@@ -4,6 +4,7 @@ import souther.compiler.numeric.EndSide;
 import souther.compiler.numeric.Towards;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -290,12 +291,53 @@ public record QuantityArrangement(List<Parting> partings, List<Run> runs, List<R
      *
      * @param parted every place this line parts the values, in any order
      */
-    public Run beside(java.util.Collection<Parting> parted, Towards side) {
-        // The run this side of every place the line parts them, which is the one this line does not
-        // also bound at its far end. A rule that names a value leaves the value itself between its
-        // two places, and that run is on neither side of the line: it is the line.
+    public Run beside(Collection<Parting> parted, Towards side) {
+        return besideIn(runs, parted, side);
+    }
+
+    /**
+     * The run at one end of what the rules leave: the one nothing parts below it, or nothing parts
+     * above it.
+     *
+     * <p>What a bound bounds. A bound's line is where what it leaves stops, so the run it bounds is
+     * the one against that end — and it is found by being the endmost rather than by holding the
+     * line's own value, which a bound that stops short of that value does not leave in any run at
+     * all. Null where the rules leave no run there, which is a point nobody is owed a row at.
+     */
+    public Run endmost(Towards inward) {
+        return endmostIn(runs, inward);
+    }
+
+    /**
+     * The same of the runs the rules leave nothing in: the empty run on one side of a line, or null
+     * where the run there has values or there is none.
+     *
+     * <p>Asked where {@link #beside} found nothing, by a reader that has to say why no row is owed
+     * there: what stops this run is what left the side empty. Found by the one rule {@link #beside}
+     * finds by, over the other runs, so the run a rule naming a value leaves between its own two
+     * places is the line here as well and never the side of it.
+     */
+    public Run emptyBeside(Collection<Parting> parted, Towards side) {
+        return besideIn(empty, parted, side);
+    }
+
+    /** The same of the empty run at one end of what the rules leave ({@link #endmost}). */
+    public Run emptyEndmost(Towards inward) {
+        return endmostIn(empty, inward);
+    }
+
+    /**
+     * The run among {@code among} on one side of a line, given every place the line parts the
+     * values: the one this side of a place the line parts them that this line does not also bound
+     * at its far end. A rule that names a value leaves the value itself between its two places, and
+     * that run is on neither side of the line: it is the line.
+     */
+    private static Run besideIn(List<Run> among, Collection<Parting> parted, Towards side) {
         for (Parting each : parted) {
-            Run run = side == Towards.ABOVE ? above(each) : below(each);
+            Run run = among.stream().filter(candidate -> is(side == Towards.ABOVE
+                            ? candidate.values().lower().seam()
+                            : candidate.values().upper().seam(), each))
+                    .findFirst().orElse(null);
             if (run == null) {
                 continue;
             }
@@ -309,44 +351,9 @@ public record QuantityArrangement(List<Parting> partings, List<Run> runs, List<R
         return null;
     }
 
-    /**
-     * The run at one end of what the rules leave: the one nothing parts below it, or nothing parts
-     * above it.
-     *
-     * <p>What a bound bounds. A bound's line is where what it leaves stops, so the run it bounds is
-     * the one against that end — and it is found by being the endmost rather than by holding the
-     * line's own value, which a bound that stops short of that value does not leave in any run at
-     * all. Null where the rules leave no run there, which is a point nobody is owed a row at.
-     */
-    public Run endmost(Towards inward) {
-        return runs.stream()
-                .filter(each -> (inward == Towards.ABOVE
-                        ? each.values().lower() : each.values().upper()).seam() == null)
-                .findFirst().orElse(null);
-    }
-
-    /**
-     * The run on one side of a line the rules leave nothing in, or null where the run there has
-     * values or there is none.
-     *
-     * <p>Asked where {@link #beside} found nothing, by a reader that has to say why no row is owed
-     * there: what stops this run is what left the side empty.
-     */
-    public Run emptyBeside(java.util.Collection<Parting> parted, Towards side) {
-        for (Parting each : parted) {
-            for (Run run : empty) {
-                if (is(side == Towards.ABOVE ? run.values().lower().seam()
-                        : run.values().upper().seam(), each)) {
-                    return run;
-                }
-            }
-        }
-        return null;
-    }
-
-    /** The same of the run at one end of what the rules leave ({@link #endmost}). */
-    public Run emptyEndmost(Towards inward) {
-        return empty.stream()
+    /** The run among {@code among} nothing parts on the side facing away from {@code inward}. */
+    private static Run endmostIn(List<Run> among, Towards inward) {
+        return among.stream()
                 .filter(each -> (inward == Towards.ABOVE
                         ? each.values().lower() : each.values().upper()).seam() == null)
                 .findFirst().orElse(null);

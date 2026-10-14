@@ -805,11 +805,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
          * The lines this behavior's own rules drew, which are the borders a report says it has.
          *
          * <p>A line a declaration drew is read at this behavior's positions and is still the
-         * declaration's: what it owes is the declarations' account, and what it leaves out is said
-         * once under the declarations ({@link Adequacy.DeclaredLine}). Counted or said here, a
-         * behavior that compares nothing has borders, and every behavior carrying the type repeats
-         * the same points. Whose a line is is the line's own answer
-         * ({@link AuthoredLine#obligationOwners}), the one the accounts are filed by.
+         * declaration's, and is counted under the declarations ({@link Adequacy.DeclaredLine}).
+         * Counted here, a behavior that compares nothing has borders. Whose a line is is the line's
+         * own answer ({@link AuthoredLine#obligationOwners}); whose a point of it is, owed or not, is
+         * the point's ({@code LeftOutPoint}, {@code BorderObligationPointAssessment}).
          */
         public List<BorderAssessment> ownLines() {
             return lines().stream()
@@ -1959,15 +1958,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             String rule = RuleHandleProse.said(each.read().describe(places), rendering, null)
                     + each.stoppedAt();
             out.append(String.format("      · no %s point%s%s: %s%n", each.role(), each.whichSide(),
-                    each.namesItsLevel() ? " is owed at " + each.said() + " (" + rule + ")"
-                            : " of " + rule + " is owed",
+                    onADeclaredLine("is owed", each.namesItsLevel(), each.said(), rule),
                     whyNotOwed(each.point().reason())));
         }
         // The roles a line has no point in, which its own rule settles alone.
         for (Adequacy.DeclaredLine each : lines) {
-            String rule = RuleHandleProse.said(each.read().describe(places), rendering, null);
-            String exists = each.namesItsLevel()
-                    ? " exists at " + each.said() + " (" + rule + ")" : " of " + rule + " exists";
+            String exists = onADeclaredLine("exists", each.namesItsLevel(), each.said(),
+                    RuleHandleProse.said(each.read().describe(places), rendering, null));
             each.noPoint().forEach((role, none) -> out.append(String.format(
                     "      · no %s point%s: %s%n", role, exists, whyNoPoint(none.why()))));
         }
@@ -3452,6 +3449,17 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 }
             });
         }
+    }
+
+    /**
+     * The rest of a sentence about a point of a declaration's line, after its role: where on what
+     * the declaration wrote, and the rule — or the rule alone, where the declaration has no quantity
+     * to say the line on, as a debt on such a line is said ({@link #pointOf}).
+     */
+    private static String onADeclaredLine(String verb, boolean namesItsLevel, String said,
+                                          String rule) {
+        return namesItsLevel ? " " + verb + " at " + said + " (" + rule + ")"
+                : " of " + rule + " " + verb;
     }
 
     /** Why a line has no point in one of the four roles, in the report's own words. */

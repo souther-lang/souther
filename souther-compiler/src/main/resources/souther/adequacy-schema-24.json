@@ -1975,7 +1975,7 @@
               },
               "excluded": {
                 "type": "array",
-                "description": "The points no row is owed at that are these declarations' fact, once each however many positions carry the type. Filed by whose the point is, as `obligations` are: a point a type's bound leaves out on its own is the type's, and the same point of the same bound where a record's clause on the field empties the region beside it is the type's and the record's together, and is a second entry under that pair. A fact the declarations settled and not an obligation: none of these is in `obligations`, and none is a row anybody is short of.",
+                "description": "The points no row is owed at that are these declarations' fact, once each however many positions carry the type. Filed by whose the point is, as `obligations` are: a point a type's bound leaves out on its own is the type's, and the same role of the same bound where a record's clause on the field empties the region beside it is another point, told apart by `stops` and filed under whose it is — the declarations whose line it is, and a declaration that took in the end the region stops at. A fact the declarations settled and not an obligation: none of these is in `obligations`, and none is a row anybody is short of.",
                 "items": {
                   "type": "object",
                   "required": [

@@ -1249,7 +1249,9 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
             out.add(new RegionClaim(new FarEnd.AtTheDomain(upper.bound()),
                     PointContributions.byNarrowing(upper)));
         }
-        return out;
+        // One claim per place, as a run's ends are: a position holding one value stops there both
+        // ways, and the two ends are then one place with what each named joined.
+        return RegionClaim.byBasis(out);
     }
 
     /** The level a point against the line stands at, or null where no row is owed there. */

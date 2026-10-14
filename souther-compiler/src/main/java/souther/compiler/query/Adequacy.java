@@ -7062,11 +7062,12 @@ public final class Adequacy {
      *
      * <p>Filed the way a debt is, by whose the point is ({@link LeftOutPoint#attribution}), and told
      * apart the way the model tells it apart ({@link NotOwedPoint}): the line, where on it, why, and
-     * what besides the line settled it. A point beside a type's bound is left out by the bound alone,
-     * once for the type; the point in the region beside it, where a record's clause on the field
-     * empties that region, is left out by the bound and the clause together, and is the two
-     * declarations' fact and not a fact about the type wherever it is carried. Read at a bare value
-     * of the type the same point is owed a row, and is a debt and not one of these.
+     * where else it was settled. A point beside a type's bound is left out by the bound alone, once
+     * for the type. The point in the region beside it, where a record's clause on the field empties
+     * that region, is another point, told apart by where the region stops; read at a bare value of
+     * the type the same role is owed a row, and is a debt and not one of these. Whose each is, is
+     * the attribution's answer and is not worked out here: it names a declaration that took in the
+     * end the region stops at, and the declarations whose line it is.
      *
      * <p>Not a debt: nothing here is a row anybody is short of, so it is counted in neither number.
      *

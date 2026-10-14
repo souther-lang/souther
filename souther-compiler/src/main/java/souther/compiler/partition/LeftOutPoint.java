@@ -13,7 +13,7 @@ import java.util.Objects;
  * owed there: a point only a type's own clauses settled is a fact about the type, said once for
  * the declarations that wrote them, and a point a body's comparison settled is that body's. A
  * reader handed the point without this has to decide it again, and a reader filing it by the line
- * alone names one declaration for a point another declaration settled as well.
+ * alone files it by another rule than the one a point a row is owed at is filed by.
  */
 public final class LeftOutPoint {
 
