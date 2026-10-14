@@ -65,15 +65,6 @@ import java.util.function.Predicate;
  */
 final class Witnesses {
 
-    /** What this stops at, named where every budget of this compiler's is named. The figures are
-     *  {@link CompositionBudget}'s so that a reader of a stopped search reaches the one it ran out
-     *  of. */
-    private static final int MOST_ELEMENTS =
-            CompositionBudget.ELEMENTS_A_PROPOSAL_HOLDS.maximum();
-
-    private static final int MOST_CHARACTERS =
-            CompositionBudget.CHARACTERS_A_PROPOSAL_HOLDS.maximum();
-
     private static final int MOST_PAIRINGS =
             CompositionBudget.PAIRINGS_BUILT_AT_ONCE.maximum();
 
@@ -247,6 +238,27 @@ final class Witnesses {
         }
     }
 
+    /**
+     * The figure a value holding {@code count} elements is past, or null where it is inside it.
+     *
+     * <p>The one place a value built here is held to how many it holds, and every reader that
+     * decides how many a value it builds holds asks it before building one: the value built at a
+     * count, every content a collection is walked through, and a collection filled to what its
+     * rules ask. Asked by one of them alone, the others built at whatever count the rules asked
+     * for, so a collection past the figure was refused at one door and built at the next. Past it,
+     * a value is one this compiler does not build, which is not one the model cannot have.
+     */
+    private static CompositionBudget pastTheElements(int count) {
+        return count > CompositionBudget.ELEMENTS_A_PROPOSAL_HOLDS.maximum()
+                ? CompositionBudget.ELEMENTS_A_PROPOSAL_HOLDS : null;
+    }
+
+    /** The same, of a string holding {@code count} characters. */
+    private static CompositionBudget pastTheCharacters(int count) {
+        return count > CompositionBudget.CHARACTERS_A_PROPOSAL_HOLDS.maximum()
+                ? CompositionBudget.CHARACTERS_A_PROPOSAL_HOLDS : null;
+    }
+
     private static Built sized(TypeView position, int least, List<List<String>> held,
                                RuleReadingContext reading, Set<TypeSymbol> expanding) {
         if (least <= 0) {
@@ -261,15 +273,15 @@ final class Witnesses {
             // string of any characters at all after it — both are proposals, and the one every rule
             // admits is the one a caller with a single chance needs.
             case Shape.Scalar scalar when scalar.prim() == Type.Prim.STRING ->
-                    least > MOST_CHARACTERS
-                            ? Built.stoppedBy(CompositionBudget.CHARACTERS_A_PROPOSAL_HOLDS)
+                    pastTheCharacters(least) != null
+                            ? Built.stoppedBy(pastTheCharacters(least))
                             : Built.of(ofThatManyCharacters(position, least, reading));
-            case Shape.Sequence sequence -> least > MOST_ELEMENTS
-                    ? Built.stoppedBy(CompositionBudget.ELEMENTS_A_PROPOSAL_HOLDS)
+            case Shape.Sequence sequence -> pastTheElements(least) != null
+                    ? Built.stoppedBy(pastTheElements(least))
                     : ofSequence(sequence, ElementsKeptApart.at(position, held, reading), least,
                             reading, expanding);
-            case Shape.Mapping mapping -> least > MOST_ELEMENTS
-                    ? Built.stoppedBy(CompositionBudget.ELEMENTS_A_PROPOSAL_HOLDS)
+            case Shape.Mapping mapping -> pastTheElements(least) != null
+                    ? Built.stoppedBy(pastTheElements(least))
                     : ofMapping(mapping, least, reading, expanding);
             // Nothing else has a count this builds to. A number is one value however many the rules
             // ask for, a record holds its fields and not a number of them, and the shapes that are
@@ -836,7 +848,7 @@ final class Witnesses {
             }
         }
         int needed = Math.max(holds.least(), elements.size());
-        if (needed > holds.most()) {
+        if (needed > holds.most() || pastTheElements(needed) != null) {
             return null;
         }
         // Fewer than asked for is a type with too few values, which is a container the rules want
@@ -1248,7 +1260,8 @@ final class Witnesses {
                 List<FixtureTemplate> values = distinctValuesOf(element, many, reading, inside);
                 boolean once = apart || kind == Shape.Sequence.Kind.SET;
                 for (int size = least; size <= range.most(); size++) {
-                    if ((once && size > values.size()) || (values.isEmpty() && size > 0)) {
+                    if ((once && size > values.size()) || (values.isEmpty() && size > 0)
+                            || pastTheElements(size) != null) {
                         return;
                     }
                     int[] at = first(size, once);
@@ -1263,7 +1276,8 @@ final class Witnesses {
                 List<FixtureTemplate> keys = distinctValuesOf(key, many, reading, inside);
                 List<FixtureTemplate> values = distinctValuesOf(value, many, reading, inside);
                 for (int size = least; size <= range.most() && size <= keys.size(); size++) {
-                    if ((values.isEmpty() && size > 0) || (apart && size > values.size())) {
+                    if ((values.isEmpty() && size > 0) || (apart && size > values.size())
+                            || pastTheElements(size) != null) {
                         return;
                     }
                     int[] which = first(size, true);
@@ -1376,7 +1390,7 @@ final class Witnesses {
 
     /**
      * The {@code index}th value of {@code type} made by stepping its carrier, or null where the carrier
-     * has no order to step.
+     * has no order to step or the step is a string longer than a proposal holds.
      *
      * <p>A string grows by a character from the length its rules ask for, and a whole number steps
      * through the range they leave. Which characters is a question the carrier has no answer to, so
@@ -1392,9 +1406,12 @@ final class Witnesses {
         TypeView view = TypeView.of(type, ruleSource.inners(), ruleSource.symbols(),
                 ruleSource.kinds(), ruleSource.sums());
         if (view.shape() instanceof Shape.Scalar scalar && scalar.prim() == Type.Prim.STRING) {
-            return WornNames.under(view.wrappers(), FixtureTemplate.string(
-                    "x".repeat(Math.max(1, Partitions.leastHeld(view, reading)) + index)),
-                    ruleSource);
+            // The floor asked first, so that a floor past the figure is not added to.
+            int least = Math.max(1, Partitions.leastHeld(view, reading));
+            return pastTheCharacters(least) != null || pastTheCharacters(least + index) != null
+                    ? null
+                    : WornNames.under(view.wrappers(),
+                            FixtureTemplate.string("x".repeat(least + index)), ruleSource);
         }
         Place at = Partitions.numberInside(view, reading, index);
         if (at == null) {

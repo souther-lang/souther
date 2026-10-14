@@ -2,12 +2,20 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.check.DeclaredBounds;
+import souther.compiler.check.RuleReadingContext;
+import souther.compiler.check.RuleReadings;
+import souther.compiler.check.Shape;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.numeric.Towards;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ItemAssessment;
+import souther.compiler.query.ReadAs;
+import souther.compiler.types.Type;
+import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbols;
 
 import java.util.List;
 import java.util.Map;
@@ -15,6 +23,7 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -129,6 +138,66 @@ class AContainerHoldsNoMoreThanItsElementsHaveValuesTest {
                 && owed.searches().each().stream()
                         .anyMatch(ItemAssessment.Attempt.Certified.class::isInstance),
                 () -> String.valueOf(line.items().get(new DomainPoint.AtTheLine())));
+    }
+
+    private static final String PAST_THE_FIGURES = """
+            module p
+            data Huge = List<Bool>
+              invariant List.length(value) >= 65
+            data Long = String
+              invariant String.length(value) >= 4097
+            data Wide = Map<String, Bool>
+              invariant Map.size(value) >= 65
+            behavior f : (s: Set<Huge>) -> Int
+            let f (s) = if Set.size(s) == 2 then 1 else 0
+            """;
+
+    // Every way a value is built at a count asks the figure a proposal is held to: what an
+    // element is offered, a string stepped from its floor, and a collection filled to what its
+    // rules ask. Asked by one of them alone, the others built past it.
+
+    @Test
+    void noCollectionAnElementIsOfferedHoldsMoreThanAProposalHolds() {
+        RuleReadingContext reading = pastTheFigures();
+        // Asked for more than the figure, since a set or a map is as large as the values it is
+        // made from and those are as many as are asked for.
+        int many = CompositionBudget.ELEMENTS_A_PROPOSAL_HOLDS.maximum() + 2;
+        for (String type : List.of("Huge", "Wide")) {
+            for (FixtureTemplate each : Witnesses.distinctValuesOf(declared(type), many, null,
+                    reading, Set.of())) {
+                assertTrue(each.text().split(", ").length
+                        <= CompositionBudget.ELEMENTS_A_PROPOSAL_HOLDS.maximum(),
+                        () -> type + " " + each.text().length());
+            }
+        }
+    }
+
+    @Test
+    void noStringAnElementIsOfferedHoldsMoreThanAProposalHolds() {
+        for (FixtureTemplate each : Witnesses.distinctValuesOf(declared("Long"), 4, null,
+                pastTheFigures(), Set.of())) {
+            assertTrue(each.text().length() <= CompositionBudget.CHARACTERS_A_PROPOSAL_HOLDS
+                    .maximum() + "Long(\"\")".length(), () -> each.text().length() + " long");
+        }
+    }
+
+    @Test
+    void aCollectionFilledToItsFloorIsNotBuiltPastWhatAProposalHolds() {
+        assertNull(Witnesses.holding(new Shape.Sequence(Shape.Sequence.Kind.LIST, Type.BOOL),
+                List.of(), List.of(), List.of(), new DeclaredBounds.CountRange(
+                        CompositionBudget.ELEMENTS_A_PROPOSAL_HOLDS.maximum() + 1,
+                        Integer.MAX_VALUE), pastTheFigures()));
+    }
+
+    private static RuleReadingContext pastTheFigures() {
+        Compilation compilation = Compilation.ofSource(PAST_THE_FIGURES, "Main");
+        compilation.answerEverything();
+        return RuleReadingContext.unshared(RuleReadings.of(compilation, "p"),
+                ReadAs.THE_COMPILATION_DOES);
+    }
+
+    private static Type declared(String name) {
+        return Type.ref(TypeSymbols.declared(new TypeKey("p", name)));
     }
 
     private static final String SERVICES = """
