@@ -52,7 +52,7 @@ class AGapNamesAFigureExactlyWhereAWiderRunMayCloseItTest {
     /** And the figure each names is the one it was declined or stopped at. */
     @Test
     void aReadingGapNamesTheFigureItWasStoppedAt() {
-        assertEquals(List.of(CompositionBudget.READINGS_OF_ONE_CONDITION),
+        assertEquals(List.of(CompositionBudget.READINGS_OF_ONE_CONDITION.figure()),
                 new ReadingGap.ReachNotRead(ReadingGap.ReachNotRead.Why.MORE_READINGS_THAN_ARE_MADE)
                         .figures());
         assertEquals(List.of(WorkFigure.ELEMENTS_A_WALK_WRITES_OUT.at(
@@ -116,7 +116,7 @@ class AGapNamesAFigureExactlyWhereAWiderRunMayCloseItTest {
                 EstablishmentGap.Observation.of(List.of(nothingReadIt)), List.of(),
                 EstablishmentGap.Observation.of(List.of(aLimit, nothingReadIt)), List.of(),
                 EstablishmentGap.Composition.of(budgets),
-                        Figure.inOrder(budgets),
+                        Figure.inOrder(budgets.stream().map(CompositionBudget::figure).toList()),
                 EstablishmentGap.Composition.of(budgets, writesSomeOf, Set.of()), List.of(),
                 EstablishmentGap.Composition.of(budgets, Set.of(), noRoom), List.of(),
                 EstablishmentGap.Composition.of(Set.of(), writesSomeOf, Set.of()), List.of());

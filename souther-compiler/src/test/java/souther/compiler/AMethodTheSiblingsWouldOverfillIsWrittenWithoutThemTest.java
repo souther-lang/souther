@@ -99,7 +99,8 @@ class AMethodTheSiblingsWouldOverfillIsWrittenWithoutThemTest {
                 .rewrites();
         assertTrue(rewrites.stream().anyMatch(each -> each.outcome()
                         instanceof ReplacementEvidence.Undecided(var why)
-                        && why.written().contains(ReplacementEvidence.Undecided.Why.TOO_LARGE)),
+                        && why.reasons().written()
+                                .contains(ReplacementEvidence.Undecided.Why.TOO_LARGE)),
                 () -> "a rewrite the method had no room for: " + rewrites);
     }
 
@@ -117,7 +118,8 @@ class AMethodTheSiblingsWouldOverfillIsWrittenWithoutThemTest {
 
         List<Weakening> tooLarge = measured.measured().weakening().causes().stream()
                 .filter(each -> each instanceof Weakening.RewriteUndecided it
-                        && it.why().written().contains(ReplacementEvidence.Undecided.Why.TOO_LARGE))
+                        && it.why().reasons().written()
+                                .contains(ReplacementEvidence.Undecided.Why.TOO_LARGE))
                 .toList();
         assertFalse(tooLarge.isEmpty(), () -> "a rewrite the method had no room for: " + measured);
         for (Weakening each : tooLarge) {

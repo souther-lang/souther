@@ -633,7 +633,25 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
             Map.entry("souther.compiler.partition.ReadingGap$ReachNotRead#figures()"
                             + "Ljava/util/List;",
                     "names the figure a part was declined at, for a reader told a wider run may"
-                            + " read past it")));
+                            + " read past it"),
+            // A budget as the figure a reader is told stopped something: what it is called, what
+            // it counts and what it stands at, read off the budget and handed on with it.
+            Map.entry("souther.compiler.observe.Figure$Budget#name()Ljava/lang/String;",
+                    "what a budget reached is called where a reader is told it stopped something"),
+            Map.entry("souther.compiler.observe.Figure$Budget#counts()Ljava/lang/String;",
+                    "what a budget reached counts, in a reader's words"),
+            Map.entry("souther.compiler.observe.Figure$Budget#most()Ljava/lang/String;",
+                    "the number a budget reached stands at"),
+            Map.entry("souther.compiler.partition.Generator$ReplacementWitness#asFigures("
+                            + "Ljava/util/Collection;)Ljava/util/List;",
+                    "hands the budgets a search for a rewrite's row met on as the figures it"
+                            + " stopped at"),
+            Map.entry("souther.compiler.query.EstablishmentGap$Composition#figures()"
+                            + "Ljava/util/List;",
+                    "names the budgets a gap was stopped at, where they are all that held it open"),
+            Map.entry("souther.compiler.query.Weakening#figures()Ljava/util/List;",
+                    "names the budget a decision's reading stopped at, for a reader told a wider"
+                            + " run may read past it")));
 
     /**
      * The places that read a figure are the places that say they do.

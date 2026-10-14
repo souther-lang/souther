@@ -238,7 +238,7 @@ class AWeakeningAWiderRunMayAnswerNamesTheFigureThatStoppedItTest {
             case RUNS_A_REWRITE_MAY_TAKE -> List.of(
                     List.of(WorkFigure.RUNS_REPLACING_AN_ARM.at(4)));
             case A_FIGURE_OF_THE_COMPOSING -> List.of(
-                    List.of(CompositionBudget.ELEMENTS_A_PROPOSAL_HOLDS),
+                    List.of(CompositionBudget.ELEMENTS_A_PROPOSAL_HOLDS.figure()),
                     List.of(WorkFigure.CANDIDATES_A_REPAIR_BUILDS.at(64)));
             case A_RUN_DID_NOT_COME_BACK -> List.of(
                     List.of(WorkFigure.EVALUATION_STEPS.at(100)), List.of());

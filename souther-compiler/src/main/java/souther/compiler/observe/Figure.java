@@ -1,10 +1,13 @@
 package souther.compiler.observe;
 
+import souther.compiler.partition.CompositionBudget;
+
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -17,10 +20,34 @@ import java.util.Set;
  * word that several figures share.
  *
  * <p>Two kinds: the figures the composing stage holds itself to, which are fixed
- * ({@code CompositionBudget}), and the rest of this compiler's, some fixed and some handed to a
- * run ({@link WorkFigure}).
+ * ({@link Budget}), and the rest of this compiler's, some fixed and some handed to a run
+ * ({@link WorkFigure.At}). Sealed, so a figure is a value whose equality is its kind's and an
+ * answer that holds one is compared by what it holds.
  */
-public interface Figure {
+public sealed interface Figure permits Figure.Budget, WorkFigure.At {
+
+    /** One of the composing stage's budgets, which stands at the figure it declares. */
+    record Budget(CompositionBudget budget) implements Figure {
+
+        public Budget {
+            Objects.requireNonNull(budget, "a budget reached is some budget");
+        }
+
+        @Override
+        public String name() {
+            return budget.name();
+        }
+
+        @Override
+        public String counts() {
+            return budget.counts();
+        }
+
+        @Override
+        public String most() {
+            return Integer.toString(budget.maximum());
+        }
+    }
 
     /** What this compiler calls it where it is declared. */
     String name();

@@ -101,7 +101,7 @@ public sealed interface Weakening {
             case DecisionReadingIncomplete it -> switch (it.why()) {
                 case DecisionReading.Enumeration.Complete _ -> List.of();
                 case DecisionReading.Enumeration.StoppedAtAFigure(CompositionBudget figure) ->
-                        List.of(figure);
+                        List.of(figure.figure());
             };
             case RewriteUndecided it -> it.why().figures();
         };

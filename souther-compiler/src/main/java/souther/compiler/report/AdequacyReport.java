@@ -7211,7 +7211,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     case ReplacementEvidence.Undecided(var why) -> {
                         one.put("disposition", "undecided");
                         ArrayNode because = one.putArray("undecidedBecause");
-                        why.written().forEach(way -> because.add(word(way.name())));
+                        why.reasons().written().forEach(way -> because.add(word(way.name())));
                     }
                 }
             }

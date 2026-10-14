@@ -407,7 +407,7 @@ public sealed interface BlockReason {
                 // Each of the two is one figure, declared where it is counted.
                 case WhatItStatesIsNoLine(var why) -> switch (why) {
                     case MORE_READINGS_THAN_ARE_MADE ->
-                            List.of(CompositionBudget.READINGS_OF_ONE_CONDITION);
+                            List.of(CompositionBudget.READINGS_OF_ONE_CONDITION.figure());
                     case MORE_ELEMENTS_THAN_ARE_WRITTEN_OUT -> List.of(
                             WorkFigure.ELEMENTS_A_WALK_WRITES_OUT.at(WrittenOutElements.MOST_WALKED));
                     case A_PART_NOT_READ, A_NUMBER_NO_POSITION_HOLDS, NO_RELATION_OF_NUMBERS ->

@@ -118,7 +118,7 @@ class AnUndecidedRewriteNamesTheFigureItStoppedAtTest {
         ReplacementEvidence.Undecided.Way.AtFigures named = assertInstanceOf(
                 ReplacementEvidence.Undecided.Way.AtFigures.class, reached,
                 "a figure of the composing's own stopped it, and it is carried");
-        assertTrue(named.figures().contains(CompositionBudget.ELEMENTS_A_PROPOSAL_HOLDS),
+        assertTrue(named.figures().contains(CompositionBudget.ELEMENTS_A_PROPOSAL_HOLDS.figure()),
                 () -> "what a proposed collection holds is what stopped it: " + named.figures());
         assertEquals(RunSensitivity.MAY_CHANGE, named.runSensitivity());
     }

@@ -60,7 +60,7 @@ class APatternPastItsFigureNamesTheFigureTest {
     /** Each figure that is fixed where it is declared is the one said. */
     @Test
     void aFigureFixedWhereItIsDeclaredIsTheOneSaid() {
-        assertEquals(List.of(CompositionBudget.READINGS_OF_ONE_CONDITION),
+        assertEquals(List.of(CompositionBudget.READINGS_OF_ONE_CONDITION.figure()),
                 new BlockReason.WhatItStatesIsNoLine(
                         BlockReason.WhatItStatesIsNoLine.Why.MORE_READINGS_THAN_ARE_MADE).figures());
         assertEquals(List.of(WorkFigure.ELEMENTS_A_WALK_WRITES_OUT.at(

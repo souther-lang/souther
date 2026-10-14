@@ -42,7 +42,7 @@ import souther.compiler.observe.RunSensitivity;
  * {@link CompositionRepertoire}, which is a population this compiler offers some of and is not a
  * number anybody raises.
  */
-public enum CompositionBudget implements Figure {
+public enum CompositionBudget {
 
     /** How many elements a proposed collection is worth building. A row is offered for somebody to
      *  read and complete, and a minimum past this asks for one nobody would. */
@@ -385,9 +385,9 @@ public enum CompositionBudget implements Figure {
         return maximum;
     }
 
-    @Override
-    public String most() {
-        return Integer.toString(maximum);
+    /** This budget as a figure something stopped at. */
+    public Figure figure() {
+        return new Figure.Budget(this);
     }
 
     /**
@@ -398,7 +398,6 @@ public enum CompositionBudget implements Figure {
      * budget added arrives here as a compile error rather than as a name nobody wrote a sentence
      * for.
      */
-    @Override
     public String counts() {
         return switch (this) {
             case ELEMENTS_A_PROPOSAL_HOLDS -> "how many elements a proposed collection holds";

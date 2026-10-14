@@ -8281,11 +8281,11 @@ public final class Generator {
                 // its own or at the figures what it composed on the way met.
                 case Witness.Limited limited -> {
                     List<Figure> at = new ArrayList<>(limited.boundsReached());
-                    at.addAll(limited.found().met().figures());
+                    at.addAll(asFigures(limited.found().met().figures()));
                     composingStoppedUnlessThisStoppedIt(before, at);
                 }
-                case Witness.Exhausted none ->
-                        composingStoppedUnlessThisStoppedIt(before, none.found().met().figures());
+                case Witness.Exhausted none -> composingStoppedUnlessThisStoppedIt(before,
+                        asFigures(none.found().met().figures()));
                 case Witness.Certified _, Witness.Unconfirmed _, Witness.NoCombination _ -> { }
             }
             return null;
@@ -8300,9 +8300,11 @@ public final class Generator {
             }
             switch (came) {
                 case RowComposed.PassedOver(SearchShortfall found) ->
-                        composingStoppedUnlessThisStoppedIt(before, found.met().figures());
+                        composingStoppedUnlessThisStoppedIt(before,
+                                asFigures(found.met().figures()));
                 case RowComposed.Failed(Attempt why, OptionalInt _) ->
-                        composingStoppedUnlessThisStoppedIt(before, why.found().met().figures());
+                        composingStoppedUnlessThisStoppedIt(before,
+                                asFigures(why.found().met().figures()));
                 // Stopped by what it handed its rows to: this, or the bound on how many it may be
                 // handed ({@link #atMost}), which says so where it is reached.
                 case RowComposed.Halted _, RowComposed.Taken _ -> { }
@@ -8319,7 +8321,7 @@ public final class Generator {
             }
             if (came.stoppedShort()) {
                 List<Figure> at = new ArrayList<>(came.boundsReached());
-                at.addAll(came.came().met().figures());
+                at.addAll(asFigures(came.came().met().figures()));
                 composingStoppedUnlessThisStoppedIt(before, at);
             }
             return null;
@@ -8337,6 +8339,11 @@ public final class Generator {
             if (stops == before && !figures.isEmpty()) {
                 composingStopped(figures);
             }
+        }
+
+        /** The composing stage's budgets a search met, as the figures they are. */
+        private static List<Figure> asFigures(Collection<CompositionBudget> budgets) {
+            return budgets.stream().map(CompositionBudget::figure).toList();
         }
 
         /** How the search ended, where nothing was found: each way it stopped with the figures it

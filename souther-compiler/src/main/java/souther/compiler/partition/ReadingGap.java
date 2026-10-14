@@ -255,7 +255,7 @@ public sealed interface ReadingGap {
         public List<Figure> figures() {
             return switch (why) {
                 case MORE_READINGS_THAN_ARE_MADE ->
-                        List.of(CompositionBudget.READINGS_OF_ONE_CONDITION);
+                        List.of(CompositionBudget.READINGS_OF_ONE_CONDITION.figure());
                 case MORE_ELEMENTS_THAN_ARE_WRITTEN_OUT -> List.of(
                         WorkFigure.ELEMENTS_A_WALK_WRITES_OUT.at(WrittenOutElements.MOST_WALKED));
                 case A_PART_NOT_READ, NO_VALUE_OF_THE_ROW -> List.of();

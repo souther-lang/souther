@@ -3,6 +3,7 @@ package souther.compiler.query;
 import souther.compiler.observe.Figure;
 import souther.compiler.observe.MeasureReason;
 import souther.compiler.observe.RunSensitivity;
+import souther.compiler.publish.CanonicalSelection;
 import souther.compiler.publish.PublicationOrders;
 import souther.compiler.observe.RowIdentity;
 import souther.compiler.partition.Replacement;
@@ -223,8 +224,9 @@ public record ReplacementEvidence(Measure<ReplacementEvidence.Summary> measured)
             }
 
             /** The reasons, in the order they are published in. */
-            public List<Why> written() {
-                return ways.stream().map(Way::why).toList();
+            public CanonicalSelection<Why> reasons() {
+                return PublicationOrders.REWRITE_UNDECIDED_REASONS.keep(
+                        ways.stream().map(Way::why).toList());
             }
 
             /** Never: a rewrite left open was left open for a reason. */

@@ -235,7 +235,9 @@ public sealed interface EstablishmentGap {
         @Override
         public List<Figure> figures() {
             return runSensitivity() == RunSensitivity.MAY_CHANGE
-                    ? List.copyOf(budgets.written()) : List.of();
+                    ? Figure.inOrder(budgets.written().stream().map(CompositionBudget::figure)
+                            .toList())
+                    : List.of();
         }
 
         /** The gap the budgets a search met are, where it met nothing else of this compiler's. */
