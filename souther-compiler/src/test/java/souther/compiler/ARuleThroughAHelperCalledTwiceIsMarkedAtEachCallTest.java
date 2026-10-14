@@ -194,6 +194,35 @@ class ARuleThroughAHelperCalledTwiceIsMarkedAtEachCallTest {
         assertTrue(both, "a rule through both halves marks the call each half stands in");
     }
 
+    /** One condition the way consults at two calls of a helper, on the same value. */
+    private static final String AGAIN = """
+            module example.again
+
+            behavior f : (n: Int) -> Int
+
+            let positive (k: Int): Bool = k > 0
+
+            let f (n) = if positive(n) then (if positive(n) then 1 else 2) else 3
+            """;
+
+    @Test
+    void aConditionConsultedAtTwoCallsIsMarkedAtBoth() {
+        Compilation compilation = Compilation.ofSource(AGAIN, "Main");
+        compilation.measure(Adequacy.Asked.warningsAt(Adequacy.Level.ALL));
+        compilation.answerEverything();
+        boolean both = false;
+        for (Located each : compilation.warnings()) {
+            Set<DiagnosticPlace> places = new HashSet<>();
+            for (LabeledRegion label : each.diagnostic().secondary()) {
+                if (label.said() instanceof ExampleMessage.TheRuleTakesItHoldingInThisCall) {
+                    places.add(label.place());
+                }
+            }
+            both |= places.size() == 2;
+        }
+        assertTrue(both, "a rule through both calls holding marks each call it was consulted at");
+    }
+
     private static String called(LabeledRegion label) {
         return switch (label.said()) {
             case ExampleMessage.TheRuleTakesItHoldingInThisCall(var called) -> called;

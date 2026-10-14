@@ -1114,11 +1114,15 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 continue;
             }
             List<ShownCondition> shown = new ArrayList<>();
-            for (ShownBy each : rule.shownBy()) {
-                DecisionRuleReading read = DecisionRuleReading.of(each, plan, behavior);
-                shown.add(new ShownCondition(read, whereItIsWritten(compilation, read),
-                        each.copy().map(copy -> callsOf(compilation, module, copy.lineage()))
-                                .orElse(List.of())));
+            // One line per condition, naming every call the way consulted it at.
+            for (RuleStep step : rule.steps()) {
+                DecisionRuleReading read = DecisionRuleReading.of(step.shown(), plan, behavior);
+                List<List<CallSite>> calls = new ArrayList<>();
+                for (ShownBy each : step.seen()) {
+                    each.copy().ifPresent(copy ->
+                            calls.add(callsOf(compilation, module, copy.lineage())));
+                }
+                shown.add(new ShownCondition(read, whereItIsWritten(compilation, read), calls));
             }
             out.put(rule, List.copyOf(shown));
         }
@@ -1128,24 +1132,30 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     /**
      * The calls each copy of a helper's code this behavior's page names was made at.
      *
-     * <p>The copies are the steps of every place a rule was searched at, which are what a search
-     * went without can be about, and the copies each line was read at. Asked here because where a
-     * call is written is a question of the compilation, and a page has none. A copy standing where
-     * it was written was made at no call and has no entry.
+     * <p>Every copy anything the page may name was read off or seen at: what each way a rule was
+     * searched along and each way to a line was read off ({@link SaidOnTheWay#copies}), every
+     * place a rule's way consulted a condition, and the copies each line and each finding was read
+     * at. Asked here because where a call is written is a question of the compilation, and a page
+     * has none. A copy standing where it was written was made at no call, and its entry says so.
+     *
+     * <p>Gathered off each holder through the one account it gives of its copies, and held to it
+     * where it is read ({@link ConditionsShown#callsOf}): a copy something here holds and this does
+     * not is this missing a holder, and is raised rather than shown naming no call.
      */
     private static Map<ExpansionLineage, List<CallSite>> copyCalls(
             Compilation compilation, String module, Map<DecisionRule, SettledAt> settled,
             List<BorderAssessment> lines, List<ReportedFinding> reported) {
         List<ExpansionLineage> copies = new ArrayList<>();
         for (SettledAt each : settled.values()) {
+            each.at().saidOnTheWay().copies().forEach(copy -> copies.add(copy.lineage()));
             for (RuleStep step : each.at().steps()) {
-                step.shown().copy().ifPresent(copy -> copies.add(copy.lineage()));
+                step.seen().forEach(seen ->
+                        seen.copy().ifPresent(copy -> copies.add(copy.lineage())));
             }
         }
         for (BorderAssessment line : lines) {
             line.readAt().forEach(copy -> copies.add(copy.lineage()));
-            line.saidOnTheWay().entries().values().forEach(by ->
-                    by.forEach(copy -> copies.add(copy.lineage())));
+            line.saidOnTheWay().copies().forEach(copy -> copies.add(copy.lineage()));
         }
         // And the copies each rule this page says nothing worked out about was read at.
         for (ReportedFinding each : reported) {
@@ -1159,12 +1169,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         }
         Map<ExpansionLineage, List<CallSite>> out = new LinkedHashMap<>();
         for (ExpansionLineage copy : copies) {
-            if (!out.containsKey(copy)) {
-                List<CallSite> calls = callsOf(compilation, module, copy);
-                if (!calls.isEmpty()) {
-                    out.put(copy, calls);
-                }
-            }
+            out.computeIfAbsent(copy, _ -> callsOf(compilation, module, copy));
         }
         return out;
     }
@@ -1211,12 +1216,6 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         }
     }
 
-    /** {@code calls} as a page writes them after the place of what stands in the copy. */
-    private static String inCalls(List<CallSite> calls, SourceRendering rendering,
-                                  SourceId declaredIn) {
-        return calls.isEmpty() ? "" : " in " + chain(calls, rendering, declaredIn);
-    }
-
     /**
      * The calls of a helper {@code readAt} were copies made at, as a page writes them after what
      * they are about, or nothing where none of them stands in a copy.
@@ -1229,8 +1228,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                                    SourceRendering rendering, SourceId declaredIn) {
         List<String> calls = new ArrayList<>();
         for (ModelOccurrence copy : readAt) {
-            List<CallSite> through = copyCalls.get(copy.lineage());
-            if (through != null) {
+            List<CallSite> through = callsAt(copyCalls, copy);
+            if (!through.isEmpty()) {
                 calls.add(chain(through, rendering, declaredIn));
             }
         }
@@ -1298,15 +1297,18 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * asks, and it is answered where the plan that numbered the places is in reach.
      *
      * @param at      where the construct that drew it is written, or null where there is none
-     * @param through the calls the copy of that construct stands in were made at, innermost first,
-     *                and empty where it stands where it was written. What tells apart two
-     *                conditions of a helper called twice, which {@code at} sends to one place
+     * @param through for each place the way consulted it, the calls the copy of that construct
+     *                stands in were made at, innermost first — none where it stands where it was
+     *                written. What tells apart two conditions of a helper called twice, which
+     *                {@code at} sends to one place, and what names both calls of a rule that
+     *                consults one condition at two of them
      */
-    public record ShownCondition(DecisionRuleReading read, Citation at, List<CallSite> through) {
+    public record ShownCondition(DecisionRuleReading read, Citation at,
+                                 List<List<CallSite>> through) {
 
         public ShownCondition {
             Objects.requireNonNull(read, "a condition shown is some condition");
-            through = List.copyOf(through);
+            through = through.stream().map(List::copyOf).toList();
         }
     }
 
@@ -1435,9 +1437,28 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         /** The calls of each copy that put on this way what {@code gap} is about, for the copies
          *  made at one. */
         List<List<CallSite>> callsOf(ConditionGap gap) {
-            return way.of(gap).stream().map(copy -> copies.get(copy.lineage()))
-                    .filter(Objects::nonNull).toList();
+            return way.of(gap).stream().map(copy -> callsAt(copies, copy))
+                    .filter(calls -> !calls.isEmpty()).toList();
         }
+    }
+
+    /**
+     * The calls {@code copy} was made at, out of what this report was assembled with — none for a
+     * copy made at no call.
+     *
+     * <p>Raised for a copy it was not assembled with, rather than answered with none: a copy the
+     * page names and the assembly did not gather is a holder of copies the gathering missed
+     * ({@link #copyCalls}), and answered with none, the page would name no call where there is
+     * one.
+     */
+    private static List<CallSite> callsAt(Map<ExpansionLineage, List<CallSite>> copies,
+                                          ModelOccurrence copy) {
+        List<CallSite> calls = copies.get(copy.lineage());
+        if (calls == null) {
+            throw new IllegalStateException("this report was not assembled with the copy "
+                    + copy.lineage() + " it names");
+        }
+        return calls;
     }
 
     /**
@@ -3861,8 +3882,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         // And which call of the helper it is in, after what it is. A helper called three times is
         // one place in the source, and three conditions of a rule sent there alike are three a
         // reader cannot tell apart.
+        List<String> calls = shown.through().stream().filter(each -> !each.isEmpty())
+                .map(each -> chain(each, rendering, declaredIn)).distinct().toList();
         return what(shown, declaredIn, rendering)
-                + inCalls(shown.through(), rendering, declaredIn);
+                + (calls.isEmpty() ? "" : " in " + String.join(", ", calls));
     }
 
     private static String what(ShownCondition shown, SourceId declaredIn,

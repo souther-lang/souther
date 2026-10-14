@@ -8375,14 +8375,20 @@ public final class Adequacy {
                     // stand in — the rule goes through, and nothing more is said of it there.
                     Map<Citation, CallMarks> calls = new LinkedHashMap<>();
                     for (RuleStep each : ruled.steps()) {
-                        DecisionRuleReading read =
-                                DecisionRuleReading.of(each.shown(), plan, behavior);
-                        said(db, built, read);
-                        Optional<ModelOccurrence> seen = each.shown().copy();
-                        seen.ifPresent(copy -> calledAt(db, module,
-                                called -> takenAt(read, called), copy.lineage(), calls));
+                        // The condition's own marker once, where it is written, and the way the
+                        // rule takes it at every call the way consulted it at.
+                        said(db, built, DecisionRuleReading.of(each.shown(), plan, behavior));
+                        Set<ModelOccurrence> seen = new HashSet<>();
+                        for (ShownBy place : each.seen()) {
+                            DecisionRuleReading read = DecisionRuleReading.of(place, plan, behavior);
+                            place.copy().ifPresent(copy -> {
+                                seen.add(copy);
+                                calledAt(db, module, called -> takenAt(read, called),
+                                        copy.lineage(), calls);
+                            });
+                        }
                         for (ModelOccurrence copy : each.said().copies()) {
-                            if (!seen.equals(Optional.of(copy))) {
+                            if (!seen.contains(copy)) {
                                 calledAt(db, module, ExampleMessage.TheRuleGoesThroughThisCall::new,
                                         copy.lineage(), calls);
                             }

@@ -283,6 +283,33 @@ final class DemandReading {
             return new ReadOff(each, own);
         }
 
+        /**
+         * The same, with {@code kept} — which asks what {@code dropped} asks — told what both
+         * were read off, {@code dropped} as {@code its} says, and each read inside an alternative
+         * of it told so of the read at the same place in the other.
+         */
+        ReadOff alike(Read kept, Read dropped, ReadOff its) {
+            Map<Read, List<ModelOccurrence>> both = new IdentityHashMap<>(each);
+            joinedInto(kept, this, dropped, its, both);
+            return new ReadOff(both, own);
+        }
+
+        private static void joinedInto(Read kept, ReadOff mine, Read dropped, ReadOff theirs,
+                                       Map<Read, List<ModelOccurrence>> into) {
+            List<ModelOccurrence> copies = new ArrayList<>(mine.of(kept));
+            theirs.of(dropped).forEach(copy -> once(copy, copies));
+            into.put(kept, copies);
+            if (kept instanceof Read.OneOf one && dropped instanceof Read.OneOf other) {
+                for (int alternative = 0; alternative < one.alternatives().size(); alternative++) {
+                    List<Read> those = one.alternatives().get(alternative);
+                    List<Read> these = other.alternatives().get(alternative);
+                    for (int at = 0; at < those.size(); at++) {
+                        joinedInto(those.get(at), mine, these.get(at), theirs, into);
+                    }
+                }
+            }
+        }
+
         /** What {@code off} says {@code read} and every read inside an alternative of it were
          *  read off, into {@code into}: told by the half that read them. */
         private static void resolved(Read read, ReadOff off,
@@ -309,29 +336,87 @@ final class DemandReading {
         final Map<String, List<Read>> met = new HashMap<>();
         /** The copy each part was read off, by the part's key either way round. */
         private final Map<String, List<ModelOccurrence>> byPart;
+        /** What a read of a part read off nothing else was read off: the copy of the code that
+         *  states it. */
+        private final List<ModelOccurrence> own;
         private final Map<Read, List<ModelOccurrence>> readIn = new IdentityHashMap<>();
 
-        private Projection(Map<String, List<ModelOccurrence>> byPart) {
+        private Projection(Map<String, List<ModelOccurrence>> byPart, List<ModelOccurrence> own) {
             this.byPart = byPart;
+            this.own = List.copyOf(own);
         }
 
         /** A projection nothing says the parts of. */
         static Projection unplaced() {
-            return new Projection(Map.of());
+            return new Projection(Map.of(), List.of());
         }
 
-        /** A projection of what {@code pulled} states, each part read off where it was. */
-        static Projection over(Pullback.Pulled pulled) {
+        /** A projection of what {@code pulled} states, each part read off where it was, and what
+         *  nothing else was read off read off {@code own}. */
+        static Projection over(Pullback.Pulled pulled, List<ModelOccurrence> own) {
             Map<String, List<ModelOccurrence>> byPart = new LinkedHashMap<>();
-            for (Pullback.Leaf leaf : pulled.turnsOn()) {
-                Optional<ModelOccurrence> copy = copyOf(leaf);
-                if (copy.isPresent()) {
-                    for (String key : List.of(leaf.part().key(), leaf.part().denied().key())) {
-                        once(copy.get(), byPart.computeIfAbsent(key, _ -> new ArrayList<>()));
+            if (pulled != null) {
+                for (Pullback.Leaf leaf : pulled.turnsOn()) {
+                    Optional<ModelOccurrence> copy = copyOf(leaf);
+                    if (copy.isPresent()) {
+                        for (String key : List.of(leaf.part().key(),
+                                leaf.part().denied().key())) {
+                            once(copy.get(),
+                                    byPart.computeIfAbsent(key, _ -> new ArrayList<>()));
+                        }
                     }
                 }
             }
-            return new Projection(byPart);
+            return new Projection(byPart, own);
+        }
+
+        /**
+         * {@code made}, one of several things whose alternatives were {@code parts}, with what
+         * every part was read off told of the alternative it is.
+         *
+         * <p>Two parts asking alike are one alternative, and the one kept stands for both: dropped
+         * with what it was read off, a statement asking the same of two calls would name one of
+         * them.
+         */
+        List<Read> joinedAlike(List<Read> made, List<List<Read>> parts) {
+            // One of several things keeps each alternative once; anything else made of the parts
+            // is the one part they all came to.
+            List<List<Read>> kept = made.size() == 1 && made.getFirst() instanceof Read.OneOf oneOf
+                    ? oneOf.alternatives() : List.of(made);
+            for (List<Read> alternative : kept) {
+                for (List<Read> part : parts) {
+                    if (part.equals(alternative)) {
+                        for (int at = 0; at < alternative.size(); at++) {
+                            alike(alternative.get(at), part.get(at));
+                        }
+                    }
+                }
+            }
+            return made;
+        }
+
+        /** {@code kept}, which asks what {@code dropped} asks, told what both were read off. */
+        private void alike(Read kept, Read dropped) {
+            if (kept == dropped) {
+                return;
+            }
+            List<ModelOccurrence> both = new ArrayList<>(of(kept));
+            of(dropped).forEach(copy -> once(copy, both));
+            readIn.put(kept, both);
+            if (kept instanceof Read.OneOf one && dropped instanceof Read.OneOf other) {
+                for (int each = 0; each < one.alternatives().size(); each++) {
+                    List<Read> mine = one.alternatives().get(each);
+                    List<Read> theirs = other.alternatives().get(each);
+                    for (int at = 0; at < mine.size(); at++) {
+                        alike(mine.get(at), theirs.get(at));
+                    }
+                }
+            }
+        }
+
+        /** What {@code read} was read off, as told so far. */
+        private List<ModelOccurrence> of(Read read) {
+            return told().of(read);
         }
 
         /**
@@ -364,9 +449,9 @@ final class DemandReading {
             return reads;
         }
 
-        /** What this projection told, with every read it told nothing of read off {@code own},
-         *  the copy the condition stands in. */
-        ReadOff told(List<ModelOccurrence> own) {
+        /** What this projection told, with every read it told nothing of read off the copy the
+         *  code that states it stands in. */
+        ReadOff told() {
             return new ReadOff(readIn, own);
         }
     }
@@ -455,9 +540,11 @@ final class DemandReading {
                 // Each half an alternative, and each read off where that half was: the halves of
                 // a condition may stand in two calls of a helper, and the one way a row takes is
                 // along one of them.
-                yield oneOf(List.of(left, right), Stated::read,
+                List<List<Stated>> halves = List.of(left, right);
+                yield keptAlike(oneOf(halves, Stated::read,
                         (each, parts) -> new Stated(joined, each, ReadOff.joined(each, parts)),
-                        Optional.of(holdingAs(statedBy(joined, read, conditions), holding)));
+                        Optional.of(holdingAs(statedBy(joined, read, conditions), holding))),
+                        halves);
             }
             // What a comparison states, read as what it states: a size held against a number that
             // parts nought from every size above it asks what the container holding something
@@ -471,6 +558,30 @@ final class DemandReading {
                 yield statedOff(truth, pulled, holding, read);
             }
         };
+    }
+
+    /**
+     * {@code made}, what one of {@code halves} came to, with what a half asking alike was read off
+     * told of it too.
+     *
+     * <p>Where every half that could hold asks the same, the whole asks what one of them asks, and
+     * that one stands for all of them: dropped with what it was read off, a condition asking the
+     * same of two calls would name one of them.
+     */
+    private static List<Stated> keptAlike(List<Stated> made, List<List<Stated>> halves) {
+        List<Read> asked = made.stream().map(Stated::read).toList();
+        List<Stated> out = new ArrayList<>(made);
+        for (List<Stated> half : halves) {
+            if (half != made && half.stream().map(Stated::read).toList().equals(asked)) {
+                for (int at = 0; at < out.size(); at++) {
+                    Stated kept = out.get(at);
+                    Stated other = half.get(at);
+                    out.set(at, new Stated(kept.where(), kept.read(),
+                            kept.readOff().alike(kept.read(), other.read(), other.readOff())));
+                }
+            }
+        }
+        return List.copyOf(out);
     }
 
     /** What {@code pulled}, the statement of {@code where}, coming out {@code holding} asks, each
@@ -504,9 +615,9 @@ final class DemandReading {
      */
     static Projected projectedOff(Pullback.Pulled pulled, Proposition stated, InputReading read,
                                   List<ModelOccurrence> own) {
-        Projection projection = pulled == null ? Projection.unplaced() : Projection.over(pulled);
+        Projection projection = Projection.over(pulled, own);
         List<Read> reads = projected(stated, read, projection);
-        return new Projected(reads, projection.told(own));
+        return new Projected(reads, projection.told());
     }
 
     /**
@@ -739,9 +850,12 @@ final class DemandReading {
                 all.parts().forEach(part -> out.addAll(projected(part, read, projection)));
                 yield List.copyOf(out);
             }
-            case Proposition.Any any -> oneOf(any.parts().stream()
-                    .map(part -> projected(part, read, projection)).toList(), each -> each,
-                    (each, _) -> each, Optional.of(any));
+            case Proposition.Any any -> {
+                List<List<Read>> parts = any.parts().stream()
+                        .map(part -> projected(part, read, projection)).toList();
+                yield projection.joinedAlike(oneOf(parts, each -> each, (each, _) -> each,
+                        Optional.of(any)), parts);
+            }
             // One of several statements, which one turning on which application a run meets the
             // condition on: one alternative per statement that can hold, as a disjunction is. A
             // statement of an application no run makes is an alternative too many and never one
@@ -757,8 +871,9 @@ final class DemandReading {
                 }
                 yield switch ((int) open.stream().distinct().count()) {
                     case 0 -> List.of(new Read.Settled(false));
-                    case 1 -> open.getFirst();
-                    default -> List.of(new Read.OneOf(open, Optional.of(applications)));
+                    case 1 -> projection.joinedAlike(open.getFirst(), open);
+                    default -> projection.joinedAlike(
+                            List.of(new Read.OneOf(open, Optional.of(applications))), open);
                 };
             }
             // The elements of a container a dependency answered are what a row stands the
@@ -776,11 +891,14 @@ final class DemandReading {
             }
             // What the search asks of the node it starts at, where that settles it, or some node
             // further down settling it, which no row is written toward.
-            case Proposition.SomeReachable reached -> oneOf(List.of(
-                    projected(reached.surely(true), read, projection),
-                    List.of(new Read.Unread(new WhyNotTaken.OutsideDomain(
-                            WhyNotTaken.DomainLimit.A_NODE_BELOW_WHAT_A_ROW_WRITES)))),
-                    each -> each, (each, _) -> each, Optional.of(reached));
+            case Proposition.SomeReachable reached -> {
+                List<List<Read>> parts = List.of(
+                        projected(reached.surely(true), read, projection),
+                        List.of(new Read.Unread(new WhyNotTaken.OutsideDomain(
+                                WhyNotTaken.DomainLimit.A_NODE_BELOW_WHAT_A_ROW_WRITES))));
+                yield projection.joinedAlike(oneOf(parts, each -> each, (each, _) -> each,
+                        Optional.of(reached)), parts);
+            }
         };
         return projection.readOff(made, stated);
     }

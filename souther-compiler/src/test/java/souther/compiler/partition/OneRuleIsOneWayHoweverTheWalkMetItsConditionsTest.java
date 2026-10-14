@@ -8,6 +8,13 @@ import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.WhyNotTaken;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
+import souther.compiler.types.ExpansionLineage;
+import souther.compiler.types.ExpansionSite;
+import souther.compiler.types.ModelOccurrence;
+import souther.compiler.types.SourceConstruct;
+import souther.compiler.types.SourceConstructOrigin;
+import souther.compiler.types.ValueName;
+import souther.compiler.types.WrittenOwner;
 
 import java.util.List;
 
@@ -45,6 +52,50 @@ class OneRuleIsOneWayHoweverTheWalkMetItsConditionsTest {
     void andTwoAnswersAboutOneColumnAreNot() {
         assertNotEquals(way(OVER_FIVE), way(compared("a", 5, false)),
                 "one column coming out two ways is two ways");
+    }
+
+    /**
+     * One column consulted at two calls of a helper is one column, and the way keeps both
+     * consultations: where a run through each is seen and what each was read off.
+     */
+    @Test
+    void oneColumnConsultedTwiceIsOneColumnWithBothConsultations() {
+        ModelOccurrence first = comparisonIn(call(1));
+        ModelOccurrence second = comparisonIn(call(2));
+        DecisionPath.Consulted once = OVER_FIVE;
+        DecisionPath.Consulted atTheFirst = seenAt(once, first);
+        DecisionPath.Consulted atTheSecond = seenAt(once, second);
+
+        DecisionPath both = way(atTheFirst, atTheSecond);
+        assertEquals(way(atTheFirst), both, "the same column with the same answer is one rule");
+        assertEquals(1, both.steps().size(), "and one condition of it");
+        RuleStep step = both.steps().getFirst();
+        assertEquals(List.of(atTheFirst.shown(), atTheSecond.shown()), step.seen(),
+                "seen at both places the way consulted it, the first first");
+        assertEquals(atTheFirst.shown(), step.shown(), "and witnessed where it was met first");
+        assertEquals(List.of(first, second), step.said().copies(),
+                "and read off both calls");
+    }
+
+    /** {@code consulted}, which comes out holding, seen and read off at the comparison
+     *  {@code at}. */
+    private static DecisionPath.Consulted seenAt(DecisionPath.Consulted consulted,
+                                                 ModelOccurrence at) {
+        return new DecisionPath.Consulted(consulted.answer(), new ShownBy.AtAnOutcome(at, true),
+                consulted.states(), ReachingCuts.Stating.of(consulted.states(), List.of(at)).by());
+    }
+
+    /** The comparison of the helper `positive` in its copy made at {@code made}. */
+    private static ModelOccurrence comparisonIn(ExpansionLineage made) {
+        return new ModelOccurrence(SourceConstructOrigin.written(
+                new WrittenOwner.Body("m", "positive"), 1, SourceConstruct.BINARY), made);
+    }
+
+    /** The copy of `positive` the call at {@code ordinal} of the body makes. */
+    private static ExpansionLineage call(int ordinal) {
+        return ExpansionLineage.ORIGINAL.copiedInto(new ValueName.Helper("m", "positive"),
+                new ExpansionSite.Written(SourceConstructOrigin.written(
+                        new WrittenOwner.Body("m", "f"), ordinal, SourceConstruct.CALL)));
     }
 
     private static DecisionPath way(DecisionPath.Consulted... consulted) {

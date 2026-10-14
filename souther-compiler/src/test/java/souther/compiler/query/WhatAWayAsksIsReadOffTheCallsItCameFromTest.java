@@ -161,6 +161,72 @@ class WhatAWayAsksIsReadOffTheCallsItCameFromTest {
                 "which is the copy no call made");
     }
 
+    private static final String TWICE = """
+            module example.twice
+
+            behavior f : (n: Int) -> Int
+
+            let positive (k: Int): Bool = k > 0
+
+            let f (n) = if positive(n) then (if positive(n) then 1 else 2) else 3
+            """;
+
+    /**
+     * One condition consulted at two calls of a helper is one condition of the rule, and the rule
+     * keeps both: where each was seen and what each was read off.
+     */
+    @Test
+    void aConditionConsultedAtTwoCallsKeepsBoth() {
+        boolean both = false;
+        for (DecisionReading.Ruled rule : found(TWICE, "f")) {
+            for (RuleStep step : rule.steps()) {
+                Set<ModelOccurrence> seen = new LinkedHashSet<>();
+                step.seen().forEach(place -> place.copy().ifPresent(seen::add));
+                if (seen.size() == 2) {
+                    assertEquals(seen, Set.copyOf(step.said().copies()),
+                            "read off the two calls it was seen at");
+                    both = true;
+                }
+            }
+        }
+        assertTrue(both, "the way through both calls consults the condition at both");
+    }
+
+    private static final String EITHER = """
+            module example.either
+
+            behavior f : (n: Int, m: Int) -> Int
+
+            let positive (k: Int): Bool = k > 0
+
+            let f (n, m) = if positive(n) || positive(n) then 1 else (if m < 10 then 2 else 3)
+            """;
+
+    /**
+     * Two halves asking alike are one thing asked, read off every call the way consulted it at:
+     * the halves stand in two calls, and a way past both failing went through both.
+     */
+    @Test
+    void halvesAskingAlikeAreReadOffEveryCallTheWayConsulted() {
+        boolean both = false;
+        for (DecisionReading.Ruled rule : found(EITHER, "f")) {
+            for (RuleStep step : rule.steps()) {
+                Set<ModelOccurrence> seen = new LinkedHashSet<>();
+                step.seen().forEach(place -> place.copy().ifPresent(seen::add));
+                for (OnTheWay.TakenIn each : takenIn(step.states())) {
+                    if (each.demand().terms().stream()
+                            .anyMatch(term -> term.toString().equals("n"))) {
+                        assertEquals(seen,
+                                Set.copyOf(step.said().entries().getOrDefault(each, List.of())),
+                                () -> "read off the calls it was consulted at: " + each);
+                        both |= seen.size() == 2;
+                    }
+                }
+            }
+        }
+        assertTrue(both, "and a way past both halves failing consulted both calls");
+    }
+
     /** Which call's limit is the latest {@code part} weighs. */
     private static int latestLimit(OnTheWay.TakenIn part) {
         int latest = -1;

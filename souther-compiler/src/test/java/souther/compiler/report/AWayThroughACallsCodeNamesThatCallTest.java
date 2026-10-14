@@ -109,6 +109,51 @@ class AWayThroughACallsCodeNamesThatCallTest {
         assertTrue(told > 0, "a line inside the arm is reached through what the arm states of a");
     }
 
+    private static final String EITHER = """
+            module example.either
+
+            behavior f : (n: Int, m: Int) -> Int
+
+            let positive (k: Int): Bool = k > 0
+
+            let f (n, m) = if positive(n) || positive(n) then (if m < 10 then 1 else 2) else 3
+            """;
+
+    /**
+     * A joined condition whose halves ask alike asks one thing, and what it asks on the way to a
+     * line past it is read off both halves' calls: a row past it went through one of them, and
+     * either is where a reader looks.
+     */
+    @Test
+    void halvesAskingAlikeOnTheWayToALineNameBothCalls() {
+        Compilation compilation = Compilation.ofSource(EITHER, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        Map<String, List<BorderAssessment>> lines =
+                Adequacy.searchedBoundariesOf(compilation.db(), "example.either");
+        assertNotNull(lines, "the model under test compiles");
+        int told = 0;
+        for (BorderAssessment line : lines.get("f")) {
+            // The line the body writes itself, past the whole condition. The helper's own line in
+            // its second copy is reached only where the first copy's failed, which is one call.
+            if (!line.readAt().stream()
+                    .allMatch(copy -> copy.lineage().equals(ExpansionLineage.ORIGINAL))) {
+                continue;
+            }
+            for (Map.Entry<OnTheWay, List<ModelOccurrence>> each
+                    : line.saidOnTheWay().entries().entrySet()) {
+                if (each.getKey() instanceof OnTheWay.TakenIn taken
+                        && taken.demand().terms().stream()
+                        .anyMatch(term -> term.toString().equals("n"))) {
+                    assertEquals(2, Set.copyOf(each.getValue()).size(),
+                            () -> "read off both halves' calls: " + each);
+                    told++;
+                }
+            }
+        }
+        assertTrue(told > 0, "the line past the condition is reached through what it asks of n");
+    }
+
     /** Where the body writes {@code written}, as the page names the call. */
     private static String call(String written) {
         List<String> lines = MODEL.lines().toList();
