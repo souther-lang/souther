@@ -224,7 +224,7 @@ final class PartitionClasses {
                 ? nothingFor("Some", "Some", is, some.met(),
                         "nothing here composed a value of " + Type.show(element))
                 : PartitionClass.of("Some", "Some", is,
-                        RepresentativeSource.under(writes, RepresentativeSource.of(some.values())));
+                        RepresentativeSource.under(writes, RepresentativeSource.of(some)));
     }
 
     /**
@@ -304,7 +304,7 @@ final class PartitionClasses {
                             "nothing here composed a value of `" + leaf.name() + "`")
                     : PartitionClass.of(idOfCase(leaf), leaf.name(), is,
                             RepresentativeSource.under(writes,
-                                    RepresentativeSource.of(values.values())));
+                                    RepresentativeSource.of(values)));
         }
         // A record case is written field by field, which is the generator's composition. So the class
         // names the constructor and the generator does the composing — the same walk every other

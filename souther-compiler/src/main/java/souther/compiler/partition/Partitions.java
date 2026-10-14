@@ -1618,7 +1618,7 @@ public final class Partitions {
     static Proposals standingFor(RepresentativeSource source, RuleReadingContext reading,
                                  Set<TypeSymbol> expanding) {
         return switch (source) {
-            case RepresentativeSource.Values values -> Proposals.of(values.written());
+            case RepresentativeSource.Values values -> values.offered();
             // Against the case's own rules: the names the position wears are over the sum, and a
             // rule of theirs reads no field of one of its cases.
             case RepresentativeSource.Compose compose ->

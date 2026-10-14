@@ -50,6 +50,8 @@ class WhatAnElementsValuesMetIsWhatItsContainerMetTest {
             data Small = { n: Int }
             data Large = { h: Huge }
             data Either = Small | Large
+            data One = List<Either>
+              invariant List.length(value) == 1
 
             data Red = { r: Bool }
               invariant r
@@ -159,6 +161,31 @@ class WhatAnElementsValuesMetIsWhatItsContainerMetTest {
         Proposals found = Witnesses.distinctValuesOf(named("Either"), 3, READING, Set.of());
 
         assertEquals(3, found.values().size(), () -> found.values().toString());
+        assertEquals(ELEMENTS, found.met().figures());
+    }
+
+    /**
+     * The same of contents arranged out of those values: a list of one holding the second of them
+     * is taken in place of one holding what the figure kept out, so the lists say it too.
+     */
+    @Test
+    void contentsArrangedPastAFigureSayIt() {
+        Proposals found = Witnesses.distinctValuesOf(named("One"), 3, READING, Set.of());
+
+        assertEquals(3, found.values().size(), () -> found.values().toString());
+        assertEquals(ELEMENTS, found.met().figures());
+    }
+
+    /**
+     * And of the values a class of a position stands for: what an optional holds is a class of it,
+     * and the value of {@code Large} in it was built in place of one the figure kept out.
+     */
+    @Test
+    void theValuesOfAClassSayWhatStoppedThem() {
+        Proposals found = Witnesses.distinctValuesOf(new Type.OptionOf(named("Large")), 2,
+                READING, Set.of());
+
+        assertEquals(2, found.values().size(), () -> found.values().toString());
         assertEquals(ELEMENTS, found.met().figures());
     }
 

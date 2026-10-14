@@ -31,7 +31,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.function.Predicate;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 /**
@@ -661,11 +661,11 @@ final class Witnesses {
         List<FixtureTemplate> keys = keyProposals.values();
         List<FixtureTemplate> values = valueProposals.values();
         List<Step> out = new ArrayList<>();
-        // Where each side's proposals were stopped, by the proposal they stand in front of: met
-        // where the walk first comes to a pair holding that proposal, which is the pair a proposal
-        // a figure kept out would have stood in.
-        List<CompositionShortfall> keysStopped = stopsBefore(keyProposals);
-        List<CompositionShortfall> valuesStopped = stopsBefore(valueProposals);
+        // Where each side's proposals were stopped, met where the walk first comes to a pair
+        // holding the proposal they stand in front of, which is the pair a proposal a figure kept
+        // out would have stood in.
+        Reaching keysStopped = new Reaching(keyProposals);
+        Reaching valuesStopped = new Reaching(valueProposals);
         if (keys.isEmpty() || values.isEmpty()) {
             // Nothing to pair, so every proposal either side would have had is one no map is
             // built of.
@@ -675,8 +675,6 @@ final class Witnesses {
             }
             return new Built(out);
         }
-        boolean[] keyReached = new boolean[keys.size()];
-        boolean[] valueReached = new boolean[values.size()];
         int pairs = 0;
         // Every pair, nearest first. A key's rules and a value's are answered together or not at all —
         // the pair is inside one position, so no search outside can put a key's second proposal beside
@@ -706,14 +704,8 @@ final class Witnesses {
                 if (keysFrom.get(i) == null) {
                     keysFrom.set(i, distinctFrom(keys.get(i), keyValues, least));
                 }
-                if (!keyReached[i]) {
-                    keyReached[i] = true;
-                    halt(out, keysStopped.get(i));
-                }
-                if (!valueReached[apart - i]) {
-                    valueReached[apart - i] = true;
-                    halt(out, valuesStopped.get(apart - i));
-                }
+                halt(out, keysStopped.through(new int[] {i})
+                        .and(valuesStopped.through(new int[] {apart - i})));
                 FixtureTemplate value = values.get(apart - i);
                 List<FixtureTemplate> entries = new ArrayList<>();
                 for (FixtureTemplate key : keysFrom.get(i).values()) {
@@ -733,8 +725,7 @@ final class Witnesses {
         } else {
             // Every pair walked, so a proposal stopped past the last of either side is one the walk
             // would have gone on to.
-            halt(out, keysStopped.getLast());
-            halt(out, valuesStopped.getLast());
+            halt(out, keysStopped.rest().and(valuesStopped.rest()));
         }
         return new Built(out);
     }
@@ -1253,15 +1244,8 @@ final class Witnesses {
                 List<List<String>> keptApart = view.shape() instanceof Shape.Sequence
                         ? ElementsKeptApart.at(view, apart, reading) : apart;
                 if (out.size() < many && keptApart.stream().allMatch(List::isEmpty)) {
-                    out.stop(arrange(view.shape(), !keptApart.isEmpty(), range, many,
-                            reading, inside, content -> {
-                                FixtureTemplate each =
-                                        WornNames.under(view.wrappers(), content, source);
-                                if (each != null) {
-                                    out.add(each);
-                                }
-                                return out.size() < many;
-                            }));
+                    arrange(view.shape(), !keptApart.isEmpty(), range, many, reading, inside,
+                            out, content -> WornNames.under(view.wrappers(), content, source));
                 }
                 yield out.done();
             }
@@ -1387,58 +1371,71 @@ final class Witnesses {
      * {@code many} contents apart. Proposals and not built values: a rule over what the collection
      * holds is the decoder's to apply.
      *
-     * <p>What comes back is what of this compiler's the walk met before {@code offer} had enough:
-     * a size past what a proposal holds, and what the values it arranges met. Nothing where
-     * {@code offer} answered false, which is a caller that has what it asked for.
+     * <p>Into {@code out}, each content after what stopped a value of what it holds in front of
+     * the furthest value it takes — a content of values the walk would have reached past one a
+     * figure kept out is a content taken in place of one holding that value — until {@code out}
+     * holds {@code many}. Where the contents run out first, after them every stop the values had
+     * left, and a size past what a proposal holds.
      *
-     * @param apart whether the elements are apart as wholes, so that a list or a map's values say
-     *              no value twice; a set's never do
+     * @param apart   whether the elements are apart as wholes, so that a list or a map's values
+     *                say no value twice; a set's never do
+     * @param written what a content is written as, or null where it is written as nothing
      */
-    private static CompositionShortfall arrange(Shape shape, boolean apart,
-                                                DeclaredBounds.CountRange range, int many,
-                                                RuleReadingContext reading,
-                                                Set<TypeSymbol> inside,
-                                                Predicate<FixtureTemplate> offer) {
+    private static void arrange(Shape shape, boolean apart, DeclaredBounds.CountRange range,
+                                int many, RuleReadingContext reading, Set<TypeSymbol> inside,
+                                Proposals.Gathering out,
+                                Function<FixtureTemplate, FixtureTemplate> written) {
         int least = Math.max(range.least(), 0);
         // What tells two contents apart is the shape's: a set is the few it holds, and a list or
         // what a map files under its keys is in an order as well.
         Picking runs = apart ? Picking.AN_ORDER_OF_A_FEW : Picking.A_RUN;
         switch (shape) {
             case Shape.Sequence(Shape.Sequence.Kind kind, Type element) -> {
-                Proposals elements = distinctValuesOf(element, many, reading, inside);
+                Reaching elements = new Reaching(distinctValuesOf(element, many, reading, inside));
                 List<FixtureTemplate> values = elements.values();
                 Picking picking = kind == Shape.Sequence.Kind.SET ? Picking.A_FEW : runs;
                 for (int size = least; size <= range.most(); size++) {
                     if (!picking.fits(size, values.size())) {
-                        return elements.met();
+                        out.stop(elements.rest());
+                        return;
                     }
                     CompositionBudget past = pastTheElements(size);
                     if (past != null) {
-                        return elements.met().and(CompositionShortfall.of(List.of(past)));
+                        out.stop(elements.rest().and(CompositionShortfall.of(List.of(past))));
+                        return;
                     }
                     int[] at = picking.first(size);
                     do {
-                        if (!offer.test(FixtureTemplate.collection(picked(values, at)))) {
-                            return CompositionShortfall.NONE;
+                        out.stop(elements.through(at));
+                        FixtureTemplate each =
+                                written.apply(FixtureTemplate.collection(picked(values, at)));
+                        if (each != null) {
+                            out.add(each);
+                        }
+                        if (out.size() >= many) {
+                            return;
                         }
                     } while (picking.next(at, values.size()));
                 }
-                return elements.met();
+                out.stop(elements.rest());
             }
             case Shape.Mapping(Type key, Type value) -> {
-                Proposals keyValues = distinctValuesOf(key, many, reading, inside);
-                Proposals valueValues = distinctValuesOf(value, many, reading, inside);
-                CompositionShortfall met = keyValues.met().and(valueValues.met());
+                Reaching keyValues = new Reaching(distinctValuesOf(key, many, reading, inside));
+                Reaching valueValues = new Reaching(distinctValuesOf(value, many, reading,
+                        inside));
                 List<FixtureTemplate> keys = keyValues.values();
                 List<FixtureTemplate> values = valueValues.values();
                 for (int size = least; size <= range.most(); size++) {
                     if (!Picking.A_FEW.fits(size, keys.size())
                             || !runs.fits(size, values.size())) {
-                        return met;
+                        out.stop(keyValues.rest().and(valueValues.rest()));
+                        return;
                     }
                     CompositionBudget past = pastTheElements(size);
                     if (past != null) {
-                        return met.and(CompositionShortfall.of(List.of(past)));
+                        out.stop(keyValues.rest().and(valueValues.rest())
+                                .and(CompositionShortfall.of(List.of(past))));
+                        return;
                     }
                     int[] which = Picking.A_FEW.first(size);
                     do {
@@ -1450,19 +1447,70 @@ final class Witnesses {
                                 entries.add(FixtureTemplate.entry(held.get(i),
                                         values.get(to[i])));
                             }
-                            if (!offer.test(FixtureTemplate.collection(entries))) {
-                                return CompositionShortfall.NONE;
+                            out.stop(keyValues.through(which).and(valueValues.through(to)));
+                            FixtureTemplate each =
+                                    written.apply(FixtureTemplate.collection(entries));
+                            if (each != null) {
+                                out.add(each);
+                            }
+                            if (out.size() >= many) {
+                                return;
                             }
                         } while (runs.next(to, values.size()));
                     } while (Picking.A_FEW.next(which, keys.size()));
                 }
-                return met;
+                out.stop(keyValues.rest().and(valueValues.rest()));
             }
             case Shape.Scalar _, Shape.Product _, Shape.Sum _, Shape.Unit _, Shape.Optional _,
                  Shape.Unresolved _, Shape.Cases _, Shape.Tuple _, Shape.Function _,
-                 Shape.Uninhabited _, Shape.Bottom _, Shape.Erroneous _, Shape.Undecided _ -> {
-                return CompositionShortfall.NONE;
+                 Shape.Uninhabited _, Shape.Bottom _, Shape.Erroneous _, Shape.Undecided _ -> { }
+        }
+    }
+
+    /**
+     * Values arranged into contents, and how far into them the arranging has reached: what
+     * stopped a value in front of the furthest one taken so far is met once, as the arranging
+     * first reaches past it.
+     */
+    private static final class Reaching {
+
+        private final List<FixtureTemplate> values;
+
+        /** What stopped the values in front of each of them by its place, and last past them. */
+        private final List<CompositionShortfall> before;
+
+        /** How many places' stops have been met. */
+        private int reached;
+
+        Reaching(Proposals proposals) {
+            this.values = proposals.values();
+            this.before = stopsBefore(proposals);
+        }
+
+        List<FixtureTemplate> values() {
+            return values;
+        }
+
+        /** What stops in front of the furthest of the places {@code at} names have not been met. */
+        CompositionShortfall through(int[] at) {
+            int furthest = -1;
+            for (int each : at) {
+                furthest = Math.max(furthest, each);
             }
+            return metUpTo(furthest + 1);
+        }
+
+        /** Every stop not yet met, past the last value as well: the arranging went to the end. */
+        CompositionShortfall rest() {
+            return metUpTo(before.size());
+        }
+
+        private CompositionShortfall metUpTo(int places) {
+            CompositionShortfall out = CompositionShortfall.NONE;
+            for (; reached < places; reached++) {
+                out = out.and(before.get(reached));
+            }
+            return out;
         }
     }
 

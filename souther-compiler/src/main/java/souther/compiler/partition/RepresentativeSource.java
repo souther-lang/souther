@@ -36,17 +36,27 @@ import java.util.List;
  */
 public sealed interface RepresentativeSource {
 
-    /** Values ready to be written at the position, in the order to try them, under every name it
-     *  wears. Never empty: a class with nothing to write is {@link NothingProducible}, which says
-     *  why. */
-    record Values(List<FixtureTemplate> written) implements RepresentativeSource {
+    /**
+     * Values ready to be written at the position, in the order to try them, under every name it
+     * wears, and where in that order a figure of this compiler's kept one from being built. Never
+     * without a value: a class with nothing to write is {@link NothingProducible}, which says why.
+     *
+     * <p>The stops are kept with the values because a class's values are an offer like any other:
+     * a reader taking the first few of them is owed what stopped one in front of those, and a
+     * class holding them apart would hand on its values with their account left behind.
+     */
+    record Values(Proposals offered) implements RepresentativeSource {
 
         public Values {
-            written = List.copyOf(written);
-            if (written.isEmpty()) {
+            if (offered.isEmpty()) {
                 throw new IllegalArgumentException(
                         "no values is `NothingProducible`, which says why");
             }
+        }
+
+        /** The values, in the order to try them. */
+        public List<FixtureTemplate> written() {
+            return offered.values();
         }
     }
 
@@ -122,12 +132,20 @@ public sealed interface RepresentativeSource {
         };
     }
 
+    /** These values, which nothing of this compiler's stopped any of. */
     static RepresentativeSource of(FixtureTemplate... values) {
-        return new Values(List.of(values));
+        return new Values(Proposals.of(List.of(values)));
     }
 
+    /** These values, which nothing of this compiler's stopped any of. A build that may have been
+     *  stopped hands over what it built whole ({@link #of(Proposals)}). */
     static RepresentativeSource of(List<FixtureTemplate> values) {
-        return new Values(values);
+        return new Values(Proposals.of(values));
+    }
+
+    /** What a build offered, with where it was stopped. */
+    static RepresentativeSource of(Proposals offered) {
+        return new Values(offered);
     }
 
     /**
@@ -146,8 +164,7 @@ public sealed interface RepresentativeSource {
             return source;
         }
         return switch (source) {
-            case Values values -> new Values(
-                    values.written().stream().map(each -> under(wrappers, each)).toList());
+            case Values values -> new Values(values.offered().map(each -> under(wrappers, each)));
             // The names go on outside whatever the composition already wears, which is the order
             // they were read off the position in.
             case Compose compose -> {

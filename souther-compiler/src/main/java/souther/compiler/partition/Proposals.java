@@ -30,13 +30,13 @@ import java.util.function.Function;
  *
  * @param entries the values and the stops, in the order the build came to them
  */
-record Proposals(List<Entry> entries) {
+public record Proposals(List<Entry> entries) {
 
     /** One place in the order: a value, or a value a figure kept from being built. */
-    sealed interface Entry {}
+    public sealed interface Entry {}
 
     /** A value built. */
-    record Offered(FixtureTemplate value) implements Entry {
+    public record Offered(FixtureTemplate value) implements Entry {
 
         public Offered {
             Objects.requireNonNull(value, "a value offered is a value");
@@ -44,7 +44,7 @@ record Proposals(List<Entry> entries) {
     }
 
     /** A value not built there, and what of this compiler's stopped it. */
-    record Stopped(CompositionShortfall met) implements Entry {
+    public record Stopped(CompositionShortfall met) implements Entry {
 
         public Stopped {
             if (met.nothing()) {
@@ -56,7 +56,7 @@ record Proposals(List<Entry> entries) {
     /** Nothing built, and nothing stopped it. */
     static final Proposals NONE = new Proposals(List.of());
 
-    Proposals {
+    public Proposals {
         entries = List.copyOf(entries);
     }
 
@@ -91,8 +91,15 @@ record Proposals(List<Entry> entries) {
         return new Proposals(out);
     }
 
-    /** The values, in order. */
-    List<FixtureTemplate> values() {
+    /**
+     * The values, in order.
+     *
+     * <p>For a reader that takes all of them or one it already cut to ({@link #firstOf}). A builder
+     * putting these into something else walks {@link #entries} or gathers them
+     * ({@link Gathering#addAll}): taken apart into the values and {@link #met}, where a stop stood
+     * is gone, and what is built of the values says either too much or too little.
+     */
+    public List<FixtureTemplate> values() {
         List<FixtureTemplate> out = new ArrayList<>();
         for (Entry each : entries) {
             if (each instanceof Offered(FixtureTemplate value)) {
@@ -113,7 +120,7 @@ record Proposals(List<Entry> entries) {
         return out;
     }
 
-    boolean isEmpty() {
+    public boolean isEmpty() {
         return entries.stream().noneMatch(Offered.class::isInstance);
     }
 
