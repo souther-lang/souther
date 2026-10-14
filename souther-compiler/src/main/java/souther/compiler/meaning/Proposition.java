@@ -372,7 +372,8 @@ public sealed interface Proposition {
 
         @Override
         public Proposition denied() {
-            return any(parts.stream().map(Proposition::denied).toList());
+            return SharedPropositions.denied(this,
+                    () -> any(parts.stream().map(Proposition::denied).toList()));
         }
     }
 
@@ -410,7 +411,8 @@ public sealed interface Proposition {
 
         @Override
         public Proposition denied() {
-            return all(parts.stream().map(Proposition::denied).toList());
+            return SharedPropositions.denied(this,
+                    () -> all(parts.stream().map(Proposition::denied).toList()));
         }
     }
 
@@ -656,7 +658,8 @@ public sealed interface Proposition {
 
         @Override
         public Proposition denied() {
-            return onAnApplication(each.stream().map(Proposition::denied).toList());
+            return SharedPropositions.denied(this,
+                    () -> onAnApplication(each.stream().map(Proposition::denied).toList()));
         }
     }
 

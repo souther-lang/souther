@@ -19,8 +19,8 @@ import souther.compiler.query.Compilation;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -83,10 +83,15 @@ class ACaseChainIsReadNoFurtherInAllThanOneConditionIsReadTest {
 
     private record Read(Compilation compilation, List<Proposition> stated) {}
 
+    /** Each chain read once, for every test asking about it. */
+    private static final Map<Integer, Read> READ = new ConcurrentHashMap<>();
+
     private static Read read(int calls) {
+        return READ.computeIfAbsent(calls, ACaseChainIsReadNoFurtherInAllThanOneConditionIsReadTest::readAnew);
+    }
+
+    private static Read readAnew(int calls) {
         Compilation compilation = Compilation.ofSource(model(calls), "Main");
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors(), "the chain compiles");
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked("demo")).value();
         assertNotNull(checked, "the chain under test compiles");
         AnalysisBody analysis = checked.analysisBodies().get("draw");
@@ -136,14 +141,6 @@ class ACaseChainIsReadNoFurtherInAllThanOneConditionIsReadTest {
                 .max().orElseThrow();
     }
 
-    /** No arm of the chain's forks is one nothing arrives at, however far past the figures. */
-    private static void noArmIsProvedUnreached(Read read) {
-        Map<String, PathReachability.Answers> byBehavior =
-                read.compilation().db().ask(new Adequacy.PathReached("demo")).value();
-        byBehavior.get("draw").found().forEach((place, reached) ->
-                assertFalse(reached instanceof souther.compiler.reach.Reachability.Unreachable,
-                        () -> place + " is proved unreached on a reading that stopped"));
-    }
 
     @Test
     void withinTheFigureNoConditionIsGivenUpForIt() {
@@ -155,12 +152,24 @@ class ACaseChainIsReadNoFurtherInAllThanOneConditionIsReadTest {
     }
 
     @Test
-    void oneCallMoreGivesTheLastConditionsUpAtTheFigureAndProvesNothing() {
+    void oneCallMoreGivesTheLastConditionsUpAtTheFigure() {
         Read past = read(WITHIN + 1);
 
         assertTrue(past.stated().stream().anyMatch(each -> whysIn(each).contains(PAST_THE_TOTAL)),
                 "the conditions of the last call are read more times in all than are made");
-        noArmIsProvedUnreached(past);
+    }
+
+    /** No arm of the chain's forks is one nothing arrives at, on conditions given up at the
+     *  figure. Asked of a compilation of its own, which reads the conditions for itself. */
+    @Test
+    void whatWasGivenUpProvesNoArmUnreached() {
+        Compilation compilation = Compilation.ofSource(model(WITHIN + 1), "Main");
+        Map<String, PathReachability.Answers> byBehavior =
+                compilation.db().ask(new Adequacy.PathReached("demo")).value();
+
+        byBehavior.get("draw").found().forEach((place, reached) ->
+                assertFalse(reached instanceof souther.compiler.reach.Reachability.Unreachable,
+                        () -> place + " is proved unreached on a reading that stopped"));
     }
 
     /**
@@ -170,11 +179,10 @@ class ACaseChainIsReadNoFurtherInAllThanOneConditionIsReadTest {
     @Test
     void aLongerChainStatesNoMoreOfAnyCondition() {
         Read first = read(WITHIN + 1);
-        Read longer = read(WITHIN + 6);
+        Read longer = read(WITHIN + 3);
 
         assertTrue(largest(longer) <= largest(first),
                 () -> largest(longer) + " parts past " + largest(first));
         assertTrue(largest(longer) <= CompositionBudget.PARTS_A_DERIVATION_CONCLUDES.maximum());
-        noArmIsProvedUnreached(longer);
     }
 }

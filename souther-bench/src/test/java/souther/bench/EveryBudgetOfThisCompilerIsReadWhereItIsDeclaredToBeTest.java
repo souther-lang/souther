@@ -184,9 +184,11 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/partition/ElementsWrittenAlike$Choices;",
                     "says the figure the walk stopped at beside the ways it looked along, which"
                             + " the way composed as it stands says of what it wrote alike"),
-            Map.entry("souther.compiler.partition.AnAnswerComposed#written(Ljava/util/List;)"
-                            + "Lsouther/compiler/partition/AnAnswerComposed$Ways;",
-                    "says the figures the walk stopped at in the ways it answers with"),
+            Map.entry("souther.compiler.partition.AnAnswerComposed#stoppedAt("
+                            + "Lsouther/compiler/meaning/WhyNotTaken;)"
+                            + "Lsouther/compiler/partition/CompositionBudget;",
+                    "names the figure each part the reading gave up stopped at, which the ways"
+                            + " an answer is composed along say they stopped at"),
             Map.entry("souther.compiler.partition.CardinalityComposer#handingOn("
                             + "Ljava/util/List;Ljava/util/List;Ljava/util/List;"
                             + "Lsouther/compiler/partition/NumericSet;"

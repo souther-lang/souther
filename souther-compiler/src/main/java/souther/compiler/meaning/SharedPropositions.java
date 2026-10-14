@@ -3,6 +3,7 @@ package souther.compiler.meaning;
 import java.lang.ref.WeakReference;
 import java.util.Map;
 import java.util.WeakHashMap;
+import java.util.function.Supplier;
 
 /**
  * One object for each conjunction, disjunction and statement on an application made while it is
@@ -18,13 +19,20 @@ import java.util.WeakHashMap;
  * <p>Compared as values when one is made. Its parts made the same way are the ones kept here
  * already, so the comparison stops at each of them.
  *
+ * <p>And the denial of each, made once. A condition is stated where it holds and denied where it
+ * does not, so a statement kept here is denied again wherever it is read, and a denial made afresh
+ * writes out every part again before it comes to the one kept.
+ *
  * <p>Held weakly both ways. A key held weakly whose value is the key itself held strongly is never
  * let go, so what is kept is a reference to it, and one nobody else holds is let go with its
- * entry.
+ * entry. A statement and its denial are each the other's, so a denial held strongly would hold its
+ * statement, and neither would be let go.
  */
 final class SharedPropositions {
 
     private static final Map<Proposition, WeakReference<Proposition>> KEPT = new WeakHashMap<>();
+    private static final Map<Proposition, WeakReference<Proposition>> DENIED =
+            new WeakHashMap<>();
 
     private SharedPropositions() {
     }
@@ -40,5 +48,27 @@ final class SharedPropositions {
             KEPT.put(made, new WeakReference<>(made));
             return made;
         }
+    }
+
+    /**
+     * What holds exactly where {@code stated} does not: the one made the first time it was asked
+     * while both are held, or {@code denying}'s, kept from now on.
+     *
+     * <p>Made outside the lock, since making it asks for the denial of every part. Two readers
+     * asking at once make two equal denials and keep the one {@link #shared} hands both.
+     */
+    static Proposition denied(Proposition stated, Supplier<Proposition> denying) {
+        synchronized (DENIED) {
+            WeakReference<Proposition> held = DENIED.get(stated);
+            Proposition kept = held == null ? null : held.get();
+            if (kept != null) {
+                return kept;
+            }
+        }
+        Proposition made = denying.get();
+        synchronized (DENIED) {
+            DENIED.put(stated, new WeakReference<>(made));
+        }
+        return made;
     }
 }

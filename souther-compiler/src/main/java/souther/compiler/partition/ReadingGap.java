@@ -288,7 +288,20 @@ public sealed interface ReadingGap {
                 case WhyUnread.MorePartsThanAreConcluded _ -> Why.MORE_PARTS_THAN_ARE_CONCLUDED;
                 case WhyUnread.MoreElementsThanAreWrittenOut _ ->
                         Why.MORE_ELEMENTS_THAN_ARE_WRITTEN_OUT;
-                default -> Why.A_PART_NOT_READ;
+                // Every other reason named, so one added that stops at a figure is placed here
+                // rather than said as a part nothing read with no figure to raise.
+                case WhyUnread.AtNoPosition _, WhyUnread.NoMeasureOfItsSize _,
+                     WhyUnread.OutsideTheLinearFragment _, WhyUnread.NotArithmetic _,
+                     WhyUnread.ANumberNotHeld _, WhyUnread.NoNumberOnARun _,
+                     WhyUnread.TwoElementsOfOneContainer _, WhyUnread.NoLawFor _,
+                     WhyUnread.NoWordsFor _, WhyUnread.NotProvedOfItsBody _,
+                     WhyUnread.NoFormOfWhatItAnswers _,
+                     WhyUnread.ANumberOfWhatAnOperationAnswers _,
+                     WhyUnread.AClauseOfAnInvariant _, WhyUnread.AnInvariantNotReached _,
+                     WhyUnread.InACalledBody _, WhyUnread.WhatARecursiveHelperAnswers _,
+                     WhyUnread.SeveralValuesNotGoneInto _,
+                     WhyUnread.CopiesStateDifferentThings _, WhyUnread.NotMetByTheReading _ ->
+                        Why.A_PART_NOT_READ;
             });
         }
     }
