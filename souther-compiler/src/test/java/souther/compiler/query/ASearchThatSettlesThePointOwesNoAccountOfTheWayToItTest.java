@@ -38,7 +38,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  */
 class ASearchThatSettlesThePointOwesNoAccountOfTheWayToItTest {
 
-    private static final ConditionOccurrence MET = new ConditionOccurrence("b", 0);
+    private static final ConditionOccurrence MET =
+            new ConditionOccurrence("b", ConditionOccurrence.Reading.DIVIDING, 0);
 
     private static final OnTheWay.Declined LEFT_OUT = new OnTheWay.Declined(MET,
             new ConditionReportAnchor.WhereTheReadingMetIt("m", MET),

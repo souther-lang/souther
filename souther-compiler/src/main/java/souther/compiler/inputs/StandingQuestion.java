@@ -4,8 +4,11 @@ import souther.compiler.check.CoverageObligation;
 import souther.compiler.check.RuleCitation;
 import souther.compiler.check.RuleRef;
 import souther.compiler.check.RuleReportAnchor;
+import souther.compiler.types.ModelOccurrence;
 
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
@@ -123,6 +126,21 @@ public sealed interface StandingQuestion {
     StandingQuestion mergedWith(StandingQuestion other);
 
     /**
+     * Every copy of the model's code the rule was read at where it raised this, which is what tells
+     * a reader apart the readings of a rule written in a helper called more than once. No part of
+     * what makes two of these one.
+     */
+    List<ModelOccurrence> readAt();
+
+    /** Both accounts' copies, each once, in the order they were met. */
+    private static List<ModelOccurrence> together(List<ModelOccurrence> one,
+                                                  List<ModelOccurrence> other) {
+        List<ModelOccurrence> out = new ArrayList<>(one);
+        other.stream().filter(copy -> !out.contains(copy)).forEach(out::add);
+        return out;
+    }
+
+    /**
      * One question a rule of the model raises that nothing answered.
      *
      * <p>The other side of {@code check.RuleAccounting.Unanswered}, which is the same question in
@@ -176,6 +194,13 @@ public sealed interface StandingQuestion {
         @Override
         public Set<RuleCitation> cited() {
             return RuleCitation.handlesFor(fact.rule(), reachedBy);
+        }
+
+        /** None: a question one asks of a declaration's clauses is read wherever the type is
+         *  carried, and is no copy of anybody's code. */
+        @Override
+        public List<ModelOccurrence> readAt() {
+            return List.of();
         }
 
         /** What it asks and what it asks it about. */
@@ -303,7 +328,8 @@ public sealed interface StandingQuestion {
      * only the measure answering it.
      */
     record NothingClassifiesIt(NothingClassifiesIt.Filed filed,
-                                  Set<RuleReportAnchor> reachedBy) implements Unclassified {
+                                  Set<RuleReportAnchor> reachedBy, List<ModelOccurrence> readAt)
+            implements Unclassified {
 
         public NothingClassifiesIt {
             if (filed == null) {
@@ -312,14 +338,16 @@ public sealed interface StandingQuestion {
             }
             reachedBy = reachedBy == null ? Set.of() : Set.copyOf(reachedBy);
             RuleCitation.requireReached(filed.rule(), reachedBy);
+            readAt = List.copyOf(readAt);
         }
 
-        /** One reader's account of it, as that reader produced it. */
-        public static NothingClassifiesIt of(RuleCitation cited, FilingCoordinate at,
+        /** One reader's account of it, as that reader produced it, read at {@code readAt}. */
+        public static NothingClassifiesIt of(RuleCitation cited, List<ModelOccurrence> readAt,
+                                             FilingCoordinate at,
                                              BlockReason.RuleReadingStopped why) {
             return new NothingClassifiesIt(
                     new NothingClassifiesIt.Filed(cited.rule(), at, why),
-                    RuleCitation.anchorOf(cited));
+                    RuleCitation.anchorOf(cited), readAt);
         }
 
         @Override
@@ -367,7 +395,7 @@ public sealed interface StandingQuestion {
             }
             Set<RuleReportAnchor> both = new HashSet<>(reachedBy);
             both.addAll(it.reachedBy);
-            return new NothingClassifiesIt(filed, both);
+            return new NothingClassifiesIt(filed, both, together(readAt, it.readAt));
         }
 
         @Override
@@ -414,7 +442,8 @@ public sealed interface StandingQuestion {
      *                  author named it
      */
     record BoundaryUndetermined(BoundaryUndetermined.Filed filed,
-                                Set<RuleReportAnchor> reachedBy) implements Unclassified {
+                                Set<RuleReportAnchor> reachedBy, List<ModelOccurrence> readAt)
+            implements Unclassified {
 
         public BoundaryUndetermined {
             if (filed == null) {
@@ -423,14 +452,16 @@ public sealed interface StandingQuestion {
             }
             reachedBy = reachedBy == null ? Set.of() : Set.copyOf(reachedBy);
             RuleCitation.requireReached(filed.rule(), reachedBy);
+            readAt = List.copyOf(readAt);
         }
 
-        /** One reader's account of it, as that reader produced it. */
-        public static BoundaryUndetermined of(RuleCitation cited, FilingCoordinate at,
+        /** One reader's account of it, as that reader produced it, read at {@code readAt}. */
+        public static BoundaryUndetermined of(RuleCitation cited, List<ModelOccurrence> readAt,
+                                              FilingCoordinate at,
                                               BlockReason.RuleReadingStopped why) {
             return new BoundaryUndetermined(
                     new BoundaryUndetermined.Filed(cited.rule(), at, why),
-                    RuleCitation.anchorOf(cited));
+                    RuleCitation.anchorOf(cited), readAt);
         }
 
         @Override
@@ -475,7 +506,7 @@ public sealed interface StandingQuestion {
             }
             Set<RuleReportAnchor> both = new HashSet<>(reachedBy);
             both.addAll(it.reachedBy);
-            return new BoundaryUndetermined(filed, both);
+            return new BoundaryUndetermined(filed, both, together(readAt, it.readAt));
         }
 
         @Override

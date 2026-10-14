@@ -17,6 +17,7 @@ import souther.compiler.check.ValueOrigin;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputNumber;
+import souther.compiler.inputs.RuleWithoutALine;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
@@ -251,7 +252,8 @@ public final class GuardThresholds {
                     // emitted tree made of that construct has nothing to say about it — so a copy
                     // per materialisation would be one account under several names, and whoever
                     // asked would have to pick one of them with nothing to pick by.
-                    cuts.reached(stated, each.assumed(), each.whereEachDecides());
+                    cuts.reached(stated, each.assumed(), each.whereEachDecides(),
+                            each.saidOnTheWay());
                     switch (each.standing()) {
                         case BoundaryPolicy.Standing.Admitted admitted ->
                                 // The same reading on the narrower region a row at the line is in:
@@ -289,9 +291,10 @@ public final class GuardThresholds {
         // was handed is answered by no construct, and no run is seen at it.
         WhatConditionsState conditions = WhatConditionsState.of(read);
         for (ComparisonReadings.TruthMet each : comparisons.truths()) {
-            List<OnTheWay> holding = ReachingCuts.stating(each.condition(), read, true, conditions);
+            List<OnTheWay> holding =
+                    ReachingCuts.stating(each.condition(), read, true, conditions).entries();
             List<OnTheWay> failing =
-                    ReachingCuts.stating(each.condition(), read, false, conditions);
+                    ReachingCuts.stating(each.condition(), read, false, conditions).entries();
             // As the copy the call a helper's body was read at makes of the construct, which is
             // the copy every other fact about that call's reading is filed under.
             Optional<ModelOccurrence> answeredBy =
@@ -746,7 +749,7 @@ public final class GuardThresholds {
         // Which question places this comparison, asked once here. The two readers below say the
         // same thing about one rule, and asking apiece would let them come to say two.
         RuleReportAnchor anchor = reaches.anchorOf(wrote, where);
-        publish(behavior, wrote, anchor, read, withoutALine);
+        publish(behavior, stated, wrote, anchor, read, withoutALine);
         // The geometry itself is not this reader's own — {@link ComparisonGeometry} reads it the
         // same way a clause does. Only where a line's origin comes from is: a guard's is where
         // the run meets the comparison, which is this reading's own place to say.
@@ -776,11 +779,15 @@ public final class GuardThresholds {
      * relating two positions — a sentence saying no measure is short of anything, over a model
      * missing a border.
      */
-    private static void publish(String behavior, SourceConstructOrigin wrote,
-                                RuleReportAnchor anchor,
+    private static void publish(String behavior, ModelOccurrence stated,
+                                SourceConstructOrigin wrote, RuleReportAnchor anchor,
                                 ComparisonAssessment read, RulesWithNoLine.Gathered out) {
         RuleCitation cited =
                 new RuleCitation.Written(new RuleRef.Comparison(behavior, wrote), anchor);
+        // And the copy of the comparison this reading was made at, beside the rule and not in it:
+        // a comparison written in a helper is one rule read once per call, and the call is what a
+        // reader tells those readings apart by.
+        List<ModelOccurrence> readAt = List.of(stated);
         // What each place is left with, and which places there are, are the assessment's one
         // answer. A rule that was read is filed at its quantity's coordinates and says one thing
         // there, because the quantity is one subject; a reading that stopped has none, and each
@@ -791,9 +798,9 @@ public final class GuardThresholds {
         // reading stopped there is nothing that was determined and nothing that could have been.
         read.whatEachPlaceIsLeftWith().forEach(left -> {
             if (left.why() instanceof BlockReason.RuleReadingStopped stopped) {
-                out.unclassified(cited, left.at(), stopped);
+                out.unclassified(cited, readAt, left.at(), stopped);
             } else {
-                out.add(cited, left.at(), left.why());
+                out.add(RuleWithoutALine.of(cited, readAt, left.at(), left.why()));
             }
         });
     }

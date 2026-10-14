@@ -33,7 +33,8 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 class AWayWithOneAlternativeLeftOpenIsLookedAlongThatOneTest {
 
     private static final ConditionReportAnchor WHERE =
-            new ConditionReportAnchor.WhereTheReadingMetIt("m", new ConditionOccurrence("f", 0));
+            new ConditionReportAnchor.WhereTheReadingMetIt("m",
+                    new ConditionOccurrence("f", ConditionOccurrence.Reading.DIVIDING, 0));
 
     private static final TermPath KIND = TermPath.of("k");
 
@@ -41,11 +42,14 @@ class AWayWithOneAlternativeLeftOpenIsLookedAlongThatOneTest {
     void theOneAlternativeLeftIsTheWayLookedAlong() {
         WayToTheBorder way = new WayToTheBorder(List.of(
                 new OnTheWay.Narrowed(WHERE, KIND.refine(only("A")), List.of(), List.of()),
-                new OnTheWay.OneOf(new ConditionOccurrence("f", 1), WHERE, List.of(
-                        List.of(new OnTheWay.Narrowed(WHERE, KIND.refine(only("A")), List.of(),
-                                List.of())),
-                        List.of(new OnTheWay.Narrowed(WHERE, KIND.refine(only("B")), List.of(),
-                                List.of()))), Optional.empty())));
+                new OnTheWay.OneOf(
+                        new ConditionOccurrence("f", ConditionOccurrence.Reading.DIVIDING, 1),
+                        WHERE, List.of(
+                                List.of(new OnTheWay.Narrowed(WHERE, KIND.refine(only("A")),
+                                        List.of(), List.of())),
+                                List.of(new OnTheWay.Narrowed(WHERE, KIND.refine(only("B")),
+                                        List.of(), List.of()))),
+                        Optional.empty())));
         Reachability.Reaching reaching = assertInstanceOf(Reachability.Reaching.class,
                 Reachability.of(way, reading().quantities().region()));
         Reachability.Ways.Each each = assertInstanceOf(Reachability.Ways.Each.class,

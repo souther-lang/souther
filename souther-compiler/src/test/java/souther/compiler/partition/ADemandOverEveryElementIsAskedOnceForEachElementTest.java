@@ -53,7 +53,7 @@ class ADemandOverEveryElementIsAskedOnceForEachElementTest {
 
     private static final ConditionReportAnchor WHERE =
             new ConditionReportAnchor.WhereTheReadingMetIt("g",
-                    new ConditionOccurrence("pick", 0));
+                    new ConditionOccurrence("pick", ConditionOccurrence.Reading.DIVIDING, 0));
 
     /** What the container holding one or none is said as, which nothing here reads. */
     private static final RowDemand.Relational HOLDING = new RowDemand.Relational(

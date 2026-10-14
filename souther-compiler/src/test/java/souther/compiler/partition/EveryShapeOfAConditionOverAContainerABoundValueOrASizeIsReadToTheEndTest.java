@@ -136,17 +136,19 @@ class EveryShapeOfAConditionOverAContainerABoundValueOrASizeIsReadToTheEndTest {
             InputReading read = inputs.reading(rules);
             Core body = analysis.core();
             Condition condition = Condition.of(body, reads, rules.symbols(), rules.newtypes(),
-                    new ConditionNumbering(module, name));
+                    new ConditionNumbering(module, name, ConditionOccurrence.Reading.DIVIDING));
             WhatConditionsState conditions = WhatConditionsState.of(read);
             Proposition stated = DemandReading.statedBy(condition, read, conditions);
             if (!Proposition.stopsIn(stated).isEmpty()) {
                 unread.add(name + " leaves " + Proposition.stopsIn(stated) + " unread");
             }
             for (boolean holding : List.of(true, false)) {
-                for (OnTheWay asked : ReachingCuts.stating(condition, read, holding, conditions)) {
+                for (OnTheWay asked
+                        : ReachingCuts.stating(condition, read, holding, conditions).entries()) {
                     declined(asked, name + " asked of a row coming out " + holding, unread);
                 }
-                if (DecisionMeanings.columnOf(stated, holding, new ConditionOccurrence(name, 0))
+                if (DecisionMeanings.columnOf(stated, holding, new ConditionOccurrence(
+                                name, ConditionOccurrence.Reading.DECIDING, 0))
                         instanceof DecidedCondition.Unread(var column, boolean _)) {
                     unread.add(name + " is no column coming out " + holding + ": "
                             + column.whys());

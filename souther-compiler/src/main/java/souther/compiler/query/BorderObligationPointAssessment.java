@@ -11,6 +11,7 @@ import souther.compiler.check.RuleReportAnchor;
 import souther.compiler.publish.PublicationOrders;
 import souther.compiler.publish.PublishedRuleHandle;
 import souther.compiler.publish.PublishedSentence;
+import souther.compiler.types.ModelOccurrence;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -561,8 +562,16 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
      * <p>Words for a reader and never a key. Two readings that happen to say the same words are
      * still two entries here — what tells them apart is {@link #where}, and a surface that folded
      * them by their words would be deciding identity from a rendering.
+     *
+     * @param readAt the copies of the comparison the line was read at, which is what a surface names
+     *               the calls of a helper by ({@link BorderAssessment#readAt})
      */
-    public record ReadingSaid(Reading where, String at, String asks) {}
+    public record ReadingSaid(Reading where, String at, String asks, List<ModelOccurrence> readAt) {
+
+        public ReadingSaid {
+            readAt = List.copyOf(readAt);
+        }
+    }
 
     /**
      * How many readings a surface says under the point before saying how many are left.
@@ -589,7 +598,7 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
     public List<ReadingSaid> readingsSaid() {
         List<ReadingSaid> out = new ArrayList<>();
         met.forEach((where, at) -> out.add(new ReadingSaid(where, at.axis(),
-                new BorderAssessment.Point(at, at(), at.at(at())).asked())));
+                new BorderAssessment.Point(at, at(), at.at(at())).asked(), at.readAt())));
         out.sort(java.util.Comparator.comparing((ReadingSaid said) -> said.at())
                 .thenComparing(ReadingSaid::asks));
         return List.copyOf(out);

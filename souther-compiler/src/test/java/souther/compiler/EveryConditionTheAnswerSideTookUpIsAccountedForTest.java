@@ -7,6 +7,7 @@ import souther.compiler.partition.DemandGap;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.RuleSettlement;
+import souther.compiler.query.SettledAt;
 import souther.compiler.report.AdequacyReport;
 
 import java.util.LinkedHashSet;
@@ -179,6 +180,7 @@ class EveryConditionTheAnswerSideTookUpIsAccountedForTest {
                 .flatMap(module -> module.behaviors().stream())
                 .filter(each -> "decides".equals(each.name()))
                 .flatMap(each -> each.ruleSettlements().values().stream())
+                .map(SettledAt::settlement)
                 .toList();
         assertFalse(out.isEmpty(), "the body decides, so it has rules a row is looked for at");
         assertTrue(out.stream().anyMatch(each -> !each.account().onAnAnswer().isEmpty()),

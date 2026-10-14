@@ -69,7 +69,8 @@ class ADemandNoRegionCarriesIsNotComposedAgainstTest {
 
         assertFalse(behavior.ruleSettlements().isEmpty(),
                 "the body decides, so it has rules a row is looked for at");
-        behavior.ruleSettlements().forEach((rule, settled) -> {
+        behavior.ruleSettlements().forEach((rule, at) -> {
+            RuleSettlement settled = at.settlement();
             assertInstanceOf(RuleRequirement.Unsettled.NothingWasComposedToTry.class,
                     settled.requirement(),
                     () -> "nothing was composed for " + rule + ": " + settled);

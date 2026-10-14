@@ -237,7 +237,7 @@ public final class BehaviorSetStatements {
                 // over a reading that stopped — while the report went on naming the rule.
                 case Outcome.SayingNothing(var at, var why) -> at.forEach(where ->
                         nothingClassifies.add(StandingQuestion.NothingClassifiesIt
-                                .of(each.origin().cited(), where, why)));
+                                .of(each.origin().cited(), each.origin().readAt(), where, why)));
                 // Nothing places it, so there is nobody to say it to. Which is the answer the
                 // reading of a comparison gives the same shape, and not this walk being quiet.
                 case Outcome.Nowhere _ -> { }

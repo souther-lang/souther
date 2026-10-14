@@ -11,6 +11,7 @@ import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Towards;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -44,14 +45,26 @@ import java.util.Set;
  * @param of          the quantity, which is what reads a row's positions and what names the line
  * @param seam        where the values part, in the quantity's own units
  * @param satisfiedOn the side of it the rule is satisfied on
+ * @param direction   the quantity with its common divisor taken out. Worked out once, with the
+ *                    boundary, since every row a line is weighed at is read along it
  */
-public record OrderedAffineBoundary(LinearQuantity of, Seam seam, Towards satisfiedOn) {
+public record OrderedAffineBoundary(LinearQuantity of, Seam seam, Towards satisfiedOn,
+                                    QuantityKey direction) {
 
     public OrderedAffineBoundary {
-        if (of == null || seam == null || satisfiedOn == null) {
+        if (of == null || seam == null || satisfiedOn == null || direction == null) {
             throw new IllegalArgumentException("a boundary is a quantity parted somewhere, with a"
                     + " side it is satisfied on: " + of + " " + seam + " " + satisfiedOn);
         }
+        if (!direction.equals(QuantityKey.of(of.direction()))) {
+            throw new IllegalArgumentException("a boundary runs the way its quantity does: "
+                    + direction + " for " + of);
+        }
+    }
+
+    /** The boundary on {@code of}, running the way {@code of} does. */
+    public OrderedAffineBoundary(LinearQuantity of, Seam seam, Towards satisfiedOn) {
+        this(of, seam, satisfiedOn, QuantityKey.of(of.direction()));
     }
 
     /**
@@ -91,11 +104,6 @@ public record OrderedAffineBoundary(LinearQuantity of, Seam seam, Towards satisf
         return true;
     }
 
-    /** The quantity this is a boundary on, with its common divisor taken out. */
-    public QuantityKey direction() {
-        return QuantityKey.of(of.direction());
-    }
-
     /**
      * The positions of a quantity a rule could write another weight for — for a caller working out
      * whether there is a boundary of this kind to build at all.
@@ -107,10 +115,9 @@ public record OrderedAffineBoundary(LinearQuantity of, Seam seam, Towards satisf
      */
     public static Set<NumericTerm> weighedByANumber(LinearQuantity of) {
         Set<NumericTerm> out = new LinkedHashSet<>();
-        // A linked set answers in the order it was filled, so it is filled in the terms' own order
-        // and not in whatever order the direction happens to walk its keys.
-        Set<NumericTerm> named = QuantityKey.of(of.direction()).direction().keySet();
-        for (NumericTerm term : NumericTerms.inOrder(named)) {
+        // A linked set answers in the order it was filled, so it is filled in the order the
+        // direction holds its terms in, which is theirs.
+        for (NumericTerm term : QuantityKey.of(of.direction()).direction().keySet()) {
             Carrier on = of.carrierOf(term);
             if (on != null && on.canBeWeighed()) {
                 out.add(term);
@@ -133,7 +140,7 @@ public record OrderedAffineBoundary(LinearQuantity of, Seam seam, Towards satisf
         // Three answers and not two. A row whose sum the exact arithmetic cannot hold is neither
         // kept nor refused as far as this can tell, and read as either it is evidence nobody
         // established: read as refused, a row the model keeps would rule out a line beside this one.
-        return along(direction().direction(), values).map(at -> seam.sideOf(at) == satisfiedOn);
+        return along(direction, values).map(at -> seam.sideOf(at) == satisfiedOn);
     }
 
     /**
@@ -143,10 +150,14 @@ public record OrderedAffineBoundary(LinearQuantity of, Seam seam, Towards satisf
      * <p>Zero for a position the direction does not name, which is what a coefficient of nothing is.
      * Written here for both the line the model drew and the lines it did not, so that neither is
      * scored by a rule the other is not.
+     *
+     * <p>Walked in the order the direction holds its terms in, which is put in place where the
+     * direction is made and not again for each row.
      */
-    public static ExactAnswer<ExactRatio> along(Map<NumericTerm, ExactRatio> direction,
+    public static ExactAnswer<ExactRatio> along(QuantityKey direction,
                                                 Map<NumericTerm, Place> values) {
-        return summed(direction, values, ExactRatio.ZERO);
+        return summed(direction.direction().keySet(), direction.direction(), values,
+                ExactRatio.ZERO);
     }
 
     /**
@@ -180,7 +191,7 @@ public record OrderedAffineBoundary(LinearQuantity of, Seam seam, Towards satisf
         return summed(of.terms(), of.direction().coefs(), values, constant);
     }
 
-    private static ExactAnswer<ExactRatio> summed(List<NumericTerm> walked,
+    private static ExactAnswer<ExactRatio> summed(Collection<NumericTerm> walked,
                                                   Map<NumericTerm, ExactRatio> direction,
                                                   Map<NumericTerm, Place> values,
                                                   ExactRatio constant) {

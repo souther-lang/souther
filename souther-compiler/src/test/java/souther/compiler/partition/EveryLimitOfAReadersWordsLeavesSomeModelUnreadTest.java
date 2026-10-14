@@ -222,7 +222,8 @@ class EveryLimitOfAReadersWordsLeavesSomeModelUnreadTest {
             for (boolean way : List.of(true, false)) {
                 DemandReading.asked(way ? states : states.denied(), reading)
                         .forEach(read -> limitsIn(read, out));
-                if (DecisionMeanings.columnOf(states, way, new ConditionOccurrence(behavior, 0))
+                if (DecisionMeanings.columnOf(states, way, new ConditionOccurrence(
+                                behavior, ConditionOccurrence.Reading.DECIDING, 0))
                         instanceof DecidedCondition.Unread(var condition, boolean _)) {
                     condition.whys().forEach(why -> limitOf(why, out));
                 }

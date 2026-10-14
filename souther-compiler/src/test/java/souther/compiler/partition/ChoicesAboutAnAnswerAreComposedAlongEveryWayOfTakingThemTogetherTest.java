@@ -7,6 +7,7 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.RuleRequirement;
 import souther.compiler.query.RuleSettlement;
+import souther.compiler.query.SettledAt;
 import souther.compiler.report.AdequacyReport;
 
 import java.util.List;
@@ -62,7 +63,8 @@ class ChoicesAboutAnAnswerAreComposedAlongEveryWayOfTakingThemTogetherTest {
                 .findFirst().orElseThrow();
 
         assertFalse(decides.ruleSettlements().isEmpty(), page);
-        for (RuleSettlement each : decides.ruleSettlements().values()) {
+        for (RuleSettlement each : decides.ruleSettlements().values().stream()
+                .map(SettledAt::settlement).toList()) {
             assertInstanceOf(RuleRequirement.Required.class, each.requirement(),
                     () -> "a row for every rule, the one past both choices included: " + each
                             + "\n" + page);

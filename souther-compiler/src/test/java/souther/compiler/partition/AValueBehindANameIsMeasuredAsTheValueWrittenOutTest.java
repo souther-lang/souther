@@ -387,7 +387,11 @@ class AValueBehindANameIsMeasuredAsTheValueWrittenOutTest {
         }
     }
 
-    /** The report of {@code source}'s one module, with where each thing is written taken out. */
+    /**
+     * The report of {@code source}'s one module, with where each thing is written taken out —
+     * which includes the call of a helper a condition is in, since a value handed to a helper is
+     * compared inside the helper's code.
+     */
     private static String reportOf(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
@@ -396,7 +400,8 @@ class AValueBehindANameIsMeasuredAsTheValueWrittenOutTest {
                 .map(each -> each.diagnostic().code()).toList(), "the model under test compiles");
         return AdequacyReport.of(compilation)
                 .human(SourceRendering.namedByIdentity(compilation.texts()))
-                .replaceAll("\\d+:\\d+", "");
+                .replaceAll("\\d+:\\d+", "")
+                .replaceAll(" in \\w+@", "");
     }
 
     /** What each source was measured as, so a module several tests read is compiled once. */

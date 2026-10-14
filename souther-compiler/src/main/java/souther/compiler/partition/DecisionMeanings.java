@@ -46,8 +46,16 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects) {
      * One condition of a path: the column it is, and what it states about the input.
      *
      * @param onTheWay what it asks of a row, which is as many things as it asks and one column
+     * @param said     which copies of the model's code each thing it asks was read off, told
+     *                 where it was read
      */
-    record Read(DecidedCondition answer, List<OnTheWay> onTheWay) {}
+    record Read(DecidedCondition answer, List<OnTheWay> onTheWay, SaidOnTheWay said) {
+
+        /** {@code answer}, asking what {@code stated} put on the way. */
+        Read(DecidedCondition answer, ReachingCuts.Stating stated) {
+            this(answer, stated.entries(), stated.by());
+        }
+    }
 
     /**
      * What {@code condition} coming out {@code held} decides, one entry per condition consulted.
@@ -75,7 +83,8 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects) {
             out.addAll(right);
             return List.copyOf(out);
         }
-        List<OnTheWay> stated = states.stating(condition, held);
+        ReachingCuts.Stating said = states.stating(condition, held);
+        List<OnTheWay> stated = said.entries();
         // What the source settles is no distinction the body draws: coming out this way for every
         // row it is no column, and coming out the other way for every row there is no rule down
         // this side at all.
@@ -88,9 +97,9 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects) {
             return List.of();
         }
         return List.of(new Read(oneRelation(asked) && (!(condition instanceof Condition.Truth)
-                || oneRelation(asked(states.stating(condition, !held))))
+                || oneRelation(asked(states.stating(condition, !held).entries())))
                 ? answerOf(condition, asked.getFirst(), held)
-                : asOneColumn(condition, held), stated));
+                : asOneColumn(condition, held), stated, said.by()));
     }
 
     /** What was stated less what the source settles this way, which asks nothing of a row and is
@@ -276,23 +285,26 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects) {
      */
     Optional<Read> entering(Core.Match match, int part, InputReads reads,
                             ConditionNumbering numbering) {
-        List<OnTheWay> onTheWay = states.entering(match, part, reads, numbering);
+        ReachingCuts.Stating entered = states.entering(match, part, reads, numbering);
+        List<OnTheWay> onTheWay = entered.entries();
         if (onTheWay.size() == 1 && onTheWay.getFirst() instanceof OnTheWay.Settled settled
                 && settled.thisWay()) {
             return Optional.empty();
         }
-        return Optional.of(asTheArm(match, part, reads, onTheWay));
+        return Optional.of(asTheArm(match, part, reads, entered));
     }
 
     /** The column taking arm {@code part} is, where it is one. */
-    private Read asTheArm(Core.Match match, int part, InputReads reads, List<OnTheWay> onTheWay) {
+    private Read asTheArm(Core.Match match, int part, InputReads reads,
+                          ReachingCuts.Stating entered) {
+        List<OnTheWay> onTheWay = entered.entries();
         if (onTheWay.size() == 1 && onTheWay.getFirst() instanceof OnTheWay.Narrowed narrowed) {
             TermPath at = narrowed.position();
             // Where the value the fork is on stands: a name read on a value left several cases is
             // the name read at the sum, and not a name under the set of them.
             return new Read(new DecidedCondition.Narrowed(new DecisionCondition.ACase(
                     new DecisionSubject.AnInput(at.narrowedFrom().position()),
-                    states.answersOf(match, reads)), at.narrowing()), onTheWay);
+                    states.answersOf(match, reads)), at.narrowing()), entered);
         }
         // Where the arithmetic had no position to narrow, the fork may still be on something a row
         // controls; and where the declarations leave the position none of the arm's case, there is
@@ -305,12 +317,12 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects) {
         if (subject != null && narrowing != null) {
             return new Read(new DecidedCondition.Narrowed(
                     new DecisionCondition.ACase(subject, states.answersOf(match, reads)),
-                    narrowing), onTheWay);
+                    narrowing), entered);
         }
         // Otherwise the column is what entering the arm states: which case a value the body
         // computed is of, under what.
         return new Read(columnOf(states.entered(match, part, reads), true, metAt(onTheWay)),
-                onTheWay);
+                entered);
     }
 
     /**
@@ -322,9 +334,9 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects) {
      */
     Read attempting(Core.IfConstructed attempt, int part, SourcePos at, InputReads reads,
                     ConditionNumbering numbering) {
-        List<OnTheWay> onTheWay = states.attempting(attempt, part, at, reads, numbering);
-        return new Read(columnOf(states.entered(attempt, part, reads), true, metAt(onTheWay)),
-                onTheWay);
+        ReachingCuts.Stating entered = states.attempting(attempt, part, at, reads, numbering);
+        return new Read(columnOf(states.entered(attempt, part, reads), true,
+                metAt(entered.entries())), entered);
     }
 
     /**

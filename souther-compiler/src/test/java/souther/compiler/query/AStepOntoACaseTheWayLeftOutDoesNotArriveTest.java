@@ -34,7 +34,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class AStepOntoACaseTheWayLeftOutDoesNotArriveTest {
 
-    private static final ConditionOccurrence MET = new ConditionOccurrence("b", 0);
+    private static final ConditionOccurrence MET =
+            new ConditionOccurrence("b", ConditionOccurrence.Reading.DIVIDING, 0);
 
     private static final TermPath LEVEL = TermPath.of("r").then("level");
 

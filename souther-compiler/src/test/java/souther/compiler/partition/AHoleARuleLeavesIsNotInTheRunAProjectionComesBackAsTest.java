@@ -46,7 +46,8 @@ class AHoleARuleLeavesIsNotInTheRunAProjectionComesBackAsTest {
 
     /** The anchor a report would name the condition by, which nothing here asks about. */
     private static final ConditionReportAnchor WHERE =
-            new ConditionReportAnchor.WhereTheReadingMetIt("m", new ConditionOccurrence("b", 0));
+            new ConditionReportAnchor.WhereTheReadingMetIt("m",
+                    new ConditionOccurrence("b", ConditionOccurrence.Reading.DIVIDING, 0));
 
     /** A region that says the same thing about every term, so what the cuts add is what is read. */
     private record Leaving(NumericDomain.Bounds bounds) implements SearchRegion {

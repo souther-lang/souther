@@ -7,7 +7,6 @@ import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 
 /**
  * A value composed for a row is held to the rules of every value whose clauses reach the position
@@ -231,7 +230,7 @@ class AValueIsComposedUnderTheRulesOfEveryValueThatReachesItTest {
         String said = report(model);
 
         assertEquals(rules, count(said, NO_ROW_TAKES), cases + "\n" + said);
-        assertFalse(said.contains(NOTHING_COULD_SHOW + " at 1 decision rule"),
+        assertEquals(0, count(said, NOTHING_COULD_SHOW + " at a decision rule"),
                 cases + "\n" + said);
     }
 

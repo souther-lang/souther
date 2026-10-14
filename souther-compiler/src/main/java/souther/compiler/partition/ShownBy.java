@@ -2,6 +2,8 @@ package souther.compiler.partition;
 
 import souther.compiler.types.ModelOccurrence;
 
+import java.util.Optional;
+
 /**
  * What a run down one path of a body would be seen doing, for one condition of it.
  *
@@ -20,6 +22,24 @@ import souther.compiler.types.ModelOccurrence;
  * conditions beside it were seen.
  */
 public sealed interface ShownBy {
+
+    /**
+     * Which copy of which construct of the model a run here would be seen at, or empty where this
+     * names none.
+     *
+     * <p>The copy is what tells apart the conditions of a helper called more than once: they are
+     * one construct written at one place, and each call made a copy of it. An arm short of an
+     * operand is the arm's copy, which is the one the operand not run stands in too.
+     */
+    default Optional<ModelOccurrence> copy() {
+        return switch (this) {
+            case AtAnOutcome(var construct, var _) -> Optional.of(construct);
+            case AtAnArm(var fork, var _) -> Optional.of(fork);
+            case AtAnArmShortOf(var fork, var _, var _) -> Optional.of(fork);
+            case ShortOf(var _, var notReached) -> Optional.of(notReached);
+            case NothingIsRecorded _ -> Optional.empty();
+        };
+    }
 
     /**
      * A construct of the model answering a truth one way: a comparison, or an application of one

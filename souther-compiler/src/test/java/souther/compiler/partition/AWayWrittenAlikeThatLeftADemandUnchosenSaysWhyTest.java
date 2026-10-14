@@ -37,7 +37,8 @@ class AWayWrittenAlikeThatLeftADemandUnchosenSaysWhyTest {
     private static final int ASKED_OF_Q = 12;
 
     private static final ConditionReportAnchor WHERE =
-            new ConditionReportAnchor.WhereTheReadingMetIt("m", new ConditionOccurrence("f", 0));
+            new ConditionReportAnchor.WhereTheReadingMetIt("m",
+                    new ConditionOccurrence("f", ConditionOccurrence.Reading.DIVIDING, 0));
 
     private static final TermPath XS = TermPath.of("xs");
 

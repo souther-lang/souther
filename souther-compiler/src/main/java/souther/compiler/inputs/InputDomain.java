@@ -2023,7 +2023,7 @@ public final class InputDomain {
             // time is stopped by whatever stopped each branch — so they are asked as the several
             // questions they are rather than one of them standing for the rest.
             each.at().why().forEach(why ->
-                    found.asked(StandingQuestion.BoundaryUndetermined.of(each.cited(),
+                    found.asked(StandingQuestion.BoundaryUndetermined.of(each.cited(), List.of(),
                             FilingCoordinate.at(path), why)));
         }
         for (souther.compiler.check.RuleAccounting.Unanswered each : placed.unanswered(path)) {
