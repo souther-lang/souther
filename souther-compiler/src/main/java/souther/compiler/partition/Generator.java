@@ -5171,8 +5171,23 @@ public final class Generator {
         for (RealizationTarget each : fixing.keySet()) {
             itemAsks.put(each, asking);
         }
+        // An item written under a case the way does not take is at no row along it. Along a way
+        // split at the cases a narrowing leaves, a line read under one of them is off every other
+        // case's way, and that is the model's answer for those ways and not a search come to
+        // nothing.
+        Requirements assumed;
+        switch (reaching.writing(fixing.keySet())) {
+            case Reachability.Written.Under(Requirements both) -> assumed = both;
+            case Reachability.Written.OffTheWay(RealizationTarget each) -> {
+                return new BoundaryAttempt.Unresolved(new UnresolvedCombination(List.of(label),
+                        UnresolvedCombination.Reason.ONE_POSITION_CANNOT_BE_BOTH,
+                        each.writeRoot().toString(), Optional.of("`" + each.writeRoot()
+                                + "` is written under a case the way to it does not take")),
+                        stood.account());
+            }
+        }
         Standing where = alsoOnTheWay(subject, fixing, itemAsks, check, reaching, byCounts,
-                alikeStoppedBy).with(stood.account());
+                alikeStoppedBy, assumed).with(stood.account());
         // A way the rules leave nothing standing on is a way no row arrives by, so there is no row
         // to compose for this point and the rest of this would be composing one. What comes back is
         // the model's word, which is the same word the realizer's proof comes back with and is
@@ -5831,12 +5846,16 @@ public final class Generator {
      *                       are composed at is held to
      * @param alikeStoppedBy the figure the ways of writing the elements alike were looked along
      *                       to, where one stopped them, or null
+     * @param itemAndWay     the cases the way takes the row through with the ones the item is
+     *                       written under ({@link Reachability.Reaching#writing}), which is what
+     *                       the row is taken to be before any condition on the way is placed
      */
     private static Standing alsoOnTheWay(MeasuredInput subject, Map<RealizationTarget, Place> fixing,
                                          Map<RealizationTarget, NumbersAskedFor> itemAsks,
                                          CandidateCheck check, Reachability.Reaching reaching,
                                          boolean everyQuantifierCounted,
-                                         CompositionBudget alikeStoppedBy) {
+                                         CompositionBudget alikeStoppedBy,
+                                         Requirements itemAndWay) {
         Map<RealizationTarget, Place> out = new LinkedHashMap<>(fixing);
         Map<NumericTerm, RealizationTarget> routed = new LinkedHashMap<>();
         Map<RealizationTarget, NumbersAskedFor> counted = new LinkedHashMap<>();
@@ -5868,15 +5887,7 @@ public final class Generator {
         // be asking for a value that is both, and which of the two a name got would depend on the
         // order the cuts were read in. And a number of the item written under a case has taken
         // the row there already, so a cut's name of the same sum is written under it too.
-        Requirements assumed = reaching.requirements();
-        for (RealizationTarget each : fixing.keySet()) {
-            if (!(assumed.merge(each.writeRoot().requirements())
-                    instanceof Requirements.Merge.Merged(Requirements both))) {
-                throw new IllegalStateException("the item is written at " + each.writeRoot()
-                        + ", which is a case the way it is reached by is not: " + assumed);
-            }
-            assumed = both;
-        }
+        Requirements assumed = itemAndWay;
         // The count the item itself asks for, which is the one count its level is — by which
         // count it is, so a condition on the way asking for the same count asks it of this one.
         Map<CountedElements.Identity, RealizationTarget.ACount> itemCounts = new LinkedHashMap<>();
@@ -5912,7 +5923,7 @@ public final class Generator {
         // their own way. Any other says so: along one of its ways the row would be composed
         // against more.
         if (reaching.ways() instanceof Reachability.Ways.Whole(var unsplit, var figure, var _)) {
-            for (OnTheWay.OneOf each : unsplit) {
+            for (OnTheWay each : unsplit) {
                 Optional<RealizationTarget.ElementsMeetingTogether> stated =
                         RealizationTarget.ElementsMeetingTogether.of(subject.behavior(), each);
                 if (stated.isEmpty()) {
@@ -9367,21 +9378,18 @@ public final class Generator {
             }
         }
         Reachability.Reaching reaching = held.getLast().reaching();
-        // The cases the way takes the row through, and the ones each number is written under. A
-        // row is one value, so what the way says and where the numbers are written have to be one
-        // set of cases.
-        Requirements required = reaching.requirements();
-        for (RealizationTarget each : fixing.keySet()) {
-            if (!(required.merge(each.writeRoot().requirements())
-                    instanceof Requirements.Merge.Merged(Requirements both))) {
+        Requirements required;
+        switch (reaching.writing(fixing.keySet())) {
+            case Reachability.Written.Under(Requirements both) -> required = both;
+            case Reachability.Written.OffTheWay(RealizationTarget each) -> {
                 return new HeldTogether.Refused(new Attempt(null,
                         UnresolvedCombination.Reason.ONE_POSITION_CANNOT_BE_BOTH,
                         each.writeRoot().toString(), Optional.of("`" + each.writeRoot()
                                 + "` is written under a case the way to it does not take")));
             }
-            required = both;
         }
-        Standing where = alsoOnTheWay(subject, fixing, itemAsks, check, reaching, false, null);
+        Standing where = alsoOnTheWay(subject, fixing, itemAsks, check, reaching, false, null,
+                required);
         for (ReachabilityGap gap : where.unrepresented().onTheWay()) {
             if (gap instanceof ReachabilityGap.ProvedImpossible) {
                 return new HeldTogether.Refused(new Attempt(null,

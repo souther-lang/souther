@@ -62,11 +62,11 @@ public sealed interface ReachabilityGap {
      * against that way's alternative as well, which along the whole it is not, so a row the search
      * did not find here is one it may have found along one of them.
      */
-    record LookedAlongWhole(OnTheWay.OneOf condition, CompositionBudget figure)
+    record LookedAlongWhole(OnTheWay condition, CompositionBudget figure)
             implements ReachabilityGap {
 
         public LookedAlongWhole {
-            if (condition == null || figure == null) {
+            if (condition == null || figure == null || condition.alternatives().isEmpty()) {
                 throw new IllegalArgumentException(
                         "a way looked along whole is past some condition, at some figure");
             }

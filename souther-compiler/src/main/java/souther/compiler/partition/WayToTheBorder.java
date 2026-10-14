@@ -234,17 +234,19 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
         }
     }
 
-    /** The conditions on this way that came out one of several ways, in the order the walk met
-     *  them. */
-    public List<OnTheWay.OneOf> severalWays() {
-        return onTheWay.stream().filter(OnTheWay.OneOf.class::isInstance)
-                .map(OnTheWay.OneOf.class::cast).toList();
+    /** The conditions on this way a row is past one of several ways of
+     *  ({@link OnTheWay#alternatives}), in the order the walk met them. */
+    public List<OnTheWay> severalWays() {
+        return onTheWay.stream().filter(each -> !each.alternatives().isEmpty()).toList();
     }
 
     /**
      * The ways a row past this one may take, each with one alternative of conditions of several
-     * ways taken in where it stands ({@link OnTheWay.OneOf}) — or why no row takes any of them,
-     * for the cases, the truths or the counts it asks.
+     * ways taken in where it stands ({@link OnTheWay#alternatives}) — or why no row takes any of
+     * them, for the cases, the truths or the counts it asks.
+     *
+     * <p>A narrowing leaving several cases is one of them. The way whole states the cases it
+     * leaves, and a row along it is one of those cases, so it is composed along each.
      *
      * <p>Every row past this way is past one alternative of each such condition. Conditions that
      * turn on no position in common are chosen apart ({@link OneOfEach}); the ways handed on are
@@ -298,7 +300,8 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
 
                 @Override
                 public List<List<OnTheWay>> alternatives(OnTheWay entry) {
-                    return entry instanceof OnTheWay.OneOf several ? several.alternatives() : null;
+                    List<List<OnTheWay>> several = entry.alternatives();
+                    return several.isEmpty() ? null : several;
                 }
 
                 @Override

@@ -166,6 +166,47 @@ class ARowIsLookedForUnderEveryCaseItCanBeWrittenUnderTest {
         }
     }
 
+    /**
+     * A line read at a name the cases share is read under each case, and inside an arm the way to
+     * it takes a row through the arm's cases alone. A reading under another case is one no row
+     * along the way is at, which the model settles before any value is put to it.
+     */
+    @Test
+    void aReadingUnderACaseTheArmLeavesOutIsOneNoValueStandsAt() {
+        for (String arm : new String[] {"Q -> if r.deadline > 10 then 1 else 2\n        | S -> 3",
+                "Q | S -> if r.deadline > 10 then 1 else 2"}) {
+            String said = report("""
+                    module probe.r exposing ( C, R, P, Q, S, f )
+
+                    data C = { deadline: Int }
+                        invariant deadline >= 0 && deadline <= 100
+
+                    data P = { ...C }
+                    data Q = { ...C }
+                    data S = { ...C }
+
+                    data R = P | Q | S
+
+                    behavior f : (r: R) -> Int
+
+                    let f (r) =
+                        match r with
+                            | P -> 0
+                            | %s
+                    """.formatted(arm));
+            String offTheWay = " would need one position to be two things at once, so no value can"
+                    + " stand there";
+
+            assertTrue(said.lines().anyMatch(each -> each.contains("read as f/r@P.deadline: = 11")
+                    && each.contains("r@P.deadline = 11" + offTheWay)), arm + "\n" + said);
+            assertFalse(said.lines().anyMatch(each -> each.contains("read as f/r@Q.deadline")
+                    && each.contains(offTheWay)), arm + "\n" + said);
+            assertEquals(arm.contains("| S -> 3") ? 4 : 3, count(said, NO_ROW_TAKES),
+                    arm + "\n" + said);
+            assertFalse(said.contains(NOTHING_COULD_SHOW), arm + "\n" + said);
+        }
+    }
+
     private static long count(String said, String line) {
         return said.lines().filter(each -> each.contains(line)).count();
     }

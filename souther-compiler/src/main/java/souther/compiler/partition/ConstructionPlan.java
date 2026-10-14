@@ -1083,10 +1083,11 @@ final class ConstructionPlan {
      *
      * <p>Up to a requirement that leaves the position several cases, and not past it. What is built
      * is one case, and which of the ones left is no more this plan's to choose than which case of
-     * a position nothing narrowed is: the position is built as what the declaration puts there,
-     * and a value of a case the requirement leaves out is a row that does not take the way — which
-     * is what a composer handed a way it could not state all of is free to write
-     * ({@link Reachability}).
+     * a position nothing narrowed is: the position is built as what the declaration puts there.
+     * A way a narrowing to several cases is on is looked along each of them first
+     * ({@link OnTheWay.Narrowed#alternatives}), and along the way whole only after them; a value of
+     * a case the requirement leaves out is then a row that does not take the way, which is what a
+     * composer handed a way it could not state all of is free to write ({@link Reachability}).
      */
     private static Settled settle(Type declared, TermPath at, NewtypeInners inners,
                                   Symbols symbols,

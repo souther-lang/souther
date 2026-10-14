@@ -47,6 +47,7 @@ import souther.compiler.partition.BorderQuantity;
 import souther.compiler.partition.StandingAtAPoint;
 import souther.compiler.partition.LevelRealizer;
 import souther.compiler.partition.Realization;
+import souther.compiler.partition.RealizationTarget;
 import souther.compiler.partition.CompositionBudget;
 import souther.compiler.partition.CompositionCapacity;
 import souther.compiler.partition.CompositionRepertoire;
@@ -1522,6 +1523,15 @@ final class Coverages {
                         return noRowTakes(label, within, Generator.UnresolvedCombination.Reason
                                 .A_CONDITION_NEVER_COMES_OUT_THAT_WAY);
                     }
+                }
+                // A reading of the line under a case the way does not take. A line at a name the
+                // cases of a sum share is read under each case, and no row along this way is the
+                // case this reading's numbers stand under — which is the same word, settled by
+                // the model before any value is put to the point.
+                if (able.writing(quantity.numbers().stream().map(RealizationTarget::of).toList())
+                        instanceof Reachability.Written.OffTheWay) {
+                    return noRowTakes(label, within,
+                            Generator.UnresolvedCombination.Reason.ONE_POSITION_CANNOT_BE_BOTH);
                 }
                 // Where a condition on the way came out one of several ways, a row is looked for
                 // along each of them first, each narrower than the way whole. A row standing along

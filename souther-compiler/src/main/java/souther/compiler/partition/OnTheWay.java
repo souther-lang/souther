@@ -1,11 +1,15 @@
 package souther.compiler.partition;
 
+import souther.compiler.inputs.CasesLeft;
+import souther.compiler.inputs.DeclaredInput;
 import souther.compiler.inputs.NameReach;
+import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.Requirements;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.WhyNotTaken;
 
+import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
@@ -49,6 +53,19 @@ public sealed interface OnTheWay {
      * written.
      */
     ConditionReportAnchor anchor();
+
+    /**
+     * The ways a row past this may take, each as what it asks; empty where every row past it is
+     * asked the one thing.
+     *
+     * <p>What a composer looks along and not what the way states. A row is one value, so a row
+     * past a condition leaving it one of several things is past one of them, and composed against
+     * them all at once it is composed against less than any one of them asks
+     * ({@link WayToTheBorder#along}).
+     */
+    default List<List<OnTheWay>> alternatives() {
+        return List.of();
+    }
 
     /**
      * A condition a search can compose a row against, and what it came to.
@@ -113,6 +130,34 @@ public sealed interface OnTheWay {
         /** What has to hold of the parameter for a row to be past this narrowing. */
         public Requirements requirements() {
             return Requirements.of(position, crossings);
+        }
+
+        /**
+         * Each case the narrowing leaves, as a narrowing to that case alone, where it leaves
+         * several.
+         *
+         * <p>A row is built as one case. Composed against several, it is built as whatever the
+         * declaration puts at the position, and that may be a case the narrowing leaves out — a row
+         * that does not take the way. Composed along each, it is built as a case the narrowing
+         * leaves, and the first that takes the way is one of the cases the arm wrote.
+         *
+         * <p>What each says on the position's order is what the narrowing whole says. The case
+         * each one leaves is what its requirement says, and the region a row is looked for over is
+         * allowed to hold more than the rows that take the way.
+         */
+        @Override
+        public List<List<OnTheWay>> alternatives() {
+            CasesLeft left = position.narrowing();
+            if (left.only() != null) {
+                return List.of();
+            }
+            List<List<OnTheWay>> out = new ArrayList<>();
+            for (Refinement each : left.atoms()) {
+                out.add(List.of(new Narrowed(anchor,
+                        DeclaredInput.narrowedTo(position, CasesLeft.of(each)), crossings,
+                        onItsOrder)));
+            }
+            return List.copyOf(out);
         }
     }
 

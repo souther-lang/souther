@@ -251,15 +251,17 @@ public sealed interface RealizationTarget {
         }
 
         /**
-         * What {@code oneOf} states, as a statement the elements of one container meet together —
-         * or empty where no one proposition states it, where a row cannot be asked it, or where
-         * it reads anything but the elements of one container a parameter is.
+         * What {@code several}, a condition of several ways, states as a statement the elements of
+         * one container meet together — or empty where no one proposition states it, where a row
+         * cannot be asked it, or where it reads anything but the elements of one container a
+         * parameter is. A narrowing to several cases states which case one value is, which is
+         * none of these.
          *
          * @param behavior the behavior whose input the statement reads
          */
-        public static Optional<ElementsMeetingTogether> of(String behavior,
-                                                           OnTheWay.OneOf oneOf) {
-            if (oneOf.stated().isEmpty() || !AStatementAtARow.askable(oneOf.stated().get())) {
+        public static Optional<ElementsMeetingTogether> of(String behavior, OnTheWay several) {
+            if (!(several instanceof OnTheWay.OneOf oneOf) || oneOf.stated().isEmpty()
+                    || !AStatementAtARow.askable(oneOf.stated().get())) {
                 return Optional.empty();
             }
             Proposition stated = oneOf.stated().get();
