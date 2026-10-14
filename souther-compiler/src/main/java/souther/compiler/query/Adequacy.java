@@ -8406,7 +8406,17 @@ public final class Adequacy {
                             }
                         }
                     }
-                    calls.forEach((call, marks) -> marks.markedAt(built, call));
+                    // And, once, where a call's mark said less than its conditions do, that the
+                    // report says the rest: which way each condition went in it, and every call it
+                    // was reached through. Not where every mark said what its call was told — a
+                    // reader told everything a mark can say is sent nowhere.
+                    boolean saidLess = false;
+                    for (Map.Entry<Citation, CallMarks> each : calls.entrySet()) {
+                        saidLess |= each.getValue().markedAt(built, each.getKey());
+                    }
+                    if (saidLess) {
+                        built.hint(new ExampleMessage.TheReportSaysWhatTheRuleTakesInEachCall());
+                    }
                 }
                 // Which of the two this arm is, is already settled: a row is there. What is left is
                 // the answer, so the hint says how it is written rather than what might be wrong.
@@ -8645,13 +8655,19 @@ public final class Adequacy {
          */
         private record CallMarks(String called, List<Supporting> said) {
 
-            void markedAt(Diagnostic.Builder built, Citation call) {
+            /**
+             * Marks the call, and answers whether the mark said less than the call was told: true
+             * where its conditions went different ways and the mark says only that the rule goes
+             * through it. Nothing was told is nothing left unsaid.
+             */
+            boolean markedAt(Diagnostic.Builder built, Citation call) {
                 List<Supporting> taken = said.stream()
                         .filter(each -> !(each instanceof ExampleMessage.TheRuleGoesThroughThisCall))
                         .distinct().toList();
                 label(built, call, (ExampleMessage & Supporting) (taken.size() == 1
                         ? taken.getFirst()
                         : new ExampleMessage.TheRuleGoesThroughThisCall(called)));
+                return taken.size() > 1;
             }
         }
 

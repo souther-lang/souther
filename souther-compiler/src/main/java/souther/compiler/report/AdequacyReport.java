@@ -7,21 +7,14 @@ import souther.compiler.source.SourceId;
 
 import souther.compiler.ast.Hir;
 import souther.compiler.check.BehaviorImplementation;
-import souther.compiler.check.HelperInliner;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.CoverageObligation;
 import souther.compiler.check.PartId;
 import souther.compiler.publish.InputUseWord;
-import souther.compiler.publish.MaterialisationRegionWord;
-import souther.compiler.publish.RegionSlotWord;
-import souther.compiler.publish.ThroughStepWord;
 import souther.compiler.types.CanonicalNameOrder;
-import souther.compiler.types.ExpansionSite;
 import souther.compiler.types.ModelOccurrence;
-import souther.compiler.types.MaterialisationSite;
 import souther.compiler.types.StepOfACopy;
-import souther.compiler.types.RegionSlot;
 import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.types.ValueName;
 import souther.compiler.types.WrittenOwner;
@@ -1367,14 +1360,15 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         /**
          * The call as a page writes it: what was called, at where it was called.
          *
-         * <p>Where there is nowhere to send a reader, what the step is within the definition that
-         * wrote it, and that there is no place. Said by the name alone, two copies made at two
-         * names this compiler could not place would read alike and a reader would be shown one
-         * where there are two.
+         * <p>Where there is nowhere to send a reader, every field the document identifies the step
+         * by ({@link StepIdentity}), and that there is no place. Said by the name alone, two copies
+         * made at two names this compiler could not place would read alike and a reader would be
+         * shown one where there are two.
          */
         String said(SourceRendering rendering, SourceId declaredIn) {
-            return at == null ? name + " (" + unplaced(step) + ", which this compiler has no place"
-                    + " for)" : name + "@" + at.said(rendering, declaredIn);
+            return at == null
+                    ? name + " (no place to send you to; " + StepIdentity.inWords(step) + ")"
+                    : name + "@" + at.said(rendering, declaredIn);
         }
     }
 
@@ -4086,31 +4080,6 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     }
 
     /**
-     * A step of a copy with nowhere to send a reader, said by what tells it from every other: what
-     * it was made at within the definition that wrote it, and for a build the region it was made
-     * for.
-     */
-    private static String unplaced(StepOfACopy step) {
-        return switch (step) {
-            case StepOfACopy.ACall(var _, var site) -> "made at " + unplaced(site);
-            case StepOfACopy.ABuild(var _, var region) -> "built for " + region;
-        };
-    }
-
-    /** A site a copy was made at, said by what it is within the definition that wrote it. */
-    private static String unplaced(ExpansionSite site) {
-        return switch (site) {
-            case ExpansionSite.Written(var call) -> "call " + call.ordinal() + " of `"
-                    + WrittenOwner.theBodyThatWrote(call.owner()).definition() + "`";
-            case ExpansionSite.Named(var reference) -> "name " + reference.ordinal() + " of `"
-                    + WrittenOwner.theBodyThatWrote(reference.owner()).definition() + "`";
-            case ExpansionSite.Supplied supplied -> unplaced(supplied.application())
-                    + " inside `" + HelperInliner.asWritten(supplied.copy().expanded().name())
-                    + "`";
-        };
-    }
-
-    /**
      * The pair numbers as counts, never as one ratio.
      *
      * <p>A ratio needs a denominator that is known, and this one is not: a combination no row sits in
@@ -5664,103 +5633,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         }
         ArrayNode through = into.putArray("through");
         for (StepOfACopy step : steps) {
-            ObjectNode one = through.addObject();
-            switch (step) {
-                case StepOfACopy.ACall copy -> expansionStep(one, copy);
-                case StepOfACopy.ABuild(var built, var region) -> {
-                    one.put("kind", word(ThroughStepWord.MATERIALISATION));
-                    one.put("materialised", built.toString());
-                    regionOf(one.putObject("at"), region);
-                }
-            }
-        }
-    }
-
-    /** One call the copy was made through: what it reached, and where the call is written. */
-    private static void expansionStep(ObjectNode one, StepOfACopy.ACall copy) {
-        one.put("kind", word(ThroughStepWord.EXPANSION));
-        one.put("expanded", copy.called().toString());
-        switch (copy.at()) {
-            case ExpansionSite.Written(var origin) -> {
-                one.put("module", origin.owner().module());
-                one.put("definition", WrittenOwner.theBodyThatWrote(origin.owner()).definition());
-                one.put("call", origin.ordinal());
-                one.put("lowered", origin.lowered());
-            }
-            // A site named by what stands there rather than by a call the author wrote, and one
-            // read off where the block came from. Neither has a construct of its own to name,
-            // so what is written is what the site is.
-            case ExpansionSite.Named named -> one.put("name", named.toString());
-            case ExpansionSite.Supplied supplied -> one.put("supplied", supplied.toString());
-        }
-    }
-
-    /** The region a build was made for, in the words the source settles it by. */
-    private static void regionOf(ObjectNode into, MaterialisationSite site) {
-        switch (site) {
-            case MaterialisationSite.Body body -> {
-                into.put("kind", word(MaterialisationRegionWord.BODY));
-                into.put("module", body.owner().module());
-                into.put("definition", body.owner().definition());
-            }
-            case MaterialisationSite.Slot slot -> {
-                into.put("kind", word(MaterialisationRegionWord.SLOT));
-                into.put("module", slot.construct().owner().module());
-                into.put("definition",
-                        WrittenOwner.theBodyThatWrote(slot.construct().owner()).definition());
-                into.put("construct", slot.construct().ordinal());
-                into.put("lowered", slot.construct().lowered());
-                switch (slot.slot()) {
-                    case RegionSlot.IfThen _ -> into.put("slot", word(RegionSlotWord.IF_THEN));
-                    case RegionSlot.IfElse _ -> into.put("slot", word(RegionSlotWord.IF_ELSE));
-                    case RegionSlot.ConstructedThen _ ->
-                            into.put("slot", word(RegionSlotWord.CONSTRUCTED_THEN));
-                    case RegionSlot.ConstructedElse refused -> {
-                        into.put("slot", word(RegionSlotWord.CONSTRUCTED_ELSE));
-                        refused.clause().ifPresent(clause -> into.put("clause", clause));
-                    }
-                    case RegionSlot.MatchCase match -> {
-                        into.put("slot", word(RegionSlotWord.MATCH_CASE));
-                        ArrayNode cases = into.putArray("cases");
-                        match.caseTypes().forEach(cases::add);
-                    }
-                    case RegionSlot.ShortCircuitRight _ ->
-                            into.put("slot", word(RegionSlotWord.SHORT_CIRCUIT_RIGHT));
-                    case RegionSlot.ComprehensionElement _ ->
-                            into.put("slot", word(RegionSlotWord.COMPREHENSION_ELEMENT));
-                    case RegionSlot.ComprehensionGuard guard -> {
-                        into.put("slot", word(RegionSlotWord.COMPREHENSION_GUARD));
-                        into.put("index", guard.index());
-                    }
-                }
-            }
-            case MaterialisationSite.WrittenBlock block -> {
-                into.put("kind", word(MaterialisationRegionWord.BLOCK));
-                into.put("module", block.rule().owner().module());
-                into.put("definition",
-                        WrittenOwner.theBodyThatWrote(block.rule().owner()).definition());
-                into.put("rule", block.rule().ordinal());
-            }
-            case MaterialisationSite.GeneratedBlock block -> {
-                into.put("kind", word(MaterialisationRegionWord.BLOCK_OF_NAME));
-                into.put("module", block.reference().owner().module());
-                into.put("definition",
-                        WrittenOwner.theBodyThatWrote(block.reference().owner()).definition());
-                into.put("reference", block.reference().ordinal());
-            }
-            case MaterialisationSite.Invariant invariant -> {
-                into.put("kind", word(MaterialisationRegionWord.INVARIANT));
-                into.put("module", invariant.declaration().module());
-                into.put("declaration", invariant.declaration().declaration().name());
-                into.put("ordinal", invariant.ordinal());
-            }
-            case MaterialisationSite.Ensures ensures -> {
-                into.put("kind", word(MaterialisationRegionWord.ENSURES));
-                into.put("module", ensures.stated().module());
-                into.put("definition", ensures.stated().behavior());
-                into.put("ordinal", ensures.clause());
-                into.put("arm", ensures.arm());
-            }
+            StepIdentity.of(new StepIdentity.InTheDocument(through.addObject()), step);
         }
     }
 

@@ -10,6 +10,7 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.CombinationCriterion;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.DecisionRuleReading;
+import souther.compiler.query.Sites;
 import souther.compiler.types.OccurrenceLineage;
 import souther.compiler.types.StepOfACopy;
 
@@ -26,6 +27,8 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -167,7 +170,9 @@ class ALineAboutACombinationSaysWhichCombinationItIsTest {
     @ValueSource(strings = {"MEETING", "TWICE", "NESTED", "NAMED", "SAME_CASES", "OPERATION",
             "MEETS_TWICE"})
     void eachConditionSaidIsAPlaceTheCombinationIsRecordedAt(String fixture) {
-        AdequacyReport.BehaviorReport behavior = behaviorOf(FIXTURES.get(fixture));
+        Compilation compilation = measured(FIXTURES.get(fixture));
+        AdequacyReport.BehaviorReport behavior =
+                AdequacyReport.of(compilation).modules().getFirst().behaviors().getFirst();
         Set<ObligationIdentity.OfACombinationOfDecisions> about = aboutOf(behavior);
         assertTrue(about.size() >= 3, () -> "lines about combinations: " + about);
 
@@ -176,7 +181,7 @@ class ALineAboutACombinationSaysWhichCombinationItIsTest {
             for (InteractionRequirements.Way way : waysOf(behavior, combination)) {
                 Set<List<Object>> claimed = new HashSet<>();
                 for (ControlClaim claim : way.claims()) {
-                    claimed.add(claimed(claim));
+                    claimed.add(claimed(compilation, claim));
                 }
                 asked.add(claimed);
             }
@@ -247,6 +252,40 @@ class ALineAboutACombinationSaysWhichCombinationItIsTest {
         assertEquals(about.size(), unmade, () -> "one obligation per line: " + interaction);
     }
 
+    /**
+     * An arm inside one of the language's own operations, called twice, is shown where its own
+     * call reached it: the first call's arms at the first call, the second's at the second.
+     *
+     * <p>Read off the page and held to where the fixture writes the two calls, so a page that sent
+     * the second call's arm to the first — the place the arm's site was made for — reads wrong
+     * here whatever the reading it was handed said.
+     */
+    @Test
+    void anArmInsideAnOperationIsShownWhereItsOwnCallReachedIt() {
+        String written = OPERATION.lines().filter(line -> line.startsWith("let f")).findFirst()
+                .orElseThrow();
+        int line = OPERATION.lines().toList().indexOf(written) + 1;
+        int first = written.indexOf("Option.withDefault") + 1;
+        int second = written.indexOf("Option.withDefault", first) + 1;
+        Set<String> calls = Set.of(line + ":" + first, line + ":" + second);
+
+        Compilation compilation = measured(OPERATION);
+        String page = AdequacyReport.of(compilation)
+                .human(SourceRendering.namedByIdentity(compilation.texts()));
+        Pattern arm = Pattern.compile("reached at (\\d+:\\d+)\\) in withDefault@(\\d+:\\d+)");
+        Set<String> shown = new HashSet<>();
+        for (Set<String> block : blocksOf(page)) {
+            for (String condition : block) {
+                Matcher said = arm.matcher(condition);
+                assertTrue(said.find(), () -> "an arm said with its call: " + condition);
+                assertEquals(said.group(2), said.group(1),
+                        () -> "shown where its own call reached it: " + condition);
+                shown.add(said.group(1));
+            }
+        }
+        assertEquals(calls, shown, () -> "each call's arms at that call: " + page);
+    }
+
     /** Two ways naming the same conditions in two orders are said once, in the first one's order. */
     @Test
     void aWayThatReadsLikeAnEarlierOneIsSaidOnce() {
@@ -262,10 +301,14 @@ class ALineAboutACombinationSaysWhichCombinationItIsTest {
 
     /** What a claim is recorded at: which construct, which way, where it is shown, and every step
      *  of its copy — read off the claim's occurrence by a walk of this test's own. */
-    private static List<Object> claimed(ControlClaim claim) {
+    private static List<Object> claimed(Compilation compilation, ControlClaim claim) {
         return switch (claim.at()) {
+            // And where a page sends a reader for the arm, which is where the claim is recorded:
+            // asked of the claim's own anchor and set beside what the page was handed, so a page
+            // that resolved the arm's place from anything else is caught here.
             case ControlPlace.Arm(var arm, var _, var anchor) ->
-                    List.of("arm", arm.origin(), arm.part(), anchor, steps(arm.fork().lineage()));
+                    List.of("arm", arm.origin(), arm.part(), anchor,
+                            Sites.placeOf(compilation.db(), anchor), steps(arm.fork().lineage()));
             case ControlPlace.Outcome(var occurrence, var _, var held) ->
                     List.of("outcome", occurrence.origin(), held, steps(occurrence.lineage()));
         };
@@ -281,7 +324,7 @@ class ALineAboutACombinationSaysWhichCombinationItIsTest {
         return switch (shown.read()) {
             case DecisionRuleReading.AForkTookAnArm(var arm, var shownAt) ->
                     List.of("arm", arm.obligation().origin(), arm.obligation().part(), shownAt,
-                            steps(through));
+                            shown.at(), steps(through));
             case DecisionRuleReading.AComparisonCameOut(var comparison, var held) ->
                     List.of("outcome", comparison.obligation().origin(), held, steps(through));
             case DecisionRuleReading.AnApplicationAnswered(var application, var held) ->

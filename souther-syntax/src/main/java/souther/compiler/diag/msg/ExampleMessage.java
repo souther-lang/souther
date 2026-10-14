@@ -428,6 +428,16 @@ public sealed interface ExampleMessage extends Message {
     record TheRuleGoesThroughThisCall(String called) implements ExampleMessage, Supporting {}
 
     /**
+     * That the report says which way the rule takes each condition in each call, and every call it
+     * was reached through, said once where a call's mark said less than that.
+     *
+     * <p>Only there. A call whose conditions of the rule go different ways is marked only as one
+     * the rule goes through, and the conditions are marked alike at the helper; a warning whose
+     * marks said everything they were told has nothing left for the report to add.
+     */
+    record TheReportSaysWhatTheRuleTakesInEachCall() implements ExampleMessage, Supporting {}
+
+    /**
      * The call of a helper a reading of that line was made in, where the helper writes the
      * comparison that draws it.
      *
