@@ -8575,7 +8575,12 @@ public final class Adequacy {
         for (RowOutcome row : rows) {
             boolean held = row.disposition() == Disposition.HELD;
             if (row.expectedArm() != null) {
-                specified.add(row.expectedArm());
+                // Only a case this count is out of. A row naming a type the output does not have
+                // expects nothing of it, and counted here it would make the number of cases a row
+                // expects larger than the number there are to expect.
+                if (declaredOut.contains(row.expectedArm())) {
+                    specified.add(row.expectedArm());
+                }
             } else if (!declaredOut.isEmpty()) {
                 unreadableOut++;   // an expectation whose case the text does not say
             }
