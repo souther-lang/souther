@@ -115,6 +115,18 @@ public record TypeView(Type declared, List<TypeSymbol> wrappers, Shape shape) {
     }
 
     /**
+     * The name the value is written under on the outside, or null where it wears none.
+     *
+     * <p>The one name a reader of the value's rules asks. A name reads the rules of every name
+     * beneath it as its walk reaches them ({@link DeclarationReadings#ownerOf}), so the reading of
+     * this one is the reading of the whole chain — and a reader that asked each name and met the
+     * answers would count the inner rules once per name above them.
+     */
+    public TypeSymbol outermostName() {
+        return wrappers.isEmpty() ? null : wrappers.getFirst();
+    }
+
+    /**
      * What {@code terminal} is. Exhaustive over {@link Type}, and over the declarations a
      * {@link Type.Ref} can denote — no {@code default} in either, so a constructor added to
      * {@code Type} or a declaration form added to {@code Hir} stops compiling here until it has

@@ -18,9 +18,9 @@ import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -63,6 +63,10 @@ class AContainerHoldsNoMoreThanItsElementsHaveValuesTest {
               invariant value == "a" || value == "a"
             data Narrow = Code
               invariant value.value /= "a"
+            data Wrapped = Code
+            data Kept = Code
+              invariant value.value /= "z"
+            data Item = { code: Code, active: Bool }
             data Odd = Int
               invariant value == 1 || value == 3 || value == 7
             data Loose = String
@@ -124,6 +128,10 @@ class AContainerHoldsNoMoreThanItsElementsHaveValuesTest {
                 new Case("Map<Code, Int>", "Map.size(s)", 2),
                 new Case("Set<Twice>", "Set.size(s)", 1),
                 new Case("Set<Narrow>", "Set.size(s)", 1),
+                // A name over it reads the rules of the name beneath, whether or not it writes
+                // any of its own, so both values are offered under it.
+                new Case("Set<Wrapped>", "Set.size(s)", 2),
+                new Case("Set<Kept>", "Set.size(s)", 2),
                 new Case("Set<Odd>", "Set.size(s)", 3),
                 // Beside a rule nothing reads, which may refuse one of them and add none.
                 new Case("Set<Loose>", "Set.size(s)", 2))) {
@@ -151,7 +159,7 @@ class AContainerHoldsNoMoreThanItsElementsHaveValuesTest {
             %s
             behavior f : (s: %s) -> Int
             let f (s) = {
-                guard Set.size(s) >= %d else 0
+                guard %s else 0
 
                 1
             }
@@ -162,43 +170,71 @@ class AContainerHoldsNoMoreThanItsElementsHaveValuesTest {
      * way past it is said as the rules leaving no value that way — not as a way nothing here could
      * hold a row to, which would leave an author looking for a row nobody can write.
      *
-     * <p>And one asking for as many as there are is not: a row may well go past it, so where one
-     * stops there the way was looked for.
+     * <p>Both ways of writing that, and none of the guards a row does go past: as many as there
+     * are, fewer, and a set of an element with no end of values. A row going past one of those is
+     * looked for and offered, and no way past it is said to be one the rules leave nothing on.
      */
     @Test
     void aGuardAskingForMoreValuesThanThereAreIsOneTheRulesLetNoRowPast() {
         RepairShortfall.WayPast leftNoValue = new RepairShortfall.WayPast.NotSearchable(
                 RepairShortfall.Barrier.THE_RULES_LEAVE_NO_VALUE_THAT_WAY);
-        for (String type : List.of("Set<Code>", "Set<Bool>")) {
-            List<RepairShortfall> stops = stopsOf(GUARDED.formatted(TYPES, type, 3));
-            assertFalse(stops.isEmpty(), () -> type + " has rows stopped at the guard");
-            for (RepairShortfall stop : stops) {
-                assertTrue(stop.came() instanceof RepairShortfall.AtTheGuard.NoWayPast(var ways)
-                        && ways.stream().allMatch(leftNoValue::equals),
-                        () -> type + " " + stop);
-            }
-            for (RepairShortfall stop : stopsOf(GUARDED.formatted(TYPES, type, 2))) {
-                assertTrue(stop.came() instanceof RepairShortfall.AtTheGuard.NoWayPast(var ways)
-                        && ways.stream().noneMatch(leftNoValue::equals),
-                        () -> type + " " + stop);
+        record Case(String type, String guard, boolean past) {}
+        for (Case each : List.of(
+                new Case("Set<Code>", "Set.size(s) >= 3", false),
+                new Case("Set<Code>", "Set.size(s) > 2", false),
+                new Case("Set<Bool>", "Set.size(s) >= 3", false),
+                new Case("Set<Code>", "Set.size(s) >= 2", true),
+                new Case("Set<Code>", "Set.size(s) <= 2", true),
+                new Case("Set<Code>", "Set.size(s) < 2", true),
+                new Case("Set<String>", "Set.size(s) >= 3", true))) {
+            List<FillResult.Offer> offers =
+                    offersOf(GUARDED.formatted(TYPES, each.type(), each.guard()));
+            String said = each.type() + " " + each.guard();
+            List<RepairShortfall> stops = offers.stream().map(FillResult.Offer::stop)
+                    .filter(Objects::nonNull).toList();
+            if (each.past()) {
+                assertTrue(offers.stream().anyMatch(offer -> offer.stop() == null),
+                        () -> said + ": a row goes past it " + offers);
+                for (RepairShortfall stop : stops) {
+                    assertTrue(stop.came() instanceof RepairShortfall.AtTheGuard.NoWayPast(var ways)
+                            && ways.stream().noneMatch(leftNoValue::equals), () -> said + stop);
+                }
+            } else {
+                assertFalse(stops.isEmpty(), () -> said + ": rows stop at the guard");
+                assertEquals(offers.size(), stops.size(), () -> said + ": none goes past");
+                for (RepairShortfall stop : stops) {
+                    assertTrue(stop.came() instanceof RepairShortfall.AtTheGuard.NoWayPast(var ways)
+                            && ways.stream().allMatch(leftNoValue::equals), () -> said + stop);
+                }
             }
         }
     }
 
-    /** What stopped each row offered for {@code f}, for the rows something stopped. */
-    private static List<RepairShortfall> stopsOf(String model) {
+    /**
+     * A record holding such a value is built twice over for a count of the records meeting a
+     * statement about another of its fields: the two differ at the value, which the statement
+     * says nothing of.
+     */
+    @Test
+    void recordsMeetingAStatementDifferAtAValueTheStatementDoesNotRead() {
+        BorderAssessment line = lineOf(MODEL.formatted(TYPES, "Set<Item>",
+                "Set.size(Set.filter(x -> x.active, s))", 2), "p", "2");
+
+        assertTrue(line.items().get(new DomainPoint.AtTheLine())
+                instanceof ItemAssessment.Owed owed
+                && owed.searches().each().stream()
+                        .anyMatch(ItemAssessment.Attempt.Certified.class::isInstance),
+                () -> String.valueOf(line.items().get(new DomainPoint.AtTheLine())));
+    }
+
+    /** Every row offered for {@code f}, with what stopped it where something did. */
+    private static List<FillResult.Offer> offersOf(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         Map<String, Adequacy.Filling> all = Adequacy.generatedOf(compilation.db(), "p");
         assertNotNull(all, "the model under test compiles");
-        List<RepairShortfall> out = new ArrayList<>();
-        for (FillResult.Offer offer : all.get("f").composed().offers()) {
-            if (offer.stop() != null) {
-                out.add(offer.stop());
-            }
-        }
-        return out;
+        return all.get("f").composed().offers();
     }
 
     /**
