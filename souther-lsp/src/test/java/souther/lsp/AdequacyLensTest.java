@@ -178,7 +178,7 @@ class AdequacyLensTest {
         int line = lineOf(TRIP, "behavior submit");
         assertEquals(new Range(new Position(line, 0), new Position(line, 0)),
                 lenses.get(0).range());
-        assertEquals("1 row · out 1/2 · boundary 2/5 · branch 1/2", lenses.get(0).title());
+        assertEquals("1 row · out 1/2 · boundary 1/4 · branch 1/2", lenses.get(0).title());
     }
 
     /**
@@ -201,7 +201,7 @@ class AdequacyLensTest {
         List<CodeLens> lenses = measuring(Adequacy.Level.ALL).codeLenses(MODULE, graphOf(workspace));
 
         assertEquals(1, lenses.size());
-        assertEquals("2 rows · out 2/2 · boundary 3/5 · branch 2/2", lenses.get(0).title());
+        assertEquals("2 rows · out 2/2 · boundary 2/4 · branch 2/2", lenses.get(0).title());
     }
 
     /** Nothing has been claimed about a behavior no row names, so there is nothing to draw over it. */

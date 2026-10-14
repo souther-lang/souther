@@ -32,9 +32,9 @@ class ALineBehindABoolIsComposedThroughItTest {
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
     /**
-     * The line, behind {@code condition} coming out false — with one row past the condition the
-     * other way, which writes {@code n} at the declaration's own line and leaves the rows offered to
-     * be the ones at the line under test.
+     * The line, behind {@code condition} coming out false — with two rows past the condition the
+     * other way, which write {@code n} at the declaration's own line and inside the region beside
+     * it and leave the rows offered to be the ones at the line under test.
      */
     private static String behind(String condition, boolean past) {
         return """
@@ -48,13 +48,14 @@ class ALineBehindABoolIsComposedThroughItTest {
             behavior charge : (a: Amount) -> Ok | Refused
                 constructs Ok, Refused
             let charge (a) =
-                if %s then
+                if %1$s then
                     Ok { n = 1 }
                 else
                     if a.n.value > 100 then Ok { n = 2 } else Refused { why = "small" }
 
             example charge
-                | (Amount { flag = %s, n = N(100) }) -> Ok { n = 1 }
+                | (Amount { flag = %2$s, n = N(100) }) -> Ok { n = 1 }
+                | (Amount { flag = %2$s, n = N(150) }) -> Ok { n = 1 }
             """.formatted(condition, past);
     }
 
@@ -82,6 +83,7 @@ class ALineBehindABoolIsComposedThroughItTest {
 
             example charge
                 | (Amount { kind = Plain { note = 0 }, n = N(100) }) -> Ok { n = 0 }
+                | (Amount { kind = Plain { note = 0 }, n = N(150) }) -> Ok { n = 0 }
             """;
 
     @Test

@@ -61,9 +61,10 @@ import java.util.List;
  * @param parted  where the rules part this position's values, which is not the same list. A cut is
  *                a value a row can be written against and a bound has one without parting
  *                anything; a rule that wrote a multiple of the position parts its values where the
- *                position may hold none, and has no cut. What every border on this position owes
- *                away from its line is a run of what these leave together, and the cuts alone are
- *                short of the lines that have no value
+ *                position may hold none, and has no cut. What a comparison's border on this
+ *                position owes away from its line is a run of what these leave together, and the
+ *                cuts alone are short of the lines that have no value. A bound's border reads none
+ *                of them: its run is what the rules leave
  */
 public record Axis(AxisId id, NumericTerm.FromOnePosition term,
                    List<PartitionClass> classes, List<RuleEvidenceOrigin> divides,

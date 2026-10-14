@@ -609,8 +609,10 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
      *
      * <p>A place that was not worked out is not a place with nothing at it: the runs of the
      * arrangement lie between the places, so with one missing none of them is known to be the run
-     * it looks like. Every point read off the arrangement is then answered as not worked out, and
-     * the points at the line, which the order alone answers, are asked as they always are.
+     * it looks like. Every point a comparison reads off the arrangement is then answered as not
+     * worked out, and the points at the line, which the order alone answers, are asked as they
+     * always are. A bound reads nothing off it: its run is what the rules leave, which no other
+     * rule's place moves.
      *
      * @param parted every place the rules part this quantity's values, or the way one of them was
      *               not worked out
@@ -642,23 +644,28 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
                     "a border built on a line the quantity does not reach: " + target.left()
                             + " at " + target.right());
         }
+        DomainEnds ends = DomainEnds.leaving(space, cut, reach, narrowed);
+        Map<DomainPoint, PointAnswer> demands = new LinkedHashMap<>();
+        if (drawnByAnInvariant(origin)) {
+            // Not told where the other rules part the values. What a bound asks a row for is a
+            // question about what the rules leave, and a body's comparison divides that without
+            // moving it. Read against the arrangement, the run a bound leaves would stop at
+            // whichever line a body drew next to it, and one clause would owe a different region
+            // to each behavior carrying it.
+            aBound(demands, origin, target.of(), cut, space, admissible,
+                    QuantityArrangement.of(space, List.of(), ends));
+            return new Border(target, origin, demands, Sides.NEITHER);
+        }
         // Handed over as candidates rather than told apart here. Whether this line is one the
         // others already hold is a question about where the values part, and the arrangement is
-        // what answers it — asked here as well, this reading kept whichever of two lines at one
-        // place it met first and the other went unsaid.
-        DomainEnds ends = DomainEnds.leaving(space, cut, reach, narrowed);
+        // what answers it — asked here as well, this reading would keep whichever of two lines at
+        // one place it met first and the other would go unsaid.
         ExactAnswer<Arranged> arranged = parted.flatMap(others ->
                 partedBy(target, origin).map(mine -> {
                     List<Parting> all = new ArrayList<>(others);
                     all.addAll(mine);
                     return new Arranged(QuantityArrangement.of(space, all, ends), mine);
                 }));
-        Map<DomainPoint, PointAnswer> demands = new LinkedHashMap<>();
-        if (drawnByAnInvariant(origin)) {
-            aBound(demands, origin, target.of(), cut, space, admissible,
-                    arranged.map(Arranged::arrangement));
-            return new Border(target, origin, demands, Sides.NEITHER);
-        }
         againstTheLine(demands, origin, cut, space, admissible);
         // Each side runs from the point against the line on that side, where there is one, and from
         // the line itself where there is not: the values one step away are not there to be left out,
@@ -1310,11 +1317,17 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
      * <p>Which side the values are kept on is what the reading that placed the end recorded, and the
      * point against the line is the value a row inside stands at: the line's own where the bound
      * admits it, and the nearest value it does leave where the bound refuses it.
+     *
+     * <p>The region away from the line is everything the rules leave, and no body's comparison
+     * parts it. A behavior that compares the value draws its own line inside that region and is owed
+     * rows either side of it on that line's account; the bound's region is the same whichever
+     * behavior is reading it, so one row anywhere in it settles it.
+     *
+     * @param leaves what the rules leave the quantity, as one run that nothing parts
      */
     private static void aBound(Map<DomainPoint, PointAnswer> demands, LineOrigin origin,
                                BorderQuantity of, Level cut, LevelSpace space,
-                               Admissible admissible,
-                               ExactAnswer<QuantityArrangement> arrangement) {
+                               Admissible admissible, QuantityArrangement leaves) {
         Towards kept = satisfyingSide(origin);
         boolean holdsHere = holdsAtTheValue(origin);
         // Asked of a bound on a position and of nothing else. A position's range ends where its own
@@ -1342,12 +1355,8 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
         // starts past the cut: looked up by the cut, the run a bound leaves was no run of the
         // arrangement at all and the row away from its line came back refused.
         Level against = against(on) != null ? against(on) : cut;
-        demands.put(new DomainPoint.InTheRegion(kept), switch (arrangement) {
-            case ExactAnswer.Unheld<QuantityArrangement> unheld ->
-                    new PointAnswer.NotWorkedOut(unheld.why());
-            case ExactAnswer.Held<QuantityArrangement> held ->
-                    runOf(space, held.value().endmost(kept), against, kept);
-        });
+        demands.put(new DomainPoint.InTheRegion(kept),
+                runOf(space, leaves.endmost(kept), against, kept));
         demands.put(new DomainPoint.InTheRegion(kept.opposite()),
                 new PointAnswer.NotOwed(NotOwedReason.NO_VALUE_CAN_STAND_THERE));
     }

@@ -262,7 +262,7 @@ class AHelpersArmIsOneObligationHoweverOftenItIsCalledTest {
                 """);
 
         // The record's own minimum, and the two the guard draws at 100.
-        assertTrue(report.contains("border      borders 2   obligations 3/5"),
+        assertTrue(report.contains("border      borders 2   obligations 2/4"),
                 () -> "one line per rule, not one per reading of it:\n" + report);
         // One mark and one reading under it, however many calls of the helper met the line: the
         // guard is one rule and the row it asks for is one row.

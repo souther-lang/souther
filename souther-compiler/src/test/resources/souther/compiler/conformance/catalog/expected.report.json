@@ -1744,9 +1744,23 @@
         "disposition" : "met",
         "readings" : [ {
           "behavior" : "apportion",
+          "axis" : "apportion/among",
+          "relation" : "in",
+          "against" : "0 < among",
+          "status" : "complete",
+          "hit" : true
+        }, {
+          "behavior" : "apportion",
           "axis" : "apportion/amount",
           "relation" : "in",
           "against" : "0 < amount",
+          "status" : "complete",
+          "hit" : true
+        }, {
+          "behavior" : "apportionExactly",
+          "axis" : "apportionExactly/among",
+          "relation" : "in",
+          "against" : "0 < among",
           "status" : "complete",
           "hit" : true
         }, {
@@ -2090,7 +2104,12 @@
               "kind" : "in_the_region",
               "side" : "above"
             },
-            "notOwed" : "no_value_can_stand_there"
+            "relation" : "in",
+            "against" : "0 < among",
+            "knownWritable" : true,
+            "writableBecause" : [ "it_is_proved", "a_row_is_at_it" ],
+            "status" : "complete",
+            "hit" : true
           }, {
             "point" : "out",
             "location" : {
@@ -3005,7 +3024,12 @@
               "kind" : "in_the_region",
               "side" : "above"
             },
-            "notOwed" : "no_value_can_stand_there"
+            "relation" : "in",
+            "against" : "0 < among",
+            "knownWritable" : true,
+            "writableBecause" : [ "it_is_proved", "a_row_is_at_it" ],
+            "status" : "complete",
+            "hit" : true
           }, {
             "point" : "out",
             "location" : {
@@ -4999,7 +5023,7 @@
               "side" : "above"
             },
             "relation" : "in",
-            "against" : "1 < 指示.重量 <= 30000",
+            "against" : "1 < 指示.重量",
             "knownWritable" : true,
             "writableBecause" : [ "it_is_proved", "a_row_is_at_it" ],
             "status" : "complete",
@@ -5225,87 +5249,6 @@
           } ]
         } ],
         "obligations" : [ {
-          "obligationId" : {
-            "line" : {
-              "which" : {
-                "kind" : "part",
-                "rule" : {
-                  "kind" : "invariant",
-                  "declaredIn" : "conformance.catalog",
-                  "declaredOn" : "Weight",
-                  "clause" : 0
-                },
-                "part" : 0,
-                "line" : {
-                  "kind" : "statement",
-                  "statement" : 0
-                }
-              },
-              "facts" : {
-                "valueBelongsBelow" : false,
-                "holdsAtTheValue" : true,
-                "singles" : false
-              },
-              "narrowedWithin" : [ ]
-            },
-            "level" : {
-              "kind" : "on_a_carrier",
-              "carrier" : {
-                "kind" : "whole"
-              },
-              "at" : "1"
-            },
-            "location" : {
-              "kind" : "in_the_region",
-              "side" : "above"
-            },
-            "stops" : {
-              "kind" : "at_a_line",
-              "line" : {
-                "which" : {
-                  "kind" : "comparison",
-                  "rule" : {
-                    "kind" : "comparison",
-                    "declaredIn" : "conformance.shipping",
-                    "definition" : "出荷する",
-                    "behavior" : "出荷する",
-                    "ordinal" : 12,
-                    "lowered" : 0
-                  }
-                },
-                "facts" : {
-                  "valueBelongsBelow" : true,
-                  "holdsAtTheValue" : true,
-                  "singles" : false
-                },
-                "narrowedWithin" : [ ]
-              },
-              "where" : "30000|30001"
-            }
-          },
-          "point" : "in",
-          "rule" : "invariant Weight #1",
-          "ruleId" : {
-            "kind" : "invariant",
-            "declaredIn" : "conformance.catalog",
-            "declaredOn" : "Weight",
-            "clause" : 0
-          },
-          "relation" : "in",
-          "knownWritable" : true,
-          "writableBecause" : [ "it_is_proved", "a_row_is_at_it" ],
-          "status" : "complete",
-          "hit" : true,
-          "disposition" : "met",
-          "readings" : [ {
-            "behavior" : "出荷する",
-            "axis" : "出荷する/指示.重量",
-            "relation" : "in",
-            "against" : "1 < 指示.重量 <= 30000",
-            "status" : "complete",
-            "hit" : true
-          } ]
-        }, {
           "obligationId" : {
             "line" : {
               "which" : {
