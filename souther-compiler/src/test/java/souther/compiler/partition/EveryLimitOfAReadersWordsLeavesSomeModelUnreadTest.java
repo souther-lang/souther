@@ -55,18 +55,22 @@ class EveryLimitOfAReadersWordsLeavesSomeModelUnreadTest {
 
             data Tier = Gold | Plain
             data Item = { n: Int }
-            data P = { n: Int }
             data O = { a: Int, b: Int, name: String, other: String, tier: Tier,
-                       xs: List<Item>, ns: List<Int>, p: P, q: P }
+                       xs: List<Item>, ns: List<Int> }
 
             data A
             data B
             data C
 
+            data Bronze
+            data Gold
+            data Rank = Bronze | Gold
+
             behavior lookup : (n: Int) -> Int
 
-            behavior twoRecords : (o: O) -> A | B | C
-            let twoRecords (o) = if o.p == o.q then (if o.a > 5 then A else B) else C
+            behavior twoCasesOrdered : (o: O, low: Bronze, high: Gold) -> A | B | C
+            let twoCasesOrdered (o, low, high) =
+                if high > low then (if o.a > 5 then A else B) else C
 
             behavior askedOfADependency : (o: O) -> A | B | C depends on lookup
             let askedOfADependency (o, lookup) =
@@ -143,8 +147,9 @@ class EveryLimitOfAReadersWordsLeavesSomeModelUnreadTest {
     /** The behavior each limit leaves without words. */
     private static Map<WhyNotTaken.DomainLimit, String> witnesses() {
         Map<WhyNotTaken.DomainLimit, String> out = new EnumMap<>(WhyNotTaken.DomainLimit.class);
-        // Two records compared: read to the end, and a difference that is a distance on nothing.
-        out.put(WhyNotTaken.DomainLimit.A_QUANTITY_ON_NO_ORDER, "twoRecords");
+        // Two cases of one sum held one above the other: read to the end, and a difference that is
+        // a distance on nothing.
+        out.put(WhyNotTaken.DomainLimit.A_QUANTITY_ON_NO_ORDER, "twoCasesOrdered");
         // What a dependency answered, which a row stands in and does not write.
         out.put(WhyNotTaken.DomainLimit.AN_ANSWER_A_ROW_STANDS_IN, "askedOfADependency");
         // A search from a node, which some node further down than a row is written may settle.
@@ -223,7 +228,8 @@ class EveryLimitOfAReadersWordsLeavesSomeModelUnreadTest {
                 DemandReading.asked(way ? states : states.denied(), reading)
                         .forEach(read -> limitsIn(read, out));
                 if (DecisionMeanings.columnOf(states, way, new ConditionOccurrence(
-                                behavior, ConditionOccurrence.Reading.DECIDING, 0))
+                                behavior, ConditionOccurrence.Reading.DECIDING, 0),
+                        Proposition::denied)
                         instanceof DecidedCondition.Unread(var condition, boolean _)) {
                     condition.whys().forEach(why -> limitOf(why, out));
                 }

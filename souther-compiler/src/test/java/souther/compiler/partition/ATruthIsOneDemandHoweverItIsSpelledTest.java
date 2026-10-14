@@ -85,11 +85,17 @@ class ATruthIsOneDemandHoweverItIsSpelledTest {
         }
     }
 
-    /** Two positions held against each other ask no one value of either, and are declined as
-     *  before. */
+    /** Two positions held against each other ask no one value of either: what they ask is that
+     *  the two hold one value, or two, whichever it is. */
     @Test
     void twoPositionsComparedAreNoTruth() {
-        assertInstanceOf(OnTheWay.Declined.class, stated("twoPositions", true));
+        for (boolean holding : List.of(true, false)) {
+            OnTheWay.TakenIn taken = assertInstanceOf(OnTheWay.TakenIn.class,
+                    stated("twoPositions", holding));
+            RowDemand.OneValueAtBoth both = assertInstanceOf(RowDemand.OneValueAtBoth.class,
+                    taken.demand(), "no truth of either, and the two held against each other");
+            assertEquals(holding, both.same());
+        }
     }
 
     /** What a region is narrowed by is what it can measure, and a truth is not that. */

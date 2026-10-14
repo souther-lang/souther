@@ -525,6 +525,49 @@ class AClassIsOneThePositionCanHoldAndNothingTakesItAwayTest {
     }
 
     /**
+     * A run between two lines that the declarations leave nothing in is no class, and nor is what
+     * is left of a position once the values singled out are every value it can hold.
+     *
+     * <p>A position held between one and five and away from two has no class of its own values to
+     * read, so the body's lines divide the range — and the run from two to three holds a value of
+     * the range that is no value of the position. Against the same lines over the same range with
+     * nothing kept away, where that run is a class.
+     */
+    @Test
+    void aRunOrARestTheDeclarationsLeaveNothingInIsNoClass() {
+        String runs = "if c.value < 2 then Accepted { at = \"x\" }"
+                + " else if c.value < 3 then Accepted { at = \"y\" } else Accepted { at = \"z\" }";
+        assertEquals(List.of("c/1 <= x < 2", "c/3 <= x <= 5"),
+                withBody(over(" && value /= 2", runs), "classify"));
+        assertEquals(List.of("c/1 <= x < 2", "c/2 <= x < 3", "c/3 <= x <= 5"),
+                withBody(over("", runs), "classify"));
+        String singled = "if c.value == 1 then Accepted { at = \"x\" }"
+                + " else if c.value == 5 then Accepted { at = \"y\" } else Accepted { at = \"z\" }";
+        assertEquals(List.of("c/= 1", "c/= 5"),
+                withBody(over(" && value /= 2 && value /= 3 && value /= 4", singled), "classify"));
+        assertEquals(List.of("c/= 1", "c/= 5", "c//= 1, 5"),
+                withBody(over("", singled), "classify"));
+    }
+
+    /** A position held between one and five, and by {@code more} besides, decided on by
+     *  {@code body}. */
+    private static String over(String more, String body) {
+        return """
+                module g
+
+                data Held = Int
+                    invariant value >= 1 && value <= 5%s
+
+                data Accepted = { at: String }
+
+                behavior classify : (c: Held) -> Accepted
+                    constructs Accepted
+
+                let classify (c) = %s
+                """.formatted(more, body);
+    }
+
+    /**
      * A line a body draws on a position that already has classes leaves them where they are.
      *
      * <p>The classes the model states are finer than the ranges either side of a line — every value

@@ -468,7 +468,7 @@ class ABoundaryIsAValueTheRecordCanHoldTest {
         // settled by building one. Two kinds of witness, and the projection proves neither.
         // Under the declarations: both lines are the record's own clause, so the behavior carrying
         // the type is owed nothing at them and the module's account is where the two are counted.
-        assertTrue(report.contains("declarations   obligations 2/4"),
+        assertTrue(report.contains("declarations   borders 2   obligations 2/4"),
                 () -> "the row at 0 is met, and 10 was built and is owed:\n" + report);
         // Under the declaration that drew it, in the terms it wrote: the line is owed once over
         // every position carrying the type (issue #1062).

@@ -67,11 +67,37 @@ class AnInvariantSaysARuleWentUnreadTheWayAGuardDoesTest {
             let byGuardAboutOne (b) = if b.x < b.x + 1 then Ok else No
             """;
 
+    /**
+     * {@link #MODEL} measured, once for the class.
+     *
+     * <p>Every check here reads what the compilation answers, and its database keeps the answers,
+     * so each of them measuring the model again is the same measurement paid for again. Rendered
+     * once for the same reason.
+     */
+    private static Compilation measured;
+
+    private static String rendered;
+
+    private static synchronized Compilation measured() {
+        if (measured == null) {
+            Compilation compilation = Compilation.ofSource(MODEL, "Main");
+            compilation.measure(Adequacy.Asked.fullReport());
+            compilation.answerEverything();
+            measured = compilation;
+        }
+        return measured;
+    }
+
+    private static synchronized String human() {
+        if (rendered == null) {
+            rendered = AdequacyReport.of(measured())
+                    .human(SourceRendering.namedByIdentity(measured().texts()));
+        }
+        return rendered;
+    }
+
     private static String blockOf(String behavior) {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        String human = AdequacyReport.of(compilation).human(SourceRendering.namedByIdentity(compilation.texts()));
+        String human = human();
         StringBuilder block = new StringBuilder();
         boolean inside = false;
         for (String line : human.split("\n", -1)) {
@@ -150,18 +176,30 @@ class AnInvariantSaysARuleWentUnreadTheWayAGuardDoesTest {
      * <p>The rule beside it went unread; this one did not. A reading that answered the pair with
      * one verdict would have taken the boundary with it.
      *
-     * <p>Three lines: one at each field's own end, and one on what the record's clause relates. That
-     * last is still a line, drawn on the form the clause cuts rather than on either position. Which
-     * values of each field settle it on their own is not worked out — neither field is shown to
-     * reach every value of the other, since neither is below nought — so the question it raises at
-     * each stands, and the border says so.
+     * <p>Two lines, both the declarations': the fields' own type's end, read at each field, and one
+     * on what the record's clause relates. That last is still a line, drawn on the form the clause
+     * cuts rather than on either position. Which values of each field settle it on their own is not
+     * worked out — neither field is shown to reach every value of the other, since neither is below
+     * nought — so the question it raises at each stands, and the border says so.
      */
     @Test
     void andTheBoundTheFieldsOwnTypeStatesIsStillALine() {
         String block = blockOf("quote");
+        String declarations = declarationsShownWith("quote");
 
         assertTrue(block.contains(
-                "border      borders 3   obligations 0/0   (not all of it was measured)\n"), block);
+                "border      borders 0   obligations 0/0   (not all of it was measured)\n"), block);
+        assertTrue(declarations.startsWith("  declarations   borders 2 "), declarations);
+        assertTrue(declarations.contains("read as quote/parcel.length: = 0"), declarations);
+        assertTrue(declarations.contains("read as quote/parcel.width: = 0"), declarations);
+    }
+
+    /** The declarations' block of a report showing {@code behavior} alone, which holds the lines
+     *  the declarations drew that it reads. */
+    private static String declarationsShownWith(String behavior) {
+        String human = AdequacyReport.of(measured()).only(null, behavior)
+                .human(SourceRendering.namedByIdentity(measured().texts()));
+        return human.substring(human.indexOf("  declarations "));
     }
 
     /** One clause and one sentence: what a reader has to lift is one thing. */

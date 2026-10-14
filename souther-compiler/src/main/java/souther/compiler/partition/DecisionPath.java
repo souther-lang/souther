@@ -122,6 +122,11 @@ final class DecisionPath {
          * it.
          */
         Consulted again(Consulted more) {
+            // Consulted again as itself it is told of no place and no copy it was not already, and
+            // telling it walks every entry on the way to find that out.
+            if (more == this) {
+                return this;
+            }
             List<ShownBy> places = new ArrayList<>(seen);
             more.seen.stream().filter(each -> !places.contains(each)).forEach(places::add);
             return new Consulted(answer, places, states,
@@ -381,6 +386,17 @@ final class DecisionPath {
      * <p>A column both answer alike is one column, consulted again ({@link Consulted#again}).
      */
     DecisionPath and(DecisionPath more) {
+        // Refused by the rules first: each is what its path's columns came out as, so the two
+        // disagree exactly where a column of one came out otherwise in the other. Most ways a
+        // reading pairs are ways no run takes, and each of those is answered by a look per column
+        // rather than by finding every condition of one among the conditions of the other.
+        for (Map.Entry<DecisionCondition, DecidedCondition> each
+                : more.rule.consulted().entrySet()) {
+            DecidedCondition had = rule.at(each.getKey());
+            if (had != null && !had.equals(each.getValue())) {
+                return null;
+            }
+        }
         List<Consulted> out = new ArrayList<>(consulted);
         for (Consulted each : more.consulted) {
             int already = at(out, each.answer().condition());

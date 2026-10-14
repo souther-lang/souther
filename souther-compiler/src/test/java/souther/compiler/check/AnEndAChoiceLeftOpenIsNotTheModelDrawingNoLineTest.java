@@ -474,9 +474,11 @@ class AnEndAChoiceLeftOpenIsNotTheModelDrawingNoLineTest {
     /** And a rule with no choice in it is measured as it was. */
     @Test
     void andARuleWithNoChoiceInItIsMeasuredAsItWas() {
-        assertEquals(List.of("border      borders 1   obligations 0/0"),
+        assertEquals(List.of("border      borders 0   obligations 0/0"),
                 borderIn("n >= 2"),
-                "one line, and nothing here is owed about it");
+                "nothing here is owed about it, and the line is the declaration's");
+        assertEquals(1, linesOf("n >= 2", each -> each.startsWith("declarations   borders 1 "))
+                .size(), "one line");
     }
 
     private static List<String> theModelDrawsNoLine() {

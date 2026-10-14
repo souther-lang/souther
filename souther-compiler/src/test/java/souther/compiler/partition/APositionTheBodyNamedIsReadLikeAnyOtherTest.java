@@ -7,6 +7,8 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
+import java.util.List;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -86,14 +88,22 @@ class APositionTheBodyNamedIsReadLikeAnyOtherTest {
      */
     @Test
     void theDeclarationsOwnBoundIsAtBothOccurrences() {
-        String report = report(OUTSIDE_THE_BOUND);
+        List<String> read = linesReadBy(OUTSIDE_THE_BOUND, "f");
 
-        assertTrue(report.contains("no OFF point is owed at c@Cons.head = 100"
-                        + " (invariant Amount (atLeast))"),
-                report);
-        assertTrue(report.contains("no OFF point is owed at c@Cons.tail@Cons.head = 100"
-                        + " (invariant Amount (atLeast))"),
-                () -> "the occurrence the body named carries it too:\n" + report);
+        assertTrue(read.contains("c@Cons.head = 100 (invariant Amount (atLeast))"), () -> "" + read);
+        assertTrue(read.contains("c@Cons.tail@Cons.head = 100 (invariant Amount (atLeast))"),
+                () -> "the occurrence the body named carries it too: " + read);
+    }
+
+    /** Where each line {@code behavior}'s positions met is, and the rule that drew it. */
+    private static List<String> linesReadBy(String model, String behavior) {
+        Compilation compilation = Compilation.ofSource(model, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        return Adequacy.boundariesOf(compilation.db(), compilation.modules().get(0))
+                .get(behavior).stream()
+                .map(each -> each.label() + " (" + each.origin().saidWithoutAPlace() + ")")
+                .toList();
     }
 
     /** And a line the declaration does admit is drawn there, so nothing was suppressed wholesale. */

@@ -323,7 +323,8 @@ final class AReportOfOneBorder {
                         // Nothing this module's declarations are owed, and nothing that finding
                         // them went without: the fixture is about one behavior's own lines.
                         new AdequacyReport.DeclarationsShown(
-                                new Adequacy.DeclaredBoundaries(List.of(), java.util.Map.of()),
+                                new Adequacy.DeclaredBoundaries(List.of(), List.of(), List.of(),
+                                        Map.of()),
                                 AdequacyReport.ConditionsShown.NONE, Map.of(), Map.of()))))
                 .adequacy();
     }

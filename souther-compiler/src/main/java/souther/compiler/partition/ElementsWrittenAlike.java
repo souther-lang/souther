@@ -138,7 +138,8 @@ final class ElementsWrittenAlike {
                     }
                 }
                 case RowDemand.Relational _, RowDemand.ATruth _, RowDemand.SoMany _,
-                     RowDemand.ForTheRun _ -> throw new IllegalStateException(
+                     RowDemand.OneValueAtBoth _, RowDemand.ForTheRun _ ->
+                        throw new IllegalStateException(
                         "a demand of one way is written as it stands: " + entry);
             }
             return out;
@@ -168,7 +169,7 @@ final class ElementsWrittenAlike {
                     asked = every.ofEachElement().theWay();
                 }
                 case RowDemand.Relational _, RowDemand.ATruth _, RowDemand.SoMany _,
-                     RowDemand.ForTheRun _ -> {
+                     RowDemand.OneValueAtBoth _, RowDemand.ForTheRun _ -> {
                     return new Step.Held<>(so);
                 }
             }

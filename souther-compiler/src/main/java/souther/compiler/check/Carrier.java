@@ -1049,6 +1049,28 @@ public sealed interface Carrier extends ValueOrder {
     }
 
     /**
+     * Every place {@code set} names on this order, in the order the set names them, where it names
+     * finitely many; null where it does not.
+     *
+     * <p>The places an order with no step to take can still be walked through: the set says which
+     * they are, so nothing has to be stepped to. A value the order holds no place for is left out,
+     * as {@link #somewhereIn} leaves it out.
+     */
+    default List<Place> everyPlaceOf(ValueSet set) {
+        if (!(set instanceof ValueSet.Finite finite)) {
+            return null;
+        }
+        List<Place> out = new ArrayList<>();
+        for (Value each : finite.values()) {
+            Place at = placeOf(each);
+            if (at != null) {
+                out.add(at);
+            }
+        }
+        return out;
+    }
+
+    /**
      * A place this order holds inside {@code range} that {@code set} admits and none of
      * {@code apart} stands at, or null where this composed none.
      *
@@ -1343,6 +1365,30 @@ public sealed interface Carrier extends ValueOrder {
      */
     default souther.compiler.values.Emptiness meets(ValueSet set, OrderedInterval range, Meter meter,
                                                     StringMachineAnswers machines) {
+        if (set instanceof ValueSet.Matching it && !range.holdsNothing()) {
+            return this instanceof Text ? stringsInside(it.language(), range, meter, machines)
+                    : souther.compiler.values.Emptiness.UNDECIDED;
+        }
+        return meetsWithoutBuilding(set, range);
+    }
+
+    /**
+     * Whether {@code set} is shown to admit no value this order holds inside {@code range}, so far
+     * as that can be said without building anything.
+     *
+     * <p>For a reader holding no allowance and asking only for the refusal. A set that names its
+     * values, or every value but a few, meets a range by looking at those few; a language names its
+     * strings and does not list them, and what is left of it inside a range is a machine — so that
+     * one is not shown to admit nothing here, which is a question that waits and not a value being
+     * let in.
+     */
+    default boolean admitsNothingIn(ValueSet set, OrderedInterval range) {
+        return meetsWithoutBuilding(set, range).isEmpty();
+    }
+
+    /** {@link #meets} of a set that is not a language, which needs nothing built. */
+    private souther.compiler.values.Emptiness meetsWithoutBuilding(ValueSet set,
+                                                                   OrderedInterval range) {
         if (range.holdsNothing()) {
             return souther.compiler.values.Emptiness.EMPTY;
         }
@@ -1351,9 +1397,7 @@ public sealed interface Carrier extends ValueOrder {
             // Every value of the order is admitted, and the range holds one.
             case ValueSet.Cofinite it -> it.excluded().isEmpty()
                     ? souther.compiler.values.Emptiness.NONEMPTY : somethingNotExcluded(it.excluded(), range);
-            case ValueSet.Matching it -> this instanceof Text
-                    ? stringsInside(it.language(), range, meter, machines)
-                    : souther.compiler.values.Emptiness.UNDECIDED;
+            case ValueSet.Matching _ -> souther.compiler.values.Emptiness.UNDECIDED;
         };
     }
 

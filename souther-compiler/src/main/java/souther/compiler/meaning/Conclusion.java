@@ -1,5 +1,6 @@
 package souther.compiler.meaning;
 
+import souther.compiler.partition.CompositionBudget;
 import souther.compiler.types.ModelOccurrence;
 
 import java.util.ArrayDeque;
@@ -36,6 +37,12 @@ import java.util.Set;
  */
 public final class Conclusion {
 
+    /**
+     * How many parts a step is concluded with
+     * ({@link CompositionBudget#PARTS_A_DERIVATION_CONCLUDES}), read here and nowhere else.
+     */
+    private static final CompositionBudget PARTS = CompositionBudget.PARTS_A_DERIVATION_CONCLUDES;
+
     /** What every concluding made from one by supposing more shares: where, the numbering, and
      *  what each step came to. */
     private static final class Shared {
@@ -45,6 +52,10 @@ public final class Conclusion {
         private final Map<Derivation, Proposition> last = new IdentityHashMap<>();
         /** The carried values each step being concluded has read so far, innermost last. */
         private final Deque<Set<ACarriedValue>> reading = new ArrayDeque<>();
+        /** How many parts each statement concluded here comes to written out, past the figure
+         *  held at one past it. By identity, since a part held twice is one statement counted
+         *  twice wherever it is held. */
+        private final Map<Proposition, Long> parts = new IdentityHashMap<>();
         private int unread;
 
         private Shared(Optional<ModelOccurrence> where, boolean reusing) {
@@ -110,6 +121,11 @@ public final class Conclusion {
         } finally {
             read = shared.reading.pop();
         }
+        // Counted as each step is concluded, so the steps it is made of are each within the figure
+        // already and what is kept of it — here and by whoever asks again — is the step given up.
+        if (partsIn(out) > PARTS.maximum()) {
+            out = unread(new Derivation.Stopped(new WhyUnread.MorePartsThanAreConcluded(), false));
+        }
         if (shared.reusing) {
             Map<ACarriedValue, Optional<Boolean>> how = new HashMap<>();
             read.forEach(each -> how.put(each, Optional.ofNullable(supposed.get(each))));
@@ -119,6 +135,68 @@ public final class Conclusion {
         readAll(read);
         shared.last.put(step, out);
         return out;
+    }
+
+    /**
+     * How many parts {@code stated} comes to written out — each part as many times as it is held,
+     * the statements a count is taken over among them — or one past the figure, where it is past
+     * it.
+     */
+    private long partsIn(Proposition stated) {
+        Long known = shared.parts.get(stated);
+        if (known != null) {
+            return known;
+        }
+        // Its parts, and the statements a count or a sum in it is taken over, which a reader of the
+        // number walks as much as a part.
+        long out = 1 + partsIn(stated.partsHeld()) + switch (stated) {
+            case Proposition.Compared compared -> switch (compared.relation()) {
+                case Relation.Affine affine -> {
+                    long held = 0;
+                    for (Quantity each : affine.form().coefs().keySet()) {
+                        held += partsIn(each);
+                    }
+                    yield held;
+                }
+                case Relation.Ordered _ -> 0;
+            };
+            case Proposition.All _, Proposition.Any _, Proposition.OnAnApplication _,
+                 Proposition.Some _, Proposition.SomeReachable _, Proposition.Always _,
+                 Proposition.Truth _, Proposition.InCases _, Proposition.Present _,
+                 Proposition.SameValue _, Proposition.LastToHold _, Proposition.Unread _,
+                 Proposition.Carried _ -> 0;
+        };
+        long kept = Math.min(out, PARTS.maximum() + 1L);
+        shared.parts.put(stated, kept);
+        return kept;
+    }
+
+    private long partsIn(List<Proposition> each) {
+        long out = 0;
+        for (Proposition one : each) {
+            out += partsIn(one);
+        }
+        return out;
+    }
+
+    /** The parts the statements {@code quantity} is a count or a sum over come to. */
+    private long partsIn(Quantity quantity) {
+        return switch (quantity) {
+            case Quantity.HowManyMeet(DecisionSubject _, Proposition each) -> partsIn(each);
+            case Quantity.HowManyHold(List<Proposition> each) -> partsIn(each);
+            case Quantity.SumOver(DecisionSubject _, Quantity each) -> partsIn(each);
+            case Quantity.WhatAnOperationAnswers answers -> {
+                long out = 0;
+                for (Quantity each : answers.of()) {
+                    out += partsIn(each);
+                }
+                yield out;
+            }
+            case DecisionAtom.OfTheInput _, DecisionAtom.OfAnAnswer _,
+                 DecisionAtom.TakenOfAnAnswer _, Quantity.OfABinding _,
+                 Quantity.CodePointsOfAPiece _, Quantity.HowManyDifferent _,
+                 Quantity.RemainderOfADividend _ -> 0;
+        };
     }
 
     /** What {@code how} concludes, beside {@code how}: the one way a meaning is made. */

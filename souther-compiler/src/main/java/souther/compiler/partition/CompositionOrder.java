@@ -16,7 +16,9 @@ import java.util.Set;
  * <p>One answer for every walk that composes a row parameter by parameter. A container handed the
  * value at another parameter is composed after that parameter, and what came of composing it turns
  * on that parameter's value — and on every value that one's turned on in turn: a box holding the
- * number, and an outer list holding the box, is an outer list another number may let be built.
+ * number, and an outer list holding the box, is an outer list another number may let be built. And
+ * a parameter asked to hold the value another holds, or one other than it, turns on the one composed
+ * before it.
  * Worked out once here, the order, whether a parameter has to wait for one after it, and whether
  * one coming to nothing is a reason to try another value of an earlier one are one reading; a walk
  * that answered any of them itself would answer it its own way.
@@ -65,6 +67,12 @@ record CompositionOrder(List<String> parameters, List<Integer> order,
      * The order {@code parameters} are composed in under what {@code contents} asks: each after
      * every parameter whose value one of its containers is handed, and otherwise in the order they
      * are declared.
+     *
+     * <p>And two parameters a position of each of which is held to one value with the other, or
+     * two, in the order that comes to: what is asked of the two says nothing of which comes first,
+     * so the one composed second turns on the first, and a value of the first the second can be
+     * given nothing beside is passed over for the next ({@link #mayTurnOn}). Said in the order
+     * already worked out, so it adds no order of its own and no circle.
      */
     static Result of(List<String> parameters, ContentsAsked contents) {
         Map<String, Set<String>> after = new LinkedHashMap<>();
@@ -92,6 +100,15 @@ record CompositionOrder(List<String> parameters, List<Integer> order,
             }
             out.add(next);
             placed.add(parameters.get(next));
+        }
+        for (List<String> pair : contents.heldAcross()) {
+            int one = out.indexOf(parameters.indexOf(pair.get(0)));
+            int other = out.indexOf(parameters.indexOf(pair.get(1)));
+            if (one < 0 || other < 0) {
+                continue;
+            }
+            after.computeIfAbsent(parameters.get(out.get(Math.max(one, other))),
+                    _ -> new LinkedHashSet<>()).add(parameters.get(out.get(Math.min(one, other))));
         }
         Map<String, Set<String>> reached = new LinkedHashMap<>();
         for (String parameter : parameters) {

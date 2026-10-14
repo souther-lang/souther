@@ -2061,10 +2061,148 @@
               "owners",
               "name",
               "obligations",
-              "findings"
+              "findings",
+              "lines",
+              "excluded"
             ],
             "additionalProperties": false,
             "properties": {
+              "lines": {
+                "type": "array",
+                "description": "Every line these declarations drew that some behavior of the module reads, once each however many positions carry the type — what the human-readable report counts as the declarations' `borders`. What a row is owed at on one is under `obligations` and what no row is owed at is under `excluded`, each filed by whose the point is, which need not be the declarations that drew the line.",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "lineId",
+                    "ruleId",
+                    "label",
+                    "noPoint"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "lineId": {
+                      "type": "object",
+                      "description": "Which line, by the two parts an `obligationId` names a line by.",
+                      "required": [
+                        "line",
+                        "level"
+                      ],
+                      "additionalProperties": false,
+                      "properties": {
+                        "line": {
+                          "$ref": "#/$defs/authoredLineId"
+                        },
+                        "level": {
+                          "$ref": "#/$defs/level"
+                        }
+                      }
+                    },
+                    "ruleId": {
+                      "$ref": "#/$defs/ruleId"
+                    },
+                    "label": {
+                      "type": "string",
+                      "description": "Where the line is, in the words the declaration wrote for what it is on. A rendering and never a key."
+                    },
+                    "noPoint": {
+                      "type": "array",
+                      "description": "The roles the line has no point in, which its own rule settles: `the_class_at_the_line_holds_one_value` is a rule naming one value, which puts that value in a class of its own and leaves no row in it away from the line. Empty where the line has a point in every role.",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "point",
+                          "why"
+                        ],
+                        "additionalProperties": false,
+                        "properties": {
+                          "point": {
+                            "enum": [
+                              "on",
+                              "off",
+                              "in",
+                              "out"
+                            ]
+                          },
+                          "why": {
+                            "enum": [
+                              "the_class_at_the_line_holds_one_value"
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "excluded": {
+                "type": "array",
+                "description": "The points no row is owed at that are these declarations' fact, once each however many positions carry the type. Filed by whose the point is, as `obligations` are: a point a type's bound leaves out on its own is the type's, and the same role of the same bound where a record's clause on the field empties the region beside it is another point, told apart by `stops` and filed under whose it is — the declarations whose line it is, and a declaration that took in the end the region stops at. A fact the declarations settled and not an obligation: none of these is in `obligations`, and none is a row anybody is short of.",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "pointId",
+                    "point",
+                    "ruleId",
+                    "label",
+                    "notOwed"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "pointId": {
+                      "type": "object",
+                      "description": "Which point: the line and its level and where on the quantity, which an `obligationId` names a point by, and where else it was settled. Two entries that differ only in `stops` are two points — the run above a type's bound holds values where nothing else stops it, and is empty where a record's clause holds the field at the bound.",
+                      "required": [
+                        "line",
+                        "level",
+                        "location",
+                        "stops"
+                      ],
+                      "additionalProperties": false,
+                      "properties": {
+                        "line": {
+                          "$ref": "#/$defs/authoredLineId"
+                        },
+                        "level": {
+                          "$ref": "#/$defs/level"
+                        },
+                        "location": {
+                          "$ref": "#/$defs/location"
+                        },
+                        "stops": {
+                          "type": "array",
+                          "description": "Where else it was settled, each written as an obligation's `stops` is: the far end of the empty run beside the line, or an end the rules leave the position at that refuses the value. Empty where the line alone settled it. A set: the order carries no meaning.",
+                          "items": {
+                            "$ref": "#/$defs/obligationId/properties/stops"
+                          }
+                        }
+                      }
+                    },
+                    "point": {
+                      "enum": [
+                        "on",
+                        "off",
+                        "in",
+                        "out"
+                      ],
+                      "description": "Which of the four coverage items this point is. Not what tells two of them apart: two points of one line can carry one of these words, and `pointId` is what they differ by."
+                    },
+                    "ruleId": {
+                      "$ref": "#/$defs/ruleId"
+                    },
+                    "label": {
+                      "type": "string",
+                      "description": "Where the line is, in the words the declaration wrote for what it is on, and the level where the line states one on that quantity. A rendering and never a key."
+                    },
+                    "notOwed": {
+                      "enum": [
+                        "no_value_can_stand_there",
+                        "the_carrier_names_no_neighbour"
+                      ],
+                      "description": "Why no row is owed at the point, in the words a behavior's `boundaries` item uses for the same answer."
+                    }
+                  }
+                }
+              },
               "name": {
                 "type": "string",
                 "description": "What a report calls the owners above. A rendering and never a key: two sets of declarations a report writes alike are two sets."
@@ -2845,7 +2983,7 @@
     },
     "conditionNotReadReason": {
       "type": "object",
-      "description": "One reason a condition nothing read was not: which of the three kinds, and the word within it. The kinds are told apart by what lifts one — a rule of the reading of what a condition means, a wider domain, or a higher figure. `more_ways_than_are_read` is some or every element meeting the condition coming, taken apart, to more ways an element may meet it than a reading of one condition makes; nothing about the model or about either domain is short. Each `outside_domain` word names the reader whose domain stops: what a row is asked is written at the input's positions, so `answer_a_row_stands_in` is what a dependency answered and `node_below_what_a_row_writes` is a node a search reaches further down than a row is written; what a path knows is relations of numbers, truths and what every element was written to meet, about the places of the tree it walks, so the `path_` words and `place_the_path_does_not_read` are where that stops. `size_nothing_measures` and `position_the_reading_holds_no_place_for` are no longer written — every container a condition asks about has a size that is a number of the input, and the reading of the input holds every position a condition names — and a document of this version may still carry them.",
+      "description": "One reason a condition nothing read was not: which of the three kinds, and the word within it. The kinds are told apart by what lifts one — a rule of the reading of what a condition means, a wider domain, or a higher figure. `more_ways_than_are_read` is some or every element meeting the condition coming, taken apart, to more ways an element may meet it than a reading of one condition makes; `more_alternatives_than_are_tried` is a condition that is one of several things, whose parts a path takes alone to know which of them it leaves, coming — counted inside one another — to more parts than a reading of one condition takes alone. For neither is anything about the model or about either domain short. Each `outside_domain` word names the reader whose domain stops: what a row is asked is written at the input's positions, so `answer_a_row_stands_in` is what a dependency answered and `node_below_what_a_row_writes` is a node a search reaches further down than a row is written; what a path knows is relations of numbers, truths and what every element was written to meet, about the places of the tree it walks, so the `path_` words and `place_the_path_does_not_read` are where that stops. `size_nothing_measures` and `position_the_reading_holds_no_place_for` are no longer written — every container a condition asks about has a size that is a number of the input, and the reading of the input holds every position a condition names — and a document of this version may still carry them.",
       "required": [
         "kind",
         "reason"
@@ -2900,6 +3038,8 @@
                   "called_body_reaches_itself",
                   "called_body_not_read",
                   "more_readings_than_are_made",
+                  "more_total_readings_than_are_made",
+                  "more_parts_than_are_concluded",
                   "more_elements_than_are_written_out",
                   "several_values_not_gone_into",
                   "copies_state_different_things",
@@ -2952,7 +3092,8 @@
             "properties": {
               "reason": {
                 "enum": [
-                  "more_ways_than_are_read"
+                  "more_ways_than_are_read",
+                  "more_alternatives_than_are_tried"
                 ]
               }
             }
@@ -5581,12 +5722,14 @@
                     {
                       "description": "A point no row is owed at carries which point it is and why, and nothing else. Closed rather than listing what it may not have: the list was the keys of the owed side written a second time, and a field added to that side was a field somebody had to remember to forbid here. Two went unforbidden that way — `weakening`, which no measurement of a point owing no row can produce, and `writableBecause`, which is evidence about a row nobody is owed.",
                       "required": [
-                        "notOwed"
+                        "notOwed",
+                        "stops"
                       ],
                       "properties": {
                         "point": {},
                         "location": {},
-                        "notOwed": {}
+                        "notOwed": {},
+                        "stops": {}
                       },
                       "additionalProperties": false
                     },
@@ -5707,6 +5850,13 @@
                         "the_carrier_names_no_neighbour"
                       ],
                       "description": "Why no row is owed here, present exactly when one is not. `no_value_can_stand_there` is the model's own answer — nothing outside an invariant's bound can be constructed, so the points out there are excluded and counted out, a side one value wide has no `in` point for the same reason, and a count of a `Set<Bool>` past two has no value with no rule written. The word says that no value stands at the point and not what showed it: a type with few values, a rule on the type, a rule on a container's size and how many of an element's values meet a statement each show it, and two of them may show one point alike. `the_carrier_names_no_neighbour` is this language having no name for the value one step from the line, which a `Decimal`, a `DateTime` and a `String` do not — at a place, and at the difference two terms of a line between them stand at. The two ask different things of a reader — one is the model having settled the point and the other is a limit of this language — which is why the key is a word and not a flag."
+                    },
+                    "stops": {
+                      "type": "array",
+                      "description": "Where else the point was settled, present exactly when `notOwed` is: the far end of the empty run beside the line, or an end the rules leave the position at that refuses the value, each written as an obligation's `stops` is. Empty where the line alone settled it. With the line and `location` it is what tells this point from the same place of the same line left out elsewhere, and what a consumer joins it to `declarations[].excluded[].pointId` by. A set: the order carries no meaning.",
+                      "items": {
+                        "$ref": "#/$defs/obligationId/properties/stops"
+                      }
                     },
                     "relation": {
                       "type": "string",

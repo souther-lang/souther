@@ -316,6 +316,25 @@ public final class GeneratedRows {
     }
 
     /**
+     * How the note about a finding no strategy composes a row for opens, for what is missing.
+     *
+     * <p>Not one opening for all of them. Where what is missing is a way to steer a row somewhere,
+     * no row in this block was composed for the finding. An output case is not reached by steering
+     * at all: rows are composed for what the inputs divide into, and one of them may well answer
+     * with the case once it runs — so what is said is that nothing aims a row at it, and nothing
+     * about the rows above.
+     */
+    private static String openingFor(GenerationOutcome.NotSupported.Reason why) {
+        return switch (why) {
+            case NO_WAY_INTO_THIS_ARM_CAN_BE_NAMED, THE_WAYS_INTO_THIS_ARM_ARE_NOT_ENUMERABLE,
+                 MORE_WAYS_IN_THAN_THE_READING_HOLDS, THE_ARM_RUNS_WHERE_SOMETHING_CALLS_IT,
+                 A_CONSTRUCTION_DECIDES_THIS_ARM, NO_AXIS_AT_THIS_POSITION ->
+                    "nothing offers a row for";
+            case NO_STRATEGY_FOR_AN_OUTPUT_CASE -> "nothing aims a row at";
+        };
+    }
+
+    /**
      * The findings this block owes a reader a word about.
      *
      * <p>A point of a border is said like everything else. What a run offers is the account's, and
@@ -937,7 +956,7 @@ public final class GeneratedRows {
                 // them is not what is missing at the other.
                 case GenerationOutcome.NotSupported none -> none.reasons().forEach(why ->
                         say(out, saidOf, Owed.by(each.finding()),
-                                String.format("// nothing offers a row for %s in `%s`: %s%n",
+                                String.format("// %s %s in `%s`: %s%n", openingFor(why),
                                         called(each.finding(), db, module, rendering, places)
                                                 .quoted(), behavior,
                                         why.said())));

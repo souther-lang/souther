@@ -233,21 +233,13 @@ class AMeasureWithNoNumberSaysWhyTest {
                   baseRate                 injected      rows 0    pending 0
                     signature   not applicable (this behavior's output is not a sum)
                     partition   not applicable (the rules of this behavior divide no position)
-                    border      borders 2   obligations 0/0
-                      · no OFF point is owed at r.cost = 0 (invariant Amount #1): excluded — no value can stand there
-                      · no OUT point is owed at r.cost = 0 (invariant Amount #1): excluded — no value can stand there
-                      · no OFF point is owed at r.cost = 1000 (invariant Amount #1): excluded — no value can stand there
-                      · no OUT point is owed at r.cost = 1000 (invariant Amount #1): excluded — no value can stand there
+                    border      borders 0   obligations 0/0
                     branch      not applicable (this behavior has no body)
                     replacement not applicable (this behavior has no body)
                   rated                    implemented   rows 0    pending 0
                     signature   not applicable (this behavior's output is not a sum)
                     partition   not applicable (the rules of this behavior divide no position)
-                    border      borders 2   obligations 0/0
-                      · no OFF point is owed at r.cost = 0 (invariant Amount #1): excluded — no value can stand there
-                      · no OUT point is owed at r.cost = 0 (invariant Amount #1): excluded — no value can stand there
-                      · no OFF point is owed at r.cost = 1000 (invariant Amount #1): excluded — no value can stand there
-                      · no OUT point is owed at r.cost = 1000 (invariant Amount #1): excluded — no value can stand there
+                    border      borders 0   obligations 0/0
                     branch      not applicable (this body owes no arm)
                     decision    rules 1   taken 0
                       ! no row takes a decision rule
@@ -276,7 +268,7 @@ class AMeasureWithNoNumberSaysWhyTest {
                       ! no row takes a decision rule
                           · it goes through `case No` (49:16)
                     replacement not measured (no row names this behavior)
-                  declarations   obligations 0/4
+                  declarations   borders 2   obligations 0/4
                       ? undecided whether a row is at the ON point value = 0 (invariant Amount #1) — no row names this behavior
                           · read as baseRate/r.cost: = 0
                           · read as rated/r.cost: = 0
@@ -289,6 +281,10 @@ class AMeasureWithNoNumberSaysWhyTest {
                       ? undecided whether a row is at the IN point value in 0 <= value < 1000 (invariant Amount #1) — no row names this behavior
                           · read as baseRate/r.cost: in 0 <= r.cost < 1000
                           · read as rated/r.cost: in 0 <= r.cost < 1000
+                      · no OFF point is owed at value = 0 (invariant Amount #1): excluded — no value can stand there
+                      · no OUT point is owed at value = 0 (invariant Amount #1): excluded — no value can stand there
+                      · no OFF point is owed at value = 1000 (invariant Amount #1): excluded — no value can stand there
+                      · no OUT point is owed at value = 1000 (invariant Amount #1): excluded — no value can stand there
 
                 7 behaviors: 6 implemented, 0 unimplemented, 1 injected; 0 rows waiting for a `let`.
                 adequacy: not satisfied

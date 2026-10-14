@@ -819,6 +819,13 @@ final class DemandReading {
                                        DecisionSubject.AnInput(TermPath other), boolean _, var _)
                     when keyOf(one, other) != null -> ofAnEntryKeyedAs(keyOf(one, other), stated,
                     read);
+            // Two positions of the row being one value, or not, which is what a row writes at
+            // them.
+            case Proposition.SameValue(DecisionSubject.AnInput(TermPath one),
+                                       DecisionSubject.AnInput(TermPath other), boolean holds,
+                                       var _)
+                    when RowDemand.OneValueAtBoth.of(one, other, holds) != null ->
+                    List.of(new Read.Demands(RowDemand.OneValueAtBoth.of(one, other, holds)));
             case Proposition.SameValue _ ->
                     List.of(forTheRun(stated, RowDemand.NoComposer.TWO_SUBJECTS_ONE_VALUE));
             // The elements of a container are written alike, so the last of them is the last of
@@ -1238,6 +1245,14 @@ final class DemandReading {
                             ? AnElementsWay.ofTheRow(forTheRun(whole,
                                     RowDemand.NoComposer.A_COUNT_WITHIN_AN_ELEMENT))
                             : AnElementsWay.ofTheRow(each));
+            // Two values being one, asked of the row where neither is inside the element. Inside
+            // it, the element is written alike with every other and no value is written into it
+            // from another position here.
+            case Read.Demands(RowDemand.OneValueAtBoth both) ->
+                    List.of(everyElement || anyInside(both.positions(), element)
+                            ? AnElementsWay.ofTheRow(forTheRun(whole,
+                                    RowDemand.NoComposer.TWO_SUBJECTS_ONE_VALUE))
+                            : AnElementsWay.ofTheRow(each));
             case Read.Demands(RowDemand.ForTheRun(var _, var why, var past)) ->
                     List.of(AnElementsWay.ofTheRow(forTheRun(whole, why, past)));
             // Each way of each alternative: one alternative a figure stopped is said to be, and
@@ -1544,8 +1559,14 @@ final class DemandReading {
                 yield switch (read.quantities().region().assuming(against, met)) {
                     case SearchRegion.Assumption.Taken _ -> new Read.Demands(
                             new RowDemand.Relational(new TakenConstraint.Affine(against, met)));
-                    case SearchRegion.Assumption.Refused(var why) ->
-                            new Read.Unread(whyDeclined(why));
+                    // Two values on no order held equal or unequal, which is what a row writes
+                    // and not a relation a region places. Held one above the other, they are a
+                    // distance on nothing, and the region's word for why is what is said.
+                    case SearchRegion.Assumption.Refused(var why) -> {
+                        RowDemand.OneValueAtBoth both = oneValueAtBoth(against, met);
+                        yield both != null ? new Read.Demands(both)
+                                : new Read.Unread(whyDeclined(why));
+                    }
                 };
             }
             case Relation.Ordered(DecisionAtom.OfTheInput(NumericTerm.FromOnePosition term),
@@ -1651,6 +1672,32 @@ final class DemandReading {
         }
         return counted ? forTheRun(compared, RowDemand.NoComposer.A_COUNT_OF_ELEMENTS)
                 : forTheRun(compared, RowDemand.NoComposer.A_VALUE_THE_BODY_WORKS_OUT, past);
+    }
+
+    /**
+     * {@code form met 0} as the values at two positions being one, or not — where the form weighs
+     * the value at one position by one and the value at another by minus one, adds nothing, and is
+     * held equal or unequal; null for any other.
+     */
+    private static RowDemand.OneValueAtBoth oneValueAtBoth(LinearForm<NumericTerm> form, Rel met) {
+        if ((met != Rel.EQ && met != Rel.NE) || form.constant().signum() != 0
+                || form.coefs().size() != 2) {
+            return null;
+        }
+        List<TermPath> at = new ArrayList<>();
+        ExactRatio sum = ExactRatio.ZERO;
+        for (Map.Entry<NumericTerm, ExactRatio> each : form.coefs().entrySet()) {
+            if (!(each.getKey() instanceof NumericTerm.ValueOf(TermPath position))
+                    || each.getValue().abs().compareTo(ExactRatio.ONE) != 0
+                    || !(sum.plus(each.getValue()) instanceof ExactAnswer.Held<ExactRatio>(
+                            ExactRatio added))) {
+                return null;
+            }
+            at.add(position);
+            sum = added;
+        }
+        return sum.signum() == 0
+                ? RowDemand.OneValueAtBoth.of(at.get(0), at.get(1), met == Rel.EQ) : null;
     }
 
     /**

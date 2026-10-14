@@ -5,6 +5,7 @@ import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.PlacesApart;
 import souther.compiler.numeric.Rel;
+import souther.compiler.values.ValueSet;
 
 import java.util.Map;
 import java.util.Optional;
@@ -76,6 +77,11 @@ record ReadRegion(ReadQuantities within) implements SearchRegion {
     @Override
     public Congruences valueClassAt(NumericTerm.ValueOf place) {
         return within.valueClassAt(place);
+    }
+
+    @Override
+    public ValueSet admittedAt(NumericTerm.ValueOf place) {
+        return within.admittedAt(place);
     }
 
     @Override

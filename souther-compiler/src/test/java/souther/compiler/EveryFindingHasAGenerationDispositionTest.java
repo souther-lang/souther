@@ -884,8 +884,11 @@ class EveryFindingHasAGenerationDispositionTest {
                         + " so the reading stopped short of it rather than saying what steers a row"
                         + " there",
                 GenerationOutcome.NotSupported.Reason.MORE_WAYS_IN_THAN_THE_READING_HOLDS.said());
-        assertEquals("rows here are composed from what the input positions divide into, and nothing"
-                        + " searches for one by the case it would answer with",
+        // Nothing about the rows composed: one of them may answer with the case once it runs, so
+        // what is missing is a search aimed at the case and not a row that reaches it.
+        assertEquals("rows here are composed for what the input positions divide into and not for"
+                        + " the case they answer with, so which of them answers with it is what"
+                        + " their runs say",
                 GenerationOutcome.NotSupported.Reason.NO_STRATEGY_FOR_AN_OUTPUT_CASE.said());
         // A case whose parameter no axis was derived at has its cases in the declaration and in no
         // partition, so what is missing is a derivation and not the classes. Said as there being

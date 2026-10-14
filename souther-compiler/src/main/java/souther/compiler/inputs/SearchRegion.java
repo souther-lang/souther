@@ -6,6 +6,7 @@ import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.PlacesApart;
 import souther.compiler.numeric.Rel;
+import souther.compiler.values.ValueSet;
 
 import java.util.Map;
 import java.util.Optional;
@@ -215,6 +216,21 @@ public interface SearchRegion {
      */
     default Congruences valueClassAt(NumericTerm.ValueOf place) {
         return null;
+    }
+
+    /**
+     * The values the declarations of the position at {@code place} admit it, as far as they were
+     * read.
+     *
+     * <p>Beside {@link #valueClassAt} and for the same reason: a range says where a value runs and
+     * not which values of the run the position may hold, and a position held to {@code "a"} or
+     * {@code "b"} holds none of the strings between them. Read and not proved: what the rules that
+     * were read admit, so a value outside it is refused and a value inside it is not shown to be one
+     * a row can hold. A region that reads no position says nothing of one, which is what the default
+     * is.
+     */
+    default ValueSet admittedAt(NumericTerm.ValueOf place) {
+        return ValueSet.ANY;
     }
 
     /** The same, of one term — the one-term case of the question above and not a second answer to

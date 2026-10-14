@@ -148,7 +148,7 @@ class EveryShapeOfAConditionOverAContainerABoundValueOrASizeIsReadToTheEndTest {
                     declined(asked, name + " asked of a row coming out " + holding, unread);
                 }
                 if (DecisionMeanings.columnOf(stated, holding, new ConditionOccurrence(
-                                name, ConditionOccurrence.Reading.DECIDING, 0))
+                                name, ConditionOccurrence.Reading.DECIDING, 0), Proposition::denied)
                         instanceof DecidedCondition.Unread(var column, boolean _)) {
                     unread.add(name + " is no column coming out " + holding + ": "
                             + column.whys());

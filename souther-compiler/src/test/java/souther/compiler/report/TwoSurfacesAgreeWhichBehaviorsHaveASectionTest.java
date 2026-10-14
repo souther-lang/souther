@@ -113,10 +113,17 @@ class TwoSurfacesAgreeWhichBehaviorsHaveASectionTest {
      */
     @Test
     void theBehaviorThisIssueWasAboutHasOneAndSaysWhatItFound() {
-        String take = block(report().human(SourceRendering.namedByIdentity(SourceLayouts.NONE)), "take");
+        AdequacyReport report = report();
+        String take = block(report.human(SourceRendering.namedByIdentity(SourceLayouts.NONE)), "take");
+        // The lines are `Rate`'s, so they are counted and said under the declarations, which a
+        // view of `take` alone shows because `take` reads them.
+        String shown = report.only(null, "take")
+                .human(SourceRendering.namedByIdentity(SourceLayouts.NONE));
+        String declarations = shown.substring(shown.indexOf("  declarations "));
 
-        assertTrue(take.contains("border      borders 2"), take);
-        assertTrue(take.contains("this order names no value there"), take);
+        assertTrue(take.contains("border      borders 0"), take);
+        assertTrue(declarations.startsWith("  declarations   borders 2 "), declarations);
+        assertTrue(declarations.contains("this order names no value there"), declarations);
     }
 
     /** The lines a report writes under one behavior's name. */

@@ -194,10 +194,14 @@ public sealed interface DecisionCondition {
             }
         }
 
-        /** {@code stated} coming out {@code held}, as the answer to the one column it and its
-         *  denial are. */
-        static DecidedCondition.Held of(Proposition stated, boolean held) {
-            Proposition denied = stated.denied();
+        /**
+         * {@code stated} coming out {@code held}, as the answer to the one column it and its
+         * denial are.
+         *
+         * @param denied what holds exactly where {@code stated} does not — handed in, so that the
+         *               two ways one condition comes out name the column with one value
+         */
+        static DecidedCondition.Held of(Proposition stated, Proposition denied, boolean held) {
             return denied.key().compareTo(stated.key()) < 0
                     ? new DecidedCondition.Held(new AStatement(denied), !held)
                     : new DecidedCondition.Held(new AStatement(stated), held);

@@ -95,8 +95,13 @@ import souther.compiler.partition.CameToNothing;
 import souther.compiler.partition.BorderQuantity;
 import souther.compiler.partition.ClassOfAPosition;
 import souther.compiler.partition.Border;
+import souther.compiler.partition.BorderObligationId;
 import souther.compiler.partition.HeldOutcome;
 import souther.compiler.partition.DomainPoint;
+import souther.compiler.partition.FarEnd;
+import souther.compiler.partition.LeftOutPoint;
+import souther.compiler.partition.NotOwedPoint;
+import souther.compiler.partition.RoleAnswer;
 import souther.compiler.partition.LevelRealizer;
 import souther.compiler.partition.MeasuredInput;
 import souther.compiler.partition.ReachingCuts;
@@ -6992,6 +6997,178 @@ public final class Adequacy {
     }
 
     /**
+     * A line one of this module's declarations drew, once however many positions read it.
+     *
+     * <p>What the declaration wrote, counted for the declaration. A line a clause of a {@code data}
+     * drew is the same line wherever the type is carried, so it is counted once, among the
+     * declarations' borders. Counted under each behavior, one line would be a border of every
+     * behavior carrying the type, a body that compares nothing among them.
+     *
+     * <p>Not a debt, and not what the line leaves out. What a row is owed at on the line is
+     * {@link DeclaredDebt}'s and what no row is owed at is {@link DeclaredExclusion}'s, each filed by
+     * whose the point is. This is the line, and what its own rule says of it: the roles it has no
+     * point in, which the rule settles alone ({@link souther.compiler.partition.Border#inEachRole}).
+     *
+     * @param read      one reading of the line, which is what the rule and the quantity are asked
+     *                  of; those are the line's and every reading says the same of them
+     * @param axis      what the line is on, in the words the declaration wrote it in
+     *                  ({@link DeclaredDebt#axis})
+     * @param owners    the module's own declarations that wrote the line, never empty
+     * @param carriedBy the behaviors whose positions read the line, each once, in the order the
+     *                  module's readings are in. What a view of some of the behaviors is selected
+     *                  by, and nothing else
+     */
+    public record DeclaredLine(BorderAssessment read, String axis,
+                               List<DeclaredDebt.Owner> owners, List<String> carriedBy) {
+
+        public DeclaredLine {
+            owners = List.copyOf(owners);
+            carriedBy = List.copyOf(carriedBy);
+            if (read == null || axis == null || owners.isEmpty() || carriedBy.isEmpty()) {
+                throw new IllegalArgumentException("a declaration's line is read somewhere, is on"
+                        + " something it wrote, and is some declaration's: " + read);
+            }
+        }
+
+        /** The line, which is what tells one of these from another. */
+        public BorderObligationId line() {
+            return read.border().obligation();
+        }
+
+        /** The roles the line has no point in, with why, in the order the roles are in. */
+        public Map<PointRole, RoleAnswer.NoPoint> noPoint() {
+            Map<PointRole, RoleAnswer.NoPoint> out = new LinkedHashMap<>();
+            read.border().inEachRole().forEach((role, answer) -> {
+                if (answer instanceof RoleAnswer.NoPoint none) {
+                    out.put(role, none);
+                }
+            });
+            return Collections.unmodifiableMap(out);
+        }
+
+        /** Where on what the declaration wrote the line is, as a report writes it
+         *  ({@link #saidOn}). */
+        public String said() {
+            return saidOn(read, axis);
+        }
+
+        /** Whether the declaration has a quantity to say where the line is on
+         *  ({@link #namesALevel}). */
+        public boolean namesItsLevel() {
+            return namesALevel(read);
+        }
+
+        /** Whether one of {@code behaviors} reads the line. */
+        public boolean carriedByAny(Set<String> behaviors) {
+            return carriedBy.stream().anyMatch(behaviors::contains);
+        }
+    }
+
+    /**
+     * A point of a line no row is owed at, said for the declarations whose fact it is.
+     *
+     * <p>Filed the way a debt is, by whose the point is ({@link LeftOutPoint#attribution}), and told
+     * apart the way the model tells it apart ({@link NotOwedPoint}): the line, where on it, why, and
+     * where else it was settled. A point beside a type's bound is left out by the bound alone, once
+     * for the type. The point in the region beside it, where a record's clause on the field empties
+     * that region, is another point, told apart by where the region stops; read at a bare value of
+     * the type the same role is owed a row, and is a debt and not one of these. Whose each is, is
+     * the attribution's answer and is not worked out here: it names a declaration that took in the
+     * end the region stops at, and the declarations whose line it is.
+     *
+     * <p>Not a debt: nothing here is a row anybody is short of, so it is counted in neither number.
+     *
+     * @param point     which point, and what settled it
+     * @param read      one reading of the line, which is what the rule and the quantity are asked of
+     * @param axis      what the line is on, in the words its declaration wrote it in
+     * @param role      which of the four the point is
+     * @param whichSide which side of the line, where the line has two points in the role
+     * @param owners    the module's own declarations whose fact it is, never empty
+     * @param carriedBy the behaviors whose positions read it, each once
+     */
+    public record DeclaredExclusion(NotOwedPoint point, BorderAssessment read, String axis,
+                                    PointRole role, String whichSide,
+                                    List<DeclaredDebt.Owner> owners, List<String> carriedBy) {
+
+        public DeclaredExclusion {
+            owners = List.copyOf(owners);
+            carriedBy = List.copyOf(carriedBy);
+            if (point == null || read == null || axis == null || role == null || whichSide == null
+                    || owners.isEmpty() || carriedBy.isEmpty()) {
+                throw new IllegalArgumentException("a point no row is owed at is some line's, read"
+                        + " somewhere, and some declaration's: " + point);
+            }
+        }
+
+        /** Where on what the declaration wrote the line is, as a report writes it
+         *  ({@link #saidOn}). */
+        public String said() {
+            return saidOn(read, axis);
+        }
+
+        /** Whether the declaration has a quantity to say where the line is on
+         *  ({@link #namesALevel}). */
+        public boolean namesItsLevel() {
+            return namesALevel(read);
+        }
+
+        /** Whether one of {@code behaviors} reads it. */
+        public boolean carriedByAny(Set<String> behaviors) {
+            return carriedBy.stream().anyMatch(behaviors::contains);
+        }
+
+        /**
+         * Where else it was settled, as words to put after the line, or nothing where the line
+         * alone settled it.
+         *
+         * <p>What tells the point from the same point of the same line settled elsewhere, so it is
+         * said: a place the values stop at on the declaration's own quantity, and a line by its
+         * rule.
+         */
+        public String stoppedAt() {
+            StringBuilder out = new StringBuilder();
+            for (FarEnd each : point.stops()) {
+                String said = switch (each) {
+                    case FarEnd.AtTheDomain(var reaches) ->
+                            "where the values stop at " + reaches.at().spelled();
+                    case FarEnd.AtALine(var line, var _) -> "up to " + line.saidWithoutAPlace();
+                    case FarEnd.AtTheOrderEnd _ -> null;
+                };
+                if (said != null) {
+                    out.append(out.isEmpty() ? " " : " and ").append(said);
+                }
+            }
+            return out.toString();
+        }
+    }
+
+    /**
+     * Where on what a declaration wrote a line is, as a report writes it.
+     *
+     * <p>The level where the line states one on the declaration's own quantity, written from the
+     * line's own level and not from a reading's spelling of it: one line can arrive as 0 at one
+     * position and as 0.00 at another. A line between two positions writes the other position there,
+     * which is a reading's name and not the declaration's, so what is left is the quantity alone — as
+     * {@link DeclaredDebt#said()} leaves it.
+     */
+    private static String saidOn(BorderAssessment read, String axis) {
+        return namesALevel(read)
+                ? axis + " = " + read.border().cut().of().writtenAt(read.border().obligation().at())
+                : axis;
+    }
+
+    /**
+     * Whether the declaration has a quantity to say where a line is on.
+     *
+     * <p>The question {@link DeclaredDebt#namesItsQuantity()} answers for a point, asked of the line:
+     * a line between two positions has a level only in a reading's words, so a report names it by
+     * its rule and the role on it.
+     */
+    private static boolean namesALevel(BorderAssessment read) {
+        return read.border().cut().of().statesADeclarationRelativeLevel();
+    }
+
+    /**
      * What a module's declarations are owed, and how far the reading it was made from got.
      *
      * <p>Every debt and not only the ones something is short of. A line a row already stands at is
@@ -7019,17 +7196,26 @@ public final class Adequacy {
      * {@link #weakening()} is both.
      *
      * @param owed    every debt this module's declarations hold, covered or not
-     * @param reading what finding them went without, under the behavior whose reading went without
-     *                it. By behavior and not as one set, because a reader shown some of a module's
-     *                behaviors is owed what those behaviors' readings went without and not what the
-     *                rest did — folded into one set here, a view filtered to one behavior would
-     *                carry a reason about a position its reader cannot see
+     * @param owed     every debt this module's declarations hold, covered or not
+     * @param lines    every line this module's declarations drew that some behavior of it reads,
+     *                 once per line however many positions read it
+     * @param excluded every point no row is owed at that is this module's declarations' fact, once
+     *                 per point however many positions read it. Filed by whose the point is, as the
+     *                 debts are, and counted in neither number
+     * @param reading  what finding them went without, under the behavior whose reading went
+     *                 without it. By behavior and not as one set, because a reader shown some of a
+     *                 module's behaviors is owed what those behaviors' readings went without and
+     *                 not what the rest did — folded into one set here, a view filtered to one
+     *                 behavior would carry a reason about a position its reader cannot see
      */
-    public record DeclaredBoundaries(List<DeclaredDebt> owed,
+    public record DeclaredBoundaries(List<DeclaredDebt> owed, List<DeclaredLine> lines,
+                                     List<DeclaredExclusion> excluded,
                                      Map<String, WeakeningSet> reading) {
 
         public DeclaredBoundaries {
             owed = List.copyOf(owed);
+            lines = List.copyOf(lines);
+            excluded = List.copyOf(excluded);
             // In the order the readings were made, which is what everything downstream of a
             // weakening is written in: a set of reasons keeps the order they were discovered in so
             // that two runs of one compile write one document, and a copy that did not would hand
@@ -7056,8 +7242,12 @@ public final class Adequacy {
          *
          * <p>What is not sliced either is who owes the line: a declaration owes it wherever the type
          * is carried, and which behaviors a reader is shown is no part of that.
+         *
+         * <p>The lines and the points no row is owed at narrow the way the debts do, by which
+         * behaviors read them: one none of the behaviors shown reads is one this view says nothing
+         * else about either.
          */
-        public DeclaredBoundaries keptFor(java.util.Set<String> behaviors) {
+        public DeclaredBoundaries keptFor(Set<String> behaviors) {
             Map<String, WeakeningSet> kept = new LinkedHashMap<>(reading);
             kept.keySet().retainAll(behaviors);
             List<DeclaredDebt> owedHere = new ArrayList<>();
@@ -7066,7 +7256,11 @@ public final class Adequacy {
                     owedHere.add(each);
                 }
             }
-            return new DeclaredBoundaries(owedHere, kept);
+            List<DeclaredLine> linesHere = lines.stream()
+                    .filter(each -> each.carriedByAny(behaviors)).toList();
+            List<DeclaredExclusion> excludedHere = excluded.stream()
+                    .filter(each -> each.carriedByAny(behaviors)).toList();
+            return new DeclaredBoundaries(owedHere, linesHere, excludedHere, kept);
         }
 
         /**
@@ -7125,8 +7319,10 @@ public final class Adequacy {
                     went.put(behavior, read.weakening());
                 }
             });
-            if (points.isEmpty()) {
-                return Answer.of(new DeclaredBoundaries(List.of(), went));
+            Map<BorderObligationId, List<Read>> declared = declaredLines(name, lines);
+            Map<NotOwedPoint, List<LeftOutAt>> leftOut = leftOutBy(name, lines);
+            if (points.isEmpty() && declared.isEmpty() && leftOut.isEmpty()) {
+                return Answer.of(new DeclaredBoundaries(List.of(), List.of(), List.of(), went));
             }
             // Where a declaration is, which is what an owner is named by and is no part of what the
             // points are. Asked here, once, and its absence is this measure having no answer rather
@@ -7138,6 +7334,14 @@ public final class Adequacy {
             }
             Map<TypeSymbol, souther.compiler.check.DeclaredBorders> declarations =
                     new LinkedHashMap<>();
+            PublishedDeclarations published = Shapes.publishedDeclarations(db);
+            DeclarationCitations citations = Shapes.declarationCitations(db);
+            RuleReadingContext context = RuleReadingContext.of(ruleReading, policy, db.readings());
+            // What a line is on is the line's, so every debt on it and the line itself are named
+            // by one answer, worked out once.
+            Map<BorderObligationId, String> axes = new HashMap<>();
+            Function<BorderObligationId, String> axisOfLine = id -> axes.computeIfAbsent(id,
+                    each -> axisOf(each, declarations, published, citations, context));
             List<DeclaredDebt> out = new ArrayList<>();
             // A run that stops at a body's own rule exists in that body and nowhere else, so no
             // declaration is owed a row inside it however the line beside it was written; and this
@@ -7157,15 +7361,85 @@ public final class Adequacy {
                 if (owners.isEmpty()) {
                     continue;
                 }
-                out.add(new DeclaredDebt(debt,
-                        axisOf(debt.id(), declarations, Shapes.publishedDeclarations(db),
-                                Shapes.declarationCitations(db),
-                                RuleReadingContext.of(ruleReading, policy, db.readings())),
-                        owners));
+                out.add(new DeclaredDebt(debt, axisOfLine.apply(debt.id()), owners));
             }
-            return Answer.of(new DeclaredBoundaries(out, went));
+            List<DeclaredLine> drawn = new ArrayList<>();
+            declared.forEach((line, readings) -> {
+                // In the declarations' own order, which is the order a debt names its owners in, so
+                // that a line and the debts on it are filed under one set of owners.
+                List<DeclaredDebt.Owner> owners = line.line().ownersIn(name).stream()
+                        .sorted().distinct().map(DeclaredDebt.Owner::new).toList();
+                drawn.add(new DeclaredLine(readings.getFirst().line(), axisOfLine.apply(line), owners,
+                        readings.stream().map(Read::behavior).distinct().toList()));
+            });
+            // What no row is owed at, filed the way the debts are: by whose the point is, which the
+            // model concluded from what settled it ({@link LeftOutPoint#attribution}), and once per
+            // point however many positions read it. Every reading of one point was settled by the
+            // same things, so they agree about whose it is; owners are gathered over them all the
+            // way a debt's are.
+            List<DeclaredExclusion> excluded = new ArrayList<>();
+            leftOut.forEach((point, readings) -> {
+                List<DeclaredDebt.Owner> owners = readings.stream()
+                        .flatMap(each -> each.owners().stream())
+                        .sorted().distinct().map(DeclaredDebt.Owner::new).toList();
+                BorderAssessment read = readings.getFirst().read().line();
+                excluded.add(new DeclaredExclusion(point, read, axisOfLine.apply(point.line()),
+                        read.border().roleOf(point.point()),
+                        read.border().whichSide(point.point()), owners,
+                        readings.stream().map(each -> each.read().behavior()).distinct().toList()));
+            });
+            return Answer.of(new DeclaredBoundaries(out, drawn, excluded, went));
         }
 
+        /** One reading of a line, and the behavior whose position it was read at. */
+        private record Read(String behavior, BorderAssessment line) {}
+
+        /** One reading of a point no row is owed at, and which of this module's declarations it
+         *  names as whose the point is. */
+        private record LeftOutAt(Read read, List<TypeSymbol.AtModule> owners) {}
+
+        /**
+         * Every reading of each point no row is owed at that this module's declarations are among
+         * the owners of, by point, in the order the readings were made.
+         *
+         * <p>Whose a point is, is the model's answer and is read, not worked out: a point a body's
+         * rule settled is that body's, and a point settled by declarations only this module keeps
+         * no account of is somebody else's.
+         */
+        private static Map<NotOwedPoint, List<LeftOutAt>> leftOutBy(
+                String module, Map<String, Measure<List<BorderAssessment>>> lines) {
+            Map<NotOwedPoint, List<LeftOutAt>> byPoint = new LinkedHashMap<>();
+            lines.forEach((behavior, read) -> {
+                for (BorderAssessment line : read.made().orElseGet(List::of)) {
+                    for (LeftOutPoint left : line.border().leavesOut()) {
+                        List<TypeSymbol.AtModule> owners = left.ownersIn(module);
+                        if (!owners.isEmpty()) {
+                            byPoint.computeIfAbsent(left.point(), _ -> new ArrayList<>())
+                                    .add(new LeftOutAt(new Read(behavior, line), owners));
+                        }
+                    }
+                }
+            });
+            return byPoint;
+        }
+
+        /**
+         * Every reading of each line this module's declarations drew, by line, in the order the
+         * readings were made.
+         */
+        private static Map<BorderObligationId, List<Read>> declaredLines(
+                String module, Map<String, Measure<List<BorderAssessment>>> lines) {
+            Map<BorderObligationId, List<Read>> byLine = new LinkedHashMap<>();
+            lines.forEach((behavior, read) -> {
+                for (BorderAssessment line : read.made().orElseGet(List::of)) {
+                    if (!line.origin().authoredLine().ownersIn(module).isEmpty()) {
+                        byLine.computeIfAbsent(line.border().obligation(), _ -> new ArrayList<>())
+                                .add(new Read(behavior, line));
+                    }
+                }
+            });
+            return byLine;
+        }
     }
 
     /**

@@ -46,14 +46,18 @@ import java.util.SequencedMap;
  *                    on with — or a demand on a container this composed without, since nothing
  *                    built yet said what it asks ({@link ContentsAsked.Here#leftOpen}). Either is
  *                    this compiler's, and not the model refusing anything
+ * @param notHeld     why a candidate built was passed over for not holding one value with another
+ *                    position, or two, as the way asks, where one was: a value the model took
+ *                    that this compiler did not go on with, and no refusal either
  */
 record SearchShortfall(CompositionShortfall met,
                        SequencedMap<TermPath, StringOfferShortfall> offered,
-                       boolean uncertified, boolean unread, Optional<String> notHandedOn) {
+                       boolean uncertified, boolean unread, Optional<String> notHandedOn,
+                       Optional<String> notHeld) {
 
     /** A search that found out nothing of the kind: what it came to is about the model. */
     static final SearchShortfall NONE = new SearchShortfall(CompositionShortfall.NONE,
-            new LinkedHashMap<>(), false, false, Optional.empty());
+            new LinkedHashMap<>(), false, false, Optional.empty(), Optional.empty());
 
     SearchShortfall {
         offered = Collections.unmodifiableSequencedMap(new LinkedHashMap<>(offered));
@@ -61,19 +65,20 @@ record SearchShortfall(CompositionShortfall met,
 
     /** What met {@code met} and nothing else. */
     static SearchShortfall of(CompositionShortfall met) {
-        return new SearchShortfall(met, new LinkedHashMap<>(), false, false, Optional.empty());
+        return new SearchShortfall(met, new LinkedHashMap<>(), false, false, Optional.empty(),
+                Optional.empty());
     }
 
     /** What met {@code met} and was offered short of {@code offered}. */
     static SearchShortfall of(CompositionShortfall met,
                               SequencedMap<TermPath, StringOfferShortfall> offered) {
-        return new SearchShortfall(met, offered, false, false, Optional.empty());
+        return new SearchShortfall(met, offered, false, false, Optional.empty(), Optional.empty());
     }
 
     /** Whether there is nothing here, so that the word is all there is to say. */
     boolean nothing() {
         return met.nothing() && offered.isEmpty() && !uncertified && !unread
-                && notHandedOn.isEmpty();
+                && notHandedOn.isEmpty() && notHeld.isEmpty();
     }
 
     /**
@@ -93,26 +98,36 @@ record SearchShortfall(CompositionShortfall met,
         other.offered().forEach((at, gap) -> both.merge(at, gap, StringOfferShortfall::and));
         return new SearchShortfall(met.and(other.met()), both, uncertified || other.uncertified(),
                 unread || other.unread(),
-                notHandedOn.isPresent() ? notHandedOn : other.notHandedOn());
+                notHandedOn.isPresent() ? notHandedOn : other.notHandedOn(),
+                notHeld.isPresent() ? notHeld : other.notHeld());
     }
 
     /** The same, having been turned away building a candidate as well where {@code turnedAway}. */
     SearchShortfall uncertifiedWhere(boolean turnedAway) {
         return turnedAway && !uncertified
-                ? new SearchShortfall(met, offered, true, unread, notHandedOn) : this;
+                ? new SearchShortfall(met, offered, true, unread, notHandedOn, notHeld) : this;
     }
 
     /** The same, with a way under a case nobody read as well where {@code someUnread}. */
     SearchShortfall unreadWhere(boolean someUnread) {
         return someUnread && !unread
-                ? new SearchShortfall(met, offered, uncertified, true, notHandedOn) : this;
+                ? new SearchShortfall(met, offered, uncertified, true, notHandedOn, notHeld)
+                : this;
     }
 
     /** The same, with a candidate that built and had nothing to hand on, for {@code why}, where
      *  none was already said. */
     SearchShortfall notHandedOn(String why) {
         return notHandedOn.isPresent() ? this
-                : new SearchShortfall(met, offered, uncertified, unread, Optional.of(why));
+                : new SearchShortfall(met, offered, uncertified, unread, Optional.of(why), notHeld);
+    }
+
+    /** The same, with a candidate built and passed over for not holding what two positions are
+     *  asked to hold, for {@code why}, where none was already said. */
+    SearchShortfall notHeld(String why) {
+        return notHeld.isPresent() ? this
+                : new SearchShortfall(met, offered, uncertified, unread, notHandedOn,
+                        Optional.of(why));
     }
 
     /**
@@ -144,13 +159,14 @@ record SearchShortfall(CompositionShortfall met,
         if (uncertified && said == Generator.UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED) {
             return Generator.UnresolvedCombination.Reason.NO_CERTIFIED_WITNESS;
         }
-        // Not every candidate refused: one the model took had nothing this could hand on.
-        if (notHandedOn.isPresent()
+        // Not every candidate refused: one the model took had nothing this could hand on, or
+        // did not hold what two positions are asked to hold.
+        if ((notHandedOn.isPresent() || notHeld.isPresent())
                 && said == Generator.UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED) {
             return Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE;
         }
-        return (uncertified || unread || notHandedOn.isPresent()) && said != null
-                && said.provesInfeasible()
+        return (uncertified || unread || notHandedOn.isPresent() || notHeld.isPresent())
+                && said != null && said.provesInfeasible()
                 ? Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE : said;
     }
 
@@ -171,10 +187,10 @@ record SearchShortfall(CompositionShortfall met,
 
     /**
      * What is said beside the word for {@code said}: {@code told}, or where nothing was told and
-     * what was found out changed the word, why a candidate was not handed on. A reader given only
-     * the word that nothing composed one is not told what stopped it.
+     * what was found out changed the word, why a candidate was not handed on or not held. A reader
+     * given only the word that nothing composed one is not told what stopped it.
      */
     Optional<String> toldFor(Generator.UnresolvedCombination.Reason said, Optional<String> told) {
-        return told.isEmpty() && wordFor(said) != said ? notHandedOn : told;
+        return told.isEmpty() && wordFor(said) != said ? notHandedOn.or(() -> notHeld) : told;
     }
 }

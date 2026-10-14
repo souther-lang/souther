@@ -36,7 +36,6 @@ import souther.compiler.inputs.RulesWithNoLine;
 import souther.compiler.inputs.StandingQuestion;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermPath;
-import souther.compiler.numeric.Congruences;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactAnswer;
@@ -60,6 +59,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.function.Function;
+import java.util.function.IntFunction;
 import java.util.function.Supplier;
 import java.util.Map;
 import java.util.Objects;
@@ -1191,10 +1191,9 @@ public final class Partitions {
         // whose two halves came from two places, and the day they part is the day a row is decoded
         // on a count the value is not written in.
         TermOrders orders = reading.ordersOf(axis.term());
-        // The class the declarations hold the value to, which the range alone cannot say: a point
-        // inside the range that is not of the class is one the rules refuse.
-        Congruences valueClass = axis.term() instanceof NumericTerm.ValueOf place
-                ? reading.region().valueClassAt(place) : null;
+        // What the declarations hold the value to, which the range alone cannot say: a point inside
+        // the range they refuse is one the rules refuse.
+        HeldValues heldTo = HeldValues.of(reading.region(), orders);
         List<Border> out = new ArrayList<>();
         // Every place the rules part this position's values, collected before any border is built.
         // What a comparison's border owes away from its line is a run of the arrangement they make
@@ -1246,7 +1245,7 @@ public final class Partitions {
                 // The line is written down as it is met and the border where it lands, so that the
                 // day something is written between the two the reading is held to having lost one.
                 read.found(target, origin);
-                out.add(read.drew(Border.at(target, origin, within, valueClass, parted,
+                out.add(read.drew(Border.at(target, origin, within, heldTo, parted,
                         axis.narrowed())));
             }
         }
@@ -1572,32 +1571,30 @@ public final class Partitions {
         };
     }
 
-    /** The value a primitive stands for, which for a number is one the position is left able to
-     *  hold and for everything else is one fixed value. */
+    /** The value a primitive stands for, which for one whose values are counted is one the position
+     *  is left able to hold and for the rest is one fixed value. */
     private static List<FixtureTemplate> standsForA(Shape.Scalar scalar, NumericDomain.Bounds within,
                                                     RuleReadingSource ruleSource) {
         return switch (scalar.prim()) {
-            case INT, DECIMAL -> numberStandingFor(numbersOf(scalar), within, ruleSource);
+            // Where the range is entered on the order the value is compared on, which is where a
+            // second value and a set's further elements are stepped from as well, so the second is
+            // beside the first. Never the clock's: a generated row is compared with the last one to
+            // see what changed, and a value that read the clock would change every time nothing had.
+            case INT, DECIMAL, DATE, TIME, DATETIME, INSTANT ->
+                    countStandingFor(Carrier.ofPrimitive(scalar.prim()), within, ruleSource);
             case STRING -> List.of(FixtureTemplate.string("x"));
             case BOOL -> List.of(FixtureTemplate.bool(true));
-            // A date is built from its ISO 8601 form, which is how a row writes one. One fixed day
-            // rather than today's: a generated row is compared with the last one to see what changed,
-            // and a value that read the clock would change every time nothing had.
-            case DATE -> List.of(FixtureTemplate.date("2000-01-01"));
-            case TIME -> List.of(FixtureTemplate.time("00:00:00"));
-            case DATETIME -> List.of(FixtureTemplate.dateTime("2000-01-01T00:00:00"));
-            case INSTANT -> List.of(FixtureTemplate.instant("2000-01-01T00:00:00Z"));
             // A Rational reaches no position: it has no external form, so nothing declares one and no
-            // row is written at one (ADR-0116). Said here rather than left to the numeric arm above,
-            // which would offer a value of a type a fixture cannot carry.
+            // row is written at one (ADR-0116). Said here rather than left to the arm above, which
+            // would offer a value of a type a fixture cannot carry.
             case RATIONAL -> List.of();
         };
     }
 
-    /** A number the position is left able to hold, or none where what is left of it holds none. */
-    private static List<FixtureTemplate> numberStandingFor(Carrier carrier,
-                                                           NumericDomain.Bounds within,
-                                                           RuleReadingSource ruleSource) {
+    /** A count the position is left able to hold, or none where what is left of it holds none. */
+    private static List<FixtureTemplate> countStandingFor(Carrier carrier,
+                                                          NumericDomain.Bounds within,
+                                                          RuleReadingSource ruleSource) {
         Place at = inside(within, carrier);
         FixtureTemplate standing = at == null ? null
                 : FixtureTemplate.on(carrier, at, ruleSource.symbols().scope()::reach);
@@ -2044,60 +2041,80 @@ public final class Partitions {
     }
 
     /**
-     * The {@code index}th number the rules on {@code type} leave it able to hold, or null where it has
-     * no such number.
+     * The values the rules on {@code view} leave it able to hold, by index: each written under the
+     * names the position wears, or null where it has no value at that index.
      *
      * <p>Asked where several values of one type are needed and they have to differ — the elements of a
      * set, the keys of a map. Counted from inside the range rather than from zero, because a second
      * value the type itself refuses would have the collection refused for its elements while saying
      * nothing about how many of them there are.
      *
-     * <p>Only a whole number steps. Between two decimals there is no next value, so a dense carrier
-     * names the one number inside its range and no more.
+     * <p>Stepped on the order the position's values are compared on, which is the one the rules were
+     * read on ({@link DeclaredBounds#of(TypeView, RuleReadingContext)}) and the one the value is
+     * written back from. A date steps by a day and a time of day by a second, as a whole number steps
+     * by one: each is held on a grid, and what is beside a value on it is a value of the type. Between
+     * two decimals there is no next value, so a dense order names the one value inside its range and
+     * no more.
+     *
+     * <p>Away from the end the range has ({@link #stepped}).
+     *
+     * <p>The rules are read and the range entered once, here, and each index is a step from there. A
+     * caller filling a collection asks for every index up to how many it holds, and none of what is
+     * read depends on which.
      */
-    static Place numberInside(TypeView view, RuleReadingContext reading, int index) {
-        Carrier carrier = numbersOf(view.shape());
-        if (carrier == null) {
-            return null;
+    static IntFunction<FixtureTemplate> valuesInside(TypeView view, RuleReadingContext reading) {
+        DeclaredBounds.Range declared = countedOrder(view, reading);
+        if (declared == null) {
+            return index -> null;
         }
-        NumericDomain.Bounds range =
-                TypeBounds.admissible(DeclaredBounds.of(view, reading), null);
+        Carrier carrier = declared.carrier();
+        NumericDomain.Bounds range = TypeBounds.admissible(declared, null);
         Place from = inside(range, carrier);
-        if (from == null || !(carrier instanceof Carrier.Whole)) {
-            return from != null && index == 0 ? from : null;
+        if (from == null) {
+            return index -> null;
         }
-        Count stepped = Count.number(from).plus(index);
-        return stepped != null && holdsCount(range, stepped) ? stepped : null;
+        RuleReadingSource source = reading.source();
+        if (carrier.spacing() != Granularity.DISCRETE) {
+            FixtureTemplate only = standing(view, carrier, from, source);
+            return index -> index == 0 ? only : null;
+        }
+        return index -> {
+            Place at = stepped(range, carrier, from, index);
+            return at == null ? null : standing(view, carrier, at, source);
+        };
     }
 
     /**
-     * The order a position's own numbers are counted on, or null where its values are not numbers.
+     * What the rules a position's own value is stepped on were read on, or null where its value has
+     * no count to step.
      *
-     * <p>Of the shape, which is what the position is with every name off — so this is a projection
-     * of the reading and not a second look at what the names wrap. Asked of the type instead, it
-     * walked the names again to find the number under them, which is the reading's answer and was
-     * already in hand.
-     *
-     * <p>Exhaustive over the primitives, with no {@code default}: whether a primitive's values are
-     * counted is a question about each of them, and one added later is one this has to be told about
-     * rather than one that falls to the arm it was not named in.
+     * <p>A value of its own that counts: a number, a date, a time, a moment. Not a string, which is
+     * ordered and has no count under it, and not an enumeration, whose cases are what the position
+     * divides into and are offered as that. Asked once, here, by every reader that steps a value, so
+     * which values step is not decided twice.
      */
-    private static Carrier numbersOf(Shape shape) {
-        if (!(shape instanceof Shape.Scalar scalar)) {
+    private static DeclaredBounds.Range countedOrder(TypeView view, RuleReadingContext reading) {
+        if (!(view.shape() instanceof Shape.Scalar)) {
             return null;
         }
-        return switch (scalar.prim()) {
-            case INT -> Carrier.WHOLE;
-            case DECIMAL -> Carrier.DENSE;
-            // Ordered, some of them, and none of them counted in numbers of its own: a date is a
-            // count of days and a string a count of characters, which is what a rule about them
-            // counts rather than what the value is.
-            case STRING, BOOL, DATE, TIME, DATETIME, INSTANT -> null;
-            // A Rational is a number and is counted on nothing: a carrier is what a position's values
-            // are placed on, and no position holds a Rational (ADR-0116). The same answer
-            // {@code Carrier} gives it, for the same reason.
-            case RATIONAL -> null;
-        };
+        DeclaredBounds.Range declared = DeclaredBounds.of(view, reading);
+        return declared != null && declared.carrier().counts() ? declared : null;
+    }
+
+    /**
+     * The count {@code index} steps from {@code from} on a discrete carrier, away from the one end
+     * {@code range} has, or null where the carrier or the range holds nothing there.
+     *
+     * <p>Away from that end because a range bounded only above is entered at its end, and a step up
+     * from there is a value the rules refuse. On the carrier's grid because a step past the end of
+     * what the carrier holds — the second after the last of the day — is no value.
+     */
+    private static Place stepped(NumericDomain.Bounds range, Carrier carrier, Place from,
+                                 int index) {
+        boolean downwards = range != null && range.min() == null && range.max() != null;
+        Count origin = Count.number(from);
+        Place at = carrier.onTheGrid(downwards ? origin.minus(index) : origin.plus(index));
+        return at != null && holdsCount(range, at) ? at : null;
     }
 
     /**
@@ -2150,18 +2167,19 @@ public final class Partitions {
     }
 
     /**
-     * The same, with a second value offered at a numeric position.
+     * The same, with a second value offered at a position whose values are counted — a number, a
+     * date, a time.
      *
      * <p>One value is enough only where the rules that decide it are the rules the projection holds.
      * A disequality is a hole no range keeps, and a form that is neither an interval nor a difference
      * is not recorded at all — so the value a range gives up can be one those rules refuse, and a
      * position offering only that has nothing left to try.
      *
-     * <p>Displaced and not invented. A whole number has a next one; a decimal between two ends has a
-     * midpoint, and where it has no second end it gets no second value, because an epsilon is a value
-     * the type does not name. A candidate is a proposal the decoder answers — it carries no promise
-     * that the value is writable, which is what separates this from a boundary a person is asked to
-     * write.
+     * <p>Displaced and not invented. A whole number and a date have a next one; a decimal between
+     * two ends has a midpoint, and where it has no second end it gets no second value, because an
+     * epsilon is a value the type does not name. A candidate is a proposal the decoder answers — it
+     * carries no promise that the value is writable, which is what separates this from a boundary a
+     * person is asked to write.
      *
      * <p>With what building the ordinary offer met, which the second value does nothing to change.
      */
@@ -2181,12 +2199,14 @@ public final class Partitions {
         // start. This pass runs only where both of those have already failed, and a position keeping
         // a value from the last search there is a value nothing will ever be tried at.
         inReserve(view, reading, within, ordinarily.values()).forEach(base::add);
-        Carrier carrier = numbersOf(view.shape());
-        if (carrier == null) {
+        // On the order the rules were read on, so a date is displaced by a day as a whole number is
+        // by one, and only where a value of its own counts — the same values that step as elements.
+        DeclaredBounds.Range declared = countedOrder(view, reading);
+        if (declared == null) {
             return base.done();
         }
-        NumericDomain.Bounds range =
-                TypeBounds.admissible(DeclaredBounds.of(view, reading), within);
+        Carrier carrier = declared.carrier();
+        NumericDomain.Bounds range = TypeBounds.admissible(declared, within);
         Place step = displaced(range, carrier);
         if (step == null) {
             return base.done();
@@ -2215,12 +2235,9 @@ public final class Partitions {
             return min == null || max == null || !min.inclusive() ? null
                     : carrier.somethingInside(Endpoint.exclusive(min.at()), max);
         }
-        Count up = Count.number(from).plus(1);
-        if (up != null && holdsCount(range, up)) {
-            return up;
-        }
-        Count down = Count.number(from).minus(1);
-        return down != null && holdsCount(range, down) ? down : null;
+        // The step an element of a collection takes after the first, so a position's second value and
+        // a set's second element are one value.
+        return stepped(range, carrier, from, 1);
     }
 
     /** Whether a range holds a count, with no range holding everything. */
@@ -2233,7 +2250,7 @@ public final class Partitions {
      * position wears, and none of them the same string twice.
      *
      * <p>Asked where several values of one type are needed and they have to differ — the elements of
-     * a set, the keys of a map. The counterpart of {@link #numberInside} over the strings, and it is
+     * a set, the keys of a map. The counterpart of {@link #valuesInside} over the strings, and it is
      * here for the same reason: a second value stepped off the first by the carrier alone is a value
      * the type's own rules may refuse, and a collection filled from those comes back as one every
      * value tried was refused at while the strings the rule admits are as many as anybody could want.
