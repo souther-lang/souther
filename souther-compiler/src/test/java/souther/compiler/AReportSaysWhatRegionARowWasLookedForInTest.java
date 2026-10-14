@@ -107,7 +107,7 @@ class AReportSaysWhatRegionARowWasLookedForInTest {
         // repeated here — this section already lists the rules a position went unread on, and the
         // block is the surface that has nowhere else to say it.
         assertTrue(line.contains("nothing composed one: every value tried at p.low = 11 was"
-                + " refused, and not every value there could be tried"), line);
+                + " refused, but the values offered were not shown to be exhaustive"), line);
     }
 
     /**

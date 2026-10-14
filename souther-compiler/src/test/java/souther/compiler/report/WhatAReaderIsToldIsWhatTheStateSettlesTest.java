@@ -2,13 +2,22 @@ package souther.compiler.report;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.coverage.CoverageSites;
+import souther.compiler.inputs.TermPath;
+import souther.compiler.partition.ConditionOccurrence;
 import souther.compiler.partition.Demand;
 import souther.compiler.partition.Generator;
 import souther.compiler.partition.NotOwedReason;
+import souther.compiler.partition.OnTheWay;
+import souther.compiler.partition.Reachability;
 import souther.compiler.partition.RepairShortfall;
+import souther.compiler.query.ClaimAnnotations;
+import souther.compiler.query.RuleRequirement;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -33,10 +42,6 @@ class WhatAReaderIsToldIsWhatTheStateSettlesTest {
 
     /** What a sentence may claim. */
     private enum Claim { NO_VALUE_STANDS, NOT_SETTLED, CANNOT_BE_WRITTEN }
-
-    /** The forms a sentence takes to say that no value stands somewhere, and only those. */
-    private static final List<String> NO_VALUE = List.of(
-            "no value can", "which no value is", "for every row");
 
     @Test
     void aPointNotOwedIsSaidAsWhatSettledIt() {
@@ -67,19 +72,47 @@ class WhatAReaderIsToldIsWhatTheStateSettlesTest {
     @Test
     void aWayPastAGuardIsSaidAsOneNoRowGoesOnlyWhereNoValueCan() {
         for (RepairShortfall.Barrier each : RepairShortfall.Barrier.values()) {
-            // Exhaustive, so a barrier added is one somebody says which of the two it is.
-            Claim claim = switch (each) {
-                case NO_VALUE_CAN_GO_THAT_WAY -> Claim.NO_VALUE_STANDS;
-                case NOTHING_HOLDS_A_ROW_TO_IT, IT_WOULD_REWRITE_A_STATED_VALUE,
-                     THE_ROW_ALREADY_DOES_ALL_OF_IT -> Claim.NOT_SETTLED;
-            };
+            Claim claim = each.provesNoRowGoes() ? Claim.NO_VALUE_STANDS : Claim.NOT_SETTLED;
 
             assertSays(claim, GeneratedRows.why(each), each);
         }
     }
 
+    /**
+     * A rule the readings settled before anything was composed is said as no value taking its way,
+     * whichever reading settled it. The one the composings proved is said in their words, which the
+     * composing words above already hold to this.
+     */
+    @Test
+    void aRuleNoValueTakesIsSaidAsThatAndNotAsWhatShowedIt() {
+        List<RuleRequirement.Excluded> readOff = List.of(
+                new RuleRequirement.Excluded.OnePositionCannotBeBoth(
+                        new Reachability.TwoAtOnce.Truths(TermPath.of("x"))),
+                new RuleRequirement.Excluded.AnArmNothingReaches(
+                        new CoverageSites.AsWritten(null, 0)),
+                new RuleRequirement.Excluded.AConditionNeverComesOutThatWay(new OnTheWay.Settled(
+                        new ConditionOccurrence("b", ConditionOccurrence.Reading.DIVIDING, 0),
+                        null, false)));
+        // Every kind the readings settle, which is every kind but the one composings prove.
+        assertEquals(Arrays.stream(RuleRequirement.Excluded.class.getPermittedSubclasses())
+                        .filter(kind -> kind != RuleRequirement.Excluded.NoValueCanTakeIt.class)
+                        .collect(Collectors.toSet()),
+                readOff.stream().map(Object::getClass).collect(Collectors.toSet()));
+        for (RuleRequirement.Excluded each : readOff) {
+            assertSays(Claim.NO_VALUE_STANDS, AdequacyReport.readOff(each), each.getClass());
+        }
+    }
+
+    /** What a claim nothing settled is told: never in the words a proof is said in. */
+    @Test
+    void aClaimNothingSettledIsNeverSaidAsAProof() {
+        for (ClaimAnnotations.Why each : ClaimAnnotations.Why.values()) {
+            assertSays(Claim.NOT_SETTLED, AdequacyReport.unproven(each), each);
+        }
+    }
+
     private static void assertSays(Claim claim, String said, Object of) {
-        boolean noValue = NO_VALUE.stream().anyMatch(said::contains);
+        boolean noValue = said.contains(NoValue.CAN);
         assertEquals(claim == Claim.NO_VALUE_STANDS, noValue,
                 () -> of + " is " + claim + " and says: " + said);
         if (claim == Claim.CANNOT_BE_WRITTEN) {

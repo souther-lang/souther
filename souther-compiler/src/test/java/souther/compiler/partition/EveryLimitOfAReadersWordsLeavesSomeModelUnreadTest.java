@@ -227,7 +227,7 @@ class EveryLimitOfAReadersWordsLeavesSomeModelUnreadTest {
                         instanceof DecidedCondition.Unread(var condition, boolean _)) {
                     condition.whys().forEach(why -> limitOf(why, out));
                 }
-                if (WhatTheDeclarationsLeave.admits(states, way, reading)
+                if (WhatTheDeclarationsLeave.whetherRuledOut(states, way, reading)
                         instanceof AWayThrough.NotRuledOut(var notAsked)) {
                     notAsked.forEach(why -> limitOf(why, out));
                 }

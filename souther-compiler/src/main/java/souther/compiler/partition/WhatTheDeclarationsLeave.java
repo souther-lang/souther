@@ -86,8 +86,15 @@ public final class WhatTheDeclarationsLeave {
         private final Map<Asked, AWayThrough> filed = new ConcurrentHashMap<>();
     }
 
-    /** Whether the rules leave some input on which {@code stated} comes out {@code want}. */
-    public static AWayThrough admits(Proposition stated, boolean want, InputReading read) {
+    /**
+     * Whether the declarations prove that no input brings {@code stated} out {@code want}.
+     *
+     * <p>{@link AWayThrough.RuledOut} is that proof. {@link AWayThrough.NotRuledOut} is no proof
+     * either way — a part nothing read is not ruled out, and neither is one the declarations do
+     * leave a value for — so it is never read as some input taking the way.
+     */
+    public static AWayThrough whetherRuledOut(Proposition stated, boolean want,
+                                              InputReading read) {
         // A statement no part of which is about the input is answered without one, and has nothing
         // to be kept with.
         if (read == null) {
@@ -119,8 +126,8 @@ public final class WhatTheDeclarationsLeave {
             case Proposition.Unread unread ->
                     notAsked(new WhyNotTaken.MeaningUnread(unread.why()));
             case Proposition.Carried carried -> throw carried.handedToAReader();
-            // What a dependency answered is what a row stands it in with, and the input's rules
-            // say nothing of that.
+            // What a dependency answered is what a row stands it in with, and the input's
+            // declarations say nothing of that.
             case Proposition.Truth(DecisionSubject.AnAnswer _, boolean _, var _),
                  Proposition.InCases(DecisionSubject.AnAnswer _, var _, boolean _, var _),
                  Proposition.Present(DecisionSubject.AnAnswer _, boolean _, var _) -> LEFT;
@@ -140,8 +147,8 @@ public final class WhatTheDeclarationsLeave {
             case Proposition.Some some when some.container() instanceof DecisionSubject.AnAnswer ->
                     LEFT;
             case Proposition.Some some -> someElement(some, some.holds() == want, read);
-            // The rules are of what a row writes, and a search goes on below as deep as a value
-            // does: a node it reaches may meet what the one at the top cannot.
+            // The declarations are of what a row writes, and a search goes on below as deep as a
+            // value does: a node it reaches may meet what the one at the top cannot.
             case Proposition.SomeReachable _ -> LEFT;
         };
     }
@@ -220,44 +227,44 @@ public final class WhatTheDeclarationsLeave {
     }
 
     /**
-     * Whether the rules leave some element of the container meeting what is asked of it — or, the
-     * other way round, every element meeting its denial: ruled out where they leave no element any
-     * value meeting it and, for every element, the container no way of holding none.
+     * Whether the declarations prove no element of the container meets what is asked of it — or,
+     * the other way round, that not every element meets its denial: ruled out where they leave no
+     * element any value meeting it and, for every element, the container no way of holding none.
      *
-     * <p>The element asked of on its own, as every element is: what the rules leave one element is
-     * what they leave each, and which element it is is no rule's.
+     * <p>The element asked of on its own, as every element is: what the declarations leave one
+     * element is what they leave each, and which element it is is no rule's.
      */
     private static AWayThrough someElement(Proposition.Some some, boolean someMeets,
                                            InputReading read) {
-        AWayThrough element = admits(some.ofTheElement(), someMeets, read);
+        AWayThrough element = whetherRuledOut(some.ofTheElement(), someMeets, read);
         if (someMeets) {
             TermPath container = some.container().inputPosition();
-            return element instanceof AWayThrough.RuledOut || mayHold(container, true, read)
+            return element instanceof AWayThrough.RuledOut || !provedToHold(container, false, read)
                     ? element : new AWayThrough.RuledOut(
                             new WhyRuledOut.NothingIsHeldIn(container));
         }
-        return mayHold(some.container().inputPosition(), false, read) ? LEFT : element;
+        return provedToHold(some.container().inputPosition(), true, read) ? element : LEFT;
     }
 
     /**
-     * Whether the rules leave the container at {@code at} holding at least one, or none, as its
-     * size: where no size of it is a number of the input they leave it either.
+     * Whether the declarations prove the container at {@code at} holds at least one, or holds none,
+     * as its size. Where no size of it is a number of the input nothing is proved either way.
      */
-    private static boolean mayHold(TermPath at, boolean atLeastOne, InputReading read) {
+    private static boolean provedToHold(TermPath at, boolean atLeastOne, InputReading read) {
         Type container = read.domain().typeAt(at, read.rules());
         ValueName.Stdlib size = container == null ? null
                 : NumericMeasures.takenOf(container, read.rules().inners());
         NumericTerm.TakenOf count = size == null ? null : NumericTerm.TakenOf.asItStands(size, at,
                 container, read.rules().inners(), read.rules().symbols());
-        return count == null || someValue(read.quantities().runsBetween(count),
-                atLeastOne ? Rel.GE : Rel.LE, atLeastOne ? Count.of(1) : Count.ZERO);
+        return count != null && ruledOutByBounds(read.quantities().runsBetween(count),
+                atLeastOne ? Rel.LT : Rel.GT, atLeastOne ? Count.of(1) : Count.ZERO);
     }
 
     /** Every one of {@code parts} coming out {@code want}: ruled out where one of them is. */
     private static AWayThrough every(List<Proposition> parts, boolean want, InputReading read) {
         List<WhyNotTaken> notAsked = new ArrayList<>();
         for (Proposition part : parts) {
-            switch (admits(part, want, read)) {
+            switch (whetherRuledOut(part, want, read)) {
                 case AWayThrough.RuledOut out -> {
                     return out;
                 }
@@ -278,7 +285,7 @@ public final class WhatTheDeclarationsLeave {
         List<WhyRuledOut> eachRuledOut = new ArrayList<>();
         boolean somePartLeft = false;
         for (Proposition part : parts) {
-            switch (admits(part, want, read)) {
+            switch (whetherRuledOut(part, want, read)) {
                 case AWayThrough.NotRuledOut(var whys) -> {
                     somePartLeft = true;
                     notAsked.addAll(whys);
@@ -302,29 +309,31 @@ public final class WhatTheDeclarationsLeave {
     }
 
     /**
-     * Whether the rules leave a value at which {@code relation} holds, or fails where
-     * {@code holds} is false.
+     * Whether the declarations prove no value is one at which {@code relation} holds, or fails
+     * where {@code holds} is false.
      *
      * <p>Over a number that is no number of the input — what a dependency answered, a value the
-     * body works out, how many elements meet something — the input's rules range over none of it,
-     * so they rule nothing out.
+     * body works out, how many elements meet something — the input's declarations range over none
+     * of it, so they rule nothing out.
      */
-    private static AWayThrough leaves(Relation relation, boolean holds, Quantities rules) {
+    private static AWayThrough leaves(Relation relation, boolean holds, Quantities declared) {
         Rel asked = holds ? relation.proposition() : relation.proposition().denied();
         return switch (relation) {
             case Relation.Ordered(DecisionAtom.OfTheInput(NumericTerm term), var at, Rel _) ->
-                    someValue(rules.runsBetween(term), asked, at) ? LEFT
-                            : new AWayThrough.RuledOut(
-                                    new WhyRuledOut.TheNumbersLeaveNone(relation, asked));
+                    ruledOutByBounds(declared.runsBetween(term), asked, at)
+                            ? new AWayThrough.RuledOut(
+                                    new WhyRuledOut.TheNumbersLeaveNone(relation, asked))
+                            : LEFT;
             case Relation.Ordered _ -> LEFT;
             case Relation.Affine affine -> {
                 LinearForm<NumericTerm> form = ofTheInput(affine.form());
                 if (form == null) {
                     yield LEFT;
                 }
-                yield someValue(rules.runsBetween(form), asked, Count.ZERO) ? LEFT
-                        : new AWayThrough.RuledOut(
-                                new WhyRuledOut.TheNumbersLeaveNone(relation, asked));
+                yield ruledOutByBounds(declared.runsBetween(form), asked, Count.ZERO)
+                        ? new AWayThrough.RuledOut(
+                                new WhyRuledOut.TheNumbersLeaveNone(relation, asked))
+                        : LEFT;
             }
         };
     }
@@ -342,42 +351,53 @@ public final class WhatTheDeclarationsLeave {
         return new LinearForm<>(form.constant(), coefs);
     }
 
-    /** Whether {@code runs} holds a value {@code v} with {@code v asked at}. */
-    private static boolean someValue(NumericDomain.Bounds runs, Rel asked, Place at) {
+    /**
+     * Whether {@code runs} proves that no value {@code v} has {@code v asked at}.
+     *
+     * <p>The one table of what a run's ends rule out, for every reader that asks it. False is no
+     * proof having been had, and never that such a value stands: a run with no end on the side, or
+     * none read at all, proves nothing either way.
+     */
+    public static boolean ruledOutByBounds(NumericDomain.Bounds runs, Rel asked, Place at) {
         return switch (asked) {
-            case GT -> anythingBeyond(runs, at, true, false);
-            case GE -> anythingBeyond(runs, at, true, true);
-            case LT -> anythingBeyond(runs, at, false, false);
-            case LE -> anythingBeyond(runs, at, false, true);
-            case EQ -> anythingBeyond(runs, at, true, true) && anythingBeyond(runs, at, false, true);
-            case NE -> anythingBeyond(runs, at, true, false) || anythingBeyond(runs, at, false, false);
+            case GT -> provesNoValueBeyond(runs, at, true, false);
+            case GE -> provesNoValueBeyond(runs, at, true, true);
+            case LT -> provesNoValueBeyond(runs, at, false, false);
+            case LE -> provesNoValueBeyond(runs, at, false, true);
+            // One value, which either side being empty of it leaves out.
+            case EQ -> provesNoValueBeyond(runs, at, true, true)
+                    || provesNoValueBeyond(runs, at, false, true);
+            // Every value but one, so it takes both sides being empty.
+            case NE -> provesNoValueBeyond(runs, at, true, false)
+                    && provesNoValueBeyond(runs, at, false, false);
         };
     }
 
     /**
-     * Whether the run holds a value on the {@code up} side of {@code at}, taking {@code at} itself
-     * where the side {@code inclusive} reaches it.
+     * Whether {@code runs} proves no value stands on the {@code above} side of {@code at}, taking
+     * {@code at} itself where {@code inclusive}.
      *
-     * <p>Only the end the side runs towards can close it: everything above a line is still above it
-     * however far the run's low end is raised, so a side that reaches past the far end is a side
-     * with a value on it.
+     * <p>False means no such proof was had, not that a value stands there.
+     *
+     * <p>Only the end the side runs towards can prove it: everything above a line is still above it
+     * however far the run's low end is raised, so a side reaching past the far end is not shown
+     * empty, and neither is a side with no end at all.
      *
      * <p>Where the end falls exactly on the line, what is beyond it is the line itself and nothing
-     * else, so a side that takes the line has a value there where the run does, and a side that does
-     * not has none. That is the one place this closes a way on the run's word: strictly past an end
-     * the run stops at, no value stands. Everywhere short of the end this answers that a value
-     * stands, whether the run steps or fills there, because that much the end says on its own.
+     * else, so a side that takes the line is shown empty only where the run's end leaves the line
+     * out, and a side that does not take it is shown empty. That is the one place this closes a way
+     * on the run's word: strictly past an end the run stops at, no value stands.
      */
-    public static boolean anythingBeyond(NumericDomain.Bounds runs, Place at, boolean up,
-                                         boolean inclusive) {
-        Endpoint end = runs == null ? null : (up ? runs.max() : runs.min());
+    private static boolean provesNoValueBeyond(NumericDomain.Bounds runs, Place at, boolean above,
+                                               boolean inclusive) {
+        Endpoint end = runs == null ? null : (above ? runs.max() : runs.min());
         if (end == null || end.at() == null) {
-            return true;
+            return false;
         }
         int against = end.at().compareTo(at);
-        if (up ? against > 0 : against < 0) {
-            return true;
+        if (above ? against > 0 : against < 0) {
+            return false;
         }
-        return against == 0 && inclusive && end.inclusive();
+        return !(against == 0 && inclusive && end.inclusive());
     }
 }

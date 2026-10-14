@@ -85,7 +85,7 @@ public final class WhatTheDeclarationsLeaveAnArm {
         }
         return meanings.at(new MeaningsOfABody.Site(construct.get(),
                         new MeaningsOfABody.Part.OfACase(index)))
-                .map(stated -> WhatTheDeclarationsLeave.admits(stated, true, read))
+                .map(stated -> WhatTheDeclarationsLeave.whetherRuledOut(stated, true, read))
                 .flatMap(answer -> answer instanceof AWayThrough.RuledOut(var why)
                         ? Optional.of(new WhyNoValueTakesTheArm.ByWhatItStates(why))
                         : Optional.empty());

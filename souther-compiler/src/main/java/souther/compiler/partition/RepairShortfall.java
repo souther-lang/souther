@@ -150,6 +150,21 @@ public record RepairShortfall(List<Generator.Purpose> soughtFor, CoverageSites.A
          * There is nothing left to ask of a row, so the ways the reading wrote down are not every
          * way the guard has.
          */
-        THE_ROW_ALREADY_DOES_ALL_OF_IT
+        THE_ROW_ALREADY_DOES_ALL_OF_IT;
+
+        /**
+         * Whether this is the model settling that no row goes the way, as against this compiler
+         * not looking.
+         *
+         * <p>Exhaustive, so a barrier added is one somebody says which of the two it is. Only the
+         * first may be said as no value going that way; the rest are no proof of anything.
+         */
+        public boolean provesNoRowGoes() {
+            return switch (this) {
+                case NO_VALUE_CAN_GO_THAT_WAY -> true;
+                case NOTHING_HOLDS_A_ROW_TO_IT, IT_WOULD_REWRITE_A_STATED_VALUE,
+                     THE_ROW_ALREADY_DOES_ALL_OF_IT -> false;
+            };
+        }
     }
 }

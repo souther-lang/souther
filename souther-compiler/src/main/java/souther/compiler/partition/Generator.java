@@ -4765,9 +4765,8 @@ public final class Generator {
             public Built {
                 for (ReachabilityGap gap : unrepresented.onTheWay()) {
                     if (gap instanceof ReachabilityGap.ProvedImpossible) {
-                        throw new IllegalArgumentException("a row was built for a way the rules"
-                                + " leave nothing standing on, which is a row that does not arrive:"
-                                + " " + gap.anchor());
+                        throw new IllegalArgumentException("a row was built for a way no value can"
+                                + " take, which is a row that does not arrive: " + gap.anchor());
                     }
                 }
             }

@@ -221,7 +221,7 @@ class EveryPropositionIsTakenOrMeetsTheEdgeOfAReadersWordsTest {
                 instanceof DecidedCondition.Unread(var condition, boolean _)) {
             out.addAll(condition.whys());
         }
-        if (WhatTheDeclarationsLeave.admits(stated, way, read)
+        if (WhatTheDeclarationsLeave.whetherRuledOut(stated, way, read)
                 instanceof AWayThrough.NotRuledOut(var notAsked)) {
             out.addAll(notAsked);
         }

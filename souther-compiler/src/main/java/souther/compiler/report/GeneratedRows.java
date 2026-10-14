@@ -208,7 +208,7 @@ public final class GeneratedRows {
                 case BorderAccount.Unmet.TheLineCannotBeWritten(var owedBy, var asked, var _) ->
                         say(out, said, String.format(
                                 "// no row can be written at `%s` owed by `%s`: every reading of the"
-                                        + " line was searched and no value can stand at it%n",
+                                        + " line was searched and " + NoValue.standsAt("it") + "%n",
                                 asked, owedBy));
                 // One line per reading, because they are not one fact: a reading whose rules leave
                 // nothing at its own position and one whose search stopped are different news, and
@@ -1230,7 +1230,7 @@ public final class GeneratedRows {
         return switch (why) {
             case NOTHING_HOLDS_A_ROW_TO_IT -> "nothing here can hold a row to it, so it was not"
                     + " looked for — which does not make it a way no row goes";
-            case NO_VALUE_CAN_GO_THAT_WAY -> "no value can go that way, so no row goes this way";
+            case NO_VALUE_CAN_GO_THAT_WAY -> NoValue.goesThatWay() + ", so no row goes this way";
             case IT_WOULD_REWRITE_A_STATED_VALUE -> "a row going this way would write afresh a"
                     + " value the module states, which the row keeps as written, so it was not"
                     + " looked for";
@@ -1339,13 +1339,13 @@ public final class GeneratedRows {
             case ALL_CANDIDATES_REJECTED ->
                     "every value tried was refused at construction, which does not make the"
                             + " combination impossible";
-            // The same refusals, and one fewer thing they show. Not every value there could be
-            // tried, so a reader is told they were refused and told this proves nothing about the
-            // ones left untried. Which rule gave none of them follows this, said as the rule it
-            // was.
+            // The same refusals, and one fewer thing they show. What was offered is not shown to be
+            // every value there is, so a reader is told they were refused and not that any value
+            // was left untried — whether one was is what nobody knows. Which rule gave none of them
+            // follows this, said as the rule it was.
             case NOT_ALL_CANDIDATES_COULD_BE_OFFERED ->
-                    "every value tried was refused at construction, and not every value there"
-                            + " could be tried, which does not make the combination impossible";
+                    "every value tried was refused at construction, but the values offered were"
+                            + " not shown to be exhaustive";
             // What is missing is the stand-in and not the row's values, so an author reading this
             // is being told what to write beside the row rather than that no row exists.
             case NOTHING_STANDS_IN_FOR_A_DEPENDENCY ->
@@ -1378,13 +1378,13 @@ public final class GeneratedRows {
             // something they cannot act on either. Nor which part of the model proved it: a type
             // with two values leaves nothing past them with no rule written.
             case NO_VALUE_CAN_STAND_THERE ->
-                    "no value can stand here";
+                    NoValue.standsHere();
             case ONE_POSITION_CANNOT_BE_BOTH ->
-                    "it would need one position to be two things at once, which no value is, so"
-                            + " there is no row to write";
+                    "it would need one position to be two things at once, so "
+                            + NoValue.standsHere() + " and there is no row to write";
             case A_CONDITION_NEVER_COMES_OUT_THAT_WAY ->
-                    "it is past a condition that comes out the other way for every row, so there"
-                            + " is no row to write";
+                    "it is past a condition that comes out the other way for every row, so "
+                            + NoValue.goesThatWay() + " and there is no row to write";
             case NOTHING_TO_BUILD_AGAINST ->
                     "the module's classes were not there to build a candidate against";
             case NO_VALUES_WERE_ASKED_FOR ->

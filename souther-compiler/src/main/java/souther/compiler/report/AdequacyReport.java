@@ -2811,7 +2811,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * nothing is not said — a rule, or a type with too few values and no rule written.
      */
     private static String cannotBeWritten(String point) {
-        return "no row can stand at the " + point + " — no value can stand there";
+        return "no row can stand at the " + point + " — " + NoValue.standsThere();
     }
 
     /**
@@ -2897,7 +2897,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     }
 
     /** What a reader is told about a claim nothing settled, in this report's own words. */
-    private String unproven(ClaimAnnotations.Why why) {
+    static String unproven(ClaimAnnotations.Why why) {
         return switch (why) {
             case A_RULE_WENT_UNREAD -> "a rule about this position went unread";
             case THE_RULES_LEAVE_THE_POSITION_NOTHING ->
@@ -3313,7 +3313,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         return switch (reason) {
             // Not what proved it: a reader told a rule refuses the point goes looking for one, and
             // a Set<Bool> asked for three elements has none to find.
-            case NO_VALUE_CAN_STAND_THERE -> "excluded — no value can stand there";
+            case NO_VALUE_CAN_STAND_THERE -> "excluded — " + NoValue.standsThere();
             case THE_CARRIER_NAMES_NO_NEIGHBOUR ->
                     "this order names no value there, so the point cannot be written";
         };
@@ -4038,15 +4038,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     new Said(3, 0,
                             "a row was composed and run, and nothing watched where it went");
             // The model's own answers, after the ones that are about what this compiler managed.
-            case RuleRequirement.Excluded.OnePositionCannotBeBoth _ ->
-                    new Said(4, 0, "its way would need one position to be two things at once,"
-                            + " which no value is");
-            case RuleRequirement.Excluded.AnArmNothingReaches _ ->
-                    new Said(5, 0, "its way goes through an arm the rules leave nothing for, which"
-                            + " is an arm the branch count is made without");
-            case RuleRequirement.Excluded.AConditionNeverComesOutThatWay _ ->
-                    new Said(6, 0, "its way goes past a condition that comes out the other way"
-                            + " for every row");
+            case RuleRequirement.Excluded.OnePositionCannotBeBoth one -> new Said(4, 0, readOff(one));
+            case RuleRequirement.Excluded.AnArmNothingReaches arm -> new Said(5, 0, readOff(arm));
+            case RuleRequirement.Excluded.AConditionNeverComesOutThatWay never ->
+                    new Said(6, 0, readOff(never));
             // In the words the composings were said in, which are the model's. The other two here
             // are read off the rules before anything is composed and have nothing of a search to
             // say; this one is what the composings themselves proved, so what they came back with
@@ -4060,6 +4055,30 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case RuleRequirement.Required _ ->
                     throw new IllegalArgumentException(
                             "a rule owed a row is said as the finding it is");
+        };
+    }
+
+    /**
+     * What a rule the readings settled before anything was composed is said as.
+     *
+     * <p>That no value takes its way, and not what showed it. An arm nothing reaches may be one no
+     * case the source wrote takes, one a condition on entering it leaves empty, or one whose cases a
+     * rule refuses, and a reader does the same about the rule whichever it was.
+     */
+    static String readOff(RuleRequirement.Excluded excluded) {
+        return switch (excluded) {
+            case RuleRequirement.Excluded.OnePositionCannotBeBoth _ ->
+                    "its way would need one position to be two things at once, so "
+                            + NoValue.goesThatWay();
+            case RuleRequirement.Excluded.AnArmNothingReaches _ ->
+                    "its way goes through an arm " + NoValue.reaches("it") + ", and the branch"
+                            + " count is made without it";
+            case RuleRequirement.Excluded.AConditionNeverComesOutThatWay _ ->
+                    "its way goes past a condition that comes out the other way for every row, so "
+                            + NoValue.goesThatWay();
+            case RuleRequirement.Excluded.NoValueCanTakeIt _ ->
+                    throw new IllegalArgumentException(
+                            "what the composings proved is said in the words they came back with");
         };
     }
 
@@ -4981,8 +5000,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // what was tried came from the rules beside it — and an author told the line above
             // would go looking for the rule that refuses those values, which is not what happened.
             case NOT_ALL_CANDIDATES_COULD_BE_OFFERED ->
-                    "every value tried at " + at + " was refused, and not every value there could"
-                            + " be tried, which does not make it impossible";
+                    "every value tried at " + at + " was refused, but the values offered were not"
+                            + " shown to be exhaustive";
             // What the row is short of, and not what the model is short of. A row that stands
             // nothing in for a dependency its target requires is one nothing applies, so it is
             // held back rather than handed over to be pasted and refused.
@@ -5019,14 +5038,16 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case THE_BLOCK_IS_AS_LONG_AS_IT_MAY_BE ->
                     "a value was found for " + at + " and this block offers as many rows as it may";
             case NO_VALUE_CAN_STAND_THERE ->
-                    "no value can stand at " + at;
+                    NoValue.standsAt(at);
             // What the model settles, said as that. A class under one case of a sum and a class
             // under another are classes of positions that are not in one value, so there is no row
             // to go looking for.
             case ONE_POSITION_CANNOT_BE_BOTH ->
-                    at + " would need one position to be two things at once, which no value is";
+                    at + " would need one position to be two things at once, so "
+                            + NoValue.standsThere();
             case A_CONDITION_NEVER_COMES_OUT_THAT_WAY ->
-                    at + " is past a condition that comes out the other way for every row";
+                    at + " is past a condition that comes out the other way for every row, so "
+                            + NoValue.goesThatWay();
             // What the body states, said as the body's and not as the model's. Nothing proves the
             // inputs there do not arise; what is known is that a row there is refused.
             case EVERY_ROW_THERE_REACHES_AN_UNREACHABLE ->
