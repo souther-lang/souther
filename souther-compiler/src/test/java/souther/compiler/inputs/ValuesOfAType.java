@@ -43,9 +43,9 @@ import java.util.function.Function;
  * would make. And then it is checked that each component did come out varied alone, because a
  * constructor can refuse every value a component was offered but one.
  *
- * <p>Never null. Which component may be absent is said by a record's documentation and not by its
- * type, and several constructors here take a null nothing ever hands them; offered one, they make
- * values no order is owed for. An absence a record does mean is a pair written out by hand.
+ * <p>Null is offered for every component that is not a primitive, and the constructor says whether
+ * it is a value. An absence a record means — the owner of a construct no source wrote — is one an
+ * order is owed an answer for, and one it does not mean is refused where the record is made.
  *
  * <p>Not a proof about every value. An order that read a word by its length would pass every pair
  * here whose words differ in length; what this holds is that no component is left out.
@@ -169,7 +169,11 @@ final class ValuesOfAType {
         Constructor<?> canonical = canonical(record, components);
         List<List<Object>> offered = new ArrayList<>();
         for (RecordComponent component : components) {
-            offered.add(of(resolved(component.getGenericType(), bound)));
+            List<Object> each = new ArrayList<>(of(resolved(component.getGenericType(), bound)));
+            if (!component.getType().isPrimitive()) {
+                each.add(null);
+            }
+            offered.add(each);
         }
         if (components.length == 0) {
             return List.of(made(canonical, new Object[0]).orElseThrow(() -> new AssertionError(

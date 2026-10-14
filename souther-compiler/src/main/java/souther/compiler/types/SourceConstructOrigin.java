@@ -90,6 +90,10 @@ public record SourceConstructOrigin(WrittenOwner owner, int ordinal, int lowered
     }
 
     public SourceConstructOrigin {
+        if (kind == null) {
+            throw new IllegalArgumentException("an origin says what was written there, or that"
+                    + " nothing was");
+        }
         // Three spellings of one fact, held together rather than left to agree. `isWritten` is asked
         // by readers that have no use for the kind, and a value answering it one way and carrying a
         // construct the other way is one either reader can be right about. The owner goes with them:

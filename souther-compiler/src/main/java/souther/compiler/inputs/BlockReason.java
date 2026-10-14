@@ -306,8 +306,8 @@ public sealed interface BlockReason {
                         why.compareTo(((LineSideNotWorkedOut) other).why());
                 case PatternTooCostly(List<Figure> stoppedAt) ->
                         Figure.compare(stoppedAt, ((PatternTooCostly) other).stoppedAt());
-                // By the figure the limit that refused it stands at, as a pattern is.
-                case OrderedExtentTooCostly _ -> Figure.compare(one.figures(), other.figures());
+                case OrderedExtentTooCostly(Meter.Stopped stopped) ->
+                        stopped.compareTo(((OrderedExtentTooCostly) other).stopped());
                 // The rank says which statement it is.
                 case WhatItStatesIsNoLine _ -> 0;
                 case UnreadComparisonForm _, UnreadComparisonDomain _, RuleAboutADerivedValue _,

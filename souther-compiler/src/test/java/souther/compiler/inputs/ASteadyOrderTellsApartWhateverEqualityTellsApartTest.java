@@ -21,6 +21,7 @@ import souther.compiler.values.StoppedReading;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -45,7 +46,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
  *
  * <p>What that does not make is two values that differ in two components at once, and a
  * comparison built out of a rendering — two names run together into one word — is wrong exactly
- * there. Nor a component left absent, which it never offers. Those pairs are written out below.
+ * there. Those pairs are written out below.
  */
 class ASteadyOrderTellsApartWhateverEqualityTellsApartTest {
 
@@ -161,6 +162,10 @@ class ASteadyOrderTellsApartWhateverEqualityTellsApartTest {
     }
 
     private record Kept(StoppedReading reason, boolean twice) {
+
+        private Kept {
+            Objects.requireNonNull(reason, "kept for some reason");
+        }
     }
 
     private record Unmade(Thread runs) {
@@ -181,18 +186,6 @@ class ASteadyOrderTellsApartWhateverEqualityTellsApartTest {
                 new SourceConstructOrigin(new WrittenOwner.Body("a b", "c"), 0, 0,
                         SourceConstruct.CALL),
                 new SourceConstructOrigin(new WrittenOwner.Body("a", "b c"), 0, 0,
-                        SourceConstruct.CALL));
-    }
-
-    /**
-     * And a construct no source wrote from one a source did, which is the one origin whose owner
-     * is absent.
-     */
-    @Test
-    void anUnwrittenConstructIsToldFromAWrittenOne() {
-        tellsApart(SourceConstructOrigin.inASteadyOrder(),
-                SourceConstructOrigin.unwritten(),
-                SourceConstructOrigin.written(new WrittenOwner.Body("a", "b"), 0,
                         SourceConstruct.CALL));
     }
 
@@ -221,7 +214,13 @@ class ASteadyOrderTellsApartWhateverEqualityTellsApartTest {
         List<String> out = new ArrayList<>();
         for (T one : all) {
             for (T other : all) {
-                int either = order.compare(one, other);
+                int either;
+                try {
+                    either = order.compare(one, other);
+                } catch (RuntimeException e) {
+                    out.add("no answer for " + one + " and " + other + ": " + e);
+                    continue;
+                }
                 if ((either == 0) != one.equals(other)) {
                     out.add((either == 0 ? "called one: " : "called two: ") + one + " and "
                             + other);

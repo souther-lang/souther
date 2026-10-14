@@ -15,6 +15,13 @@ import souther.compiler.inputs.NumericTerm;
  */
 public record AxisId(String behavior, String term) {
 
+    public AxisId {
+        if (behavior == null || term == null) {
+            throw new IllegalArgumentException(
+                    "an axis is some behavior's, of some number: " + behavior + "/" + term);
+        }
+    }
+
     public static AxisId of(String behavior, NumericTerm term) {
         return new AxisId(behavior, term.toString());
     }
