@@ -16,6 +16,7 @@ import souther.compiler.inputs.InputReads;
 
 import souther.compiler.types.ApplicationOrigin;
 import souther.compiler.types.BindingId;
+import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.SourceConstructOrigin;
 
 import java.util.ArrayList;
@@ -258,7 +259,8 @@ record PredicateReadings(List<Reading> predicates, Set<Core> statedAt,
         out.add(new Reading(
                 new PredicateOrigin(new PredicateOccurrence(out.size()),
                         new RuleRef.Predicate(behavior, written),
-                        reaches.anchorOf(written, Citation.of(call.pos()))),
+                        reaches.anchorOf(written, Citation.of(call.pos())),
+                        ModelOccurrence.statedAt(call.occurrence())),
                 states, reads));
     }
 

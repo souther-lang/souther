@@ -6,6 +6,7 @@ import souther.compiler.check.RuleReportAnchor;
 import souther.compiler.types.ModelOccurrence;
 
 import java.util.List;
+import java.util.Optional;
 
 /**
  * One reading of a predicate applied in a behavior's body.
@@ -35,16 +36,18 @@ import java.util.List;
  * @param anchor     which question says where it is written, which is how a reader finds a rule
  *                   with no name. About the application: a condition holding two predicates is two
  *                   rules, and a reader sent to the condition is given one handle for both
+ * @param copy       the copy of the model's code the application stands in, read off the
+ *                   application when it was met. Empty where the model states nothing there
  */
 public record PredicateOrigin(PredicateOccurrence occurrence, RuleRef.Predicate rule,
-                              RuleReportAnchor anchor)
+                              RuleReportAnchor anchor, Optional<ModelOccurrence> copy)
         implements RuleEvidenceOrigin {
 
     public PredicateOrigin {
-        if (occurrence == null || rule == null || anchor == null) {
+        if (occurrence == null || rule == null || anchor == null || copy == null) {
             throw new IllegalArgumentException(
-                    "a reading of a predicate is a reading of some rule, told from the others, and"
-                            + " written somewhere");
+                    "a reading of a predicate is a reading of some rule, told from the others,"
+                            + " written somewhere and read in some copy or none");
         }
     }
 
@@ -60,10 +63,9 @@ public record PredicateOrigin(PredicateOccurrence occurrence, RuleRef.Predicate 
         return new RuleCitation.Written(rule, anchor);
     }
 
-    /** None: which reading of a predicate this is, is told by {@link #occurrence}, which names no
-     *  copy of the model's code. */
+    /** The copy the application was read in, where it was read in one. */
     @Override
     public List<ModelOccurrence> readAt() {
-        return List.of();
+        return copy.map(List::of).orElse(List.of());
     }
 }
