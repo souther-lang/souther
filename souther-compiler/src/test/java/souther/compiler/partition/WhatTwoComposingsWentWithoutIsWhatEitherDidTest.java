@@ -53,6 +53,24 @@ class WhatTwoComposingsWentWithoutIsWhatEitherDidTest {
                 "whichever composing was made first");
     }
 
+    /**
+     * And put in the order the reading states the conditions, the account is one value whichever
+     * composing was put first.
+     */
+    @Test
+    void inTheOrderTheConditionsAreStatedTheOrderOfPuttingTogetherIsGone() {
+        CompositionAccount one = CompositionAccount.ofTheInput(List.of(gap(1)));
+        CompositionAccount other = CompositionAccount.ofTheInput(List.of(gap(0)));
+        List<ConditionReportAnchor> stated = List.of(gap(0).anchor(), gap(1).anchor());
+
+        assertEquals(List.of(gap(0), gap(1)),
+                one.alongside(other).inTheOrderOf(stated).onTheWay(),
+                "the condition stated first is said first");
+        assertEquals(one.alongside(other).inTheOrderOf(stated),
+                other.alongside(one).inTheOrderOf(stated),
+                "whichever composing was put first");
+    }
+
     private static ReachabilityGap gap(int which) {
         return new ReachabilityGap.Unstated(new OnTheWay.Declined(condition(which),
                 new ConditionReportAnchor.WhereTheReadingMetIt("example.ruled", condition(which)),

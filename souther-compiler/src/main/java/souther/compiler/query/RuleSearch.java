@@ -10,7 +10,10 @@ import souther.compiler.publish.PublicationOrders;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.SequencedMap;
+import java.util.function.Function;
 
 /**
  * What composing a row for one rule of a decision came to.
@@ -138,15 +141,27 @@ public sealed interface RuleSearch {
         }
 
         /**
-         * This and another word a reader cannot tell from it, as one holding what both met.
+         * These as a reader that shows less of a word than the word holds reads them: one for
+         * each thing it shows, holding what every word shown alike met.
          *
-         * <p>For a projection that says less of the word than this holds. The page says the
-         * sentence beside the word and a document need not, and where a projection leaves out
-         * what told two of these apart, they are one thing to it — written as two, its reader
-         * meets one thing twice with half of what was met apiece. The word kept is this one's, so
-         * only a caller whose projection does not show what the two words differ in joins them.
+         * <p>The law {@link souther.compiler.partition.CameToNothing#joinedAsShown} states, over
+         * these. Two words that differ only in what a reader does not show are one sentence to it,
+         * and written as two they are that sentence twice with half of what was met apiece.
+         *
+         * @param shown what the reader's sentence for a word is made from — the parts it prints,
+         *              and not the sentence
          */
-        public Came and(Came other) {
+        public static List<Came> joinedAsShown(List<Came> all,
+                                               Function<Generator.UnresolvedCombination, ?> shown) {
+            SequencedMap<Object, Came> under = new LinkedHashMap<>();
+            for (Came each : all) {
+                under.merge(shown.apply(each.why()), each, Came::and);
+            }
+            return List.copyOf(under.values());
+        }
+
+        /** This and a word shown alike, as one holding what both met; the word kept is this one. */
+        private Came and(Came other) {
             return new Came(why,
                     PublicationOrders.COMPOSITION_BUDGETS.keep(
                             both(figures.written(), other.figures().written())),

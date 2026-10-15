@@ -6,6 +6,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.SequencedMap;
 import java.util.Set;
+import java.util.function.Function;
 
 /**
  * What a search that composed nothing came back with.
@@ -66,9 +67,27 @@ public record CameToNothing(Generator.UnresolvedCombination why, CompositionShor
      * <p>In the order the words were first met, which is the order a search met them in.
      */
     public static List<CameToNothing> joined(Collection<CameToNothing> all) {
-        SequencedMap<Generator.UnresolvedCombination, CameToNothing> under = new LinkedHashMap<>();
+        return joinedAsShown(all, why -> why);
+    }
+
+    /**
+     * The same law, for a reader that shows less of a word than the word holds.
+     *
+     * <p>Two words that differ only in what a reader does not show are one word to that reader,
+     * and written as two they are one sentence said twice with half of what was met apiece. So a
+     * reader joins under what it shows, and what each met adds up under it as it does under the
+     * whole word. The word kept is the first one's, which differs from the rest only in what is not
+     * shown.
+     *
+     * @param shown what the reader's sentence for a word is made from — the parts of it the reader
+     *              prints, and not the sentence, which would join two words worded alike
+     */
+    public static List<CameToNothing> joinedAsShown(
+            Collection<CameToNothing> all,
+            Function<Generator.UnresolvedCombination, ?> shown) {
+        SequencedMap<Object, CameToNothing> under = new LinkedHashMap<>();
         for (CameToNothing each : all) {
-            under.merge(each.why(), each, CameToNothing::and);
+            under.merge(shown.apply(each.why()), each, CameToNothing::and);
         }
         return List.copyOf(under.values());
     }
@@ -85,7 +104,7 @@ public record CameToNothing(Generator.UnresolvedCombination why, CompositionShor
         return new CameToNothing(why, CompositionShortfall.NONE, Set.of());
     }
 
-    /** This and another search with the same word, as one answer holding what both met. */
+    /** This and another search with a word shown alike, as one answer holding what both met. */
     private CameToNothing and(CameToNothing other) {
         Set<CompositionBudget> cut = EnumSet.noneOf(CompositionBudget.class);
         cut.addAll(planCut);

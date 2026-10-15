@@ -239,10 +239,10 @@ final class Reasons {
     /**
      * The same, of what was met already put in the order each kind is said in.
      *
-     * <p>A figure that cut the plan short is said as that and never as a stop. The search ran to
-     * the end of what it was handed, or was never made, so a reader told it stopped would go
-     * looking for a search that did not finish; told the plan was cut short, they read the word
-     * after it as being about less than the point had, which is what it is.
+     * <p>A figure that cut the plan short is said as a limit on the plan and never as a stop. The
+     * search ran to the end of what it was handed, or was never made, so a reader told it stopped
+     * would go looking for a search that did not finish. Nor as a search over a plan cut short:
+     * where nothing was planned, no search was made, and the word after the clause says so.
      */
     static String met(CanonicalSelection<CompositionBudget> figures,
                       CanonicalSelection<CompositionRepertoire> populations,
@@ -253,7 +253,7 @@ final class Reasons {
             out.add("this compiler stopped at " + said(figures));
         }
         if (!planCut.isEmpty()) {
-            out.add("this compiler cut short the plan it searched at " + said(planCut));
+            out.add("this compiler's plan of the value was limited by " + said(planCut));
         }
         if (!populations.isEmpty()) {
             out.add("this compiler writes some of " + writes(populations)

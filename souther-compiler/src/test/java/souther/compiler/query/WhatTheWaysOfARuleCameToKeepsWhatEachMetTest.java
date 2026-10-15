@@ -96,12 +96,10 @@ class WhatTheWaysOfARuleCameToKeepsWhatEachMetTest {
         Generator.BoundaryAttempt other = new Generator.BoundaryAttempt.Unresolved(
                 nothingComposes(), CompositionAccount.ofTheInput(List.of(gap(1))));
 
-        assertEquals(Set.of(gap(0), gap(1)),
-                Set.copyOf(cameTo(List.of(one, other)).account().onTheWay()),
-                "both conditions were gone without by a search for the rule");
-        assertEquals(Set.copyOf(cameTo(List.of(one, other)).account().onTheWay()),
-                Set.copyOf(cameTo(List.of(other, one)).account().onTheWay()),
-                "whichever way was walked first");
+        assertEquals(List.of(gap(0), gap(1)), cameTo(List.of(other, one)).account().onTheWay(),
+                "both conditions were gone without, in the order the reading states them");
+        assertEquals(cameTo(List.of(one, other)), cameTo(List.of(other, one)),
+                "whichever way was walked first, the rule's answer is one value");
     }
 
     /**
@@ -154,7 +152,7 @@ class WhatTheWaysOfARuleCameToKeepsWhatEachMetTest {
     private static RuleSettlement cameTo(List<Generator.BoundaryAttempt> ways) {
         return Adequacy.DecisionSearch.whatTheWaysCameTo(ways, built -> RuleSettlement.of(
                 new RuleRequirement.Unsettled.AComposedRowWentElsewhere(),
-                built.unrepresented()));
+                built.unrepresented()), List.of(gap(0).anchor(), gap(1).anchor()));
     }
 
     private static Generator.BoundaryAttempt.NoRow stoppedAt(CompositionBudget figure) {

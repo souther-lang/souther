@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import souther.compiler.meaning.AnswerAsAnInput;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -96,7 +97,9 @@ public record CompositionAccount(List<ReachabilityGap> onTheWay,
      * way it is a gap ({@link #reconciledWith}). What comes out reconciles to every gap either of
      * the two reconciles to, and to no other.
      *
-     * <p>Each gap once, in the order this then the other met them.
+     * <p>Each gap once, in the order this then the other met them — which is the order the two
+     * were put together in, so a caller with more than one composing to put together puts what
+     * comes out in an order of the model's ({@link #inTheOrderOf}).
      */
     public CompositionAccount alongside(CompositionAccount other) {
         List<ReachabilityGap> input = new ArrayList<>(new LinkedHashSet<>(onTheWay));
@@ -106,6 +109,32 @@ public record CompositionAccount(List<ReachabilityGap> onTheWay,
         Set<ConditionOccurrence> taken = new LinkedHashSet<>(takenUpByAnAnswer);
         taken.retainAll(other.takenUpByAnAnswer);
         return new CompositionAccount(input, demands, taken);
+    }
+
+    /**
+     * This account with what it went without in the order the conditions are stated in.
+     *
+     * <p>For an account several composings were put together into. What each went without is in
+     * the order that composing met it, and putting them together leaves the order they were put
+     * together in — which is the order the composings were made in, and that is this compiler's
+     * walk and nothing a reader can find in the source. The order the reading states the
+     * conditions in is the model's, and is the same whichever composing came first.
+     *
+     * <p>A gap about a condition not among them comes after the rest, in the order it was in.
+     *
+     * @param stated where a report about each condition asks for its place, in the order the
+     *               reading states them
+     */
+    public CompositionAccount inTheOrderOf(List<ConditionReportAnchor> stated) {
+        Comparator<ConditionReportAnchor> byStatement = Comparator.comparingInt(anchor -> {
+            int at = stated.indexOf(anchor);
+            return at < 0 ? stated.size() : at;
+        });
+        List<ReachabilityGap> input = new ArrayList<>(onTheWay);
+        input.sort(Comparator.comparing(ReachabilityGap::anchor, byStatement));
+        List<DemandGap> demands = new ArrayList<>(onAnAnswer);
+        demands.sort(Comparator.comparing(DemandGap::anchor, byStatement));
+        return new CompositionAccount(input, demands, takenUpByAnAnswer);
     }
 
     /**

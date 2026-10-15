@@ -197,7 +197,6 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.HashSet;
-import java.util.SequencedMap;
 import java.util.Set;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
@@ -4156,7 +4155,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * is that kind's own order to give — asked of {@link PublicationOrders} the way every other
      * plurality this report says together is.
      */
-    private record Said(int family, int within, String text) {
+    record Said(int family, int within, String text) {
 
         /**
          * The order these are said in: by what kind of answer, then within it.
@@ -4287,21 +4286,41 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * that had everything and reached nothing; told the figure first, they read the word as the
      * answer of a search that did not finish, and know what to raise.
      *
+     * <p>One clause for each thing the page shows, holding what every word shown alike met
+     * ({@link #shownOnThePage}). Two words that differ in what the page leaves out would otherwise
+     * be one clause twice, each with half of the figures.
+     *
      * <p>Where the sentence sits among the others is the first word's place, as for a proof.
      */
-    private static Said nothingToTry(List<RuleSearch.Came> came, SourceRendering rendering,
-                                     PublishedRuleHandle.WhereARuleIs places) {
+    static Said nothingToTry(List<RuleSearch.Came> came, SourceRendering rendering,
+                             PublishedRuleHandle.WhereARuleIs places) {
         List<String> clauses = new ArrayList<>();
-        for (RuleSearch.Came each : came) {
-            String clause = Reasons.met(each.figures(), each.populations(), each.unheld(),
+        for (RuleSearch.Came each
+                : RuleSearch.Came.joinedAsShown(came, AdequacyReport::shownOnThePage)) {
+            clauses.add(Reasons.met(each.figures(), each.populations(), each.unheld(),
                     each.planCut())
-                    + GeneratedRows.beside(saidOrWhy(each.why()), each.why(), rendering, places);
-            if (!clauses.contains(clause)) {
-                clauses.add(clause);
-            }
+                    + GeneratedRows.beside(saidOrWhy(each.why()), each.why(), rendering, places));
         }
         return new Said(1, PublicationOrders.positionOf(came.get(0).why().reason()),
                 String.join("; ", clauses));
+    }
+
+    /**
+     * What the page's sentence for a word is made from: its own sentence where it said one, the
+     * word and what it is about where it did not ({@link #saidOrWhy}), and what else the offer was
+     * short of ({@link GeneratedRows#beside}). Changed with those two and never apart from them.
+     */
+    static List<Object> shownOnThePage(Generator.UnresolvedCombination why) {
+        return why.said().isPresent() ? List.of(why.said().get(), why.alsoShort())
+                : List.of(why.reason(), why.subject(), why.alsoShort());
+    }
+
+    /**
+     * What the document's entry for a word is made from: the word and the causes of its offer
+     * ({@link #synthesisShortfalls}). Not the sentence beside the word, and not what it is about.
+     */
+    static List<Object> shownInTheDocument(Generator.UnresolvedCombination why) {
+        return List.of(why.reason(), why.alsoShort());
     }
 
     /**
@@ -4317,12 +4336,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     private static Said proved(RuleSearch.CameToNothing proofs, SourceRendering rendering,
                                PublishedRuleHandle.WhereARuleIs places) {
         List<String> clauses = new ArrayList<>();
-        for (RuleSearch.Came proof : proofs.ways()) {
+        for (RuleSearch.Came proof
+                : RuleSearch.Came.joinedAsShown(proofs.ways(), AdequacyReport::shownOnThePage)) {
             Generator.UnresolvedCombination why = proof.why();
-            String clause = GeneratedRows.beside(saidOrWhy(why), why, rendering, places);
-            if (!clauses.contains(clause)) {
-                clauses.add(clause);
-            }
+            clauses.add(GeneratedRows.beside(saidOrWhy(why), why, rendering, places));
         }
         return new Said(7, PublicationOrders.positionOf(proofs.ways().get(0).why().reason()),
                 String.join("; ", clauses));
@@ -7456,12 +7473,16 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
 
     /**
      * What the composings for a rule came back with where none had a candidate to try, one entry
-     * per word.
+     * for each thing the document shows of a word ({@link #shownInTheDocument}).
      *
-     * <p>Each word with what its searches met of this compiler's, in the document's own words for
-     * the three things a search meets: a figure it stopped at or was cut short by, a population it
-     * writes some of, and a number it could not hold. A word alone sends a consumer to rewrite a
+     * <p>Each word with what its searches met of this compiler's, in the document's own words: a
+     * figure that stopped one, a figure that cut short the plan one ran over, a population one
+     * writes some of, and a number one could not hold. A word alone sends a consumer to rewrite a
      * rule where a figure was the whole of it.
+     *
+     * <p>Two words the document shows alike are one entry holding what both met. The document
+     * says neither the sentence beside a word nor what it is about, so written as two, a consumer
+     * reads one entry twice and cannot say what makes them two.
      *
      * <p>And why the offer each was refusing was not everything the rules leave, where anything
      * made it short. Beside the word and not spelled into it: the word is what the search came to
@@ -7476,7 +7497,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                                             DocumentSources sources,
                                             PublishedRuleHandle.WhereARuleIs places) {
         ArrayNode all = into.putArray("synthesisShortfalls");
-        for (RuleSearch.Came each : published(came)) {
+        for (RuleSearch.Came each
+                : RuleSearch.Came.joinedAsShown(came, AdequacyReport::shownInTheDocument)) {
             ObjectNode one = all.addObject();
             one.put("reason", word(each.why().reason()));
             if (!each.figures().isEmpty()) {
@@ -7502,25 +7524,6 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             }
             causes(one, each.why(), sources, places);
         }
-    }
-
-    /**
-     * What the ways came back with, one per thing the document can tell apart.
-     *
-     * <p>The document says a word and the causes of its offer, and not the sentence a search said
-     * beside the word. Two ways with one word and two sentences are two things on the page and
-     * one thing here, so they are one entry holding what both met — written as two, a consumer
-     * reads one entry twice and cannot say what makes them two.
-     *
-     * <p>In the order of the first of each, which is the order the search holds them in.
-     */
-    static List<RuleSearch.Came> published(List<RuleSearch.Came> came) {
-        SequencedMap<List<Object>, RuleSearch.Came> under = new LinkedHashMap<>();
-        for (RuleSearch.Came each : came) {
-            under.merge(List.of(each.why().reason(), each.why().alsoShort()), each,
-                    RuleSearch.Came::and);
-        }
-        return List.copyOf(under.values());
     }
 
     /**

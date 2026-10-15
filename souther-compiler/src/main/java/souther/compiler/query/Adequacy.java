@@ -91,6 +91,8 @@ import souther.compiler.partition.AnswersStoodIn;
 import souther.compiler.partition.Axis;
 import souther.compiler.partition.AxisId;
 import souther.compiler.partition.CameToNothing;
+import souther.compiler.partition.ConditionReportAnchor;
+import souther.compiler.partition.DecisionReading;
 import souther.compiler.partition.BorderQuantity;
 import souther.compiler.partition.ClassOfAPosition;
 import souther.compiler.partition.Border;
@@ -2784,7 +2786,21 @@ public final class Adequacy {
             if (proved != null) {
                 return RuleSettlement.provedNothingTakesIt(proved);
             }
-            return whatTheWaysCameTo(ways, built -> whatItsRunSettles(built, probe, taken, ruled));
+            return whatTheWaysCameTo(ways, built -> whatItsRunSettles(built, probe, taken, ruled),
+                    statedInOrder(ruled));
+        }
+
+        /**
+         * Where a report about each condition of a rule's way asks for its place, in the order the
+         * reading states them: the conditions on the way, then what it asks of answers, then what
+         * it could not state of them.
+         */
+        private static List<ConditionReportAnchor> statedInOrder(DecisionReading.Ruled ruled) {
+            List<ConditionReportAnchor> out = new ArrayList<>();
+            ruled.states().onTheWay().forEach(each -> out.add(each.anchor()));
+            ruled.demands().stated().forEach(each -> out.add(each.anchor()));
+            ruled.demands().declined().forEach(each -> out.add(each.anchor()));
+            return out;
         }
 
         /**
@@ -2805,13 +2821,17 @@ public final class Adequacy {
          * ({@link CompositionAccount#alongside}). Each way's account says what that composing could
          * not compose against, and the answer is all of them together; one way's account in place
          * of the rest would leave out what the others went without, and which one would follow the
-         * order the ways were enumerated in.
+         * order the ways were enumerated in. In the order the rule's reading states the
+         * conditions, for the same reason ({@link CompositionAccount#inTheOrderOf}).
          *
-         * @param run what the run of a row that was composed settles about the rule
+         * @param run    what the run of a row that was composed settles about the rule
+         * @param stated where a report about each condition of the rule's way asks for its place,
+         *               in the order the reading states them
          */
-        static RuleSettlement whatTheWaysCameTo(List<Generator.BoundaryAttempt> ways,
-                                                Function<Generator.BoundaryAttempt.Built,
-                                                        RuleSettlement> run) {
+        static RuleSettlement whatTheWaysCameTo(
+                List<Generator.BoundaryAttempt> ways,
+                Function<Generator.BoundaryAttempt.Built, RuleSettlement> run,
+                List<ConditionReportAnchor> stated) {
             RuleSettlement established = null;
             List<CameToNothing> cameToNothing = new ArrayList<>();
             CompositionAccount without = null;
@@ -2839,7 +2859,7 @@ public final class Adequacy {
             }
             if (!cameToNothing.isEmpty()) {
                 return RuleSettlement.nothingToTryWith(RuleSearch.CameToNothing.of(cameToNothing),
-                        without);
+                        without.inTheOrderOf(stated));
             }
             // Nothing was tried at all, which is the classes not linking rather than a search that
             // came to nothing.

@@ -29,7 +29,7 @@ class AFigureThatCutThePlanShortIsSaidAsThatTest {
                 Set.of(CompositionBudget.DEPTH_A_CONSTRUCTION_PLAN_DESCENDS)));
 
         assertFalse(said.contains("stopped at"), said);
-        assertTrue(said.startsWith("this compiler cut short the plan it searched at "), said);
+        assertTrue(said.startsWith("this compiler's plan of the value was limited by "), said);
     }
 
     /** And a search that met a figure and was handed a cut plan is said as both, the stop first. */
@@ -40,7 +40,7 @@ class AFigureThatCutThePlanShortIsSaidAsThatTest {
                 Set.of(CompositionBudget.DEPTH_A_CONSTRUCTION_PLAN_DESCENDS)));
 
         assertTrue(said.startsWith("this compiler stopped at "), said);
-        assertTrue(said.contains(", and this compiler cut short the plan it searched at "), said);
+        assertTrue(said.contains(", and this compiler's plan of the value was limited by "), said);
     }
 
     private static Generator.UnresolvedCombination word() {
