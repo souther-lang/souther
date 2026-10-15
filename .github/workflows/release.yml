@@ -38,13 +38,8 @@ jobs:
       - name: Find the release notes
         if: github.ref_type == 'tag'
         run: |
-          notes="docs/releases/${GITHUB_REF_NAME#v}.md"
-          if [ ! -s "$notes" ]; then
-            echo "::error::$GITHUB_REF_NAME has no release notes: $notes is missing or empty"
-            exit 1
-          fi
           mkdir -p notes
-          cp "$notes" notes/release-notes.md
+          bin/release-notes.sh "${GITHUB_REF_NAME#v}" > notes/release-notes.md
 
       # Apart from the artifacts, so the notes are the release's text and not one of its assets.
       - name: Upload the release notes to the workflow run
