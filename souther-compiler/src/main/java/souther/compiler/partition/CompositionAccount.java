@@ -258,10 +258,9 @@ public record CompositionAccount(List<ReachabilityGap> onTheWay,
                     case ReachabilityGap.Why.NoValueComposedForItsPositions _ -> out.add(0);
                     case ReachabilityGap.Why.TheWalkForItsPositionsWasStopped _ -> out.add(1);
                     case ReachabilityGap.Why.TwoNumbersAtOneLocation _ -> out.add(2);
-                    case ReachabilityGap.Why.NoComposerWritesIt none -> {
-                        out.add(3);
-                        out.add(none.what().ordinal());
-                    }
+                    // Which kind of statement nothing writes is the condition's, the same along
+                    // every way, so two gaps about one condition do not differ in it.
+                    case ReachabilityGap.Why.NoComposerWritesIt _ -> out.add(3);
                     case ReachabilityGap.Why.ElementsWrittenAlike _ -> out.add(4);
                 }
             }
