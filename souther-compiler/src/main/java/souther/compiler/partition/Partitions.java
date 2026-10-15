@@ -55,6 +55,7 @@ import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeReachName;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -818,7 +819,7 @@ public final class Partitions {
                         Intervals.of(reachable, within == null ? null : within.min(),
                                 within == null ? null : within.max(), carrier),
                         points, term, type, reading, ruleReading, within,
-                        at.position().admits(), PatternPlan.Budget.OF_A_WITNESS::meter)),
+                        PatternPlan.Budget.OF_A_WITNESS::meter)),
                 made.divides(),
                 // A cut is a place on the order the values are counted on, and a class that is a
                 // set has no answer to where it lies — so a position whose classes are sets
@@ -2307,22 +2308,37 @@ public final class Partitions {
      */
     static List<FixtureTemplate> admittedStringOfSize(TypeView view, RuleReadingContext reading,
                                                       int size) {
-        if (size < 0) {
-            return List.of();
-        }
+        return admittedStringsOfSizes(view, reading, List.of(size));
+    }
+
+    /**
+     * The same for each of {@code sizes}, in the order they are given.
+     *
+     * <p>The rules on {@code view} are read once for all of them: they are the same rules whatever
+     * size is asked, and a caller walking several sizes would otherwise read them again for each.
+     */
+    static List<FixtureTemplate> admittedStringsOfSizes(TypeView view, RuleReadingContext reading,
+                                                        Collection<Integer> sizes) {
         RulesRead rules = rulesReadOn(view, reading);
         if (rules == null) {
             return List.of();
         }
-        // That many and no other is one more count the rules leave, met with the one they wrote.
-        DeclaredBounds.CountRange exactly = new DeclaredBounds.CountRange(
-                Math.max(rules.characters().least(), size),
-                Math.min(rules.characters().most(), size));
-        return reading.revision()
-                .settled(new StringsTheRulesAdmit(new RulesRead(rules.stated(), exactly), 1))
-                .stream()
-                .map(FixtureTemplate::string)
-                .toList();
+        List<FixtureTemplate> out = new ArrayList<>();
+        for (int size : sizes) {
+            if (size < 0) {
+                continue;
+            }
+            // That many and no other is one more count the rules leave, met with the one they
+            // wrote.
+            DeclaredBounds.CountRange exactly = new DeclaredBounds.CountRange(
+                    Math.max(rules.characters().least(), size),
+                    Math.min(rules.characters().most(), size));
+            for (String each : reading.revision().settled(
+                    new StringsTheRulesAdmit(new RulesRead(rules.stated(), exactly), 1))) {
+                out.add(FixtureTemplate.string(each));
+            }
+        }
+        return List.copyOf(out);
     }
 
     /**

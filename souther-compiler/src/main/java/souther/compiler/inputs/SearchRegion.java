@@ -219,8 +219,8 @@ public interface SearchRegion {
     }
 
     /**
-     * The values the declarations of the position at {@code place} admit it, as far as they were
-     * read.
+     * The values the declarations of the position {@code term} is read of admit it, as far as they
+     * were read.
      *
      * <p>Beside {@link #valueClassAt} and for the same reason: a range says where a value runs and
      * not which values of the run the position may hold, and a position held to {@code "a"} or
@@ -228,8 +228,28 @@ public interface SearchRegion {
      * were read admit, so a value outside it is refused and a value inside it is not shown to be one
      * a row can hold. A region that reads no position says nothing of one, which is what the default
      * is.
+     *
+     * <p>Values of the position whatever {@code term} takes of it: the strings of a string, and not
+     * its lengths. What those come to as the number {@code term} is, is {@link #heldAt}.
      */
-    default ValueSet admittedAt(NumericTerm.ValueOf place) {
+    default ValueSet admittedAt(NumericTerm.FromOnePosition term) {
+        return ValueSet.ANY;
+    }
+
+    /**
+     * The values the declarations hold the number {@code term} to, on the order it is answered on.
+     *
+     * <p>The position's own values where {@code term} is its value, and the numbers they come to
+     * where {@code term} is a number taken of it: a string held to {@code "a"} or {@code "bbb"} is
+     * held to a length of one or three. The one answer every reader of such a number takes — a
+     * border refusing a point, a class standing for a run, a search walking the numbers — so that
+     * none of them puts the strings to the lengths, which admits no length at all, or reads the
+     * strings through the term again on its own.
+     *
+     * <p>Only ever as wide as {@link #admittedAt}: every value where the numbers were not worked
+     * out.
+     */
+    default ValueSet heldAt(NumericTerm.FromOnePosition term) {
         return ValueSet.ANY;
     }
 
