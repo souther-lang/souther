@@ -410,12 +410,18 @@ public sealed interface Derivation {
 
         @Override
         public Proposition conclusion(Conclusion numbering) {
-            List<Proposition> earlier = before.stream().map(numbering::of).toList();
-            Proposition selecting = numbering.of(selects);
-            List<Proposition> arrives = new ArrayList<>(noArmBefore(earlier, selecting));
-            arrives.add(selecting);
-            return Proposition.all(arrives);
+            return taken(before.stream().map(numbering::of).toList(), numbering.of(selects));
         }
+    }
+
+    /**
+     * Where an arm selecting {@code selects} is taken, the arms written before it selecting
+     * {@code before}: it selects the value, and none of them does.
+     */
+    static Proposition taken(List<Proposition> before, Proposition selects) {
+        List<Proposition> arrives = new ArrayList<>(noArmBefore(before, selects));
+        arrives.add(selects);
+        return Proposition.all(arrives);
     }
 
     /**

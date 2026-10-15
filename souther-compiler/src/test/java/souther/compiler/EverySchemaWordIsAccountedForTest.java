@@ -296,6 +296,7 @@ class EverySchemaWordIsAccountedForTest {
         Map<String, String> spelling = new LinkedHashMap<>();
         spelling.put("OnePositionCannotBeBoth", "the_way_needs_one_position_to_be_two");
         spelling.put("AnArmNothingReaches", "an_arm_nothing_reaches");
+        spelling.put("AComparisonOutcomeNothingReaches", "a_comparison_outcome_nothing_reaches");
         spelling.put("AConditionNeverComesOutThatWay", "a_condition_never_comes_out_that_way");
         spelling.put("NoValueCanTakeIt", "no_value_can_take_it");
         spelling.put("AComposedRowWentElsewhere", "a_composed_row_went_elsewhere");

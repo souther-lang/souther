@@ -7,10 +7,12 @@ import souther.compiler.diag.Severity;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.OrderedIntervals;
+import souther.compiler.numeric.Text;
 import souther.compiler.values.AdmittedPlan;
 import souther.compiler.values.Allowance;
 import souther.compiler.values.AsACompilationAllows;
@@ -21,6 +23,7 @@ import souther.compiler.values.ValueSet;
 import org.junit.jupiter.api.Test;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -160,6 +163,65 @@ class WhetherAPathIsReachedIsAskedOfEveryDomainTest {
         assertFalse(nothing.constraints().confinement().holdsNothing());
         assertFalse(nothing.unguarded().constraints().isBottom(),
                 "it is the guards that cannot all hold, not the values that fail");
+    }
+
+    /**
+     * The values a position's rules name, beside a range the path took in about the same position.
+     *
+     * <p>Two domains holding halves of one contradiction. The range {@code 2 <= x < 3} has values in
+     * it and the set {@code {1, 3, 7}} has values in it; that none of the set is in the range is
+     * found only where the two are put to one position, which is what the state does with a range
+     * the numbers leave and the values a reading holds.
+     */
+    @Test
+    void aRangeOnThePathBetweenTheValuesTheRulesNameLeavesNothing() {
+        Known odd = admittingOdd(Known.top());
+        assertFalse(odd.reachesNothing(), "the values alone leave three");
+
+        assertTrue(between(odd, 2, 3).reachesNothing(),
+                "no value of 1, 3 and 7 lies at or above 2 and below 3");
+        assertFalse(between(odd, 2, 4).reachesNothing(), "3 lies at or above 2 and below 4");
+        assertFalse(between(Known.top(), 2, 3).reachesNothing(),
+                "and without the values, the range alone holds 2");
+    }
+
+    /** The same on an order with no arithmetic, where the path holds the range on the order. */
+    @Test
+    void aRangeOnAnOrderBetweenTheStringsTheRulesNameLeavesNothing() {
+        Allowance<FactSubject> sets = AsACompilationAllows.forAdmittedValues();
+        Known code = Known.top().admitting(new Confinement.Planned<>(
+                PlannedValues.at(A_POSITION, AdmittedPlan.of(new ValueSet.Finite(Set.of(
+                        Value.text("a"), Value.text("c"), Value.text("e"))))),
+                OrderedIntervals.top(), Map.of(A_POSITION, Carrier.TEXT)).resolve(sets), sets);
+
+        assertTrue(code.bounding(OrderedIntervals.at(A_POSITION, new OrderedInterval(
+                        Endpoint.inclusive(new Text("b")), Endpoint.exclusive(new Text("c")))),
+                Map.of(A_POSITION, Carrier.TEXT)).reachesNothing(),
+                "no string of a, c and e lies at or after b and before c");
+        assertFalse(code.bounding(OrderedIntervals.at(A_POSITION, new OrderedInterval(
+                        Endpoint.inclusive(new Text("b")), Endpoint.inclusive(new Text("c")))),
+                Map.of(A_POSITION, Carrier.TEXT)).reachesNothing(),
+                "c lies at or after b and at or before c");
+    }
+
+    /** {@code known} with the position held to 1, 3 and 7, as a reading of its rules says. */
+    private static Known admittingOdd(Known known) {
+        Allowance<FactSubject> sets = AsACompilationAllows.forAdmittedValues();
+        return known.admitting(new Confinement.Planned<>(
+                PlannedValues.at(A_POSITION, AdmittedPlan.of(new ValueSet.Finite(Set.of(
+                        Value.number(1), Value.number(3), Value.number(7))))),
+                OrderedIntervals.top(), Map.of(A_POSITION, Carrier.WHOLE)).resolve(sets), sets);
+    }
+
+    /** {@code known} with the position taken on the path to lie at or above {@code low} and below
+     *  {@code high}. */
+    private static Known between(Known known, long low, long high) {
+        Map<FactSubject, Granularity> whole = Map.of(A_POSITION, Granularity.DISCRETE);
+        return known
+                .taking(LinearForm.atomMinusConstant(A_POSITION, ExactRatio.of(low)), Rel.GE,
+                        Known.Held.ON_THE_PATH, whole)
+                .taking(LinearForm.atomMinusConstant(A_POSITION, ExactRatio.of(high)), Rel.LT,
+                        Known.Held.ON_THE_PATH, whole);
     }
 
     private static Known reaching(ConstraintState<FactSubject> constraints) {

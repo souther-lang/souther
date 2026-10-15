@@ -2,6 +2,7 @@ package souther.compiler.report;
 
 import souther.compiler.coverage.ArmProbe;
 import souther.compiler.cst.CstError;
+import souther.compiler.cst.CstLexer;
 import souther.compiler.cst.CstParser;
 import souther.compiler.cst.SyntaxKind;
 import souther.compiler.diag.SourceRendering;
@@ -20,7 +21,6 @@ import souther.compiler.partition.BorderObligationPoint;
 import souther.compiler.partition.CameToNothing;
 import souther.compiler.partition.CompositionBudget;
 import souther.compiler.partition.CompositionShortfall;
-import souther.compiler.partition.FixtureTemplate;
 import souther.compiler.partition.RepairShortfall;
 import souther.compiler.partition.GenerationReason;
 import souther.compiler.partition.GenerationOutcome;
@@ -327,7 +327,7 @@ public final class GeneratedRows {
     private static String openingFor(GenerationOutcome.NotSupported.Reason why) {
         return switch (why) {
             case NO_WAY_INTO_THIS_ARM_CAN_BE_NAMED, THE_WAYS_INTO_THIS_ARM_ARE_NOT_ENUMERABLE,
-                 MORE_WAYS_IN_THAN_THE_READING_HOLDS, THE_ARM_RUNS_WHERE_SOMETHING_CALLS_IT,
+                 THE_WAYS_INTO_THIS_ARM_ARE_NOT_TOLD_APART, MORE_WAYS_IN_THAN_THE_READING_HOLDS, THE_ARM_RUNS_WHERE_SOMETHING_CALLS_IT,
                  A_CONSTRUCTION_DECIDES_THIS_ARM, NO_AXIS_AT_THIS_POSITION ->
                     "nothing offers a row for";
             case NO_STRATEGY_FOR_AN_OUTPUT_CASE -> "nothing aims a row at";
@@ -403,7 +403,7 @@ public final class GeneratedRows {
             // it stands, a name holding a quote — which a class named after a rule about strings
             // does — closes the literal early and the rest of it becomes source.
             return named
-                    ? "    | " + FixtureTemplate.quoted(purposes.getFirst().words())
+                    ? "    | " + CstLexer.literalOf(purposes.getFirst().words())
                             + " : (" + inputs + ")" + standsIn + " -> " + UNANSWERED
                     : "    | (" + inputs + ")" + standsIn + " -> " + UNANSWERED;
         }

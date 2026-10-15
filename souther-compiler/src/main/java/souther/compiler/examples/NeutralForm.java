@@ -1,5 +1,6 @@
 package souther.compiler.examples;
 
+import souther.compiler.cst.CstLexer;
 import souther.compiler.jvm.SoutherJvmAbi;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.Boundary;
@@ -459,7 +460,8 @@ final class NeutralForm {
     /** What a fixture that wrote text where a temporal stands is told, wherever it wrote it. */
     static FixtureException notWrittenAsATemporal(Type.Prim temporal, String text) {
         return new FixtureException("a `" + temporal.shown() + "` is written `" + temporal.shown()
-                + "(\"" + text + "\")`; a string is how one arrives from outside, not how a fixture"
+                + "(" + CstLexer.literalOf(text)
+                + ")`; a string is how one arrives from outside, not how a fixture"
                 + " writes it");
     }
 

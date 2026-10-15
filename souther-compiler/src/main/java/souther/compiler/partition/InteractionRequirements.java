@@ -28,11 +28,17 @@ import java.util.SequencedMap;
  * reading of one walk, and a reader asking which rows a requirement is about — whether every one of
  * them reaches an {@code unreachable} — asks them of the cell this placed rather than placing the
  * decisions again.
+ *
+ * <p>And the meetings this asks nothing of though they were read: the ones the limit kept back
+ * ({@code notMeasured}), which a wider run walks, and the ones the classes do not place
+ * ({@code notPlaced}), which none does. Neither is a meeting with nothing owed at it, and both are
+ * said where what this asks for is measured.
  */
 public record InteractionRequirements(
         int read,
         SequencedMap<ObligationIdentity.OfACombinationOfDecisions, List<Way>> ways,
-        List<InteractionCells.NotOffered> notMeasured) {
+        List<InteractionCells.NotOffered> notMeasured,
+        List<InteractionCells.NotPlaced> notPlaced) {
 
     /**
      * One way to a requirement: the rows that take it, and what a run that took it is seen doing.
@@ -63,18 +69,19 @@ public record InteractionRequirements(
     public InteractionRequirements {
         ways = Collections.unmodifiableSequencedMap(new LinkedHashMap<>(ways));
         notMeasured = List.copyOf(notMeasured);
+        notPlaced = List.copyOf(notPlaced);
         if (read < 0) {
             throw new IllegalArgumentException("meetings are counted from none: " + read);
         }
-        if (read < notMeasured.size()) {
+        if (read < notMeasured.size() + notPlaced.size()) {
             throw new IllegalArgumentException("more meetings were held back than were read: "
-                    + notMeasured.size() + " of " + read);
+                    + (notMeasured.size() + notPlaced.size()) + " of " + read);
         }
     }
 
     /** Nothing asked of a behavior whose decisions meet nowhere, which is not a group of none. */
     public static final InteractionRequirements NONE =
-            new InteractionRequirements(0, new LinkedHashMap<>(), List.of());
+            new InteractionRequirements(0, new LinkedHashMap<>(), List.of(), List.of());
 
     /**
      * Whether the body has meetings at all, which is what says the criterion this behavior is held
@@ -120,7 +127,8 @@ public record InteractionRequirements(
                 }
             }
         }
-        return new InteractionRequirements(groups.size(), ways, offered.notOffered());
+        return new InteractionRequirements(groups.size(), ways, offered.notOffered(),
+                offered.notPlaced());
     }
 
     /**

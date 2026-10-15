@@ -37,6 +37,20 @@ public record DecidingCase(Proposition condition, Cases standsFor) {
         return new DecidingCase(condition, new Cases.One(condition));
     }
 
+    /** {@code cases} said as one: some one of them holding, standing for each of them. */
+    static DecidingCase someOneOf(List<DecidingCase> cases) {
+        return new DecidingCase(
+                Proposition.any(cases.stream().map(DecidingCase::condition).toList()),
+                new Cases.EachOf(cases.stream().map(DecidingCase::standsFor).toList()));
+    }
+
+    /** This case where {@code also} holds as well, standing for each of its cases where it does. */
+    DecidingCase meeting(Proposition also) {
+        Proposition met = Proposition.all(List.of(condition, also));
+        return saidAlone() ? alone(met)
+                : new DecidingCase(met, new Cases.Together(List.of(standsFor, new Cases.One(also))));
+    }
+
     /** Whether this is said for no case but its own, so that asking its cases asks it again. */
     public boolean saidAlone() {
         return standsFor instanceof Cases.One(Proposition one) && one.equals(condition);

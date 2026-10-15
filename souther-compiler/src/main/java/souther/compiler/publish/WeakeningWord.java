@@ -211,6 +211,15 @@ public enum WeakeningWord {
      */
     MEETINGS_NOT_WALKED,
 
+    /**
+     * A meeting of the body's decisions whose combinations the classes of the input do not place,
+     * so which of them the rows make was never established.
+     *
+     * <p>Its own word beside the one above, because a consumer acts on them differently: a wider
+     * limit walks a meeting held back by one, and places nothing more of these.
+     */
+    MEETINGS_NOT_PLACED,
+
     /** A row went through an arm this compiler had proven nothing arrives at. */
     PROOF_CONTRADICTED,
 

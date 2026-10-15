@@ -317,13 +317,37 @@ class ABorderDebtIsTheLineTheAuthorWroteTest {
     /**
      * One reading can be evidence for two lines.
      *
-     * <p>{@code fits(p, p, g)} hands {@code p} as both {@code x} and {@code y}, so the one line on
-     * {@code p} this call draws is where each of the author's two lines is read. The debts are the
-     * author's two; the reading is one place of each.
+     * <p>{@code fits(flag, p, p, g)} hands {@code p} as both {@code x} and {@code y}, so the one
+     * line on {@code p} this call draws is where each of the author's two lines is read: the first
+     * where the flag holds, and the second where it does not. The debts are the author's two; the
+     * reading is one place of each.
      */
     @Test
     void oneReadingIsEvidenceForBothLinesWhereACallHandsOneValueTwice() {
         assertEquals(List.of(Set.of("p = g"), Set.of("p = g")),
+                List.copyOf(readingsOfEachDebtInOrder("""
+                        module example.overlap
+
+                        behavior admit : (flag: Bool, p: Int, g: Int) -> Bool
+                        let admit (flag, p, g) = fits(flag, p, p, g)
+
+                        let fits (c: Bool, x: Int, y: Int, g: Int): Bool =
+                            (if c then x else y) <= g
+                        """).values()),
+                "two lines the author wrote, each read at p");
+    }
+
+    /**
+     * A line under an arm the call never takes is read nowhere in it.
+     *
+     * <p>{@code fits(p, p, g)} hands {@code Int.max} one value twice, and an operation choosing the
+     * larger of two equal values takes one of its arms on every row. The line under the other arm
+     * is the author's all the same, and no row of this call is under it, so this call owes it
+     * nothing: a row asked for there is a row no value is.
+     */
+    @Test
+    void aLineUnderAnArmTheCallNeverTakesIsReadNowhere() {
+        assertEquals(List.of(Set.of("p = g")),
                 List.copyOf(readingsOfEachDebtInOrder("""
                         module example.overlap
 
@@ -332,7 +356,7 @@ class ABorderDebtIsTheLineTheAuthorWroteTest {
 
                         let fits (x: Int, y: Int, g: Int): Bool = Int.max(x, y) <= g
                         """).values()),
-                "two lines the author wrote, each read at p");
+                "the line of the arm the call takes, read at p");
     }
 
     /**
@@ -737,7 +761,7 @@ class ABorderDebtIsTheLineTheAuthorWroteTest {
                 .filter(a -> a.path().toString().equals(path)).findFirst().orElseThrow();
         souther.compiler.inputs.Quantities reading = domain.quantities(rules);
         return Partitions.bordersOf(axis, reading,
-                reading.runsBetween(axis.term()), new LinesRead());
+                reading.runsBetween(axis.term()), new LinesRead(), (one, other) -> false);
     }
 
     /** A newtype's own clause, reached through the record that holds it. */

@@ -3,6 +3,7 @@ package souther.compiler.regex;
 import net.unit8.notation199x.pattern.Automaton;
 import net.unit8.notation199x.pattern.CodePoints;
 import net.unit8.notation199x.pattern.Meter;
+import souther.compiler.cst.CstLexer;
 
 /**
  * A set of strings this compiler can answer about exactly.
@@ -284,6 +285,7 @@ public final class Language {
     @Override
     public String toString() {
         String some = some();
-        return "language of " + (some == null ? "nothing" : "\"" + some + "\" and such");
+        return "language of "
+                + (some == null ? "nothing" : CstLexer.literalOf(some) + " and such");
     }
 }

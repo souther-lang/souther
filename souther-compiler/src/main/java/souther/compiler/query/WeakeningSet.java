@@ -194,7 +194,7 @@ public final class WeakeningSet {
                  Weakening.ArmsUnsettled _, Weakening.DecisionOfRowUnreadable _,
                  Weakening.DecisionRunNotWatched _,
                  Weakening.DecisionReadingIncomplete _, Weakening.DecisionRuleReadShort _,
-                 Weakening.KeyedOverwriteCasesUnmeasured _ -> one;
+                 Weakening.KeyedOverwriteCasesUnmeasured _, Weakening.MeetingsNotPlaced _ -> one;
         };
     }
 
@@ -240,7 +240,7 @@ public final class WeakeningSet {
                  Weakening.ArmsUnsettled _, Weakening.DecisionOfRowUnreadable _,
                  Weakening.DecisionRunNotWatched _,
                  Weakening.DecisionReadingIncomplete _, Weakening.DecisionRuleReadShort _,
-                 Weakening.KeyedOverwriteCasesUnmeasured _ -> had;
+                 Weakening.KeyedOverwriteCasesUnmeasured _, Weakening.MeetingsNotPlaced _ -> had;
         };
     }
 

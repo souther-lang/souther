@@ -6,7 +6,9 @@ import souther.compiler.numeric.ClosedStates;
 import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.OrderedIntervals;
 import souther.compiler.numeric.Rel;
+import souther.compiler.values.Allowance;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -121,6 +123,38 @@ record Known(ConstraintState<FactSubject> constraints, List<Quantified> quantifi
     Known taking(LinearForm<FactSubject> f, Rel rel, Held held, Map<FactSubject, Granularity> kinds) {
         return new Known(constraints.taking(f, rel, kinds), quantified, spoken,
                 held == Held.OF_THE_VALUE ? unguarded.taking(f, rel, kinds) : unguarded, cases);
+    }
+
+    /**
+     * This, with the values a declaration leaves the names of one value taken in.
+     *
+     * <p>Of the value and not of the path: what a declaration's rules admit is true wherever a
+     * value of it is named. Taken in as a reading of the values rather than as numbers —
+     * {@code value == 1 || value == 3} leaves a gap between two values that no range holds, and it
+     * is the values beside the ranges a path takes in that show an arm written for the gap is one
+     * nothing enters ({@link ConstraintState#isBottom}).
+     *
+     * <p>Met with what is known rather than read into it. Every value a walk enters says what its
+     * declaration leaves it, so this is a conjunction of many such readings, one per value, and a
+     * conjunction is what {@link ConstraintState#meet} is: readings about different values are held
+     * apart and pay nothing for each other.
+     */
+    Known admitting(Confinement.Worked<FactSubject> read, Allowance<FactSubject> sets) {
+        ConstraintState<FactSubject> values =
+                ConstraintState.top(FactSubject.inOneOrder()).takingRead(read, sets);
+        return new Known(constraints.meet(values, sets), quantified, spoken,
+                new Unguarded(unguarded.constraints().meet(values, sets)), cases);
+    }
+
+    /**
+     * This, with {@code bounded} taken as holding on the path, on the orders {@code on} says the
+     * positions are counted by.
+     *
+     * <p>For a comparison against a place on an order where there is no sum to say it as — two
+     * strings do not add. A condition says it, so it reaches the path and not the value.
+     */
+    Known bounding(OrderedIntervals<FactSubject> bounded, Map<FactSubject, Carrier> on) {
+        return new Known(constraints.taking(bounded, on), quantified, spoken, unguarded, cases);
     }
 
     /** This, with the predicate {@code key} taken as holding — or as failing, where {@code positive}

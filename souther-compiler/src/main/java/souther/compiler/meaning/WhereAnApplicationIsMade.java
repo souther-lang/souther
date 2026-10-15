@@ -143,31 +143,28 @@ public final class WhereAnApplicationIsMade {
      * each case of where it decides on one application, met where that application is made.
      *
      * <p>Each case kept once. A case holding wherever a row is makes every other say nothing more,
-     * and one holding nowhere says nothing. Past {@link WhereEachLineDecides#MOST_CASES}, the cases
-     * are said as one: some one of them holding, said for each of them.
+     * and one holding nowhere says nothing. Cases that differ only in which case one value is are
+     * said as one ({@link WhereEachLineDecides#joinedOverAValue}); past
+     * {@link WhereEachLineDecides#MOST_CASES} after that, the cases are said as one: some one of
+     * them holding, said for each of them.
      */
     public static List<DecidingCase> decidesOn(List<OnOne> readings) {
         Map<String, DecidingCase> kept = new LinkedHashMap<>();
         for (OnOne one : readings) {
             for (DecidingCase each : one.cases()) {
-                Proposition met = Proposition.all(List.of(each.condition(), one.reached()));
-                switch (met) {
+                DecidingCase met = each.meeting(one.reached());
+                switch (met.condition()) {
                     case Proposition.Always(boolean holds) when holds -> {
-                        return List.of(DecidingCase.alone(met));
+                        return List.of(DecidingCase.alone(met.condition()));
                     }
                     case Proposition.Always _ -> { }
-                    default -> kept.putIfAbsent(met.key(), each.saidAlone()
-                            ? DecidingCase.alone(met)
-                            : new DecidingCase(met, new DecidingCase.Cases.Together(List.of(
-                                    each.standsFor(), new DecidingCase.Cases.One(one.reached())))));
+                    default -> kept.putIfAbsent(met.condition().key(), met);
                 }
             }
         }
-        List<DecidingCase> cases = List.copyOf(kept.values());
+        List<DecidingCase> cases = WhereEachLineDecides.joinedOverAValue(
+                List.copyOf(kept.values()));
         return cases.size() <= WhereEachLineDecides.MOST_CASES ? cases
-                : List.of(new DecidingCase(
-                        Proposition.any(cases.stream().map(DecidingCase::condition).toList()),
-                        new DecidingCase.Cases.EachOf(
-                                cases.stream().map(DecidingCase::standsFor).toList())));
+                : List.of(DecidingCase.someOneOf(cases));
     }
 }

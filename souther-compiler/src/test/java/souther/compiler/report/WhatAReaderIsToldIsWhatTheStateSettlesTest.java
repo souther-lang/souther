@@ -13,6 +13,11 @@ import souther.compiler.partition.Reachability;
 import souther.compiler.partition.RepairShortfall;
 import souther.compiler.query.ClaimAnnotations;
 import souther.compiler.query.RuleRequirement;
+import souther.compiler.types.ExpansionLineage;
+import souther.compiler.types.ModelOccurrence;
+import souther.compiler.types.SourceConstruct;
+import souther.compiler.types.SourceConstructOrigin;
+import souther.compiler.types.WrittenOwner;
 
 import java.util.Arrays;
 import java.util.List;
@@ -174,6 +179,9 @@ class WhatAReaderIsToldIsWhatTheStateSettlesTest {
                 case RuleRequirement.Excluded.AnArmNothingReaches _ ->
                         "its way goes through an arm, but no value can reach that arm, so the branch"
                                 + " count is made without it";
+                case RuleRequirement.Excluded.AComparisonOutcomeNothingReaches _ ->
+                        "its way needs a comparison to come out one way, but no value can reach it"
+                                + " coming out so";
                 case RuleRequirement.Excluded.AConditionNeverComesOutThatWay _ ->
                         "its way goes past a condition that comes out the other way for every row,"
                                 + " so no value can go that way";
@@ -190,6 +198,10 @@ class WhatAReaderIsToldIsWhatTheStateSettlesTest {
                         new Reachability.TwoAtOnce.Truths(TermPath.of("x"))),
                 new RuleRequirement.Excluded.AnArmNothingReaches(
                         new CoverageSites.AsWritten(null, 0)),
+                new RuleRequirement.Excluded.AComparisonOutcomeNothingReaches(
+                        new ModelOccurrence(new SourceConstructOrigin(
+                                new WrittenOwner.Body("m", "b"), 0, 0, SourceConstruct.BINARY),
+                                ExpansionLineage.ORIGINAL), true),
                 new RuleRequirement.Excluded.AConditionNeverComesOutThatWay(new OnTheWay.Settled(
                         new ConditionOccurrence("b", ConditionOccurrence.Reading.DIVIDING, 0),
                         null, false)));

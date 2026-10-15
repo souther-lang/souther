@@ -182,12 +182,16 @@ class AMapKeyedByAValueInsideSomeElementIsComposedWithThatElementTest {
                 model));
     }
 
-    /** A list the rules keep empty is answered as the model's: it would have to hold the one. */
+    /**
+     * A list the rules keep empty is answered as the model's: nothing filtered out of it holds one,
+     * so the comparison never comes out true on any way there, and the rule needing it to is out
+     * before anything is composed.
+     */
     @Test
     void aListTheRulesKeepEmptyIsTheModelsAnswer() {
         String report = report(measured(KEPT_EMPTY));
 
-        assertTrue(report.contains("`ks` would have to hold 1 for the value placed in it, and the"
-                + " rules leave room for 0"), report);
+        assertTrue(report.contains("no row is owed at 1 decision rule — its way needs a comparison"
+                + " to come out one way, but no value can reach it coming out so"), report);
     }
 }

@@ -7,7 +7,7 @@ import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 import souther.compiler.proof.ByPlace;
 import souther.compiler.proof.Slot;
-import souther.compiler.partition.FixtureTemplate;
+import souther.compiler.cst.CstLexer;
 import souther.compiler.semantics.AnswerAspect;
 import souther.compiler.semantics.CodePointClass;
 import souther.compiler.semantics.LawNumber;
@@ -673,7 +673,7 @@ public final class WhatTheLibraryComputes {
             String kept = switch (counted) {
                 case CodePointClass.NotWhitespace _ -> notWhitespace;
                 case CodePointClass.NotWhitespaceNorEqualTo apart -> notWhitespace + " && c /= "
-                        + FixtureTemplate.quoted(new String(Character.toChars(apart.separator())));
+                        + CstLexer.literalOf(new String(Character.toChars(apart.separator())));
                 case CodePointClass.OneOf set -> "List.any(p -> " + set.held().ranges().stream()
                         .map(range -> "(p >= " + range.from() + " && p <= " + range.to() + ")")
                         .collect(Collectors.joining(" || ")) + ", String.codePoints(c))";

@@ -454,6 +454,7 @@ public final class PublicationOrders {
                 WeakeningWord.QUESTION_UNANSWERED,
                 WeakeningWord.PAIR_SPACE_TRUNCATED,
                 WeakeningWord.MEETINGS_NOT_WALKED,
+                WeakeningWord.MEETINGS_NOT_PLACED,
                 WeakeningWord.PROOF_CONTRADICTED,
                 WeakeningWord.ARMS_UNSETTLED,
                 WeakeningWord.DECISION_NOT_FULLY_READ,

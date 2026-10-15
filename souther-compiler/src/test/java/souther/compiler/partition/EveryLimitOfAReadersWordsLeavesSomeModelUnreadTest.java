@@ -97,7 +97,7 @@ class EveryLimitOfAReadersWordsLeavesSomeModelUnreadTest {
             let oneValue (o) = if named(o) then (if o.a > 5 then A else B) else C
 
             behavior anOrder : (o: O) -> A | B | C
-            let anOrder (o) = if o.name < "M" then (if o.a > 5 then A else B) else C
+            let anOrder (o) = if o.name /= "M" then (if o.a > 5 then A else B) else C
 
             behavior aCount : (o: O) -> A | B | C
             let aCount (o) =
@@ -163,7 +163,7 @@ class EveryLimitOfAReadersWordsLeavesSomeModelUnreadTest {
         out.put(WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_CASE_A_VALUE_IS_NOT, "aCase");
         // A helper whose answer is two texts being one.
         out.put(WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_SAMENESS_OF_VALUES, "oneValue");
-        // A text against a written place on its order.
+        // A text held apart from a written place on its order, which is a hole and no range.
         out.put(WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_PLACE_ON_AN_ORDER, "anOrder");
         // How many elements meet something, against a number.
         out.put(WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_COUNT_OF_ELEMENTS, "aCount");

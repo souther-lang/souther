@@ -8,11 +8,13 @@ import souther.compiler.core.Core;
 import souther.compiler.flow.Arrival;
 import souther.compiler.flow.Naming;
 import souther.compiler.flow.Truth;
+import souther.compiler.flow.WayWritten;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.WhatAConditionRuns;
 import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.ModelOccurrence;
 
+import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
@@ -210,6 +212,18 @@ final class DecisionNaming implements Naming<DecisionPath> {
     }
 
     /**
+     * Told apart, because every way this writes into an arm among others is one it wrote down whole
+     * where it went ({@link #oneOfTheWaysIn}): two of them part where one condition both ran came
+     * out two ways, and each records that where the condition is stated. A condition this sees at
+     * the arm is seen there short of an operand the other ways ran ({@link ShownBy.AtAnArmShortOf}),
+     * which is not what a run on another way is seen doing.
+     */
+    @Override
+    public boolean toldApart(List<DecisionPath> ways) {
+        return true;
+    }
+
+    /**
      * The way, with each condition settled short of an operand seen at the arm taken without that
      * operand having run — where every run down the arm ran the operator.
      *
@@ -217,21 +231,45 @@ final class DecisionNaming implements Naming<DecisionPath> {
      * Under {@code x > 0 && (flag && n > 0)} the inner {@code &&} runs only where {@code x > 0}
      * held, and a run down the {@code else} arm with {@code n > 0} not run may have stopped at
      * {@code x > 0} and never asked {@code flag}.
+     *
+     * <p>Nothing, for a way this reading could not write down whole or could not value, as for
+     * {@link #seenAtTheArm}: and here the arm is not even the one way's, so it says less still.
      */
     @Override
-    public DecisionPath oneOfTheWaysIn(Core.If fork, int part, DecisionPath way) {
+    public WayWritten<DecisionPath> oneOfTheWaysIn(Core.If fork, int part,
+                                                   Arrival<DecisionPath> taken) {
+        if (taken.value() == Truth.UNREAD || !taken.isComplete()) {
+            return new WayWritten.NoWords<>();
+        }
+        DecisionPath way = taken.path();
         ModelOccurrence stated = forkStated(fork);
         if (stated == null) {
-            return way;
+            return new WayWritten.As<>(way);
         }
-        Set<ModelOccurrence> alwaysRun = new LinkedHashSet<>();
+        // Worked out at the first condition settled short of an operand, which most ways have none
+        // of, and not once for every way into the arm.
+        List<Set<ModelOccurrence>> alwaysRun = new ArrayList<>(1);
+        return new WayWritten.As<>(way.seenAgain(shown -> {
+            if (!(shown instanceof ShownBy.ShortOf(var _, var notReached))) {
+                return shown;
+            }
+            if (alwaysRun.isEmpty()) {
+                alwaysRun.add(alwaysRun(fork, part));
+            }
+            return alwaysRun.getFirst().contains(notReached)
+                    ? new ShownBy.AtAnArmShortOf(stated, part, notReached) : shown;
+        }));
+    }
+
+    /** The operands every run down arm {@code part} of {@code fork} ran, where a run through one
+     *  is recorded at the operand itself. */
+    private Set<ModelOccurrence> alwaysRun(Core.If fork, int part) {
+        Set<ModelOccurrence> out = new LinkedHashSet<>();
         for (Core right : WhatAConditionRuns.whenItCameOut(fork.cond(), part == 0, reads,
                 meanings.states().symbols(), meanings.states().newtypes()).mayNotRun()) {
-            recordedAsItself(right).ifPresent(alwaysRun::add);
+            recordedAsItself(right).ifPresent(out::add);
         }
-        return way.seenAgain(shown -> shown instanceof ShownBy.ShortOf(var _, var notReached)
-                && alwaysRun.contains(notReached)
-                ? new ShownBy.AtAnArmShortOf(stated, part, notReached) : shown);
+        return out;
     }
 
     /**

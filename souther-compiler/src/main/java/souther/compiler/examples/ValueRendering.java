@@ -1,5 +1,6 @@
 package souther.compiler.examples;
 
+import souther.compiler.cst.CstLexer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.observe.Alignment;
 import souther.compiler.observe.Asserted;
@@ -377,10 +378,11 @@ final class ValueRendering {
             case ObservedValue.Bool b -> String.valueOf(b.value());
             case ObservedValue.Integer i -> String.valueOf(i.value());
             case ObservedValue.Decimal d -> ExactRatio.spelledBounded(d.value());
-            case ObservedValue.Text t -> "\"" + t.value() + "\"";
+            case ObservedValue.Text t -> CstLexer.literalOf(t.value());
             // Written as the construction a fixture writes one with, so it is never read as the text
             // that spells it — which is the difference a row writing a date as a string is told about.
-            case ObservedValue.Temporal t -> t.primitive().shown() + "(\"" + t.iso() + "\")";
+            case ObservedValue.Temporal t ->
+                    t.primitive().shown() + "(" + CstLexer.literalOf(t.iso()) + ")";
             case ObservedValue.Unit u -> u.type().name();
             case ObservedValue.Absent _ -> "None";
             case ObservedValue.Constructed c -> constructed(c);

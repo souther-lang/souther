@@ -104,12 +104,18 @@ final class Meetings {
      * combination a row is steered into, and the conditions of such a way do not say what would
      * steer one there — so it is left out, and where that leaves none the value is answered as
      * varying in no way this can compose against rather than as varying in one nobody can reach.
+     *
+     * <p>Each as what a run on it is seen doing ({@link souther.compiler.flow.Provenance#seen}),
+     * which is what a group is met by. A way into an arm a run is not seen taking one of is the arm
+     * here, which is all a run there shows: offered as itself, a run down another way into the arm
+     * would be seen meeting it.
      */
     private static List<Outcome> outcomesOf(Core e, ValueArrivals<Outcome> reading) {
         List<Outcome> out = new ArrayList<>();
         for (Arrival<Outcome> each : reading.waysAt(e).orNone()) {
-            if (each.isComplete() && !out.contains(each.path())) {
-                out.add(each.path());
+            Outcome seen = each.provenance().seen();
+            if (each.isComplete() && !out.contains(seen)) {
+                out.add(seen);
             }
         }
         return out;

@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.cst.CstLexer;
 import souther.compiler.hash.SaysWhatStandsForIt;
 import souther.compiler.types.BinOp;
 import souther.compiler.types.TypeSymbol;
@@ -785,7 +786,7 @@ final class Term {
             case EVALUATION -> sb.append(of);
             case ON -> sb.append(parts.get(0).rendered()).append(path());
             case INT, DECIMAL, BOOL -> sb.append(of);
-            case STRING -> sb.append('"').append(of).append('"');
+            case STRING -> sb.append(CstLexer.literalOf((String) of));
             case UNIT -> sb.append(of);
             case NEG -> sb.append('-').append(parts.get(0).rendered());
             case NOT -> sb.append('!').append(parts.get(0).rendered());
