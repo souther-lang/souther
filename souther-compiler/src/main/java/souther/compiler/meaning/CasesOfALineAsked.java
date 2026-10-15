@@ -7,7 +7,6 @@ import java.util.Collections;
 import java.util.EnumSet;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Objects;
 import java.util.Set;
 import java.util.function.Predicate;
 
@@ -58,9 +57,10 @@ public final class CasesOfALineAsked {
     /**
      * What asking found.
      *
-     * @param decidesIn  the cases shown to hold a row on each side of the line, said as the cases
-     *                   where a line decides are ({@link DecidingCase#saidFor}); the case asked,
-     *                   as it was said, where every case it stands for is one of them
+     * @param decidesIn  the cases shown to hold a row on each side of the line, each by itself; the
+     *                   case asked, as it was said, where every case it stands for is one of them.
+     *                   How many of them a line is read in one by one is the line's to say, over
+     *                   every case it holds ({@link DecidingCase#saidInAsFewAsMay})
      * @param notWorkedOut every figure some case was stopped at, where some was: which way those
      *                   cases go was not worked out, and empty where every case was
      */
@@ -79,20 +79,16 @@ public final class CasesOfALineAsked {
 
     private int left = CompositionBudget.CASES_A_LINE_IS_ASKED_IN.maximum();
 
-    /** Each case shown to divide rows, as what it chose. */
-    private final Set<List<Proposition>> dividing = new LinkedHashSet<>();
+    /** Each case shown to divide rows, as the conjunction of what it chose. */
+    private final Set<Proposition> dividing = new LinkedHashSet<>();
 
     /** Whether some case was shown to divide no rows. */
     private boolean dropped;
 
     private final Set<CompositionBudget> stopped = EnumSet.noneOf(CompositionBudget.class);
 
-    /**
-     * @param crossedIn whether rows that reach the line with a condition taken in beside the way
-     *                  to it stand on each side of it
-     */
-    public CasesOfALineAsked(Predicate<Proposition> crossedIn) {
-        this.crossedIn = Objects.requireNonNull(crossedIn, "a line is asked of some rows");
+    private CasesOfALineAsked(Predicate<Proposition> crossedIn) {
+        this.crossedIn = crossedIn;
     }
 
     /**
@@ -104,9 +100,14 @@ public final class CasesOfALineAsked {
      * says where some one holds only as far as it was said the same way; where they were not, the
      * condition is all that says it.
      *
-     * <p>Asked once: the steps counted are this case's.
+     * @param crossedIn whether rows that reach the line with a condition taken in beside the way
+     *                  to it stand on each side of it
      */
-    public Found casesOf(DecidingCase said) {
+    public static Found casesOf(DecidingCase said, Predicate<Proposition> crossedIn) {
+        return new CasesOfALineAsked(crossedIn).asked(said);
+    }
+
+    private Found asked(DecidingCase said) {
         if (!aStepIsLeft()) {
             pastTheSteps(List.of(said.standsFor()));
             return new Found(List.of(), stopped);
@@ -117,22 +118,25 @@ public final class CasesOfALineAsked {
         if (said.saidAlone()) {
             return new Found(List.of(said), Set.of());
         }
-        chosen(List.of(), List.of(said.standsFor()));
+        chosen(new ArrayList<>(), List.of(said.standsFor()));
         // Every case divides rows and every one was worked out: the case is what it was said as,
         // and saying it again would read the line under another condition for nothing.
         if (!dropped && stopped.isEmpty() && !dividing.isEmpty()) {
             return new Found(List.of(said), Set.of());
         }
-        return new Found(DecidingCase.saidFor(List.copyOf(dividing)), stopped);
+        return new Found(dividing.stream().map(DecidingCase::alone).toList(), stopped);
     }
 
     /**
      * Each case holding all of {@code chosen}, and one case of each of {@code toChoose}, that holds
      * a row on each side of the line — {@code chosen} already shown to.
+     *
+     * <p>{@code chosen} is the one path walked, taken a part further on the way down and given back
+     * on the way up, and written out only for a case kept.
      */
     private void chosen(List<Proposition> chosen, List<DecidingCase.Cases> toChoose) {
         if (toChoose.isEmpty()) {
-            dividing.add(chosen);
+            dividing.add(Proposition.all(chosen));
             return;
         }
         List<DecidingCase.Cases> rest = toChoose.subList(1, toChoose.size());
@@ -142,13 +146,13 @@ public final class CasesOfALineAsked {
                     pastTheSteps(toChoose);
                     return;
                 }
-                List<Proposition> more = new ArrayList<>(chosen);
-                more.add(condition);
-                if (crossedIn.test(Proposition.all(more))) {
-                    chosen(List.copyOf(more), rest);
+                chosen.add(condition);
+                if (crossedIn.test(Proposition.all(chosen))) {
+                    chosen(chosen, rest);
                 } else {
                     dropped = true;
                 }
+                chosen.removeLast();
             }
             // Every alternative: one that divides rows is no answer about another. Each taken is
             // a step, and where the steps run out the ones not taken are not walked.

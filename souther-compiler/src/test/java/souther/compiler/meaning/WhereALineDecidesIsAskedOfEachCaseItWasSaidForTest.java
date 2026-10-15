@@ -68,10 +68,10 @@ class WhereALineDecidesIsAskedOfEachCaseItWasSaidForTest {
         }
 
         CasesOfALineAsked.Found of(DecidingCase.Cases cases) {
-            return new CasesOfALineAsked(condition -> {
+            return CasesOfALineAsked.casesOf(new DecidingCase(SAID, cases), condition -> {
                 asked.add(condition);
                 return crossed.test(condition);
-            }).casesOf(new DecidingCase(SAID, cases));
+            });
         }
     }
 
@@ -134,31 +134,45 @@ class WhereALineDecidesIsAskedOfEachCaseItWasSaidForTest {
     }
 
     /**
-     * Past as many as the cases where a line decides are said in, the ones that divide rows are
-     * said as one again, standing for each of them and for no other.
+     * The cases kept are each a case of their own however many there are: how many a line is read
+     * in one by one is counted over the line, and not over one case it held.
      */
     @Test
-    void pastAsManyAsAreSaidTheCasesKeptAreSaidAsOne() {
+    void theCasesKeptAreEachACaseOfTheirOwn() {
         int count = WhereEachLineDecides.MOST_CASES + 2;
         DecidingCase.Cases many = manyCases(count);
         Proposition dropped = truth("t0");
-        Asking asking = new Asking(each -> !each.equals(dropped));
 
-        CasesOfALineAsked.Found found = asking.of(many);
-        assertEquals(1, found.decidesIn().size(), () -> "one case: " + found);
-        DecidingCase kept = found.decidesIn().getFirst();
-        List<Proposition> standsFor = DecidingCases.eachOf(kept.standsFor());
-        assertEquals(DecidingCases.eachOf(many).subList(1, count), standsFor,
+        assertEquals(DecidingCases.eachOf(many).subList(1, count).stream()
+                        .map(DecidingCase::alone).toList(),
+                new Asking(each -> !each.equals(dropped)).of(many).decidesIn(),
                 "every case but the one that divides no rows");
-        assertEquals(kept.standsFor().holdingInSome().orElseThrow(), kept.condition(),
-                "said as where some one of them holds");
+    }
 
-        int few = WhereEachLineDecides.MOST_CASES + 1;
-        CasesOfALineAsked.Found asFew = new Asking(each -> !each.equals(dropped))
-                .of(manyCases(few));
-        assertEquals(DecidingCases.eachOf(manyCases(few)).subList(1, few).stream()
-                        .map(DecidingCase::alone).toList(), asFew.decidesIn(),
+    /**
+     * Past as many as the cases where a line decides are said in, a line's cases are said as one,
+     * standing for each of them; and what every one of them holds is said once, ahead of some one
+     * of what tells them apart.
+     */
+    @Test
+    void pastAsManyAsAreSaidALinesCasesAreSaidAsOne() {
+        List<DecidingCase> each = new ArrayList<>();
+        for (int i = 0; i <= WhereEachLineDecides.MOST_CASES; i++) {
+            each.add(DecidingCase.alone(Proposition.all(List.of(A, truth("t" + i)))));
+        }
+        List<DecidingCase> asMany = each.subList(0, WhereEachLineDecides.MOST_CASES);
+        assertEquals(asMany, DecidingCase.saidInAsFewAsMay(asMany),
                 "as many as are said one by one are each a case of their own");
+
+        List<DecidingCase> said = DecidingCase.saidInAsFewAsMay(each);
+        assertEquals(1, said.size(), () -> "one case: " + said);
+        assertEquals(each.stream().map(DecidingCase::condition).toList(),
+                DecidingCases.eachOf(said.getFirst().standsFor()), "standing for each of them");
+        assertEquals(Proposition.all(List.of(A, Proposition.any(each.stream()
+                        .map(one -> ((Proposition.All) one.condition()).parts().stream()
+                                .filter(part -> !part.equals(A)).findFirst().orElseThrow())
+                        .toList()))),
+                said.getFirst().condition(), "a once, and some one of the truths beside it");
     }
 
     /**

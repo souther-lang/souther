@@ -374,12 +374,19 @@ public enum CompositionBudget {
      * took apart, or past the last question allowed — would run as far as that product. Counted for
      * each case said as one on its own, so what one of them spent decides nothing about another.
      *
+     * <p><b>Enough to walk what was taken apart.</b> Which of the cases the line decides in is
+     * asked, and not whether some one does, so where every case divides rows every case is chosen
+     * to the end. As many cases as {@link #CASES_A_LINE_IS_TAKEN_APART_INTO} takes apart, chosen
+     * one part of two at a time, are about four steps each: an alternative and a part at each
+     * level, and the levels near the leaves as many as the cases. Sized below that, a line every
+     * case of which divides rows would be not worked out for having been asked to the end.
+     *
      * <p><b>Reaching it gives that case up and says so.</b> Its cases are neither ones the line
      * turns in nor ones it turns nothing in, so they are where the line was not worked out
      * ({@link souther.compiler.inputs.BlockReason.WhereALineDecidesNotWorkedOut}), beside whatever
      * the line's other cases showed.
      */
-    CASES_A_LINE_IS_ASKED_IN(256),
+    CASES_A_LINE_IS_ASKED_IN(1024),
 
     /**
      * How deep a construction plan descends.

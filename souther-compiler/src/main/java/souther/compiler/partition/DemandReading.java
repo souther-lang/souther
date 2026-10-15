@@ -238,10 +238,10 @@ final class DemandReading {
                 return copies;
             }
             if (read instanceof Read.OneOf oneOf) {
-                List<ModelOccurrence> out = new ArrayList<>();
+                Set<ModelOccurrence> out = new LinkedHashSet<>();
                 oneOf.alternatives().forEach(alternative -> alternative.forEach(one ->
-                        of(one).forEach(copy -> once(copy, out))));
-                return out.isEmpty() ? own : out;
+                        out.addAll(of(one))));
+                return out.isEmpty() ? own : List.copyOf(out);
             }
             return own;
         }
@@ -259,7 +259,7 @@ final class DemandReading {
             for (List<Stated> part : parts) {
                 for (Stated one : part) {
                     resolved(one.read(), one.readOff(), each);
-                    one.readOff().own.forEach(copy -> once(copy, own));
+                    SaidOnTheWay.eachOnce(one.readOff().own, own);
                 }
             }
             if (made instanceof Read.OneOf oneOf) {
@@ -275,10 +275,9 @@ final class DemandReading {
                     }
                 }
             } else {
-                List<ModelOccurrence> settledBy = new ArrayList<>();
-                parts.forEach(part -> part.forEach(one ->
-                        each.get(one.read()).forEach(copy -> once(copy, settledBy))));
-                each.put(made, settledBy);
+                Set<ModelOccurrence> settledBy = new LinkedHashSet<>();
+                parts.forEach(part -> part.forEach(one -> settledBy.addAll(each.get(one.read()))));
+                each.put(made, new ArrayList<>(settledBy));
             }
             return new ReadOff(each, own);
         }
@@ -297,7 +296,7 @@ final class DemandReading {
         private static void joinedInto(Read kept, ReadOff mine, Read dropped, ReadOff theirs,
                                        Map<Read, List<ModelOccurrence>> into) {
             List<ModelOccurrence> copies = new ArrayList<>(mine.of(kept));
-            theirs.of(dropped).forEach(copy -> once(copy, copies));
+            SaidOnTheWay.eachOnce(theirs.of(dropped), copies);
             into.put(kept, copies);
             if (kept instanceof Read.OneOf one && dropped instanceof Read.OneOf other) {
                 for (int alternative = 0; alternative < one.alternatives().size(); alternative++) {
@@ -314,8 +313,7 @@ final class DemandReading {
          *  read off, into {@code into}: told by the half that read them. */
         private static void resolved(Read read, ReadOff off,
                                      Map<Read, List<ModelOccurrence>> into) {
-            List<ModelOccurrence> copies = into.computeIfAbsent(read, _ -> new ArrayList<>());
-            off.of(read).forEach(copy -> once(copy, copies));
+            SaidOnTheWay.eachOnce(off.of(read), into.computeIfAbsent(read, _ -> new ArrayList<>()));
             if (read instanceof Read.OneOf oneOf) {
                 oneOf.alternatives().forEach(alternative ->
                         alternative.forEach(one -> resolved(one, off, into)));
@@ -354,19 +352,20 @@ final class DemandReading {
         /** A projection of what {@code pulled} states, each part read off where it was, and what
          *  nothing else was read off read off {@code own}. */
         static Projection over(Pullback.Pulled pulled, List<ModelOccurrence> own) {
-            Map<String, List<ModelOccurrence>> byPart = new LinkedHashMap<>();
+            Map<String, Set<ModelOccurrence>> found = new LinkedHashMap<>();
             if (pulled != null) {
                 for (Pullback.Leaf leaf : pulled.turnsOn()) {
                     Optional<ModelOccurrence> copy = copyOf(leaf);
                     if (copy.isPresent()) {
                         for (String key : List.of(leaf.part().key(),
                                 leaf.part().denied().key())) {
-                            once(copy.get(),
-                                    byPart.computeIfAbsent(key, _ -> new ArrayList<>()));
+                            found.computeIfAbsent(key, _ -> new LinkedHashSet<>()).add(copy.get());
                         }
                     }
                 }
             }
+            Map<String, List<ModelOccurrence>> byPart = new LinkedHashMap<>();
+            found.forEach((key, copies) -> byPart.put(key, List.copyOf(copies)));
             return new Projection(byPart, own);
         }
 
@@ -421,14 +420,15 @@ final class DemandReading {
             }
             Set<String> keys = new HashSet<>();
             Pullback.Pulled.partsOf(from, keys);
-            List<ModelOccurrence> copies = new ArrayList<>();
+            Set<ModelOccurrence> copies = new LinkedHashSet<>();
             byPart.forEach((key, those) -> {
                 if (keys.contains(key)) {
-                    those.forEach(copy -> once(copy, copies));
+                    copies.addAll(those);
                 }
             });
             if (!copies.isEmpty()) {
-                reads.forEach(each -> readIn.putIfAbsent(each, copies));
+                List<ModelOccurrence> readOff = List.copyOf(copies);
+                reads.forEach(each -> readIn.putIfAbsent(each, readOff));
             }
             return reads;
         }
@@ -455,7 +455,7 @@ final class DemandReading {
         return switch (condition) {
             case Condition.Joined joined -> {
                 List<ModelOccurrence> out = new ArrayList<>(own(joined.left()));
-                own(joined.right()).forEach(copy -> once(copy, out));
+                SaidOnTheWay.eachOnce(own(joined.right()), out);
                 yield List.copyOf(out);
             }
             case Condition.Compares one ->
@@ -490,12 +490,6 @@ final class DemandReading {
                                 WhatConditionsState conditions) {
         Projected made = projectedOff(pulledOf(at, read, conditions), stated, read, own(at));
         return made.reads().stream().map(each -> new Stated(at, each, made.readOff())).toList();
-    }
-
-    private static void once(ModelOccurrence copy, List<ModelOccurrence> out) {
-        if (!out.contains(copy)) {
-            out.add(copy);
-        }
     }
 
     /**

@@ -166,9 +166,7 @@ public final class WhereAnApplicationIsMade {
                 }
             }
         }
-        List<DecidingCase> cases = WhereEachLineDecides.joinedOverAValue(
-                DecidingCase.oneForEachCondition(kept));
-        return cases.size() <= WhereEachLineDecides.MOST_CASES ? cases
-                : List.of(DecidingCase.someOneOf(cases));
+        return DecidingCase.saidInAsFewAsMay(WhereEachLineDecides.joinedOverAValue(
+                DecidingCase.oneForEachCondition(kept)));
     }
 }

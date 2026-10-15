@@ -37,9 +37,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * turns there as anywhere. Nought is still a point of the line there, and a row in such a case at
  * nought tells nothing about the line.
  *
- * <p>Past a figure the cases are said as one condition. Kept whole wherever some case of it divides
- * rows, that condition held the cases the line turns nothing in too, and the row at nought was
- * counted for the point. The line is read in the cases that divide rows and no other.
+ * <p>Past a figure the cases are said as one condition, and that condition holds the cases the line
+ * turns nothing in as well as the ones it turns in. The line is read in the cases that divide rows
+ * and no other, so a row in the condition is not by that alone a row at the line.
  */
 class ARowInACaseTheLineTurnsNothingInMeetsNoPointOfItTest {
 
@@ -49,7 +49,7 @@ class ARowInACaseTheLineTurnsNothingInMeetsNoPointOfItTest {
      * A row where {@code x + y > 0} fails, at nought on {@code x}, meets no point of the line on
      * {@code x}: with the cases said one by one (four truths beside the part), said as one past the
      * figure with as few dividing rows as are said one by one (five), and said as one with more than
-     * that dividing rows, which are said as one again (six).
+     * that dividing rows, which the line is read in as one again (six).
      */
     @Test
     void aRowInACaseTheLineTurnsNothingInIsNotAtItsPoint() {
@@ -77,8 +77,8 @@ class ARowInACaseTheLineTurnsNothingInMeetsNoPointOfItTest {
     /**
      * The way to each case a line is drawn in is filed under that case, with the case put on it:
      * the cases are known once the line is narrowed by what arrives, and a border asks for its way
-     * by the case it was drawn in ({@link ReachingCuts#wayTo}). Filed under the cases the line was
-     * read in before that, a case said again would be asked for and found nothing on the way.
+     * by the case it was drawn in ({@link ReachingCuts#wayTo}), and finds the way to the comparison
+     * with that case after it.
      */
     @Test
     void theWayToEachCaseALineIsDrawnInIsFiledUnderThatCase() {
@@ -103,6 +103,56 @@ class ARowInACaseTheLineTurnsNothingInMeetsNoPointOfItTest {
                                 + ": " + toTheCase);
             }
         }
+    }
+
+    /**
+     * A line every case of which divides rows is asked to the end and read in all of them, and
+     * nothing of it is left not worked out: {@code x} compared with nought where an even number of
+     * seven truths hold, which is more cases than are said one by one and each a case the line
+     * turns in.
+     */
+    @Test
+    void aLineEveryCaseOfWhichDividesRowsIsWorkedOutInAll() {
+        List<String> ways = new ArrayList<>();
+        int truths = 7;
+        for (int each = 0; each < 1 << truths; each++) {
+            if (Integer.bitCount(each) % 2 != 0) {
+                continue;
+            }
+            List<String> parts = new ArrayList<>();
+            for (int i = 0; i < truths; i++) {
+                parts.add((each >> i & 1) == 1 ? "t" + i : "Bool.not(t" + i + ")");
+            }
+            ways.add("(" + String.join(" && ", parts) + ")");
+        }
+        List<String> names = new ArrayList<>();
+        List<String> typed = new ArrayList<>();
+        for (int i = 0; i < truths; i++) {
+            names.add("t" + i);
+            typed.add("t" + i + ": Bool");
+        }
+        JsonNode report = JSON.readTree(measured("""
+                module probe
+                behavior e : (x: Int, TYPED) -> Int
+                let e (x, NAMES) = if (if EVEN then x else 0) > 0 then 1 else 0
+                """.replace("TYPED", String.join(", ", typed))
+                .replace("NAMES", String.join(", ", names))
+                .replace("EVEN", anyOf(ways)))
+                .json(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
+        List<JsonNode> onX = new ArrayList<>();
+        borders(report, "e/x", onX);
+        assertEquals(1, onX.size(), () -> "the line on x is a border: " + report);
+        List<String> left = new ArrayList<>();
+        reasons(report, "x", left);
+        assertEquals(List.of(), left, "and nothing is left at x");
+    }
+
+    private static void reasons(JsonNode node, String position, List<String> out) {
+        if (node.isObject() && node.has("ruleId") && node.has("reason")
+                && position.equals(node.path("position").asString())) {
+            out.add(node.path("reason").asString());
+        }
+        node.forEach(child -> reasons(child, position, out));
     }
 
     /** What the guards of {@code e} come to in {@code source}. */

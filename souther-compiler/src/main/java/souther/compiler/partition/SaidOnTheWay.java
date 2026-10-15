@@ -3,10 +3,14 @@ package souther.compiler.partition;
 import souther.compiler.types.ModelOccurrence;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Which copies of the model's code put each thing on one way to a line or a rule.
@@ -57,12 +61,11 @@ public record SaidOnTheWay(Map<OnTheWay, List<ModelOccurrence>> entries,
 
     /** Every copy anything on the way was read off, each once, in the order met. */
     public List<ModelOccurrence> copies() {
-        List<ModelOccurrence> out = new ArrayList<>();
+        Set<ModelOccurrence> out = new LinkedHashSet<>();
         for (Map<?, List<ModelOccurrence>> each : List.of(entries, stated, unstated)) {
-            each.values().forEach(copies -> copies.stream().filter(copy -> !out.contains(copy))
-                    .forEach(out::add));
+            each.values().forEach(out::addAll);
         }
-        return out;
+        return List.copyOf(out);
     }
 
     /**
@@ -176,17 +179,30 @@ public record SaidOnTheWay(Map<OnTheWay, List<ModelOccurrence>> entries,
         if (by.isEmpty()) {
             return;
         }
-        List<ModelOccurrence> copies = into.computeIfAbsent(entry, _ -> new ArrayList<>());
-        by.stream().filter(copy -> !copies.contains(copy)).forEach(copies::add);
+        eachOnce(by, into.computeIfAbsent(entry, _ -> new ArrayList<>()));
+    }
+
+    /**
+     * {@code copies} added to {@code held}, each where it was first met and once.
+     *
+     * <p>Through a set of what is held and not by asking the list: one condition may be written
+     * over many constructs, each a copy of its own, and one list asked of each of them in turn is
+     * their number squared.
+     */
+    static void eachOnce(Collection<ModelOccurrence> copies, List<ModelOccurrence> held) {
+        Set<ModelOccurrence> there = new HashSet<>(held);
+        for (ModelOccurrence copy : copies) {
+            if (there.add(copy)) {
+                held.add(copy);
+            }
+        }
     }
 
     /** {@code from} taken into {@code out}: each key where it was first met, and each copy once. */
     private static <K> void into(Map<K, List<ModelOccurrence>> out,
                                  Map<K, List<ModelOccurrence>> from) {
-        from.forEach((key, copies) -> {
-            List<ModelOccurrence> held = out.computeIfAbsent(key, _ -> new ArrayList<>());
-            copies.stream().filter(copy -> !held.contains(copy)).forEach(held::add);
-        });
+        from.forEach((key, copies) ->
+                eachOnce(copies, out.computeIfAbsent(key, _ -> new ArrayList<>())));
     }
 
     /** In the order the copies were met, which is the order a reader is told them in. */

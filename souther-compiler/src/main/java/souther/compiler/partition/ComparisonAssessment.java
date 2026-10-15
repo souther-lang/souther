@@ -803,12 +803,15 @@ sealed interface ComparisonAssessment {
                 }
                 continue;
             }
-            CasesOfALineAsked.Found found = new CasesOfALineAsked(condition ->
+            CasesOfALineAsked.Found found = CasesOfALineAsked.casesOf(each, condition ->
                     arrivesAtSomePlace(cutting, wayToACase.apply(condition), arrivals,
-                            cutting::crossedIn)).casesOf(each);
+                            cutting::crossedIn));
             for (DecidingCase one : found.decidesIn()) {
                 reached.add(one);
-                deciding.addAll(waysArrivedBy(wayToACase.apply(one.condition()), arrivals));
+                // The case as it was read is the reading's own, whose way it holds already.
+                deciding.addAll(waysArrivedBy(one.equals(each)
+                        ? wayToAPart.apply(new WhereAPartDecides(part.id(), each.condition()))
+                        : wayToACase.apply(one.condition()), arrivals));
             }
             if (!found.notWorkedOut().isEmpty()) {
                 stoppedAt.addAll(found.notWorkedOut());
@@ -823,7 +826,7 @@ sealed interface ComparisonAssessment {
         if (!reached.isEmpty()) {
             out.add(new Several.Part(part.id(), arrived instanceof AcrossPositions across
                     && !deciding.isEmpty() ? across.whereRowsArrive(reading, deciding) : arrived,
-                    DecidingCase.oneForEachCondition(reached)));
+                    DecidingCase.saidInAsFewAsMay(reached)));
         }
         if (!stoppedAt.isEmpty()) {
             out.add(new Several.Part(part.id(), new Unread(atEachOf(cutting.over(),
