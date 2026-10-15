@@ -50,6 +50,7 @@ import souther.compiler.types.Type;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -247,49 +248,45 @@ public final class GuardThresholds {
                 // is a row.
                 case EmittedComparisonState.NotInstrumented _ -> { }
                 case EmittedComparisonState.Instrumented at -> {
-                    // What a row had to satisfy to get here, filed under the construct of the model
-                    // it is about. What stood on the way is read off this tree once, and what the
-                    // emitted tree made of that construct has nothing to say about it — so a copy
-                    // per materialisation would be one account under several names, and whoever
-                    // asked would have to pick one of them with nothing to pick by.
-                    cuts.reached(stated, each.assumed(), each.whereEachDecides(),
-                            each.saidOnTheWay());
+                    // What each case puts on the way, once however many ask it: the lines of one
+                    // statement are asked over the same parts, a case said again is one that was
+                    // asked while it was chosen, and its way is filed under it after that.
+                    Map<Proposition, ReachingCuts.Stating> putOnTheWay = new HashMap<>();
+                    Function<Proposition, ReachingCuts.Stating> aCase = decides -> putOnTheWay
+                            .computeIfAbsent(decides, _ -> each.aCasePutOnTheWay(decides, read));
                     Map<Proposition, Reachability> waysToACase = new HashMap<>();
                     switch (each.standing()) {
-                        case BoundaryPolicy.Standing.Admitted admitted ->
-                                // The same reading on the narrower region a row at the line is in:
-                                // what the way states, and what arrives at every place it is
-                                // watched. The line goes only where all of them prove nothing
-                                // reaches it, since a run through any one of them is a run through
-                                // the rule. A line of a statement of several is asked again with
-                                // where it decides taken in.
-                                lineAt(behavior, stated, at, each.occurrence().origin(), each.at(),
-                                        whereMet(each, helper ->
-                                                runsOnce.computeIfAbsent(helper,
-                                                        called -> plan.runsOnce(called, emitted))),
-                                        reaches,
-                                        ComparisonAssessment.narrowedByWhatArrives(admitted.read(),
-                                                Reachability.of(
-                                                        new WayToTheBorder(each.assumed()),
-                                                        read.quantities().region()),
-                                                part -> Reachability.of(
-                                                        new WayToTheBorder(each.wayTo(part)),
-                                                        read.quantities().region()),
-                                                // Once for each case however many lines ask it:
-                                                // the lines of one statement are asked over the
-                                                // same parts.
-                                                decides -> waysToACase.computeIfAbsent(decides,
-                                                        _ -> Reachability.of(new WayToTheBorder(
-                                                                each.wayToACase(decides, read)),
-                                                                read.quantities().region())),
-                                                at.observations().stream()
-                                                        .map(one -> one.arrival()).toList(), false,
-                                                read),
-                                        found, between, withoutALine);
+                        case BoundaryPolicy.Standing.Admitted admitted -> {
+                            // The same reading on the narrower region a row at the line is in:
+                            // what the way states, and what arrives at every place it is watched.
+                            // The line goes only where all of them prove nothing reaches it, since
+                            // a run through any one of them is a run through the rule. A line of a
+                            // statement of several is asked again with where it decides taken in.
+                            ComparisonAssessment arrived =
+                                    ComparisonAssessment.narrowedByWhatArrives(admitted.read(),
+                                            Reachability.of(new WayToTheBorder(each.assumed()),
+                                                    read.quantities().region()),
+                                            part -> Reachability.of(
+                                                    new WayToTheBorder(each.wayTo(part)),
+                                                    read.quantities().region()),
+                                            decides -> waysToACase.computeIfAbsent(decides,
+                                                    _ -> Reachability.of(new WayToTheBorder(
+                                                            each.wayToACase(aCase.apply(decides))),
+                                                            read.quantities().region())),
+                                            at.observations().stream()
+                                                    .map(one -> one.arrival()).toList(), false,
+                                            read);
+                            reached(cuts, stated, each, readingsOf(arrived), aCase);
+                            lineAt(behavior, stated, at, each.occurrence().origin(), each.at(),
+                                    whereMet(each, helper -> runsOnce.computeIfAbsent(helper,
+                                            called -> plan.runsOnce(called, emitted))),
+                                    reaches, arrived, found, between, withoutALine);
+                        }
                         // Not a rule with no line here: its outcome is about no row, whichever of
                         // the reasons refused it ({@link NotABoundary}), so there is nothing for a
                         // report to say of it.
-                        case BoundaryPolicy.Standing.Refused _ -> { }
+                        case BoundaryPolicy.Standing.Refused _ ->
+                                reached(cuts, stated, each, List.of(), aCase);
                     }
                 }
             }
@@ -337,6 +334,44 @@ public final class GuardThresholds {
         return new Guards(found, withoutALine.found(), between, cuts.made(),
                 comparisons.forks(), comparisons.conditionsMet(),
                 comparisons.operationsStanding());
+    }
+
+    /**
+     * What a row had to satisfy to get to {@code each}, filed under the construct of the model it
+     * is about: the way, and each of {@code readings} after it.
+     *
+     * <p>Once per comparison read. What stood on the way is read off this tree once, and what the
+     * emitted tree made of that construct has nothing to say about it — so a copy per
+     * materialisation would be one account under several names, and whoever asked would have to
+     * pick one of them with nothing to pick by.
+     *
+     * <p>The readings the line holds once the way to it is taken in, and not the ones it was read
+     * in. A case said for several is read again in those of its cases rows divide, and a border is
+     * filed under the reading it was drawn in; the way to it is looked up by that reading
+     * ({@link ReachingCuts#wayTo}), so the two are filed from the one answer.
+     *
+     * @param aCase what a case puts on the way at {@code each}, as the line was asked it
+     */
+    private static void reached(ReachingCuts.Collected cuts, ModelOccurrence stated,
+                                ComparisonReadings.Reading each,
+                                List<WhereAPartDecides> readings,
+                                Function<Proposition, ReachingCuts.Stating> aCase) {
+        Map<WhereAPartDecides, List<OnTheWay>> decides = new LinkedHashMap<>();
+        List<SaidOnTheWay> said = new ArrayList<>();
+        said.add(each.saidOnTheWay());
+        for (WhereAPartDecides reading : readings) {
+            ReachingCuts.Stating stating = each.whereItDecides(reading, aCase);
+            decides.put(reading, stating.entries());
+            said.add(stating.by());
+        }
+        cuts.reached(stated, each.assumed(), decides, SaidOnTheWay.allOf(said));
+    }
+
+    /** Each reading of each line of {@code assessed}, where it is a statement of several. */
+    private static List<WhereAPartDecides> readingsOf(ComparisonAssessment assessed) {
+        return assessed instanceof ComparisonAssessment.Several several
+                ? several.parts().stream().flatMap(part -> part.readings().stream()).toList()
+                : List.of();
     }
 
     /**

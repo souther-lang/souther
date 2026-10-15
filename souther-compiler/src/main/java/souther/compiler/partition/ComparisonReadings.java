@@ -41,6 +41,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 /**
@@ -268,23 +269,49 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         }
 
         /**
-         * What a row in {@code decides} has met by the time it is at the comparison: the way, and
-         * then {@code decides} put on the way where a case of where a line decides is.
+         * What a row in a case has met by the time it is at the comparison: the way, and then
+         * {@code put}, what the case puts on the way ({@link #aCasePutOnTheWay}).
          *
          * <p>Any condition over the statement's parts and not only a case one of its readings was
          * read in: a case said for several is asked of each of them, and of what choosing one has
          * chosen so far. The same reading of it as {@link #wayTo} has of a case it holds, read
          * off the same condition, so the two cannot come to say two things of one case.
+         */
+        List<OnTheWay> wayToACase(ReachingCuts.Stating put) {
+            List<OnTheWay> out = new ArrayList<>(assumed);
+            out.addAll(put.entries());
+            return List.copyOf(out);
+        }
+
+        /**
+         * What the reading {@code part} of a line puts on the way at this comparison, and which
+         * copies of the model's code put each entry there.
+         *
+         * <p>A reading this comparison was read in is the one it holds, whose copies are told in
+         * {@link #saidOnTheWay} already. Any other is a case the line was read in once the way to
+         * it was taken in — some of the cases a case said for several stands for — and is what
+         * {@code aCase} puts on the way for it, which is what {@link #wayToACase} was asked with.
+         *
+         * @param aCase what a case puts on the way at this comparison ({@link #aCasePutOnTheWay})
+         */
+        ReachingCuts.Stating whereItDecides(WhereAPartDecides part,
+                                            Function<Proposition, ReachingCuts.Stating> aCase) {
+            List<OnTheWay> held = whereEachDecides.get(part);
+            return held != null ? new ReachingCuts.Stating(held, SaidOnTheWay.NONE)
+                    : aCase.apply(part.decides());
+        }
+
+        /**
+         * What {@code decides} puts on the way at this comparison, where it is a case of where a
+         * line of it decides, and which copies of the model's code put each entry there.
          *
          * @param read the reading of the input this comparison was read against
          */
-        List<OnTheWay> wayToACase(Proposition decides, InputReading read) {
+        ReachingCuts.Stating aCasePutOnTheWay(Proposition decides, InputReading read) {
             Condition statedAt = severalStated.orElseThrow(() -> new IllegalArgumentException(
                     "this comparison is one line, and no case of where one decides is put on the"
                             + " way at it: " + decides));
-            List<OnTheWay> out = new ArrayList<>(assumed);
-            out.addAll(ReachingCuts.whereItDecides(statedAt, decides, read).entries());
-            return List.copyOf(out);
+            return ReachingCuts.whereItDecides(statedAt, decides, read);
         }
 
         /** What a row at the reading {@code part} of a line has met by the time it is there: the

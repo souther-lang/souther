@@ -5,6 +5,7 @@ import souther.compiler.partition.CompositionBudget;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -69,7 +70,7 @@ public record DecidingCase(Proposition condition, Cases standsFor) {
      * {@code cases}, one for each condition they are said by, in the order the conditions first
      * come: those said by one condition taken as one ({@link #and}).
      */
-    static List<DecidingCase> oneForEachCondition(List<DecidingCase> cases) {
+    public static List<DecidingCase> oneForEachCondition(List<DecidingCase> cases) {
         Map<Proposition, DecidingCase> out = new LinkedHashMap<>();
         cases.forEach(each -> out.merge(each.condition, each, DecidingCase::and));
         return List.copyOf(out.values());
@@ -92,6 +93,37 @@ public record DecidingCase(Proposition condition, Cases standsFor) {
             }
         }
         return List.copyOf(cases);
+    }
+
+    /**
+     * The cases {@code chosen} writes out, each the conjunction of what it chose, said as the cases
+     * where a line decides are: each by itself up to {@link WhereEachLineDecides#MOST_CASES}, and
+     * past that as one, standing for each of them.
+     *
+     * <p>Said the same way whichever way the cases came to be these: a line read with few cases
+     * where it decides and the same line left with as few once the others are dropped are read in
+     * the same cases, each under its own condition.
+     *
+     * <p>Said as one, what every case holds is said once, ahead of what tells them apart. The cases
+     * share what they begin with and nothing else ({@link Cases#ofConjunctions}), and what every
+     * case of a line holds is often most of each — the rest of the statement holding, which may be
+     * as long as the statement — so written beside each it would be the condition many times over.
+     */
+    static List<DecidingCase> saidFor(List<List<Proposition>> chosen) {
+        if (chosen.size() <= WhereEachLineDecides.MOST_CASES) {
+            return oneForEachCondition(chosen.stream()
+                    .map(each -> alone(Proposition.all(each))).toList());
+        }
+        Set<Proposition> everyOne = new LinkedHashSet<>(chosen.getFirst());
+        chosen.forEach(everyOne::retainAll);
+        List<List<Proposition>> sharedFirst = new ArrayList<>();
+        for (List<Proposition> each : chosen) {
+            List<Proposition> one = new ArrayList<>(everyOne);
+            each.stream().filter(part -> !everyOne.contains(part)).forEach(one::add);
+            sharedFirst.add(one);
+        }
+        Cases each = Cases.ofConjunctions(sharedFirst);
+        return List.of(new DecidingCase(each.holdingInSome().orElseThrow(), each));
     }
 
     /** {@code cases} said as one: some one of them holding, standing for each of them. */

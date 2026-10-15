@@ -728,6 +728,9 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
          * The comparison stated at {@code states}, reached under {@code assumed} — and each reading
          * of each of its lines, where it states several, reached under that and then the case of
          * where the line decides it is read in.
+         *
+         * <p>The readings a border is drawn in, which are known once the line is narrowed by what
+         * arrives at it, and are what {@link #wayTo} is asked by.
          */
         void reached(ModelOccurrence states, List<OnTheWay> assumed,
                      Map<WhereAPartDecides, List<OnTheWay>> whereEachDecides,

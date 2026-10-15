@@ -633,7 +633,8 @@ sealed interface ComparisonAssessment {
      *
      * <p><b>A line of several is asked on the way and then in each case where it decides.</b> On
      * the way alone, a line nothing arrives at is that, as a line of one is. Then each case: the
-     * ones no arriving row can be in are dropped, and a line rows arrive at where no case leaves
+     * ones no arriving row can be in are dropped, a case said for several is read in those of its
+     * cases arriving rows divide and in no other, and a line rows arrive at where no case leaves
      * one is a line the statement never turns on, which is a fact about the statement and not
      * about the way ({@link TurnsNothing}).
      *
@@ -786,29 +787,32 @@ sealed interface ComparisonAssessment {
         List<Reachability.Reaching> deciding = new ArrayList<>();
         // A case said for several is asked of the cases it stands for, one at a time: rows on the
         // two sides of its condition may be in two of them, and the line turns nothing between
-        // those ({@link CasesOfALineAsked}). Counted for each such case on its own, so that what
-        // one case spent decides nothing about another.
+        // those ({@link CasesOfALineAsked}). The line is then read in the ones that divide rows
+        // and in no other, so that a row in one it turns nothing in is not counted at its points.
+        // Counted for each such case on its own, so that what one case spent decides nothing about
+        // another.
         List<DecidingCase> notWorkedOut = new ArrayList<>();
         Set<CompositionBudget> stoppedAt = EnumSet.noneOf(CompositionBudget.class);
         for (DecidingCase each : part.cases()) {
-            Reachability toIt = wayToAPart.apply(new WhereAPartDecides(part.id(),
-                    each.condition()));
-            boolean decides = each.saidAlone()
-                    ? arrivesAtSomePlace(cutting, toIt, arrivals, cutting::crossedIn)
-                    : switch (new CasesOfALineAsked(condition -> arrivesAtSomePlace(cutting,
-                            wayToACase.apply(condition), arrivals, cutting::crossedIn))
-                            .inSomeOf(each)) {
-                        case CasesOfALineAsked.Found.InSome _ -> true;
-                        case CasesOfALineAsked.Found.InNone _ -> false;
-                        case CasesOfALineAsked.Found.NotWorkedOut(var figures) -> {
-                            stoppedAt.addAll(figures);
-                            notWorkedOut.add(each);
-                            yield false;
-                        }
-                    };
-            if (decides) {
-                reached.add(each);
-                deciding.addAll(waysArrivedBy(toIt, arrivals));
+            if (each.saidAlone()) {
+                Reachability toIt = wayToAPart.apply(new WhereAPartDecides(part.id(),
+                        each.condition()));
+                if (arrivesAtSomePlace(cutting, toIt, arrivals, cutting::crossedIn)) {
+                    reached.add(each);
+                    deciding.addAll(waysArrivedBy(toIt, arrivals));
+                }
+                continue;
+            }
+            CasesOfALineAsked.Found found = new CasesOfALineAsked(condition ->
+                    arrivesAtSomePlace(cutting, wayToACase.apply(condition), arrivals,
+                            cutting::crossedIn)).casesOf(each);
+            for (DecidingCase one : found.decidesIn()) {
+                reached.add(one);
+                deciding.addAll(waysArrivedBy(wayToACase.apply(one.condition()), arrivals));
+            }
+            if (!found.notWorkedOut().isEmpty()) {
+                stoppedAt.addAll(found.notWorkedOut());
+                notWorkedOut.add(each);
             }
         }
         // The cases nobody worked out are neither ones the line turns in, owed rows where it may
@@ -819,7 +823,7 @@ sealed interface ComparisonAssessment {
         if (!reached.isEmpty()) {
             out.add(new Several.Part(part.id(), arrived instanceof AcrossPositions across
                     && !deciding.isEmpty() ? across.whereRowsArrive(reading, deciding) : arrived,
-                    reached));
+                    DecidingCase.oneForEachCondition(reached)));
         }
         if (!stoppedAt.isEmpty()) {
             out.add(new Several.Part(part.id(), new Unread(atEachOf(cutting.over(),
