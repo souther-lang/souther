@@ -506,16 +506,18 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Ljava/util/function/Predicate;)V",
                     "how many times the cases one case was said for are asked, which every"
                             + " question spends"),
-            Map.entry("souther.compiler.meaning.CasesOfALineAsked#<clinit>()V",
-                    "what the asking comes to past either figure: not worked out, naming it"),
+            Map.entry("souther.compiler.meaning.CasesOfALineAsked#asked("
+                            + "Lsouther/compiler/meaning/DecidingCase;)"
+                            + "Lsouther/compiler/meaning/CasesOfALineAsked$Found;",
+                    "how many ways of choosing a case are asked, counted before any is: past the"
+                            + " figure, more cases than are taken apart, and none is asked"),
             Map.entry("souther.compiler.meaning.CasesOfALineAsked#pastTheSteps("
-                            + "Ljava/util/List;)"
-                            + "Lsouther/compiler/meaning/CasesOfALineAsked$Found$NotWorkedOut;",
+                            + "Ljava/util/List;)V",
                     "out of steps, naming them and the cases left nobody took apart"),
             Map.entry("souther.compiler.partition.ComparisonAssessment#aPartNarrowed("
                             + "Lsouther/compiler/partition/ComparisonAssessment$Several$Part;"
                             + "Lsouther/compiler/partition/Reachability;"
-                            + "Ljava/util/function/Function;Ljava/util/function/Function;"
+                            + "Ljava/util/function/Function;"
                             + "Ljava/util/List;ZLsouther/compiler/inputs/InputReading;)"
                             + "Ljava/util/List;",
                     "hands the figure the asking stopped at to the line, as one where it decides"

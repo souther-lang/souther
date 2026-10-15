@@ -12,6 +12,7 @@ import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.FilingCoordinate;
 import souther.compiler.inputs.RulesWithNoLine;
 import souther.compiler.types.BindingId;
+import souther.compiler.types.ModelOccurrences;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -277,7 +278,7 @@ public final class EnsuresThresholds {
         // nothing that was determined.
         left.forEach(each -> {
             if (each.why() instanceof BlockReason.RuleReadingStopped stopped) {
-                withoutALine.unclassified(cited, List.of(), each.at(), stopped);
+                withoutALine.unclassified(cited, ModelOccurrences.NONE, each.at(), stopped);
             } else {
                 withoutALine.add(cited, each.at(), each.why());
             }

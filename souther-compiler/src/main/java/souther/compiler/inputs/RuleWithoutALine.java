@@ -3,9 +3,8 @@ package souther.compiler.inputs;
 import souther.compiler.check.RuleCitation;
 import souther.compiler.check.RuleRef;
 import souther.compiler.check.RuleReportAnchor;
-import souther.compiler.types.ModelOccurrence;
+import souther.compiler.types.ModelOccurrences;
 
-import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -56,27 +55,26 @@ import java.util.Set;
  *                  apart for a reader. No part of the fact, which is one however many calls found it
  */
 public record RuleWithoutALine(Fact fact, Set<RuleReportAnchor> reachedBy,
-                               List<ModelOccurrence> readAt) {
+                               ModelOccurrences readAt) {
 
     public RuleWithoutALine {
-        if (fact == null) {
+        if (fact == null || readAt == null) {
             throw new IllegalArgumentException("a rule is without a line somewhere, and for a"
                     + " reason");
         }
         reachedBy = reachedBy == null ? Set.of() : Set.copyOf(reachedBy);
         RuleCitation.requireReached(fact.rule(), reachedBy);
-        readAt = List.copyOf(readAt);
     }
 
     /** One reader's finding about the whole of a rule, as that reader produced it. */
     public static RuleWithoutALine of(RuleCitation cited, FilingCoordinate at,
                                       BlockReason.RuleWithoutLineReason why) {
-        return of(cited, List.of(), at, RuleSite.theRuleItself(), why);
+        return of(cited, ModelOccurrences.NONE, at, RuleSite.theRuleItself(), why);
     }
 
     /** The same, of a reading made at {@code readAt}, which says which copies of the model's code
      *  it was read at. */
-    public static RuleWithoutALine of(RuleCitation cited, List<ModelOccurrence> readAt,
+    public static RuleWithoutALine of(RuleCitation cited, ModelOccurrences readAt,
                                       FilingCoordinate at,
                                       BlockReason.RuleWithoutLineReason why) {
         return of(cited, readAt, at, RuleSite.theRuleItself(), why);
@@ -86,11 +84,11 @@ public record RuleWithoutALine(Fact fact, Set<RuleReportAnchor> reachedBy,
     public static RuleWithoutALine of(RuleCitation cited, FilingCoordinate at,
                                       RuleSite sentTo,
                                       BlockReason.RuleWithoutLineReason why) {
-        return of(cited, List.of(), at, sentTo, why);
+        return of(cited, ModelOccurrences.NONE, at, sentTo, why);
     }
 
     /** The same, read at {@code readAt}. */
-    public static RuleWithoutALine of(RuleCitation cited, List<ModelOccurrence> readAt,
+    public static RuleWithoutALine of(RuleCitation cited, ModelOccurrences readAt,
                                       FilingCoordinate at, RuleSite sentTo,
                                       BlockReason.RuleWithoutLineReason why) {
         return new RuleWithoutALine(new Fact(cited.rule(), at, sentTo, why),
@@ -176,10 +174,9 @@ public record RuleWithoutALine(Fact fact, Set<RuleReportAnchor> reachedBy,
         }
         Set<RuleReportAnchor> both = new HashSet<>(reachedBy);
         both.addAll(other.reachedBy);
-        List<ModelOccurrence> copies = new ArrayList<>(readAt);
-        other.readAt.stream().filter(copy -> !copies.contains(copy)).forEach(copies::add);
         return new RuleWithoutALine(new Fact(fact.rule(), fact.at(), fact.sentTo(),
-                BlockReason.together(fact.why(), other.fact.why())), both, copies);
+                BlockReason.together(fact.why(), other.fact.why())), both,
+                readAt.and(other.readAt));
     }
 
 }

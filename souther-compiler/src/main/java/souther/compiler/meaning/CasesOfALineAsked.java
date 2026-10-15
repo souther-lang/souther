@@ -5,19 +5,25 @@ import souther.compiler.partition.CompositionBudget;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
-import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.function.Predicate;
 
 /**
- * Whether a line decides in some one of the cases a condition was said for, asked a case at a time.
+ * Which of the cases a condition was said for a line decides in, asked a case at a time.
  *
  * <p>A line decides in a case where a row on each side of it can stand in that case: the two rows
  * then differ in the line alone, and the statement turns between them. Asked of the condition the
  * cases were said as, a row on one side may be in one case and the row on the other side in
  * another, and the line turns nothing between those. So the question is asked of each case, and a
  * line decides in the cases said as one only where it decides in one of them.
+ *
+ * <p><b>Which cases, and not whether some.</b> A row meets the line only in a case the line turns
+ * in. A case the line turns nothing in can still hold one of its points, on the one side its rows
+ * are on, and a row there says nothing about the line; kept under the condition said for all of
+ * them, it would be counted for the point. So every case is asked, and the ones that divide rows
+ * are what the line is read in.
  *
  * <p><b>Of a case and not of the condition.</b> This is not the question whether rows of a region
  * stand on both sides of a line asked of a region made of several: rows that reach a line along one
@@ -27,7 +33,15 @@ import java.util.function.Predicate;
  * <p><b>A case is asked part by part as it is chosen.</b> What has been chosen so far holds every
  * row a case chosen further holds, so where it holds no row on one side of the line, neither does
  * any case chosen past it, and those are not asked. A narrower region holds no more rows on either
- * side than a wider one, which is what makes stopping there a proof.
+ * side than a wider one, which is what makes stopping there a proof. The converse is not one: rows
+ * on both sides of what has been chosen so far may each be in a case of their own further on, so a
+ * case is one the line decides in only once it is chosen to the end.
+ *
+ * <p><b>As many cases as are taken apart, and no more.</b> How many ways there are of choosing a
+ * case is counted off the choices before any is asked ({@link DecidingCase.Cases#waysOfChoosing}),
+ * and past {@link CompositionBudget#CASES_A_LINE_IS_TAKEN_APART_INTO} none is asked: those are
+ * more cases than are taken apart, whether they were written out or said as choices, and the line
+ * is not worked out in them at that figure.
  *
  * <p><b>Counted by the step, and stopped short as a stop.</b> Every step of the choosing is counted
  * against {@link CompositionBudget#CASES_A_LINE_IS_ASKED_IN} for the one case they were said as:
@@ -37,8 +51,8 @@ import java.util.function.Predicate;
  * the choices. Where the steps run out the choosing stops there, and says the figures it met and,
  * of what it did not walk to, only what is written in the cases already: that some were never
  * taken apart, and the figure each stopped at. And where the cases were never taken apart nothing
- * is asked of them at all. Either way the answer is that it was not worked out, which is neither a
- * case the line turns in nor one it does not.
+ * is asked of them at all. Either way what was not walked is neither a case the line turns in nor
+ * one it does not, and the cases already shown to divide rows are what they are beside it.
  *
  * <p>Here, beside where the cases were taken apart, because what a case chosen part by part has
  * chosen so far is a conjunction of the statement's parts, and those are joined where a rule joins
@@ -46,131 +60,142 @@ import java.util.function.Predicate;
  */
 public final class CasesOfALineAsked {
 
-    /** What asking found. */
-    public sealed interface Found {
+    /**
+     * What asking found.
+     *
+     * @param decidesIn  the cases shown to hold a row on each side of the line, each by itself; the
+     *                   case asked, as it was said, where every case it stands for is one of them.
+     *                   How many of them a line is read in one by one is the line's to say, over
+     *                   every case it holds ({@link DecidingCase#saidInAsFewAsMay})
+     * @param notWorkedOut every figure some case was stopped at, where some was: which way those
+     *                   cases go was not worked out, and empty where every case was
+     */
+    public record Found(List<DecidingCase> decidesIn, Set<CompositionBudget> notWorkedOut) {
 
-        /** Some case holds a row on each side of the line. */
-        record InSome() implements Found {}
-
-        /** No case does. */
-        record InNone() implements Found {}
-
-        /**
-         * Which it is was not worked out, and {@code figures} are every figure some case of them
-         * was stopped at: no case was shown to divide rows, and not every case was shown not to.
-         */
-        record NotWorkedOut(Set<CompositionBudget> figures) implements Found {
-
-            public NotWorkedOut {
-                if (figures.isEmpty()) {
-                    throw new IllegalArgumentException("what was not worked out stopped at some"
-                            + " figure");
-                }
-                figures = Collections.unmodifiableSet(EnumSet.copyOf(figures));
-            }
+        public Found {
+            decidesIn = DecidingCase.eachByItsOwnCondition(decidesIn);
+            notWorkedOut = notWorkedOut.isEmpty() ? Set.of()
+                    : Collections.unmodifiableSet(EnumSet.copyOf(notWorkedOut));
         }
     }
 
-    private static final Found IN_SOME = new Found.InSome();
-
-    private static final Found IN_NONE = new Found.InNone();
-
-    /** Out of steps: one more is taken than the figure lets be. */
-    private static final Found.NotWorkedOut PAST_THE_STEPS =
-            new Found.NotWorkedOut(Set.of(CompositionBudget.CASES_A_LINE_IS_ASKED_IN));
+    private static final Found IN_NONE = new Found(List.of(), Set.of());
 
     private final Predicate<Proposition> crossedIn;
 
     private int left = CompositionBudget.CASES_A_LINE_IS_ASKED_IN.maximum();
 
-    /**
-     * @param crossedIn whether rows that reach the line with a condition taken in beside the way
-     *                  to it stand on each side of it
-     */
-    public CasesOfALineAsked(Predicate<Proposition> crossedIn) {
+    /** Each case shown to divide rows, as the conjunction of what it chose. */
+    private final Set<Proposition> dividing = new LinkedHashSet<>();
+
+    /** Whether some case was shown to divide no rows. */
+    private boolean dropped;
+
+    private final Set<CompositionBudget> stopped = EnumSet.noneOf(CompositionBudget.class);
+
+    private CasesOfALineAsked(Predicate<Proposition> crossedIn) {
         this.crossedIn = crossedIn;
     }
 
     /**
-     * Whether the line decides in some one of the cases {@code said} stands for.
+     * Which of the cases {@code said} stands for the line decides in.
      *
      * <p>Where some one of them holds is asked first, as one question: where it holds no row on
      * one side of the line, neither does any one of them, which settles every case at once. Asked
      * of the cases where they were taken apart, and not of the condition they were said as, which
      * says where some one holds only as far as it was said the same way; where they were not, the
      * condition is all that says it.
+     *
+     * @param crossedIn whether rows that reach the line with a condition taken in beside the way
+     *                  to it stand on each side of it
      */
-    public Found inSomeOf(DecidingCase said) {
+    public static Found casesOf(DecidingCase said, Predicate<Proposition> crossedIn) {
+        return new CasesOfALineAsked(crossedIn).asked(said);
+    }
+
+    private Found asked(DecidingCase said) {
         if (!aStepIsLeft()) {
-            return pastTheSteps(List.of(said.standsFor()));
+            pastTheSteps(List.of(said.standsFor()));
+            return new Found(List.of(), stopped);
         }
         if (!crossedIn.test(said.standsFor().holdingInSome().orElse(said.condition()))) {
             return IN_NONE;
         }
         if (said.saidAlone()) {
-            return IN_SOME;
+            return new Found(List.of(said), Set.of());
         }
-        return chosen(List.of(), List.of(said.standsFor()));
+        // More ways of choosing a case than cases are taken apart is more cases than were taken
+        // apart, however they were written: said as choices rather than written out, they are as
+        // many to ask, and asking them is the work that figure bounds. And every figure a case
+        // among them was already stopped at where it was never taken apart, read off the cases
+        // as they stand: that one figure stops the asking says nothing about the others.
+        long most = CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.maximum();
+        if (said.standsFor().waysOfChoosing(most) > most) {
+            stopped.add(CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO);
+            notTakenApartAt(said.standsFor(), stopped);
+            return new Found(List.of(), stopped);
+        }
+        chosen(new ArrayList<>(), List.of(said.standsFor()));
+        // Every case divides rows and every one was worked out: the case is what it was said as,
+        // and saying it again would read the line under another condition for nothing.
+        if (!dropped && stopped.isEmpty() && !dividing.isEmpty()) {
+            return new Found(List.of(said), Set.of());
+        }
+        return new Found(dividing.stream().map(DecidingCase::alone).toList(), stopped);
     }
 
     /**
-     * Whether some case holding all of {@code chosen}, and one case of each of {@code toChoose},
-     * holds a row on each side of the line — {@code chosen} already shown to.
+     * Each case holding all of {@code chosen}, and one case of each of {@code toChoose}, that holds
+     * a row on each side of the line — {@code chosen} already shown to.
+     *
+     * <p>{@code chosen} is the one path walked, taken a part further on the way down and given back
+     * on the way up, and written out only for a case kept.
      */
-    private Found chosen(List<Proposition> chosen, List<DecidingCase.Cases> toChoose) {
+    private void chosen(List<Proposition> chosen, List<DecidingCase.Cases> toChoose) {
         if (toChoose.isEmpty()) {
-            return IN_SOME;
+            dividing.add(Proposition.all(chosen));
+            return;
         }
         List<DecidingCase.Cases> rest = toChoose.subList(1, toChoose.size());
-        return switch (toChoose.getFirst()) {
+        switch (toChoose.getFirst()) {
             case DecidingCase.Cases.One(var condition) -> {
                 if (!aStepIsLeft()) {
-                    yield pastTheSteps(toChoose);
+                    pastTheSteps(toChoose);
+                    return;
                 }
-                List<Proposition> more = new ArrayList<>(chosen);
-                more.add(condition);
-                yield crossedIn.test(Proposition.all(more)) ? chosen(more, rest) : IN_NONE;
+                chosen.add(condition);
+                if (crossedIn.test(Proposition.all(chosen))) {
+                    chosen(chosen, rest);
+                } else {
+                    dropped = true;
+                }
+                chosen.removeLast();
             }
-            // Every alternative, and not the first that stopped: one that stopped shows nothing,
-            // and another after it may show the line divides rows. Which stopped first decides
-            // nothing, so every figure met is said. Each alternative taken is a step, and where
-            // the steps run out the ones not taken are not walked.
+            // Every alternative: one that divides rows is no answer about another. Each taken is
+            // a step, and where the steps run out the ones not taken are not walked.
             case DecidingCase.Cases.EachOf(var alternatives) -> {
-                Set<CompositionBudget> stopped = new HashSet<>();
-                boolean shown = false;
                 for (int at = 0; at < alternatives.size(); at++) {
-                    DecidingCase.Cases one = alternatives.get(at);
                     if (!aStepIsLeft()) {
                         List<DecidingCase.Cases> notWalked =
                                 new ArrayList<>(alternatives.subList(at, alternatives.size()));
                         notWalked.addAll(rest);
-                        stopped.addAll(pastTheSteps(notWalked).figures());
-                        break;
+                        pastTheSteps(notWalked);
+                        return;
                     }
                     List<DecidingCase.Cases> next = new ArrayList<>();
-                    next.add(one);
+                    next.add(alternatives.get(at));
                     next.addAll(rest);
-                    Found found = chosen(chosen, next);
-                    if (found instanceof Found.InSome) {
-                        shown = true;
-                        break;
-                    }
-                    if (found instanceof Found.NotWorkedOut(var figures)) {
-                        stopped.addAll(figures);
-                    }
+                    chosen(chosen, next);
                 }
-                yield shown ? IN_SOME
-                        : stopped.isEmpty() ? IN_NONE : new Found.NotWorkedOut(stopped);
             }
             case DecidingCase.Cases.Together(var factors) -> {
                 List<DecidingCase.Cases> next = new ArrayList<>(factors);
                 next.addAll(rest);
-                yield chosen(chosen, next);
+                chosen(chosen, next);
             }
             // Nobody took them apart, and nothing asks them.
-            case DecidingCase.Cases.NotTakenApart(var stoppedAt) ->
-                    new Found.NotWorkedOut(Set.of(stoppedAt));
-        };
+            case DecidingCase.Cases.NotTakenApart(var stoppedAt) -> stopped.add(stoppedAt);
+        }
     }
 
     /**
@@ -181,10 +206,9 @@ public final class CasesOfALineAsked {
      * met where they were taken apart, and is written in the cases themselves, so it is read off
      * them as they stand — once over each, and not by choosing among them.
      */
-    private static Found.NotWorkedOut pastTheSteps(List<DecidingCase.Cases> notWalked) {
-        Set<CompositionBudget> figures = EnumSet.of(CompositionBudget.CASES_A_LINE_IS_ASKED_IN);
-        notWalked.forEach(each -> notTakenApartAt(each, figures));
-        return figures.size() == 1 ? PAST_THE_STEPS : new Found.NotWorkedOut(figures);
+    private void pastTheSteps(List<DecidingCase.Cases> notWalked) {
+        stopped.add(CompositionBudget.CASES_A_LINE_IS_ASKED_IN);
+        notWalked.forEach(each -> notTakenApartAt(each, stopped));
     }
 
     /** Adds to {@code figures} each figure a case {@code cases} stands for was stopped at, where

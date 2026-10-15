@@ -14,6 +14,7 @@ import souther.compiler.numeric.Endpoint;
 import souther.compiler.publish.PublishedRuleHandle;
 import souther.compiler.publish.PublishedSentence;
 import souther.compiler.types.ModelOccurrence;
+import souther.compiler.types.ModelOccurrences;
 import souther.compiler.types.TypeSymbol;
 
 import java.util.List;
@@ -616,8 +617,8 @@ public sealed interface LineOrigin extends RuleEvidenceOrigin {
 
     /** The copy of the comparison this line was read at, where it was read at one. */
     @Override
-    default List<ModelOccurrence> readAt() {
-        return comparisonAt().map(List::of).orElse(List.of());
+    default ModelOccurrences readAt() {
+        return comparisonAt().map(ModelOccurrences::of).orElse(ModelOccurrences.NONE);
     }
 
     /**

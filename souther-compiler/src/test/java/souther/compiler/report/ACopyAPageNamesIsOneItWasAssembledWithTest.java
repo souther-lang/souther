@@ -9,6 +9,7 @@ import souther.compiler.partition.OnTheWay;
 import souther.compiler.partition.ReachabilityGap;
 import souther.compiler.partition.SaidOnTheWay;
 import souther.compiler.types.ExpansionLineage;
+import souther.compiler.types.ModelOccurrences;
 import souther.compiler.types.ExpansionSite;
 import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.SourceConstruct;
@@ -50,7 +51,8 @@ class ACopyAPageNamesIsOneItWasAssembledWithTest {
             new ConditionGap.OfTheInput(new ReachabilityGap.Unstated(DECLINED));
 
     private static final SaidOnTheWay WAY =
-            new SaidOnTheWay(Map.of(DECLINED, List.of(IN_THE_CALL)), Map.of(), Map.of());
+            new SaidOnTheWay(Map.of(DECLINED, ModelOccurrences.of(IN_THE_CALL)), Map.of(),
+                    Map.of());
 
     @Test
     void aCopyThePageWasAssembledWithNamesItsCalls() {

@@ -1,7 +1,7 @@
 package souther.compiler.query;
 
 import souther.compiler.check.CoverageObligation;
-import souther.compiler.types.ModelOccurrence;
+import souther.compiler.types.ModelOccurrences;
 import souther.compiler.diag.Citation;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.ReadingPolicy;
@@ -259,7 +259,7 @@ final class Coverages {
         // is about.
         sets.forks().forEach(each ->
                 each.filed().forEach((at, why) ->
-                        found.unclassified(each.cited(), List.of(), at, why)));
+                        found.unclassified(each.cited(), ModelOccurrences.NONE, at, why)));
         return clauses.noLine().and(guards.noLine()).and(filed.noLine()).and(found.found());
     }
 
@@ -1854,8 +1854,7 @@ final class Coverages {
         for (DomainPoint point : a.items().keySet()) {
             kept.put(point, together(a.at(point), b.at(point)));
         }
-        List<ModelOccurrence> readAt = new ArrayList<>(a.readAt());
-        b.readAt().stream().filter(copy -> !readAt.contains(copy)).forEach(readAt::add);
+        ModelOccurrences readAt = a.readAt().and(b.readAt());
         return new BorderAssessment(a.border(), kept, besides(a.beside(), b.beside()),
                 // Both readings' searches and neither standing for the other. A row is composed in
                 // one reading's region and at the positions that reading names, so the reading

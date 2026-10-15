@@ -6,6 +6,7 @@ import souther.compiler.check.Clause;
 import souther.compiler.check.PartId;
 import souther.compiler.check.RuleCitation;
 import souther.compiler.check.RuleReportAnchor;
+import souther.compiler.types.ModelOccurrences;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
 import souther.compiler.types.WrittenOwner;
@@ -244,7 +245,7 @@ class OneFactIsOneWeakeningHoweverItWasEvidencedTest {
 
     private static WeakeningSet ruleWithoutALine(RuleCitation cited) {
         return of(new Weakening.ModelReadingIncomplete(ClosureGap.QuestionUnanswered.of(
-                StandingQuestion.NothingClassifiesIt.of(cited, List.of(),
+                StandingQuestion.NothingClassifiesIt.of(cited, ModelOccurrences.NONE,
                         new FilingCoordinate.AtPosition(TermPath.of("x")),
                         new BlockReason.UnreadComparisonForm()))));
     }

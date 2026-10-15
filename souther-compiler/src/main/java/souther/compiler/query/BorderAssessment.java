@@ -15,7 +15,7 @@ import souther.compiler.partition.SaidOnTheWay;
 import souther.compiler.partition.WhereAPartDecides;
 import souther.compiler.publish.PublishedRuleHandle;
 import souther.compiler.publish.PublishedSentence;
-import souther.compiler.types.ModelOccurrence;
+import souther.compiler.types.ModelOccurrences;
 
 import java.util.List;
 import java.util.Map;
@@ -62,7 +62,7 @@ import java.util.Set;
  */
 public record BorderAssessment(Border border, Map<DomainPoint, ItemAssessment> items,
                                AnotherLineTheRowsAllow beside, ARowTellingTheLinesApart toldApart,
-                               List<ModelOccurrence> readAt, SaidOnTheWay saidOnTheWay)
+                               ModelOccurrences readAt, SaidOnTheWay saidOnTheWay)
         implements RuleCitations {
 
     /** One reading of a line, before anybody asked for a row that would tell it from the lines
@@ -221,7 +221,7 @@ public record BorderAssessment(Border border, Map<DomainPoint, ItemAssessment> i
             agrees(border, point, items.get(point));
         }
         items = java.util.Collections.unmodifiableMap(new java.util.LinkedHashMap<>(items));
-        readAt = List.copyOf(readAt);
+        Objects.requireNonNull(readAt, "the copies it was read at, or none");
         Objects.requireNonNull(saidOnTheWay, "who put what on the way, or nobody");
     }
 

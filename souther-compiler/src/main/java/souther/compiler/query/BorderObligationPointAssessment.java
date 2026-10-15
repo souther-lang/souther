@@ -13,7 +13,7 @@ import souther.compiler.check.RuleReportAnchor;
 import souther.compiler.publish.PublicationOrders;
 import souther.compiler.publish.PublishedRuleHandle;
 import souther.compiler.publish.PublishedSentence;
-import souther.compiler.types.ModelOccurrence;
+import souther.compiler.types.ModelOccurrences;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -710,12 +710,7 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
      * @param readAt the copies of the comparison the line was read at, which is what a surface names
      *               the calls of a helper by ({@link BorderAssessment#readAt})
      */
-    public record ReadingSaid(Reading where, String at, String asks, List<ModelOccurrence> readAt) {
-
-        public ReadingSaid {
-            readAt = List.copyOf(readAt);
-        }
-    }
+    public record ReadingSaid(Reading where, String at, String asks, ModelOccurrences readAt) {}
 
     /**
      * How many readings a surface says under the point before saying how many are left.

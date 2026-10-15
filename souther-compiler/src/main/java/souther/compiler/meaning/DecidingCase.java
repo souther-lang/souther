@@ -5,6 +5,7 @@ import souther.compiler.partition.CompositionBudget;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -94,11 +95,43 @@ public record DecidingCase(Proposition condition, Cases standsFor) {
         return List.copyOf(cases);
     }
 
-    /** {@code cases} said as one: some one of them holding, standing for each of them. */
+    /**
+     * {@code cases} said as the cases where a line decides are: one for each condition, each by
+     * itself up to {@link WhereEachLineDecides#MOST_CASES}, and past that as one, standing for each
+     * of them.
+     *
+     * <p>Said the same way whichever way the cases came to be these: a line read with few cases
+     * where it decides and the same line left with as few once the others are dropped are read in
+     * the same cases, each under its own condition. And counted over the whole line, however many
+     * cases said for several they came out of.
+     */
+    public static List<DecidingCase> saidInAsFewAsMay(List<DecidingCase> cases) {
+        List<DecidingCase> each = oneForEachCondition(cases);
+        return each.size() <= WhereEachLineDecides.MOST_CASES ? each : List.of(someOneOf(each));
+    }
+
+    /**
+     * {@code cases} said as one: some one of them holding, standing for each of them.
+     *
+     * <p>What every one of them holds is said once, ahead of what tells them apart. What every case
+     * of a line holds is often most of each — the rest of the statement holding, which may be as
+     * long as the statement — so written beside each it would be the condition many times over.
+     */
     static DecidingCase someOneOf(List<DecidingCase> cases) {
-        return new DecidingCase(
-                Proposition.any(cases.stream().map(DecidingCase::condition).toList()),
-                eachOf(cases));
+        Set<Proposition> everyOne = new LinkedHashSet<>(conjunctsOf(cases.getFirst().condition));
+        cases.forEach(each -> everyOne.retainAll(conjunctsOf(each.condition)));
+        List<Proposition> apart = cases.stream()
+                .map(each -> Proposition.all(conjunctsOf(each.condition).stream()
+                        .filter(part -> !everyOne.contains(part)).toList()))
+                .toList();
+        List<Proposition> said = new ArrayList<>(everyOne);
+        said.add(Proposition.any(apart));
+        return new DecidingCase(Proposition.all(said), eachOf(cases));
+    }
+
+    /** What {@code condition} holds all of together: its parts, where it is a conjunction. */
+    private static List<Proposition> conjunctsOf(Proposition condition) {
+        return condition instanceof Proposition.All all ? all.parts() : List.of(condition);
     }
 
     /** The cases each of {@code cases} stands for, any one of them. */
@@ -217,6 +250,38 @@ public record DecidingCase(Proposition condition, Cases standsFor) {
                 parts.add(holding.get());
             }
             return Optional.of(every ? Proposition.all(parts) : Proposition.any(parts));
+        }
+
+        /**
+         * How many ways there are of choosing one case of these, or {@code past} and one more
+         * where there are more than {@code past}.
+         *
+         * <p>Counted off the choices as they stand, without choosing: any one of several is as
+         * many ways as each of them has together, and one of each of several holding together is
+         * as many as theirs multiplied. Cases nobody took apart are one way, which ends there.
+         */
+        default long waysOfChoosing(long past) {
+            return switch (this) {
+                case One _, NotTakenApart _ -> 1;
+                case EachOf(var alternatives) -> {
+                    long ways = 0;
+                    for (Cases one : alternatives) {
+                        ways = Math.min(past + 1, ways + one.waysOfChoosing(past));
+                    }
+                    yield ways;
+                }
+                case Together(var factors) -> {
+                    long ways = 1;
+                    for (Cases one : factors) {
+                        long these = one.waysOfChoosing(past);
+                        if (these == 0) {
+                            yield 0;
+                        }
+                        ways = Math.min(past + 1, ways * these);
+                    }
+                    yield ways;
+                }
+            };
         }
 
         /** These, each one case of them said as {@code each} says it — no case at all where it

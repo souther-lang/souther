@@ -29,6 +29,7 @@ import souther.compiler.semantics.TakenArguments;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
+import souther.compiler.types.ModelOccurrences;
 import souther.compiler.types.ValueName;
 import souther.compiler.values.AdmissibleSet;
 
@@ -2023,7 +2024,8 @@ public final class InputDomain {
             // time is stopped by whatever stopped each branch — so they are asked as the several
             // questions they are rather than one of them standing for the rest.
             each.at().why().forEach(why ->
-                    found.asked(StandingQuestion.BoundaryUndetermined.of(each.cited(), List.of(),
+                    found.asked(StandingQuestion.BoundaryUndetermined.of(each.cited(),
+                            ModelOccurrences.NONE,
                             FilingCoordinate.at(path), why)));
         }
         for (souther.compiler.check.RuleAccounting.Unanswered each : placed.unanswered(path)) {

@@ -12,6 +12,7 @@ import souther.compiler.check.RuleRef;
 import souther.compiler.observe.Figure;
 import souther.compiler.observe.WorkFigure;
 import souther.compiler.types.SourceConstruct;
+import souther.compiler.types.ModelOccurrences;
 import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
@@ -114,14 +115,15 @@ class OneIdentityIsFoldedOnceAndKeepsEveryHandleTest {
                         new RuleWithoutALine.Fact(comparison(), at("x"),
                                 RuleSite.theRuleItself(),
                                 new BlockReason.ComparisonRelatingTwoValues()),
-                        Set.of(), List.of()),
+                        Set.of(), ModelOccurrences.NONE),
                 "a comparison nothing places is one nobody can be sent to look at");
         assertThrows(IllegalArgumentException.class,
                 () -> new RuleWithoutALine(
                         new RuleWithoutALine.Fact(invariant(), at("x"),
                                 RuleSite.theRuleItself(),
                                 new BlockReason.ComparisonRelatingTwoValues()),
-                        Set.of(new RuleReportAnchor.ByTheModuleThatWroteIt()), List.of()),
+                        Set.of(new RuleReportAnchor.ByTheModuleThatWroteIt()),
+                        ModelOccurrences.NONE),
                 "and a question about where a rule the author named is written is a second way to"
                         + " say one thing");
     }
@@ -136,9 +138,9 @@ class OneIdentityIsFoldedOnceAndKeepsEveryHandleTest {
     @Test
     void aQuestionAboutAnUnclassifiedRuleIsFoldedBesideTheFindings() {
         RulesWithNoLine.Gathered gathered = new RulesWithNoLine.Gathered();
-        gathered.unclassified(ONE_CALL, List.of(), at("x"),
+        gathered.unclassified(ONE_CALL, ModelOccurrences.NONE, at("x"),
                 new BlockReason.UnreadComparisonForm());
-        gathered.unclassified(ANOTHER_CALL, List.of(), at("x"),
+        gathered.unclassified(ANOTHER_CALL, ModelOccurrences.NONE, at("x"),
                 new BlockReason.UnreadComparisonForm());
         gathered.add(ONE_CALL, at("x"), new BlockReason.ComparisonRelatingTwoValues());
 
@@ -266,9 +268,9 @@ class OneIdentityIsFoldedOnceAndKeepsEveryHandleTest {
         RulesWithNoLine.Gathered gathered = new RulesWithNoLine.Gathered();
         gathered.add(ONE_CALL, at("x"), new BlockReason.PatternTooCostly(ONE_MACHINE));
         gathered.add(ANOTHER_CALL, at("x"), new BlockReason.PatternTooCostly(AT_A_FIGURE));
-        gathered.unclassified(ONE_CALL, List.of(), at("x"),
+        gathered.unclassified(ONE_CALL, ModelOccurrences.NONE, at("x"),
                 new BlockReason.PatternTooCostly(ONE_MACHINE));
-        gathered.unclassified(ANOTHER_CALL, List.of(), at("x"),
+        gathered.unclassified(ANOTHER_CALL, ModelOccurrences.NONE, at("x"),
                 new BlockReason.PatternTooCostly(AT_A_FIGURE));
         RulesWithNoLine found = gathered.found();
 
@@ -298,7 +300,7 @@ class OneIdentityIsFoldedOnceAndKeepsEveryHandleTest {
     void theTwoKindsOfStandingQuestionAreNotTwoAccountsOfOneThing() {
         StandingQuestion asks = asked(ONE_CALL, standingOn());
         StandingQuestion unclassified = StandingQuestion.NothingClassifiesIt.of(
-                ONE_CALL, List.of(), at("x"), new BlockReason.UnreadComparisonForm());
+                ONE_CALL, ModelOccurrences.NONE, at("x"), new BlockReason.UnreadComparisonForm());
 
         assertThrows(IllegalArgumentException.class, () -> asks.mergedWith(unclassified));
         assertThrows(IllegalArgumentException.class, () -> unclassified.mergedWith(asks));
@@ -319,7 +321,7 @@ class OneIdentityIsFoldedOnceAndKeepsEveryHandleTest {
         RulesWithNoLine.Gathered asFinding = new RulesWithNoLine.Gathered();
         asFinding.add(ONE_CALL, at("x"), form);
         RulesWithNoLine.Gathered asQuestion = new RulesWithNoLine.Gathered();
-        asQuestion.unclassified(ONE_CALL, List.of(), at("x"), form);
+        asQuestion.unclassified(ONE_CALL, ModelOccurrences.NONE, at("x"), form);
 
         assertEquals(null, RulesWithNoLine.NONE.aReadingThatStopped(),
                 "nothing found, so nothing stopped");

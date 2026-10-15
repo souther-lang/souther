@@ -1,8 +1,7 @@
 package souther.compiler.partition;
 
-import souther.compiler.types.ModelOccurrence;
+import souther.compiler.types.ModelOccurrences;
 
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -24,9 +23,9 @@ import java.util.Map;
  * @param stated  what each demand on the answers was asked by
  * @param unstated what each demand this reading could not state was asked by
  */
-public record SaidOnTheWay(Map<OnTheWay, List<ModelOccurrence>> entries,
-                           Map<AnswerDemand, List<ModelOccurrence>> stated,
-                           Map<DemandGap.Unstated, List<ModelOccurrence>> unstated) {
+public record SaidOnTheWay(Map<OnTheWay, ModelOccurrences> entries,
+                           Map<AnswerDemand, ModelOccurrences> stated,
+                           Map<DemandGap.Unstated, ModelOccurrences> unstated) {
 
     /** A way no copy of anybody's code put anything on. */
     public static final SaidOnTheWay NONE = new SaidOnTheWay(Map.of(), Map.of(), Map.of());
@@ -38,8 +37,8 @@ public record SaidOnTheWay(Map<OnTheWay, List<ModelOccurrence>> entries,
     }
 
     /** The copies that put on the way what {@code gap} is about, in the order they were met. */
-    public List<ModelOccurrence> of(ConditionGap gap) {
-        List<ModelOccurrence> by = switch (gap) {
+    public ModelOccurrences of(ConditionGap gap) {
+        ModelOccurrences by = switch (gap) {
             case ConditionGap.OfTheInput(ReachabilityGap.Unstated(var declined)) ->
                     entries.get(declined);
             case ConditionGap.OfTheInput(ReachabilityGap.Uncomposed(var taken, var _)) ->
@@ -52,17 +51,16 @@ public record SaidOnTheWay(Map<OnTheWay, List<ModelOccurrence>> entries,
             case ConditionGap.OfADemand(DemandGap.Uncomposed(var demand, var _)) ->
                     stated.get(demand);
         };
-        return by == null ? List.of() : by;
+        return by == null ? ModelOccurrences.NONE : by;
     }
 
     /** Every copy anything on the way was read off, each once, in the order met. */
-    public List<ModelOccurrence> copies() {
-        List<ModelOccurrence> out = new ArrayList<>();
-        for (Map<?, List<ModelOccurrence>> each : List.of(entries, stated, unstated)) {
-            each.values().forEach(copies -> copies.stream().filter(copy -> !out.contains(copy))
-                    .forEach(out::add));
+    public ModelOccurrences copies() {
+        ModelOccurrences.Gathering out = new ModelOccurrences.Gathering();
+        for (Map<?, ModelOccurrences> each : List.of(entries, stated, unstated)) {
+            each.values().forEach(out::add);
         }
-        return out;
+        return out.gathered();
     }
 
     /**
@@ -72,9 +70,9 @@ public record SaidOnTheWay(Map<OnTheWay, List<ModelOccurrence>> entries,
      * were read off what the condition's statement was, and not off any one entry of it.
      */
     public SaidOnTheWay asking(AnswersDemanded demands) {
-        List<ModelOccurrence> every = copies();
-        Map<AnswerDemand, List<ModelOccurrence>> asked = new LinkedHashMap<>(stated);
-        Map<DemandGap.Unstated, List<ModelOccurrence>> declined = new LinkedHashMap<>(unstated);
+        ModelOccurrences every = copies();
+        Map<AnswerDemand, ModelOccurrences> asked = new LinkedHashMap<>(stated);
+        Map<DemandGap.Unstated, ModelOccurrences> declined = new LinkedHashMap<>(unstated);
         if (!every.isEmpty()) {
             demands.stated().forEach(demand -> asked.put(demand, every));
             demands.declined().forEach(demand -> declined.put(demand, every));
@@ -94,8 +92,7 @@ public record SaidOnTheWay(Map<OnTheWay, List<ModelOccurrence>> entries,
      * what the second was read off is kept beside the first by value, which is all that is left.
      */
     public SaidOnTheWay retold(List<OnTheWay> onto, List<OnTheWay> from, SaidOnTheWay other) {
-        Map<OnTheWay, List<ModelOccurrence>> told = new LinkedHashMap<>();
-        entries.forEach((key, copies) -> told.put(key, new ArrayList<>(copies)));
+        Map<OnTheWay, ModelOccurrences> told = new LinkedHashMap<>(entries);
         if (!retoldInto(onto, from, other, told)) {
             return and(other);
         }
@@ -105,7 +102,7 @@ public record SaidOnTheWay(Map<OnTheWay, List<ModelOccurrence>> entries,
 
     private static boolean retoldInto(List<OnTheWay> onto, List<OnTheWay> from,
                                       SaidOnTheWay other,
-                                      Map<OnTheWay, List<ModelOccurrence>> into) {
+                                      Map<OnTheWay, ModelOccurrences> into) {
         if (onto.size() != from.size()) {
             return false;
         }
@@ -115,7 +112,7 @@ public record SaidOnTheWay(Map<OnTheWay, List<ModelOccurrence>> entries,
             if (mine.getClass() != theirs.getClass()) {
                 return false;
             }
-            filedAlone(mine, other.entries.getOrDefault(theirs, List.of()), into);
+            filedAlone(mine, other.entries.getOrDefault(theirs, ModelOccurrences.NONE), into);
             if (mine instanceof OnTheWay.OneOf one && theirs instanceof OnTheWay.OneOf two) {
                 if (one.alternatives().size() != two.alternatives().size()) {
                     return false;
@@ -146,21 +143,21 @@ public record SaidOnTheWay(Map<OnTheWay, List<ModelOccurrence>> entries,
      * every call before it.
      */
     public static SaidOnTheWay allOf(List<SaidOnTheWay> ways) {
-        Map<OnTheWay, List<ModelOccurrence>> entries = new LinkedHashMap<>();
-        Map<AnswerDemand, List<ModelOccurrence>> stated = new LinkedHashMap<>();
-        Map<DemandGap.Unstated, List<ModelOccurrence>> unstated = new LinkedHashMap<>();
+        Map<OnTheWay, ModelOccurrences.Gathering> entries = new LinkedHashMap<>();
+        Map<AnswerDemand, ModelOccurrences.Gathering> stated = new LinkedHashMap<>();
+        Map<DemandGap.Unstated, ModelOccurrences.Gathering> unstated = new LinkedHashMap<>();
         for (SaidOnTheWay way : ways) {
             into(entries, way.entries);
             into(stated, way.stated);
             into(unstated, way.unstated);
         }
-        return new SaidOnTheWay(entries, stated, unstated);
+        return new SaidOnTheWay(gathered(entries), gathered(stated), gathered(unstated));
     }
 
     /** What {@code entries} were put on a way by: {@code by}, for each of them and every entry
      *  inside an alternative of one. */
-    static void filed(List<OnTheWay> entries, List<ModelOccurrence> by,
-                      Map<OnTheWay, List<ModelOccurrence>> into) {
+    static void filed(List<OnTheWay> entries, ModelOccurrences by,
+                      Map<OnTheWay, ModelOccurrences> into) {
         for (OnTheWay each : entries) {
             filedAlone(each, by, into);
             if (each instanceof OnTheWay.OneOf several) {
@@ -171,28 +168,29 @@ public record SaidOnTheWay(Map<OnTheWay, List<ModelOccurrence>> entries,
 
     /** What {@code entry} itself was put on a way by, leaving what its alternatives were put
      *  there by to whoever made them. */
-    static void filedAlone(OnTheWay entry, List<ModelOccurrence> by,
-                           Map<OnTheWay, List<ModelOccurrence>> into) {
-        if (by.isEmpty()) {
-            return;
+    static void filedAlone(OnTheWay entry, ModelOccurrences by,
+                           Map<OnTheWay, ModelOccurrences> into) {
+        if (!by.isEmpty()) {
+            into.merge(entry, by, ModelOccurrences::and);
         }
-        List<ModelOccurrence> copies = into.computeIfAbsent(entry, _ -> new ArrayList<>());
-        by.stream().filter(copy -> !copies.contains(copy)).forEach(copies::add);
     }
 
-    /** {@code from} taken into {@code out}: each key where it was first met, and each copy once. */
-    private static <K> void into(Map<K, List<ModelOccurrence>> out,
-                                 Map<K, List<ModelOccurrence>> from) {
-        from.forEach((key, copies) -> {
-            List<ModelOccurrence> held = out.computeIfAbsent(key, _ -> new ArrayList<>());
-            copies.stream().filter(copy -> !held.contains(copy)).forEach(held::add);
-        });
+    /** {@code from} gathered into {@code out}: each key where it was first met. */
+    private static <K> void into(Map<K, ModelOccurrences.Gathering> out,
+                                 Map<K, ModelOccurrences> from) {
+        from.forEach((key, copies) ->
+                out.computeIfAbsent(key, _ -> new ModelOccurrences.Gathering()).add(copies));
     }
 
-    /** In the order the copies were met, which is the order a reader is told them in. */
-    private static <K> Map<K, List<ModelOccurrence>> ordered(Map<K, List<ModelOccurrence>> map) {
-        Map<K, List<ModelOccurrence>> out = new LinkedHashMap<>();
-        map.forEach((key, copies) -> out.put(key, List.copyOf(copies)));
-        return Collections.unmodifiableMap(out);
+    private static <K> Map<K, ModelOccurrences> gathered(
+            Map<K, ModelOccurrences.Gathering> gathering) {
+        Map<K, ModelOccurrences> out = new LinkedHashMap<>();
+        gathering.forEach((key, copies) -> out.put(key, copies.gathered()));
+        return out;
+    }
+
+    /** Each key in the order it was met, which is the order a reader is told them in. */
+    private static <K> Map<K, ModelOccurrences> ordered(Map<K, ModelOccurrences> map) {
+        return Collections.unmodifiableMap(new LinkedHashMap<>(map));
     }
 }
