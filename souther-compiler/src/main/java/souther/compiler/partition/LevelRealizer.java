@@ -357,7 +357,7 @@ public final class LevelRealizer {
         List<Place> refused = new ArrayList<>();
         for (int offered = 0; offered < PLACES_A_POSITION_IS_OFFERED; offered++) {
             Place at = placeMeeting(one.where(), one.term(), one.of(), runs.get(one.term()),
-                    members, looking, tried, Map.of(), refused, stoppedBy);
+                    members, looking, within, tried, Map.of(), refused, stoppedBy);
             if (at == null) {
                 return stoppedShort(stoppedBy);
             }
@@ -475,7 +475,7 @@ public final class LevelRealizer {
                         : placeMeeting(here, reading.settles(), two.of(), settled,
                                 reading.settles() instanceof NumericTerm.ValueOf value
                                         ? within.valueClassAt(value) : null,
-                                looking, tried,
+                                looking, within, tried,
                                 Map.of(RealizationTarget.of(reading.anchors()), common),
                                 List.of(), stoppedBy);
                 if (at == null) {
@@ -581,7 +581,7 @@ public final class LevelRealizer {
         // Composed from and not narrowed by, because the place walked here is written into a row.
         // A pair standing at a value out of a set nobody established is the same row this class
         // declines to offer at one position, offered because it was reached through two.
-        ValueSet admits = looking.toComposeFrom(anchored).toCrossTheRunWith();
+        ValueSet admits = looking.toComposeFrom(anchored, within).toCrossTheRunWith();
         if (admits == null) {
             return null;
         }
@@ -1743,7 +1743,8 @@ public final class LevelRealizer {
     private static Place placeMeeting(Criterion where, NumericTerm.FromOnePosition term,
                                       Carrier carrier, NumericDomain.Bounds bounds,
                                       Congruences members, WitnessSearch looking,
-                                      ValuesTried tried, Map<RealizationTarget, Place> given,
+                                      SearchRegion region, ValuesTried tried,
+                                      Map<RealizationTarget, Place> given,
                                       List<Place> refused, Set<CompositionBudget> stoppedBy) {
         PlacesApart apart = tried.apartFor(RealizationTarget.of(term), given);
         if (!refused.isEmpty()) {
@@ -1768,7 +1769,7 @@ public final class LevelRealizer {
             // A path the reading puts no position at is not that, and the run is what a value there
             // is composed from.
             case Criterion.Within within -> {
-                ValueSet admits = looking.toComposeFrom(term).toCrossTheRunWith();
+                ValueSet admits = looking.toComposeFrom(term, region).toCrossTheRunWith();
                 yield admits == null ? null
                         : someValueIn(within, carrier, bounds, admits, members, apart,
                                 looking::meter, stoppedBy);

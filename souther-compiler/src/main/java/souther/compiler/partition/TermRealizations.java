@@ -1448,8 +1448,7 @@ final class TermRealizations {
                 return null;
             }
         }
-        if (!(within.admittedAt(new NumericTerm.ValueOf(at.position()))
-                instanceof ValueSet.Finite named)) {
+        if (!(within.admittedAt(at) instanceof ValueSet.Finite named)) {
             return null;
         }
         List<Place> answering = new ArrayList<>();
@@ -1477,9 +1476,12 @@ final class TermRealizations {
         for (Place each : answering) {
             FixtureTemplate bare = FixtureTemplate.on(observed, each,
                     ruleSource.symbols().scope()::reach);
-            if (bare != null) {
-                out.add(RepresentativeSource.under(worn.names(), bare));
+            // A value this writes no literal for is one the set holds and this cannot offer, so
+            // none answering would no longer be an answer about the model.
+            if (bare == null) {
+                return null;
             }
+            out.add(RepresentativeSource.under(worn.names(), bare));
         }
         return out.isEmpty()
                 ? new Realization.None(Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE)

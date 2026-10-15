@@ -1955,16 +1955,27 @@ final class ReadQuantities implements Quantities {
     }
 
     /**
-     * The values the position at {@code place} was read to admit, or every value where no position
-     * is there.
+     * The values the position {@code term} is read of was read to admit, or every value where no
+     * position is there.
      *
      * <p>The position's own answer, as {@link #ownOf} is for where its numbers stop: what its rules
      * admit was worked out where the position was read, and read again here it would be a second
      * reading free to disagree with the first.
      */
-    public ValueSet admittedAt(NumericTerm.ValueOf place) {
-        Position at = byPath.get(place.position());
+    public ValueSet admittedAt(NumericTerm.FromOnePosition term) {
+        Position at = byPath.get(term.position());
         return at == null ? ValueSet.ANY : at.admitted().approximation();
+    }
+
+    /**
+     * The values the position's rules hold {@code term} to: the position's values for its own
+     * value, and each of them read through the term ({@link TermOrders#readOfEach}) for a number
+     * taken of it, on the orders this reading has the term standing on.
+     */
+    public ValueSet heldAt(NumericTerm.FromOnePosition term) {
+        ValueSet admitted = admittedAt(term);
+        return term instanceof NumericTerm.ValueOf ? admitted
+                : ordersOf(term).readOfEach(admitted);
     }
 
     /**

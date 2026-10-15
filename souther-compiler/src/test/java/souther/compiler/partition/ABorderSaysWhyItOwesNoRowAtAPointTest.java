@@ -313,6 +313,22 @@ class ABorderSaysWhyItOwesNoRowAtAPointTest {
     }
 
     /**
+     * A run of a number taken of the position is offered a row at a number one of the values comes
+     * to, however far into the run that is.
+     *
+     * <p>Forty is the only length past five any value named has. Walked from five upward over every
+     * length, what a walk may try runs out long before forty, and the run came back as one nothing
+     * could build a value for.
+     */
+    @Test
+    void aRunOfANumberTakenOfTheValuesNamedIsOfferedTheNumberOneOfThemComesTo() {
+        String far = "b".repeat(40);
+        assertEquals(List.of("Code(\"" + far + "\")"), offeredAt(naming("Code", "String",
+                        "value == \"a\" || value == \"" + far + "\"", "String.length(c.value) < 5"),
+                "String.length(c) = 5", PointRole.OUT));
+    }
+
+    /**
      * The same of a remainder: two is left by eight and not by four, so the row offered at two
      * holds eight rather than the first whole number that leaves two.
      */

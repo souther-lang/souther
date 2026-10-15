@@ -48,7 +48,7 @@ record HeldValues(Carrier on, Congruences class_, ValueSet named) {
      * order it is answered on.
      *
      * <p>A number taken of a position is held to the numbers the values its rules name come to
-     * ({@link TermOrders#readOfEach}): a string held to {@code "a"} or {@code "b"} is held to a
+     * ({@link SearchRegion#heldAt}): a string held to {@code "a"} or {@code "b"} is held to a
      * length of one. The class is the value's own, so it is said of the value and of nothing taken
      * of it.
      */
@@ -57,11 +57,9 @@ record HeldValues(Carrier on, Congruences class_, ValueSet named) {
         if (one == null) {
             return NONE;
         }
-        HeldValues held = one instanceof NumericTerm.ValueOf value
-                ? new HeldValues(orders.answered(), region.valueClassAt(value),
-                        region.admittedAt(value))
-                : new HeldValues(orders.answered(), null, orders.readOfEach(
-                        region.admittedAt(new NumericTerm.ValueOf(one.position()))));
+        HeldValues held = new HeldValues(orders.answered(),
+                one instanceof NumericTerm.ValueOf value ? region.valueClassAt(value) : null,
+                region.heldAt(one));
         return held.holdsAnything() ? held : NONE;
     }
 
