@@ -7,6 +7,8 @@ import souther.compiler.check.RuleReadings;
 import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.inputs.InputDomain;
+import souther.compiler.meaning.Proposition;
+import souther.compiler.meaning.WhereEachLineDecides;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
@@ -19,6 +21,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -40,25 +43,30 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>Past a figure the cases are said as one condition, and that condition holds the cases the line
  * turns nothing in as well as the ones it turns in. The line is read in the cases that divide rows
  * and no other, so a row in the condition is not by that alone a row at the line.
+ *
+ * <p>Which cases the line is drawn in is asked of the guards, for each way the cases come: said
+ * one by one (four truths beside the part), said as one and taken apart again into as many as are
+ * said one by one (five), and said as one with more than that dividing rows, kept as one (six).
+ * That a row is at the line's point only in a case the line is drawn in is asked of the report
+ * once, with the cases said one by one: what reads a row against a point is the same however the
+ * cases it was drawn in came, and how many cases there are against the figure is asked without a
+ * compilation in {@code meaning.WhereALineDecidesIsAskedOfEachCaseItWasSaidForTest}.
  */
 class ARowInACaseTheLineTurnsNothingInMeetsNoPointOfItTest {
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
+    /** The guards of {@code e} for each number of truths, which every test here only reads. */
+    private static final Map<Integer, GuardThresholds.Guards> GUARDS = new ConcurrentHashMap<>();
+
     /**
      * A row where {@code x + y > 0} fails, at nought on {@code x}, meets no point of the line on
-     * {@code x}: with the cases said one by one (four truths beside the part), said as one past the
-     * figure with as few dividing rows as are said one by one (five), and said as one with more than
-     * that dividing rows, which the line is read in as one again (six).
+     * {@code x}.
      */
     @Test
     void aRowInACaseTheLineTurnsNothingInIsNotAtItsPoint() {
-        for (int truths = 4; truths <= 6; truths++) {
-            int of = truths;
-            assertFalse(atNought(statement(truths), "0, MB(0)", truths, 2),
-                    () -> "x + y > 0 fails and the line turns nothing there, of " + of
-                            + " truths");
-        }
+        assertFalse(atNought(statement(4), "0, MB(0)", 4, 2),
+                "x + y > 0 fails and the line turns nothing there");
     }
 
     /**
@@ -67,10 +75,32 @@ class ARowInACaseTheLineTurnsNothingInMeetsNoPointOfItTest {
      */
     @Test
     void aRowInACaseTheLineTurnsInIsAtItsPoint() {
+        assertTrue(atNought(statement(4), "0, MB(1)", 4, 1),
+                "x + y > 0 holds and the line turns there");
+    }
+
+    /**
+     * The line on {@code x} is drawn in the cases that hold {@code x + y > 0} and in no case that
+     * holds it failing: one by one where those are as few as are said one by one, and as one where
+     * they are more. Of the assignments to the truths, half put the part on its holding side.
+     */
+    @Test
+    void theLineIsDrawnOnlyInTheCasesItTurnsIn() {
         for (int truths = 4; truths <= 6; truths++) {
             int of = truths;
-            assertTrue(atNought(statement(truths), "0, MB(1)", truths, 1),
-                    () -> "x + y > 0 holds and the line turns there, of " + of + " truths");
+            int dividing = 1 << (truths - 1);
+            List<Proposition> cases = casesTheLineIsDrawnIn(truths);
+            assertEquals(dividing <= WhereEachLineDecides.MOST_CASES ? dividing : 1, cases.size(),
+                    () -> "the cases the line is drawn in, of " + of + " truths: " + cases);
+            for (Proposition each : cases) {
+                List<Boolean> comparisons = each.partsHeld().stream()
+                        .flatMap(part -> part instanceof Proposition.Compared compared
+                                ? Stream.of(compared.holds()) : Stream.empty())
+                        .toList();
+                assertEquals(List.of(true), comparisons,
+                        () -> "a case the line is drawn in holds x + y > 0, of " + of
+                                + " truths: " + each);
+            }
         }
     }
 
@@ -84,13 +114,8 @@ class ARowInACaseTheLineTurnsNothingInMeetsNoPointOfItTest {
     void theWayToEachCaseALineIsDrawnInIsFiledUnderThatCase() {
         for (int truths = 5; truths <= 6; truths++) {
             int of = truths;
-            GuardThresholds.Guards guards = guardsOf(statement(truths));
-            List<LineOrigin.ComparisonOrigin> inACase = guards.evidence().stream()
-                    .map(each -> each.evidence().by())
-                    .flatMap(by -> by instanceof LineOrigin.ComparisonOrigin comparison
-                            && comparison.part().isPresent()
-                            ? Stream.of(comparison) : Stream.empty())
-                    .toList();
+            GuardThresholds.Guards guards = guards(truths);
+            List<LineOrigin.ComparisonOrigin> inACase = drawnInACase(guards);
             assertFalse(inACase.isEmpty(), () -> "some line is drawn in a case, of " + of);
             for (LineOrigin.ComparisonOrigin origin : inACase) {
                 List<OnTheWay> toTheCase = guards.reaching().wayTo(origin).onTheWay();
@@ -153,6 +178,26 @@ class ARowInACaseTheLineTurnsNothingInMeetsNoPointOfItTest {
             out.add(node.path("reason").asString());
         }
         node.forEach(child -> reasons(child, position, out));
+    }
+
+    /** The case each line drawn in a case of the statement is drawn in. */
+    private static List<Proposition> casesTheLineIsDrawnIn(int truths) {
+        return drawnInACase(guards(truths)).stream()
+                .map(origin -> origin.part().orElseThrow().decides())
+                .toList();
+    }
+
+    private static List<LineOrigin.ComparisonOrigin> drawnInACase(GuardThresholds.Guards guards) {
+        return guards.evidence().stream()
+                .map(each -> each.evidence().by())
+                .flatMap(by -> by instanceof LineOrigin.ComparisonOrigin comparison
+                        && comparison.part().isPresent()
+                        ? Stream.of(comparison) : Stream.empty())
+                .toList();
+    }
+
+    private static GuardThresholds.Guards guards(int truths) {
+        return GUARDS.computeIfAbsent(truths, of -> guardsOf(statement(of)));
     }
 
     /** What the guards of {@code e} come to in {@code source}. */

@@ -57,7 +57,7 @@ public final class WhereEachLineDecides {
      * ({@link DecidingCase#standsFor}), so whether the line decides in any of them is asked of
      * them and not of the one condition they were said as.
      */
-    static final int MOST_CASES = 16;
+    public static final int MOST_CASES = 16;
 
     private WhereEachLineDecides() {
     }

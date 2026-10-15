@@ -3,9 +3,11 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.query.Adequacy;
+import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.PartitionEvidence;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -96,6 +98,9 @@ class ARuleAboutATotalOfASequenceIsMeasuredTest {
                     then Needed else NotNeeded
             """;
 
+    /** The model measured once for every question here, none of which changes what it read. */
+    private static final Compilation MEASURED = measured();
+
     /** A total of a list a behavior takes is a number of that location, like a count of it. */
     @Test
     void aTotalOfABareListIsMeasured() {
@@ -159,11 +164,8 @@ class ARuleAboutATotalOfASequenceIsMeasuredTest {
 
     /** The points of the total's own line, in the order a border names them. */
     private static List<String> pointsOn(String behavior) {
-        Compilation compilation = measured();
-        List<String> out = new java.util.ArrayList<>();
-        for (souther.compiler.query.BorderAssessment border
-                : souther.compiler.query.Adequacy.readingsOf(compilation.db(), MODULE)
-                        .get(behavior)) {
+        List<String> out = new ArrayList<>();
+        for (BorderAssessment border : Adequacy.readingsOf(MEASURED.db(), MODULE).get(behavior)) {
             if (border.label().contains("List.sum")) {
                 border.items().forEach(
                         (role, _) -> out.add(border.label() + " " + border.border().named(role)));
@@ -238,8 +240,7 @@ class ARuleAboutATotalOfASequenceIsMeasuredTest {
     }
 
     private static Map<String, PartitionEvidence> evidence() {
-        Compilation compilation = measured();
-        return compilation.db().ask(new Adequacy.Coverage(MODULE)).value();
+        return MEASURED.db().ask(new Adequacy.Coverage(MODULE)).value();
     }
 
     private static Compilation measured() {

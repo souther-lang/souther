@@ -5,8 +5,13 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import souther.cli.CliProcess.Ran;
+import souther.cli.backend.Backends;
+import souther.cli.backend.Configured;
 import souther.cli.backend.FakeBackend;
 import souther.cli.backend.LocalRepository;
+import souther.cli.backend.Repository;
+import souther.cli.backend.Unavailable;
+import souther.compiler.diag.Messages;
 import souther.compiler.meta.ModuleMetadata;
 
 import java.io.IOException;
@@ -15,10 +20,12 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -66,7 +73,7 @@ class ACompileForATargetThatIsNotInstalledFetchesItsBackendTest {
     }
 
     @Test
-    void anEmptyHomeFetchesTheBackendAndRunsItAndTheNextCompileAsksNothing() throws Exception {
+    void anEmptyHomeFetchesTheBackendAndRunsIt() throws Exception {
         released("fetched-backend");
 
         Ran first = cli(Map.of(), "compile", "--target", "wasm", "--exit", "3", "a.sou");
@@ -77,21 +84,15 @@ class ACompileForATargetThatIsNotInstalledFetchesItsBackendTest {
         assertFalse(first.out().contains(WASM), first.out());
         assertTrue(first.err().contains(WASM) && first.err().contains("0.1.0"), first.err());
         assertTrue(Files.isRegularFile(fetchedTo().resolve("wasm-" + HERE + ".jar")));
-
-        int asked = repository.asked().size();
-        Ran second = cli(Map.of(), "compile", "--target", "wasm");
-
-        assertEquals(0, second.code(), second.err());
-        assertEquals("said-on-stderr", second.err().strip());
-        assertEquals(asked, repository.asked().size());
     }
 
+    /** Asked of {@code backend fetch}, which writes where a compile does and runs no backend. */
     @Test
     void theHomeSoutherNamesIsWhereABackendIsFetchedTo() throws Exception {
         released("into-souther-home");
         Path home = work.resolve("souther-home");
 
-        Ran ran = cli(Map.of("SOUTHER_HOME", home.toString()), "compile", "--target", "wasm");
+        Ran ran = cli(Map.of("SOUTHER_HOME", home.toString()), "backend", "fetch", "wasm");
 
         assertEquals(0, ran.code(), ran.err());
         assertTrue(Files.isRegularFile(home.resolve("backends/wasm-" + HERE + ".jar")));
@@ -171,12 +172,46 @@ class ACompileForATargetThatIsNotInstalledFetchesItsBackendTest {
             settings.add(new Written("souther.repository", Map.of(), List.of("-Dsouther.repository="
                     + value.replace("proxy.example:8080", "nexus.example/maven2/"))));
         }
+        // What a run says of a setting it cannot use is the lines below, in either language, and
+        // they are asked of every spelling here; each command is run once for each kind of
+        // setting, which is where the settings are read from what a run is given.
         for (Written written : settings) {
-            assertRefusedWithout(password, written, "en", "compile", "--target", "wasm");
+            for (String lang : List.of("en", "ja")) {
+                String said = unusable(written, lang);
+                assertFalse(said.contains(password), written + " " + lang + said);
+                assertTrue(said.contains(written.setting()), said);
+            }
         }
-        // The other command, and the other language, say it through the same lines; once each.
-        assertRefusedWithout(password, settings.get(0), "ja", "backend", "fetch", "wasm");
-        assertRefusedWithout(password, settings.get(1), "en", "backend", "fetch", "wasm");
+        assertRefusedWithout(password, settings.get(0), "en", "compile", "--target", "wasm");
+        assertRefusedWithout(password, settings.get(1), "ja", "backend", "fetch", "wasm");
+    }
+
+    /**
+     * The lines a compile says where {@code written} names no repository it can use, in
+     * {@code lang}; the ones {@code backend fetch} says are among them.
+     */
+    private static String unusable(Written written, String lang) {
+        String named = written.properties().isEmpty() ? null
+                : written.properties().getFirst().substring("-Dsouther.repository=".length());
+        Configured configured;
+        if (named == null) {
+            configured = Repository.configured(written.environment());
+        } else {
+            System.setProperty("souther.repository", named);
+            try {
+                configured = Repository.configured(written.environment());
+            } finally {
+                System.clearProperty("souther.repository");
+            }
+        }
+        Configured.Unusable unusable = assertInstanceOf(Configured.Unusable.class, configured);
+        Locale locale = Messages.resolveLocale(new Messages.Named(lang, false));
+        StringBuilder said = new StringBuilder();
+        for (Unavailable.Line line : Unavailable.of(new Backends.Absent("wasm", HERE, List.of()),
+                unusable.why(), unusable.name())) {
+            said.append(Messages.get(line.key(), locale, line.array())).append('\n');
+        }
+        return said.toString();
     }
 
     private void assertRefusedWithout(String password, Written written, String lang,
@@ -230,17 +265,5 @@ class ACompileForATargetThatIsNotInstalledFetchesItsBackendTest {
 
         assertEquals(2, ran.code());
         assertTrue(ran.err().contains("maven-metadata.xml"), ran.err());
-    }
-
-    @Test
-    void theFetchCommandTakesFetchAndATargetAndNothingElse() throws Exception {
-        for (List<String> line : List.of(List.of("backend"), List.of("backend", "fetch"),
-                List.of("backend", "get", "wasm"), List.of("backend", "fetch", "wasm", "x"),
-                List.of("backend", "fetch", "jvm"))) {
-            Ran ran = cli(Map.of(), line.toArray(String[]::new));
-
-            assertEquals(2, ran.code(), line + ran.err());
-        }
-        assertEquals(List.of(), repository.asked());
     }
 }

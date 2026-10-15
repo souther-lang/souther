@@ -122,11 +122,18 @@ class TheWaysAnElementMayMeetAStatementLeaveOutTheOnesNoElementMeetsTest {
         }
     }
 
-    /** A conjunction of choices between the two numbers of an element, every way of which an
-     *  element meets, and more of them than a reading of one condition makes. */
+    /**
+     * A conjunction of choices between the two numbers of an element, every way of which an
+     * element meets, and more of them than a reading of one condition makes.
+     *
+     * <p>Every choice taken at every depth is one reading, so {@code n} choices of two are
+     * {@code 2^(n+1) - 2} readings: the fewest past the figure.
+     */
     static String pastTheFigure() {
+        int choices = 31 - Integer.numberOfLeadingZeros(
+                CompositionBudget.READINGS_OF_ONE_CONDITION.maximum() + 2);
         List<String> parts = new ArrayList<>();
-        for (int each = 0; each < 10; each++) {
+        for (int each = 0; each < choices; each++) {
             parts.add("(x.a >= " + (10 + each) + " || x.b >= " + (10 + each) + ")");
         }
         return "(" + String.join(" && ", parts) + ")";
