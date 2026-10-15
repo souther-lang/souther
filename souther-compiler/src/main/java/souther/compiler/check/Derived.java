@@ -59,10 +59,10 @@ public final class Derived {
          * through the two could come back in two forms.
          */
         static Def derive(Normalized.Def declaration, ResolvedSymbols scope,
-                          DeclarationKinds kinds, PublishedDeclarations published) {
+                          DeclarationKinds kinds, SumCases sums) {
             return switch (declaration) {
                 case Normalized.Data d -> {
-                    Deriver.Codecs codecs = Deriver.derive(d.node(), scope, kinds, published);
+                    Deriver.Codecs codecs = Deriver.derive(d.node(), scope, kinds, sums);
                     yield codecs == null ? null : new Data(d, codecs);
                 }
                 case Normalized.Sum s -> new Sum(s);

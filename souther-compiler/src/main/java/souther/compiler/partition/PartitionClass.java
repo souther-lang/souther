@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.inputs.Refinement;
+import souther.compiler.numeric.Place;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.values.ValueSet;
 
@@ -122,6 +123,12 @@ public record PartitionClass(String id, String label, Recognition recognises,
      */
     public boolean holdsTheNumberAt(souther.compiler.numeric.Place place) {
         return Recognitions.holdsTheNumberAt(recognises, place);
+    }
+
+    /** Whether the number at {@code place} is the only one this class holds
+     *  ({@link Recognitions#holdsOnlyTheNumberAt}). */
+    public boolean holdsOnlyTheNumberAt(Place place) {
+        return Recognitions.holdsOnlyTheNumberAt(recognises, place);
     }
 
     /**

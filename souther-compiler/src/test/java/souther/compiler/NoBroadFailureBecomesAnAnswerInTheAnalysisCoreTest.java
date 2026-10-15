@@ -287,8 +287,9 @@ class NoBroadFailureBecomesAnAnswerInTheAnalysisCoreTest {
                     "java.lang.LinkageError",
                     "the same, asked by reading a row through them — answered as a row nothing"
                             + " built, which is not a row seen to stand somewhere else"),
-            new Permission("souther.compiler.query.Adequacy$Generated", "compute",
-                    "(Lsouther/compiler/query/Db;)Lsouther/compiler/query/Answer;",
+            new Permission("souther.compiler.query.Adequacy$Generated$Environment", "searchedFor",
+                    "(Lsouther/compiler/partition/GenerationPlan;)"
+                            + "Lsouther/compiler/partition/FillResult;",
                     "java.lang.LinkageError",
                     "the same, asked by assembling what a model admits — answered by reporting no"
                             + " combination rather than reporting them impossible"));

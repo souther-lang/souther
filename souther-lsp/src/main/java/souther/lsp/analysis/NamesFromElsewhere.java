@@ -9,7 +9,6 @@ import souther.compiler.types.ValueName;
 import souther.lsp.protocol.CompletionItem;
 
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -109,7 +108,7 @@ final class NamesFromElsewhere {
 
     /** Forgets every document the workspace no longer holds, so a file that was deleted or renamed
      * leaves no names behind. */
-    void forgetAllBut(Collection<String> uris) {
+    void forgetAllBut(Set<String> uris) {
         byDocument.forgetAllBut(uris);
     }
 

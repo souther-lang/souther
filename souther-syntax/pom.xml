@@ -7,7 +7,7 @@
     <parent>
         <groupId>org.souther-lang</groupId>
         <artifactId>souther-parent</artifactId>
-        <version>0.3.0</version>
+        <version>0.3.1-SNAPSHOT</version>
     </parent>
 
     <artifactId>souther-syntax</artifactId>
@@ -24,7 +24,12 @@
         <dependency>
             <groupId>tools.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
-            <version>3.2.2</version>
+        </dependency>
+        <!-- The White_Space set a rule of the grammar reads string literals by, which is the one
+             the runtime's trim and words read. -->
+        <dependency>
+            <groupId>net.unit8.199x</groupId>
+            <artifactId>notation-199x</artifactId>
         </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>

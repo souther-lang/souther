@@ -4,15 +4,17 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.ast.Hir;
 import souther.compiler.check.ConstructionDescent;
+import souther.compiler.check.DeclarationKinds;
 import souther.compiler.check.NewtypeInners;
-import souther.compiler.check.PublishedDeclarations;
 import souther.compiler.check.ReadableFields;
 import souther.compiler.check.ResolvedFieldTypes;
 import souther.compiler.check.Shape;
 import souther.compiler.check.Sig;
+import souther.compiler.check.SumCases;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeView;
 import souther.compiler.inputs.Case;
+import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.Distinctions;
 import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.StructuralInspection;
@@ -117,7 +119,7 @@ class WhatIsReadableAndWhatIsBuiltAgreeAtARecordAndPartAtASumTest {
         assertInstanceOf(StructuralInspection.Retained.class, inspected(sum),
                 "the sum stands as a position rather than being given up for its shared names");
         assertNull(BehaviorInputs.stepWrittenValue(new TermPath.Step.Field("deadline"), sum,
-                        wraps(), symbols(), said()),
+                        wraps(), symbols(), kinds(), sums()),
                 "and a row writes one of the cases, so nothing is written at the shared name");
     }
 
@@ -134,22 +136,27 @@ class WhatIsReadableAndWhatIsBuiltAgreeAtARecordAndPartAtASumTest {
     @Test
     void whereTheStepsBesideAFieldLandForAWrittenValue() {
         assertEquals(Type.INT, BehaviorInputs.stepWrittenValue(new TermPath.Step.Element(),
-                        new Type.ListOf(Type.INT), wraps(), symbols(), said()),
+                        new Type.ListOf(Type.INT), wraps(), symbols(), kinds(), sums()),
                 "a sequence puts what it holds under an element");
+        assertEquals(Type.INT, BehaviorInputs.stepWrittenValue(new TermPath.Step.Element(),
+                        Type.map(Type.STRING, Type.INT), wraps(), symbols(), kinds(), sums()),
+                "and a map its values, and not its keys");
         assertEquals(typeOf("p"), BehaviorInputs.stepWrittenValue(
-                        new TermPath.Step.Refine(caseOf("P")), typeOf("r"), wraps(), symbols(),
-                        said()),
+                        new TermPath.Step.Refine(CasesLeft.of(caseOf("P"))), typeOf("r"), wraps(),
+                        symbols(),
+                        kinds(), sums()),
                 "and a narrowing to a case is that case at the same position");
         assertNull(BehaviorInputs.stepWrittenValue(new TermPath.Step.Element(), typeOf("r"),
-                        wraps(), symbols(), said()),
+                        wraps(), symbols(), kinds(), sums()),
                 "and a sum holds nothing under an element");
     }
 
     /** The narrowing to {@code leaf}, taken from what the sum's type divides into. */
     private static Refinement caseOf(String leaf) {
         TypeSymbol wanted = TypeSymbols.declared(new TypeKey(module(), leaf));
-        for (Case one : Distinctions.ofType(TypeView.asWritten(typeOf("r"), symbols(), said()),
-                symbols(), said())) {
+        for (Case one : Distinctions.ofType(
+                TypeView.asWritten(typeOf("r"), symbols(), kinds(), sums()).shape(),
+                symbols(), kinds(), sums())) {
             if (one instanceof Case.SumCase found && found.leaf().equals(wanted)) {
                 return Refinement.of(one);
             }
@@ -265,11 +272,12 @@ class WhatIsReadableAndWhatIsBuiltAgreeAtARecordAndPartAtASumTest {
     }
 
     private static StructuralInspection inspected(Type type) {
-        TypeView view = TypeView.asWritten(type, symbols(), said());
+        TypeView view = TypeView.asWritten(type, symbols(), kinds(), sums());
         Shape.ReadablePositionShape shape = assertInstanceOf(
                 Shape.ReadablePositionShape.class, view.shape(),
                 "the model under test declares a shape a position can have");
-        return StructuralInspection.of(shape, Distinctions.ofType(view, symbols(), said()));
+        return StructuralInspection.of(shape,
+                Distinctions.ofType(view.shape(), symbols(), kinds(), sums()));
     }
 
     /** Where a step into a written value lands, for each name in hand. */
@@ -278,7 +286,7 @@ class WhatIsReadableAndWhatIsBuiltAgreeAtARecordAndPartAtASumTest {
         for (String name : names.keySet()) {
             Type there =
                     BehaviorInputs.stepWrittenValue(new TermPath.Step.Field(name), type,
-                            wraps(), symbols(), said());
+                            wraps(), symbols(), kinds(), sums());
             assertNotNull(there, () -> "a value written here puts one at " + name);
             out.put(name, there);
         }
@@ -286,7 +294,7 @@ class WhatIsReadableAndWhatIsBuiltAgreeAtARecordAndPartAtASumTest {
     }
 
     private static Shape shapeOf(Type type) {
-        return TypeView.asWritten(type, symbols(), said()).shape();
+        return TypeView.asWritten(type, symbols(), kinds(), sums()).shape();
     }
 
     /** What the behavior's parameter {@code named} is declared to be. */
@@ -319,8 +327,12 @@ class WhatIsReadableAndWhatIsBuiltAgreeAtARecordAndPartAtASumTest {
         return Scopes.derived(COMPILATION.db(), module()).value();
     }
 
-    private static PublishedDeclarations said() {
-        return Shapes.publishedDeclarations(COMPILATION.db());
+    private static DeclarationKinds kinds() {
+        return Shapes.declarationKinds(COMPILATION.db());
+    }
+
+    private static SumCases sums() {
+        return Shapes.sumCases(COMPILATION.db());
     }
 
     /** What the declarations this reads wear one of, as the compilation answers it. */

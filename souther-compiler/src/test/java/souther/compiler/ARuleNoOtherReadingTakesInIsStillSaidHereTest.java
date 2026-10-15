@@ -41,6 +41,10 @@ class ARuleNoOtherReadingTakesInIsStillSaidHereTest {
      * model answered it. It used to be said twice — once here without naming the rule, because a
      * value reading files what it could not take in under the position rather than under the
      * clause.
+     *
+     * <p>And said as read, beside the question. The rule was read to the end and its line falls
+     * past every length, which is not the same as a form nothing reads; without this finding the
+     * only words about the rule were the reading of values', and they say the second.
      */
     @Test
     void aSizeBoundPastTheEndOfTheWholeNumbersIsNamedAsUnaccountedFor() {
@@ -59,6 +63,8 @@ class ARuleNoOtherReadingTakesInIsStillSaidHereTest {
 
         assertTrue(human.contains("not accounted for: invariant Tag (long)"), human);
         assertTrue(human.contains("which values may stand at t"), human);
+        assertTrue(human.contains("no line: invariant Tag (long) — it was read to the end and draws"
+                + " its line outside what the quantity it cuts ever holds"), human);
     }
 
     /**

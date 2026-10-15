@@ -2,14 +2,19 @@ package souther.compiler;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.partition.Border;
+import souther.compiler.partition.DomainPoint;
+import souther.compiler.partition.PointRole;
 import souther.compiler.query.Adequacy;
+import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 
 /**
  * The other producer of the same claim, held to the same reading of it.
@@ -46,17 +51,52 @@ class AnEnsuresBetweenTwoPositionsSinglesNothingOutTest {
                 .flatMap(each -> each.classes().stream()).toList();
     }
 
-    /** A rule over a pair singles nothing out at either of them. */
+    /**
+     * A rule over a pair singles nothing out at either of them, and is a line over the two.
+     *
+     * <p>The line the guard of the same shape draws, point for point and role for role: the place
+     * the two meet and the nearest rows either side of it.
+     */
     @Test
     void anEqualityBetweenTwoPositionsDividesNeitherOfThem() {
         assertEquals(List.of(), classes("r.a == r.other"));
         assertEquals(List.of(), classes("r.a /= r.other"));
-        // The measure's own answer and not a count read off it, which nought would also be where
-        // nobody measured: what the rule leaves is no line for a row to be at.
-        assertInstanceOf(souther.compiler.query.Measure.NotApplicable.class,
-                measured("r.a == r.other").boundaryReadings(),
-                "and it is not a line either: the values either side of the place they meet are"
-                        + " one class");
+        for (String clause : List.of("r.a == r.other", "r.a /= r.other")) {
+            Map<DomainPoint, PointRole> guarded = rolesOf(AdequacyReport.of(guarded(clause))
+                    .modules().get(0).behaviors().get(0));
+            assertEquals(5, guarded.size(), () -> clause + ": " + guarded);
+            assertEquals(guarded, rolesOf(measured(clause)), clause);
+        }
+    }
+
+    /** The role of every point of the one line a behavior's rules draw. */
+    private static Map<DomainPoint, PointRole> rolesOf(AdequacyReport.BehaviorReport behavior) {
+        List<BorderAssessment> lines = behavior.lines();
+        assertEquals(1, lines.size(), () -> "one line: " + lines);
+        Border border = lines.get(0).border();
+        Map<DomainPoint, PointRole> out = new LinkedHashMap<>();
+        border.answers().keySet().forEach(point -> out.put(point, border.roleOf(point)));
+        return out;
+    }
+
+    /** The same comparison as a body's guard, the other producer of the line. */
+    private static Compilation guarded(String condition) {
+        Compilation compilation = Compilation.ofSource("""
+                module m
+
+                data R = { a: Int, other: Int }
+                data Ok
+                data No
+
+                behavior f : (r: R) -> Ok | No
+                let f (r) = if %s then No else Ok
+
+                example f
+                    | "one" : (R { a = 1, other = 2 }) -> Ok
+                """.formatted(condition), "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        return compilation;
     }
 
     /** While one about a single position still puts the value in a class of its own. */

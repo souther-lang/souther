@@ -4,7 +4,11 @@ import souther.compiler.check.RuleRef;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.PositionId;
 import souther.compiler.inputs.StandingQuestion;
+import souther.compiler.observe.Figure;
 import souther.compiler.observe.RunSensitivity;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * One thing that stopped a measure's reading of the model from running out.
@@ -34,6 +38,35 @@ public sealed interface ClosureGap {
      * {@code WhatEachClosureGapSaysAboutAWiderRunTest} holds to the reasons that do.
      */
     RunSensitivity runSensitivity();
+
+    /**
+     * Every figure of this compiler's that stopped what this holds, each as it stood where the
+     * comparison was made, each once and in {@link Figure#inOrder}; some wherever
+     * {@link #runSensitivity} is {@link RunSensitivity#MAY_CHANGE}.
+     *
+     * <p>Asked of the stops, as {@link #runSensitivity} is, and never decided here: a gap holds what
+     * stopped the reading, and what stopped it is what carries the figure.
+     *
+     * <p>Two questions, and this is not the other one again. A question short of a figure and of a
+     * form nothing reads is not open for the figure — raising it leaves the question standing, which
+     * is why it answers {@code UNAFFECTED} — and it reached the figure all the same. Left out here,
+     * a reader would be told it stopped at no figure, and raise none, and meet it again the day the
+     * form is read.
+     */
+    default List<Figure> figures() {
+        return switch (this) {
+            case QuestionUnanswered it -> {
+                List<Figure> out = new ArrayList<>();
+                for (BlockReason.QuestionStandingReason each : it.question().stopped().all()) {
+                    out.addAll(each.figures());
+                }
+                yield Figure.inOrder(out);
+            }
+            case PositionNotReachedInto it -> it.why().figures();
+            // Neither holds a stop that is a figure, which is why each answers UNAFFECTED.
+            case RulesNotReached _, LineNotDerived _ -> List.of();
+        };
+    }
 
     /**
      * What tells one of these from another.

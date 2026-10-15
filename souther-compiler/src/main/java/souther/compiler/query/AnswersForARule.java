@@ -3,6 +3,8 @@ package souther.compiler.query;
 import souther.compiler.check.FakeTables;
 import souther.compiler.examples.ExampleProvisioning;
 import souther.compiler.examples.ExampleStatements;
+import souther.compiler.inputs.NumericTerm;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.partition.AnAnswerComposed;
 import souther.compiler.partition.AnswerDemand;
 import souther.compiler.partition.AnswersDemanded;
@@ -11,7 +13,8 @@ import souther.compiler.partition.CompositionAccount;
 import souther.compiler.partition.DemandGap;
 import souther.compiler.partition.FixtureTemplate;
 import souther.compiler.partition.Generator;
-import souther.compiler.partition.InjectedAnswer;
+import souther.compiler.partition.MeasuredInput;
+import souther.compiler.meaning.InjectedAnswer;
 import souther.compiler.partition.StandInAttempt;
 import souther.compiler.partition.StoodInAnswer;
 import souther.compiler.types.TypeSymbol;
@@ -66,6 +69,16 @@ record AnswersForARule(RequiredDependencies requires,
                        FakeTables blocks) {
 
     /**
+     * The subject a value for the whole of what {@code dependency} answers is composed over, or
+     * null where there is none: nothing stands in for it, or its answer is a union of cases and has
+     * a subject for each.
+     */
+    MeasuredInput subjectOf(ValueName.Behavior dependency) {
+        AnswerSubjects subjects = standing.get(dependency);
+        return subjects == null || subjects.whole() == null ? null : subjects.whole().subject();
+    }
+
+    /**
      * Every way a row taking {@code demanded} could stand the dependencies in, or the one answer
      * saying nothing stands them in.
      *
@@ -80,6 +93,14 @@ record AnswersForARule(RequiredDependencies requires,
      * them all.
      */
     List<StandInAttempt> of(AnswersDemanded demanded) {
+        return of(demanded, Map.of());
+    }
+
+    /**
+     * The same, for a row that writes {@code pinned} at the numbers of the input a way's statement
+     * about an answer names: what the answer has to be turns on them.
+     */
+    List<StandInAttempt> of(AnswersDemanded demanded, Map<NumericTerm, ExactRatio> pinned) {
         Map<ValueName.Behavior, Map<InjectedAnswer, List<AnswerDemand>>> asked = byDependency(
                 demanded.byAnswer());
         List<List<Alternative>> apiece = new ArrayList<>();
@@ -89,7 +110,8 @@ record AnswersForARule(RequiredDependencies requires,
         // nothing met would put this compiler's word on a value it has.
         Evidence withoutARow = Evidence.NOTHING;
         for (RequiredDependencies.Required each : requires.inOrder()) {
-            StandingIn here = standingIn(each, asked.getOrDefault(each.dependency(), Map.of()));
+            StandingIn here = standingIn(each, asked.getOrDefault(each.dependency(), Map.of()),
+                    pinned);
             if (here instanceof StandingIn.None(var why, var evidence)) {
                 return List.of(new StandInAttempt(new AnswersStoodIn.NothingComposed(why),
                         account(demanded, withoutARow.and(evidence))));
@@ -276,15 +298,38 @@ record AnswersForARule(RequiredDependencies requires,
      * the module was written for — and what the run reaches decides whether it was.
      */
     private StandingIn standingIn(RequiredDependencies.Required required,
-                                  Map<InjectedAnswer, List<AnswerDemand>> asked) {
+                                  Map<InjectedAnswer, List<AnswerDemand>> asked,
+                                  Map<NumericTerm, ExactRatio> pinned) {
         if (asked.isEmpty() && stated(required.dependency())) {
             return byTheModule(required, Evidence.NOTHING);
+        }
+        // A row writes one value for a dependency, which answers every call of it, so what every
+        // asking wants is asked of that one value together. Which askings are which is
+        // InjectedAnswer's and stays in the account; it is no reason to compose a value apiece and
+        // look for one they share, since two askings with a value each may have none in common
+        // and still have a value that meets both.
+        if (asked.size() > 1) {
+            List<AnswerDemand> every = new ArrayList<>();
+            asked.values().forEach(every::addAll);
+            Composing together = composed(required, every, pinned);
+            if (!together.values().isEmpty()) {
+                List<Alternative> alternatives = new ArrayList<>();
+                List<AnswerDemand> met = new ArrayList<>();
+                for (Candidate each : together.values()) {
+                    alternatives.add(new Alternative(
+                            new StoodInAnswer.OnTheRow(required.dependency(), each.value()),
+                            new Evidence(each.met(), each.said())));
+                    met.addAll(each.met());
+                }
+                return new StandingIn.Any(alternatives,
+                        new Evidence(met, together.written()));
+            }
         }
         Map<InjectedAnswer, List<Candidate>> values = new LinkedHashMap<>();
         List<DemandGap> said = new ArrayList<>();
         List<AnswerDemand> metBySomething = new ArrayList<>();
         for (Map.Entry<InjectedAnswer, List<AnswerDemand>> each : asked.entrySet()) {
-            Composing composed = composed(required, each.getValue());
+            Composing composed = composed(required, each.getValue(), pinned);
             said.addAll(composed.written());
             composed.values().forEach(candidate -> metBySomething.addAll(candidate.met()));
             if (composed.values().isEmpty()) {
@@ -390,7 +435,7 @@ record AnswersForARule(RequiredDependencies requires,
     private List<Candidate> servingEveryAsking(RequiredDependencies.Required required,
                                                Map<InjectedAnswer, List<Candidate>> values) {
         if (values.isEmpty()) {
-            return composed(required, List.of()).values();
+            return composed(required, List.of(), Map.of()).values();
         }
         Map<WhatARowWrites, Candidate> serving = null;
         for (List<Candidate> each : values.values()) {
@@ -418,7 +463,8 @@ record AnswersForARule(RequiredDependencies requires,
      * not what the row carries and its answers are read only where no case gave one.
      */
     private Composing composed(RequiredDependencies.Required required,
-                               List<AnswerDemand> demands) {
+                               List<AnswerDemand> demands,
+                               Map<NumericTerm, ExactRatio> pinned) {
         AnswerSubjects subjects = standing.get(required.dependency());
         List<AnswerSubjects.Feasible> over = subjects == null ? List.of()
                 : subjects.against(demands);
@@ -426,7 +472,8 @@ record AnswersForARule(RequiredDependencies requires,
         List<DemandGap> written = new ArrayList<>();
         for (AnswerSubjects.Feasible each : over) {
             AnAnswerComposed.Attempt attempt =
-                    AnAnswerComposed.of(each.standing(), each.demands());
+                    AnAnswerComposed.of(each.standing().subject(),
+                            each.standing().statements(), pinned, each.demands());
             written.addAll(attempt.unaccounted());
             if (attempt.outcome() instanceof AnAnswerComposed.Outcome.Composed(var value)) {
                 // This value's own evidence, and never the asking's: what another case could not

@@ -201,12 +201,12 @@ class AReadingAnswersAboutThePlacesOfOnePlanTest {
 
         ArmProbe elsewhere = refused.armProvenDead().probe().orElseThrow();
 
-        assertEquals(Set.of(),
-                capped.arrives.asRunWith(Set.of()).provedWrong(),
+        assertEquals(PathReachability.Answers.Contradictions.NONE,
+                capped.arrives.asRunWith(Set.of(), Set.of()).contradicted(),
                 "no row ran, so this reading is shown wrong nowhere");
 
         IllegalArgumentException refusal = assertThrows(IllegalArgumentException.class,
-                () -> capped.arrives.asRunWith(Set.of(elsewhere)));
+                () -> capped.arrives.asRunWith(Set.of(elsewhere), Set.of()));
 
         assertTrue(refusal.getMessage().contains("was made under"),
                 () -> "the refusal names the two numberings: " + refusal.getMessage());
@@ -253,11 +253,11 @@ class AReadingAnswersAboutThePlacesOfOnePlanTest {
 
         UnreachableClaims claims = declared.claims();
         assertFalse(claims.isEmpty(), "the body declares that a case cannot arrive");
-        assertEquals(claims.all().size(), Claims.of(claims, declared.arrives).all().size(),
+        assertEquals(claims.all().size(), Claims.of(claims, () -> declared.arrives).all().size(),
                 "read against its own plan, every claim it makes is judged");
 
         IllegalArgumentException refusal = assertThrows(IllegalArgumentException.class,
-                () -> Claims.of(claims, refused.arrives));
+                () -> Claims.of(claims, () -> refused.arrives));
 
         assertTrue(refusal.getMessage().contains("was made under"),
                 () -> "the refusal names the two numberings: " + refusal.getMessage());
@@ -286,7 +286,7 @@ class AReadingAnswersAboutThePlacesOfOnePlanTest {
             AnalysisBody analysis = checked.analysisBodies().get("pick");
             return GuardThresholds.of("pick", analysis, body, plan, inputs.reading(rules),
                     ElementBindings.of(analysis.core(), analysis.elements(), rules.newtypes()),
-                    against, new RuleReachNumbering(module, "pick"));
+                    against.arrivals(), new RuleReachNumbering(module, "pick"));
         }
 
         /** What this behavior's body declares cannot arrive. */
@@ -294,7 +294,7 @@ class AReadingAnswersAboutThePlacesOfOnePlanTest {
             RuleReadingSource rules = RuleReadings.of(compilation, module);
             InputDomain inputs = compilation.db()
                     .ask(new Adequacy.Inputs(module)).value().get("pick");
-            return UnreachableClaims.of(body, inputs, rules.symbols(), rules.newtypes(), plan);
+            return UnreachableClaims.of(body, inputs, rules.symbols(), rules, plan);
         }
 
         /** The arm this module's own reading proves nothing arrives at. */

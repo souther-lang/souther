@@ -84,7 +84,7 @@ import java.util.Optional;
  *
  * <p><b>And one space per question and not one for the input, because a position exists under
  * conditions.</b> A field of a case is there where the value turned out to be that case, and a
- * field of an element where the sequence holds one — so a question naming such a position is asked
+ * field of an element where the container holds one — so a question naming such a position is asked
  * of the rows that meet those conditions, and the rules that reach it are the ones about those
  * rows. Every reading met into one space instead, the cases of a sum would be rules that hold
  * together, and one case its own rules refuse would refuse an input whose other cases are rows an
@@ -133,6 +133,16 @@ public sealed interface Quantities permits ReadQuantities {
     TermOrders ordersOf(NumericTerm term);
 
     /**
+     * The same number named at {@code at}, or null where what it takes is not taken there.
+     *
+     * <p>For a name every case of a sum spreads, which is one number at the sum and one under each
+     * case. What stands at {@code at} is this reading's to say, for the reason {@link #ordersOf}
+     * gives: a caller holding a type of its own would be holding whatever its walk stopped at, and
+     * a walk that follows a written value says nothing about a name a row reads.
+     */
+    NumericTerm namedAt(NumericTerm.FromOnePosition term, TermPath at);
+
+    /**
      * How many the rules leave the container standing at {@code at}, or every number where they
      * leave it unsaid.
      *
@@ -171,6 +181,16 @@ public sealed interface Quantities permits ReadQuantities {
     default NumericDomain.Bounds runsBetween(NumericTerm term) {
         return runsBetween(LinearForm.atom(term));
     }
+
+    /**
+     * The same question, with a term no value stands at kept apart from a range: what
+     * {@link #runsBetween} answers as every value there is.
+     *
+     * <p>For a reader drawing the lines of a position, which owes none where no value stands — the
+     * elements of a container the declarations hold to none, in an input that has values. One
+     * projection answers both, so such a reader asks this alone rather than this and the range.
+     */
+    NumericDomain.FormProjection projectionOfTheDeclarations(NumericTerm term);
 
     /**
      * The same rules, with these positions fixed at these values.

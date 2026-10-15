@@ -1,6 +1,11 @@
 package souther.compiler.semantics;
 
+import souther.compiler.types.ValueName;
+
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * One thing that is true of one of the language's operations.
@@ -18,10 +23,11 @@ import java.util.Objects;
  * <p><b>A kind is here because a reader in the compiler takes it as a proposition.</b> Whether the
  * statement is that something holds or that it does not is beside the point; what earns a kind its
  * place is that something below the binding reads its value as a statement about the operation and
- * acts on it. That a question about an operation was considered and closed without a rule is not
- * such a statement. Its reason may well be about the operation, but no reader here interprets the
- * closing, so it belongs to the completeness check that asks the question and is not declared,
- * bound or filed here.
+ * acts on it. That a question about an operation was considered and closed without a rule is such a
+ * statement only where a reader acts on the closing: what an observation of an answer comes to,
+ * closed with the proposition the domain has no words for, is what the reading of a condition stops
+ * on and says ({@link LeavesUnsaid}). A closing nothing here reads belongs to the completeness check
+ * that asks the question, and is not declared, bound or filed here.
  *
  * <p><b>The authoring vocabulary, and nothing below the binding reads it.</b> An argument is named
  * here as {@link ArgumentRef}, a word; another operation as a {@link souther.compiler.types.ValueName},
@@ -112,6 +118,32 @@ public sealed interface OperationFact {
     }
 
     /**
+     * The operation answers how many whole units lie between its two arguments, counting forward
+     * from {@code from} to {@code to}, where one unit is {@code perUnit} steps of the order the
+     * arguments are counted on.
+     *
+     * <p>The count is truncated toward zero: a {@code to} fifty-nine steps before {@code from} is no
+     * unit before it, and the answer is nought. So the answer is no form of the two arguments, and
+     * what is stated of it is stated through the difference of the two. With {@code d} the number of
+     * steps from {@code from} to {@code to}, the count is at least {@code n} exactly where
+     * {@code d} is at least {@code perUnit * n} for a positive {@code n}, and where {@code d} is at
+     * least {@code perUnit * n - (perUnit - 1)} for any other.
+     */
+    record CountsWholeUnitsBetween(ArgumentRef from, ArgumentRef to, long perUnit)
+            implements OperationFact {
+
+        public CountsWholeUnitsBetween {
+            Objects.requireNonNull(from, "a count of units starts somewhere");
+            Objects.requireNonNull(to, "and ends somewhere");
+            if (perUnit < 2) {
+                throw new IllegalArgumentException(
+                        "a unit is more than one step of the order, or the count is the difference"
+                                + " and states a form instead: " + perUnit);
+            }
+        }
+    }
+
+    /**
      * Something that holds of the number the operation answers, wherever it is called.
      *
      * <p>One fact per bound rather than a list in one: an operation with two bounds carries two
@@ -136,6 +168,35 @@ public sealed interface OperationFact {
     }
 
     /**
+     * Every element of the operation's answer is inside what a closure answered on an element of
+     * {@code lineage}'s source, and nothing is said of how many there are.
+     *
+     * <p>Where an element came from, apart from how many of them the answer has. A
+     * {@link BuildsItsResultFrom} says both, and its rows are also the table the invariant
+     * discharge reads, so an operation whose count is neither as many as its source nor no more
+     * ({@code List.flatMap} answers any number for each element) cannot be a row there. Declared
+     * here it is read by the readers that follow a value back to the position it was made from,
+     * and by nothing that reasons about the answer's size or what survives the construction.
+     *
+     * <p>Only the lineages a value is made from, which are the closure's answer and what is inside
+     * it. The very elements of an argument are a statement about the answer's count as well, and
+     * stay a {@link BuildsItsResultFrom}.
+     */
+    record ElementsComeFrom(ElementLineage<ArgumentRef> lineage) implements OperationFact {
+
+        public ElementsComeFrom {
+            Objects.requireNonNull(lineage, "this one says where the elements came from");
+            if (!(lineage instanceof ElementLineage.ClosureResult<ArgumentRef>
+                    || lineage instanceof ElementLineage.InsideClosureResult<ArgumentRef>)
+                    || lineage.source().elements() != 1) {
+                throw new IllegalArgumentException(
+                        "an element made from one element of an argument is what this says: "
+                                + lineage);
+            }
+        }
+    }
+
+    /**
      * The operation's result is never smaller than what {@code container} holds.
      *
      * <p>One fact per container it is no smaller than: {@code a ++ b} is as long as either half, and
@@ -151,6 +212,343 @@ public sealed interface OperationFact {
 
         public ResultIsNoSmallerThan {
             Objects.requireNonNull(container, "this one names a container");
+        }
+    }
+
+    /**
+     * The operation's answer is a piece for each element of {@code source}, put end to end in the
+     * order of those elements, and nothing else: the answer to {@code [x₁, …, xₙ]} is
+     * {@code piece(x₁) ++ … ++ piece(xₙ)}, with {@code piece} what {@code piece} says the closure
+     * makes of an element.
+     *
+     * <p>Which values the answer holds, in which order and how many times, and which of them are
+     * there at all, are four readings of this one statement. Where the elements came from
+     * ({@link ElementLineage}) and how many there are ({@link SizeAgainstItsSource}, a size law) are
+     * each weaker, and the two together are not this: {@code [a, a]} came from inside
+     * {@code [a, b]} and is as long. A reader writing the answer out asks this and nothing else.
+     */
+    record AssemblesPieces(ArgumentRef source, PieceOfAnElement piece) implements OperationFact {
+
+        public AssemblesPieces {
+            Objects.requireNonNull(source, "pieces are made of the elements of something");
+            Objects.requireNonNull(piece, "and of each element some piece is made");
+        }
+    }
+
+    /**
+     * What the operation answers holds a value exactly where {@code option} does, and the value it
+     * holds is what the closure answers on the one {@code option} holds: {@code Some(f(x))} of
+     * {@code Some(x)}, and nothing of nothing.
+     *
+     * <p>Whether the answer holds anything is the weaker part of this, and is stated from it
+     * rather than beside it. What the value is, is a value the closure builds and not one the
+     * option holds, so a statement about the answer's value is a statement about the closure's
+     * answer on the option's value, and never about the option's value itself.
+     */
+    record AnswersTheClosureOnWhatItHolds(ArgumentRef option) implements OperationFact {
+
+        public AnswersTheClosureOnWhatItHolds {
+            Objects.requireNonNull(option, "the value the closure is handed is held by some option");
+        }
+    }
+
+    /**
+     * The operation answers the elements of {@code list} from the index {@code count} names on, in
+     * the order they stand there: each of them once, and nothing else. All of them where the count
+     * is nought or less, and none where it is past the last.
+     *
+     * <p>Which of the source's elements, and not only that they came from it. What is left out is
+     * the run before the index, so some element of the answer meeting a statement is some element of
+     * the source at that index or after it meeting it — and of a list holding something, what the
+     * answer from index one holds and the element at nought are all it holds.
+     */
+    record HoldsTheElementsFrom(ArgumentRef count, ArgumentRef list) implements OperationFact {
+
+        public HoldsTheElementsFrom {
+            Objects.requireNonNull(count, "the index the elements are kept from is some argument");
+            Objects.requireNonNull(list, "and they are some list's");
+        }
+    }
+
+    /**
+     * The operation's answer holds the image of every element of the argument {@code image} names,
+     * and holds nothing else: an element of the answer is one of those images, and each of those
+     * is in the answer. The image is the element itself, or what the closure answered on it.
+     *
+     * <p>The answer as a set of values, whichever kind of container holds them and however many
+     * times. That a set made of a list holds each value once, and a set of what a closure made holds
+     * each answer once, are what {@link BuildsItsResultFrom} does not say: it says where an element
+     * came from, and an operation that kept some of what it was given has that too. What a reader
+     * asking whether some element of the answer meets a statement needs is the other half, that no
+     * element of the source was left out, and with it the statement about some element of the
+     * answer is the statement about some element of the source.
+     *
+     * <p>No count, as {@link ElementsComeFrom} has none. How many elements the answer holds is
+     * what a set that holds each value once is the number of different ones of, and no reader of
+     * this takes a count from it.
+     */
+    record HoldsTheImageOfEveryElement(ElementLineage<ArgumentRef> image) implements OperationFact {
+
+        public HoldsTheImageOfEveryElement {
+            Objects.requireNonNull(image, "this one says what the answer holds an image of");
+            if (!(image instanceof ElementLineage.SameAs<ArgumentRef>
+                    || image instanceof ElementLineage.ClosureResult<ArgumentRef>)
+                    || image.source().elements() != 1) {
+                throw new IllegalArgumentException(
+                        "the element itself or the closure's answer on it, of one element of an"
+                                + " argument, is what this says: " + image);
+            }
+        }
+    }
+
+    /**
+     * The operation answers the pieces {@code string} falls into where {@code separator} stands in
+     * it, each once and in order, the empty ones too: a string that is no longer than one piece is
+     * its own, and the code points of the pieces together are those of the string but for each
+     * place the separator stood.
+     *
+     * <p>Said of a separator that is one code point, and only then. A longer one can stand across
+     * where a shorter one is looked for, and what is left between two of its occurrences is not
+     * what is left of the string with a code point taken out. Whether a call's separator is one is
+     * a question about the call and is asked where it is read, as what a constant argument reads
+     * as.
+     *
+     * <p>Nothing here counts the pieces. How many there are is the number of times the separator
+     * stands in the string and is no number the language says.
+     *
+     * <p>With no separator each piece is one code point of the string, every one of them in order:
+     * the characters it is taken apart into.
+     */
+    record HoldsThePiecesOf(Optional<ArgumentRef> separator, ArgumentRef string)
+            implements OperationFact {
+
+        public HoldsThePiecesOf {
+            Objects.requireNonNull(separator, "this one says where the pieces part, if anywhere");
+            Objects.requireNonNull(string, "and the string they are of");
+        }
+    }
+
+    /**
+     * Every element of what the operation answers comes out on {@code side}: each word a string is
+     * split into at whitespace holds something, and so does each character of one.
+     *
+     * <p>What some element of the answer meeting a statement comes to where that statement is this
+     * side: an element there is is one meeting it, so some element meets it exactly where the
+     * answer holds something, and how many elements the answer holds says so too — one or more is
+     * some element meeting it. Said of the answer alone, of no argument, and so not a law: a law is
+     * what an observation of the answer comes to over the arguments, and this holds of every answer
+     * whatever it was handed.
+     */
+    record EveryElementOfItsAnswerIs(SideAnswered side) implements OperationFact {
+
+        public EveryElementOfItsAnswerIs {
+            Objects.requireNonNull(side, "this one names the side every element comes out on");
+        }
+    }
+
+    /**
+     * What the operation answers holds a code point of {@code counted} exactly where {@code string}
+     * does — or, where {@code held} says so, where some element of the strings {@code string}
+     * holds does. A case mapping takes a code point that is not whitespace to some that are not,
+     * and leaves whitespace as it is; strings put end to end hold every code point of each, once
+     * the seams are canonical, and canonical composition joins code points that are not whitespace
+     * into one that is not.
+     *
+     * <p>Whether there is one and not how many. A case mapping can widen one code point to several
+     * and a seam can join two into one, so the count of the answer is no number of the argument,
+     * and only a statement that is the same for every count of one or more is carried across.
+     */
+    record KeepsWhetherItHoldsACodePointOf(CodePointClass counted, ArgumentRef string,
+                                           HeldBy held) implements OperationFact {
+
+        /** What of the argument holds the code points the answer holds. */
+        public enum HeldBy {
+            /** The argument, a string. */
+            THE_STRING,
+            /** Some element of the argument, a container of strings. */
+            SOME_ELEMENT
+        }
+
+        public KeepsWhetherItHoldsACodePointOf {
+            Objects.requireNonNull(counted, "this one names the code points it keeps");
+            Objects.requireNonNull(string, "and the string it keeps them of");
+            Objects.requireNonNull(held, "and what of the argument holds them");
+        }
+    }
+
+    /**
+     * The operation answers what {@code into} holds with {@code value} put in: every element of the
+     * answer is one of {@code into}'s or {@code value}, it holds at most one element more than
+     * {@code into}, and of {@code into}'s it holds each as many times as {@code into} does or fewer.
+     *
+     * <p>A set put a value it holds answers the set; a map put a value under a key it has answers it
+     * with the value under that key replaced. Both are this statement, which says what each element
+     * of the answer was and nothing about which of {@code into}'s it gave up.
+     *
+     * <p>An axiom of a kernel, read by the proofs of what the library's written operations build out
+     * of what they are handed, and by nothing a reader of a condition is handed.
+     */
+    record PutsAValueIn(ArgumentRef value, ArgumentRef into) implements OperationFact {
+
+        public PutsAValueIn {
+            Objects.requireNonNull(value, "this one names the value put in");
+            Objects.requireNonNull(into, "and what it is put in");
+        }
+    }
+
+    /**
+     * The operation answers a map every key of which is a key {@code map} was keyed by — the same
+     * value, filed under in the answer as it was there.
+     *
+     * <p>Its own statement and not something a reader works out from the elements. What
+     * {@link BuildsItsResultFrom} says is where the values came from, and a map whose values a
+     * closure rewrote keeps every key it had ({@code Map.mapValues}), while an answer holding the
+     * very values of a map may hold them under keys it did not have. So which keys an answer has is
+     * said here, of the operations that keep them, and a key is followed into an answer only where
+     * this says so.
+     */
+    record KeepsTheKeysOf(ArgumentRef map) implements OperationFact {
+
+        public KeepsTheKeysOf {
+            Objects.requireNonNull(map, "this one names the map the keys were kept from");
+        }
+
+        /**
+         * What this says of {@code operation}, which takes {@code arity} arguments, as a statement
+         * beside what a map answers asked whether it holds a key: any value the answer holds as a
+         * key, {@code map} holds as one. What a proof of it shows, and what a proof of another
+         * operation takes of it.
+         */
+        public LawProposition<ArgumentRef> states(ValueName.Stdlib.Operation operation,
+                                                  int arity) {
+            List<LawSubject<ArgumentRef>> own = new ArrayList<>();
+            for (int at = 0; at < arity; at++) {
+                own.add(new LawSubject.Argument<>(new ArgumentRef.At(at)));
+            }
+            LawSubject<ArgumentRef> any = new LawSubject.Argument<>(new ArgumentRef.Every(0));
+            return new LawProposition.Any<>(List.of(
+                    holdsTheKey(any, new LawSubject.AnswerOf<>(operation, own)).denied(),
+                    holdsTheKey(any, new LawSubject.Argument<>(map))));
+        }
+
+        private static LawProposition<ArgumentRef> holdsTheKey(LawSubject<ArgumentRef> key,
+                                                              LawSubject<ArgumentRef> in) {
+            return new LawProposition.Observed<>(new LawSubject.AnswerOf<>(
+                    ValueName.Stdlib.operation("Map", "containsKey"), List.of(key, in)),
+                    new SideAnswered(AnswerAspect.TRUTH, true));
+        }
+    }
+
+    /**
+     * What an observation of the operation's answer comes to over its arguments ({@link
+     * OperationLaw}).
+     *
+     * <p>One kind for every observation, because each is the same statement: a side of the answer,
+     * or how many it holds, is a proposition or a number of what the operation was handed. That a
+     * filter holds something where some element was kept, that a take holds something where it was
+     * asked for some and handed some, and that a list of a map's keys holds something where the map
+     * does are three laws of one shape, and a reader carries each across a call by one rule.
+     *
+     * <p>Not every observation of every answer has one declared. Where what the operation is
+     * declared to build already says it — an answer as many as its one source is empty where that
+     * source is — the law is derived there and declaring it again is refused, so the two cannot
+     * disagree.
+     */
+    record HasALaw(OperationLaw<ArgumentRef> law) implements OperationFact {
+
+        public HasALaw {
+            Objects.requireNonNull(law, "this one states a law");
+        }
+    }
+
+    /**
+     * The observation {@code observed} of the operation's answer comes to {@code why}, which no
+     * statement over the arguments can say.
+     *
+     * <p>Read by the reading of a condition, which stops there on a fact about the domain rather
+     * than on a law nobody wrote: what a trimmed string being empty comes to is known, and is a
+     * proposition this compiler has no words for.
+     */
+    record LeavesUnsaid(OperationLaw.Observed observed, Unsayable why) implements OperationFact {
+
+        public LeavesUnsaid {
+            Objects.requireNonNull(observed, "this one names an observation");
+            Objects.requireNonNull(why, "and what it comes to");
+        }
+    }
+
+    /**
+     * A law of an operation the library writes in the language, stated to be proved against its
+     * body: {@code states}, which is a law only once proved, and what a walk the body makes carries
+     * at every step of it ({@code carries}), which the proof goes by.
+     *
+     * <p>Never a law on its own say-so. A law declared beside a body is a second account of what the
+     * body does and is refused there; this is the same statement as an obligation, which the body
+     * discharges or leaves open. A clause of {@code carries} names the walk's parts with
+     * {@link ArgumentRef.Carried}, {@link ArgumentRef.Walked} and {@link ArgumentRef.Every}, and may
+     * name what other operations answer ({@link LawSubject.AnswerOf}).
+     */
+    record IsALemma(OperationLaw<ArgumentRef> states, List<LawProposition<ArgumentRef>> carries)
+            implements OperationFact {
+
+        public IsALemma {
+            Objects.requireNonNull(states, "a lemma states something");
+            carries = List.copyOf(carries);
+        }
+    }
+
+    /**
+     * What an operation the library writes answers stands to what it was handed, and to what
+     * other operations answer on those, as {@code holds} says — stated to be proved against its
+     * body, with what a walk the body makes carries at every step of it ({@code carries}).
+     *
+     * <p>A lemma, as {@link IsALemma} is, about a statement no law can make: one naming what other
+     * operations answer, the answer itself among them ({@link LawSubject.AnswerOf} of the operation
+     * handed its own arguments), and holding of every value ({@link ArgumentRef.Every}). Proved, it
+     * is read by the proofs of the library's other operations where they call this one, as what is
+     * stated of a kernel beside others is ({@link IsRelated}); by no reader of a condition.
+     */
+    record IsRelatedInALemma(LawProposition<ArgumentRef> holds,
+                             List<LawProposition<ArgumentRef>> carries) implements OperationFact {
+
+        public IsRelatedInALemma {
+            Objects.requireNonNull(holds, "a lemma states something");
+            carries = List.copyOf(carries);
+        }
+    }
+
+    /**
+     * What a kernel answers stands to what other kernels answer on its arguments as {@code holds}
+     * says, wherever it answers: a key a map holds is one only where the map holds something; an
+     * insert holds one more than its map unless the key was there.
+     *
+     * <p>An axiom about a kernel, as a law of one is, and held to what it computes the same way. Not
+     * a law: a law says what one observation of an answer comes to over the arguments alone, and
+     * this names other answers ({@link LawSubject.AnswerOf}), the answer itself among them, and may
+     * hold of every value ({@link ArgumentRef.Every}). Read by the proofs of what the library's
+     * written operations keep, and by nothing a reader of a condition is handed.
+     */
+    record IsRelated(LawProposition<ArgumentRef> holds) implements OperationFact {
+
+        public IsRelated {
+            Objects.requireNonNull(holds, "a relation states something");
+        }
+    }
+
+    /**
+     * The operation answers a list of what {@code map} holds: its keys, its values, or its entries
+     * as pairs of a key and the value filed under it.
+     *
+     * <p>Which part is what a reader of an element of the answer needs, and it is not the elements
+     * of the map: a map's element is its value, and a list of its keys holds none of those. So this
+     * is its own statement rather than a {@link BuildsItsResultFrom}, which says an answer holds an
+     * argument's elements.
+     */
+    record ListsAPartOf(ArgumentRef map, MapPart part) implements OperationFact {
+
+        public ListsAPartOf {
+            Objects.requireNonNull(map, "this one names the map listed");
+            Objects.requireNonNull(part, "and which of what it holds");
         }
     }
 
@@ -187,41 +585,6 @@ public sealed interface OperationFact {
         public ReadsItsContainer {
             Objects.requireNonNull(container, "this one names a container");
             through = java.util.Set.copyOf(through);
-        }
-    }
-
-    /**
-     * What the closure answered decides {@code aspect} of what the operation answers.
-     *
-     * <p><b>Said, and never read off a size.</b> That {@code List.filter} answers at most as many
-     * as it walked is one fact ({@link BuiltFrom}); that the closure's truth is <em>why</em> it
-     * answers fewer is another, and the first does not state the second. An operation whose result
-     * is smaller for a reason of its own — a take, a distinct — is one whose closure decides
-     * nothing, and a reading that took the size for the cause would say a rule inside such a call
-     * decides what the call comes to.
-     *
-     * <p>Which is what a reader wants it for. A rule written inside a closure reaches a fork
-     * testing the call only along an edge declared here: {@code List.isEmpty(List.filter(p, xs))}
-     * turns on what {@code p} answered, and {@code List.isEmpty(List.map(p, xs))} does not — the
-     * mapping answers one per element whatever the closure said, so a rule inside it says nothing
-     * about whether the answer is empty.
-     *
-     * <p><b>Nothing here is about the type of what stands there.</b> What is stated is about the
-     * answer, and a closure and a truth are both things that answer; which argument may carry the
-     * fact is what naming it holds it to.
-     *
-     * <p><b>Silence is the answer for everything else.</b> An operation with no such fact is one
-     * this compiler cannot follow to the answer, and a reader stops there rather than
-     * guessing — which leaves a fork stating a rule of its own, and is the safe way round: a rule
-     * credited to nobody leaves a measure open, and one credited to the wrong owner reports a model
-     * nothing read as one read to the end.
-     */
-    record TurnsOnWhetherAnArgumentHolds(AnswerAspect aspect, ArgumentRef argument)
-            implements OperationFact {
-
-        public TurnsOnWhetherAnArgumentHolds {
-            Objects.requireNonNull(aspect, "this one names a side of the answer");
-            Objects.requireNonNull(argument, "this one names an argument");
         }
     }
 

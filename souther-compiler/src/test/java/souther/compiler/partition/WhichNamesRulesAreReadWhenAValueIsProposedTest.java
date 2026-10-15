@@ -47,7 +47,7 @@ class WhichNamesRulesAreReadWhenAValueIsProposedTest {
         return Partitions.representativesOf(Type.ref(at),
                         RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES),
                         null, Set.of())
-                .stream().map(FixtureTemplate::text).toList();
+                .values().stream().map(FixtureTemplate::text).toList();
     }
 
     /** A rule on the name the string is directly under is read, and proposes what it asks for. */
@@ -84,7 +84,7 @@ class WhichNamesRulesAreReadWhenAValueIsProposedTest {
                 data B = String
 
                 data A = B
-                    invariant tagged = startsWith("X", value)
+                    invariant tagged = startsWith("X", value.value)
                 """, "A");
 
         assertEquals(List.of("A(B(\"X\"))", "A(B(\"x\"))"), proposed,
@@ -107,7 +107,7 @@ class WhichNamesRulesAreReadWhenAValueIsProposedTest {
                     invariant tagged = startsWith("X", value)
 
                 data A = B
-                    invariant ended = endsWith("Z", value)
+                    invariant ended = endsWith("Z", value.value)
                 """, "A"));
     }
 

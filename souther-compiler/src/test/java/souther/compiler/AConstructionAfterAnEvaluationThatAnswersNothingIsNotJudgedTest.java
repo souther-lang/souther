@@ -224,7 +224,9 @@ class AConstructionAfterAnEvaluationThatAnswersNothingIsNotJudgedTest {
                 "    guard x >= 0 else Nothing\n")),
                 "the product that overflows runs only where the left came out true, which is"
                         + " nowhere here — so it stops nothing and the construction is judged");
-        assertEquals(List.of(), reported(shortCircuiting(
+        // No E2010: the construction is not judged. What is said is that `flag` is never true
+        // past the guard, so the fork on it has an arm nothing reaches.
+        assertEquals(List.of("E1327"), reported(shortCircuiting(
                 "x < 0 && Negative(x).value < 0", "if flag then Nothing else Nothing",
                 "    guard x >= 0 else Nothing\n")),
                 "and a construction on that side is built on no run, so it is not judged");

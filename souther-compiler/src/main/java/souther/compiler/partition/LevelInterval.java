@@ -8,6 +8,7 @@ import souther.compiler.numeric.Towards;
 import souther.compiler.numeric.UnheldNumber;
 
 import java.util.List;
+import java.util.Optional;
 
 /**
  * One run of a quantity's order, between two places the rules stop it at.
@@ -215,9 +216,18 @@ public record LevelInterval(Bound low, Bound high) {
         // writes — and that is an end to narrow inward past, exactly as a line a multiple left
         // between two values is.
         Level itself = bound.at().asALevelOfTheQuantity();
-        Place named = itself == null ? null : itself.asAPlaceOrNothing();
-        if (named != null) {
-            return new EndSought.At(new Endpoint(named, bound.inclusive()));
+        if (itself != null) {
+            switch (itself.asAPlaceOrNothing()) {
+                case ExactAnswer.Unheld<Optional<Place>> unheld -> {
+                    return new EndSought.NotWorkedOut(unheld.why());
+                }
+                case ExactAnswer.Held<Optional<Place>> held -> {
+                    if (held.value().isPresent()) {
+                        return new EndSought.At(
+                                new Endpoint(held.value().get(), bound.inclusive()));
+                    }
+                }
+            }
         }
         return switch (bound.at().justBeyond(into, digits)) {
             case CutPosition.JustBeyond.At(Place inside) ->

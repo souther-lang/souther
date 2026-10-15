@@ -1,20 +1,25 @@
 package souther.compiler.check;
 
+import souther.compiler.collect.AppendOnly;
+import souther.compiler.inputs.CasesLeft;
+import souther.compiler.numeric.ClosedStates;
 import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.OrderedIntervals;
 import souther.compiler.numeric.Rel;
+import souther.compiler.values.Allowance;
 
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.HashSet;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 /**
  * What holds where the walk stands: numeric relations, predicates known to hold or to fail, relations
- * known of every element of a container, and the terms an assumption named — which is what makes a
+ * known of every element of a container, which cases a value an arm or a condition on the way
+ * settled may still be, and the terms an assumption named — which is what makes a
  * computed value one a clause may be read against. Threaded functionally through the walk, as the
  * domain alone once was.
  *
@@ -24,9 +29,19 @@ import java.util.Set;
  * the unguarded reading already refutes holds wherever the construction stands, and one only the full
  * reading refutes took something more than the values to settle. Which something is not recorded, so
  * it is not claimed either.
+ *
+ * <p>Equal by its parts, and its parts by which states they are: the numbers a state holds and the
+ * terms its assumptions named are compared as the objects they are and not by what they hold
+ * ({@link AppendOnly}). So two of these are equal where they were made of the same states, and
+ * nothing asks it whether two paths know alike — a reader with that question asks what each knows.
  */
 record Known(ConstraintState<FactSubject> constraints, List<Quantified> quantified,
-                     Set<FactSubject> spoken, Unguarded unguarded) {
+                     AppendOnly<FactSubject, Boolean> spoken, Unguarded unguarded,
+                     Map<FactSubject, CasesLeft> cases) {
+
+    Known {
+        cases = Map.copyOf(cases);
+    }
 
     /** What holds of the values here whatever the path did — what a type guarantees of a value and
      * what a name was given. It carries no quantifiers and no spoken terms: those decide which
@@ -84,22 +99,102 @@ record Known(ConstraintState<FactSubject> constraints, List<Quantified> quantifi
      * is named, and a condition says it only on the path it guards. */
     enum Held { OF_THE_VALUE, ON_THE_PATH }
 
+    /**
+     * Nothing known, each domain taken from here working out what its rules leave for itself.
+     *
+     * <p>For a reader that holds no engine. A walk an engine makes starts at
+     * {@link PathEngine#nothingKnown}, which lends one walk's closures to the next.
+     */
     static Known top() {
-        return new Known(ConstraintState.top(FactSubject.inOneOrder()), List.of(), Set.of(),
-                new Unguarded(ConstraintState.top(FactSubject.inOneOrder())));
+        return top(ClosedStates.NONE);
+    }
+
+    /**
+     * Nothing known, with what the numbers leave worked out through {@code closures}, which every
+     * fact taken in afterwards keeps.
+     */
+    static Known top(ClosedStates closures) {
+        return new Known(ConstraintState.top(FactSubject.inOneOrder(), closures), List.of(),
+                AppendOnly.empty(),
+                new Unguarded(ConstraintState.top(FactSubject.inOneOrder(), closures)), Map.of());
     }
 
     /** This, with {@code f rel 0} taken as holding as far as {@code held} reaches. */
     Known taking(LinearForm<FactSubject> f, Rel rel, Held held, Map<FactSubject, Granularity> kinds) {
         return new Known(constraints.taking(f, rel, kinds), quantified, spoken,
-                held == Held.OF_THE_VALUE ? unguarded.taking(f, rel, kinds) : unguarded);
+                held == Held.OF_THE_VALUE ? unguarded.taking(f, rel, kinds) : unguarded, cases);
+    }
+
+    /**
+     * This, with the values a declaration leaves the names of one value taken in.
+     *
+     * <p>Of the value and not of the path: what a declaration's rules admit is true wherever a
+     * value of it is named. Taken in as a reading of the values rather than as numbers —
+     * {@code value == 1 || value == 3} leaves a gap between two values that no range holds, and it
+     * is the values beside the ranges a path takes in that show an arm written for the gap is one
+     * nothing enters ({@link ConstraintState#isBottom}).
+     *
+     * <p>Met with what is known rather than read into it. Every value a walk enters says what its
+     * declaration leaves it, so this is a conjunction of many such readings, one per value, and a
+     * conjunction is what {@link ConstraintState#meet} is: readings about different values are held
+     * apart and pay nothing for each other.
+     */
+    Known admitting(Confinement.Worked<FactSubject> read, Allowance<FactSubject> sets) {
+        ConstraintState<FactSubject> values =
+                ConstraintState.top(FactSubject.inOneOrder()).takingRead(read, sets);
+        return new Known(constraints.meet(values, sets), quantified, spoken,
+                new Unguarded(unguarded.constraints().meet(values, sets)), cases);
+    }
+
+    /**
+     * This, with {@code bounded} taken as holding on the path, on the orders {@code on} says the
+     * positions are counted by.
+     *
+     * <p>For a comparison against a place on an order where there is no sum to say it as — two
+     * strings do not add. A condition says it, so it reaches the path and not the value.
+     */
+    Known bounding(OrderedIntervals<FactSubject> bounded, Map<FactSubject, Carrier> on) {
+        return new Known(constraints.taking(bounded, on), quantified, spoken, unguarded, cases);
     }
 
     /** This, with the predicate {@code key} taken as holding — or as failing, where {@code positive}
      * is false — as far as {@code held} reaches. */
     Known taking(FactSubject key, boolean positive, Held held) {
         return new Known(constraints.taking(key, positive), quantified, spoken,
-                held == Held.OF_THE_VALUE ? unguarded.taking(key, positive) : unguarded);
+                held == Held.OF_THE_VALUE ? unguarded.taking(key, positive) : unguarded, cases);
+    }
+
+    /**
+     * This, with the value {@code value} one of {@code left} on this path, or reaching nothing where
+     * what the path already left it holds none of them.
+     *
+     * <p>On the path only. Which case a value is, is what an arm or a condition on the way settled,
+     * and a value's type says nothing of it.
+     *
+     * <p>What was left before and {@code left} are met ({@link CasesLeft#meet}). Two answers of
+     * unlike kinds — an optional's carriers beside a sum's cases — are about two values that were
+     * named alike, and they say nothing of each other, so the first is kept.
+     */
+    Known inCases(FactSubject value, CasesLeft left) {
+        CasesLeft was = cases.get(value);
+        if (was == null) {
+            Map<FactSubject, CasesLeft> more = new HashMap<>(cases);
+            more.put(value, left);
+            return new Known(constraints, quantified, spoken, unguarded, more);
+        }
+        if (!was.atoms().getFirst().getClass().equals(left.atoms().getFirst().getClass())) {
+            return this;
+        }
+        CasesLeft both = was.meet(left);
+        if (both == null) {
+            return reachingNothing();
+        }
+        if (both.equals(was)) {
+            return this;
+        }
+        Map<FactSubject, CasesLeft> narrowed = new HashMap<>(cases);
+        narrowed.put(value, both);
+        return new Known(constraints, quantified, spoken, unguarded, narrowed);
     }
 
     /**
@@ -112,7 +207,7 @@ record Known(ConstraintState<FactSubject> constraints, List<Quantified> quantifi
      * the program never builds rather than one it builds wrongly.
      */
     Known reachingNothing() {
-        return new Known(constraints.shownToHoldNothing(), quantified, spoken, unguarded);
+        return new Known(constraints.shownToHoldNothing(), quantified, spoken, unguarded, cases);
     }
 
     /**
@@ -120,14 +215,19 @@ record Known(ConstraintState<FactSubject> constraints, List<Quantified> quantifi
      * recorded where the assumption is made rather than searched for afterwards: what a guard
      * spoke about is known exactly then, and reading it back out of a domain would mean matching
      * key text, which is how a term that merely reads like another gets mistaken for it.
+     *
+     * <p>Told on to what this was told rather than copied from it ({@link AppendOnly}): a path names
+     * something new at most of the rules it takes, and copying what it had named at each of those
+     * costs the square of the path.
      */
     Known speaking(Collection<FactSubject> terms) {
-        if (terms.isEmpty()) {
-            return this;
+        AppendOnly<FactSubject, Boolean> all = spoken;
+        for (FactSubject term : terms) {
+            if (!all.contains(term)) {
+                all = all.with(term, true);
+            }
         }
-        Set<FactSubject> all = new HashSet<>(spoken);
-        all.addAll(terms);
-        return new Known(constraints, quantified, all, unguarded);
+        return all == spoken ? this : new Known(constraints, quantified, all, unguarded, cases);
     }
 
     /** Whether an assumption on this path named {@code term}. */
@@ -141,6 +241,6 @@ record Known(ConstraintState<FactSubject> constraints, List<Quantified> quantifi
         }
         List<Quantified> all = new ArrayList<>(quantified);
         all.addAll(more);
-        return new Known(constraints, List.copyOf(all), spoken, unguarded);
+        return new Known(constraints, List.copyOf(all), spoken, unguarded, cases);
     }
 }

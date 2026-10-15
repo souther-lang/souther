@@ -12,7 +12,9 @@ import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -96,8 +98,8 @@ class WhatTheOfferWasShortOfReachesTheAccountTest {
     void theDecisionSentenceNamesTheRuleThatGaveTheOfferNoValue() {
         String line = whereNothingCouldShowARow(human(model(NOTHING_READS_IT)));
 
-        assertTrue(line.contains("every value tried at a rule of the decision was refused, and what"
-                        + " was tried was not everything the rules leave"),
+        assertTrue(line.contains("every value tried at a rule of the decision was refused, but the"
+                        + " values offered were not shown to be exhaustive"),
                 () -> "what the search came to: " + line);
         assertTrue(line.contains("invariant Code (shape) at `t.code` gave none of them: written in"
                         + " a form this compiler does not read"),
@@ -166,9 +168,10 @@ class WhatTheOfferWasShortOfReachesTheAccountTest {
 
         assertFalse(owed.isEmpty(), "both ways of this body had nothing composed to try");
         for (JsonNode each : owed) {
-            assertEquals("all_candidates_rejected", each.get("synthesisShortfall").stringValue(),
+            JsonNode word = onlyShortfall(each);
+            assertEquals("all_candidates_rejected", word.get("reason").stringValue(),
                     () -> "every value the rules leave was tried: " + each);
-            assertNull(each.get("synthesisShortfallCauses"),
+            assertNull(word.get("causes"),
                     () -> "and nothing was short of anything: " + each);
         }
         assertFalse(whereNothingCouldShowARow(human(NOTHING_WAS_SHORT)).contains("gave none of"),
@@ -192,10 +195,12 @@ class WhatTheOfferWasShortOfReachesTheAccountTest {
         for (String document : List.of(json(model(NOTHING_READS_IT)),
                 json(model(MORE_THAN_A_WITNESS_MAY_SPEND)), json(NOTHING_WAS_SHORT))) {
             for (JsonNode owed : withAShortfall(document)) {
-                JsonNode causes = owed.get("synthesisShortfallCauses");
-                if (causes != null) {
-                    causes.forEach(seen::add);
-                }
+                owed.get("synthesisShortfalls").forEach(word -> {
+                    JsonNode causes = word.get("causes");
+                    if (causes != null) {
+                        causes.forEach(seen::add);
+                    }
+                });
             }
         }
 
@@ -252,19 +257,87 @@ class WhatTheOfferWasShortOfReachesTheAccountTest {
                         + " would be sent to one that reads perfectly");
     }
 
-    /** The line the page counts the rules nothing settled under. */
+    /**
+     * A rule nothing could type, in a model that compiles.
+     *
+     * <p>The clause calls a recursive helper, and the reading of a declaration's clauses leaves
+     * such a call standing with no signature for it, so the clause has no form there. The helper
+     * is handed a case with no fields because a rule may not build a value, and that is the one
+     * value of a recursive type it can name.
+     */
+    private static final String A_CLAUSE_NOTHING_TYPED = """
+            module example.untyped
+
+            data Empty
+            data More = { next: Chain }
+            data Chain = Empty | More
+
+            let reaches (c: Chain, s: String): Bool = match c with
+                | More as m -> reaches(m.next, s)
+                | Empty -> String.length(s) == 7
+
+            data Code = String
+                invariant shape = reaches(Empty, value)
+
+            data Flag = Yes | No
+
+            data T = { flag: Flag, code: Code }
+
+            data Ok
+
+            behavior look : (t: T) -> Ok
+
+            let look (t) = Ok
+            """;
+
+    /**
+     * And a clause nothing typed is one hole said in one word, under the position and under the
+     * rule the offer got nothing from.
+     *
+     * <p>The reading of the position and the offer of values meet the same clause, and both file it
+     * as rules no reading reached. The offer also knows which rule it was, because it holds the
+     * part the author wrote — so it names the rule beside the word, and the word says no more than
+     * it says under the position. Said in two words, one document would carry two accounts of one
+     * clause.
+     */
+    @Test
+    void aClauseNothingTypedIsOneWordUnderThePositionAndUnderTheRule() {
+        String document = json(A_CLAUSE_NOTHING_TYPED);
+
+        List<JsonNode> underThePosition = new ArrayList<>();
+        JSON.readTree(document).get("modules").get(0).get("behaviors").forEach(behavior ->
+                behavior.get("partition").get("notRead").forEach(each -> {
+                    if (each.get("position").stringValue().equals("t.code")) {
+                        underThePosition.add(each);
+                    }
+                }));
+        assertEquals(1, underThePosition.size(), () -> "the position is short of its rules: "
+                + underThePosition);
+        assertEquals("rules_not_read_at_all",
+                underThePosition.get(0).get("reason").stringValue());
+
+        JsonNode underTheRule = onlyCause(document);
+        assertEquals("a_rule", underTheRule.get("attribution").stringValue());
+        assertEquals("invariant Code (shape)", underTheRule.get("rule").stringValue());
+        assertEquals(underThePosition.get(0).get("reason").stringValue(),
+                underTheRule.get("unread").stringValue(),
+                "the rule the offer got nothing from is said in the position's word for it");
+    }
+
+    /** The sentence the page opens each rule nothing settled with, which is one sentence here. */
     private static String whereNothingCouldShowARow(String page) {
-        List<String> found = new ArrayList<>();
+        Set<String> found = new LinkedHashSet<>();
         for (String line : page.split("\n")) {
-            // The line the rules of the decision are counted under, and not a point of a line: the
-            // page opens both the same way and what this is about is the decision's.
+            // The line a rule of the decision is opened with, and not a point of a line: the page
+            // opens both the same way and what this is about is the decision's.
             if (line.contains("nothing could show a row can be written at")
                     && line.contains("decision rule")) {
                 found.add(line);
             }
         }
-        assertEquals(1, found.size(), () -> "one body here has a rule nothing settled: " + found);
-        return found.get(0);
+        assertEquals(1, found.size(),
+                () -> "every rule nothing settled here came to one answer: " + found);
+        return found.iterator().next();
     }
 
     /** Every rule of the document whose search had nothing composed to try it with. */
@@ -272,7 +345,7 @@ class WhatTheOfferWasShortOfReachesTheAccountTest {
         JsonNode behaviors = JSON.readTree(document).get("modules").get(0).get("behaviors");
         List<JsonNode> found = new ArrayList<>();
         behaviors.forEach(behavior -> behavior.get("decision").get("obligations").forEach(rule -> {
-            if (rule.get("synthesisShortfall") != null) {
+            if (rule.get("synthesisShortfalls") != null) {
                 found.add(rule);
             }
         }));
@@ -286,13 +359,20 @@ class WhatTheOfferWasShortOfReachesTheAccountTest {
         return found.get(0);
     }
 
+    /** The one word a rule's searches came back with, where these models have one. */
+    private static JsonNode onlyShortfall(JsonNode rule) {
+        JsonNode words = rule.get("synthesisShortfalls");
+        assertEquals(1, words.size(), () -> "the searches came back with one word: " + words);
+        return words.get(0);
+    }
+
     private static String shortfallWord(String document) {
-        return unsettled(document).get("synthesisShortfall").stringValue();
+        return onlyShortfall(unsettled(document)).get("reason").stringValue();
     }
 
     /** The one thing that gave that search's offer no value. */
     private static JsonNode onlyCause(String document) {
-        JsonNode causes = unsettled(document).get("synthesisShortfallCauses");
+        JsonNode causes = onlyShortfall(unsettled(document)).get("causes");
         assertNotNull(causes, "the offer was short of something");
         assertEquals(1, causes.size(), () -> "one rule gave it no value: " + causes);
         return causes.get(0);

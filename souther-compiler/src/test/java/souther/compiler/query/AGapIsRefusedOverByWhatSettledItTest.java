@@ -64,7 +64,9 @@ class AGapIsRefusedOverByWhatSettledItTest {
                         arm(SETTLED, 1, DecidedBy.THE_DECLARATION),
                         arm(UNSETTLED, 2, DecidedBy.NOT_SAID),
                         arm(UNSETTLED, 3, DecidedBy.NOT_SAID)),
-                Set.of(PLACES.get(0)), Set.of(), Adequacy.NOTHING_PROVEN, WeakeningSet.none()).arms();
+                Map.of(PLACES.get(0), RowWitnesses.ANOTHER_ROW), Set.of(),
+                Adequacy.NOTHING_PROVEN, WeakeningSet.none(),
+                _ -> List.of()).arms();
     }
 
     @Test
@@ -89,7 +91,9 @@ class AGapIsRefusedOverByWhatSettledItTest {
                         arm(SETTLED, 1, DecidedBy.THE_DECLARATION),
                         arm(UNSETTLED, 2, DecidedBy.NOT_SAID),
                         arm(UNSETTLED, 3, DecidedBy.NOT_SAID)),
-                Set.of(PLACES.get(0)), Set.of(), Adequacy.NOTHING_PROVEN, WeakeningSet.none());
+                Map.of(PLACES.get(0), RowWitnesses.ANOTHER_ROW), Set.of(),
+                Adequacy.NOTHING_PROVEN, WeakeningSet.none(),
+                _ -> List.of());
 
         assertEquals(WeakeningSet.of(new Weakening.ArmsUnsettled(UNSETTLED)),
                 measured.measured().weakening(),

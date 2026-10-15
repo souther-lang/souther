@@ -1,6 +1,7 @@
 package souther.compiler.inputs;
 
 import souther.compiler.check.RuleCitation;
+import souther.compiler.types.ModelOccurrences;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -136,7 +137,7 @@ public record RulesWithNoLine(List<RuleWithoutALine> reported,
      */
     public static final class Gathered {
 
-        private final Map<RuleWithoutALine.Fact, RuleWithoutALine> reported = new LinkedHashMap<>();
+        private final Map<Object, RuleWithoutALine> reported = new LinkedHashMap<>();
         private final Map<Object, StandingQuestion.Unclassified> unclassified = new LinkedHashMap<>();
 
         /** One more finding, which is what a report says about the rule at that place. */
@@ -166,9 +167,9 @@ public record RulesWithNoLine(List<RuleWithoutALine> reported,
          * {@code ensures} come this way — there is no reading that says what either raises, so
          * where the reading of one stopped there is nothing to have been determined.
          */
-        public void unclassified(RuleCitation cited, FilingCoordinate at,
-                                 BlockReason.RuleReadingStopped why) {
-            asked(StandingQuestion.NothingClassifiesIt.of(cited, at, why));
+        public void unclassified(RuleCitation cited, ModelOccurrences readAt,
+                                 FilingCoordinate at, BlockReason.RuleReadingStopped why) {
+            asked(StandingQuestion.NothingClassifiesIt.of(cited, readAt, at, why));
         }
 
         /**
@@ -180,15 +181,16 @@ public record RulesWithNoLine(List<RuleWithoutALine> reported,
          * is what holds the border measure open, and the classes are settled beside it rather than
          * held open with it.
          */
-        public void boundaryUndetermined(RuleCitation cited, FilingCoordinate at,
+        public void boundaryUndetermined(RuleCitation cited, ModelOccurrences readAt,
+                                         FilingCoordinate at,
                                          BlockReason.RuleReadingStopped why) {
-            add(RuleWithoutALine.of(cited, at, why));
-            asked(StandingQuestion.BoundaryUndetermined.of(cited, at, why));
+            add(RuleWithoutALine.of(cited, readAt, at, why));
+            asked(StandingQuestion.BoundaryUndetermined.of(cited, readAt, at, why));
         }
 
         /** One a reader already made, which is how the findings of two readings meet. */
         public void add(RuleWithoutALine one) {
-            reported.merge(one.fact(), one, RuleWithoutALine::mergedWith);
+            reported.merge(one.fact().key(), one, RuleWithoutALine::mergedWith);
         }
 
         /** The same, for a rule nothing worked out what it raises. */

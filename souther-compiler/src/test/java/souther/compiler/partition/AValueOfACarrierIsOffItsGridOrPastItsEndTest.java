@@ -4,10 +4,12 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.Carrier;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -36,7 +38,7 @@ class AValueOfACarrierIsOffItsGridOrPastItsEndTest {
     /** A number the order stands at is the level, and the place is the count it is. */
     @Test
     void aNumberTheOrderStandsAtIsTheLevel() {
-        assertEquals(new Level.OnACarrier(WHOLE, Count.of(4)),
+        assertEquals(ExactAnswer.held(new Level.OnACarrier(WHOLE, Count.of(4))),
                 Level.OnACarrier.held(WHOLE, ExactRatio.of(4)));
     }
 
@@ -48,7 +50,8 @@ class AValueOfACarrierIsOffItsGridOrPastItsEndTest {
      */
     @Test
     void aCountTheOrderDoesNotStandAtIsRefused() {
-        assertEquals(new Count(new BigDecimal("0.5")), Count.at(ratio(1, 2)),
+        assertEquals(ExactAnswer.held(Optional.of(new Count(new BigDecimal("0.5")))),
+                Count.written(ratio(1, 2)),
                 "a half is a count, which is the half of this a number can answer");
 
         assertThrows(IllegalStateException.class,
@@ -68,7 +71,8 @@ class AValueOfACarrierIsOffItsGridOrPastItsEndTest {
         ExactRatio pastTheEnd = ExactRatio.of(BigInteger.valueOf(Long.MAX_VALUE)
                 .add(BigInteger.ONE));
 
-        assertEquals(new Level.OnACarrier(WHOLE, Count.at(pastTheEnd)),
+        assertEquals(ExactAnswer.held(new Level.OnACarrier(WHOLE,
+                        new Count(new BigDecimal(Long.MAX_VALUE).add(BigDecimal.ONE)))),
                 Level.OnACarrier.held(WHOLE, pastTheEnd));
     }
 }

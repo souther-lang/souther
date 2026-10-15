@@ -34,7 +34,7 @@ class WhatTheReadingsOfOneDebtComeToTogetherTest {
      */
     @Test
     void aRowFoundAtOneReadingSettlesTheDebt() {
-        assertEquals(new ObligationCoverage.Witnessed(),
+        assertEquals(new ObligationCoverage.Witnessed(RowWitnesses.ANOTHER_ROW),
                 ObligationCoverage.acrossTheReadings(List.of(
                         missed(), found(), unread())),
                 "one reading is at the point, which is what the line asked for");
@@ -115,15 +115,15 @@ class WhatTheReadingsOfOneDebtComeToTogetherTest {
      */
     @Test
     void aReadingMadeInPartThatFoundTheRowIsWitnessedAndNotUndecided() {
-        assertEquals(new ObligationCoverage.Witnessed(),
+        assertEquals(new ObligationCoverage.Witnessed(RowWitnesses.ANOTHER_ROW),
                 ObligationCoverage.acrossTheReadings(List.of(
-                        new Measurement.Partial<>(new Coverage.Hit(), WEAKENED))),
+                        new Measurement.Partial<>(new Coverage.Hit(RowWitnesses.ANOTHER_ROW), WEAKENED))),
                 "found is found, whatever the reading beside it went without");
     }
 
     /** A reading that found the row. */
     private static Measurement<Coverage> found() {
-        return new Measurement.Complete<>(new Coverage.Hit());
+        return new Measurement.Complete<>(new Coverage.Hit(RowWitnesses.ANOTHER_ROW));
     }
 
     /** A reading that read its rows to the end and found none at the point. */

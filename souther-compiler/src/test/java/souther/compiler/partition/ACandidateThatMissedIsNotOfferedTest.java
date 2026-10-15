@@ -13,6 +13,8 @@ import souther.compiler.coverage.ControlClaim;
 import souther.compiler.coverage.Runs;
 import souther.compiler.coverage.SiteNumbering;
 import souther.compiler.inputs.InputDomain;
+import souther.compiler.observe.AnswerObservation;
+import souther.compiler.observe.ObservedValue;
 import souther.compiler.reading.Interaction;
 import souther.compiler.reading.CoverageRead;
 import souther.compiler.query.Adequacy;
@@ -45,6 +47,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class ACandidateThatMissedIsNotOfferedTest {
 
+    /** What a run that went to the end came back with. Which value is no part of what is asked
+     *  here; that there was one is, since a run that stopped without one is no witness. */
+    private static final AnswerObservation ANSWERED =
+            new AnswerObservation.Answered(new ObservedValue.Integer(0));
+
     private static final String SHIPPING = """
             module example.shipping
 
@@ -75,8 +82,9 @@ class ACandidateThatMissedIsNotOfferedTest {
     /** A run that did nothing at all, which is a run that missed every combination. Of the
      *  model's own numbering: a run is a run of somewhere, and one of nowhere could be asked about
      *  any place at all and answer. */
-    private static Generator.Watched missed(Model model) {
-        return new Generator.Watched.Ran(Runs.nowhere(model.numbering()));
+    private static Generator.ObservedRun missed(Model model) {
+        return new Generator.ObservedRun(new Generator.Watched.Ran(Runs.nowhere(model.numbering())),
+                ANSWERED);
     }
 
     /**
@@ -96,7 +104,7 @@ class ACandidateThatMissedIsNotOfferedTest {
                         == Generator.UnresolvedCombination.Reason.NO_CERTIFIED_WITNESS),
                 "the combinations were left untried: " + filled.unresolved());
         assertTrue(filled.unresolved().stream().noneMatch(each -> each.why().reason()
-                        == Generator.UnresolvedCombination.Reason.THE_RULES_LEAVE_NOTHING_THERE),
+                        == Generator.UnresolvedCombination.Reason.NO_VALUE_CAN_STAND_THERE),
                 "and nothing was said to be impossible: " + filled.unresolved());
     }
 
@@ -107,7 +115,8 @@ class ACandidateThatMissedIsNotOfferedTest {
         AlignedObservation everything = doing(model.numbering(), everyClaimOf(model));
 
         FillResult filled =
-                fill(model, _ -> new Generator.Watched.Ran(everything));
+                fill(model, _ -> new Generator.ObservedRun(new Generator.Watched.Ran(everything),
+                        ANSWERED));
 
         assertTrue(filled.unresolved().stream().noneMatch(each -> each.why().reason()
                         == Generator.UnresolvedCombination.Reason.NO_CERTIFIED_WITNESS),
@@ -176,7 +185,7 @@ class ACandidateThatMissedIsNotOfferedTest {
     /** Every claim any combination of the model makes, so that one run answers all of them. */
     private static List<ControlClaim> everyClaimOf(Model model) {
         List<ControlClaim> out = new ArrayList<>();
-        for (InteractionCells.Group group : InteractionCells.of(model.groups(), model.subject().axes().axes(), Budgets.generation().cellsPerGroup()).groups()) {
+        for (InteractionCells.Group group : InteractionCells.of(model.groups(), model.subject().axes(), Budgets.generation().cellsPerGroup()).groups()) {
             for (int index = 0; index < group.size(); index++) {
                 CellSelection selection = group.at(index);
                 if (selection != null) {
@@ -221,11 +230,11 @@ class ACandidateThatMissedIsNotOfferedTest {
             Core body = checked.behaviorBodies().get(behavior);
             assertNotNull(body, "the behavior under test has a body");
             return new Model(MeasuredInput.of(spec.name(), inputs.reading(rules),
-                    Partitions.of(spec.name(), inputs, rules,
+                    Partitions.of(spec.name(), inputs.reading(rules),
                             souther.compiler.query.ReadAs.THE_COMPILATION_DOES)),
-                    CoverageRead.of(spec.name(), body,
-                            checked.plan(), inputs,
-                            rules), checked.plan().numbering());
+                    CoverageRead.of(spec.name(),
+                            checked.run(spec.name()), inputs.reading(rules)),
+                    checked.plan().numbering());
         }
     }
 }

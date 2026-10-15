@@ -1,0 +1,38 @@
+// A decision past an attempted construction, where what is known there and the ways of the decision
+// together are more than are read at once, is still read as the decision it is.
+//
+// Nine ways lead to the attempt and each way out of the inner condition is two or more, so what is
+// known past the attempt is read no further. What the condition itself decides is read all the
+// same: past the bound the decision is read against more than it was made in, and is never dropped.
+//
+// told apart at a1: 2 groups of 2
+// told apart at a2: 2 groups of 2
+// told apart at a3: 2 groups of 2
+// told apart at a4: 2 groups of 2
+// told apart at a5: 2 groups of 2
+// told apart at a6: 2 groups of 2
+// told apart at a7: 2 groups of 2
+// told apart at a8: 2 groups of 2
+// told apart at a9: 2 groups of 2
+// told apart at b1: 2 groups of 2
+// told apart at b2: 2 groups of 2
+// told apart at b3: 2 groups of 2
+// told apart at b4: 2 groups of 2
+module example.pastthebound
+
+data Note = String
+    invariant String.length(value) >= 1
+data NoNote
+
+data Ok = { n: Int }
+
+behavior judge : (a1: Int, a2: Int, a3: Int, a4: Int, a5: Int, a6: Int, a7: Int, a8: Int,
+                  a9: Int, b1: Int, b2: Int, b3: Int, b4: Int, text: String) -> Ok | NoNote
+    constructs Ok, Note
+
+let judge (a1, a2, a3, a4, a5, a6, a7, a8, a9, b1, b2, b3, b4, text) =
+    if a1 > 0 || a2 > 0 || a3 > 0 || a4 > 0 || a5 > 0 || a6 > 0 || a7 > 0 || a8 > 0
+            || a9 > 0 then {
+        guard Note(text) as note else NoNote
+        if (b1 > 0 && b2 > 0) || (b3 > 0 && b4 > 0) then Ok { n = 1 } else Ok { n = 2 }
+    } else Ok { n = 0 }

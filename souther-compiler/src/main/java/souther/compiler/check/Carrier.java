@@ -5,6 +5,7 @@ import souther.compiler.core.Core;
 import souther.compiler.core.IntNegation;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.PlacesApart;
@@ -19,7 +20,7 @@ import souther.compiler.numeric.Towards;
 import souther.compiler.numeric.ValueOrder;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.regex.Language;
-import souther.compiler.regex.Meter;
+import net.unit8.notation199x.pattern.Meter;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
@@ -32,7 +33,9 @@ import souther.compiler.values.ValueSet;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
+import java.util.function.Predicate;
 
 /**
  * An order a rule is read against and a value is written back at, and the only place either
@@ -136,6 +139,17 @@ public sealed interface Carrier extends ValueOrder {
             return index < 0 ? null : Count.of(index);
         }
 
+        /** Where each case {@code kept} keeps comes in the declaration, in that order. */
+        public List<Place> placesOf(Predicate<TypeSymbol> kept) {
+            List<Place> out = new ArrayList<>();
+            for (int index = 0; index < cases.size(); index++) {
+                if (kept.test(cases.get(index))) {
+                    out.add(Count.of(index));
+                }
+            }
+            return out;
+        }
+
         /** The case at a count, which must be one this carrier holds ({@link #requiredOnGrid}). */
         public TypeSymbol caseAt(Place count) {
             Place held = requiredOnGrid(count);
@@ -168,7 +182,7 @@ public sealed interface Carrier extends ValueOrder {
      */
     static Carrier ofPrimitive(Type type) {
         return type instanceof Type.Prim
-                ? ofValue(type, NewtypeInners.NONE, null, DeclarationKinds.NONE, null)
+                ? ofValue(type, DeclarationAccess.NONE)
                 : null;
     }
 
@@ -198,18 +212,16 @@ public sealed interface Carrier extends ValueOrder {
      * makes {@code data Cutoff = Date} the same carrier as a bare {@code Date}, and
      * {@code data StageN = Stage} the same carrier as a bare {@code Stage}.
      */
-    static Carrier ofValue(Type type, NewtypeInners inners, Symbols symbols,
-                           DeclarationKinds kinds,
-                           PublishedDeclarations published) {
+    static Carrier ofValue(Type type, DeclarationAccess declarations) {
         // Which order a value of this type is compared on is {@link Ordering}'s, and this asks it
         // rather than deciding what an enumeration is a second time. Every one of its answers is
         // answered for here, so an order added there is one this has to place or say it has no
         // count for — the direction #856 went silent in was a reader measuring what another refused.
-        Ordering how = Ordering.of(type, inners, symbols, kinds, published);
+        Ordering how = Ordering.of(type, declarations);
         if (how == null) {
             return null;
         }
-        Type base = TypeOps.base(type, inners);
+        Type base = TypeOps.base(type, declarations.inners());
         return switch (how.opened()) {
             // Being ordered is not being counted: two dates order alike whatever a line on one is
             // counted in, and which count that is belongs here and is asked of the type.
@@ -220,7 +232,7 @@ public sealed interface Carrier extends ValueOrder {
             // one case, given the sum's counts, was asked for a row at a value it cannot hold.
             case Ordering.Places places -> base instanceof Type.Ref ref
                     && ref.name().equals(places.enumeration())
-                    ? ordinalOf(places, published) : null;
+                    ? ordinalOf(places, declarations.sums()) : null;
             // `opened` answers for the value with the names off, which is never one still wearing
             // them.
             case Ordering.Wrapped _ ->
@@ -253,16 +265,13 @@ public sealed interface Carrier extends ValueOrder {
         };
     }
 
-    /** The cases in the order they are declared, which is the order itself and not a set. The
-     *  declaration is read for that list alone: whether this is an enumeration is already answered. */
-    private static Carrier ordinalOf(Ordering.Places places, PublishedDeclarations published) {
-        if (!(places.enumeration() instanceof TypeSymbol.AtModule at)
-                || !(published.of(at.key())
-                        instanceof PublishedDeclarationResult.Found(DeclarationMeaning.Sum _))) {
-            return null;
-        }
-        List<TypeSymbol> cases = AtomSpace.subjectAtoms(Type.ref(places.enumeration()), published);
-        return cases.isEmpty() ? null : new Ordinal(places.enumeration(), cases);
+    /** The cases in the order they are declared, which is the order itself and not a set: what
+     *  {@code sums} answers for the enumeration the order already named. */
+    private static Carrier ordinalOf(Ordering.Places places, SumCases sums) {
+        return places.enumeration() instanceof TypeSymbol.AtModule at
+                && sums.of(at) instanceof SumCases.Enumeration enumeration
+                ? new Ordinal(places.enumeration(), enumeration.cases())
+                : null;
     }
 
     /**
@@ -275,6 +284,26 @@ public sealed interface Carrier extends ValueOrder {
      */
     default boolean counts() {
         return !(this instanceof Text);
+    }
+
+    /**
+     * Whether a value written out on this order is a constant of the arithmetic over the input's
+     * numbers.
+     *
+     * <p>Every order that counts but an enumeration's. A case written out names which case a value
+     * is, and the place it takes in the order its cases are declared in is no quantity a comparison
+     * with it is about: {@code l == Level(Mid)} asks which case {@code l} is. Read as the count
+     * {@code 1}, it would be a line on that order — and the same case written bare, which stands on
+     * no carrier at all, would not, so one comparison would be read two ways by how it was spelled.
+     *
+     * <p>A switch with nothing to fall through to: a ninth carrier says for itself whether a value
+     * written on it is a number to add.
+     */
+    default boolean writesAConstant() {
+        return switch (this) {
+            case Whole _, Dense _, Days _, Seconds _, SecondsOfDay _, Nanos _ -> true;
+            case Ordinal _, Text _ -> false;
+        };
     }
 
     /**
@@ -537,7 +566,8 @@ public sealed interface Carrier extends ValueOrder {
      * reader instead, and an invariant and a {@code guard} at one position admitted different rules
      * with only one of them saying so.
      *
-     * <p><b>No names to take off.</b> The {@link #literalOf(Core, Symbols)} beside this one peels a
+     * <p><b>No names to take off.</b> The {@link #literalOf(ValueStanding.Standing, Symbols)} beside
+     * this one peels a
      * newtype's construction, and this one does not, which is a difference in what the two are handed
      * rather than one of them forgetting: a rule may not construct a data, so a bound is never one
      * (E1105 for an invariant, E1017 for an {@code ensures}). Peeling here would be a rule about
@@ -571,18 +601,31 @@ public sealed interface Carrier extends ValueOrder {
      * {@code Core} and an invariant's bound as {@code Hir}, and a rule read at one and not the other
      * is a rule about the representation rather than about the model — which is what the two readers
      * deciding separately what a literal is already cost once.
+     *
+     * <p><b>Handed a value with what it is read in, and never an expression alone.</b> A value
+     * written behind a name is the value written: {@code s == a} under {@code let a = Alice} states
+     * what {@code s == Alice} states. Which names stand for which values is the environment's answer
+     * and not this carrier's, so what comes here is the value as the reader's walk stands at it, and
+     * every part taken off it — what a newtype wraps, what a minus negates — is followed where the
+     * value was written before it is read ({@link ValueStanding.Standing#part}). Handed the
+     * expression alone, a carrier would either read no name or follow names for itself, and the
+     * second is a reader's own account of what a name means.
      */
-    default Place literalOf(Core e, Symbols symbols) {
-        Core bare = bare(e, symbols);
+    default Place literalOf(ValueStanding.Standing<?, ?> value, Symbols symbols) {
+        ValueStanding.Standing<?, ?> standing = bare(value, symbols);
+        Core bare = Core.withoutStanding(standing.value());
         return switch (this) {
             case Whole _, Dense _ -> switch (bare) {
                 case Core.Int i -> onTheGrid(Count.of(i.value()));
                 case Core.Decimal d -> onTheGrid(Count.of(d.value()));
                 // A minus in front of a value is part of the value written down, and these are the
                 // only carriers with one to write: nothing negates a date, a case or a string.
-                case Core.Neg n when IntNegation.isTheLeastInt(n.operand()) -> null;
                 case Core.Neg n -> {
-                    Place inner = literalOf(n.operand(), symbols);
+                    ValueStanding.Standing<?, ?> operand = standing.part(n.operand());
+                    if (IntNegation.isTheLeastInt(Core.withoutStanding(operand.value()))) {
+                        yield null;
+                    }
+                    Place inner = literalOf(operand, symbols);
                     yield inner == null ? null : Count.number(inner).negate();
                 }
                 case null, default -> null;
@@ -616,13 +659,24 @@ public sealed interface Carrier extends ValueOrder {
      * <p>What makes something one is the declaration and never the shape: a data of one field that
      * is not a newtype wraps its value rather than being it, so its construction is a value of its
      * own and is left alone.
+     *
+     * <p>What a construction wraps is followed where the construction was written, so a name inside
+     * it is the value it was given: {@code Code(c)} under {@code let c = "x"} is {@code "x"}.
+     *
+     * <p>The one taking off, for every reader asking what value a comparison was written against:
+     * which case {@code Level(Mid)} is, asked of a case compared with a value, is asked here too,
+     * or the order would read the case and the reading of cases would not.
      */
-    private static Core bare(Core written, Symbols symbols) {
+    static ValueStanding.Standing<?, ?> bare(ValueStanding.Standing<?, ?> written,
+                                             Symbols symbols) {
+        ValueStanding.Standing<?, ?> at = written;
         // A value written down is the value it is whatever type it stands as.
-        Core e = Core.withoutStanding(written);
-        return e instanceof Core.Construct nd && !nd.values().isEmpty()
-                && TypeOps.isSingleValueNewtype(Type.ref(nd.typeName()), symbols)
-                ? bare(nd.values().get(0).value(), symbols) : e;
+        while (Core.withoutStanding(at.value()) instanceof Core.Construct nd
+                && !nd.values().isEmpty()
+                && TypeOps.isSingleValueNewtype(Type.ref(nd.typeName()), symbols)) {
+            at = at.part(nd.values().get(0).value());
+        }
+        return at;
     }
 
     /** The count a written temporal is, or null where the expression is not one of that kind. A
@@ -754,14 +808,24 @@ public sealed interface Carrier extends ValueOrder {
      * composing nothing — never the range holding nothing.
      */
     private static Count oneFrom(Count at, ExactRatio by) {
-        return at.exactly().plus(by).orNull() instanceof ExactRatio at1 ? Count.at(at1) : null;
+        return composed(at.exactly().plus(by));
     }
 
     /** The count halfway between two, or null where this could not hold it, for the same reason
      *  as {@link #oneFrom}. Exact, since half a decimal is a decimal. */
     private static Count halfway(Count low, Count high) {
-        ExactRatio summed = low.exactly().plus(high.exactly()).orNull();
-        return summed == null ? null : Count.at(summed.dividedBy(ExactRatio.of(2)));
+        return composed(low.exactly().plus(high.exactly())
+                .flatMap(summed -> summed.dividedBy(ExactRatio.of(2))));
+    }
+
+    /** The count a number is, or null where the arithmetic could not hold the number or the host
+     *  had no room to write its count out: this composing nothing, which is what every caller here
+     *  reads null as, and never the range holding nothing. */
+    private static Count composed(ExactAnswer<ExactRatio> number) {
+        return switch (number.flatMap(Count::written)) {
+            case ExactAnswer.Held<Optional<Count>> held -> held.value().orElse(null);
+            case ExactAnswer.Unheld<Optional<Count>> _ -> null;
+        };
     }
 
     /**
@@ -982,6 +1046,28 @@ public sealed interface Carrier extends ValueOrder {
     default boolean admitted(ValueSet admits, Place at) {
         Value wrote = valueAt(at);
         return wrote == null || admits.has(wrote);
+    }
+
+    /**
+     * Every place {@code set} names on this order, in the order the set names them, where it names
+     * finitely many; null where it does not.
+     *
+     * <p>The places an order with no step to take can still be walked through: the set says which
+     * they are, so nothing has to be stepped to. A value the order holds no place for is left out,
+     * as {@link #somewhereIn} leaves it out.
+     */
+    default List<Place> everyPlaceOf(ValueSet set) {
+        if (!(set instanceof ValueSet.Finite finite)) {
+            return null;
+        }
+        List<Place> out = new ArrayList<>();
+        for (Value each : finite.values()) {
+            Place at = placeOf(each);
+            if (at != null) {
+                out.add(at);
+            }
+        }
+        return out;
     }
 
     /**
@@ -1279,6 +1365,30 @@ public sealed interface Carrier extends ValueOrder {
      */
     default souther.compiler.values.Emptiness meets(ValueSet set, OrderedInterval range, Meter meter,
                                                     StringMachineAnswers machines) {
+        if (set instanceof ValueSet.Matching it && !range.holdsNothing()) {
+            return this instanceof Text ? stringsInside(it.language(), range, meter, machines)
+                    : souther.compiler.values.Emptiness.UNDECIDED;
+        }
+        return meetsWithoutBuilding(set, range);
+    }
+
+    /**
+     * Whether {@code set} is shown to admit no value this order holds inside {@code range}, so far
+     * as that can be said without building anything.
+     *
+     * <p>For a reader holding no allowance and asking only for the refusal. A set that names its
+     * values, or every value but a few, meets a range by looking at those few; a language names its
+     * strings and does not list them, and what is left of it inside a range is a machine — so that
+     * one is not shown to admit nothing here, which is a question that waits and not a value being
+     * let in.
+     */
+    default boolean admitsNothingIn(ValueSet set, OrderedInterval range) {
+        return meetsWithoutBuilding(set, range).isEmpty();
+    }
+
+    /** {@link #meets} of a set that is not a language, which needs nothing built. */
+    private souther.compiler.values.Emptiness meetsWithoutBuilding(ValueSet set,
+                                                                   OrderedInterval range) {
         if (range.holdsNothing()) {
             return souther.compiler.values.Emptiness.EMPTY;
         }
@@ -1287,9 +1397,7 @@ public sealed interface Carrier extends ValueOrder {
             // Every value of the order is admitted, and the range holds one.
             case ValueSet.Cofinite it -> it.excluded().isEmpty()
                     ? souther.compiler.values.Emptiness.NONEMPTY : somethingNotExcluded(it.excluded(), range);
-            case ValueSet.Matching it -> this instanceof Text
-                    ? stringsInside(it.language(), range, meter, machines)
-                    : souther.compiler.values.Emptiness.UNDECIDED;
+            case ValueSet.Matching _ -> souther.compiler.values.Emptiness.UNDECIDED;
         };
     }
 
@@ -1397,7 +1505,7 @@ public sealed interface Carrier extends ValueOrder {
      * where it sits are the same fact said twice, and the crossing between them is the carrier's.
      * The temporal carriers place no written value, so nothing here writes one back.
      */
-    private Value valueAt(Place at) {
+    default Value valueAt(Place at) {
         return switch (this) {
             case Whole _, Dense _ -> Value.number(Count.number(at).at());
             case Text _ -> Value.text(((souther.compiler.numeric.Text) at).at());
@@ -1455,7 +1563,7 @@ public sealed interface Carrier extends ValueOrder {
      * question about how many, and a caller reads it as the range being wider than the values it
      * was asked about.
      */
-    private List<Place> firstPlacesIn(OrderedInterval range, int atMost) {
+    default List<Place> firstPlacesIn(OrderedInterval range, int atMost) {
         OrderedInterval held = extent().meet(range);
         Endpoint low = held.low();
         Endpoint high = held.high();
@@ -1529,7 +1637,7 @@ public sealed interface Carrier extends ValueOrder {
      * nothing ever asks this to place one, and answering would be a second way for a date to be
      * written down.
      */
-    private Place placeOf(Value value) {
+    default Place placeOf(Value value) {
         return switch (this) {
             case Whole _, Dense _ -> value instanceof Value.Number it
                     ? onTheGrid(Count.of(it.value())) : null;
@@ -1610,14 +1718,24 @@ public sealed interface Carrier extends ValueOrder {
      *
      * <p>Written through {@link Place#spelled}, which is that same number in digits. Naming a line
      * and writing one are two questions, and a reader here is asking the second.
+     *
+     * <p>A line may fall where the carrier has no value: a rule about a date shifted by a year of
+     * days draws its line a year past the last date there is. The line is real and so is the way a
+     * rule about it is read — the values on the near side are what the rule divides — but no date
+     * is written there, so it is named by the count in the carrier's own unit, which no reader can
+     * take for a value.
      */
     default String written(Place count) {
         return switch (this) {
             case Whole _, Dense _ -> count.spelled();
-            case Days _ -> Dates.written(requiredOnGrid(count));
-            case Seconds _ -> DateTimes.written(requiredOnGrid(count));
-            case SecondsOfDay _ -> Times.written(requiredOnGrid(count));
-            case Nanos _ -> Instants.written(requiredOnGrid(count));
+            case Days _ -> onTheGrid(count) == null ? "day " + count.spelled()
+                    : Dates.written(count);
+            case Seconds _ -> onTheGrid(count) == null ? "second " + count.spelled()
+                    : DateTimes.written(count);
+            case SecondsOfDay _ -> onTheGrid(count) == null ? "second of the day " + count.spelled()
+                    : Times.written(count);
+            case Nanos _ -> onTheGrid(count) == null ? "nanosecond " + count.spelled()
+                    : Instants.written(count);
             // The case's name, which is the only thing a person ever writes at such a position. An
             // ordinal in a report would name a line at a number the model does not contain.
             case Ordinal ordinal -> ordinal.caseAt(count).name();

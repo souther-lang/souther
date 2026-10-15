@@ -8,12 +8,14 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class CompilerBuildDriverTest {
@@ -75,6 +77,86 @@ class CompilerBuildDriverTest {
                 "and not an empty directory where it was");
         assertTrue(Files.exists(handWritten),
                 "what this compile did not write is not this compile's to remove");
+    }
+
+    @Test
+    void aLineInTheGeneratedRecordThatNamesSomethingOutsideTheOutputIsNotDeleted(@TempDir Path dir)
+            throws IOException {
+        Path sources = Files.createDirectories(dir.resolve("src"));
+        Files.writeString(sources.resolve("money.sou"), """
+                module shared.money exposing ( Amount )
+                data Amount = Int
+                    invariant value >= 0
+                """);
+        Path classes = dir.resolve("classes");
+        Path state = Files.createDirectories(dir.resolve("state"));
+        Path victim = Files.writeString(dir.resolve("victim.txt"), "keep");
+        Files.write(state.resolve("generated"),
+                List.of("../victim.txt", victim.toAbsolutePath().toString()));
+
+        compiled(sources, classes, state);
+
+        assertTrue(Files.exists(victim), "the record is a file on disk and does not choose what is deleted");
+    }
+
+    @Test
+    void aLineInTheRecordThatGoesThroughALinkInTheOutputDeletesNothingBehindIt(@TempDir Path dir)
+            throws IOException {
+        Path sources = Files.createDirectories(dir.resolve("src"));
+        Files.writeString(sources.resolve("money.sou"), """
+                module shared.money exposing ( Amount )
+                data Amount = Int
+                    invariant value >= 0
+                """);
+        Path outside = Files.createDirectories(dir.resolve("outside"));
+        Path victim = Files.writeString(outside.resolve("victim.class"), "keep");
+        Path classes = Files.createDirectories(dir.resolve("classes"));
+        linked(classes.resolve("escape"), outside);
+        Path state = Files.createDirectories(dir.resolve("state"));
+        Files.write(state.resolve("generated"), List.of("escape/victim.class"));
+
+        compiled(sources, classes, state);
+
+        assertTrue(Files.exists(victim), "a name that reads as inside the output but passes a link is not deleted");
+    }
+
+    @Test
+    void aPackageDirectoryThatIsALinkIsNotWrittenThrough(@TempDir Path dir) throws IOException {
+        Path sources = Files.createDirectories(dir.resolve("src"));
+        Files.writeString(sources.resolve("money.sou"), """
+                module shared.money exposing ( Amount )
+                data Amount = Int
+                    invariant value >= 0
+                """);
+        Path outside = Files.createDirectories(dir.resolve("outside"));
+        Path classes = Files.createDirectories(dir.resolve("classes"));
+        linked(classes.resolve("shared"), outside);
+
+        assertThrows(UncheckedIOException.class, () -> new CompilerBuildDriver().compile(
+                new BuildRequest(List.of(sources), List.of(), classes, dir.resolve("state"), "en")));
+
+        try (var written = Files.walk(outside)) {
+            assertEquals(0, written.filter(Files::isRegularFile).count(), "nothing was written behind the link");
+        }
+    }
+
+    @Test
+    void aSourceThatIsALinkUnderTheSourceDirectoryIsRefusedRatherThanRead(@TempDir Path dir)
+            throws IOException {
+        Path sources = Files.createDirectories(dir.resolve("src"));
+        Path elsewhere = Files.writeString(dir.resolve("secret.txt"), "not a source");
+        linked(sources.resolve("secret.sou"), elsewhere);
+
+        assertThrows(UncheckedIOException.class, () -> new CompilerBuildDriver().compile(
+                new BuildRequest(List.of(sources), List.of(), dir.resolve("classes"), dir.resolve("state"), "en")));
+    }
+
+    private static void linked(Path link, Path target) throws IOException {
+        try {
+            Files.createSymbolicLink(link, target);
+        } catch (UnsupportedOperationException | IOException e) {
+            org.junit.jupiter.api.Assumptions.assumeTrue(false, "symbolic links cannot be made here: " + e);
+        }
     }
 
     private static void compiled(Path sources, Path classes, Path state) {

@@ -1,0 +1,23 @@
+// A `match` on the element a fold's step is handed tells the elements apart; the step's other
+// parameter is what the fold has carried so far, which no position of the input is.
+//
+// told apart at n: 2 groups of 2
+// told apart at xs[*]: 2 groups of 2
+module example.foldmatched
+
+data North
+data South
+data Region = North | South
+
+data Ok = { n: Int }
+
+behavior judge : (n: Int, xs: List<Region>) -> Ok
+    constructs Ok
+
+let judge (n, xs) = {
+    guard n > 0 else Ok { n = 0 }
+    guard List.fold((acc, r) -> match r with
+        | North -> acc + 1
+        | South -> acc, 0, xs) > 0 else Ok { n = 1 }
+    Ok { n = 2 }
+}

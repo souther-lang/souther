@@ -47,26 +47,30 @@ public sealed interface HelperMessage extends Message {
     record WhatIsWrittenHereIsNotWhatItsPositionTakes(String takes, String written)
             implements HelperMessage, Reported {}
 
-    /** A helper is called with a number of arguments it does not take. */
+    /** A helper is called with a number of arguments it does not take. {@code call} is the callee
+     *  as the call spells it. */
     @Code(DiagnosticCode.E1802)
-    record CalledWithAnotherNumberOfArguments(String helper, String takes, String called)
+    record CalledWithAnotherNumberOfArguments(String call, String takes, String called)
             implements HelperMessage, Reported {}
 
     // --- what is passed to one ---
+    //
+    // Each names the operation as the call spells it ({@code List.map}), not by the declaration the
+    // call reached, whose name is the library's own ({@code map}).
 
     /** A block passed to a function parameter takes a different number of arguments. */
     @Code(DiagnosticCode.E1802)
-    record TheBlockTakesAnotherNumberOfArguments(String parameter, String helper, String takes,
+    record TheBlockTakesAnotherNumberOfArguments(String parameter, String call, String takes,
                                                  String written) implements HelperMessage, Reported {}
 
     /** A block passed to a function parameter answers the wrong type. */
     @Code(DiagnosticCode.E1805)
-    record TheBlockAnswersAnotherType(String parameter, String helper, String must, String returns)
+    record TheBlockAnswersAnotherType(String parameter, String call, String must, String returns)
             implements HelperMessage, Reported {}
 
     /** A value is passed where a function is taken. */
     @Code(DiagnosticCode.E1803)
-    record AValueWhereAFunctionIsTaken(String parameter, String helper, String written)
+    record AValueWhereAFunctionIsTaken(String parameter, String call, String written)
             implements HelperMessage, Reported {}
 
     /** A lambda is written on an argument that takes a value, and another takes the function. */

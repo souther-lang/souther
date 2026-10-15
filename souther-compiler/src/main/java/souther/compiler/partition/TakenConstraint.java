@@ -1,9 +1,15 @@
 package souther.compiler.partition;
 
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.SearchRegion;
 import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Rel;
+
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Set;
 
 /**
  * What a condition on the way states, in a vocabulary a search can compose a row against.
@@ -35,6 +41,72 @@ public sealed interface TakenConstraint {
      * per shape and a vocabulary added later would be one the composer walks past.
      */
     java.util.Set<NumericTerm> terms();
+
+    /**
+     * {@code region} with this taken in.
+     *
+     * <p>Asked of a constraint that was read off a region able to carry it, so a refusal now is
+     * this compiler holding two readings of one constraint that disagree — and is loud, because the
+     * quiet answer is a region wider than every reader of it was told it had been narrowed to.
+     */
+    default SearchRegion narrowing(SearchRegion region) {
+        return switch (this) {
+            case Affine affine -> region.assuming(affine.form(), affine.rel()).taken();
+            case Ordered ordered -> region.assuming(ordered.term(), ordered.at(), ordered.rel());
+            case AwayFrom away -> region.apartFrom(away.term(), away.at());
+        };
+    }
+
+    /**
+     * Whether nothing {@code rules} leaves meets every one of {@code these} together: each taken
+     * in, and some number they name, or some form one of them is over, left with nothing.
+     *
+     * <p>A proof and nothing weaker, so it is asked of a region that is a statement of what is
+     * known. Asked of what the declarations leave, it says no element meets them, since what the
+     * declarations leave is what every element holds; asked of a region a way narrowed, a
+     * condition on the one element the way walks would be held against what another element meets.
+     */
+    static boolean nothingMeetsAll(List<TakenConstraint> these, SearchRegion rules) {
+        return nothingIsLeftFor(these, narrowedBy(these, rules));
+    }
+
+    /** {@code region} with each of {@code these} taken in. */
+    static SearchRegion narrowedBy(List<TakenConstraint> these, SearchRegion region) {
+        SearchRegion within = region;
+        for (TakenConstraint one : these) {
+            within = one.narrowing(within);
+        }
+        return within;
+    }
+
+    /**
+     * Whether {@code within}, which has {@code these} taken in, leaves nothing for some number
+     * they name or some form one of them is over — the second half of {@link #nothingMeetsAll},
+     * for a reader that narrows a region one constraint at a time and asks after each.
+     *
+     * <p>Each number once, however many of them name it, and a form only where it is over more
+     * than one number: a form of one number is left nothing exactly where that number is, so the
+     * second question would be the first asked again, and a projection is what this costs.
+     */
+    static boolean nothingIsLeftFor(List<TakenConstraint> these, SearchRegion within) {
+        Set<NumericTerm> asked = new LinkedHashSet<>();
+        for (TakenConstraint one : these) {
+            for (NumericTerm term : one.terms()) {
+                if (asked.add(term) && within.projectionOf(term)
+                        instanceof NumericDomain.FormProjection.NothingIsLeft) {
+                    return true;
+                }
+            }
+        }
+        for (TakenConstraint one : these) {
+            if (one instanceof Affine affine && affine.form().coefs().size() > 1
+                    && within.projectionOf(affine.form())
+                            instanceof NumericDomain.FormProjection.NothingIsLeft) {
+                return true;
+            }
+        }
+        return false;
+    }
 
     /**
      * An inequality over a form of the input's numbers: {@code form rel 0}.

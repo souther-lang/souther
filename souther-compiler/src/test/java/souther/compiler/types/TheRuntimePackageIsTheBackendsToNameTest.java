@@ -45,7 +45,7 @@ class TheRuntimePackageIsTheBackendsToNameTest {
      */
     private static final Set<String> TARGET_NEUTRAL =
             Set.of("types", "check", "stdlib", "semantics", "partition", "inputs", "core", "flow",
-                    "numeric");
+                    "numeric", "meaning");
 
     /**
      * And where naming it is the job. {@code jvm} maps an identity to a physical name;

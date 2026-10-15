@@ -34,7 +34,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class AGuardsQuestionIsCitedByWhereItIsWrittenTest {
 
-    /** A comparison stating a line at 20 that this compiler cannot fold, beside a bound it can. */
+    /** A comparison this compiler cannot read — a position times itself — beside a bound it can. */
     private static final String MODEL = """
             module example.repro
 
@@ -43,7 +43,7 @@ class AGuardsQuestionIsCitedByWhereItIsWrittenTest {
 
             behavior price : (length: Length) -> Int
             let price (length) =
-                if length.value <= Int.min(20, 30) then 1 else 2
+                if length.value * length.value <= 400 then 1 else 2
 
             example price
                 | "one" : (Length(1)) -> 1

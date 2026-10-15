@@ -31,16 +31,17 @@ class AnImageNamesTheValuesThatLeaveItSomethingItReachesTest {
         for (long step = -3; step <= 3; step++) {
             ExactRatio x = switch (answer) {
                 case AffinePreimage.None _ -> null;
-                case AffinePreimage.Stepping on -> on.from().plus(on.by().times(at(step))).orNull();
+                case AffinePreimage.Stepping on ->
+                        on.by().times(at(step)).flatMap(on.from()::plus).orNull();
                 // A tenth of the generator is a finite decimal, so it is a member and it is not one
                 // a progression would have named.
                 case AffinePreimage.Filling on ->
-                        on.from().plus(on.by().times(new ExactRatio(BigInteger.valueOf(step),
-                                BigInteger.TEN))).orNull();
+                        on.by().times(new ExactRatio(BigInteger.valueOf(step), BigInteger.TEN))
+                                .flatMap(on.from()::plus).orNull();
             };
             if (x != null) {
-                assertTrue(image.contains(target.minus(coefficient.times(x)).orNull()),
-                        "at " + x + " the residue is " + target.minus(coefficient.times(x)).orNull());
+                ExactRatio residue = coefficient.times(x).flatMap(target::minus).orNull();
+                assertTrue(image.contains(residue), "at " + x + " the residue is " + residue);
             }
         }
     }

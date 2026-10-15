@@ -6,6 +6,7 @@ import souther.compiler.check.DeclaredSig;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
+import souther.compiler.check.TypeCardinality;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
@@ -55,8 +56,11 @@ class APositionUnderACaseIsAPositionTest {
         Map<String, DeclaredSig> sigs =
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
         RuleReadingSource rules = RuleReadings.of(compilation, module);
-        return InputDomain.of(sigs.get(behavior),
-                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES));
+        RuleReadingContext reading =
+                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES);
+        return InputDomain.of(sigs.get(behavior), reading,
+                TypeCardinality.Counts.workedOutIn(reading),
+                souther.compiler.carrier.Membership.none());
     }
 
     private static List<String> positionsOf(String source, String behavior) {
@@ -186,8 +190,9 @@ class APositionUnderACaseIsAPositionTest {
     /** The narrowing to one leaf, spelled the way the checker's resolution of an arm spells it: a
      *  leaf is a case that covers itself, so selecting it narrows to that one distinction. */
     private static Refinement toLeaf(souther.compiler.types.TypeSymbol leaf) {
-        return Refinement.of(souther.compiler.types.ResolvedCase.of(
-                souther.compiler.types.CaseSelector.direct(leaf), java.util.List.of(leaf)));
+        return Refinement.allOf(souther.compiler.types.ResolvedCase.of(
+                souther.compiler.types.CaseSelector.direct(leaf), java.util.List.of(leaf)))
+                .getFirst();
     }
 
     /** The case's own name, taken off the reading that holds it. */

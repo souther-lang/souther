@@ -6,6 +6,7 @@ import souther.compiler.check.Clause;
 import souther.compiler.check.PartId;
 import souther.compiler.check.RuleCitation;
 import souther.compiler.check.RuleReportAnchor;
+import souther.compiler.types.ModelOccurrences;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
 import souther.compiler.types.WrittenOwner;
@@ -22,6 +23,7 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.inputs.TwoAccountsOfOneQuestion;
 import souther.compiler.inputs.WhatAQuestionStandsOn;
 import souther.compiler.observe.Incompleteness;
+import souther.compiler.observe.WorkFigure;
 import souther.compiler.partition.ClosureGap;
 import souther.compiler.types.SourceConstruct;
 import souther.compiler.types.SourceConstructOrigin;
@@ -131,7 +133,8 @@ class OneFactIsOneWeakeningHoweverItWasEvidencedTest {
     @Test
     void aQuestionCitedTwoWaysKeepsTheAuthorsOneAccountOfWhatStoppedIt() {
         BlockReason.RuleReadingStopped form = new BlockReason.UnreadComparisonForm();
-        BlockReason.AnswerRealizationStopped answer = new BlockReason.ExactValuesTooCostly();
+        BlockReason.AnswerRealizationStopped answer = new BlockReason.ExactValuesTooCostly(
+                WorkFigure.ADMITTED_VALUES_IN_ALL.at("200000 states built and 50000000 looked at"));
         RuleCitation here = reachedAt(9);
         RuleCitation fromACall = reachedAt(3);
         WeakeningSet met = standingQuestion(here, form, answer);
@@ -242,7 +245,7 @@ class OneFactIsOneWeakeningHoweverItWasEvidencedTest {
 
     private static WeakeningSet ruleWithoutALine(RuleCitation cited) {
         return of(new Weakening.ModelReadingIncomplete(ClosureGap.QuestionUnanswered.of(
-                StandingQuestion.NothingClassifiesIt.of(cited,
+                StandingQuestion.NothingClassifiesIt.of(cited, ModelOccurrences.NONE,
                         new FilingCoordinate.AtPosition(TermPath.of("x")),
                         new BlockReason.UnreadComparisonForm()))));
     }

@@ -45,7 +45,7 @@ class WhatADomainProvesOfAWholeFormTest {
         NumericDomain<String> d = NumericDomain.top(CanonicalOrder.asTheyAreSpelled())
                 .assume(atom(A).minus(num(2)), Rel.GE, whole(A));
 
-        Bounds bounds = d.boundsOf(atom(A).plus(num(10)));
+        Bounds bounds = d.boundsOf(SmallForm.small(atom(A)).plus(num(10)).form());
 
         assertEquals(Endpoint.inclusive(Count.of(12)), bounds.min());
         assertNull(bounds.max());
@@ -60,7 +60,7 @@ class WhatADomainProvesOfAWholeFormTest {
                 .assume(atom(B).minus(num(10)), Rel.GE, whole(B))
                 .assume(atom(B).minus(num(20)), Rel.LE, whole(B));
 
-        Bounds bounds = d.boundsOf(atom(A).plus(atom(B)));
+        Bounds bounds = d.boundsOf(LinearForm.sumOfAtoms(A, B));
 
         assertEquals(Endpoint.inclusive(Count.of(11)), bounds.min());
         assertEquals(Endpoint.inclusive(Count.of(24)), bounds.max());
@@ -78,7 +78,7 @@ class WhatADomainProvesOfAWholeFormTest {
         NumericDomain<String> d = NumericDomain.top(CanonicalOrder.asTheyAreSpelled())
                 .assume(atom(A).minus(atom(B)), Rel.LE, whole(A, B));
 
-        Bounds bounds = d.boundsOf(atom(A).minus(atom(B)));
+        Bounds bounds = d.boundsOf(LinearForm.difference(A, B));
 
         assertEquals(Endpoint.inclusive(Count.of(0)), bounds.max());
         assertTrue(d.boundsOf(atom(A)).saysNothing(), "nothing bounds either atom on its own");
@@ -101,6 +101,6 @@ class WhatADomainProvesOfAWholeFormTest {
                 .assume(atom(A).minus(num(1)), Rel.LE, whole(A));
 
         assertTrue(d.isBottom());
-        assertTrue(d.boundsOf(atom(A).plus(num(3))).saysNothing());
+        assertTrue(d.boundsOf(SmallForm.small(atom(A)).plus(num(3)).form()).saysNothing());
     }
 }

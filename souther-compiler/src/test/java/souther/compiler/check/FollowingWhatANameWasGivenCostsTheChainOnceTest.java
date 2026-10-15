@@ -10,11 +10,10 @@ import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.Type;
 
 import org.junit.jupiter.api.Test;
+import souther.test.Growth;
 
 import java.util.LinkedHashMap;
-import java.util.Map;
-
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import java.util.SequencedMap;
 
 /**
  * What a name was given is followed to the end, and a reading that follows it does so once.
@@ -37,14 +36,11 @@ class FollowingWhatANameWasGivenCostsTheChainOnceTest {
 
     @Test
     void doublingTheChainDoublesWhatFollowingItCosts() {
-        Map<Integer, Long> steps = new LinkedHashMap<>();
+        SequencedMap<Integer, Long> steps = new LinkedHashMap<>();
         for (int links : new int[] {40, 80, 160, 320}) {
             steps.put(links, followedOver(links));
         }
-
-        assertTrue(steps.get(80) < steps.get(40) * 3, "80 links: " + steps);
-        assertTrue(steps.get(160) < steps.get(80) * 3, "160 links: " + steps);
-        assertTrue(steps.get(320) < steps.get(160) * 3, "320 links: " + steps);
+        Growth.eachAtMost(steps, 3, 1);
     }
 
     /** The steps taken following names while the arithmetic of {@code x(links)} is read, where each

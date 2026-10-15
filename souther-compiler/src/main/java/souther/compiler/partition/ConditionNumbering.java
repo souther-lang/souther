@@ -5,11 +5,14 @@ import souther.compiler.diag.Citation;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.sites.WrittenCondition;
+import souther.compiler.types.ModelOccurrences;
 import souther.compiler.types.SourceConstructOrigin;
 
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -76,17 +79,55 @@ final class ConditionNumbering {
 
     private final String module;
     private final String behavior;
+    /** Which reading of the body this is, which the names it hands out say beside their number. */
+    private final ConditionOccurrence.Reading reading;
     private final Map<Site, Condition> read = new HashMap<>();
     /** The name each arm of each fork goes by. Beside {@link #read} because an arm is not a fold of
      *  a subtree: what is met is the fork and which of its arms, and there is no node of its own to
      *  be at. A {@code match} and an attempt both, since an arm of either is met the same way. */
     private final Map<Core, Map<Integer, ConditionOccurrence>> arms = new IdentityHashMap<>();
-    private final Map<ConditionOccurrence, Citation> metAt = new LinkedHashMap<>();
-    private int next;
+    private final Map<ConditionOccurrence, Citation> metAt;
+    /** The copies each entry this reading put on a way was read off, by the entry itself, shared
+     *  with every place this reading reads. Two equal entries are two entries here, each read off
+     *  its own copies. */
+    private final Map<OnTheWay, ModelOccurrences> madeBy;
+    /** How many names this reading has handed out, shared with every place it reads. */
+    private final int[] next;
+    /** What this reading names inside the body of each call of a recursive helper it reads, by the
+     *  call, shared with every place it reads. */
+    private final Map<CallContext, ConditionNumbering> within;
 
-    ConditionNumbering(String module, String behavior) {
+    ConditionNumbering(String module, String behavior, ConditionOccurrence.Reading reading) {
+        this(module, behavior, reading, new LinkedHashMap<>(), new IdentityHashMap<>(),
+                new int[1], new HashMap<>());
+    }
+
+    private ConditionNumbering(String module, String behavior, ConditionOccurrence.Reading reading,
+                               Map<ConditionOccurrence, Citation> metAt,
+                               Map<OnTheWay, ModelOccurrences> madeBy, int[] next,
+                               Map<CallContext, ConditionNumbering> within) {
         this.module = module;
         this.behavior = behavior;
+        this.reading = reading;
+        this.metAt = metAt;
+        this.madeBy = madeBy;
+        this.next = next;
+        this.within = within;
+    }
+
+    /**
+     * The same reading, inside the body of a recursive helper read at the call {@code context}
+     * names.
+     *
+     * <p>One body read at two calls is two places the reading has been, and a fork in it is met at
+     * each: what one call's arms are named is not the other's. The names are this reading's and
+     * counted with every other it hands out, so two calls never wear one name.
+     */
+    ConditionNumbering within(CallContext context) {
+        return context.equals(CallContext.OF_THE_BODY) ? this
+                : within.computeIfAbsent(context,
+                        _ -> new ConditionNumbering(module, behavior, reading, metAt, madeBy,
+                                next, within));
     }
 
     /** What this reading already made of the condition at {@code at} under {@code reads}, or null
@@ -100,9 +141,9 @@ final class ConditionNumbering {
         read.put(new Site(at, reads), condition);
     }
 
-    /** The name of the condition being recognised now. */
+    /** The name of the condition being recognised now, where no construct of the model is it. */
     ConditionOccurrence met() {
-        return new ConditionOccurrence(behavior, next++);
+        return new ConditionOccurrence(behavior, reading, next[0]++);
     }
 
     /**
@@ -164,6 +205,62 @@ final class ConditionNumbering {
 
     /** Where this reading met each condition it places itself. */
     Map<ConditionOccurrence, Citation> metAt() {
-        return Map.copyOf(metAt);
+        return Collections.unmodifiableMap(new LinkedHashMap<>(metAt));
+    }
+
+    /**
+     * What a condition put on the way, each entry filed under the copies it was read off.
+     *
+     * <p>Filed by the entry itself and not by what it says. An entry is a value, and two copies of
+     * a helper on two ways that never meet can put equal values on them; filed by the value, a way
+     * through one would be told it met the other. What each way met is read off its own entries
+     * when the way is recorded ({@link #saidOnTheWay}), and this is how it can be.
+     *
+     * <p>Under the copies {@code stated} says each was read off, and not under the condition it
+     * ended up beside: which copy each was read off is known only where it was made.
+     *
+     * @return the entries, so a walk files what it puts on the way where it puts it
+     */
+    List<OnTheWay> said(ReachingCuts.Stating stated) {
+        file(stated.entries(), stated.by());
+        return stated.entries();
+    }
+
+    private void file(List<OnTheWay> entries, SaidOnTheWay by) {
+        for (OnTheWay each : entries) {
+            ModelOccurrences copies = by.entries().get(each);
+            if (copies != null && !copies.isEmpty()) {
+                madeBy.putIfAbsent(each, copies);
+            }
+            if (each instanceof OnTheWay.OneOf several) {
+                several.alternatives().forEach(one -> file(one, by));
+            }
+        }
+    }
+
+    /**
+     * Which copies put each of {@code ways}' entries on them, read off the entries themselves.
+     *
+     * <p>The ways one line is reached by, and no other: an entry is told the copy that made it,
+     * and two equal entries on these ways made by two copies are told both.
+     */
+    SaidOnTheWay saidOnTheWay(List<List<OnTheWay>> ways) {
+        Map<OnTheWay, ModelOccurrences> entries = new LinkedHashMap<>();
+        for (List<OnTheWay> way : ways) {
+            told(way, entries);
+        }
+        return new SaidOnTheWay(entries, Map.of(), Map.of());
+    }
+
+    private void told(List<OnTheWay> way, Map<OnTheWay, ModelOccurrences> into) {
+        for (OnTheWay each : way) {
+            ModelOccurrences made = madeBy.get(each);
+            if (made != null) {
+                SaidOnTheWay.filedAlone(each, made, into);
+            }
+            if (each instanceof OnTheWay.OneOf several) {
+                several.alternatives().forEach(one -> told(one, into));
+            }
+        }
     }
 }

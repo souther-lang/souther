@@ -64,7 +64,8 @@ final class NothingTheRulesLeave implements SearchRegion {
 
     @Override
     public Optional<EmptyInput> emptiness() {
-        return Optional.of(new EmptyInput.ProvedByTheRules(new Emptiness.ConflictingRules()));
+        return Optional.of(
+                new EmptyInput.ProvedByTheDeclarations(new Emptiness.ConflictingRules()));
     }
 
     private NothingTheRulesLeave() {}

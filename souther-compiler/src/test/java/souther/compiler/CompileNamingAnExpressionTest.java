@@ -62,12 +62,21 @@ class CompileNamingAnExpressionTest {
         return "{\n        let v = " + e + "\n        %s\n    }";
     }
 
-    /** What the check says, as one string — the code of an error, or how many warnings. */
+    /**
+     * What the invariant-discharge check says, as one string — the code of an error, or how many of
+     * its warnings.
+     *
+     * <p>Its own warnings and no other check's. Whether a branch is reached is a fact about the
+     * source as written, and an expression written twice is two branches where a name for it is
+     * evaluated once: a guard that rules out the second copy's other arm makes that arm dead, which
+     * a name has no copy of.
+     */
     private static String said(String source) {
         try {
             Compiler.Compiled c = Compiler.compileWithWarnings(source);
             return "warnings=" + c.warnings().stream()
-                    .filter(d -> d.severity() == Severity.WARNING).count();
+                    .filter(d -> d.severity() == Severity.WARNING)
+                    .filter(d -> "E2011".equals(d.code())).count();
         } catch (CompileException e) {
             String code = e.diagnostic().code();
             return code == null ? "error: " + e.getMessage() : code;

@@ -2,9 +2,9 @@ package souther.compiler.values;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.regex.PatternParser;
+import net.unit8.notation199x.pattern.PatternParser;
 import souther.compiler.regex.PatternPlan;
-import souther.compiler.regex.PatternRead;
+import net.unit8.notation199x.pattern.PatternRead;
 
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -58,7 +58,7 @@ class WhatAPositionHoldsAcrossAlternativesDoesNotFollowHowTheyWereFilledTest {
     @Test
     void everyOrderOfFillingTheSetLeavesOneAnswerAndOneCost() {
         ValueSet first = null;
-        Set<Sameness.Block<String>> gaveUp = null;
+        Map<Sameness.Block<String>, PatternPlan.Refused> gaveUp = null;
         int spent = -1;
         for (List<Integer> order : List.of(List.of(0, 1, 2), List.of(0, 2, 1), List.of(1, 0, 2),
                 List.of(1, 2, 0), List.of(2, 0, 1), List.of(2, 1, 0))) {

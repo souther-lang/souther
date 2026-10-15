@@ -1,12 +1,82 @@
 {
-  "schemaVersion" : 23,
+  "schemaVersion" : 24,
   "compilerVersion" : "<version>",
-  "status" : "complete",
-  "adequacy" : "satisfied",
-  "keptOpenBy" : [ ],
+  "status" : "partial",
+  "weakening" : [ "rule_unread" ],
+  "adequacy" : "undetermined",
+  "keptOpenBy" : [ {
+    "kind" : "rule_unread",
+    "about" : {
+      "kind" : "rule",
+      "at" : "bars",
+      "ruleId" : {
+        "kind" : "comparison",
+        "declaredIn" : "conformance.packing",
+        "definition" : "packBox",
+        "behavior" : "packBox",
+        "ordinal" : 7,
+        "lowered" : 0
+      },
+      "rule" : "comparison@0:34:49",
+      "stopped" : [ "relation_not_shown_to_reach_every_value" ]
+    },
+    "runSensitivity" : "unaffected"
+  }, {
+    "kind" : "rule_unread",
+    "about" : {
+      "kind" : "rule",
+      "at" : "from",
+      "ruleId" : {
+        "kind" : "comparison",
+        "declaredIn" : "conformance.packing",
+        "definition" : "bookSlot",
+        "behavior" : "bookSlot",
+        "ordinal" : 2,
+        "lowered" : 0
+      },
+      "rule" : "comparison@0:47:36",
+      "stopped" : [ "relation_not_shown_to_reach_every_value" ]
+    },
+    "runSensitivity" : "unaffected"
+  }, {
+    "kind" : "rule_unread",
+    "about" : {
+      "kind" : "rule",
+      "at" : "straws",
+      "ruleId" : {
+        "kind" : "comparison",
+        "declaredIn" : "conformance.packing",
+        "definition" : "packBox",
+        "behavior" : "packBox",
+        "ordinal" : 7,
+        "lowered" : 0
+      },
+      "rule" : "comparison@0:34:49",
+      "stopped" : [ "relation_not_shown_to_reach_every_value" ]
+    },
+    "runSensitivity" : "unaffected"
+  }, {
+    "kind" : "rule_unread",
+    "about" : {
+      "kind" : "rule",
+      "at" : "until",
+      "ruleId" : {
+        "kind" : "comparison",
+        "declaredIn" : "conformance.packing",
+        "definition" : "bookSlot",
+        "behavior" : "bookSlot",
+        "ordinal" : 2,
+        "lowered" : 0
+      },
+      "rule" : "comparison@0:47:36",
+      "stopped" : [ "relation_not_shown_to_reach_every_value" ]
+    },
+    "runSensitivity" : "unaffected"
+  } ],
   "modules" : [ {
     "module" : "conformance.packing",
-    "status" : "complete",
+    "status" : "partial",
+    "weakening" : [ "rule_unread" ],
     "incompleteness" : [ ],
     "declarations" : [ {
       "owners" : [ {
@@ -62,7 +132,7 @@
         "axis" : "value",
         "against" : "0",
         "knownWritable" : true,
-        "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+        "writableBecause" : [ "it_is_proved", "a_row_is_at_it" ],
         "status" : "complete",
         "hit" : true,
         "disposition" : "met",
@@ -112,10 +182,7 @@
           "stops" : {
             "kind" : "at_the_domain",
             "at" : {
-              "kind" : "on_a_carrier",
-              "carrier" : {
-                "kind" : "whole"
-              },
+              "kind" : "a_count",
               "at" : "20"
             },
             "per" : "1",
@@ -134,7 +201,7 @@
         "axis" : "value",
         "against" : "0 < value <= 20",
         "knownWritable" : true,
-        "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+        "writableBecause" : [ "it_is_proved", "a_row_is_at_it" ],
         "status" : "complete",
         "hit" : true,
         "disposition" : "met",
@@ -193,7 +260,7 @@
         "axis" : "value",
         "against" : "20",
         "knownWritable" : true,
-        "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+        "writableBecause" : [ "it_is_proved", "a_row_is_at_it" ],
         "status" : "complete",
         "hit" : true,
         "disposition" : "met",
@@ -243,10 +310,7 @@
           "stops" : {
             "kind" : "at_the_domain",
             "at" : {
-              "kind" : "on_a_carrier",
-              "carrier" : {
-                "kind" : "whole"
-              },
+              "kind" : "a_count",
               "at" : "0"
             },
             "per" : "1",
@@ -265,7 +329,7 @@
         "axis" : "value",
         "against" : "0 <= value < 20",
         "knownWritable" : true,
-        "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+        "writableBecause" : [ "it_is_proved", "a_row_is_at_it" ],
         "status" : "complete",
         "hit" : true,
         "disposition" : "met",
@@ -278,7 +342,273 @@
           "hit" : true
         } ]
       } ],
-      "findings" : [ ]
+      "findings" : [ ],
+      "lines" : [ {
+        "lineId" : {
+          "line" : {
+            "which" : {
+              "kind" : "part",
+              "rule" : {
+                "kind" : "invariant",
+                "declaredIn" : "conformance.packing",
+                "declaredOn" : "Straws",
+                "clause" : 0
+              },
+              "part" : 0,
+              "line" : {
+                "kind" : "statement",
+                "statement" : 0
+              }
+            },
+            "facts" : {
+              "valueBelongsBelow" : false,
+              "holdsAtTheValue" : true,
+              "singles" : false
+            },
+            "narrowedWithin" : [ ]
+          },
+          "level" : {
+            "kind" : "on_a_carrier",
+            "carrier" : {
+              "kind" : "whole"
+            },
+            "at" : "0"
+          }
+        },
+        "ruleId" : {
+          "kind" : "invariant",
+          "declaredIn" : "conformance.packing",
+          "declaredOn" : "Straws",
+          "clause" : 0
+        },
+        "label" : "value = 0",
+        "noPoint" : [ ]
+      }, {
+        "lineId" : {
+          "line" : {
+            "which" : {
+              "kind" : "part",
+              "rule" : {
+                "kind" : "invariant",
+                "declaredIn" : "conformance.packing",
+                "declaredOn" : "Straws",
+                "clause" : 0
+              },
+              "part" : 1,
+              "line" : {
+                "kind" : "statement",
+                "statement" : 0
+              }
+            },
+            "facts" : {
+              "valueBelongsBelow" : true,
+              "holdsAtTheValue" : true,
+              "singles" : false
+            },
+            "narrowedWithin" : [ ]
+          },
+          "level" : {
+            "kind" : "on_a_carrier",
+            "carrier" : {
+              "kind" : "whole"
+            },
+            "at" : "20"
+          }
+        },
+        "ruleId" : {
+          "kind" : "invariant",
+          "declaredIn" : "conformance.packing",
+          "declaredOn" : "Straws",
+          "clause" : 0
+        },
+        "label" : "value = 20",
+        "noPoint" : [ ]
+      } ],
+      "excluded" : [ {
+        "pointId" : {
+          "line" : {
+            "which" : {
+              "kind" : "part",
+              "rule" : {
+                "kind" : "invariant",
+                "declaredIn" : "conformance.packing",
+                "declaredOn" : "Straws",
+                "clause" : 0
+              },
+              "part" : 0,
+              "line" : {
+                "kind" : "statement",
+                "statement" : 0
+              }
+            },
+            "facts" : {
+              "valueBelongsBelow" : false,
+              "holdsAtTheValue" : true,
+              "singles" : false
+            },
+            "narrowedWithin" : [ ]
+          },
+          "level" : {
+            "kind" : "on_a_carrier",
+            "carrier" : {
+              "kind" : "whole"
+            },
+            "at" : "0"
+          },
+          "location" : {
+            "kind" : "beside_the_line",
+            "side" : "below"
+          },
+          "stops" : [ ]
+        },
+        "point" : "off",
+        "ruleId" : {
+          "kind" : "invariant",
+          "declaredIn" : "conformance.packing",
+          "declaredOn" : "Straws",
+          "clause" : 0
+        },
+        "label" : "value = 0",
+        "notOwed" : "no_value_can_stand_there"
+      }, {
+        "pointId" : {
+          "line" : {
+            "which" : {
+              "kind" : "part",
+              "rule" : {
+                "kind" : "invariant",
+                "declaredIn" : "conformance.packing",
+                "declaredOn" : "Straws",
+                "clause" : 0
+              },
+              "part" : 0,
+              "line" : {
+                "kind" : "statement",
+                "statement" : 0
+              }
+            },
+            "facts" : {
+              "valueBelongsBelow" : false,
+              "holdsAtTheValue" : true,
+              "singles" : false
+            },
+            "narrowedWithin" : [ ]
+          },
+          "level" : {
+            "kind" : "on_a_carrier",
+            "carrier" : {
+              "kind" : "whole"
+            },
+            "at" : "0"
+          },
+          "location" : {
+            "kind" : "in_the_region",
+            "side" : "below"
+          },
+          "stops" : [ ]
+        },
+        "point" : "out",
+        "ruleId" : {
+          "kind" : "invariant",
+          "declaredIn" : "conformance.packing",
+          "declaredOn" : "Straws",
+          "clause" : 0
+        },
+        "label" : "value = 0",
+        "notOwed" : "no_value_can_stand_there"
+      }, {
+        "pointId" : {
+          "line" : {
+            "which" : {
+              "kind" : "part",
+              "rule" : {
+                "kind" : "invariant",
+                "declaredIn" : "conformance.packing",
+                "declaredOn" : "Straws",
+                "clause" : 0
+              },
+              "part" : 1,
+              "line" : {
+                "kind" : "statement",
+                "statement" : 0
+              }
+            },
+            "facts" : {
+              "valueBelongsBelow" : true,
+              "holdsAtTheValue" : true,
+              "singles" : false
+            },
+            "narrowedWithin" : [ ]
+          },
+          "level" : {
+            "kind" : "on_a_carrier",
+            "carrier" : {
+              "kind" : "whole"
+            },
+            "at" : "20"
+          },
+          "location" : {
+            "kind" : "beside_the_line",
+            "side" : "above"
+          },
+          "stops" : [ ]
+        },
+        "point" : "off",
+        "ruleId" : {
+          "kind" : "invariant",
+          "declaredIn" : "conformance.packing",
+          "declaredOn" : "Straws",
+          "clause" : 0
+        },
+        "label" : "value = 20",
+        "notOwed" : "no_value_can_stand_there"
+      }, {
+        "pointId" : {
+          "line" : {
+            "which" : {
+              "kind" : "part",
+              "rule" : {
+                "kind" : "invariant",
+                "declaredIn" : "conformance.packing",
+                "declaredOn" : "Straws",
+                "clause" : 0
+              },
+              "part" : 1,
+              "line" : {
+                "kind" : "statement",
+                "statement" : 0
+              }
+            },
+            "facts" : {
+              "valueBelongsBelow" : true,
+              "holdsAtTheValue" : true,
+              "singles" : false
+            },
+            "narrowedWithin" : [ ]
+          },
+          "level" : {
+            "kind" : "on_a_carrier",
+            "carrier" : {
+              "kind" : "whole"
+            },
+            "at" : "20"
+          },
+          "location" : {
+            "kind" : "in_the_region",
+            "side" : "above"
+          },
+          "stops" : [ ]
+        },
+        "point" : "out",
+        "ruleId" : {
+          "kind" : "invariant",
+          "declaredIn" : "conformance.packing",
+          "declaredOn" : "Straws",
+          "clause" : 0
+        },
+        "label" : "value = 20",
+        "notOwed" : "no_value_can_stand_there"
+      } ]
     }, {
       "owners" : [ {
         "kind" : "declared",
@@ -333,7 +663,7 @@
         "axis" : "value",
         "against" : "0",
         "knownWritable" : true,
-        "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+        "writableBecause" : [ "it_is_proved", "a_row_is_at_it" ],
         "status" : "complete",
         "hit" : true,
         "disposition" : "met",
@@ -383,10 +713,7 @@
           "stops" : {
             "kind" : "at_the_domain",
             "at" : {
-              "kind" : "on_a_carrier",
-              "carrier" : {
-                "kind" : "whole"
-              },
+              "kind" : "a_count",
               "at" : "20"
             },
             "per" : "1",
@@ -405,7 +732,7 @@
         "axis" : "value",
         "against" : "0 < value <= 20",
         "knownWritable" : true,
-        "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+        "writableBecause" : [ "it_is_proved", "a_row_is_at_it" ],
         "status" : "complete",
         "hit" : true,
         "disposition" : "met",
@@ -464,7 +791,7 @@
         "axis" : "value",
         "against" : "20",
         "knownWritable" : true,
-        "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+        "writableBecause" : [ "it_is_proved", "a_row_is_at_it" ],
         "status" : "complete",
         "hit" : true,
         "disposition" : "met",
@@ -514,10 +841,7 @@
           "stops" : {
             "kind" : "at_the_domain",
             "at" : {
-              "kind" : "on_a_carrier",
-              "carrier" : {
-                "kind" : "whole"
-              },
+              "kind" : "a_count",
               "at" : "0"
             },
             "per" : "1",
@@ -536,7 +860,7 @@
         "axis" : "value",
         "against" : "0 <= value < 20",
         "knownWritable" : true,
-        "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+        "writableBecause" : [ "it_is_proved", "a_row_is_at_it" ],
         "status" : "complete",
         "hit" : true,
         "disposition" : "met",
@@ -549,7 +873,273 @@
           "hit" : true
         } ]
       } ],
-      "findings" : [ ]
+      "findings" : [ ],
+      "lines" : [ {
+        "lineId" : {
+          "line" : {
+            "which" : {
+              "kind" : "part",
+              "rule" : {
+                "kind" : "invariant",
+                "declaredIn" : "conformance.packing",
+                "declaredOn" : "Bars",
+                "clause" : 0
+              },
+              "part" : 0,
+              "line" : {
+                "kind" : "statement",
+                "statement" : 0
+              }
+            },
+            "facts" : {
+              "valueBelongsBelow" : false,
+              "holdsAtTheValue" : true,
+              "singles" : false
+            },
+            "narrowedWithin" : [ ]
+          },
+          "level" : {
+            "kind" : "on_a_carrier",
+            "carrier" : {
+              "kind" : "whole"
+            },
+            "at" : "0"
+          }
+        },
+        "ruleId" : {
+          "kind" : "invariant",
+          "declaredIn" : "conformance.packing",
+          "declaredOn" : "Bars",
+          "clause" : 0
+        },
+        "label" : "value = 0",
+        "noPoint" : [ ]
+      }, {
+        "lineId" : {
+          "line" : {
+            "which" : {
+              "kind" : "part",
+              "rule" : {
+                "kind" : "invariant",
+                "declaredIn" : "conformance.packing",
+                "declaredOn" : "Bars",
+                "clause" : 0
+              },
+              "part" : 1,
+              "line" : {
+                "kind" : "statement",
+                "statement" : 0
+              }
+            },
+            "facts" : {
+              "valueBelongsBelow" : true,
+              "holdsAtTheValue" : true,
+              "singles" : false
+            },
+            "narrowedWithin" : [ ]
+          },
+          "level" : {
+            "kind" : "on_a_carrier",
+            "carrier" : {
+              "kind" : "whole"
+            },
+            "at" : "20"
+          }
+        },
+        "ruleId" : {
+          "kind" : "invariant",
+          "declaredIn" : "conformance.packing",
+          "declaredOn" : "Bars",
+          "clause" : 0
+        },
+        "label" : "value = 20",
+        "noPoint" : [ ]
+      } ],
+      "excluded" : [ {
+        "pointId" : {
+          "line" : {
+            "which" : {
+              "kind" : "part",
+              "rule" : {
+                "kind" : "invariant",
+                "declaredIn" : "conformance.packing",
+                "declaredOn" : "Bars",
+                "clause" : 0
+              },
+              "part" : 0,
+              "line" : {
+                "kind" : "statement",
+                "statement" : 0
+              }
+            },
+            "facts" : {
+              "valueBelongsBelow" : false,
+              "holdsAtTheValue" : true,
+              "singles" : false
+            },
+            "narrowedWithin" : [ ]
+          },
+          "level" : {
+            "kind" : "on_a_carrier",
+            "carrier" : {
+              "kind" : "whole"
+            },
+            "at" : "0"
+          },
+          "location" : {
+            "kind" : "beside_the_line",
+            "side" : "below"
+          },
+          "stops" : [ ]
+        },
+        "point" : "off",
+        "ruleId" : {
+          "kind" : "invariant",
+          "declaredIn" : "conformance.packing",
+          "declaredOn" : "Bars",
+          "clause" : 0
+        },
+        "label" : "value = 0",
+        "notOwed" : "no_value_can_stand_there"
+      }, {
+        "pointId" : {
+          "line" : {
+            "which" : {
+              "kind" : "part",
+              "rule" : {
+                "kind" : "invariant",
+                "declaredIn" : "conformance.packing",
+                "declaredOn" : "Bars",
+                "clause" : 0
+              },
+              "part" : 0,
+              "line" : {
+                "kind" : "statement",
+                "statement" : 0
+              }
+            },
+            "facts" : {
+              "valueBelongsBelow" : false,
+              "holdsAtTheValue" : true,
+              "singles" : false
+            },
+            "narrowedWithin" : [ ]
+          },
+          "level" : {
+            "kind" : "on_a_carrier",
+            "carrier" : {
+              "kind" : "whole"
+            },
+            "at" : "0"
+          },
+          "location" : {
+            "kind" : "in_the_region",
+            "side" : "below"
+          },
+          "stops" : [ ]
+        },
+        "point" : "out",
+        "ruleId" : {
+          "kind" : "invariant",
+          "declaredIn" : "conformance.packing",
+          "declaredOn" : "Bars",
+          "clause" : 0
+        },
+        "label" : "value = 0",
+        "notOwed" : "no_value_can_stand_there"
+      }, {
+        "pointId" : {
+          "line" : {
+            "which" : {
+              "kind" : "part",
+              "rule" : {
+                "kind" : "invariant",
+                "declaredIn" : "conformance.packing",
+                "declaredOn" : "Bars",
+                "clause" : 0
+              },
+              "part" : 1,
+              "line" : {
+                "kind" : "statement",
+                "statement" : 0
+              }
+            },
+            "facts" : {
+              "valueBelongsBelow" : true,
+              "holdsAtTheValue" : true,
+              "singles" : false
+            },
+            "narrowedWithin" : [ ]
+          },
+          "level" : {
+            "kind" : "on_a_carrier",
+            "carrier" : {
+              "kind" : "whole"
+            },
+            "at" : "20"
+          },
+          "location" : {
+            "kind" : "beside_the_line",
+            "side" : "above"
+          },
+          "stops" : [ ]
+        },
+        "point" : "off",
+        "ruleId" : {
+          "kind" : "invariant",
+          "declaredIn" : "conformance.packing",
+          "declaredOn" : "Bars",
+          "clause" : 0
+        },
+        "label" : "value = 20",
+        "notOwed" : "no_value_can_stand_there"
+      }, {
+        "pointId" : {
+          "line" : {
+            "which" : {
+              "kind" : "part",
+              "rule" : {
+                "kind" : "invariant",
+                "declaredIn" : "conformance.packing",
+                "declaredOn" : "Bars",
+                "clause" : 0
+              },
+              "part" : 1,
+              "line" : {
+                "kind" : "statement",
+                "statement" : 0
+              }
+            },
+            "facts" : {
+              "valueBelongsBelow" : true,
+              "holdsAtTheValue" : true,
+              "singles" : false
+            },
+            "narrowedWithin" : [ ]
+          },
+          "level" : {
+            "kind" : "on_a_carrier",
+            "carrier" : {
+              "kind" : "whole"
+            },
+            "at" : "20"
+          },
+          "location" : {
+            "kind" : "in_the_region",
+            "side" : "above"
+          },
+          "stops" : [ ]
+        },
+        "point" : "out",
+        "ruleId" : {
+          "kind" : "invariant",
+          "declaredIn" : "conformance.packing",
+          "declaredOn" : "Bars",
+          "clause" : 0
+        },
+        "label" : "value = 20",
+        "notOwed" : "no_value_can_stand_there"
+      } ]
     }, {
       "owners" : [ {
         "kind" : "declared",
@@ -604,7 +1194,7 @@
         "axis" : "value",
         "against" : "0",
         "knownWritable" : true,
-        "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it", "a_value_was_built" ],
+        "writableBecause" : [ "it_is_proved", "a_row_is_at_it", "a_value_was_built" ],
         "status" : "complete",
         "hit" : true,
         "disposition" : "met",
@@ -661,10 +1251,7 @@
           "stops" : {
             "kind" : "at_the_domain",
             "at" : {
-              "kind" : "on_a_carrier",
-              "carrier" : {
-                "kind" : "whole"
-              },
+              "kind" : "a_count",
               "at" : "24"
             },
             "per" : "1",
@@ -683,7 +1270,7 @@
         "axis" : "value",
         "against" : "0 < value <= 24",
         "knownWritable" : true,
-        "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+        "writableBecause" : [ "it_is_proved", "a_row_is_at_it" ],
         "status" : "complete",
         "hit" : true,
         "disposition" : "met",
@@ -749,7 +1336,7 @@
         "axis" : "value",
         "against" : "24",
         "knownWritable" : true,
-        "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it", "a_value_was_built" ],
+        "writableBecause" : [ "it_is_proved", "a_row_is_at_it", "a_value_was_built" ],
         "status" : "complete",
         "hit" : true,
         "disposition" : "met",
@@ -806,10 +1393,7 @@
           "stops" : {
             "kind" : "at_the_domain",
             "at" : {
-              "kind" : "on_a_carrier",
-              "carrier" : {
-                "kind" : "whole"
-              },
+              "kind" : "a_count",
               "at" : "0"
             },
             "per" : "1",
@@ -828,7 +1412,7 @@
         "axis" : "value",
         "against" : "0 <= value < 24",
         "knownWritable" : true,
-        "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+        "writableBecause" : [ "it_is_proved", "a_row_is_at_it" ],
         "status" : "complete",
         "hit" : true,
         "disposition" : "met",
@@ -848,7 +1432,273 @@
           "hit" : true
         } ]
       } ],
-      "findings" : [ ]
+      "findings" : [ ],
+      "lines" : [ {
+        "lineId" : {
+          "line" : {
+            "which" : {
+              "kind" : "part",
+              "rule" : {
+                "kind" : "invariant",
+                "declaredIn" : "conformance.packing",
+                "declaredOn" : "Hour",
+                "clause" : 0
+              },
+              "part" : 0,
+              "line" : {
+                "kind" : "statement",
+                "statement" : 0
+              }
+            },
+            "facts" : {
+              "valueBelongsBelow" : false,
+              "holdsAtTheValue" : true,
+              "singles" : false
+            },
+            "narrowedWithin" : [ ]
+          },
+          "level" : {
+            "kind" : "on_a_carrier",
+            "carrier" : {
+              "kind" : "whole"
+            },
+            "at" : "0"
+          }
+        },
+        "ruleId" : {
+          "kind" : "invariant",
+          "declaredIn" : "conformance.packing",
+          "declaredOn" : "Hour",
+          "clause" : 0
+        },
+        "label" : "value = 0",
+        "noPoint" : [ ]
+      }, {
+        "lineId" : {
+          "line" : {
+            "which" : {
+              "kind" : "part",
+              "rule" : {
+                "kind" : "invariant",
+                "declaredIn" : "conformance.packing",
+                "declaredOn" : "Hour",
+                "clause" : 0
+              },
+              "part" : 1,
+              "line" : {
+                "kind" : "statement",
+                "statement" : 0
+              }
+            },
+            "facts" : {
+              "valueBelongsBelow" : true,
+              "holdsAtTheValue" : true,
+              "singles" : false
+            },
+            "narrowedWithin" : [ ]
+          },
+          "level" : {
+            "kind" : "on_a_carrier",
+            "carrier" : {
+              "kind" : "whole"
+            },
+            "at" : "24"
+          }
+        },
+        "ruleId" : {
+          "kind" : "invariant",
+          "declaredIn" : "conformance.packing",
+          "declaredOn" : "Hour",
+          "clause" : 0
+        },
+        "label" : "value = 24",
+        "noPoint" : [ ]
+      } ],
+      "excluded" : [ {
+        "pointId" : {
+          "line" : {
+            "which" : {
+              "kind" : "part",
+              "rule" : {
+                "kind" : "invariant",
+                "declaredIn" : "conformance.packing",
+                "declaredOn" : "Hour",
+                "clause" : 0
+              },
+              "part" : 0,
+              "line" : {
+                "kind" : "statement",
+                "statement" : 0
+              }
+            },
+            "facts" : {
+              "valueBelongsBelow" : false,
+              "holdsAtTheValue" : true,
+              "singles" : false
+            },
+            "narrowedWithin" : [ ]
+          },
+          "level" : {
+            "kind" : "on_a_carrier",
+            "carrier" : {
+              "kind" : "whole"
+            },
+            "at" : "0"
+          },
+          "location" : {
+            "kind" : "beside_the_line",
+            "side" : "below"
+          },
+          "stops" : [ ]
+        },
+        "point" : "off",
+        "ruleId" : {
+          "kind" : "invariant",
+          "declaredIn" : "conformance.packing",
+          "declaredOn" : "Hour",
+          "clause" : 0
+        },
+        "label" : "value = 0",
+        "notOwed" : "no_value_can_stand_there"
+      }, {
+        "pointId" : {
+          "line" : {
+            "which" : {
+              "kind" : "part",
+              "rule" : {
+                "kind" : "invariant",
+                "declaredIn" : "conformance.packing",
+                "declaredOn" : "Hour",
+                "clause" : 0
+              },
+              "part" : 0,
+              "line" : {
+                "kind" : "statement",
+                "statement" : 0
+              }
+            },
+            "facts" : {
+              "valueBelongsBelow" : false,
+              "holdsAtTheValue" : true,
+              "singles" : false
+            },
+            "narrowedWithin" : [ ]
+          },
+          "level" : {
+            "kind" : "on_a_carrier",
+            "carrier" : {
+              "kind" : "whole"
+            },
+            "at" : "0"
+          },
+          "location" : {
+            "kind" : "in_the_region",
+            "side" : "below"
+          },
+          "stops" : [ ]
+        },
+        "point" : "out",
+        "ruleId" : {
+          "kind" : "invariant",
+          "declaredIn" : "conformance.packing",
+          "declaredOn" : "Hour",
+          "clause" : 0
+        },
+        "label" : "value = 0",
+        "notOwed" : "no_value_can_stand_there"
+      }, {
+        "pointId" : {
+          "line" : {
+            "which" : {
+              "kind" : "part",
+              "rule" : {
+                "kind" : "invariant",
+                "declaredIn" : "conformance.packing",
+                "declaredOn" : "Hour",
+                "clause" : 0
+              },
+              "part" : 1,
+              "line" : {
+                "kind" : "statement",
+                "statement" : 0
+              }
+            },
+            "facts" : {
+              "valueBelongsBelow" : true,
+              "holdsAtTheValue" : true,
+              "singles" : false
+            },
+            "narrowedWithin" : [ ]
+          },
+          "level" : {
+            "kind" : "on_a_carrier",
+            "carrier" : {
+              "kind" : "whole"
+            },
+            "at" : "24"
+          },
+          "location" : {
+            "kind" : "beside_the_line",
+            "side" : "above"
+          },
+          "stops" : [ ]
+        },
+        "point" : "off",
+        "ruleId" : {
+          "kind" : "invariant",
+          "declaredIn" : "conformance.packing",
+          "declaredOn" : "Hour",
+          "clause" : 0
+        },
+        "label" : "value = 24",
+        "notOwed" : "no_value_can_stand_there"
+      }, {
+        "pointId" : {
+          "line" : {
+            "which" : {
+              "kind" : "part",
+              "rule" : {
+                "kind" : "invariant",
+                "declaredIn" : "conformance.packing",
+                "declaredOn" : "Hour",
+                "clause" : 0
+              },
+              "part" : 1,
+              "line" : {
+                "kind" : "statement",
+                "statement" : 0
+              }
+            },
+            "facts" : {
+              "valueBelongsBelow" : true,
+              "holdsAtTheValue" : true,
+              "singles" : false
+            },
+            "narrowedWithin" : [ ]
+          },
+          "level" : {
+            "kind" : "on_a_carrier",
+            "carrier" : {
+              "kind" : "whole"
+            },
+            "at" : "24"
+          },
+          "location" : {
+            "kind" : "in_the_region",
+            "side" : "above"
+          },
+          "stops" : [ ]
+        },
+        "point" : "out",
+        "ruleId" : {
+          "kind" : "invariant",
+          "declaredIn" : "conformance.packing",
+          "declaredOn" : "Hour",
+          "clause" : 0
+        },
+        "label" : "value = 24",
+        "notOwed" : "no_value_can_stand_there"
+      } ]
     } ],
     "behaviors" : [ {
       "name" : "packBox",
@@ -1006,7 +1856,9 @@
         },
         "disposition" : "met"
       } ],
-      "status" : "complete",
+      "rowsThatDoNotHold" : [ ],
+      "status" : "partial",
+      "weakening" : [ "rule_unread" ],
       "signature" : {
         "status" : "complete",
         "output" : {
@@ -1045,15 +1897,87 @@
       "partition" : {
         "axesMeasure" : {
           "status" : "unavailable",
-          "reason" : "nothing_is_divided"
+          "reason" : "the_reading_did_not_run_out",
+          "weakening" : [ "rule_unread" ]
         },
         "boundariesMeasure" : {
-          "status" : "complete"
+          "status" : "partial",
+          "weakening" : [ "rule_unread" ]
         },
         "axes" : [ ],
+        "unanswered" : [ {
+          "at" : "bars",
+          "rule" : "comparison@0:34:49",
+          "ruleId" : {
+            "kind" : "comparison",
+            "declaredIn" : "conformance.packing",
+            "definition" : "packBox",
+            "behavior" : "packBox",
+            "ordinal" : 7,
+            "lowered" : 0
+          },
+          "question" : "notDetermined",
+          "subject" : {
+            "kind" : "filedAt",
+            "path" : "bars",
+            "measure" : "bars"
+          },
+          "stopped" : [ {
+            "reason" : "relation_not_shown_to_reach_every_value"
+          } ]
+        }, {
+          "at" : "straws",
+          "rule" : "comparison@0:34:49",
+          "ruleId" : {
+            "kind" : "comparison",
+            "declaredIn" : "conformance.packing",
+            "definition" : "packBox",
+            "behavior" : "packBox",
+            "ordinal" : 7,
+            "lowered" : 0
+          },
+          "question" : "notDetermined",
+          "subject" : {
+            "kind" : "filedAt",
+            "path" : "straws",
+            "measure" : "straws"
+          },
+          "stopped" : [ {
+            "reason" : "relation_not_shown_to_reach_every_value"
+          } ]
+        } ],
         "claimsOffAxis" : [ ],
         "boundaries" : [ {
-          "obligationId" : {
+          "besides" : [ ],
+          "lineId" : {
+            "target" : {
+              "behavior" : "packBox",
+              "quantity" : {
+                "shape" : "at_value",
+                "terms" : [ {
+                  "term" : {
+                    "kind" : "value",
+                    "position" : "straws"
+                  },
+                  "orders" : {
+                    "observed" : {
+                      "kind" : "whole"
+                    },
+                    "answered" : {
+                      "kind" : "whole"
+                    }
+                  },
+                  "coefficient" : "1"
+                } ]
+              },
+              "level" : {
+                "kind" : "on_a_carrier",
+                "carrier" : {
+                  "kind" : "whole"
+                },
+                "at" : "0"
+              }
+            },
             "line" : {
               "which" : {
                 "kind" : "part",
@@ -1075,13 +1999,6 @@
                 "singles" : false
               },
               "narrowedWithin" : [ ]
-            },
-            "level" : {
-              "kind" : "on_a_carrier",
-              "carrier" : {
-                "kind" : "whole"
-              },
-              "at" : "0"
             }
           },
           "axis" : "packBox/straws",
@@ -1096,7 +2013,7 @@
             "relation" : "=",
             "against" : "0",
             "knownWritable" : true,
-            "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+            "writableBecause" : [ "it_is_proved", "a_row_is_at_it" ],
             "status" : "complete",
             "hit" : true
           }, {
@@ -1105,7 +2022,8 @@
               "kind" : "beside_the_line",
               "side" : "below"
             },
-            "notOwed" : "the_rules_refuse_it"
+            "notOwed" : "no_value_can_stand_there",
+            "stops" : [ ]
           }, {
             "point" : "in",
             "location" : {
@@ -1115,7 +2033,7 @@
             "relation" : "in",
             "against" : "0 < straws <= 20",
             "knownWritable" : true,
-            "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+            "writableBecause" : [ "it_is_proved", "a_row_is_at_it" ],
             "status" : "complete",
             "hit" : true
           }, {
@@ -1124,10 +2042,40 @@
               "kind" : "in_the_region",
               "side" : "below"
             },
-            "notOwed" : "the_rules_refuse_it"
+            "notOwed" : "no_value_can_stand_there",
+            "stops" : [ ]
           } ]
         }, {
-          "obligationId" : {
+          "besides" : [ ],
+          "lineId" : {
+            "target" : {
+              "behavior" : "packBox",
+              "quantity" : {
+                "shape" : "at_value",
+                "terms" : [ {
+                  "term" : {
+                    "kind" : "value",
+                    "position" : "straws"
+                  },
+                  "orders" : {
+                    "observed" : {
+                      "kind" : "whole"
+                    },
+                    "answered" : {
+                      "kind" : "whole"
+                    }
+                  },
+                  "coefficient" : "1"
+                } ]
+              },
+              "level" : {
+                "kind" : "on_a_carrier",
+                "carrier" : {
+                  "kind" : "whole"
+                },
+                "at" : "20"
+              }
+            },
             "line" : {
               "which" : {
                 "kind" : "part",
@@ -1149,13 +2097,6 @@
                 "singles" : false
               },
               "narrowedWithin" : [ ]
-            },
-            "level" : {
-              "kind" : "on_a_carrier",
-              "carrier" : {
-                "kind" : "whole"
-              },
-              "at" : "20"
             }
           },
           "axis" : "packBox/straws",
@@ -1170,7 +2111,7 @@
             "relation" : "=",
             "against" : "20",
             "knownWritable" : true,
-            "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+            "writableBecause" : [ "it_is_proved", "a_row_is_at_it" ],
             "status" : "complete",
             "hit" : true
           }, {
@@ -1179,7 +2120,8 @@
               "kind" : "beside_the_line",
               "side" : "above"
             },
-            "notOwed" : "the_rules_refuse_it"
+            "notOwed" : "no_value_can_stand_there",
+            "stops" : [ ]
           }, {
             "point" : "in",
             "location" : {
@@ -1189,7 +2131,7 @@
             "relation" : "in",
             "against" : "0 <= straws < 20",
             "knownWritable" : true,
-            "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+            "writableBecause" : [ "it_is_proved", "a_row_is_at_it" ],
             "status" : "complete",
             "hit" : true
           }, {
@@ -1198,10 +2140,40 @@
               "kind" : "in_the_region",
               "side" : "above"
             },
-            "notOwed" : "the_rules_refuse_it"
+            "notOwed" : "no_value_can_stand_there",
+            "stops" : [ ]
           } ]
         }, {
-          "obligationId" : {
+          "besides" : [ ],
+          "lineId" : {
+            "target" : {
+              "behavior" : "packBox",
+              "quantity" : {
+                "shape" : "at_value",
+                "terms" : [ {
+                  "term" : {
+                    "kind" : "value",
+                    "position" : "bars"
+                  },
+                  "orders" : {
+                    "observed" : {
+                      "kind" : "whole"
+                    },
+                    "answered" : {
+                      "kind" : "whole"
+                    }
+                  },
+                  "coefficient" : "1"
+                } ]
+              },
+              "level" : {
+                "kind" : "on_a_carrier",
+                "carrier" : {
+                  "kind" : "whole"
+                },
+                "at" : "0"
+              }
+            },
             "line" : {
               "which" : {
                 "kind" : "part",
@@ -1223,13 +2195,6 @@
                 "singles" : false
               },
               "narrowedWithin" : [ ]
-            },
-            "level" : {
-              "kind" : "on_a_carrier",
-              "carrier" : {
-                "kind" : "whole"
-              },
-              "at" : "0"
             }
           },
           "axis" : "packBox/bars",
@@ -1244,7 +2209,7 @@
             "relation" : "=",
             "against" : "0",
             "knownWritable" : true,
-            "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+            "writableBecause" : [ "it_is_proved", "a_row_is_at_it" ],
             "status" : "complete",
             "hit" : true
           }, {
@@ -1253,7 +2218,8 @@
               "kind" : "beside_the_line",
               "side" : "below"
             },
-            "notOwed" : "the_rules_refuse_it"
+            "notOwed" : "no_value_can_stand_there",
+            "stops" : [ ]
           }, {
             "point" : "in",
             "location" : {
@@ -1263,7 +2229,7 @@
             "relation" : "in",
             "against" : "0 < bars <= 20",
             "knownWritable" : true,
-            "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+            "writableBecause" : [ "it_is_proved", "a_row_is_at_it" ],
             "status" : "complete",
             "hit" : true
           }, {
@@ -1272,10 +2238,40 @@
               "kind" : "in_the_region",
               "side" : "below"
             },
-            "notOwed" : "the_rules_refuse_it"
+            "notOwed" : "no_value_can_stand_there",
+            "stops" : [ ]
           } ]
         }, {
-          "obligationId" : {
+          "besides" : [ ],
+          "lineId" : {
+            "target" : {
+              "behavior" : "packBox",
+              "quantity" : {
+                "shape" : "at_value",
+                "terms" : [ {
+                  "term" : {
+                    "kind" : "value",
+                    "position" : "bars"
+                  },
+                  "orders" : {
+                    "observed" : {
+                      "kind" : "whole"
+                    },
+                    "answered" : {
+                      "kind" : "whole"
+                    }
+                  },
+                  "coefficient" : "1"
+                } ]
+              },
+              "level" : {
+                "kind" : "on_a_carrier",
+                "carrier" : {
+                  "kind" : "whole"
+                },
+                "at" : "20"
+              }
+            },
             "line" : {
               "which" : {
                 "kind" : "part",
@@ -1297,13 +2293,6 @@
                 "singles" : false
               },
               "narrowedWithin" : [ ]
-            },
-            "level" : {
-              "kind" : "on_a_carrier",
-              "carrier" : {
-                "kind" : "whole"
-              },
-              "at" : "20"
             }
           },
           "axis" : "packBox/bars",
@@ -1318,7 +2307,7 @@
             "relation" : "=",
             "against" : "20",
             "knownWritable" : true,
-            "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+            "writableBecause" : [ "it_is_proved", "a_row_is_at_it" ],
             "status" : "complete",
             "hit" : true
           }, {
@@ -1327,7 +2316,8 @@
               "kind" : "beside_the_line",
               "side" : "above"
             },
-            "notOwed" : "the_rules_refuse_it"
+            "notOwed" : "no_value_can_stand_there",
+            "stops" : [ ]
           }, {
             "point" : "in",
             "location" : {
@@ -1337,7 +2327,7 @@
             "relation" : "in",
             "against" : "0 <= bars < 20",
             "knownWritable" : true,
-            "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+            "writableBecause" : [ "it_is_proved", "a_row_is_at_it" ],
             "status" : "complete",
             "hit" : true
           }, {
@@ -1346,10 +2336,123 @@
               "kind" : "in_the_region",
               "side" : "above"
             },
-            "notOwed" : "the_rules_refuse_it"
+            "notOwed" : "no_value_can_stand_there",
+            "stops" : [ ]
           } ]
         }, {
-          "obligationId" : {
+          "besides" : [ {
+            "obligationId" : {
+              "line" : {
+                "which" : {
+                  "kind" : "comparison",
+                  "rule" : {
+                    "kind" : "comparison",
+                    "declaredIn" : "conformance.packing",
+                    "definition" : "packBox",
+                    "behavior" : "packBox",
+                    "ordinal" : 7,
+                    "lowered" : 0
+                  }
+                },
+                "facts" : {
+                  "valueBelongsBelow" : true,
+                  "holdsAtTheValue" : true,
+                  "singles" : false
+                },
+                "narrowedWithin" : [ ]
+              },
+              "direction" : "3 * bars + straws"
+            },
+            "standing" : "ruled_out"
+          }, {
+            "obligationId" : {
+              "line" : {
+                "which" : {
+                  "kind" : "comparison",
+                  "rule" : {
+                    "kind" : "comparison",
+                    "declaredIn" : "conformance.packing",
+                    "definition" : "packBox",
+                    "behavior" : "packBox",
+                    "ordinal" : 7,
+                    "lowered" : 0
+                  }
+                },
+                "facts" : {
+                  "valueBelongsBelow" : true,
+                  "holdsAtTheValue" : true,
+                  "singles" : false
+                },
+                "narrowedWithin" : [ ]
+              },
+              "direction" : "bars + straws"
+            },
+            "standing" : "ruled_out"
+          }, {
+            "obligationId" : {
+              "line" : {
+                "which" : {
+                  "kind" : "comparison",
+                  "rule" : {
+                    "kind" : "comparison",
+                    "declaredIn" : "conformance.packing",
+                    "definition" : "packBox",
+                    "behavior" : "packBox",
+                    "ordinal" : 7,
+                    "lowered" : 0
+                  }
+                },
+                "facts" : {
+                  "valueBelongsBelow" : true,
+                  "holdsAtTheValue" : true,
+                  "singles" : false
+                },
+                "narrowedWithin" : [ ]
+              },
+              "direction" : "bars"
+            },
+            "standing" : "ruled_out"
+          } ],
+          "lineId" : {
+            "target" : {
+              "behavior" : "packBox",
+              "quantity" : {
+                "shape" : "over_a_form",
+                "terms" : [ {
+                  "term" : {
+                    "kind" : "value",
+                    "position" : "bars"
+                  },
+                  "orders" : {
+                    "observed" : {
+                      "kind" : "whole"
+                    },
+                    "answered" : {
+                      "kind" : "whole"
+                    }
+                  },
+                  "coefficient" : "600"
+                }, {
+                  "term" : {
+                    "kind" : "value",
+                    "position" : "straws"
+                  },
+                  "orders" : {
+                    "observed" : {
+                      "kind" : "whole"
+                    },
+                    "answered" : {
+                      "kind" : "whole"
+                    }
+                  },
+                  "coefficient" : "300"
+                } ]
+              },
+              "level" : {
+                "kind" : "a_count",
+                "at" : "4800"
+              }
+            },
             "line" : {
               "which" : {
                 "kind" : "comparison",
@@ -1369,9 +2472,43 @@
               },
               "narrowedWithin" : [ ]
             },
-            "level" : {
-              "kind" : "a_count",
-              "at" : "4800"
+            "placement" : {
+              "kind" : "placed",
+              "points" : [ {
+                "point" : {
+                  "kind" : "at_the_line"
+                },
+                "authored" : {
+                  "kind" : "at_the_line"
+                }
+              }, {
+                "point" : {
+                  "kind" : "beside_the_line",
+                  "side" : "above"
+                },
+                "authored" : {
+                  "kind" : "beside_the_line",
+                  "side" : "above"
+                }
+              }, {
+                "point" : {
+                  "kind" : "in_the_region",
+                  "side" : "below"
+                },
+                "authored" : {
+                  "kind" : "in_the_region",
+                  "side" : "below"
+                }
+              }, {
+                "point" : {
+                  "kind" : "in_the_region",
+                  "side" : "above"
+                },
+                "authored" : {
+                  "kind" : "in_the_region",
+                  "side" : "above"
+                }
+              } ]
             }
           },
           "axis" : "packBox/600 * bars + 300 * straws",
@@ -1448,10 +2585,6 @@
               },
               "narrowedWithin" : [ ]
             },
-            "level" : {
-              "kind" : "a_count",
-              "at" : "4800"
-            },
             "location" : {
               "kind" : "at_the_line"
             }
@@ -1500,10 +2633,6 @@
                 "singles" : false
               },
               "narrowedWithin" : [ ]
-            },
-            "level" : {
-              "kind" : "a_count",
-              "at" : "4800"
             },
             "location" : {
               "kind" : "beside_the_line",
@@ -1555,22 +2684,9 @@
               },
               "narrowedWithin" : [ ]
             },
-            "level" : {
-              "kind" : "a_count",
-              "at" : "4800"
-            },
             "location" : {
               "kind" : "in_the_region",
               "side" : "below"
-            },
-            "stops" : {
-              "kind" : "at_the_domain",
-              "at" : {
-                "kind" : "a_count",
-                "at" : "0"
-              },
-              "per" : "1",
-              "inclusive" : true
             }
           },
           "point" : "in",
@@ -1618,22 +2734,9 @@
               },
               "narrowedWithin" : [ ]
             },
-            "level" : {
-              "kind" : "a_count",
-              "at" : "4800"
-            },
             "location" : {
               "kind" : "in_the_region",
               "side" : "above"
-            },
-            "stops" : {
-              "kind" : "at_the_domain",
-              "at" : {
-                "kind" : "a_count",
-                "at" : "18000"
-              },
-              "per" : "1",
-              "inclusive" : true
             }
           },
           "point" : "out",
@@ -1671,7 +2774,7 @@
         "notDerivable" : [ ],
         "notRead" : [ {
           "position" : "bars",
-          "reason" : "unsupported_partition_shape",
+          "reason" : "relation_not_shown_to_reach_every_value",
           "rule" : "comparison@0:34:49",
           "ruleId" : {
             "kind" : "comparison",
@@ -1683,7 +2786,7 @@
           }
         }, {
           "position" : "straws",
-          "reason" : "unsupported_partition_shape",
+          "reason" : "relation_not_shown_to_reach_every_value",
           "rule" : "comparison@0:34:49",
           "ruleId" : {
             "kind" : "comparison",
@@ -1768,6 +2871,34 @@
           "taken" : true
         } ]
       },
+      "replacement" : {
+        "status" : "complete",
+        "obligations" : [ {
+          "obligationId" : {
+            "behavior" : "packBox",
+            "rewrite" : "arm_as_sibling",
+            "module" : "conformance.packing",
+            "definition" : "packBox",
+            "construct" : 3,
+            "lowered" : 0,
+            "part" : 0,
+            "with" : 1
+          },
+          "disposition" : "noticed"
+        }, {
+          "obligationId" : {
+            "behavior" : "packBox",
+            "rewrite" : "arm_as_sibling",
+            "module" : "conformance.packing",
+            "definition" : "packBox",
+            "construct" : 3,
+            "lowered" : 0,
+            "part" : 1,
+            "with" : 0
+          },
+          "disposition" : "noticed"
+        } ]
+      },
       "findings" : [ {
         "kind" : "partition_not_read",
         "disposition" : "reported",
@@ -1780,7 +2911,7 @@
           "ordinal" : 7,
           "lowered" : 0
         },
-        "reason" : "unsupported_partition_shape"
+        "reason" : "relation_not_shown_to_reach_every_value"
       }, {
         "kind" : "partition_not_read",
         "disposition" : "reported",
@@ -1793,7 +2924,31 @@
           "ordinal" : 7,
           "lowered" : 0
         },
-        "reason" : "unsupported_partition_shape"
+        "reason" : "relation_not_shown_to_reach_every_value"
+      }, {
+        "kind" : "rule_unaccounted",
+        "disposition" : "reported",
+        "subject" : "comparison@0:34:49 — what this rule states about bars",
+        "ruleId" : {
+          "kind" : "comparison",
+          "declaredIn" : "conformance.packing",
+          "definition" : "packBox",
+          "behavior" : "packBox",
+          "ordinal" : 7,
+          "lowered" : 0
+        }
+      }, {
+        "kind" : "rule_unaccounted",
+        "disposition" : "reported",
+        "subject" : "comparison@0:34:49 — what this rule states about straws",
+        "ruleId" : {
+          "kind" : "comparison",
+          "declaredIn" : "conformance.packing",
+          "definition" : "packBox",
+          "behavior" : "packBox",
+          "ordinal" : 7,
+          "lowered" : 0
+        }
       } ]
     }, {
       "name" : "bookSlot",
@@ -1921,7 +3076,9 @@
         },
         "disposition" : "met"
       } ],
-      "status" : "complete",
+      "rowsThatDoNotHold" : [ ],
+      "status" : "partial",
+      "weakening" : [ "rule_unread" ],
       "signature" : {
         "status" : "complete",
         "output" : {
@@ -1960,15 +3117,87 @@
       "partition" : {
         "axesMeasure" : {
           "status" : "unavailable",
-          "reason" : "nothing_is_divided"
+          "reason" : "the_reading_did_not_run_out",
+          "weakening" : [ "rule_unread" ]
         },
         "boundariesMeasure" : {
-          "status" : "complete"
+          "status" : "partial",
+          "weakening" : [ "rule_unread" ]
         },
         "axes" : [ ],
+        "unanswered" : [ {
+          "at" : "from",
+          "rule" : "comparison@0:47:36",
+          "ruleId" : {
+            "kind" : "comparison",
+            "declaredIn" : "conformance.packing",
+            "definition" : "bookSlot",
+            "behavior" : "bookSlot",
+            "ordinal" : 2,
+            "lowered" : 0
+          },
+          "question" : "notDetermined",
+          "subject" : {
+            "kind" : "filedAt",
+            "path" : "from",
+            "measure" : "from"
+          },
+          "stopped" : [ {
+            "reason" : "relation_not_shown_to_reach_every_value"
+          } ]
+        }, {
+          "at" : "until",
+          "rule" : "comparison@0:47:36",
+          "ruleId" : {
+            "kind" : "comparison",
+            "declaredIn" : "conformance.packing",
+            "definition" : "bookSlot",
+            "behavior" : "bookSlot",
+            "ordinal" : 2,
+            "lowered" : 0
+          },
+          "question" : "notDetermined",
+          "subject" : {
+            "kind" : "filedAt",
+            "path" : "until",
+            "measure" : "until"
+          },
+          "stopped" : [ {
+            "reason" : "relation_not_shown_to_reach_every_value"
+          } ]
+        } ],
         "claimsOffAxis" : [ ],
         "boundaries" : [ {
-          "obligationId" : {
+          "besides" : [ ],
+          "lineId" : {
+            "target" : {
+              "behavior" : "bookSlot",
+              "quantity" : {
+                "shape" : "at_value",
+                "terms" : [ {
+                  "term" : {
+                    "kind" : "value",
+                    "position" : "from"
+                  },
+                  "orders" : {
+                    "observed" : {
+                      "kind" : "whole"
+                    },
+                    "answered" : {
+                      "kind" : "whole"
+                    }
+                  },
+                  "coefficient" : "1"
+                } ]
+              },
+              "level" : {
+                "kind" : "on_a_carrier",
+                "carrier" : {
+                  "kind" : "whole"
+                },
+                "at" : "0"
+              }
+            },
             "line" : {
               "which" : {
                 "kind" : "part",
@@ -1990,13 +3219,6 @@
                 "singles" : false
               },
               "narrowedWithin" : [ ]
-            },
-            "level" : {
-              "kind" : "on_a_carrier",
-              "carrier" : {
-                "kind" : "whole"
-              },
-              "at" : "0"
             }
           },
           "axis" : "bookSlot/from",
@@ -2011,7 +3233,7 @@
             "relation" : "=",
             "against" : "0",
             "knownWritable" : true,
-            "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+            "writableBecause" : [ "it_is_proved", "a_row_is_at_it" ],
             "status" : "complete",
             "hit" : true
           }, {
@@ -2020,7 +3242,8 @@
               "kind" : "beside_the_line",
               "side" : "below"
             },
-            "notOwed" : "the_rules_refuse_it"
+            "notOwed" : "no_value_can_stand_there",
+            "stops" : [ ]
           }, {
             "point" : "in",
             "location" : {
@@ -2030,7 +3253,7 @@
             "relation" : "in",
             "against" : "0 < from <= 24",
             "knownWritable" : true,
-            "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+            "writableBecause" : [ "it_is_proved", "a_row_is_at_it" ],
             "status" : "complete",
             "hit" : true
           }, {
@@ -2039,10 +3262,40 @@
               "kind" : "in_the_region",
               "side" : "below"
             },
-            "notOwed" : "the_rules_refuse_it"
+            "notOwed" : "no_value_can_stand_there",
+            "stops" : [ ]
           } ]
         }, {
-          "obligationId" : {
+          "besides" : [ ],
+          "lineId" : {
+            "target" : {
+              "behavior" : "bookSlot",
+              "quantity" : {
+                "shape" : "at_value",
+                "terms" : [ {
+                  "term" : {
+                    "kind" : "value",
+                    "position" : "from"
+                  },
+                  "orders" : {
+                    "observed" : {
+                      "kind" : "whole"
+                    },
+                    "answered" : {
+                      "kind" : "whole"
+                    }
+                  },
+                  "coefficient" : "1"
+                } ]
+              },
+              "level" : {
+                "kind" : "on_a_carrier",
+                "carrier" : {
+                  "kind" : "whole"
+                },
+                "at" : "24"
+              }
+            },
             "line" : {
               "which" : {
                 "kind" : "part",
@@ -2064,13 +3317,6 @@
                 "singles" : false
               },
               "narrowedWithin" : [ ]
-            },
-            "level" : {
-              "kind" : "on_a_carrier",
-              "carrier" : {
-                "kind" : "whole"
-              },
-              "at" : "24"
             }
           },
           "axis" : "bookSlot/from",
@@ -2085,7 +3331,7 @@
             "relation" : "=",
             "against" : "24",
             "knownWritable" : true,
-            "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
+            "writableBecause" : [ "it_is_proved", "a_value_was_built" ],
             "status" : "complete",
             "hit" : false
           }, {
@@ -2094,7 +3340,8 @@
               "kind" : "beside_the_line",
               "side" : "above"
             },
-            "notOwed" : "the_rules_refuse_it"
+            "notOwed" : "no_value_can_stand_there",
+            "stops" : [ ]
           }, {
             "point" : "in",
             "location" : {
@@ -2104,7 +3351,7 @@
             "relation" : "in",
             "against" : "0 <= from < 24",
             "knownWritable" : true,
-            "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+            "writableBecause" : [ "it_is_proved", "a_row_is_at_it" ],
             "status" : "complete",
             "hit" : true
           }, {
@@ -2113,10 +3360,40 @@
               "kind" : "in_the_region",
               "side" : "above"
             },
-            "notOwed" : "the_rules_refuse_it"
+            "notOwed" : "no_value_can_stand_there",
+            "stops" : [ ]
           } ]
         }, {
-          "obligationId" : {
+          "besides" : [ ],
+          "lineId" : {
+            "target" : {
+              "behavior" : "bookSlot",
+              "quantity" : {
+                "shape" : "at_value",
+                "terms" : [ {
+                  "term" : {
+                    "kind" : "value",
+                    "position" : "until"
+                  },
+                  "orders" : {
+                    "observed" : {
+                      "kind" : "whole"
+                    },
+                    "answered" : {
+                      "kind" : "whole"
+                    }
+                  },
+                  "coefficient" : "1"
+                } ]
+              },
+              "level" : {
+                "kind" : "on_a_carrier",
+                "carrier" : {
+                  "kind" : "whole"
+                },
+                "at" : "0"
+              }
+            },
             "line" : {
               "which" : {
                 "kind" : "part",
@@ -2138,13 +3415,6 @@
                 "singles" : false
               },
               "narrowedWithin" : [ ]
-            },
-            "level" : {
-              "kind" : "on_a_carrier",
-              "carrier" : {
-                "kind" : "whole"
-              },
-              "at" : "0"
             }
           },
           "axis" : "bookSlot/until",
@@ -2159,7 +3429,7 @@
             "relation" : "=",
             "against" : "0",
             "knownWritable" : true,
-            "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
+            "writableBecause" : [ "it_is_proved", "a_value_was_built" ],
             "status" : "complete",
             "hit" : false
           }, {
@@ -2168,7 +3438,8 @@
               "kind" : "beside_the_line",
               "side" : "below"
             },
-            "notOwed" : "the_rules_refuse_it"
+            "notOwed" : "no_value_can_stand_there",
+            "stops" : [ ]
           }, {
             "point" : "in",
             "location" : {
@@ -2178,7 +3449,7 @@
             "relation" : "in",
             "against" : "0 < until <= 24",
             "knownWritable" : true,
-            "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+            "writableBecause" : [ "it_is_proved", "a_row_is_at_it" ],
             "status" : "complete",
             "hit" : true
           }, {
@@ -2187,10 +3458,40 @@
               "kind" : "in_the_region",
               "side" : "below"
             },
-            "notOwed" : "the_rules_refuse_it"
+            "notOwed" : "no_value_can_stand_there",
+            "stops" : [ ]
           } ]
         }, {
-          "obligationId" : {
+          "besides" : [ ],
+          "lineId" : {
+            "target" : {
+              "behavior" : "bookSlot",
+              "quantity" : {
+                "shape" : "at_value",
+                "terms" : [ {
+                  "term" : {
+                    "kind" : "value",
+                    "position" : "until"
+                  },
+                  "orders" : {
+                    "observed" : {
+                      "kind" : "whole"
+                    },
+                    "answered" : {
+                      "kind" : "whole"
+                    }
+                  },
+                  "coefficient" : "1"
+                } ]
+              },
+              "level" : {
+                "kind" : "on_a_carrier",
+                "carrier" : {
+                  "kind" : "whole"
+                },
+                "at" : "24"
+              }
+            },
             "line" : {
               "which" : {
                 "kind" : "part",
@@ -2212,13 +3513,6 @@
                 "singles" : false
               },
               "narrowedWithin" : [ ]
-            },
-            "level" : {
-              "kind" : "on_a_carrier",
-              "carrier" : {
-                "kind" : "whole"
-              },
-              "at" : "24"
             }
           },
           "axis" : "bookSlot/until",
@@ -2233,7 +3527,7 @@
             "relation" : "=",
             "against" : "24",
             "knownWritable" : true,
-            "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+            "writableBecause" : [ "it_is_proved", "a_row_is_at_it" ],
             "status" : "complete",
             "hit" : true
           }, {
@@ -2242,7 +3536,8 @@
               "kind" : "beside_the_line",
               "side" : "above"
             },
-            "notOwed" : "the_rules_refuse_it"
+            "notOwed" : "no_value_can_stand_there",
+            "stops" : [ ]
           }, {
             "point" : "in",
             "location" : {
@@ -2252,7 +3547,7 @@
             "relation" : "in",
             "against" : "0 <= until < 24",
             "knownWritable" : true,
-            "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+            "writableBecause" : [ "it_is_proved", "a_row_is_at_it" ],
             "status" : "complete",
             "hit" : true
           }, {
@@ -2261,10 +3556,147 @@
               "kind" : "in_the_region",
               "side" : "above"
             },
-            "notOwed" : "the_rules_refuse_it"
+            "notOwed" : "no_value_can_stand_there",
+            "stops" : [ ]
           } ]
         }, {
-          "obligationId" : {
+          "besides" : [ {
+            "obligationId" : {
+              "line" : {
+                "which" : {
+                  "kind" : "comparison",
+                  "rule" : {
+                    "kind" : "comparison",
+                    "declaredIn" : "conformance.packing",
+                    "definition" : "bookSlot",
+                    "behavior" : "bookSlot",
+                    "ordinal" : 2,
+                    "lowered" : 0
+                  }
+                },
+                "facts" : {
+                  "valueBelongsBelow" : true,
+                  "holdsAtTheValue" : true,
+                  "singles" : false
+                },
+                "narrowedWithin" : [ ]
+              },
+              "direction" : "until"
+            },
+            "standing" : "ruled_out"
+          }, {
+            "obligationId" : {
+              "line" : {
+                "which" : {
+                  "kind" : "comparison",
+                  "rule" : {
+                    "kind" : "comparison",
+                    "declaredIn" : "conformance.packing",
+                    "definition" : "bookSlot",
+                    "behavior" : "bookSlot",
+                    "ordinal" : 2,
+                    "lowered" : 0
+                  }
+                },
+                "facts" : {
+                  "valueBelongsBelow" : true,
+                  "holdsAtTheValue" : true,
+                  "singles" : false
+                },
+                "narrowedWithin" : [ ]
+              },
+              "direction" : "-2 * from + until"
+            },
+            "standing" : "ruled_out"
+          }, {
+            "obligationId" : {
+              "line" : {
+                "which" : {
+                  "kind" : "comparison",
+                  "rule" : {
+                    "kind" : "comparison",
+                    "declaredIn" : "conformance.packing",
+                    "definition" : "bookSlot",
+                    "behavior" : "bookSlot",
+                    "ordinal" : 2,
+                    "lowered" : 0
+                  }
+                },
+                "facts" : {
+                  "valueBelongsBelow" : true,
+                  "holdsAtTheValue" : true,
+                  "singles" : false
+                },
+                "narrowedWithin" : [ ]
+              },
+              "direction" : "-from + 2 * until"
+            },
+            "standing" : "ruled_out"
+          }, {
+            "obligationId" : {
+              "line" : {
+                "which" : {
+                  "kind" : "comparison",
+                  "rule" : {
+                    "kind" : "comparison",
+                    "declaredIn" : "conformance.packing",
+                    "definition" : "bookSlot",
+                    "behavior" : "bookSlot",
+                    "ordinal" : 2,
+                    "lowered" : 0
+                  }
+                },
+                "facts" : {
+                  "valueBelongsBelow" : true,
+                  "holdsAtTheValue" : true,
+                  "singles" : false
+                },
+                "narrowedWithin" : [ ]
+              },
+              "direction" : "-from"
+            },
+            "standing" : "ruled_out"
+          } ],
+          "lineId" : {
+            "target" : {
+              "behavior" : "bookSlot",
+              "quantity" : {
+                "shape" : "between_positions",
+                "terms" : [ {
+                  "term" : {
+                    "kind" : "value",
+                    "position" : "from"
+                  },
+                  "orders" : {
+                    "observed" : {
+                      "kind" : "whole"
+                    },
+                    "answered" : {
+                      "kind" : "whole"
+                    }
+                  },
+                  "coefficient" : "-1"
+                }, {
+                  "term" : {
+                    "kind" : "value",
+                    "position" : "until"
+                  },
+                  "orders" : {
+                    "observed" : {
+                      "kind" : "whole"
+                    },
+                    "answered" : {
+                      "kind" : "whole"
+                    }
+                  },
+                  "coefficient" : "1"
+                } ]
+              },
+              "level" : {
+                "kind" : "a_count",
+                "at" : "8"
+              }
+            },
             "line" : {
               "which" : {
                 "kind" : "comparison",
@@ -2284,9 +3716,43 @@
               },
               "narrowedWithin" : [ ]
             },
-            "level" : {
-              "kind" : "a_count",
-              "at" : "8"
+            "placement" : {
+              "kind" : "placed",
+              "points" : [ {
+                "point" : {
+                  "kind" : "at_the_line"
+                },
+                "authored" : {
+                  "kind" : "at_the_line"
+                }
+              }, {
+                "point" : {
+                  "kind" : "beside_the_line",
+                  "side" : "above"
+                },
+                "authored" : {
+                  "kind" : "beside_the_line",
+                  "side" : "above"
+                }
+              }, {
+                "point" : {
+                  "kind" : "in_the_region",
+                  "side" : "below"
+                },
+                "authored" : {
+                  "kind" : "in_the_region",
+                  "side" : "below"
+                }
+              }, {
+                "point" : {
+                  "kind" : "in_the_region",
+                  "side" : "above"
+                },
+                "authored" : {
+                  "kind" : "in_the_region",
+                  "side" : "above"
+                }
+              } ]
             }
           },
           "axis" : "bookSlot/until",
@@ -2363,10 +3829,6 @@
               },
               "narrowedWithin" : [ ]
             },
-            "level" : {
-              "kind" : "a_count",
-              "at" : "8"
-            },
             "location" : {
               "kind" : "at_the_line"
             }
@@ -2415,10 +3877,6 @@
                 "singles" : false
               },
               "narrowedWithin" : [ ]
-            },
-            "level" : {
-              "kind" : "a_count",
-              "at" : "8"
             },
             "location" : {
               "kind" : "beside_the_line",
@@ -2470,22 +3928,9 @@
               },
               "narrowedWithin" : [ ]
             },
-            "level" : {
-              "kind" : "a_count",
-              "at" : "8"
-            },
             "location" : {
               "kind" : "in_the_region",
               "side" : "below"
-            },
-            "stops" : {
-              "kind" : "at_the_domain",
-              "at" : {
-                "kind" : "a_count",
-                "at" : "-24"
-              },
-              "per" : "1",
-              "inclusive" : true
             }
           },
           "point" : "in",
@@ -2533,22 +3978,9 @@
               },
               "narrowedWithin" : [ ]
             },
-            "level" : {
-              "kind" : "a_count",
-              "at" : "8"
-            },
             "location" : {
               "kind" : "in_the_region",
               "side" : "above"
-            },
-            "stops" : {
-              "kind" : "at_the_domain",
-              "at" : {
-                "kind" : "a_count",
-                "at" : "24"
-              },
-              "per" : "1",
-              "inclusive" : true
             }
           },
           "point" : "out",
@@ -2586,7 +4018,7 @@
         "notDerivable" : [ ],
         "notRead" : [ {
           "position" : "from",
-          "reason" : "unsupported_partition_shape",
+          "reason" : "relation_not_shown_to_reach_every_value",
           "rule" : "comparison@0:47:36",
           "ruleId" : {
             "kind" : "comparison",
@@ -2598,7 +4030,7 @@
           }
         }, {
           "position" : "until",
-          "reason" : "unsupported_partition_shape",
+          "reason" : "relation_not_shown_to_reach_every_value",
           "rule" : "comparison@0:47:36",
           "ruleId" : {
             "kind" : "comparison",
@@ -2666,8 +4098,8 @@
             "behavior" : "bookSlot",
             "conditions" : [ {
               "kind" : "comparison",
-              "condition" : "GT LinearForm[constant=-8, coefs={from=-1, until=1}]",
-              "outcome" : "denied"
+              "condition" : "GE LinearForm[constant=8, coefs={from=1, until=-1}]",
+              "outcome" : "held"
             } ]
           },
           "taken" : true
@@ -2676,11 +4108,39 @@
             "behavior" : "bookSlot",
             "conditions" : [ {
               "kind" : "comparison",
-              "condition" : "GT LinearForm[constant=-8, coefs={from=-1, until=1}]",
-              "outcome" : "held"
+              "condition" : "GE LinearForm[constant=8, coefs={from=1, until=-1}]",
+              "outcome" : "denied"
             } ]
           },
           "taken" : true
+        } ]
+      },
+      "replacement" : {
+        "status" : "complete",
+        "obligations" : [ {
+          "obligationId" : {
+            "behavior" : "bookSlot",
+            "rewrite" : "arm_as_sibling",
+            "module" : "conformance.packing",
+            "definition" : "bookSlot",
+            "construct" : 0,
+            "lowered" : 0,
+            "part" : 0,
+            "with" : 1
+          },
+          "disposition" : "noticed"
+        }, {
+          "obligationId" : {
+            "behavior" : "bookSlot",
+            "rewrite" : "arm_as_sibling",
+            "module" : "conformance.packing",
+            "definition" : "bookSlot",
+            "construct" : 0,
+            "lowered" : 0,
+            "part" : 1,
+            "with" : 0
+          },
+          "disposition" : "noticed"
         } ]
       },
       "findings" : [ {
@@ -2695,7 +4155,7 @@
           "ordinal" : 2,
           "lowered" : 0
         },
-        "reason" : "unsupported_partition_shape"
+        "reason" : "relation_not_shown_to_reach_every_value"
       }, {
         "kind" : "partition_not_read",
         "disposition" : "reported",
@@ -2708,12 +4168,36 @@
           "ordinal" : 2,
           "lowered" : 0
         },
-        "reason" : "unsupported_partition_shape"
+        "reason" : "relation_not_shown_to_reach_every_value"
+      }, {
+        "kind" : "rule_unaccounted",
+        "disposition" : "reported",
+        "subject" : "comparison@0:47:36 — what this rule states about from",
+        "ruleId" : {
+          "kind" : "comparison",
+          "declaredIn" : "conformance.packing",
+          "definition" : "bookSlot",
+          "behavior" : "bookSlot",
+          "ordinal" : 2,
+          "lowered" : 0
+        }
+      }, {
+        "kind" : "rule_unaccounted",
+        "disposition" : "reported",
+        "subject" : "comparison@0:47:36 — what this rule states about until",
+        "ruleId" : {
+          "kind" : "comparison",
+          "declaredIn" : "conformance.packing",
+          "definition" : "bookSlot",
+          "behavior" : "bookSlot",
+          "ordinal" : 2,
+          "lowered" : 0
+        }
       } ]
     } ]
   } ],
   "sources" : {
-    "1" : "packing.examples.sou",
-    "0" : "packing.sou"
+    "0" : "packing.sou",
+    "1" : "packing.examples.sou"
   }
 }

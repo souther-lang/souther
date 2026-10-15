@@ -1,8 +1,13 @@
 package souther.compiler.inputs;
 
 import souther.compiler.check.DeclarationNewtypes;
+import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Symbols;
+
+import java.util.HashMap;
+import java.util.Map;
+import java.util.function.Function;
 
 /**
  * One behavior's input as it was read: where its positions are, what its rules leave the numbers at
@@ -30,6 +35,7 @@ public final class InputReading {
     private final InputDomain domain;
     private final Quantities quantities;
     private final RuleReadingSource rules;
+    private final Map<Class<?>, Object> derived = new HashMap<>();
 
     InputReading(InputDomain domain, Quantities quantities, RuleReadingSource rules) {
         if (domain == null || quantities == null) {
@@ -39,6 +45,23 @@ public final class InputReading {
         this.domain = domain;
         this.quantities = quantities;
         this.rules = rules;
+    }
+
+    /**
+     * What {@code make} works out of this reading, worked out once for it and kept with it.
+     *
+     * <p>For what is a function of this reading alone and asked by several readers of it. Kept by
+     * each reader for itself, it is worked out once per reader, and the readers of one input are
+     * many; kept here, it is worked out once for the reading they share. One value of each kind,
+     * so {@code make} is the one way of working that kind out.
+     */
+    public synchronized <T> T derived(Class<T> kind, Function<InputReading, T> make) {
+        Object kept = derived.get(kind);
+        if (kept == null) {
+            kept = make.apply(this);
+            derived.put(kind, kept);
+        }
+        return kind.cast(kept);
     }
 
     /** Where this input's positions are and what stands at each of them. */
@@ -51,9 +74,23 @@ public final class InputReading {
         return quantities;
     }
 
+    /** What the declarations put at a path of this input, read under the same source
+     *  ({@link InputDomain#declared}). */
+    public DeclaredInput declared() {
+        return domain.declared(rules);
+    }
+
     /** The scope and the clause representation the two were read against. */
     public RuleReadingSource rules() {
         return rules;
+    }
+
+    /**
+     * The world the two were read in, for a reader going on to read the declarations they reach:
+     * the same rules under the same budget, borrowing what this reading's own walk made of them.
+     */
+    public RuleReadingContext ruleReading() {
+        return RuleReadingContext.of(rules, domain.policy(), domain.machines());
     }
 
     /** The names the two were read against. */

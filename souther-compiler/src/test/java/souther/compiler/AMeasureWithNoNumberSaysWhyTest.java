@@ -84,12 +84,12 @@ class AMeasureWithNoNumberSaysWhyTest {
             data Flag = Yes | No
             data Ask = { flag: Flag }
 
-            behavior classify : (q: Ask) -> Res
-                constructs Res
-            let classify (q) = Res { n = 1 }
+            behavior classify : (q: Ask) -> Ask
+                constructs Ask
+            let classify (q) = Ask { flag = q.flag }
 
             example classify
-                | (Ask { flag = Yes }) -> Res { n = 1 }
+                | (Ask { flag = Yes }) -> Ask { flag = Yes }
 
             data Pair = { left: Flag, right: Flag }
 
@@ -214,6 +214,7 @@ class AMeasureWithNoNumberSaysWhyTest {
                     branch      not applicable (this body owes no arm)
                     decision    rules 1   taken 0
                       ! no row takes a decision rule
+                    replacement not measured (no row names this behavior)
                   narrow                   implemented   rows 0    pending 0
                     signature   not applicable (this behavior's output is not a sum)
                     partition   not applicable (the rules of this behavior divide no position)
@@ -222,31 +223,27 @@ class AMeasureWithNoNumberSaysWhyTest {
                     branch      not applicable (this body owes no arm)
                     decision    rules 1   taken 0
                       ! no row takes a decision rule
+                    replacement not measured (no row names this behavior)
                   both                     implemented   rows 1    pending 0
                     signature   not applicable (this behavior's output is not a sum)
                     partition   not applicable (this behavior is measured at its stages)
                     border      not applicable (this behavior is measured at its stages)
                     branch      not applicable (this behavior has no body)
+                    replacement not applicable (this behavior has no body)
                   baseRate                 injected      rows 0    pending 0
                     signature   not applicable (this behavior's output is not a sum)
                     partition   not applicable (the rules of this behavior divide no position)
-                    border      borders 2   obligations 0/0
-                      · no OFF point is owed at r.cost = 0 (invariant Amount #1): excluded — the rules leave no value there
-                      · no OUT point is owed at r.cost = 0 (invariant Amount #1): excluded — the rules leave no value there
-                      · no OFF point is owed at r.cost = 1000 (invariant Amount #1): excluded — the rules leave no value there
-                      · no OUT point is owed at r.cost = 1000 (invariant Amount #1): excluded — the rules leave no value there
+                    border      borders 0   obligations 0/0
                     branch      not applicable (this behavior has no body)
+                    replacement not applicable (this behavior has no body)
                   rated                    implemented   rows 0    pending 0
                     signature   not applicable (this behavior's output is not a sum)
                     partition   not applicable (the rules of this behavior divide no position)
-                    border      borders 2   obligations 0/0
-                      · no OFF point is owed at r.cost = 0 (invariant Amount #1): excluded — the rules leave no value there
-                      · no OUT point is owed at r.cost = 0 (invariant Amount #1): excluded — the rules leave no value there
-                      · no OFF point is owed at r.cost = 1000 (invariant Amount #1): excluded — the rules leave no value there
-                      · no OUT point is owed at r.cost = 1000 (invariant Amount #1): excluded — the rules leave no value there
+                    border      borders 0   obligations 0/0
                     branch      not applicable (this body owes no arm)
                     decision    rules 1   taken 0
                       ! no row takes a decision rule
+                    replacement not measured (no row names this behavior)
                   classify                 implemented   rows 1    pending 0
                     signature   not applicable (this behavior's output is not a sum)
                     partition   axes 1   equivalence partitions 1/2
@@ -254,6 +251,8 @@ class AMeasureWithNoNumberSaysWhyTest {
                     border      not applicable (the rules of this behavior draw no line)
                     branch      not applicable (this body owes no arm)
                     decision    rules 1   taken 1
+                    replacement 0/1
+                      ! no row would come out differently if the body always answered what `classify #1 in 0` answers
                   sift                     implemented   rows 0    pending 0
                     signature   not applicable (this behavior's output is not a sum)
                     partition   axes 2   equivalence partitions 0/0   (2 not measured: no row names this behavior)
@@ -268,7 +267,8 @@ class AMeasureWithNoNumberSaysWhyTest {
                           · it goes through `case No` (50:14)
                       ! no row takes a decision rule
                           · it goes through `case No` (49:16)
-                  declarations   obligations 0/4
+                    replacement not measured (no row names this behavior)
+                  declarations   borders 2   obligations 0/4
                       ? undecided whether a row is at the ON point value = 0 (invariant Amount #1) — no row names this behavior
                           · read as baseRate/r.cost: = 0
                           · read as rated/r.cost: = 0
@@ -281,10 +281,14 @@ class AMeasureWithNoNumberSaysWhyTest {
                       ? undecided whether a row is at the IN point value in 0 <= value < 1000 (invariant Amount #1) — no row names this behavior
                           · read as baseRate/r.cost: in 0 <= r.cost < 1000
                           · read as rated/r.cost: in 0 <= r.cost < 1000
+                      · no OFF point is owed at value = 0 (invariant Amount #1): excluded — no value can stand there
+                      · no OUT point is owed at value = 0 (invariant Amount #1): excluded — no value can stand there
+                      · no OFF point is owed at value = 1000 (invariant Amount #1): excluded — no value can stand there
+                      · no OUT point is owed at value = 1000 (invariant Amount #1): excluded — no value can stand there
 
                 7 behaviors: 6 implemented, 0 unimplemented, 1 injected; 0 rows waiting for a `let`.
                 adequacy: not satisfied
-                7 gaps marked `!`: what a strict build refuses over.
+                8 gaps marked `!`: what a strict build refuses over.
                 """, human());
     }
 
@@ -328,7 +332,8 @@ class AMeasureWithNoNumberSaysWhyTest {
     @Test
     void thePairsOfABehaviorNoRowNamesAreNotCountedEither() {
         PartitionEvidence.PairSpace pairs = partitions().get("sift").pairs();
-        assertEquals(4, pairs.total(), "two positions of two classes each");
+        assertEquals(2, pairs.total(),
+                "the right's two classes, which a run reads only under a left of Yes");
         assertEquals(MeasurementStatus.NOT_MEASURED, AdequacyReport.statusOf(pairs.counted()));
         assertEquals(PartitionEvidence.PairSpace.NoRows.NO_ROWS, pairs.counted().why());
         assertFalse(behaviorBlock(human(), "sift").contains("pairs"),

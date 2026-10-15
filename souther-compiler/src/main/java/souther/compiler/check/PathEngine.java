@@ -1,15 +1,26 @@
 package souther.compiler.check;
 
+import souther.compiler.numeric.ClosedStates;
+import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.OrderedIntervals;
+import souther.compiler.numeric.Rel;
 import souther.compiler.semantics.NumericResult;
 import souther.compiler.core.Contract;
 import souther.compiler.core.Contract.Guard;
 import souther.compiler.core.Core;
+import souther.compiler.inputs.CasesLeft;
+import souther.compiler.meaning.Proposition;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.CaseSelector;
 import souther.compiler.types.ResolvedCase;
 import souther.compiler.types.Type;
+import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
+import souther.compiler.values.AdmittedPlan;
+import souther.compiler.values.Allowance;
+import souther.compiler.values.PlannedValues;
+import souther.compiler.values.ValueSet;
 
 import java.util.HashMap;
 import java.util.HashSet;
@@ -55,6 +66,9 @@ final class PathEngine {
 
 
     private final Symbols symbols;
+    /** Where the declarations' readings are asked for, which a value entered asks for what its
+     *  declaration leaves its names ({@link Seeding#entered}). */
+    private final RuleReadingContext ruleReading;
     /** The declarations' invariants, typed where they are declared and read where a value is built. */
     private final Clauses clauses;
     /** Where a value is, what it is called, and what can be said of it. */
@@ -70,6 +84,9 @@ final class PathEngine {
     private final GuaranteeWalk walk;
     /** What each behavior a body may call states about its answer, by the name it is called under. */
     private final Map<ValueName.Behavior, AssumedContract> contracts;
+
+    /** One closure per question for as long as this engine is held ({@link #nothingKnown}). */
+    private final ClosedStates closures = ClosedStates.kept();
 
     /** The environment a value's body is read in, which is the same for every build of it. */
     Denotations insideATemplate() {
@@ -102,6 +119,7 @@ final class PathEngine {
                Map<ValueName.Behavior, AssumedContract> contracts,
                Terms.Of reading, ValueTemplates templates) {
         this.symbols = ruleReading.source().symbols();
+        this.ruleReading = ruleReading;
         this.terms = new Terms(reading, ruleReading, templates);
         this.clauses = terms.clauses();
         this.predicates = terms.predicates();
@@ -133,6 +151,29 @@ final class PathEngine {
     }
 
     /**
+     * Nothing known yet, where every walk this engine makes starts.
+     *
+     * <p>Every domain started here works out what its rules leave through {@link #closures}, so a
+     * closure one walk of this engine worked out is lent to every other that asks the same
+     * question. The walks of one engine read one body or one declaration's rules over and over —
+     * an arm, a guard, the path to each — and each asks what the rules on the way leave.
+     */
+    Known nothingKnown() {
+        return Known.top(closures);
+    }
+
+    /** What this engine's walks work their closures out through, for a reader holding it to
+     *  lending them ({@link ClosedStates#workedOut}). */
+    ClosedStates closures() {
+        return closures;
+    }
+
+    /** {@link #nothingKnown}, at no place. */
+    Entered nothingEntered() {
+        return new Entered(nothingKnown(), Denotations.none());
+    }
+
+    /**
      * A place and what is known of it, answered together.
      *
      * <p>Both halves or neither: a value's place and what is known of it are separate questions with
@@ -141,6 +182,7 @@ final class PathEngine {
      */
     record Entered(Known known, Denotations at) {
 
+        /** {@link Known#top}, at no place, for a reader that holds no engine. */
         static Entered nothing() {
             return new Entered(Known.top(), Denotations.none());
         }
@@ -208,6 +250,20 @@ final class PathEngine {
         return predicates.assumeCond(cond, k, at, positive);
     }
 
+    /** The same, of a condition whose meaning was read already: what it states coming out
+     *  {@code positive}, taken in as far as a path can hold it ({@link MeaningAssumptions}). */
+    Predicates.Assumed assuming(Proposition stated, Core cond, Known k, Denotations at,
+                                boolean positive, MeaningAssumptions.InputPlaces places) {
+        return predicates.assumeMeaning(stated, cond, k, at, positive, places);
+    }
+
+    /** {@code k} past what has to hold to stand somewhere no condition of the body leads, such as
+     *  inside a closure: {@code stated}, taken in as far as a path can hold it. */
+    Predicates.Assumed holding(Proposition stated, Known k, Denotations at,
+                               MeaningAssumptions.InputPlaces places) {
+        return predicates.assumeHolding(stated, k, at, places);
+    }
+
     /**
      * What a {@code match} arm's body is read under.
      *
@@ -224,9 +280,27 @@ final class PathEngine {
         Entered in = arm.binder() == null
                 ? new Entered(k, at)
                 : opening(arm, scrutinee, k, at);
-        return whatTakingThisCaseSays(arm, scrutinee,
+        Entered taken = whatTakingThisCaseSays(arm, scrutinee,
                 assuming(answeredBy(scrutinee, in.at()), answered(arm, scrutinee),
                         guard -> impliedBy(guard, arm.pattern()), in));
+        return new Entered(takingItsCases(arm, scrutinee, taken.known(), at), taken.at());
+    }
+
+    /**
+     * {@code k} with the value {@code arm} matched one of the cases it selects, which is what being
+     * inside the arm settles of it, so a fork further in on the same value is read under it.
+     *
+     * <p>Only what the arm selects. An arm left the cases the arms before it did not take is what
+     * the value's type divides into less those, which this does not read, so it settles nothing; an
+     * arm that binds the whole value selects nothing.
+     *
+     * <p>Asked on its own as well, by a reader that wants to know whether the cases are what leave
+     * the arm nothing, apart from what opening the value says.
+     */
+    Known takingItsCases(Core.Case arm, Core scrutinee, Known k, Denotations at) {
+        CasesLeft selected = arm.pattern() == null ? null : CasesLeft.selectedBy(arm.pattern());
+        FactSubject value = selected == null ? null : terms.subjectOf(scrutinee, at);
+        return value == null ? k : k.inCases(value, selected);
     }
 
     /**
@@ -476,7 +550,30 @@ final class PathEngine {
         Core.IfConstructed ic = built.attempt();
         Core.Read root = Terms.read(ic.binder(), ic.construct().type(), ic.pos());
         Denotations next = terms.choosing(built, at);
-        return new Entered(seedAt(root, k, next), next);
+        return new Entered(builtFrom(ic, root, seedAt(root, k, next), next), next);
+    }
+
+    /**
+     * {@code k} with each number of what an attempt built standing at what it was built from.
+     *
+     * <p>What was built is what it was given, field by field, so what its type guarantees of a
+     * field is guaranteed of the value it was given there: an {@code Amount} built from {@code raw}
+     * stops where {@code raw} does on every run that built one. Held of the value, since it is true
+     * wherever the built value is named.
+     */
+    private Known builtFrom(Core.IfConstructed ic, Core.Read root, Known k, Denotations at) {
+        Known out = k;
+        for (Core.FieldValue given : ic.construct().values()) {
+            LinearForm<FactSubject> field = terms.affineOf(
+                    new Core.FieldAccess(root, given.field(), given.value().type(), ic.pos()), at);
+            LinearForm<FactSubject> value = terms.affineOf(given.value(), at);
+            LinearForm<FactSubject> apart = field == null || value == null ? null
+                    : Terms.add(field, value, true);
+            if (apart != null && !apart.coefs().isEmpty()) {
+                out = out.taking(apart, Rel.EQ, Known.Held.OF_THE_VALUE, terms.kindsOf(apart));
+            }
+        }
+        return out;
     }
 
     // --- seeding -------------------------------------------------------------------------------
@@ -603,7 +700,7 @@ final class PathEngine {
      */
     Known seedAt(Core root, RuleKey path, Known k, Denotations at, GuaranteeWalk.Extent extent,
                  InvariantChecker.Gathering gathering, InvariantChecker.Reach reach) {
-        Seeding seeding = new Seeding(k, gathering);
+        Seeding seeding = new Seeding(k, gathering, at);
         walk.from(root, path, at,
                 new GuaranteeWalk.Scope(extent, reach.stopAt(), reach.withoutClauses(),
                         reach.withoutParts()),
@@ -626,14 +723,33 @@ final class PathEngine {
 
         private final InvariantChecker.Gathering gathering;
 
-        private Seeding(Known known, InvariantChecker.Gathering gathering) {
+        /** The bindings in force where the value is, which name what stands at each of its
+         *  names. */
+        private final Denotations at;
+
+        private Seeding(Known known, InvariantChecker.Gathering gathering, Denotations at) {
             this.known = known;
             this.gathering = gathering;
+            this.at = at;
         }
 
         @Override
         public void guaranteed(RuleKey path, TypeGuarantee guarantee) {
             known = taking(guarantee, known, gathering);
+        }
+
+        /**
+         * What the declaration leaves each name of the value, taken in as values.
+         *
+         * <p>Not while a declaration is being read ({@code gathering}). That reading is what the
+         * values are worked out of, so it would be asking itself; and what it reads at a field is
+         * met with the field's own reading where the values are worked out, not here.
+         */
+        @Override
+        public void entered(TypeSymbol declaration, List<GuaranteeWalk.Named> named) {
+            if (gathering == null) {
+                known = admitting(declaration, named, known, at);
+            }
         }
 
         @Override
@@ -691,6 +807,73 @@ final class PathEngine {
         return predicates.assume(guarantee.owed(), k, Known.Held.OF_THE_VALUE)
                 .and(guarantee.quantified());
     }
+
+    /**
+     * {@code k} with what {@code declaration} leaves each name readable off {@code root}, where its
+     * rules name the values a name may hold or the ones it may not.
+     *
+     * <p>The declaration's own answer ({@link FieldDomains#admits}), an upper bound however much of
+     * the rules was read, so what it rules out is ruled out. Held under the subject the value at the
+     * name is, which is the subject a condition on it names and the subject the numbers of it are
+     * held under — so a range a path takes in and the values the rules name meet at one place.
+     *
+     * <p>Values named or refused and not a pattern. A pattern is a machine, and a state asked at
+     * every arm whether anything is left would build it at every arm; what a pattern refuses is a
+     * question the reading of a declaration answers where it is read.
+     *
+     * <p>Only where the declarations read are the compilation's own ({@link AModulesRules}). There
+     * the reading of a declaration is made once and lent to every asker; a source of a reader's own
+     * may say something else of a name, so its reading is its own to make, and making it once per
+     * value a walk enters is the cost the lending exists to spare. A walk there takes in what the
+     * clauses guarantee and not these values, which is less and never wrong.
+     *
+     * <p>Not where the declaration is being read on the way to this very answer. What its reading
+     * seeds is read under {@code gathering} and comes nowhere near here, but a clause that applies a
+     * behavior answering a value of the declaration seeds that answer — and asking the declaration
+     * for its reading from inside it is asking for an answer not yet made.
+     */
+    private Known admitting(TypeSymbol declaration, List<GuaranteeWalk.Named> named, Known k,
+                            Denotations at) {
+        if (!(ruleReading.source().origin() instanceof AModulesRules)
+                || !(declaration instanceof TypeSymbol.AtModule declared)
+                || !BEING_READ.get().add(declared.key())) {
+            return k;
+        }
+        FieldDomains domains;
+        try {
+            domains = FieldDomains.of(declared, ruleReading);
+        } finally {
+            BEING_READ.get().remove(declared.key());
+        }
+        Confinement.Planned<FactSubject> said = null;
+        for (GuaranteeWalk.Named each : named) {
+            ValueSet values = domains.admits(each.key()).approximation();
+            if (!(values instanceof ValueSet.Finite || values instanceof ValueSet.Cofinite)
+                    || values.isEmpty()) {
+                continue;
+            }
+            Carrier carrier = Carrier.ofValue(each.readable().type(), terms.declarations());
+            FactSubject subject = carrier == null ? null
+                    : terms.subjectOf(each.readable().value(), at);
+            if (subject == null) {
+                continue;
+            }
+            Confinement.Planned<FactSubject> one = new Confinement.Planned<>(
+                    PlannedValues.at(subject, AdmittedPlan.of(values)), OrderedIntervals.top(),
+                    Map.of(subject, carrier));
+            said = said == null ? one : said.meet(one);
+        }
+        if (said == null) {
+            return k;
+        }
+        Allowance<FactSubject> sets = ruleReading.policy().allowanceForAdmittedValues();
+        return k.admitting(said.resolve(sets), sets);
+    }
+
+    /** The declarations whose reading this thread is asking for from inside {@link #admitting},
+     *  so that a reading reaching a value of its own declaration does not ask for itself. */
+    private static final ThreadLocal<Set<TypeKey>> BEING_READ =
+            ThreadLocal.withInitial(HashSet::new);
 
     /**
      * Tells the reading where it stopped, and how much of what stands there the rules it left are

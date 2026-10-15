@@ -45,13 +45,15 @@ class ARuleInABodyIsFiledAtWhatItsQuantityIsAboutTest {
     /**
      * A position that cancels out of the form is not one the rule is filed at.
      *
-     * <p>What survives relates two positions, so what the rule leaves at each of them is that; and
+     * <p>What survives relates two positions, so what the rule leaves at each of them is that — a
+     * sum held against a number, which neither is shown to reach at the ends of the other — and
      * {@code t.y} is left alone, because the rule the arithmetic came to does not mention it.
      */
     @Test
     void aCancelledPositionIsFiledAtByNothing() {
         assertEquals(
-                List.of("t.x/ComparisonBetweenPositions", "t.z/ComparisonBetweenPositions"),
+                List.of("t.x/RelationNotShownToReachEveryValue",
+                        "t.z/RelationNotShownToReachEveryValue"),
                 filedAt("t.x + t.y - t.y + t.z <= 10"));
     }
 

@@ -73,7 +73,7 @@ class TwoValuesWhoseDistanceThisCannotHoldStandNowhereItDecidedTest {
     }
 
     private static BorderQuantity.Observation row(BigDecimal on, BigDecimal against) {
-        return new BorderQuantity.Observation() {
+        return new AnObservationOfAForm() {
 
             @Override
             public WalkResult<ObservationAtPoint> at(TermPath path) {

@@ -7,7 +7,7 @@
     <parent>
         <groupId>org.souther-lang</groupId>
         <artifactId>souther-parent</artifactId>
-        <version>0.3.0</version>
+        <version>0.3.1-SNAPSHOT</version>
     </parent>
 
     <artifactId>souther-compiler</artifactId>
@@ -42,14 +42,20 @@
             <type>test-jar</type>
             <scope>test</scope>
         </dependency>
-        <!-- Compile scope, not `provided`: `Reserved.name` and a string literal both call
-             `Normalization.nfc` unconditionally (ADR-0120), so the compiler needs this present to
-             run at all, not only for CTFE's generated `$Ctfe.check` class and the `Fn` a
-             lambda-bearing invariant's bytecode references. Raoh stays test-only — CTFE runs the
-             bare invariant, not the Raoh-returning decoder/__construct. -->
+        <!-- Compile scope, not `provided`: the compiler folds constant text and reads temporal
+             literals by the rules the runtime holds (`Strings`, `TextAdmission`, `Temporals`), so it
+             needs this present to run at all, not only for CTFE's generated `$Ctfe.check` class and
+             the `Fn` a lambda-bearing invariant's bytecode references. Raoh stays test-only — CTFE
+             runs the bare invariant, not the Raoh-returning decoder/__construct. -->
         <dependency>
             <groupId>org.souther-lang</groupId>
             <artifactId>souther-runtime</artifactId>
+        </dependency>
+        <!-- The text rules themselves: the pattern reader and the machines the compiler's own
+             analysis of patterns is built on, normalization, and the temporal grammar. -->
+        <dependency>
+            <groupId>net.unit8.199x</groupId>
+            <artifactId>notation-199x</artifactId>
         </dependency>
         <!-- raoh core: the derived decoders/encoders `souther run` drives through (Runner), and the
              leaf codecs for primitive-typed inputs/outputs. -->
@@ -74,14 +80,13 @@
         <dependency>
             <groupId>tools.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
-            <version>3.2.2</version>
         </dependency>
         <!-- jOOQ (provided by raoh-jooq) is needed at runtime to load/verify a generated
              recordDecoder()'s $DecRecord bytecode in tests. -->
         <dependency>
             <groupId>org.jooq</groupId>
             <artifactId>jooq</artifactId>
-            <version>3.21.8</version>
+            <version>3.21.9</version>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -121,6 +126,30 @@
                                     </includes>
                                 </resource>
                             </resources>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <!-- What the library's written operations state is proved against their bodies once,
+                 here, with the classes and the library this build ships, and what each proof came
+                 to rides inside the jar. A compilation reads it rather than proving them again at
+                 every start (LibraryProofsAsBuilt). -->
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
+                <version>3.5.1</version>
+                <executions>
+                    <execution>
+                        <id>prove-the-library</id>
+                        <phase>process-classes</phase>
+                        <goals>
+                            <goal>java</goal>
+                        </goals>
+                        <configuration>
+                            <mainClass>souther.compiler.check.LibraryProofsAsBuilt</mainClass>
+                            <arguments>
+                                <argument>${project.build.outputDirectory}/souther/compiler/check/library-proofs.txt</argument>
+                            </arguments>
                         </configuration>
                     </execution>
                 </executions>

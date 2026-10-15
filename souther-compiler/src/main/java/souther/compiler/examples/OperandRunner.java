@@ -7,6 +7,9 @@ import souther.compiler.jvm.GeneratedClasses;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * Runs the method a row's operand was emitted as: a {@code static} method on the module's
@@ -32,14 +35,40 @@ final class OperandRunner {
         this.loader = loader;
     }
 
+    /**
+     * The methods of a {@code $Fns} an operand can be emitted as — static, taking nothing — by
+     * name, made callable once.
+     *
+     * <p>Filed once per class rather than looked up per operand. Every helper of the module is a
+     * method of the one class, and finding one by name walks all of them: asked for every operand
+     * of every row, that is the module's size again for each value a row writes. The class is the
+     * loader's, and the loader is shared by every row of the module, so one filing serves them all
+     * and goes when the loader does.
+     */
+    private static final ClassValue<Map<String, Method>> OPERANDS = new ClassValue<>() {
+        @Override
+        protected Map<String, Method> computeValue(Class<?> fns) {
+            Map<String, Method> out = new HashMap<>();
+            for (Method each : fns.getDeclaredMethods()) {
+                if (each.getParameterCount() == 0 && Modifier.isStatic(each.getModifiers())) {
+                    each.setAccessible(true);   // `$Fns` is package-private in every module
+                    out.put(each.getName(), each);
+                }
+            }
+            return Map.copyOf(out);
+        }
+    };
+
     /** Runs the method emitted under {@code emittedAs}, answering with the value it computed. */
     Object run(String emittedAs) {
         Method method;
         try {
             Class<?> fns = GeneratedClasses.load(loader, new GeneratedClass.Helpers(module));
-            method = fns.getDeclaredMethod(Backend.helperMethod(emittedAs));
-            method.setAccessible(true);   // `$Fns` is package-private in every module (ADR-0075)
-        } catch (ClassNotFoundException | NoSuchMethodException _) {
+            method = OPERANDS.get(fns).get(Backend.helperMethod(emittedAs));
+        } catch (ClassNotFoundException _) {
+            throw FixtureException.nothingWasEmittedFor();
+        }
+        if (method == null) {
             throw FixtureException.nothingWasEmittedFor();
         }
         try {

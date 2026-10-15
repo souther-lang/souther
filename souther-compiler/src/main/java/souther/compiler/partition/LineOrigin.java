@@ -8,11 +8,13 @@ import souther.compiler.check.PartId;
 import souther.compiler.check.RuleCitation;
 import souther.compiler.check.RuleRef;
 import souther.compiler.check.RuleReportAnchor;
-import souther.compiler.coverage.ComparisonEmissionSite;
+import souther.compiler.coverage.ConditionOutcomeSite;
+import souther.compiler.meaning.AuthoredPointMapping;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.publish.PublishedRuleHandle;
 import souther.compiler.publish.PublishedSentence;
 import souther.compiler.types.ModelOccurrence;
+import souther.compiler.types.ModelOccurrences;
 import souther.compiler.types.TypeSymbol;
 
 import java.util.List;
@@ -128,16 +130,40 @@ public sealed interface LineOrigin extends RuleEvidenceOrigin {
      * comparison's own probe.
      *
      * @param read  which comparison this is, which reading of it, and where it was met
-     * @param facts what the rule placed on the values ({@link souther.compiler.check.ComparisonClaim
-     *              ComparisonClaim}), which decides which neighbour is the other class's edge:
-     *              {@code <= 3000} leaves 3001 over there, {@code < 3000} leaves 2999
+     * @param part  which of the lines the comparison states this is, where it states several, as
+     *              the reading that took it apart named it — and where the statement turns on it,
+     *              which a row at the line has to be for it to say anything about the line. Which
+     *              line is part of the identity ({@link #authoredLine}); where it decides is this
+     *              reading's, as everything beside the rule is. Empty where the comparison is one
+     *              line
+     * @param facts    what the rule placed on the values as this reading drew it
+     *                 ({@link souther.compiler.check.ComparisonClaim ComparisonClaim}), which
+     *                 decides which neighbour is the other class's edge: {@code <= 3000} leaves 3001
+     *                 over there, {@code < 3000} leaves 2999
+     * @param authored how this reading's line stands to the line of its author's it is a place of,
+     *                 and what that line claims. The author's claim is what the debt is about; this
+     *                 reading's facing of it is not ({@link #authoredLine})
      */
-    record ComparisonOrigin(Read read, LineFacts facts) implements LineOrigin {
+    record ComparisonOrigin(Read read, Optional<WhereAPartDecides> part, LineFacts facts,
+                            AuthoredPointMapping authored)
+            implements LineOrigin {
 
         public ComparisonOrigin {
-            if (read == null || facts == null) {
+            if (read == null || part == null || facts == null || authored == null) {
                 throw new IllegalArgumentException("a line is what some comparison placed");
             }
+        }
+
+        /**
+         * Whether which way the comparison comes out is which side of this line a row is on.
+         *
+         * <p>Where the comparison is this one line. A line of a statement of several is not: which
+         * way {@code Int.max(a, b) > 5} comes out is not which side of {@code a = 5} a row is,
+         * since {@code b} may settle it — so a reader that reads a side off an outcome, or an
+         * outcome off a side, has nothing to read here.
+         */
+        public boolean comesOutBySides() {
+            return part.isEmpty();
         }
 
         /**
@@ -190,13 +216,17 @@ public sealed interface LineOrigin extends RuleEvidenceOrigin {
          *              that runs more than once: a library operation evaluating a closure it was
          *              handed twice writes the comparison twice, and the model states one rule at
          *              one construct all the same
+         * @param metOn which elements of the input a run that got an answer out of the rule got it
+         *              on. A run through any of {@link #recordedAt} got one out of the rule, and
+         *              not on every element: a row standing at the line through an element no run
+         *              compared anything on did not meet the line there
          */
         public record Read(RuleRef.Comparison rule, ModelOccurrence states,
                            RuleReportAnchor anchor,
-                           List<ComparisonEmissionSite> recordedAt) {
+                           List<ConditionOutcomeSite> recordedAt, ElementsMetOn metOn) {
 
             public Read {
-                if (rule == null || states == null || anchor == null) {
+                if (rule == null || states == null || anchor == null || metOn == null) {
                     throw new IllegalArgumentException(
                             "a rule read off a comparison names one, states it somewhere and cites"
                                     + " it");
@@ -485,9 +515,18 @@ public sealed interface LineOrigin extends RuleEvidenceOrigin {
                             lineFacts(), List.of());
             // The rule and nothing under it. A comparison is a rule apiece — a condition holding
             // three comparisons is three rules — so there is no second line of it to tell this one
-            // from, and a number here would be one this reading made up to fill a field.
-            case ComparisonOrigin g ->
-                    new AuthoredLine(new WhichLine.OfAComparison(g.rule()), lineFacts(), List.of());
+            // from, and a number here would be one this reading made up to fill a field. Unless its
+            // author drew several with it, where which of them this is was named by the reading
+            // that found them; a place a call put the comparison's one line is that line.
+            // Which of them is what the reading that took the statement apart found the relation a
+            // place of, which it carries with what it drew. And what that line claims, faced the
+            // one way, rather than what this reading drew: two calls can draw one line facing two
+            // ways, and they are one line.
+            case ComparisonOrigin g -> new AuthoredLine(g.authored().line().arms().isEmpty()
+                    ? new WhichLine.OfAComparison(g.rule())
+                    : new WhichLine.OfAPartOfAComparison(g.rule(),
+                            PartOfAComparison.of(g.authored().line())),
+                    new LineFacts(g.authored().claims()), List.of());
             // The line this reading was drawn for, handed back. Taken apart into a rule and a
             // number and put together again here, the two halves would be free to be joined
             // differently from the way they were named.
@@ -576,6 +615,12 @@ public sealed interface LineOrigin extends RuleEvidenceOrigin {
         return authoredLine().declaredLine();
     }
 
+    /** The copy of the comparison this line was read at, where it was read at one. */
+    @Override
+    default ModelOccurrences readAt() {
+        return comparisonAt().map(ModelOccurrences::of).orElse(ModelOccurrences.NONE);
+    }
+
     /**
      * Which comparison a row has to get an answer out of, for a rule that meeting takes more than
      * writing the value.
@@ -607,7 +652,7 @@ public sealed interface LineOrigin extends RuleEvidenceOrigin {
      * One projection for both would hand a reading the emitter's number and let it stand for the
      * comparison, which is how the two came to be one value.
      */
-    default List<ComparisonEmissionSite> recordedAt() {
+    default List<ConditionOutcomeSite> recordedAt() {
         return switch (this) {
             case ComparisonOrigin g -> g.read().recordedAt();
             case NarrowedOrigin n -> n.bound().recordedAt();

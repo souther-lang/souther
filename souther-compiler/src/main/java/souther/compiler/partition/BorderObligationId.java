@@ -1,5 +1,7 @@
 package souther.compiler.partition;
 
+import java.util.Optional;
+
 /**
  * What a row is owed for: one line the author wrote, wherever it is read.
  *
@@ -49,21 +51,39 @@ package souther.compiler.partition;
  * lands, and the line the two settled together is not the line the bound would have drawn alone — so
  * it comes back the same from {@code rule()} and different from here.
  *
+ * <p><b>And a comparison a body wrote has no level in it.</b> A declaration's line is at a value of
+ * the type's own, which it holds wherever the type is read; a body's comparison is at whatever value
+ * a call put it at. {@code check(x, limit) = x <= limit} called as {@code check(a, 10)} and as
+ * {@code check(b, 20)} is one guard at two levels, and as {@code check(a, 10)} and {@code check(b,
+ * 10)} one guard at one — so a level beside it would make the guard one debt or two by what the
+ * callers happened to pass.
+ *
  * @param line which line of the model a row here is owed for
- * @param at   where on the quantity it cut. A level and not a place: what a line is drawn on is not
- *             always a position, and two of the three shapes count something no position holds
+ * @param at   where on the quantity it cut, for a line a declaration drew; nothing for a comparison
+ *             a body wrote. A level and not a place: what a line is drawn on is not always a
+ *             position, and two of the three shapes count something no position holds
  */
-public record BorderObligationId(AuthoredLine line, Level at) {
+public record BorderObligationId(AuthoredLine line, Optional<Level> at) {
 
     public BorderObligationId {
         if (line == null || at == null) {
             throw new IllegalArgumentException(
                     "a debt is some rule's line somewhere: " + line + " " + at);
         }
+        if (at.isPresent() == atNoLevel(line.which())) {
+            throw new IllegalArgumentException("a declaration's line is at a value of its own and a"
+                    + " body's comparison at whatever a call put it at: " + line + " " + at);
+        }
         // Written the one way, because this is compared as a value and is what a map of debts is
         // keyed on. A level keeps the spelling its rule was written in, so one line read at two
         // positions can arrive here as 0 and as 0.00 — one line, and two keys.
-        at = at.canonical();
+        at = at.map(Level::canonical);
+    }
+
+    /** Whether {@code which} is a line a body's comparison drew, which is at no level of its own. */
+    static boolean atNoLevel(WhichLine which) {
+        return which instanceof WhichLine.OfAComparison
+                || which instanceof WhichLine.OfAPartOfAComparison;
     }
 
     /**

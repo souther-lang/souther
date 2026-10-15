@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.carrier.Membership;
 import souther.compiler.coverage.ArmProbe;
 import souther.compiler.coverage.Numberings;
 
@@ -10,11 +11,13 @@ import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Symbols;
+import souther.compiler.check.TypeCardinality;
 import souther.compiler.query.ReadAs;
 import souther.compiler.reading.CoverageRead;
 import souther.compiler.reading.PathAccess;
 import souther.compiler.types.Type;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -49,9 +52,12 @@ class NoAxesByItselfIsNotAGenerationReasonTest {
     /** The reading of an input of one parameter, which is what says what a number of it is measured
      *  on. */
     private static souther.compiler.inputs.InputReading readingOf(String parameter, Type type) {
+        RuleReadingContext reading =
+                RuleReadingContext.unshared(SYMBOLS, ReadAs.THE_COMPILATION_DOES);
         return souther.compiler.inputs.InputDomain.of(
                 List.of(new souther.compiler.inputs.InputDomain.Parameter(parameter, null, type)),
-                RuleReadingContext.unshared(SYMBOLS, ReadAs.THE_COMPILATION_DOES)).reading(SYMBOLS);
+                reading, TypeCardinality.Counts.workedOutIn(reading),
+                Membership.none()).reading(SYMBOLS);
     }
 
     @Test
@@ -77,7 +83,8 @@ class NoAxesByItselfIsNotAGenerationReasonTest {
                 AxesATestWrote.asAMeasurement("fee", List.of()));
         java.util.SequencedMap<ArmProbe, PathAccess> ways = new java.util.LinkedHashMap<>();
         ways.put(ARM, NOT_ENUMERABLE);
-        CoverageRead.Read read = new CoverageRead.Read(List.of(), ways);
+        CoverageRead.Read read = new CoverageRead.Read(List.of(), ways, List.of(), List.of(),
+                Map.of(), new LinkedHashMap<>(), List.of());
 
         return GenerationFixtures.fill(subject, List.of(), Generator.CandidateCheck.ANY, read,
                 Generator.Trial.NOTHING_RUNS, List.of(), List.of(), List.of(ARM),

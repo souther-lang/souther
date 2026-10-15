@@ -6,7 +6,9 @@ import souther.compiler.diag.Citation;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.diag.SourcePos;
 
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
@@ -27,8 +29,13 @@ import java.util.Set;
  *               its own, such as an invariant that arrived from a module compiled elsewhere. A
  *               {@link Citation}, so that a reason about a place says what the place is —
  *               the same question every other thing this report points at now answers
+ * @param figure the figure of this compiler's the thing was compared against and stopped at,
+ *               carried from where the comparison was made. Present exactly where the code is one
+ *               a wider run may change ({@link Code#runSensitivity}), so a reader told a figure
+ *               stopped something is told which one, and a code no figure decides carries none
  */
-public record Incompleteness(Code code, Target target, Optional<Citation> at) {
+public record Incompleteness(Code code, Target target, Optional<Citation> at,
+                             Optional<Figure> figure) {
 
     /** What a reason is about, and so who it counts against. */
     public enum Scope {
@@ -221,8 +228,68 @@ public record Incompleteness(Code code, Target target, Optional<Citation> at) {
         }
     }
 
+    /**
+     * What happened, with the figure it was compared against where a figure is what stopped it.
+     *
+     * <p>The pair a value, a row or a reading hands on before there is anything for it to have
+     * happened to. Made where the comparison was made, because only there is it known which of the
+     * figures that share one code was the one reached: a value the observation stopped is stopped
+     * by its depth, its nodes, its elements or its text, and the code says none of them.
+     *
+     * @param code   what happened
+     * @param figure the figure it stopped at; present exactly where the code is one a wider run may
+     *               change
+     */
+    public record Cause(Code code, Optional<Figure> figure) {
+
+        public Cause {
+            if (code == null || figure == null) {
+                throw new IllegalArgumentException("what happened is something, and whether a"
+                        + " figure stopped it is said");
+            }
+            requireAFigureExactlyWhereOneDecides(code, figure);
+        }
+
+        /** {@code code}, which no figure decides. */
+        public static Cause of(Code code) {
+            return new Cause(code, Optional.empty());
+        }
+
+        /** {@code code}, met at {@code figure}. */
+        public static Cause at(Code code, Figure figure) {
+            return new Cause(code, Optional.of(figure));
+        }
+    }
+
     public Incompleteness {
         at = at == null ? Optional.empty() : at;
+        if (code == null || figure == null) {
+            throw new IllegalArgumentException("a reason is something that happened, and whether a"
+                    + " figure stopped it is said");
+        }
+        requireAFigureExactlyWhereOneDecides(code, figure);
+    }
+
+    /**
+     * Refuses a figure beside a code no figure decides, and a code a figure decides without one.
+     *
+     * <p>The second is the one that matters. A reader is told that a figure of this compiler's
+     * stopped something wherever the code says a wider run may change it, and without the figure
+     * that sentence names nothing; recovering it later from the code would be recovering it from a
+     * word several figures share.
+     */
+    private static void requireAFigureExactlyWhereOneDecides(Code code, Optional<Figure> figure) {
+        boolean decided = code.runSensitivity() == RunSensitivity.MAY_CHANGE;
+        if (decided != figure.isPresent()) {
+            throw new IllegalArgumentException(decided
+                    ? code + " is decided by a figure, and says which"
+                    : code + " is decided by no figure, and " + figure.orElseThrow() + " is one");
+        }
+    }
+
+    /** What happened, with the figure it stopped at where one did. */
+    public Cause cause() {
+        return new Cause(code, figure);
     }
 
     /** Which kind of thing {@link #subject} identifies. Derived, so it cannot disagree with it. */
@@ -248,7 +315,8 @@ public record Incompleteness(Code code, Target target, Optional<Citation> at) {
     /** What a whole source left unmeasured, taking the identity as one rather than as its
      *  spelling: the scope follows from the subject, so the two cannot be given disagreeing. */
     public static Incompleteness ofSource(Code code, SourceId source) {
-        return new Incompleteness(code, new Target.OfSource(source), Optional.empty());
+        return new Incompleteness(code, new Target.OfSource(source), Optional.empty(),
+                Optional.empty());
     }
 
     /** What {@code code} says, about the thing {@code subject} names in {@code scope}.
@@ -256,7 +324,8 @@ public record Incompleteness(Code code, Target target, Optional<Citation> at) {
      *  @throws IllegalArgumentException for a scope whose subject is not a name — a source is
      *          {@link #ofSource} and a position is {@link #atPosition} */
     public static Incompleteness of(Code code, Scope scope, String subject) {
-        return new Incompleteness(code, Target.of(scope, subject), Optional.empty());
+        return new Incompleteness(code, Target.of(scope, subject), Optional.empty(),
+                Optional.empty());
     }
 
     /** A reason about a place. The coordinate and not a reference over one: a reference holds a
@@ -266,7 +335,7 @@ public record Incompleteness(Code code, Target target, Optional<Citation> at) {
      *  @throws IllegalArgumentException for a scope whose subject is not a name, as {@link #of} */
     public static Incompleteness at(Code code, Scope scope, String subject, SourcePos where) {
         return new Incompleteness(code, Target.of(scope, subject),
-                Optional.ofNullable(where).map(Citation::of));
+                Optional.ofNullable(where).map(Citation::of), Optional.empty());
     }
 
     /**
@@ -277,10 +346,13 @@ public record Incompleteness(Code code, Target target, Optional<Citation> at) {
      * no longer answer is a fact about the measure. Taking the row here means the two vocabularies
      * are joined once, and means the identity and the place a reader is sent to come from the same
      * row rather than from two arguments a caller could pair wrongly.
+     *
+     * <p>Taking the cause and not the code, because a row a figure stopped carries the figure it
+     * stopped at, and that is known where the row was run and nowhere after.
      */
-    public static Incompleteness ofRow(Code code, RowOutcome row) {
-        return new Incompleteness(code, new Target.OfRow(RowRef.of(row)),
-                Optional.of(souther.compiler.diag.Citation.of(row.at())));
+    public static Incompleteness ofRow(Cause cause, RowOutcome row) {
+        return new Incompleteness(cause.code(), new Target.OfRow(RowRef.of(row)),
+                Optional.of(Citation.of(row.at())), cause.figure());
     }
 
     /**
@@ -296,13 +368,15 @@ public record Incompleteness(Code code, Target target, Optional<Citation> at) {
     public static Incompleteness ofRow(Code code, String behavior, RowIdentity identity,
             SourcePos at) {
         return new Incompleteness(code, new Target.OfRow(RowRef.of(behavior, at, identity)),
-                Optional.of(Citation.of(at)));
+                Optional.of(Citation.of(at)), Optional.empty());
     }
 
     /** A position, which takes the behavior it sits in as well as the path. Both, because whose
-     * measurement it counts against is the behavior and not the path. */
-    public static Incompleteness atPosition(Code code, String behavior, String path) {
-        return new Incompleteness(code, new Target.AtPosition(behavior, path), Optional.empty());
+     * measurement it counts against is the behavior and not the path. The cause and not the code,
+     * because a value a limit stopped says which limit. */
+    public static Incompleteness atPosition(Cause cause, String behavior, String path) {
+        return new Incompleteness(cause.code(), new Target.AtPosition(behavior, path),
+                Optional.empty(), cause.figure());
     }
 
     /** The behavior this is about, where it is about exactly one. Empty for anything larger. */
@@ -321,6 +395,12 @@ public record Incompleteness(Code code, Target target, Optional<Citation> at) {
      *
      * <p>Where it was said is not part of it. A module's classes failing to be instrumented is one
      * fact however many sources went looking for them, and each of those cites it somewhere else.
+     *
+     * <p>Nor is the figure it stopped at. One row stopped at its steps is one fact about that row
+     * under whichever policy it ran, and a value at one position stopped by its depth in one row
+     * and by its text in another is one position a limit kept a value of short. The figures are
+     * what a reader raises to get past it, so they travel beside the fact as its places do
+     * ({@link Met}), and two occurrences that differ only in them stay one fact.
      */
     public Fact identity() {
         return new Fact(code, target);
@@ -398,24 +478,38 @@ public record Incompleteness(Code code, Target target, Optional<Citation> at) {
      *
      * <p>Empty citations is a fact met where there was nothing to send a reader to, and not a fact
      * nobody met.
+     *
+     * <p>With every figure it was met at, gathered the way the citations are and for the same
+     * reason: the figures are not part of what makes the fact one ({@link #identity}), and a fact
+     * met at two of them was stopped by both. Present exactly where the fact's code is one a wider
+     * run may change, and in {@link Figure#inOrder}.
      */
-    public record Met(Fact fact, Set<Citation> citations) {
+    public record Met(Fact fact, Set<Citation> citations, List<Figure> figures) {
 
         public Met {
             if (fact == null) {
                 throw new IllegalArgumentException("something was met, and this is what");
             }
             citations = citations == null ? Set.of() : Set.copyOf(citations);
+            figures = figures == null ? List.of() : Figure.inOrder(figures);
+            boolean decided = fact.code().runSensitivity() == RunSensitivity.MAY_CHANGE;
+            if (decided == figures.isEmpty()) {
+                throw new IllegalArgumentException(decided
+                        ? fact.code() + " is decided by a figure, and says which"
+                        : fact.code() + " is decided by no figure, and " + figures + " are");
+            }
         }
 
         /** One occurrence of it, as the reader that met it produced one. */
         public static Met of(Incompleteness occurrence) {
             return new Met(occurrence.identity(),
-                    occurrence.at().map(Set::of).orElseGet(Set::of));
+                    occurrence.at().map(Set::of).orElseGet(Set::of),
+                    occurrence.figure().map(List::of).orElseGet(List::of));
         }
 
         /**
-         * Both occurrences of one fact, as one: the fact, cited everywhere either was met.
+         * Both occurrences of one fact, as one: the fact, cited everywhere either was met and at
+         * every figure either was met at.
          *
          * <p>Of one fact, and it says so rather than taking the caller's word. What comes out
          * carries this one's fact, so two that are not one fact would come out as this one met
@@ -430,7 +524,9 @@ public record Incompleteness(Code code, Target target, Optional<Citation> at) {
             }
             Set<Citation> both = new HashSet<>(citations);
             both.addAll(other.citations);
-            return new Met(fact, both);
+            List<Figure> stoppedAt = new ArrayList<>(figures);
+            stoppedAt.addAll(other.figures);
+            return new Met(fact, both, stoppedAt);
         }
     }
 }

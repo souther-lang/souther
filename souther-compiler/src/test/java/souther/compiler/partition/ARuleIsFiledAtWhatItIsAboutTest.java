@@ -79,14 +79,14 @@ class ARuleIsFiledAtWhatItIsAboutTest {
     /**
      * And one whose line the quantity never reaches is filed the same way, and says so.
      *
-     * <p>A length is never negative, so {@code List.length(xs) + b - b <= -1} is read in full, its
+     * <p>A length is never negative, so {@code List.length(xs) + b - b <= -2} is read in full, its
      * quantity is found, and its line falls outside what that quantity ever holds. What it is about
      * is the length and nothing else: {@code b} is written into the clause and cancels, and a note
      * at {@code b} would say the rule states something about a position it does not mention.
      */
     @Test
     void andSoIsOneWhoseLineTheQuantityNeverReaches() {
-        PartitionEvidence measured = overAList("List.length(xs) + b - b <= -1");
+        PartitionEvidence measured = overAList("List.length(xs) + b - b <= -2");
 
         assertEquals(List.of("List.length(xs)"),
                 measured.notRead().stream().map(PartitionEvidence.NotRead::at).toList(),

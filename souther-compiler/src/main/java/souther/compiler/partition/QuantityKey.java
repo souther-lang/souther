@@ -1,11 +1,14 @@
 package souther.compiler.partition;
 
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.NumericTerms;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Objects;
 import java.util.TreeMap;
 
 /**
@@ -27,20 +30,55 @@ import java.util.TreeMap;
  * is outside the other, so turning a form round is not free; what settles the direction is done
  * before this, where a comparison is read ({@link AffineReading}).
  *
+ * <p>Held with its terms in their order ({@link NumericTerms}), which is the order a row is read
+ * along it. What a row comes to along a direction is asked once per row, and a direction put in
+ * order where it is made is not put in order again by each of them. Two keys are equal whatever
+ * order their maps were filled in, so the order is no part of which quantity this is.
+ *
  * @param direction the coefficients with their common divisor taken out, which is the smallest form
  *                  that runs this way
  */
 public record QuantityKey(Map<NumericTerm, ExactRatio> direction) {
 
     public QuantityKey {
-        direction = Map.copyOf(direction);
+        Map<NumericTerm, ExactRatio> ordered = new LinkedHashMap<>();
+        for (NumericTerm term : NumericTerms.inOrder(direction.keySet())) {
+            ordered.put(term, Objects.requireNonNull(direction.get(term),
+                    () -> "a direction weighs each of its terms by something: " + term));
+        }
+        direction = Collections.unmodifiableMap(ordered);
     }
 
-    /** The quantity {@code form} is a multiple of. */
+    /**
+     * The quantity {@code form} is a multiple of.
+     *
+     * <p>For a form {@link #tryOf} has already answered: a direction whose coefficients stand at both
+     * ends of the exponents a ratio holds has no smallest form, and a line drawn on such a form is
+     * refused where lines are drawn ({@code Cutting}), so nothing reaches this with one.
+     *
+     * @throws IllegalStateException where {@code form} is one {@link #tryOf} answers null for
+     */
     public static QuantityKey of(LinearForm<NumericTerm> form) {
+        QuantityKey held = tryOf(form);
+        if (held == null) {
+            throw new IllegalStateException(
+                    "a direction with no smallest form was taken as a quantity: " + form);
+        }
+        return held;
+    }
+
+    /** The quantity {@code form} is a multiple of, or {@code null} where a coefficient over what the
+     *  coefficients share has no representation. */
+    public static QuantityKey tryOf(LinearForm<NumericTerm> form) {
         ExactRatio per = per(form);
         Map<NumericTerm, ExactRatio> smallest = new LinkedHashMap<>();
-        form.coefs().forEach((term, coef) -> smallest.put(term, coef.dividedBy(per)));
+        for (Map.Entry<NumericTerm, ExactRatio> each : form.coefs().entrySet()) {
+            ExactRatio over = each.getValue().dividedBy(per).orNull();
+            if (over == null) {
+                return null;
+            }
+            smallest.put(each.getKey(), over);
+        }
         return new QuantityKey(smallest);
     }
 

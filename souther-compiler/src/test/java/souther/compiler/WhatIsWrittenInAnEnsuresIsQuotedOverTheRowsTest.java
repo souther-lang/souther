@@ -4,12 +4,16 @@ import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.carrier.Membership;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
+import souther.compiler.check.TypeCardinality;
+import souther.compiler.inputs.InputDomain;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
+import souther.compiler.query.ReadAs;
 import souther.compiler.report.GeneratedRows;
 
 import java.util.List;
@@ -54,8 +58,9 @@ class WhatIsWrittenInAnEnsuresIsQuotedOverTheRowsTest {
             """;
 
     private static String block(String source) {
-        return GeneratedRows.of(compiled(source), null, null,
-                SourceRendering.namedByIdentity(SourceLayouts.NONE)).text();
+        Compilation compilation = compiled(source);
+        return GeneratedRows.of(compilation, null, null,
+                SourceRendering.namedByIdentity(compilation.texts())).text();
     }
 
     private static Compilation compiled(String source) {
@@ -69,11 +74,11 @@ class WhatIsWrittenInAnEnsuresIsQuotedOverTheRowsTest {
      * Every clause of the behavior, in the author's words and in the order they are written, over
      * the rows they are about — and nothing over the rows of a behavior that declares none.
      *
-     * <p>{@code echo} carries {@code TodoId} and is offered one row rather than two. The line the
-     * invariant draws is the declaration's and is owed once over every behavior carrying the type,
-     * so it is resolved at the first reading that composes a row — {@code findTodo}'s {@code
-     * TodoId(0)} — and what is left beside {@code echo} is the region of its own position
-     * (issue #1076).
+     * <p>{@code echo} carries {@code TodoId} and is offered no row for it. The line the invariant
+     * draws and the region beside it are the declaration's and are owed once over every behavior
+     * carrying the type, so both are resolved at the reading that composes rows for them —
+     * {@code findTodo}'s {@code TodoId(0)} and {@code TodoId(1)} — and what is left for {@code echo}
+     * is its own decision rule.
      */
     @Test
     void theClausesAreQuotedOverTheRowsOfTheBehaviorTheyAreWrittenOn() {
@@ -85,12 +90,25 @@ class WhatIsWrittenInAnEnsuresIsQuotedOverTheRowsTest {
                 //     ensures asked = NotFound -> id.value > 0
 
                 example findTodo
-                    | "id=0 <= x <= 0" : (TodoId(0)) -> <?>
-                    | "id=0 < x"       : (TodoId(1)) -> <?>
-                    | (TodoId(2))                    -> <?>
+                // fills id=0 <= x <= 0
+                // fills a decision rule (the comparison at 16:33 does not hold)
+                // fills value = 0
+                // fills OFF point of ensures findTodo (asked)
+                // fills OFF point of comparison@0:16:33
+                    | (TodoId(0)) -> <?>
+                // fills id=0 < x
+                // fills a decision rule (the comparison at 16:33 holds)
+                // fills value in 0 < value
+                // fills ON point of ensures findTodo (asked)
+                // fills ON point of comparison@0:16:33
+                    | (TodoId(1)) -> <?>
+                // fills IN point of ensures findTodo (asked)
+                // fills IN point of comparison@0:16:33
+                    | (TodoId(2)) -> <?>
 
                 example echo
-                    | (TodoId(1)) -> <?>
+                // fills a decision rule
+                    | (TodoId(0)) -> <?>
                 """, block(TODO));
     }
 
@@ -271,11 +289,13 @@ class WhatIsWrittenInAnEnsuresIsQuotedOverTheRowsTest {
     private static Adequacy.Filling nothingOffered() {
         RuleReadingSource rules = RuleReadings.ofNoClauseFiled(
                 souther.compiler.check.Symbols.none(DefaultStdlib.get()));
+        RuleReadingContext reading = RuleReadingContext.unshared(rules,
+                ReadAs.THE_COMPILATION_DOES);
         souther.compiler.partition.MeasuredInput subject =
                 souther.compiler.partition.MeasuredInput.of("findTodo",
-                        souther.compiler.inputs.InputDomain.of(List.of(),
-                                RuleReadingContext.unshared(rules,
-                                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES))
+                        InputDomain.of(List.of(), reading,
+                                TypeCardinality.Counts.workedOutIn(reading),
+                                Membership.none())
                                 .reading(rules),
                         souther.compiler.partition.AxesATestWrote.asAMeasurement(
                                 "findTodo", List.of()));

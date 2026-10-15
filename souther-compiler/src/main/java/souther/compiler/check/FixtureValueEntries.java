@@ -6,7 +6,7 @@ import souther.compiler.ast.WrittenName;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.FixtureReferenceOrigin;
 import souther.compiler.types.ReachName;
-import souther.compiler.types.TypeSymbol;
+import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
 import java.util.LinkedHashMap;
@@ -125,7 +125,7 @@ public final class FixtureValueEntries {
      */
     public static Emitted emitted(CheckSurface surface, DeclarationNewtypes newtypes,
                                   List<RowFixtures.Placed> placed,
-                                  Map<TypeSymbol, List<ReachName.Declaration>> typed) {
+                                  Map<Type, List<ReachName.Declaration>> typed) {
         Hir.Module module = surface.module();
         Set<String> published = ValueEntries.publishedValues(module);
         Map<String, Hir.FnDef> defs = new LinkedHashMap<>();

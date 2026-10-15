@@ -72,7 +72,7 @@ class AClosureIsTheSameRuleHoweverItIsWrittenDownTest {
                 compilation.db().ask(new Bodies.StatedContracts(module)).value().get("pick"),
                 inputs.reading(rules), inputs.parameterReads(),
                 checked.elementBindings().get("pick"),
-                Allowance.of(new PatternPlan.Budget(1000, 1000)),
+                Allowance.of(new PatternPlan.Budget(1000, 1000, 1_000_000_000L)),
                 guardsOf(declaration).forks(),
                 new RuleReachNumbering(module, "pick"));
         List<String> found = new ArrayList<>();
@@ -122,7 +122,7 @@ class AClosureIsTheSameRuleHoweverItIsWrittenDownTest {
         BehaviorSetStatements.Read sets = BehaviorSetStatements.of("pick", states, stated,
                 inputs.reading(rules), inputs.parameterReads(),
                 checked.elementBindings().get("pick"),
-                Allowance.of(new PatternPlan.Budget(1000, 1000)), guards.forks(),
+                Allowance.of(new PatternPlan.Budget(1000, 1000, 1_000_000_000L)), guards.forks(),
                 new RuleReachNumbering(module, "pick"));
         return new Read(guards.thresholds().size(), sets.forks().size(),
                 guards.noLine().reported().size() + guards.noLine().unclassified().size());
@@ -165,6 +165,9 @@ class AClosureIsTheSameRuleHoweverItIsWrittenDownTest {
      * <p>The other half of what a closure being one rule buys: the line here is drawn by reading
      * what {@code filter} answers of what its closure said, so a spelling that lost the closure
      * would lose the line rather than the fork.
+     *
+     * <p>The emptiness check beside it is no rule of its own: whether {@code filter} kept anything
+     * is whether some element met the closure, which is the rule already read.
      */
     @Test
     void aClosureReadThroughWhatTheOperationAnswers() {
@@ -187,6 +190,8 @@ class AClosureIsTheSameRuleHoweverItIsWrittenDownTest {
      * closure the author supplied crosses two operations before anything applies it. The rule
      * inside it is the author's at both, and what says so is which copy was handed the closure —
      * the outer one — rather than which copy stands where it is finally applied.
+     *
+     * <p>The emptiness check is the closure's rule, as the one above is.
      */
     @Test
     void aClosureOneOperationHandsToAnother() {
@@ -309,8 +314,8 @@ class AClosureIsTheSameRuleHoweverItIsWrittenDownTest {
      */
     @Test
     void aClosureTwoCallsShareNamesTheElementsOfBoth() {
-        assertEquals(List.of("xs[*] RuleAboutAnElementOfSeveralSequences",
-                        "ys[*] RuleAboutAnElementOfSeveralSequences"),
+        assertEquals(List.of("xs[*] RuleAboutAnElementOfSeveralContainers",
+                        "ys[*] RuleAboutAnElementOfSeveralContainers"),
                 withoutALine("""
                         behavior pick : (xs: List<Int>, ys: List<Int>) -> Low | High
                         let pick (xs, ys) = {
@@ -318,6 +323,32 @@ class AClosureIsTheSameRuleHoweverItIsWrittenDownTest {
                             if List.any(positive, xs) && List.any(positive, ys)
                                 then High else Low
                         }"""));
+    }
+
+    /**
+     * And the same of a closure handed to two walks over maps, at each map's values.
+     *
+     * <p>What a map hands such a walk is its values, which are the element of the map the way a
+     * list's are of the list — so a block given to two of them is about an element of one map or
+     * the other, and it is filed at both.
+     *
+     * <p>Only the closure's own rule is looked at. Whether what the filter left is empty is a rule
+     * about a value made from each map, which is another rule at another place.
+     */
+    @Test
+    void aClosureTwoMapWalksShareNamesTheValuesOfBoth() {
+        assertEquals(List.of("xs[*] RuleAboutAnElementOfSeveralContainers",
+                        "ys[*] RuleAboutAnElementOfSeveralContainers"),
+                withoutALine("""
+                        behavior pick : (xs: Map<String, Int>, ys: Map<String, Int>) -> Low | High
+                        let pick (xs, ys) = {
+                            let positive = (_, x) -> x > 0
+                            if Map.isEmpty(Map.filterEntries(positive, xs))
+                                    && Map.isEmpty(Map.filterEntries(positive, ys))
+                                then Low else High
+                        }""").stream()
+                        .filter(each -> each.endsWith(" RuleAboutAnElementOfSeveralContainers"))
+                        .toList());
     }
 
     /**
@@ -334,8 +365,8 @@ class AClosureIsTheSameRuleHoweverItIsWrittenDownTest {
      */
     @Test
     void aForkInsideTheSharedClosureIsFiledWhereItMayBeAbout() {
-        assertEquals(List.of("fork at xs[*].active RuleAboutAnElementOfSeveralSequences",
-                        "fork at ys[*].active RuleAboutAnElementOfSeveralSequences"),
+        assertEquals(List.of("fork at xs[*].active RuleAboutAnElementOfSeveralContainers",
+                        "fork at ys[*].active RuleAboutAnElementOfSeveralContainers"),
                 forksOfTheirOwn("""
                         data Person = { active: Bool }
 
@@ -358,7 +389,7 @@ class AClosureIsTheSameRuleHoweverItIsWrittenDownTest {
      */
     @Test
     void aClosureHandedToTheInputAndToSomethingElseKeepsWhatItSaysAboutTheInput() {
-        assertEquals(List.of("xs[*] RuleAboutAnElementOfSeveralSequences"),
+        assertEquals(List.of("xs[*] RuleAboutAnElementOfSeveralContainers"),
                 withoutALine("""
                         behavior pick : (xs: List<Int>) -> Low | High
                         let pick (xs) = {
@@ -372,7 +403,7 @@ class AClosureIsTheSameRuleHoweverItIsWrittenDownTest {
      * And the places it may be about are the places the rule is written about.
      *
      * <p>The rule is about a field of the element, so where it may be is a field of each of the
-     * sequences and not the sequences themselves. Told at the element instead, a reader would be
+     * containers' elements and not the containers themselves. Told at the element instead, a reader would be
      * sent to a position the model says nothing about while the position the rule is written about
      * came out as one no rule reaches — which is the same measurement standing open at the wrong
      * place, and it reads as an answer.
@@ -382,8 +413,8 @@ class AClosureIsTheSameRuleHoweverItIsWrittenDownTest {
      */
     @Test
     void whatTheSharedClosureNamesIsWhereItsRuleIsWritten() {
-        assertEquals(List.of("xs[*].age RuleAboutAnElementOfSeveralSequences",
-                        "ys[*].age RuleAboutAnElementOfSeveralSequences"),
+        assertEquals(List.of("xs[*].age RuleAboutAnElementOfSeveralContainers",
+                        "ys[*].age RuleAboutAnElementOfSeveralContainers"),
                 withoutALine("""
                         data Person = { age: Int }
 

@@ -32,10 +32,11 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
  * term would have to be one answer for both, and what is actually one for both is that the operation
  * answers an {@code Int} (#1027).
  *
- * <p>And {@code Int.abs} is not among them, which is the other half of what this shows. It answers
- * an {@code Int} like the two above and the library declares nothing about what that number is, so
- * there is no account for a line to be measured on — the guard is a rule about a value an operation
- * made, and no line comes of it.
+ * <p>And {@code Int.abs} is read another way, which is the other half of what this shows. What it
+ * answers is no number taken of a value: it is the value turned round below nought and the value
+ * itself from there, which are the cases the library states of it and proved of its body. So the
+ * guard is a rule over its argument in each case, and draws its lines where the author's rule
+ * turns in each — at ten and at minus ten.
  *
  * <p><b>Not a line at nought, which is what the reading used to draw.</b> {@code Int.abs} is written
  * in this language as a fork at nought, and a reading made over a tree with that body spliced in
@@ -104,19 +105,16 @@ class AGuardOnWhatAnOperationAnswersDrawsItsLineThereTest {
     }
 
     /**
-     * And a guard on an operation the language writes out draws no line here.
+     * And a guard on an operation the language writes out draws the lines its cases state.
      *
-     * <p>Nothing declares what {@code Int.abs} answers of the number it is given, so there is no
-     * account the line could be measured on and the rule is about a value an operation made. That
-     * is a reading short of what the model states, and it is reported as one — where a line at
-     * nought, taken from how the library is written, was a row owed at a number the author's model
-     * never mentions.
-     *
-     * <p>What would place a line here is a statement about the operation, said where the operation
-     * is declared. Which is the same thing the two above have and this one does not.
+     * <p>What places them is a statement about the operation, said where the operation is declared
+     * and proved of its body: {@code Int.abs} answers {@code 0 - n} where {@code n} is below
+     * nought and {@code n} from there. Read in each case, the rule turns where {@code n} passes ten
+     * either way, and nowhere at nought — where the cases part is how the library is written, and
+     * the author's model never mentions it.
      */
     @Test
-    void aGuardOnAnOperationWrittenInTheLanguageDrawsNoLine() {
-        assertEquals(List.of(), thresholdsOf("howFar"));
+    void aGuardOnAnOperationWrittenInTheLanguageDrawsTheLinesItsCasesState() {
+        assertEquals(List.of("n at 10 on Whole[]", "n at -10 on Whole[]"), thresholdsOf("howFar"));
     }
 }

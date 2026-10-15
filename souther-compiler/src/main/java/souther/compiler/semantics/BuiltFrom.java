@@ -88,6 +88,18 @@ public record BuiltFrom<A>(List<ElementLineage.OutputLineage<A>> outputs,
     }
 
     /**
+     * The argument whose elements the answer holds all of, each once, or null where it holds some
+     * of them or more than one of each.
+     *
+     * <p>{@link #holdsTheElementsOf} with the count: the answer is the argument's elements in
+     * another order, so any statement about how many of them meet a condition, or whether some
+     * does, is the same statement about the argument.
+     */
+    public A permutesTheElementsOf() {
+        return size == SizeAgainstItsSource.SAME ? holdsTheElementsOf() : null;
+    }
+
+    /**
      * The argument each of whose elements the answer holds exactly one closure result of, or null
      * where it answers no such run.
      *
@@ -136,6 +148,20 @@ public record BuiltFrom<A>(List<ElementLineage.OutputLineage<A>> outputs,
     }
 
     /**
+     * The component of the elements of an argument that every element of the answer is, or null
+     * where the answer is not that.
+     *
+     * <p>Provenance of a value and not a correspondence of runs: a reader that reached an element
+     * of the answer has reached a component of some element of the argument, and which one is not
+     * said.
+     */
+    public ElementLineage.TupleComponent<A> componentOfTheElementsOf() {
+        return outputs.size() == 1
+                && lineage() instanceof ElementLineage.TupleComponent<A> part
+                && part.source().elements() == 1 ? part : null;
+    }
+
+    /**
      * What the building keeps of the elements it was built from, in four words.
      *
      * <p>A projection and the one place it happens. What survives a construction is decided by
@@ -150,12 +176,13 @@ public record BuiltFrom<A>(List<ElementLineage.OutputLineage<A>> outputs,
     /**
      * The word for one lineage, given whether the result has as many elements as its source.
      *
-     * <p>Elements that are each one of several things are each of them read, and the word is the one
-     * they all read where they read one — otherwise the word for elements nothing was kept of, which
-     * licenses nothing and so is true of a run holding some of each. {@code Map.updateIfPresent} is
-     * that: every value is the argument's own or what the closure made of it, so neither
-     * {@code PERMUTES} nor {@code MAPS} is true of the run, and what a reader of the four words may
-     * assume of it is nothing.
+     * <p>Elements that are each one of several things take the word for elements nothing was kept
+     * of, which licenses nothing and so is true of a run holding some of each. Each of the other
+     * words says how many of the source's elements the run holds as well as what they are, and
+     * {@link ElementLineage.OneOf} says what each element is and not how many of the source's.
+     * {@code Map.updateIfPresent} is that: every value is the argument's own or what the closure
+     * made of it, so neither {@code PERMUTES} nor {@code MAPS} is true of the run, and what a reader
+     * of the four words may assume of it is nothing.
      */
     private ElementShape wordFor(ElementLineage<A> lineage, boolean asMany) {
         return switch (lineage) {
@@ -167,18 +194,16 @@ public record BuiltFrom<A>(List<ElementLineage.OutputLineage<A>> outputs,
             // of it, and there may be any number of them. No word of the four is about that,
             // and the nearest is the one for elements nothing was kept of.
             case ElementLineage.InsideClosureResult<A> _ -> ElementShape.COLLAPSES;
+            // A part of what was stated of a source element says nothing of it as a whole, and
+            // what a tuple's component is, is not what the source held.
+            case ElementLineage.TupleComponent<A> _ -> ElementShape.COLLAPSES;
             case ElementLineage.OneOf<A> one -> {
                 if (one.source() == null) {
                     throw new IllegalStateException(
                             "a construction whose elements come from more than one place has no"
                                     + " single source for a shape to be about: " + outputs);
                 }
-                ElementShape word = null;
-                for (ElementLineage<A> alternative : one.alternatives()) {
-                    ElementShape read = wordFor(alternative, asMany);
-                    word = word == null || word == read ? read : ElementShape.COLLAPSES;
-                }
-                yield word;
+                yield ElementShape.COLLAPSES;
             }
         };
     }

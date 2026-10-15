@@ -1,18 +1,17 @@
 package souther.compiler.inputs;
 
 import souther.compiler.check.Carrier;
-import souther.compiler.check.NewtypeInners;
-import souther.compiler.check.DeclarationKinds;
-import souther.compiler.check.PublishedDeclarations;
-import souther.compiler.check.Symbols;
+import souther.compiler.check.DeclarationAccess;
 import souther.compiler.check.TypeView;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.values.AdmissibleSet;
+import souther.compiler.values.StoppedReading;
 import souther.compiler.values.ValueSet;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -54,14 +53,14 @@ final class Crossing {
      *                 nothing had been short of
      */
     static ReadingResult of(List<Case> declared, TypeView view, NumericDomain.Bounds within,
-                            AdmissibleSet admitted, NewtypeInners inners, Symbols symbols,
-                            DeclarationKinds kinds, PublishedDeclarations published,
+                            AdmissibleSet admitted, DeclarationAccess declarations,
                             BlockReason.RuleReadingStopped stopped) {
-        List<Case> kept = admits(
-                constructibleWithin(declared, view, within, inners, symbols, kinds, published),
+        List<Case> kept = admits(constructibleWithin(declared, view, within, declarations),
                 admitted);
+        // Asked of a set, so that each declared distinction is looked for in one step and not along
+        // every one kept, which for a sum is as many as it has cases.
         List<Case> refused = new ArrayList<>(declared);
-        refused.removeAll(kept);
+        refused.removeAll(new HashSet<>(kept));
         BlockReason.ReadingStopReason why =
                 admitted.whyPartial() != null ? stopped(admitted.whyPartial()) : stopped;
         if (why != null) {
@@ -87,7 +86,7 @@ final class Crossing {
      * could not turn into a set of one position's values at all. What each of them would take to
      * lift is different work, which is why they stay apart rather than becoming one word.
      */
-    static BlockReason.ReadingStopReason stopped(souther.compiler.values.UnreadReason why) {
+    static BlockReason.ReadingStopReason stopped(StoppedReading why) {
         return BlockReason.of(why);
     }
 
@@ -105,7 +104,7 @@ final class Crossing {
      * distinctions are the position's own: taking them away on the strength of a set that does not
      * fit them would leave a position with none because two readings of it did not line up.
      */
-    private static List<Case> admits(List<Case> declared, AdmissibleSet admitted) {
+    static List<Case> admits(List<Case> declared, AdmissibleSet admitted) {
         if (declared.isEmpty() || admitted.approximation().isAny()) {
             return declared;
         }
@@ -123,11 +122,9 @@ final class Crossing {
      *  to name a place on, so nothing is taken away. */
     private static List<Case> constructibleWithin(List<Case> declared, TypeView view,
                                                   NumericDomain.Bounds within,
-                                                  NewtypeInners inners, Symbols symbols,
-                                                  DeclarationKinds kinds,
-                                                  PublishedDeclarations published) {
+                                                  DeclarationAccess declarations) {
         if (within == null || declared.isEmpty()
-                || !(Carrier.ofValue(view.declared(), inners, symbols, kinds, published)
+                || !(Carrier.ofValue(view.declared(), declarations)
                         instanceof Carrier.Ordinal order)) {
             return declared;
         }

@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.partition.WhereNothingIsAnswered;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
 import souther.compiler.types.TypeSymbol;
@@ -49,7 +50,9 @@ class AFindingCarriesWhatTheMeasureThatFoundItWentWithoutTest {
             data Decision = Approved | Rejected
 
             behavior weigh : (decision: Decision) -> Ok
-            let weigh (decision) = Ok
+            let weigh (decision) =
+                match decision with
+                    | Approved | Rejected -> Ok
 
             behavior makes : (id: Int) -> Decision
                 constructs Decision, Approved
@@ -155,7 +158,8 @@ class AFindingCarriesWhatTheMeasureThatFoundItWentWithoutTest {
         // finding means and nothing about the one line that decides which measurement each finding
         // is given — which is the line that was wrong.
         List<Adequacy.Finding> found = new ArrayList<>();
-        Adequacy.Findings.signatureFindings("sort", signature, found);
+        Adequacy.Findings.signatureFindings("sort", signature, null, WhereNothingIsAnswered.NONE,
+                found);
         assertFalse(found.isEmpty(), "the producer says something about these cases");
 
         assertEquals(Adequacy.Finding.Disposition.REFUSED,

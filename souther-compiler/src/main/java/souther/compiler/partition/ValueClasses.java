@@ -1,11 +1,11 @@
 package souther.compiler.partition;
 
-import souther.compiler.check.DeclarationKinds;
-import souther.compiler.check.PublishedDeclarations;
+import souther.compiler.check.Carrier;
+import souther.compiler.check.DeclarationAccess;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Shape;
-import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeView;
+import souther.compiler.numeric.Place;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
@@ -46,8 +46,7 @@ final class ValueClasses {
                                   RuleReadingSource ruleSource) {
         Recognition is = Recognition.Under.of(worn,
                 new Recognition.AtAValue(value,
-                        placeOf(value, view.declared(), ruleSource.inners(), ruleSource.symbols(),
-                                ruleSource.kinds(), ruleSource.published())));
+                        placeOf(value, view.declared(), ruleSource.declarations())));
         if (value instanceof Value.Number number && tooFarInScaleToWrite(number, view.shape())) {
             String named = ExactDecimals.spelledBounded(number.value());
             return PartitionClass.ungeneratable(named, named, is,
@@ -96,18 +95,13 @@ final class ValueClasses {
      * a value written in a shape that order does not hold. Both are answers about this class rather
      * than reasons to stop building it — the class is still what a row is read against.
      */
-    private static souther.compiler.numeric.Place placeOf(Value value, Type type,
-                                                          souther.compiler.check.NewtypeInners
-                                                                  inners,
-                                                          Symbols symbols,
-                                                          DeclarationKinds kinds,
-                                                          PublishedDeclarations published) {
+    private static Place placeOf(Value value, Type type, DeclarationAccess declarations) {
         return placeOf(switch (value) {
             case Value.Text text -> new ObservedValue.Text(text.value());
             case Value.Truth truth -> new ObservedValue.Bool(truth.value());
             case Value.Number number -> new ObservedValue.Decimal(number.value());
             case Value.Case one -> new ObservedValue.Unit(one.data());
-        }, type, inners, symbols, kinds, published);
+        }, type, declarations);
     }
 
     /**
@@ -119,13 +113,8 @@ final class ValueClasses {
      * order: which order a case of an enumeration is placed on is the enumeration's, and a unit data
      * that is a case of two sums is at a different place in each.
      */
-    static souther.compiler.numeric.Place placeOf(ObservedValue value, Type type,
-                                                  souther.compiler.check.NewtypeInners inners,
-                                                  Symbols symbols,
-                                                  DeclarationKinds kinds,
-                                                  PublishedDeclarations published) {
-        souther.compiler.check.Carrier carrier =
-                souther.compiler.check.Carrier.ofValue(type, inners, symbols, kinds, published);
+    static Place placeOf(ObservedValue value, Type type, DeclarationAccess declarations) {
+        Carrier carrier = Carrier.ofValue(type, declarations);
         return carrier == null ? null : carrier.placeOf(value);
     }
 

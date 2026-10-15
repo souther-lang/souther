@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.check.DeclaredBounds;
 import souther.compiler.inputs.TermPath;
 
 import java.util.LinkedHashMap;
@@ -16,7 +17,7 @@ import java.util.Map;
  *
  * <p><b>And a location holding another is not a second one.</b> A container written whole and a
  * position inside it are one value asked for twice: what a total demands is every element of a
- * sequence, and what a line at an element demands is one of them. Told apart by the spelling, both
+ * container, and what a line at an element demands is one of them. Told apart by the spelling, both
  * asks are taken and the composer writes whichever it plans — which is the half-answered point
  * above, reached by two paths that are not equal.
  *
@@ -46,6 +47,59 @@ final class LocationWrites {
     private final Map<TermPath, List<FixtureTemplate>> written = new LinkedHashMap<>();
 
     /**
+     * How many each of these containers is to hold, where that is what was asked of it and not a
+     * value of it.
+     *
+     * <p>Kept apart from {@link #written} because it says less. A container written whole settles
+     * every position inside it; one asked to hold so many settles none of them, so what is asked
+     * at a position inside it is one more thing the container is built to hold rather than a
+     * second ask at one location.
+     */
+    private final Map<TermPath, DeclaredBounds.CountRange> sized = new LinkedHashMap<>();
+
+    /**
+     * The same asks, to go on asking in for one way of writing the row.
+     *
+     * <p>A row tried under one case and given up is not the row: what that way wrote at a position
+     * under its case is nothing the next way, under another, is asked for.
+     */
+    LocationWrites copy() {
+        LocationWrites out = new LocationWrites();
+        out.written.putAll(written);
+        out.sized.putAll(sized);
+        return out;
+    }
+
+    /**
+     * What asking the container at {@code at} to hold as many as {@code holds} says came to.
+     *
+     * <p>Refused where a value is written at it or at a value it is inside: that value already says
+     * how many the container holds. Taken beside whatever is asked inside it, which the container
+     * is built to hold. Asked again, the container holds a count both asks take, and is refused
+     * only where there is none.
+     */
+    Written size(TermPath at, DeclaredBounds.CountRange holds) {
+        for (TermPath whole : written.keySet()) {
+            if (at.isAtOrUnder(whole)) {
+                return Written.CONFLICTING;
+            }
+        }
+        DeclaredBounds.CountRange already = sized.get(at);
+        if (already != null) {
+            DeclaredBounds.CountRange both = new DeclaredBounds.CountRange(
+                    Math.max(already.least(), holds.least()),
+                    Math.min(already.most(), holds.most()));
+            if (both.empty()) {
+                return Written.CONFLICTING;
+            }
+            sized.put(at, both);
+            return Written.AGAIN;
+        }
+        sized.put(at, holds);
+        return Written.FIRST;
+    }
+
+    /**
      * What asking for {@code values} at {@code at} came to.
      *
      * <p>The one place a write is told from a write already here, so the two ways of being one
@@ -59,6 +113,13 @@ final class LocationWrites {
         }
         for (TermPath other : written.keySet()) {
             if (oneLocation(at, other)) {
+                return Written.CONFLICTING;
+            }
+        }
+        // A value written whole at a container asked to hold so many, or at a value around it,
+        // would say again how many it holds.
+        for (TermPath counted : sized.keySet()) {
+            if (counted.isAtOrUnder(at)) {
                 return Written.CONFLICTING;
             }
         }
@@ -87,5 +148,10 @@ final class LocationWrites {
     /** What is to be written, for the walk that composes each parameter out of it. */
     Map<TermPath, List<FixtureTemplate>> all() {
         return written;
+    }
+
+    /** How many the containers asked to hold so many are to hold, for the same walk. */
+    Map<TermPath, DeclaredBounds.CountRange> sizes() {
+        return sized;
     }
 }

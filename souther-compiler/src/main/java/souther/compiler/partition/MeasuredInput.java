@@ -1,19 +1,23 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.DeclarationReadings;
+import souther.compiler.check.FieldDomains;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Symbols;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.NameReach;
-import souther.compiler.inputs.PositionId;
 import souther.compiler.inputs.Quantities;
+import souther.compiler.inputs.RuleRoots;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.numeric.NumericDomain;
 import souther.compiler.types.Type;
 
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Predicate;
 
 /**
@@ -77,16 +81,67 @@ public final class MeasuredInput {
      * impossible.
      */
     private final NameReach reach;
+    /**
+     * Whose rules reach each position a value is composed at.
+     *
+     * <p>Held because a value composed under a case, or inside a container, is held to the rules of
+     * the case or the element as much as to the parameter's, and which of them reach a position is
+     * what the reading settled when it opened them. Worked out again from the value being built, it
+     * would be a second answer that agrees only while every value built is the parameter's own
+     * record.
+     *
+     * <p>Part of what makes two of these one: two readings whose rules reach a position differently
+     * compose differently there.
+     */
+    private final RuleRoots ruleRoots;
+    /**
+     * What has been offered at a position, by its type and what the rules leave it.
+     *
+     * <p>Kept because every point a search looks for a row at composes the row again, and each
+     * position it does not fix is offered the same values at every one of them: what stands for a
+     * type within a range is the reading's answer and nothing a point brings. So the answer is the
+     * input's, worked out once for it.
+     *
+     * <p>No part of what makes two of these one, for the reason {@link #machines} is not: it is
+     * derived from what is compared and from the reading, and two of these that compare equal would
+     * fill it alike.
+     *
+     * <p>The whole answer, with what building it met: a search reading the values from here and
+     * why they are short from a second build would hold two answers that agree only while the
+     * builds do.
+     */
+    private final Map<Offered, Proposals> offered = new ConcurrentHashMap<>();
+    /**
+     * Which values' rules name each position, as {@link #ruleRoots} answers it.
+     *
+     * <p>Kept because every value composed for every point asks it of the same positions, and the
+     * answer is the reading's and nothing a point brings. No part of what makes two of these one,
+     * for the reason {@link #offered} is not.
+     */
+    private final Map<TermPath, List<RuleRoots.Naming>> named = new ConcurrentHashMap<>();
+    /**
+     * What the rules of every value written at each position keep apart there, with nothing
+     * settled.
+     *
+     * <p>Kept because every edge composed at a container asks it of the same position, and with
+     * nothing settled the answer is the reading's and nothing an edge brings. No part of what
+     * makes two of these one, for the reason {@link #offered} is not.
+     */
+    private final Map<TermPath, List<List<String>>> keptApart = new ConcurrentHashMap<>();
+
+    /** A position as what it is offered turns on. */
+    private record Offered(Type type, NumericDomain.Bounds within, FieldDomains.Held held) {}
 
     private MeasuredInput(String behavior, BehaviorInputs written, Quantities quantities,
                           Partitions.Partitioning divided, DeclarationReadings machines,
-                          NameReach reach) {
+                          NameReach reach, RuleRoots ruleRoots) {
         this.machines = machines;
         this.behavior = behavior;
         this.written = written;
         this.quantities = quantities;
         this.divided = divided;
         this.reach = reach;
+        this.ruleRoots = ruleRoots;
     }
 
     /**
@@ -126,7 +181,7 @@ public final class MeasuredInput {
             read.quantities().ordersOf(axis.term());
         }
         return new MeasuredInput(behavior, BehaviorInputs.of(read), read.quantities(), divided,
-                read.domain().machines(), read.domain().reach());
+                read.domain().machines(), read.domain().reach(), read.domain().ruleRoots());
     }
 
     /**
@@ -147,12 +202,13 @@ public final class MeasuredInput {
                 && written.equals(that.written)
                 && quantities.equals(that.quantities)
                 && divided.equals(that.divided)
-                && reach.equals(that.reach);
+                && reach.equals(that.reach)
+                && ruleRoots.equals(that.ruleRoots);
     }
 
     @Override
     public int hashCode() {
-        return java.util.Objects.hash(behavior, written, quantities, divided, reach);
+        return java.util.Objects.hash(behavior, written, quantities, divided, reach, ruleRoots);
     }
 
     @Override
@@ -206,6 +262,23 @@ public final class MeasuredInput {
     }
 
     /**
+     * Every value whose rules name {@code path}, as the reading opened them
+     * ({@link RuleRoots#naming}).
+     */
+    List<RuleRoots.Naming> rulesNaming(TermPath path) {
+        return named.computeIfAbsent(path, ruleRoots::naming);
+    }
+
+    /**
+     * What the rules of every value written at {@code path} keep apart there, with nothing a row
+     * fixes read in ({@link ConstructionRules#heldAt}, {@link ElementsKeptApart#heldBy}).
+     */
+    List<List<String>> keptApartAt(TermPath path) {
+        return keptApart.computeIfAbsent(path, at ->
+                ElementsKeptApart.heldBy(ConstructionRules.of(this, Map.of()).heldAt(at)));
+    }
+
+    /**
      * Where the model divides its positions, whole.
      *
      * <p>For a reader whose question is about the measurement rather than about a row: which
@@ -254,6 +327,26 @@ public final class MeasuredInput {
         return Partitions.witnessSearch(divided.measurements(), reach);
     }
 
+    /**
+     * The values that stand for {@code type} at a position the rules leave {@code within} and
+     * {@code held} — {@link Partitions#representativesHolding}, read once for this input.
+     *
+     * <p>Looked up and then filled rather than filled where it is missing: what is offered for one
+     * type reads the types inside it, and a map filled while it is being filled is not one a
+     * reading may count on.
+     */
+    Proposals representativesHolding(Type type, NumericDomain.Bounds within,
+                                     FieldDomains.Held held) {
+        Offered at = new Offered(type, within, held);
+        Proposals already = offered.get(at);
+        if (already != null) {
+            return already;
+        }
+        Proposals made = Partitions.representativesHolding(type, ruleReading(), within, held);
+        Proposals raced = offered.putIfAbsent(at, made);
+        return raced != null ? raced : made;
+    }
+
     /** Every measure of its positions, in the order the rules name the numbers. */
     public MeasuredAxes axes() {
         return new MeasuredAxes(this, divided.axes());
@@ -288,7 +381,7 @@ public final class MeasuredInput {
      * the same things is this line, whatever was written beside it where the caller got it.
      *
      * <p><b>A quantity a transformation produced comes back through here.</b> Moving a quantity to
-     * another number ({@link BorderQuantity#movedTo}) is done on the quantity alone and carries
+     * another number ({@link LinearQuantity#movedTo}) is done on the quantity alone and carries
      * nothing of where it was measured, so what comes out is geometry again rather than a reading
      * of it — and a line this measurement never drew is not one it can read a row at.
      */
@@ -336,12 +429,6 @@ public final class MeasuredInput {
      */
     public RuleReadingContext ruleReading() {
         return RuleReadingContext.of(rules(), written.policy(), machines);
-    }
-
-    /** How many the rules leave the container at {@code at}, or every number where they leave it
-     *  unsaid. */
-    public int mostHeldAt(PositionId at) {
-        return quantities.mostHeldAt(at);
     }
 
     /**

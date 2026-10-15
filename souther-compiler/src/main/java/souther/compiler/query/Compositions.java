@@ -54,7 +54,8 @@ public final class Compositions {
                     try {
                         out.put(new ValueName.Behavior(module.name(), pipe.name()),
                                 PipelineSigs.composition(pipe, written, sigs.value(),
-                                        Shapes.publishedDeclarations(db), stages));
+                                        Shapes.declarationKinds(db),
+                                        Shapes.sumCases(db), stages));
                     } catch (Unanswerable _) {
                         // A stage that names nothing was reported where it was written, and this
                         // composition has nothing to route. Left out for the reason its signature

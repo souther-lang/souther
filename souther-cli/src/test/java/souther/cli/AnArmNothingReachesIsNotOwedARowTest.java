@@ -5,13 +5,16 @@ import souther.compiler.query.WeakeningSet;
 import souther.cli.Main;
 import org.junit.jupiter.api.Test;
 import souther.compiler.coverage.ArmProbe;
+import souther.compiler.coverage.ControlPlace;
 import souther.compiler.coverage.CoverageSites;
+import souther.compiler.coverage.SeenConditionOutcome;
 import souther.compiler.observe.MeasurementStatus;
 import souther.compiler.check.PathReachability;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.ArmCensus;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
+import souther.compiler.query.RowWitnesses;
 import souther.compiler.query.Weakening;
 import souther.compiler.reach.Reachability;
 
@@ -22,6 +25,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -80,6 +84,20 @@ class AnArmNothingReachesIsNotOwedARowTest {
             System.setOut(was);
         }
         return out.toString(StandardCharsets.UTF_8);
+    }
+
+    /** What the command prints about the model where the report is not: the warnings, and the
+     *  hints under them. */
+    private static String warnedOn(String model) throws Exception {
+        PrintStream was = System.err;
+        ByteArrayOutputStream err = new ByteArrayOutputStream();
+        System.setErr(new PrintStream(err, true, StandardCharsets.UTF_8));
+        try {
+            reportOn(model);
+        } finally {
+            System.setErr(was);
+        }
+        return err.toString(StandardCharsets.UTF_8);
     }
 
     /**
@@ -190,6 +208,57 @@ class AnArmNothingReachesIsNotOwedARowTest {
                 () -> "and no row went through this one:\n" + report);
     }
 
+    /**
+     * A branch for a value between the ones a rule names is said to be outside them, by them.
+     *
+     * <p>The range the three run between holds 2, so a sentence about the range would tell an
+     * author the branch asks for a value the position plainly holds.
+     */
+    @Test
+    void aBranchBetweenTheValuesARuleNamesIsToldWhichValuesThoseAre() throws Exception {
+        String report = warnedOn("""
+                module example.odd
+
+                data Low
+                data High
+                data Odd = Int
+                    invariant value == 1 || value == 3 || value == 7
+
+                behavior pick : (c: Odd) -> Low | High
+                let pick (c) = if c.value == 2 then Low else High
+
+                example pick
+                    | "one" : (Odd(1)) -> High
+                """);
+
+        assertTrue(report.contains("`c` holds one of 1, 3, 7, so the values this branch is"
+                        + " written for are not values it can hold"),
+                () -> "the values the rule names, and not where they run between:\n" + report);
+    }
+
+    /** The same of strings, each written as the literal that denotes it: a quote and a backslash
+     *  in a value are escaped where the value is named. */
+    @Test
+    void theStringsARuleNamesAreWrittenAsTheirLiterals() throws Exception {
+        String report = warnedOn("""
+                module example.quoted
+
+                data Low
+                data High
+                data Code = String
+                    invariant value == "a\\"b" || value == "c\\\\d"
+
+                behavior pick : (c: Code) -> Low | High
+                let pick (c) = if c.value == "x" then Low else High
+
+                example pick
+                    | "one" : (Code("a\\"b")) -> High
+                """);
+
+        assertTrue(report.contains("`c` holds one of \"a\\\"b\", \"c\\\\d\""),
+                () -> "each value as the literal it is read back from:\n" + report);
+    }
+
     // --- the cases behind such an arm -------------------------------------------------------------
 
     /**
@@ -202,6 +271,10 @@ class AnArmNothingReachesIsNotOwedARowTest {
      * sits well inside both bounds, which is the other pair of points a border owes: the report a
      * report command writes is held to reliable domain coverage, so a model with nothing left over
      * has a row away from each line as well as against it.
+     *
+     * <p>All that is left is what {@code ordered} raises. With {@code b} held to ten, no {@code a}
+     * from ten on can be built, so which values {@code a} may hold is a question that relation
+     * raises, and nothing here works it out.
      */
     private static final String AT_THE_CAP = CAPPED
             + "    | \"at the cap\" : (Pair { a = Count(0), b = Count(10) }) -> Small\n"
@@ -214,8 +287,12 @@ class AnArmNothingReachesIsNotOwedARowTest {
         assertTrue(report.contains("out specified 1/1"),
                 () -> "`Big` is answered only where nothing reaches:\n" + report);
         assertFalse(report.contains("no row expects `Big`"), () -> report);
-        assertTrue(report.contains("adequacy: satisfied"),
-                () -> "and everything left is covered:\n" + report);
+        List<String> open = report.lines().map(String::strip)
+                .dropWhile(line -> !line.equals("what keeps it open"))
+                .filter(line -> line.contains(" at ") && line.contains(" — ")).toList();
+        assertFalse(open.isEmpty(), () -> "something keeps it open:\n" + report);
+        assertTrue(open.stream().allMatch(line -> line.contains("invariant Pair (ordered)")),
+                () -> "and it is only what `ordered` raises:\n" + report);
     }
 
     /** The same case built somewhere a row can get to. One producer proving nothing about the others
@@ -386,14 +463,42 @@ class AnArmNothingReachesIsNotOwedARowTest {
     @Test
     void aProvenArmLeavesTheDenominator() {
         Adequacy.BranchEvidence measured = Adequacy.BranchEvidence.measured("b",
-                List.of(UNREACHED_ARM, TAKEN_ARM), Set.of(TAKEN), Set.of(),
-                proving().asRunWith(Set.of(TAKEN)), WeakeningSet.none());
+                List.of(UNREACHED_ARM, TAKEN_ARM), Map.of(TAKEN, RowWitnesses.ANOTHER_ROW),
+                Set.of(),
+                proving().asRunWith(Set.of(TAKEN), Set.of()), WeakeningSet.none(),
+                _ -> List.of());
 
         assertEquals(List.of(TAKEN), probesOf(measured));
         assertEquals(1, measured.arms().covered());
         assertTrue(measured.arms().census().settled(),
                 "nothing has shown the arms it is counted out of to be short of one");
         assertEquals(List.of(), measured.arms().unmet());
+    }
+
+    /**
+     * A proof about a comparison coming out one way that a row went against is the reading's, and
+     * nothing the arms are counted out of: no arm was left out by it, so the denominator stands.
+     */
+    @Test
+    void anOutcomeTakenBackLeavesTheArmsCountedOutOfWhatTheyWere() {
+        PathReachability.Answers proven = proving();
+        ControlPlace.Outcome shut = proven.found().entrySet().stream()
+                .filter(each -> each.getKey() instanceof ControlPlace.Outcome)
+                .filter(each -> each.getValue() instanceof Reachability.Unreachable)
+                .map(each -> (ControlPlace.Outcome) each.getKey())
+                .findFirst().orElseThrow(() -> new AssertionError(
+                        "the guard at 50 is proven never to hold: " + proven.found()));
+        PathReachability.Answers.AsRun asRun = proven.asRunWith(Set.of(TAKEN),
+                Set.of(new SeenConditionOutcome(shut.at(), shut.held())));
+        Adequacy.BranchEvidence measured = Adequacy.BranchEvidence.measured("b",
+                List.of(UNREACHED_ARM, TAKEN_ARM), Map.of(TAKEN, RowWitnesses.ANOTHER_ROW),
+                Set.of(), asRun, WeakeningSet.none(), _ -> List.of());
+
+        assertEquals(Set.of(shut), asRun.contradicted().places(),
+                "the reading says which proof the row went against");
+        assertTrue(measured.arms().census().settled(),
+                "and the arms are counted out of what they were counted out of before");
+        assertEquals(MeasurementStatus.COMPLETE, AdequacyReport.statusOf(measured.measured()));
     }
 
     /** The probes of the arms this account holds, in the order the body holds them. */
@@ -414,10 +519,13 @@ class AnArmNothingReachesIsNotOwedARowTest {
     void anArmObservedAgainstTheProofIsKeptAndSaidSo() {
         // The rows lit both arms, one of which nothing was supposed to reach. Handed to the same
         // fold the measures read, so what a run does to a proof is decided in one place.
-        PathReachability.Answers.AsRun asRun = proving().asRunWith(Set.of(UNREACHED, TAKEN));
+        PathReachability.Answers.AsRun asRun = proving().asRunWith(Set.of(UNREACHED, TAKEN),
+                Set.of());
         Adequacy.BranchEvidence measured = Adequacy.BranchEvidence.measured("b",
-                List.of(UNREACHED_ARM, TAKEN_ARM), Set.of(UNREACHED, TAKEN), Set.of(), asRun,
-                WeakeningSet.none());
+                List.of(UNREACHED_ARM, TAKEN_ARM),
+                Map.of(UNREACHED, RowWitnesses.ANOTHER_ROW, TAKEN, RowWitnesses.ANOTHER_ROW),
+                Set.of(), asRun,
+                WeakeningSet.none(), _ -> List.of());
 
         // What a disproved proof bears on is the set of arms and not any one of them. Which arms
         // there are is what the proofs decided, so a proof shown wrong leaves that set in doubt;
@@ -448,10 +556,11 @@ class AnArmNothingReachesIsNotOwedARowTest {
      */
     @Test
     void andAnArmIsStillAnsweredForBesideADisprovedProof() {
-        PathReachability.Answers.AsRun asRun = proving().asRunWith(Set.of(UNREACHED));
+        PathReachability.Answers.AsRun asRun = proving().asRunWith(Set.of(UNREACHED), Set.of());
         Adequacy.BranchEvidence measured = Adequacy.BranchEvidence.measured("b",
-                List.of(UNREACHED_ARM, TAKEN_ARM), Set.of(UNREACHED), Set.of(), asRun,
-                WeakeningSet.none());
+                List.of(UNREACHED_ARM, TAKEN_ARM), Map.of(UNREACHED, RowWitnesses.ANOTHER_ROW),
+                Set.of(), asRun,
+                WeakeningSet.none(), _ -> List.of());
 
         assertEquals(1, measured.arms().covered(), "the row went through the arm it went through");
         assertEquals(List.of(TAKEN), measured.arms().unmet().stream()
@@ -465,9 +574,9 @@ class AnArmNothingReachesIsNotOwedARowTest {
      * the case behind it would stay unowed over a proof already disproved. */
     @Test
     void theSameArmIsBackForEveryMeasure() {
-        PathReachability.Answers.AsRun asRun = proving().asRunWith(Set.of(UNREACHED));
+        PathReachability.Answers.AsRun asRun = proving().asRunWith(Set.of(UNREACHED), Set.of());
 
-        assertEquals(Set.of(UNREACHED), asRun.provedWrong(),
+        assertEquals(Set.of(UNREACHED_ARM.place()), asRun.contradicted().places(),
                 "a row went through an arm this reading had proven nothing reaches");
         assertFalse(asRun.answers().at(UNREACHED_ARM.place())
                         instanceof Reachability.Unreachable,

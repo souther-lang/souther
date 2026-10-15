@@ -168,5 +168,15 @@ public sealed interface ApplicationOrigin extends RecordOfTheBuilding {
      * they are answered differently rather than made to look alike.
      */
     record ComposedFixture() implements ApplicationOrigin {
+
+        /**
+         * The operation a composed fixture applies to make one edit to every element of a list.
+         *
+         * <p>Named once, for the two sides of it: the generator writes the edit as this operation
+         * applied, and the reader of fixtures recognises the edit by it. Spelt by each, the reader
+         * would go on recognising what the generator had stopped writing.
+         */
+        public static final ValueName.Stdlib.Operation ELEMENT_WISE =
+                ValueName.Stdlib.operation("List", "map");
     }
 }

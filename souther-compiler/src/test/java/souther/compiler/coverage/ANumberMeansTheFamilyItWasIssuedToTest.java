@@ -40,9 +40,9 @@ class ANumberMeansTheFamilyItWasIssuedToTest {
     @Test
     void anArmsNumberIsNoComparison() {
         IllegalArgumentException refused =
-                assertThrows(IllegalArgumentException.class, () -> numbering().comparison(0));
+                assertThrows(IllegalArgumentException.class, () -> numbering().outcome(0));
 
-        assertTrue(refused.getMessage().contains("which is not a comparison"),
+        assertTrue(refused.getMessage().contains("which is not a condition"),
                 refused.getMessage());
     }
 
@@ -51,12 +51,12 @@ class ANumberMeansTheFamilyItWasIssuedToTest {
     @Test
     void andEachFamilyReadsItsOwnNumberBack() {
         assertEquals(0, numbering().arm(0).raw());
-        assertEquals(1, numbering().comparison(1).raw());
+        assertEquals(1, numbering().outcome(1).raw());
     }
 
     @Test
     void aNumberThisNumberingNeverHandedOutIsNoPlaceOfIt() {
         assertThrows(IllegalArgumentException.class, () -> numbering().arm(2));
-        assertThrows(IllegalArgumentException.class, () -> numbering().comparison(2));
+        assertThrows(IllegalArgumentException.class, () -> numbering().outcome(2));
     }
 }

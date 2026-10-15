@@ -5,7 +5,11 @@ import souther.compiler.diag.msg.DataMessage;
 import souther.compiler.diag.msg.BehaviorMessage;
 import souther.compiler.ast.Hir;
 import souther.compiler.diag.CompileException;
+import souther.compiler.diag.DiagnosticPlace;
+import souther.compiler.diag.LabeledRegion;
+import souther.compiler.diag.Region;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.diag.SourceProvenance;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
 import souther.compiler.types.BindingId;
@@ -24,6 +28,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -55,7 +60,8 @@ class CallElaboratorNoCalleeTest {
                 Hir.Apply.synthetic("f", ReachName.of(denotes, "f", "m"),
                         new SourceReferenceOrigin(new WrittenOwner.Body("m", "b"), 0), WROTE,
                         List.of(new Hir.IntLit(1, AT, null)), AT, null),
-                ResolvedSymbols.none(souther.compiler.DefaultStdlib.get()));
+                ResolvedSymbols.none(souther.compiler.DefaultStdlib.get()),
+                ReachedValueLocations.NOT_HELD);
     }
 
     /** A behavior named from a helper `let` or a `>->` composition, neither of which reaches one. */
@@ -94,6 +100,59 @@ class CallElaboratorNoCalleeTest {
                 new BindingId(new BindingOwner.OfValue("m.a", "g"), 0)));
         assertInstanceOf(NameMessage.ItIsNotAFunctionHere.class,
                 assertInstanceOf(CompileException.class, e).diagnostic().said());
+    }
+
+    /** A binding applied where it hid a helper, as resolution reads one. */
+    private static Hir.Apply hidingAHelper() {
+        Hir.Apply read = Hir.Apply.synthetic("f",
+                ReachName.of(new ValueName.Local("f",
+                        new BindingId(new BindingOwner.OfValue("m.a", "g"), 0)), "f", "m"),
+                new SourceReferenceOrigin(new WrittenOwner.Body("m", "b"), 0), WROTE,
+                List.of(new Hir.IntLit(1, AT, null)), AT, null);
+        Hir.AppliedCallee hid = new Hir.AppliedCallee(read.applied().name(), Region.point(AT),
+                new Hir.Shadowing.Hides(new ReachName.OfModule(new ValueName.Helper("lib", "f"))));
+        return read.with(hid, read.function(), read.args(), read.pos(), read.region());
+    }
+
+    /** Where the reading holds a compilation to ask, the report points at what was hidden. */
+    @Test
+    void aBindingThatHidSomethingPointsAtItWhereThePlaceCanBeAsked() {
+        DiagnosticPlace there = new DiagnosticPlace.Unavailable(
+                new SourceProvenance.APublishedModule("lib", "lib.f"));
+        CompileException e = assertInstanceOf(CompileException.class,
+                CallElaborator.noCallee(hidingAHelper(),
+                        ResolvedSymbols.none(souther.compiler.DefaultStdlib.get()),
+                        new ReachedValueLocations.Held(_ -> there)));
+
+        assertInstanceOf(NameMessage.ItIsNotAFunctionHere.class, e.diagnostic().said());
+        assertEquals(List.of(new LabeledRegion(there,
+                        new NameMessage.ABindingInScopeHidesIt("f", "lib.f"))),
+                e.diagnostic().secondary());
+    }
+
+    /**
+     * Where it holds none, the report is the same report without the label — and not a failure. A
+     * reading that types a clause the check refuses keeps what it was told as a stop, and a failure
+     * there would bring the compiler down where the program only had a mistake in it.
+     */
+    @Test
+    void aBindingThatHidSomethingIsStillReportedWhereNoPlaceCanBeAsked() {
+        CompileException e = assertInstanceOf(CompileException.class,
+                CallElaborator.noCallee(hidingAHelper(),
+                        ResolvedSymbols.none(souther.compiler.DefaultStdlib.get()),
+                        ReachedValueLocations.NOT_HELD));
+
+        assertInstanceOf(NameMessage.ItIsNotAFunctionHere.class, e.diagnostic().said());
+        assertEquals(List.of(), e.diagnostic().secondary());
+    }
+
+    /** What is hidden is what the applied name would have reached, so an application of something
+     *  that is not a name is refused one. */
+    @Test
+    void anApplicationOfSomethingThatIsNotANameHidesNothing() {
+        assertThrows(IllegalArgumentException.class, () -> new Hir.AppliedCallee(null,
+                Region.point(AT),
+                new Hir.Shadowing.Hides(new ReachName.OfModule(new ValueName.Helper("lib", "f")))));
     }
 
     /**
@@ -139,7 +198,8 @@ class CallElaboratorNoCalleeTest {
                 souther.compiler.types.RuleOrigin.unwritten(), null, AT, null);
         RuntimeException e = CallElaborator.noCallee(Hir.Apply.synthetic(block,
                 List.of(new Hir.IntLit(1, AT, null)), WROTE, AT, null),
-                ResolvedSymbols.none(souther.compiler.DefaultStdlib.get()));
+                ResolvedSymbols.none(souther.compiler.DefaultStdlib.get()),
+                ReachedValueLocations.NOT_HELD);
 
         assertInstanceOf(IllegalStateException.class, e);
         assertTrue(e.getMessage().contains(String.valueOf(AT)), () -> "says where: " + e.getMessage());

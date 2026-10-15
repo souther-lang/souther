@@ -1,5 +1,7 @@
 package souther.compiler.partition;
 
+import souther.compiler.meaning.InjectedAnswer;
+
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;

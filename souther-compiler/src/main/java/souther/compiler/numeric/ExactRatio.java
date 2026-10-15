@@ -2,11 +2,16 @@ package souther.compiler.numeric;
 
 import souther.exact.ExactArithmetic;
 import souther.exact.ExactDecimals;
+import souther.exact.ExactFailure;
 import souther.exact.ExactParts;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.math.RoundingMode;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
+import java.util.Optional;
 import java.util.OptionalInt;
 
 /**
@@ -117,10 +122,15 @@ public record ExactRatio(BigInteger numeratorWithoutUnits, BigInteger denominato
      * for every value this holds.
      *
      * <p>Visible to this package alone, so that a reader elsewhere cannot reach the digits at all.
+     * And inside it only for a caller that has already asked whether the digits are few
+     * ({@link #spelled}): it throws where the host holds no number that large, which no reasoning
+     * step can be handed. A step that needs a whole number's digits asks {@link #wholeNumber},
+     * which says so instead.
      *
      * <p>Everything a reasoning step asks of the two numbers is asked of this type instead:
-     * {@link #numeratorMod} and {@link #denominatorMod} for a residue, {@link #numeratorAsRatio} and
-     * {@link #denominatorAsRatio} for either of them as a value to go on computing with,
+     * {@link #numeratorMod} and {@link #denominatorMod} for a residue, {@link #numeratorAsRatio} for
+     * the one above the line as a value to go on computing with,
+     * {@link #timesWhatItStandsOver} for a product with the one below it,
      * {@link #spread} for the part of the denominator no finite decimal divides. Each of those
      * answers from the factors and builds nothing.
      */
@@ -136,6 +146,27 @@ public record ExactRatio(BigInteger numeratorWithoutUnits, BigInteger denominato
      *  second of them positive. */
     record Fraction(BigInteger numerator, BigInteger denominator) {}
 
+    /**
+     * The digits of this whole number, or which way the host could not hold them.
+     *
+     * <p>For a step that counts in whole numbers and is handed a modulus or a period that is one:
+     * the residue of a value modulo it is a question of the value's bits, and the modulus has to be
+     * a number to be asked. A number of billions of digits is one a host holds no place for, and
+     * that is an answer this gives; the step widens what it says, as every other step does where an
+     * exact number is unheld. It is not one that throws, which is what would stop the compile over a
+     * modulus the model never wrote down.
+     *
+     * @throws IllegalArgumentException where this is not a whole number, which is a caller's mistake
+     *         and not a value this can hold
+     */
+    ExactAnswer<BigInteger> wholeNumber() {
+        if (!isWhole()) {
+            throw new IllegalArgumentException("not a whole number: " + this);
+        }
+        return ExactAnswer.of(() -> ExactArithmetic.written(numeratorWithoutUnits,
+                ExactArithmetic.aboveTheLine(twos), ExactArithmetic.aboveTheLine(fives)));
+    }
+
     /** The number above this ratio's line, as a ratio — so that a caller going on to compute with it
      *  is handed the factors rather than the digits. */
     ExactRatio numeratorAsRatio() {
@@ -144,17 +175,99 @@ public record ExactRatio(BigInteger numeratorWithoutUnits, BigInteger denominato
     }
 
     /**
-     * What this ratio stands over, as a ratio.
+     * This times what {@code other} stands over, or which way the arithmetic could not hold it.
      *
-     * <p>Partial, and so for this package's own arithmetic, which refuses where its answer is not
-     * held. A value is written as a rule with {@link #asTerms}, which answers for every value.
-     *
-     * @throws ArithmeticException where an exponent is the least long, whose negation is no exponent
+     * <p>Asked as the one product and not as a product with the denominator taken first. A
+     * denominator at the least exponent has an exponent no long holds, while the product it goes into
+     * can have one that does — so forming it would refuse an answer that was never out of range. The
+     * exponents are added as whole numbers and only the last of them has to be a long.
      */
-    ExactRatio denominatorAsRatio() {
-        return new ExactRatio(denominatorWithoutUnits, BigInteger.ONE,
-                twos >= 0 ? 0 : ExactArithmetic.negated(twos),
-                fives >= 0 ? 0 : ExactArithmetic.negated(fives));
+    ExactAnswer<ExactRatio> timesWhatItStandsOver(ExactRatio other) {
+        if (isZero()) {
+            return ExactAnswer.held(ZERO);
+        }
+        ExactParts scaled;
+        try {
+            scaled = ExactArithmetic.times(
+                    parts(), new ExactParts(other.denominatorWithoutUnits, BigInteger.ONE, 0, 0));
+        } catch (ExactFailure failure) {
+            return ExactAnswer.unheld(UnheldNumber.of(failure));
+        }
+        BigInteger scaledTwos = BigInteger.valueOf(scaled.twos()).add(belowTheLineBy(other.twos));
+        BigInteger scaledFives = BigInteger.valueOf(scaled.fives()).add(belowTheLineBy(other.fives));
+        if (!fitsALong(scaledTwos) || !fitsALong(scaledFives)) {
+            return ExactAnswer.unheld(UnheldNumber.NO_REPRESENTATION_EXISTS);
+        }
+        return ExactAnswer.of(() -> from(new ExactParts(scaled.numerator(), scaled.denominator(),
+                scaledTwos.longValue(), scaledFives.longValue())));
+    }
+
+    /** How many of a prime the denominator carries for this exponent, as a whole number because the
+     *  least long has a negation no long holds. */
+    private static BigInteger belowTheLineBy(long exponent) {
+        return BigInteger.valueOf(exponent).negate().max(BigInteger.ZERO);
+    }
+
+    private static boolean fitsALong(BigInteger exponent) {
+        return exponent.bitLength() < Long.SIZE;
+    }
+
+    /**
+     * What dividing this by {@code other} comes to, as far as anything but its exponents goes: the
+     * fraction it stands over and its two exponents as whole numbers.
+     *
+     * <p>Nothing here is built past what a quotient's own numbers are, and the exponents are not
+     * bounded by a long, which is why a question about the quotient that does not need the exponents
+     * to be held — whether it is whole, whether it is a decimal — can be answered where the quotient
+     * itself has no representation.
+     */
+    private record QuotientShape(BigInteger denominator, BigInteger twos, BigInteger fives) {}
+
+    private QuotientShape quotientShape(ExactRatio other) {
+        BigInteger acrossOne = numeratorWithoutUnits.gcd(other.numeratorWithoutUnits);
+        BigInteger acrossTwo = denominatorWithoutUnits.gcd(other.denominatorWithoutUnits);
+        return new QuotientShape(
+                denominatorWithoutUnits.divide(acrossTwo)
+                        .multiply(other.numeratorWithoutUnits.abs().divide(acrossOne)),
+                BigInteger.valueOf(twos).subtract(BigInteger.valueOf(other.twos)),
+                BigInteger.valueOf(fives).subtract(BigInteger.valueOf(other.fives)));
+    }
+
+    /**
+     * Whether this is a whole multiple of {@code other}, which is a fact about the two values and
+     * not about the quotient having a representation here.
+     *
+     * @throws ArithmeticException where {@code other} is zero
+     */
+    public boolean isWholeMultipleOf(ExactRatio other) {
+        if (other.isZero()) {
+            throw new ArithmeticException("divided by zero");
+        }
+        if (isZero()) {
+            return true;
+        }
+        QuotientShape shape = quotientShape(other);
+        return shape.denominator().equals(BigInteger.ONE)
+                && shape.twos().signum() >= 0 && shape.fives().signum() >= 0;
+    }
+
+    /**
+     * Whether this is {@code other} times a decimal a model can write, by the same rule as
+     * {@link #fitsWrittenDecimal}, and asked without the quotient being held.
+     *
+     * @throws ArithmeticException where {@code other} is zero
+     */
+    public boolean isWrittenDecimalMultipleOf(ExactRatio other) {
+        if (other.isZero()) {
+            throw new ArithmeticException("divided by zero");
+        }
+        if (isZero()) {
+            return true;
+        }
+        QuotientShape shape = quotientShape(other);
+        BigInteger leastScale = shape.twos().negate().max(shape.fives().negate());
+        return shape.denominator().equals(BigInteger.ONE)
+                && leastScale.compareTo(BigInteger.valueOf(Integer.MAX_VALUE)) <= 0;
     }
 
     /**
@@ -227,6 +340,23 @@ public record ExactRatio(BigInteger numeratorWithoutUnits, BigInteger denominato
     }
 
     /**
+     * The sum of {@code terms}, or which way the arithmetic could not hold it — the same answer for
+     * the same terms in whatever order they are handed.
+     *
+     * <p>A sum of many is not a run of {@link #plus}: a run asks every partial sum to be held, and
+     * a partial sum can fail where the whole does not — two terms far apart in scale where a third
+     * cancels one of them, or two terms at the greatest exponent where the next two cancel both.
+     * The arithmetic's own sum of many forms no partial sum in canonical form and meets the terms by
+     * scale ({@link ExactArithmetic#sum}), so the answer is the terms' and not their order's, and a
+     * sum is refused only where it has no representation or no room to be formed.
+     */
+    public static ExactAnswer<ExactRatio> sum(Collection<ExactRatio> terms) {
+        List<ExactParts> parts = new ArrayList<>();
+        terms.forEach(each -> parts.add(each.parts()));
+        return ExactAnswer.of(() -> from(ExactArithmetic.sum(parts)));
+    }
+
+    /**
      * The sum, or which way the arithmetic could not hold it.
      *
      * <p>The one operation a model's own numbers reach a failure through: the exact sum of a decimal
@@ -244,19 +374,30 @@ public record ExactRatio(BigInteger numeratorWithoutUnits, BigInteger denominato
         return plus(other.negated());
     }
 
-    public ExactRatio times(ExactRatio other) {
-        return from(ExactArithmetic.times(parts(), other.parts()));
+    /**
+     * The product, or which way the arithmetic could not hold it.
+     *
+     * <p>The exponents add, and two exponents near the end of the range a long holds add to one
+     * past it. That answer is a value this type has no place for, so it is said as an answer and not
+     * thrown. See {@link ExactAnswer}.
+     */
+    public ExactAnswer<ExactRatio> times(ExactRatio other) {
+        return ExactAnswer.of(() -> from(ExactArithmetic.times(parts(), other.parts())));
     }
 
-    /** This over {@code other}.
+    /**
+     * This over {@code other}, or which way the arithmetic could not hold it. Asked directly and not
+     * as a product with a reciprocal: the reciprocal of a value at the least exponent has no
+     * exponent, while the quotient of that value by itself is one.
      *
-     *  @throws ArithmeticException where {@code other} is zero, which is a caller's mistake and not
-     *          a value this can hold */
-    public ExactRatio dividedBy(ExactRatio other) {
+     * @throws ArithmeticException where {@code other} is zero, which is a caller's mistake and not
+     *          a value this can hold
+     */
+    public ExactAnswer<ExactRatio> dividedBy(ExactRatio other) {
         if (other.signum() == 0) {
             throw new ArithmeticException("divided by zero");
         }
-        return from(ExactArithmetic.dividedBy(parts(), other.parts()));
+        return ExactAnswer.of(() -> from(ExactArithmetic.dividedBy(parts(), other.parts())));
     }
 
     public ExactRatio negated() {
@@ -486,7 +627,7 @@ public record ExactRatio(BigInteger numeratorWithoutUnits, BigInteger denominato
     }
 
     /**
-     * This as a decimal a model could write, or {@code null} where the caller cannot have one.
+     * This as a decimal a model could write, with the three ways it can come to none kept apart.
      *
      * <p>A ratio terminates exactly where its denominator is made of the factors ten is made of,
      * which here is where nothing is left below the line once both of them are held as exponents. A
@@ -494,21 +635,27 @@ public record ExactRatio(BigInteger numeratorWithoutUnits, BigInteger denominato
      * caller asking has to know whether it was handed the value or an approximation of it, and a
      * number that came back cannot be asked which it was.
      *
-     * <p><b>And {@code null} for a value past the scale a decimal has</b>, which is the other way a
-     * value is not one: both are rules of the language, both are settled by
-     * {@link #fitsWrittenDecimal}, and a reader branching on the null is answering the question it
-     * thinks it is.
+     * <p>A held empty answer says no decimal is this value: a third, or a value past the scale a
+     * decimal has, which is the other way a value is not one and is settled by
+     * {@link #fitsWrittenDecimal}. Both are facts about the number.
      *
-     * <p><b>What does not come back as {@code null} is a shortage of room.</b> A value this says is
+     * <p>An unheld answer says the host had no room to write the decimal out: a value this says is
      * a decimal, written at a scale this language has, whose digits are more than a whole number
-     * this host addresses, leaves as a failure of the run. Handed back as a {@code null} it would
-     * have become the answer that no decimal is this value — and then a coset would have said it
-     * holds nothing, a bound that no value stands at it, and a search that a position has nowhere to
-     * go. What a machine ran out of is not what a set contains.
+     * this host addresses. That is a fact about the run and says nothing about which values exist.
+     * Handed back as an empty answer it would become the answer that no decimal is this value — and
+     * then a coset would have said it holds nothing, a bound that no value stands at it, and a
+     * search that a position has nowhere to go. What a machine ran out of is not what a set
+     * contains.
      *
-     * @throws ArithmeticException where the digits are past what a whole number here holds
+     * <p>The only way to ask a number for its digits: there is no member that throws for want of
+     * room, so a reader that reads the difference off the type has no failure to catch and none can
+     * turn it into an absence by accident.
      */
-    public BigDecimal asWrittenDecimal() {
+    public ExactAnswer<Optional<BigDecimal>> writtenDecimal() {
+        return ExactAnswer.of(() -> Optional.ofNullable(written()));
+    }
+
+    private BigDecimal written() {
         if (isZero()) {
             return BigDecimal.ZERO;
         }

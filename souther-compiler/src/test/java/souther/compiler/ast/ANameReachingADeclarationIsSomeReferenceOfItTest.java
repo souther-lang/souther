@@ -135,7 +135,8 @@ class ANameReachingADeclarationIsSomeReferenceOfItTest {
         IllegalArgumentException noReason = assertThrows(IllegalArgumentException.class,
                 () -> new Hir.Apply(new Hir.IntLit(1, POS, null), List.of(),
                         souther.compiler.ast.Origins.Own.IT_IS,
-                        new Hir.AppliedCallee(null, Region.point(POS)), null, POS, null));
+                        new Hir.AppliedCallee(null, Region.point(POS), Hir.Shadowing.NOTHING),
+                        null, POS, null));
 
         assertEquals(true, noReason.getMessage().contains("some reason"), noReason.getMessage());
     }

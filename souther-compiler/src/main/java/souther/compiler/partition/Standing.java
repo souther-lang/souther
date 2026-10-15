@@ -3,6 +3,11 @@ package souther.compiler.partition;
 import souther.compiler.check.Carrier;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.NumericTerms;
+import souther.compiler.numeric.LinearForm;
+
+import java.math.BigInteger;
+import java.util.List;
+import java.util.Map;
 
 /**
  * What a row has to satisfy to stand at one coverage item, in the words a search can solve.
@@ -96,6 +101,80 @@ public sealed interface Standing {
                         + " on one order: "
                         + NumericTerms.inOrder(form.coefs().keySet())
                         + " against " + NumericTerms.inOrder(on.keySet()));
+            }
+        }
+    }
+
+    /**
+     * What a division by a written number leaves of a form of several positions, at a remainder or
+     * in a run of them.
+     *
+     * <p>The form is held at some value that leaves it, and which value that is a search over the
+     * form's own values: every one of the class the remainder and the divisor name, that the rules
+     * leave the form room for. The remainders are the item and the values of the form are how a row
+     * gets to one of them, so two rows at one remainder by two values of the form are one item.
+     *
+     * @param dividend the form the division is of, with the constant it is moved by
+     * @param on       the order each number of the form stands on
+     * @param levels   the remainders it can leave, which is what the criterion is about
+     * @param divisor  the number it is divided by, above nought
+     */
+    record OfARemainder(LinearForm<NumericTerm> dividend, Map<NumericTerm, Carrier> on,
+                        LevelSpace levels, BigInteger divisor, Criterion where)
+            implements Standing {
+
+        public OfARemainder {
+            on = Map.copyOf(on);
+            if (dividend.coefs().isEmpty() || !on.keySet().equals(dividend.coefs().keySet())
+                    || divisor.signum() <= 0) {
+                throw new IllegalArgumentException("a remainder is of a form over the numbers it"
+                        + " names, each on one order, and by a divisor above nought: " + dividend
+                        + " against " + on.keySet() + " by " + divisor);
+            }
+        }
+    }
+
+    /**
+     * How many elements of a container meet a statement, at a number or in a run of them.
+     *
+     * <p>What the row has to hold is elements: so many meeting the statement, and the rest
+     * whatever the run leaves room for. Not a value at a position — the count is written nowhere,
+     * and a search that wrote a number at the container would write a list of the wrong kind.
+     *
+     * @param count   the count: the container its elements are counted in, and what an element is
+     *                counted for meeting
+     * @param numbers every number of a row the statement reads, the element's own among them
+     */
+    record OfACount(CountedElements count, List<NumericTerm> numbers,
+                    Criterion where) implements Standing {
+
+        public OfACount {
+            numbers = List.copyOf(numbers);
+        }
+    }
+
+    /**
+     * How many elements of a container meet a statement, together with what a form of the input's
+     * numbers comes to, at a level of the two added up.
+     *
+     * <p>Two things a row has to be at: so many elements meeting the statement, and the numbers of
+     * the form standing where they add up to what the level leaves. Neither is the item alone, and
+     * the count is the composing's to meet where the numbers are placed ({@link CardinalityComposer}).
+     *
+     * @param count  the count, as {@link OfACount} has it
+     * @param form   what is added to the count, with no constant
+     * @param on     the order each number of the form stands on
+     * @param levels the levels the sum takes
+     */
+    record OfACountAndAForm(CountedElements count, LinearForm<NumericTerm> form,
+                            Map<NumericTerm, Carrier> on, LevelSpace levels,
+                            Criterion where) implements Standing {
+
+        public OfACountAndAForm {
+            on = Map.copyOf(on);
+            if (form.coefs().isEmpty() || !on.keySet().equals(form.coefs().keySet())) {
+                throw new IllegalArgumentException("a form is added to the count over the numbers it"
+                        + " names, each on one order: " + form + " against " + on.keySet());
             }
         }
     }

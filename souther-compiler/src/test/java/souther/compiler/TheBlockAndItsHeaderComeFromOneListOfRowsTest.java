@@ -99,9 +99,11 @@ class TheBlockAndItsHeaderComeFromOneListOfRowsTest {
         return block.lines().filter(line -> line.startsWith("    | ")).toList();
     }
 
-    /** The rows as printed, which is what a reader pastes — and not what is said under them. */
+    /** The rows as printed, which is what a reader pastes — and not what is said over or under
+     *  them. */
     private static List<String> written(String block) {
         return block.lines().dropWhile(line -> !line.startsWith("example "))
+                .filter(line -> !line.startsWith("//"))
                 .takeWhile(line -> line.startsWith("example ") || line.startsWith("    "))
                 .toList();
     }

@@ -7,6 +7,7 @@ import souther.compiler.types.ModelOccurrence;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -34,8 +35,9 @@ final class ReachingAccounts {
         List<List<OnTheWay>> ways = new ArrayList<>();
         for (ConstructOccurrence written : comparisonsIn(body)) {
             ModelOccurrence.statedAt(written).ifPresent(stated -> {
-                List<OnTheWay> account = reaching.wayTo(stated).onTheWay();
-                if (!account.isEmpty()) {
+                List<OnTheWay> account = reaching.byLine()
+                        .get(new ReachingCuts.ALine(stated, Optional.empty()));
+                if (account != null && !account.isEmpty()) {
                     ways.add(account);
                 }
             });

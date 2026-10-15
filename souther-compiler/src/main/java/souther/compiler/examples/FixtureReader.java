@@ -4,14 +4,23 @@ import souther.compiler.execute.BoundaryValues;
 import souther.compiler.generated.MemoryClassLoader;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.AtomSpace;
+import souther.compiler.check.BoundOperationFacts;
 import souther.compiler.check.CallElaborator;
 import souther.compiler.check.DeclarationKinds;
-import souther.compiler.check.PublishedDeclarations;
+import souther.compiler.check.DefaultBoundOperationFacts;
+import souther.compiler.semantics.PieceOfAnElement;
+import souther.compiler.check.SumCases;
 import souther.compiler.check.Symbols;
+import souther.compiler.cst.CstLexer;
 import souther.compiler.cst.SyntaxKind;
+import souther.compiler.numeric.DateTimes;
+import souther.compiler.numeric.Times;
 import souther.compiler.core.IntNegation;
 import souther.compiler.core.Kernel;
+import souther.compiler.observe.AnswerChange;
+import souther.compiler.observe.AnswerObservation;
 import souther.compiler.observe.Asserted;
+import souther.compiler.observe.Comparisons;
 import souther.compiler.observe.Expectation;
 import souther.compiler.observe.FieldTypes;
 import souther.compiler.observe.Limits;
@@ -20,8 +29,10 @@ import souther.compiler.observe.Position;
 import souther.compiler.observe.Verdict;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.observe.ValueTypes;
+import souther.compiler.types.ApplicationOrigin;
 import souther.compiler.types.BindingId;
 import souther.compiler.check.BoundaryInput;
+import souther.compiler.evaluate.EvaluationContext;
 import souther.compiler.check.BoundaryOutput;
 import souther.compiler.types.LeafScalar;
 import souther.compiler.types.Type;
@@ -80,8 +91,10 @@ public final class FixtureReader {
 
     private final souther.compiler.check.Prepared.ForExamples module;
     private final Symbols symbols;
-    /** What the declarations a fixture names say about themselves. */
-    private final PublishedDeclarations published;
+    /** What a value of each sum a fixture names can be. */
+    private final SumCases sums;
+    /** Which form each of those declarations was written in. */
+    private final DeclarationKinds kinds;
     /** The values a row may name: this module's own, and the ones its imports bring in. */
     private final Map<String, Hir.FnDef> values;
     private final MemoryClassLoader loader;
@@ -93,25 +106,26 @@ public final class FixtureReader {
     private final ValueTypes types;
 
     FixtureReader(souther.compiler.check.Prepared.ForExamples module, Symbols symbols,
-                  PublishedDeclarations published, DeclarationKinds kinds,
+                  SumCases sums, DeclarationKinds kinds,
                   FieldTypes fields, Map<String, Hir.FnDef> values,
                   MemoryClassLoader loader) {
         this.module = module;
         this.symbols = symbols;
-        this.published = published;
+        this.sums = sums;
+        this.kinds = kinds;
         this.values = values;
         this.loader = loader;
         this.operands = new OperandRunner(module.name(), loader);
         // What a declaration is laid out as reaches this reading through the two that read a value
         // by it, and is not held beside them: a reader here asks one of those, and one that asked
         // the declarations itself would be a third answer about what a value's parts are.
-        this.neutral = new NeutralForm(symbols, published, kinds, fields);
+        this.neutral = new NeutralForm(symbols, sums, kinds, fields);
         this.types = ValueTypes.over(fields);
     }
 
     /** A way to build values against this module's generated classes, without any rows to run. */
     public static BoundaryValues constructing(souther.compiler.check.Prepared.ForExamples module,
-                                              Symbols symbols, PublishedDeclarations published,
+                                              Symbols symbols, SumCases sums,
                                             DeclarationKinds kinds, FieldTypes fields,
                                             Map<String, ClassFileImage> classes, ClassLoader parent,
                                             Map<String, Hir.FnDef> values) {
@@ -125,9 +139,20 @@ public final class FixtureReader {
         // the loader that is shared, and has to be — it caches the classes it has defined and loaded,
         // and a fake's subclass is generated once.
         MemoryClassLoader loader = new MemoryClassLoader(classes, parent);
-        return (at, fixture) ->
-                new FixtureReader(module, symbols, published, kinds, fields, values, loader)
+        return new BoundaryValues() {
+
+            @Override
+            public BoundaryValues.Built build(BoundaryInput at, Hir.Expr fixture) {
+                return new FixtureReader(module, symbols, sums, kinds, fields, values, loader)
                         .building(at, fixture);
+            }
+
+            @Override
+            public BoundaryValues.OnItsOwn buildAlone(Type type, Hir.Expr fixture) {
+                return new FixtureReader(module, symbols, sums, kinds, fields, values, loader)
+                        .buildingAlone(type, fixture);
+            }
+        };
     }
 
     /** The method emitted for {@code operand}, or null where nothing emitted one — read off the
@@ -333,7 +358,7 @@ public final class FixtureReader {
         if (value == null) {
             return null;
         }
-        for (TypeSymbol candidate : AtomSpace.subjectAtoms(outType, published)) {
+        for (TypeSymbol candidate : AtomSpace.subjectAtoms(outType, kinds, sums)) {
             if (represents(candidate, value)) {
                 return candidate;
             }
@@ -496,7 +521,7 @@ public final class FixtureReader {
                     && spells(v, r.name());
             case Type.Ref _, Type.Union _ -> {
                 TypeSymbol name = named(a);
-                yield name != null && AtomSpace.subjectAtoms(type, published).contains(name)
+                yield name != null && AtomSpace.subjectAtoms(type, kinds, sums).contains(name)
                         && parts(a, name);
             }
             case Type.ListOf l -> a instanceof Asserted.Elements(Asserted.Container stated,
@@ -621,6 +646,8 @@ public final class FixtureReader {
      * from the value.
      */
     private Asserted assertedLive(Object live) {
+        // A value a helper built, as large as it was built: one node, one counted point.
+        EvaluationContext.tick();
         if (live == null) {
             return new Asserted.Value(new ObservedValue.Unknown("a null reached the reader"));
         }
@@ -755,10 +782,10 @@ public final class FixtureReader {
         }
         return switch (v.denotes()) {
             case ValueName.OfType named -> named.type();
-            case ValueName.Local local -> {
-                Hir.Expr held = bindings.get(local.id());
-                yield held == null ? null : constructedCase(held, followed, worn);
-            }
+            // An element already read says nothing written about which case it is, and what it is
+            // as a value is not this question's to answer.
+            case ValueName.Local local -> bindings.get(local.id()) instanceof Bound.Written(
+                    Hir.Expr held) ? constructedCase(held, followed, worn) : null;
             case ValueName.Helper _ -> {
                 Hir.Expr body = followed.add(v.name()) ? valueBody(v.name()) : null;
                 yield body == null ? null : constructedCase(body, followed, worn);
@@ -771,6 +798,9 @@ public final class FixtureReader {
      * writes, so the two sides of a mismatch can be read against each other. A value with no encoder
      * (or one that fails to encode) falls back to its case name alone. */
     String describeActual(Object result) {
+        // What is written below goes over the value through its encoder, and the boundary library
+        // walks its collections passing no checkpoint, so every node is paid for before it is made.
+        PaidForBeforeItIsWalked.payFor(result);
         String name = NeutralForm.simpleName(result);
         if (name.isEmpty()) {
             return String.valueOf(result);
@@ -840,9 +870,8 @@ public final class FixtureReader {
             return net.unit8.raoh.encode.Encoder.class.getMethod("encode", Object.class)
                     .invoke(encoder, result);
         } catch (ReflectiveOperationException | RuntimeException e) {
-            if (souther.compiler.evaluate.EvaluationContext.overspending(e)) {
-                throw (RuntimeException) e;   // the evaluation ran out, not this value
-            }
+            // The encoder is reached reflectively, so a stop inside it arrives wrapped.
+            EvaluationContext.rethrowIfOverspent(e);   // the evaluation ran out, not this value
             return null;
         }
     }
@@ -875,19 +904,18 @@ public final class FixtureReader {
             return "None";
         }
         if (v instanceof String s) {
-            return "\"" + s + "\"";
+            return CstLexer.literalOf(s);
         }
         // Written by whatever writes the value everywhere else, and not by `toString`. A time of
         // day and a date-time drop their seconds at zero that way, so what came back was shown
         // `Time("16:00")` beside a line the same value named `Time("16:00:00")` — one value in two
         // spellings, in the one report where a reader holds them up against each other.
         String temporal = switch (v) {
-            case java.time.LocalDate at -> "Date(\"" + at + "\")";
-            case java.time.LocalTime at ->
-                    "Time(\"" + souther.compiler.numeric.Times.written(at) + "\")";
+            case java.time.LocalDate at -> "Date(" + CstLexer.literalOf(at.toString()) + ")";
+            case java.time.LocalTime at -> "Time(" + CstLexer.literalOf(Times.written(at)) + ")";
             case java.time.LocalDateTime at ->
-                    "DateTime(\"" + souther.compiler.numeric.DateTimes.written(at) + "\")";
-            case java.time.Instant at -> "Instant(\"" + at + "\")";
+                    "DateTime(" + CstLexer.literalOf(DateTimes.written(at)) + ")";
+            case java.time.Instant at -> "Instant(" + CstLexer.literalOf(at.toString()) + ")";
             default -> null;
         };
         if (temporal != null) {
@@ -956,6 +984,12 @@ public final class FixtureReader {
 
     /** As above, saying whether this frame is one that states a value at {@code at}. */
     private Object raw(Hir.Expr e, Position at, Admission admission) {
+        // One node of what the row wrote, one counted point. What is built here is decoded and read
+        // back afterwards by walks that pass no checkpoint — the boundary library's decoder among
+        // them — and each of those goes over what this built, so this is where they are paid for. A
+        // name is followed to its body each time it is written, so what this goes over is not the
+        // size of the source.
+        EvaluationContext.tick();
         if (admission == Admission.HELD) {
             admitWritten(e, at);
         }
@@ -970,6 +1004,7 @@ public final class FixtureReader {
             // The three that go on at this same position, so what this frame is read under travels
             // with them: a name stands for a body, a `let` for its own body, and an application for
             // the value it answers with.
+            case Hir.Apply c when composedElementWise(c) -> elementWise(c, at, admission);
             case Hir.Apply c -> collectionOrNewtype(c, at, admission);
             case Hir.Var v -> named(v, at, admission);
             case Hir.LetIn let -> bound(let, at, admission);
@@ -1060,7 +1095,8 @@ public final class FixtureReader {
             case Type.OptionOf o -> new Admits.OrAbsent(admits(o.element()));
             case Type.Ref r when r.name().isPrimitive() -> NO_NAME;
             case Type.Ref r -> new Admits.OneOf(
-                    new LinkedHashSet<>(AtomSpace.subjectAtoms(Type.ref(r.name()), published)));
+                    new LinkedHashSet<>(AtomSpace.subjectAtoms(Type.ref(r.name()), kinds,
+                            sums)));
             case Type.Prim _, Type.ListOf _, Type.SetOf _, Type.MapOf _, Type.TupleOf _ -> NO_NAME;
             case null, default -> UNSAID;
         };
@@ -1253,14 +1289,12 @@ public final class FixtureReader {
             case ValueName.OfType named
                     when symbols.declaredNode(named.type()) instanceof Hir.UnitData ->
                     unitInput(named.type(), at);
-            case ValueName.Local local -> {
-                Hir.Expr held = bindings.get(local.id());
-                if (held == null) {
-                    throw new FixtureException("`" + v.name()
-                            + "` is bound to no value a fixture can name");
-                }
-                yield expandedValue(local, held, at, admission);
-            }
+            case ValueName.Local local -> switch (bindings.get(local.id())) {
+                case Bound.Written(Hir.Expr held) -> expandedValue(local, held, at, admission);
+                case Bound.Read(Object read) -> read;
+                case null -> throw new FixtureException("`" + v.name()
+                        + "` is bound to no value a fixture can name");
+            };
             case ValueName.Helper helper -> namedValue(helper, at);
             // `Map.empty` / `Set.empty`: a library value, not a library call, so there is no method to
             // run and its value is known from the name alone. It is the empty collection, which a row
@@ -1327,13 +1361,30 @@ public final class FixtureReader {
      * local already has. That binding is what the spread then names, so a fixture reads one the way it
      * reads a value: the position says what type to read it as.
      */
-    private final Map<BindingId, Hir.Expr> bindings = new LinkedHashMap<>();
+    private final Map<BindingId, Bound> bindings = new LinkedHashMap<>();
+
+    /**
+     * What a name in force stands for while a fixture is read.
+     *
+     * <p>Two things, because a name is bound two ways here. A {@code let} binds what it was written
+     * as, which is read where the name is, at the position the name stands at. An element-wise edit
+     * binds an element of a list this has already read, and there is nothing written to read again:
+     * the element is a value already.
+     */
+    private sealed interface Bound {
+
+        /** What the binding was written as, read where the name is. */
+        record Written(Hir.Expr value) implements Bound {}
+
+        /** A value this reading has already read. */
+        record Read(Object value) implements Bound {}
+    }
 
     /** A {@code let} inside a fixture: its name stands for what it was bound to while the body is
      * built, and a binding of the same spelling that was already in force is put back afterwards. */
     private Object bound(Hir.LetIn let, Position at, Admission admission) {
         BindingId binding = let.binder().id();
-        bindings.put(binding, let.value());
+        bindings.put(binding, new Bound.Written(let.value()));
         try {
             return raw(let.body(), at, admission);
         } finally {
@@ -1393,6 +1444,70 @@ public final class FixtureReader {
         } finally {
             expanding.removeLast();
         }
+    }
+
+    /**
+     * Whether {@code c} is an edit the generator made to every element of a list:
+     * {@code List.map} applied to a block of one parameter and a list, in an application the
+     * generator says it composed ({@link ApplicationOrigin.ComposedFixture#ELEMENT_WISE}).
+     *
+     * <p>This reader does not evaluate {@code List.map}. A row an author writes that applies it is
+     * computed, and is read by running the method its operand is compiled to; so is a value the
+     * module states as one. What is read here is the one form the generator writes an edit of a list
+     * in, so both halves are asked: what is applied, by what it denotes rather than how it is spelt,
+     * and who applied it. Asked by the first alone, every {@code List.map} a fixture reached would
+     * be one this reader was evaluating.
+     *
+     * <p>And what it writes out is what the operation is proved to answer: the closure's answer on
+     * each element of the list, once each, in the list's order. Where that is not what the facts
+     * about the operation say, it is no edit this reader can write out.
+     */
+    private static boolean composedElementWise(Hir.Apply c) {
+        return c.application() instanceof ApplicationOrigin.ComposedFixture
+                && c.answered() != null
+                && ApplicationOrigin.ComposedFixture.ELEMENT_WISE.equals(c.answered().denotes())
+                && c.args().size() == 2
+                && c.args().get(0) instanceof Hir.Block block
+                && block.params().size() == 1
+                && answersEachInOrder(ApplicationOrigin.ComposedFixture.ELEMENT_WISE);
+    }
+
+    /** Whether {@code operation} is proved to answer its first argument's answer on each element
+     *  of its second, once each, in that list's order. */
+    private static boolean answersEachInOrder(ValueName.Stdlib.Operation operation) {
+        BoundOperationFacts.Assembled assembled =
+                DefaultBoundOperationFacts.get().assembles(operation);
+        return assembled != null
+                && assembled.piece() == PieceOfAnElement.THE_CLOSURES_ANSWER
+                && assembled.source().position() == 1;
+    }
+
+    /**
+     * The list {@code c} edits, read, with the edit applied to each of its elements.
+     *
+     * <p>The iteration is the only thing added here. Each element is bound under the block's
+     * parameter as the value it was read as, and the block's body is read the way any fixture is —
+     * so an edit the fixture notation cannot write is refused here as it would be anywhere else.
+     */
+    private Object elementWise(Hir.Apply c, Position at, Admission admission) {
+        Hir.Block block = (Hir.Block) c.args().get(0);
+        if (!(raw(c.args().get(1), at, admission) instanceof List<?> elements)) {
+            throw new FixtureException("`" + c.written() + "` edits a list, and what it was given"
+                    + " is not one");
+        }
+        BindingId each = block.params().get(0).id();
+        Position element = at.element();
+        Admission inside = below(admission);
+        List<Object> out = new ArrayList<>();
+        try {
+            for (Object read : elements) {
+                bindings.put(each, new Bound.Read(read));
+                out.add(raw(block.body(), element, inside));
+            }
+        } finally {
+            bindings.remove(each);
+        }
+        return out;
     }
 
     /**
@@ -1512,11 +1627,13 @@ public final class FixtureReader {
             Admission below = admission == Admission.UNHELD ? admission : Admission.HELD_BELOW;
             Object copied;
             if (ref.denotes() instanceof ValueName.Local local) {
-                Hir.Expr value = bindings.get(local.id());
-                if (value == null) {
-                    throw new FixtureException("`" + spread + "` is not a value a fixture can spread");
-                }
-                copied = expandedValue(local, value, spreadAt, below);
+                copied = switch (bindings.get(local.id())) {
+                    case Bound.Written(Hir.Expr value) ->
+                            expandedValue(local, value, spreadAt, below);
+                    case Bound.Read(Object read) -> read;
+                    case null -> throw new FixtureException(
+                            "`" + spread + "` is not a value a fixture can spread");
+                };
             } else if (ref.denotes() instanceof ValueName.Helper helper) {
                 copied = namedValue(helper, spreadAt);
             } else {
@@ -1578,9 +1695,7 @@ public final class FixtureReader {
         try {
             result = decoder.decode(raw, net.unit8.raoh.Path.ROOT);
         } catch (RuntimeException e) {
-            if (souther.compiler.evaluate.EvaluationContext.overspending(e)) {
-                throw e;   // the evaluation ran out, not this fixture failing to fit
-            }
+            EvaluationContext.rethrowIfOverspent(e);   // the evaluation ran out, not this fixture failing to fit
             // The decoder is generated for the declared type and casts on the way in, so a fixture of
             // another shape — a string where the parameter is a product, a number where it is a
             // string-backed newtype — fails inside it rather than returning an Err. That is the
@@ -1633,6 +1748,7 @@ public final class FixtureReader {
                     Class<?> c = loader.loadClass(SoutherJvmAbi.nameOf(new GeneratedClass.Value(n.name())).binaryName());
                     yield (Decoder<Object, ?>) staticCodec(c, "decoder");
                 } catch (ReflectiveOperationException e) {
+                    EvaluationContext.rethrowIfOverspent(e);
                     throw new IllegalStateException("`" + SoutherJvmAbi.nameOf(new GeneratedClass.Value(n.name())).binaryName()
                             + "` was admitted as a"
                             + " type a fixture builds through its derived decoder, and it has none", e);
@@ -1643,7 +1759,7 @@ public final class FixtureReader {
             // list deduplicated, a map over its value decoder with the keys read by their own.
             case FixtureShape.ListOf l -> ObjectDecoders.list(decoderFor(l.element()));
             case FixtureShape.SetOf s -> ObjectDecoders.list(decoderFor(s.element()))
-                    .map(elements -> Sets.fromList(new ArrayList<Object>(elements)));
+                    .map(elements -> Sets.fromList(new ArrayList<Object>(elements), EvaluationContext.checkpoint()));
             case FixtureShape.MapOf m -> mapDecoder(m.key(), m.value());
         };
     }
@@ -1717,9 +1833,7 @@ public final class FixtureReader {
         try {
             return ObservedValues.of(decoded, symbols, neutral, Limits.DEFAULT);
         } catch (RuntimeException | LinkageError e) {
-            if (souther.compiler.evaluate.EvaluationContext.overspending(e)) {
-                throw (RuntimeException) e;   // the evaluation ran out, not this value being unreadable
-            }
+            EvaluationContext.rethrowIfOverspent(e);   // the evaluation ran out, not this value being unreadable
             return new ObservedValue.Unknown(e.getClass().getSimpleName());
         }
     }
@@ -1738,9 +1852,7 @@ public final class FixtureReader {
         try {
             return ObservedValues.of(value, symbols, neutral, WHOLE);
         } catch (RuntimeException | LinkageError e) {
-            if (souther.compiler.evaluate.EvaluationContext.overspending(e)) {
-                throw (RuntimeException) e;
-            }
+            EvaluationContext.rethrowIfOverspent(e);
             return new ObservedValue.Unknown(e.getClass().getSimpleName());
         }
     }
@@ -1770,6 +1882,16 @@ public final class FixtureReader {
      */
     NeutralValue neutralAt(Object value, Type position, String what) {
         return new NeutralValue(neutral.of(value, Position.at(position), what));
+    }
+
+    /**
+     * Whether a behavior answering {@code now} answered differently from one answering {@code was},
+     * both standing at {@code position}: the same reading of what being the same value means that
+     * a comparison with a row makes.
+     */
+    AnswerChange change(AnswerObservation was, AnswerObservation now, Type position) {
+        return AnswerChange.between(was, now,
+                (left, right) -> Comparisons.same(left, right, types, Position.at(position)));
     }
 
     /**
@@ -1851,10 +1973,43 @@ public final class FixtureReader {
         } catch (FixtureException e) {
             return new BoundaryValues.Built.Refused(e.getMessage());
         } catch (RuntimeException e) {
-            if (souther.compiler.evaluate.EvaluationContext.overspending(e)) {
-                throw e;   // the evaluation ran out; whether the fixture is refused is still unread
-            }
+            EvaluationContext.rethrowIfOverspent(e);   // the evaluation ran out; whether the fixture is refused is still unread
             return new BoundaryValues.Built.Refused(String.valueOf(e.getMessage()));
+        }
+    }
+
+    /**
+     * {@link #building}, of a value read as {@code type} on its own.
+     *
+     * <p>Where the type has no decoder of its own, nothing is asked. The shape is settled before the
+     * value is read so that the two are told apart: a type with no shape here is not the value being
+     * refused, and an optional field's {@code None} answered as a refusal would be dropped from every
+     * search over the record that holds it.
+     *
+     * <p>Only the shape's own refusal is that answer. What else settling a shape can throw is this
+     * compiler disagreeing with itself — a type variable reaching a fixture — and it is thrown on
+     * rather than read as a type nothing decodes.
+     */
+    BoundaryValues.OnItsOwn buildingAlone(Type type, Hir.Expr fixture) {
+        FixtureShape shape;
+        try {
+            shape = FixtureShape.of(type, symbols);
+        } catch (FixtureException e) {
+            return BoundaryValues.OnItsOwn.NO_DECODER_OF_ITS_OWN;
+        }
+        try {
+            String method = emittedFor(fixture);
+            if (method != null) {
+                ran(method);
+            } else {
+                built(fixture, shape);
+            }
+            return BoundaryValues.OnItsOwn.BUILT;
+        } catch (FixtureException e) {
+            return BoundaryValues.OnItsOwn.REFUSED;
+        } catch (RuntimeException e) {
+            EvaluationContext.rethrowIfOverspent(e);   // the evaluation ran out; whether the fixture is refused is still unread
+            return BoundaryValues.OnItsOwn.REFUSED;
         }
     }
 }

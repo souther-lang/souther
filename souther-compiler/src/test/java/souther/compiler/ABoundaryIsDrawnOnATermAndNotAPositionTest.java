@@ -111,10 +111,10 @@ class ABoundaryIsDrawnOnATermAndNotAPositionTest {
         for (BorderAssessment line : lines(MODEL).get("look")) {
             assertNotNull(line.owedAt(souther.compiler.partition.PointRole.ON), line.label());
             assertEquals(new ItemAssessment.NotOwed(
-                            souther.compiler.partition.NotOwedReason.THE_RULES_REFUSE_IT),
+                            souther.compiler.partition.NotOwedReason.NO_VALUE_CAN_STAND_THERE),
                     line.at(souther.compiler.partition.PointRole.OFF), line.label());
             assertEquals(new ItemAssessment.NotOwed(
-                            souther.compiler.partition.NotOwedReason.THE_RULES_REFUSE_IT),
+                            souther.compiler.partition.NotOwedReason.NO_VALUE_CAN_STAND_THERE),
                     line.at(souther.compiler.partition.PointRole.OUT), line.label());
         }
     }

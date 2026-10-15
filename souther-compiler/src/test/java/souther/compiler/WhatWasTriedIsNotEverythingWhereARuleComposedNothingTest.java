@@ -54,11 +54,12 @@ class WhatWasTriedIsNotEverythingWhereARuleComposedNothingTest {
 
                 data T = { flag: Flag, code: Code }
 
-                data Ok
+                data Ok = { flag: Flag }
 
                 behavior look : (t: T) -> Ok
+                    constructs Ok
 
-                let look (t) = Ok
+                let look (t) = Ok { flag = t.flag }
                 """.replace("RULE", rule);
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
@@ -157,11 +158,12 @@ class WhatWasTriedIsNotEverythingWhereARuleComposedNothingTest {
 
                 data T = { flag: Flag, code: Code, long: Long }
 
-                data Ok
+                data Ok = { flag: Flag }
 
                 behavior look : (t: T) -> Ok
+                    constructs Ok
 
-                let look (t) = Ok
+                let look (t) = Ok { flag = t.flag }
                 """.formatted(NOTHING_READS_IT);
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
@@ -202,11 +204,12 @@ class WhatWasTriedIsNotEverythingWhereARuleComposedNothingTest {
 
                 data T = { flag: Flag, code: Code }
 
-                data Ok
+                data Ok = { flag: Flag }
 
                 behavior look : (t: T) -> Ok
+                    constructs Ok
 
-                let look (t) = Ok
+                let look (t) = Ok { flag = t.flag }
                 """.formatted(NOTHING_READS_IT);
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());

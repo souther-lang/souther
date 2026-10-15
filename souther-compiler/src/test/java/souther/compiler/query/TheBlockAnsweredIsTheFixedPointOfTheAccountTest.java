@@ -61,10 +61,11 @@ class TheBlockAnsweredIsTheFixedPointOfTheAccountTest {
 
             behavior judge : (size: Size, cost: Amount) -> Verdict
             let judge (size, cost) =
-                if cost.value > 50 then No else Yes
+                match size with
+                    | Small | Large -> if cost.value > 50 then No else Yes
 
             example judge
-                | "small and cheap" : (Small, Amount(10)) -> Yes
+                | "small and free" : (Small, Amount(0)) -> Yes
             """;
 
     /** What each derivation is short of, in the report's own words. */
@@ -75,8 +76,8 @@ class TheBlockAnsweredIsTheFixedPointOfTheAccountTest {
             "! no row goes through `then`",
             "! no row takes a decision rule",
             "! no row is at the ON point (comparison",
-            "! no row is at an IN point (invariant Amount #1)",
-            "! no row is at the ON point value = 0 (invariant Amount #1)");
+            "! no row is at the IN point value in 0 < value <= 100 (invariant Amount #1)",
+            "! no row is at the ON point value = 100 (invariant Amount #1)");
 
     @Test
     void everythingTheBlockOffersAnsweredLeavesNothingOwed() {
@@ -93,8 +94,11 @@ class TheBlockAnsweredIsTheFixedPointOfTheAccountTest {
         // by a row composed for it, and the block writes that down.
         List<String> offered = rowsOffered(MODEL);
         assertFalse(offered.isEmpty(), () -> "the block offers rows:\n" + block(MODEL));
-        assertTrue(block(MODEL).contains("nothing offers a row for `No` in `judge`"),
+        assertTrue(block(MODEL).contains("nothing aims a row at `No` in `judge`"),
                 () -> "and names what it could compose none for:\n" + block(MODEL));
+        assertFalse(block(MODEL).contains("nothing offers a row for `No`"),
+                () -> "without saying no row reaches it, which some of these rows do once they"
+                        + " run:\n" + block(MODEL));
 
         // Written out with their answers, they are rows this module keeps.
         String answered = withRows(MODEL, offered);
@@ -153,7 +157,7 @@ class TheBlockAnsweredIsTheFixedPointOfTheAccountTest {
                 () -> "what was answered and what was expected are two columns:\n" + report(missed));
 
         // And the next run says it again, in the words of the thing that could compose no row.
-        assertTrue(block(missed).contains("nothing offers a row for `No` in `judge`"),
+        assertTrue(block(missed).contains("nothing aims a row at `No` in `judge`"),
                 () -> "the block names what is still owed:\n" + block(missed));
 
         // Beside it, the other half of writing answers by hand: the rows that are wrong are wrong,

@@ -1,7 +1,7 @@
 package souther.compiler.derive;
 
 import souther.compiler.check.DeclarationKinds;
-import souther.compiler.check.PublishedDeclarations;
+import souther.compiler.check.SumCases;
 import souther.compiler.check.Symbols;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.ast.Hir;
@@ -69,7 +69,7 @@ public final class Deriver {
      * absorbed is the one report there would be about {@code T} itself, which was already made.
      */
     public static Codecs derive(Hir.Data d, Symbols symbols, DeclarationKinds kinds,
-                                PublishedDeclarations published) {
+                                SumCases sums) {
         Map<String, Type> fields = TypeOps.fieldTypes(d, symbols);
         // One walk decides what each field carries, and the decoder and the encoder are both lowered
         // from it. Asked separately they would agree only by coincidence: a builder with an arm the
@@ -83,7 +83,7 @@ public final class Deriver {
         try {
             for (String field : TypeOps.fieldLayout(d, symbols)) {
                 shapes.put(field, CodecShape.of(fields.get(field), d, field,
-                        fieldPos(d, field), symbols, kinds, published));
+                        fieldPos(d, field), symbols, kinds, sums));
             }
         } catch (CodecShape.Unnamed _) {
             return null;

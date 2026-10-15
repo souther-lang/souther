@@ -43,14 +43,14 @@ class RulesReadOfOneValueAreCarriedAndSaidTogetherTest {
     @Test
     void aRuleSaysTheSameThingUnderOtherNames() {
         NumericDomain<String> read = NumericDomain.top(CanonicalOrder.asTheyAreSpelled())
-                .assume(atom("x").plus(atom("y")).minus(num(5)), Rel.LE, whole("x", "y"))
+                .assume(LinearForm.sumOfAtoms("x", "y").minus(num(5)), Rel.LE, whole("x", "y"))
                 .assume(atom("x"), Rel.GE, whole("x"))
                 .assume(atom("y"), Rel.GE, whole("y"));
 
         NumericDomain<String> carried = read.over(name -> "p." + name, CanonicalOrder.asTheyAreSpelled());
 
         assertEquals(Endpoint.inclusive(Count.of(5)),
-                carried.boundsOf(atom("p.x").plus(atom("p.y"))).max());
+                carried.boundsOf(LinearForm.sumOfAtoms("p.x", "p.y")).max());
         assertEquals(Endpoint.inclusive(Count.of(0)), carried.boundsOf(atom("p.x")).min());
     }
 
@@ -71,13 +71,13 @@ class RulesReadOfOneValueAreCarriedAndSaidTogetherTest {
                 read.over(name -> name.equals("hidden") ? "<1>" : "p." + name,
                         CanonicalOrder.asTheyAreSpelled());
 
-        assertTrue(carried.entails(atom("p.x").minus(atom("p.y")), Rel.LE),
+        assertTrue(carried.entails(LinearForm.difference("p.x", "p.y"), Rel.LE),
                 "what the two of them are held apart by went through the number in between");
         // And nothing else says it. Half the relation is half of nothing: neither rule names both
         // of them, so a carrying that kept only the rules it could spell would leave this open.
         assertFalse(NumericDomain.top(CanonicalOrder.asTheyAreSpelled())
                         .assume(atom("p.x").minus(atom("p.hidden")), Rel.LE, whole("p.x", "p.hidden"))
-                        .entails(atom("p.x").minus(atom("p.y")), Rel.LE),
+                        .entails(LinearForm.difference("p.x", "p.y"), Rel.LE),
                 "one half of the relation proves nothing about the pair");
     }
 
@@ -119,7 +119,7 @@ class RulesReadOfOneValueAreCarriedAndSaidTogetherTest {
         NumericDomain<String> other = NumericDomain.top(CanonicalOrder.asTheyAreSpelled())
                 .assume(atom("b").minus(num(4)), Rel.LE, whole("b"));
 
-        Bounds sum = one.meet(other).boundsOf(atom("a").plus(atom("b")));
+        Bounds sum = one.meet(other).boundsOf(LinearForm.sumOfAtoms("a", "b"));
 
         assertEquals(Endpoint.inclusive(Count.of(7)), sum.max());
         assertNull(sum.min());
@@ -135,11 +135,11 @@ class RulesReadOfOneValueAreCarriedAndSaidTogetherTest {
     @Test
     void sayingThemTheOtherWayRoundSaysTheSameThing() {
         NumericDomain<String> one = NumericDomain.top(CanonicalOrder.asTheyAreSpelled())
-                .assume(atom("a").plus(atom("b")).minus(num(5)), Rel.LE, whole("a", "b"));
+                .assume(LinearForm.sumOfAtoms("a", "b").minus(num(5)), Rel.LE, whole("a", "b"));
         NumericDomain<String> other = NumericDomain.top(CanonicalOrder.asTheyAreSpelled())
                 .assume(atom("a").minus(num(1)), Rel.GE, whole("a"));
 
-        LinearForm<String> asked = atom("a").plus(atom("b"));
+        LinearForm<String> asked = LinearForm.sumOfAtoms("a", "b");
 
         assertEquals(one.meet(other).boundsOf(asked), other.meet(one).boundsOf(asked));
         assertEquals(one.meet(other).boundsOf(asked),

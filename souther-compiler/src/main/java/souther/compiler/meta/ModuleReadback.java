@@ -10,6 +10,7 @@ import souther.compiler.check.Registry;
 import souther.compiler.codegen.Backend;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Region;
+import souther.compiler.cst.IdentifierAlphabet;
 import souther.compiler.cst.SourceLayout;
 import souther.compiler.diag.SourceProvenance;
 import souther.compiler.frontend.CstFrontend;
@@ -130,7 +131,7 @@ public final class ModuleReadback {
         // header is the one that cannot be defaulted — without it there is no module to parse — so a
         // module that carries none was written by something this compiler does not agree with,
         // whatever its number says.
-        if (m.compat() != Backend.BOUNDARY_VERSION || m.header().isBlank()) {
+        if (m.compat() != Backend.BOUNDARY_VERSION || m.header().trim().isEmpty()) {
             return unreadable(moduleName, new Readback.Failure.Incompatible(m.compiler()));
         }
         // What its declarations offer another module's classes, and what its own classes were built
@@ -510,6 +511,10 @@ public final class ModuleReadback {
      * <p>What lies in {@code passedOver} is read as no part of any word, so a run ends where one
      * begins and starts again after it, and nothing on either side of it is joined into a word the
      * text does not write.
+     *
+     * <p>A name character is one a name may carry on with ({@link IdentifierAlphabet}), read a whole
+     * character at a time. A word cut anywhere else would not be the name the text writes, and the
+     * import that name needs would be left out of what is published.
      */
     private static List<String> words(String text, List<Span> passedOver) {
         boolean[] skipped = new boolean[text.length()];
@@ -520,10 +525,11 @@ public final class ModuleReadback {
         }
         List<String> words = new ArrayList<>();
         int start = -1;
-        for (int i = 0; i <= text.length(); i++) {
-            boolean part = i < text.length() && !skipped[i]
-                    && (Character.isLetterOrDigit(text.charAt(i)) || text.charAt(i) == '_'
-                            || text.charAt(i) == '.');
+        int i = 0;
+        while (i <= text.length()) {
+            int symbol = i < text.length() ? text.codePointAt(i) : -1;
+            boolean part = symbol >= 0 && !skipped[i]
+                    && (IdentifierAlphabet.isContinue(symbol) || symbol == '.');
             if (part && start < 0) {
                 start = i;
             } else if (!part && start >= 0) {
@@ -533,6 +539,7 @@ public final class ModuleReadback {
                 }
                 start = -1;
             }
+            i += symbol >= 0 ? Character.charCount(symbol) : 1;
         }
         return words;
     }

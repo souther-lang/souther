@@ -260,6 +260,16 @@ public final class TermMeaning {
                 out.add(x.type());
                 project(x.target(), out);
             }
+            // What the accesses it stands for say, the last one first, so a projection and the
+            // accesses written out are one meaning.
+            case Core.FieldProjection x -> {
+                for (Core.FieldProjection.Steps at = x.steps(); at != null; at = at.before()) {
+                    out.add(Core.FieldAccess.class);
+                    out.add(at.last().field());
+                    out.add(at.last().type());
+                }
+                project(x.base(), out);
+            }
             case Core.Binary x -> {
                 out.add(Core.Binary.class);
                 out.add(x.op());

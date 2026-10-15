@@ -2,6 +2,7 @@ package souther.compiler.examples;
 
 import souther.compiler.ast.Hir;
 import souther.compiler.check.Symbols;
+import souther.compiler.evaluate.EvaluationContext;
 import souther.compiler.observe.Limits;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.TypeSymbol;
@@ -22,9 +23,10 @@ import java.util.Map;
  *
  * <p>The walk never fails. A value it cannot read becomes {@link ObservedValue.Unknown}, which says
  * why, and an observation {@link Limits} stopped becomes {@link ObservedValue.Truncated}, which says
- * only that — a measure that cannot classify a row has to say so rather than count the row as
- * covering nothing. The second is not the same as a large value: the node budget is one for the
- * whole walk, so a small value observed after a large sibling is truncated as well.
+ * that and which of the limits it was — a measure that cannot classify a row has to say so rather
+ * than count the row as covering nothing. The second is not the same as a large value: the node
+ * budget is one for the whole walk, so a small value observed after a large sibling is truncated
+ * as well.
  */
 final class ObservedValues {
 
@@ -47,6 +49,9 @@ final class ObservedValues {
     }
 
     private ObservedValue walk(Object live, int depth) {
+        // What is walked was built by the evaluation, and is as large as it was built: one node, one
+        // counted point, as one time round a loop of the evaluated code is.
+        EvaluationContext.tick();
         // An optional holding a value is that value (spec §absence-is-written-as-null), so what is
         // read is what it holds and the envelope is not a node of what was read. Asked before the
         // budget, because the budget bounds the value that is kept: charged for, the same value
@@ -58,10 +63,10 @@ final class ObservedValues {
                     : walk(held, depth);
         }
         if (budget-- <= 0) {
-            return new ObservedValue.Truncated();
+            return new ObservedValue.Truncated(limits.nodesFigure());
         }
         if (depth > limits.maxDepth()) {
-            return new ObservedValue.Truncated();
+            return new ObservedValue.Truncated(limits.depthFigure());
         }
         return switch (live) {
             case null -> new ObservedValue.Unknown("a null reached the observer");
@@ -89,7 +94,7 @@ final class ObservedValues {
     private ObservedValue text(String s) {
         return s.length() <= limits.maxText()
                 ? new ObservedValue.Text(s)
-                : new ObservedValue.Truncated();
+                : new ObservedValue.Truncated(limits.textFigure());
     }
 
     /** A collection past the element limit is dropped whole rather than kept as a prefix. A prefix
@@ -101,7 +106,7 @@ final class ObservedValues {
         List<ObservedValue> out = new ArrayList<>();
         for (Object e : it) {
             if (out.size() >= limits.maxElements()) {
-                return new ObservedValue.Truncated();
+                return new ObservedValue.Truncated(limits.elementsFigure());
             }
             out.add(walk(e, depth + 1));
         }
@@ -110,7 +115,7 @@ final class ObservedValues {
 
     private ObservedValue mapping(Map<?, ?> m, int depth) {
         if (m.size() > limits.maxElements()) {
-            return new ObservedValue.Truncated();
+            return new ObservedValue.Truncated(limits.elementsFigure());
         }
         List<ObservedValue.Entry> out = new ArrayList<>(m.size());
         for (Map.Entry<?, ?> e : m.entrySet()) {
@@ -166,7 +171,8 @@ final class ObservedValues {
             java.lang.reflect.Method accessor = live.getClass().getDeclaredMethod(name);
             accessor.setAccessible(true);
             return accessor.invoke(live);
-        } catch (ReflectiveOperationException | RuntimeException _) {
+        } catch (ReflectiveOperationException | RuntimeException e) {
+            EvaluationContext.rethrowIfOverspent(e);
             return FAILED;
         }
     }

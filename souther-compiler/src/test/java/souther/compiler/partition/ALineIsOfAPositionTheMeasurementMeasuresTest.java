@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.DefaultStdlib;
+import souther.compiler.carrier.Membership;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
@@ -14,6 +15,7 @@ import souther.compiler.check.Clause;
 import souther.compiler.check.ClauseName;
 import souther.compiler.check.RuleRef;
 import souther.compiler.check.Symbols;
+import souther.compiler.check.TypeCardinality;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.NumericTerm;
@@ -65,8 +67,10 @@ class ALineIsOfAPositionTheMeasurementMeasuresTest {
         for (String each : parameters) {
             declared.add(new InputDomain.Parameter(each, null, Type.INT));
         }
-        return InputDomain.of(declared,
-                RuleReadingContext.unshared(SYMBOLS, ReadAs.THE_COMPILATION_DOES)).reading(SYMBOLS);
+        RuleReadingContext context =
+                RuleReadingContext.unshared(SYMBOLS, ReadAs.THE_COMPILATION_DOES);
+        return InputDomain.of(declared, context, TypeCardinality.Counts.workedOutIn(context),
+                Membership.none()).reading(SYMBOLS);
     }
 
     private static NumericTerm.ValueOf number(String parameter) {
@@ -155,7 +159,7 @@ class ALineIsOfAPositionTheMeasurementMeasuresTest {
         MeasuredInput subject = measuring("days");
         Border mine = subject.partitioning().along(bounding("fee", "days")).get(0);
 
-        Border asked = new Border(mine.cut(), mine.origin(), mine.answers());
+        Border asked = new Border(mine.cut(), mine.origin(), mine.answers(), mine.leftNothing());
         assertNotSame(mine, asked, "a border put together again, equal to the one it stands for");
 
         assertSame(mine, subject.at(asked).border(),

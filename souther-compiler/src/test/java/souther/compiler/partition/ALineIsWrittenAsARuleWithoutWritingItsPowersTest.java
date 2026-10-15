@@ -79,13 +79,13 @@ class ALineIsWrittenAsARuleWithoutWritingItsPowersTest {
     @Test
     void anArrangementOverALineAtTheLeastExponentIsBuiltAndItsRunsNamed() {
         Carrier dense = new Carrier.Dense();
-        Seam least = Seam.of(
+        Seam least = HeldSeams.of(
                 LevelSpace.overFiniteDecimals(LevelSpace.generatorOverFiniteDecimals(ExactRatio.ONE)),
                 new Level.OfTheQuantity(tenTo(Long.MIN_VALUE)), Towards.BELOW,
                 new Seam.Scale(ExactRatio.ONE, dense));
 
         QuantityArrangement arranged = QuantityArrangement.of(LevelSpace.onACarrier(dense),
-                List.of(Parting.by(least, WhatTheRulesTogetherLeaveAQuantityTest.aLine(0))));
+                List.of(Parting.by(least, WhatTheRulesTogetherLeaveAQuantityTest.aReading(0))));
 
         assertEquals(2, arranged.runs().size(), "one line, a run either side of it");
         Seam parted = arranged.partings().get(0).geometry();

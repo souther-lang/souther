@@ -62,6 +62,20 @@ final class JvmLimits {
     private static final Pattern POOL_SIZE =
             Pattern.compile("Constant pool is too large (\\d+)\\s*", Pattern.DOTALL);
 
+    /** The bytes of modified UTF-8 one {@code CONSTANT_Utf8} entry holds (JVMS 4.4.7). */
+    private static final int TEXT_BYTES = 65535;
+
+    /**
+     * What the writer says when a text will not fit in one constant, where it measures the text as
+     * it pools it. The number is the text's length in modified UTF-8.
+     */
+    private static final Pattern TEXT_LENGTH =
+            Pattern.compile("utf8 length out of range of u2: (\\d+)\\s*", Pattern.DOTALL);
+
+    /** The same refusal from a writer that measures the text only as it writes it out, and does not
+     *  say how long it was. */
+    private static final String TEXT_TOO_LONG = "string too long";
+
     private JvmLimits() {}
 
     /**
@@ -155,11 +169,34 @@ final class JvmLimits {
         CONSTANT_POOL_SIZE
     }
 
+    /** A refusal read as the limit it was. */
+    sealed interface Exceeded {
+
+        /** The method being written when the writer refused, or {@code null} where it does not
+         *  attribute the refusal to one. */
+        String method();
+    }
+
     /**
-     * A refusal read as the limit it was: which one, the number that went past it, and the method
-     * being written when it did — {@code null} for a limit the writer does not attribute to one.
+     * A count that went past its limit: which limit, the number that went past it, and the method
+     * being written when it did.
      */
-    record Exceeded(Limit limit, long measured, String method) {}
+    record Counted(Limit limit, long measured, String method) implements Exceeded {}
+
+    /**
+     * A text longer than one constant of a class file holds.
+     *
+     * <p>Without a length. One writer says how long the text was and another does not, so a
+     * diagnostic that said it would say something different for one source depending on the JDK
+     * running this compiler.
+     */
+    record ATextTooLong() implements Exceeded {
+
+        @Override
+        public String method() {
+            return null;
+        }
+    }
 
     /**
      * The limit {@code e} says was exceeded, or {@code null} if it says something else.
@@ -174,20 +211,27 @@ final class JvmLimits {
         if (said == null) {
             return null;
         }
+        if (said.equals(TEXT_TOO_LONG)) {
+            return new ATextTooLong();
+        }
+        Matcher text = TEXT_LENGTH.matcher(said);
+        if (text.matches()) {
+            return Long.parseLong(text.group(1)) > TEXT_BYTES ? new ATextTooLong() : null;
+        }
         Matcher code = CODE_LENGTH.matcher(said);
         if (code.matches()) {
             long length = Long.parseLong(code.group(1));
-            return length > CODE_BYTES ? new Exceeded(Limit.CODE_SIZE, length, code.group(2)) : null;
+            return length > CODE_BYTES ? new Counted(Limit.CODE_SIZE, length, code.group(2)) : null;
         }
         Matcher index = POOL_INDEX.matcher(said);
         if (index.matches()) {
             long wanted = Long.parseLong(index.group(1));
-            return wanted > POOL_ENTRIES ? new Exceeded(Limit.CONSTANT_POOL_INDEX, wanted, null) : null;
+            return wanted > POOL_ENTRIES ? new Counted(Limit.CONSTANT_POOL_INDEX, wanted, null) : null;
         }
         Matcher size = POOL_SIZE.matcher(said);
         if (size.matches()) {
             long entries = Long.parseLong(size.group(1));
-            return entries > POOL_ENTRIES ? new Exceeded(Limit.CONSTANT_POOL_SIZE, entries, null) : null;
+            return entries > POOL_ENTRIES ? new Counted(Limit.CONSTANT_POOL_SIZE, entries, null) : null;
         }
         return null;
     }
@@ -200,24 +244,31 @@ final class JvmLimits {
      * naming the definition alone would leave the author looking for which part of it grew.
      */
     static CompileException tooLarge(Exceeded exceeded, WrittenName written) {
-        Limit limit = exceeded.limit();
         String name = written.canonical();
-        String measured = String.valueOf(exceeded.measured());
         Diagnostic.Builder said = Diagnostic.at(written.reportedAt());
-        return switch (limit) {
-            case CODE_SIZE -> CompileException.of(said
-                    .say(new DeclarationMessage.AMethodIsLargerThanTheJvmHolds(name,
-                            exceeded.method(), measured, String.valueOf(CODE_BYTES)))
-                    .hint(new DeclarationMessage.SplitTheWorkOrMoveTheTable())
-                    .hint(new DeclarationMessage.NamingPartsDoesNotDivideTheMethod()).build());
-            case CONSTANT_POOL_INDEX -> CompileException.of(said
-                    .say(new DeclarationMessage.AClassRefersPastTheConstantPool(name, measured,
-                            String.valueOf(POOL_ENTRIES)))
-                    .hint(new DeclarationMessage.MoveTheTableOutOfTheSource()).build());
-            case CONSTANT_POOL_SIZE -> CompileException.of(said
-                    .say(new DeclarationMessage.AClassNeedsMoreConstantsThanItHolds(name, measured,
-                            String.valueOf(POOL_ENTRIES)))
-                    .hint(new DeclarationMessage.MoveTheTableOutOfTheSource()).build());
+        return switch (exceeded) {
+            case ATextTooLong _ -> CompileException.of(said
+                    .say(new DeclarationMessage.AClassHoldsATextLongerThanAConstant(name,
+                            String.valueOf(TEXT_BYTES)))
+                    .hint(new DeclarationMessage.ShortenTheTextOrSplitWhatIsWritten()).build());
+            case Counted counted -> {
+                String measured = String.valueOf(counted.measured());
+                yield switch (counted.limit()) {
+                    case CODE_SIZE -> CompileException.of(said
+                            .say(new DeclarationMessage.AMethodIsLargerThanTheJvmHolds(name,
+                                    counted.method(), measured, String.valueOf(CODE_BYTES)))
+                            .hint(new DeclarationMessage.SplitTheWorkOrMoveTheTable())
+                            .hint(new DeclarationMessage.NamingPartsDoesNotDivideTheMethod()).build());
+                    case CONSTANT_POOL_INDEX -> CompileException.of(said
+                            .say(new DeclarationMessage.AClassRefersPastTheConstantPool(name, measured,
+                                    String.valueOf(POOL_ENTRIES)))
+                            .hint(new DeclarationMessage.MoveTheTableOutOfTheSource()).build());
+                    case CONSTANT_POOL_SIZE -> CompileException.of(said
+                            .say(new DeclarationMessage.AClassNeedsMoreConstantsThanItHolds(name,
+                                    measured, String.valueOf(POOL_ENTRIES)))
+                            .hint(new DeclarationMessage.MoveTheTableOutOfTheSource()).build());
+                };
+            }
         };
     }
 

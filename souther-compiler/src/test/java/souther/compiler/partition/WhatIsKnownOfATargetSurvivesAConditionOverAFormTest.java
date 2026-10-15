@@ -35,13 +35,15 @@ class WhatIsKnownOfATargetSurvivesAConditionOverAFormTest {
     private static final Carrier DECIMALS = new Carrier.Dense();
 
     private static final TakenConstraint.Affine OVER_A_FORM = new TakenConstraint.Affine(
-            LinearForm.<NumericTerm>atom(new NumericTerm.ValueOf(TermPath.of("r").then("cost")))
-                    .plus(LinearForm.atom(new NumericTerm.ValueOf(TermPath.of("r").then("paid")))),
+            LinearForm.<NumericTerm>sumOfAtoms(
+                    new NumericTerm.ValueOf(TermPath.of("r").then("cost")),
+                    new NumericTerm.ValueOf(TermPath.of("r").then("paid"))),
             Rel.GE);
 
     private static final TakenConstraint.Affine OVER_ANOTHER_FORM = new TakenConstraint.Affine(
-            LinearForm.<NumericTerm>atom(new NumericTerm.ValueOf(TermPath.of("r").then("cost")))
-                    .plus(LinearForm.atom(new NumericTerm.ValueOf(TermPath.of("r").then("owed")))),
+            LinearForm.<NumericTerm>sumOfAtoms(
+                    new NumericTerm.ValueOf(TermPath.of("r").then("cost")),
+                    new NumericTerm.ValueOf(TermPath.of("r").then("owed"))),
             Rel.GE);
 
     private static Level at(String value) {

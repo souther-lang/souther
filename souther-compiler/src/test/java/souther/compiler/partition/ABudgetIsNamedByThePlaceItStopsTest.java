@@ -57,7 +57,7 @@ class ABudgetIsNamedByThePlaceItStopsTest {
     /** The position of this type as the builder is asked about it: what it is, and what the rules
      *  every name it wears carries say of it. */
     private static TypeView position(Type type) {
-        return TypeView.asWritten(type, SYMBOLS, RULES.published());
+        return TypeView.asWritten(type, SYMBOLS, RULES.kinds(), RULES.sums());
     }
 
     /**
@@ -70,11 +70,10 @@ class ABudgetIsNamedByThePlaceItStopsTest {
     void aProposalHoldsAsManyElementsAsTheFigureAndNoMore() {
         int most = CompositionBudget.ELEMENTS_A_PROPOSAL_HOLDS.maximum();
 
-        assertEquals(Set.of(),
-                Witnesses.heldBackFor(position(Type.list(Type.INT)), most, READING),
+        assertEquals(Set.of(), metAt(position(Type.list(Type.INT)), most),
                 "a collection of exactly as many as a row carries is one this builds");
         assertEquals(Set.of(CompositionBudget.ELEMENTS_A_PROPOSAL_HOLDS),
-                Witnesses.heldBackFor(position(Type.list(Type.INT)), most + 1, READING),
+                metAt(position(Type.list(Type.INT)), most + 1),
                 "and one past it is this compiler declining, said as the figure it declined at");
     }
 
@@ -83,11 +82,16 @@ class ABudgetIsNamedByThePlaceItStopsTest {
     void aProposalHoldsAsManyCharactersAsItsOwnFigure() {
         int most = CompositionBudget.CHARACTERS_A_PROPOSAL_HOLDS.maximum();
 
-        assertEquals(Set.of(), Witnesses.heldBackFor(position(Type.STRING), most, READING),
+        assertEquals(Set.of(), metAt(position(Type.STRING), most),
                 "a string of exactly as many characters as one is worth building");
         assertEquals(Set.of(CompositionBudget.CHARACTERS_A_PROPOSAL_HOLDS),
-                Witnesses.heldBackFor(position(Type.STRING), most + 1, READING),
+                metAt(position(Type.STRING), most + 1),
                 "and one past it names the string's figure and not the collection's");
+    }
+
+    /** The figures a value of {@code position} holding {@code least} was stopped by. */
+    private static Set<CompositionBudget> metAt(TypeView position, int least) {
+        return Witnesses.holding(position, least, List.of(), READING, Set.of()).met().figures();
     }
 
     /**
@@ -114,7 +118,7 @@ class ABudgetIsNamedByThePlaceItStopsTest {
     /** Containers of whole numbers adding up to {@code total}. */
     private static TermRealizations.Realization totalOf(int total) {
         Type ofWholeNumbers = new Type.ListOf(Type.INT);
-        NumericTerm.TakenOf sum = NumericTerm.TakenOf.of(
+        NumericTerm.TakenOf sum = NumericTerm.TakenOf.asItStands(
                 ValueName.Stdlib.operation("List", "sum"), TermPath.of("ns"), ofWholeNumbers,
                 souther.compiler.check.ScopedDeclarations.wrapsOf(SYMBOLS), SYMBOLS);
         assertNotNull(sum, "a walk that adds up a list of whole numbers is a number of it");

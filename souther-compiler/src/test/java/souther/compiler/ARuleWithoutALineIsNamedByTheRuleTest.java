@@ -163,7 +163,7 @@ class ARuleWithoutALineIsNamedByTheRuleTest {
                     constructs Accepted
 
                 let classify (n) = {
-                    guard Int.clamp(0, 100, n) > 70 else Low
+                    guard Int.clamp(0, 100, n * n) > 70 else Low
                     Accepted { at = n }
                 }
                 """;

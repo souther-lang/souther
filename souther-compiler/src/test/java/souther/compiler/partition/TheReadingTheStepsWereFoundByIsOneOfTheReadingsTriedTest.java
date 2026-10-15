@@ -9,16 +9,20 @@ import souther.compiler.check.RuleReadings;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermOrdersFixtures;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.observe.AnswerObservation;
 import souther.compiler.observe.ObservedValue;
+import souther.compiler.observe.WorkFigure;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeSymbols;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 
@@ -64,10 +68,10 @@ class TheReadingTheStepsWereFoundByIsOneOfTheReadingsTriedTest {
 
         assertEquals(1, readings.tried().size(),
                 "a position outside a sequence gives one reading of the row");
-        assertEquals(1, readings.made().size(),
-                "and the reading the steps were found by is the reading of it");
-        assertSame(readings.made().getFirst(), readings.readAt(0),
-                "so asking for it hands back what was read, rather than reading the row again");
+        assertInstanceOf(StandingAtAPoint.DiscoveringRow.class, readings.tried().getFirst(),
+                "and the walk the steps were found by is the reading of it");
+        assertSame(readings.tried().getFirst().at(FLAT), readings.tried().getFirst().at(FLAT),
+                "so asking it hands back what was read, rather than walking the row again");
     }
 
     @Test
@@ -78,10 +82,31 @@ class TheReadingTheStepsWereFoundByIsOneOfTheReadingsTriedTest {
 
         assertEquals(2, readings.tried().size(),
                 "one reading per element the position holds");
-        assertEquals(List.of(), readings.made(),
-                "each of them names an element, and none of them is the reading that names none");
-        assertNotSame(readings.readAt(0), readings.readAt(0),
-                "so each of them is read when it is asked for");
+        readings.tried().forEach(each -> assertInstanceOf(StandingAtAPoint.OneReadingOfARow.class,
+                each, "each of them names an element, and none of them is the walk that named"
+                        + " none"));
+        assertNotSame(readings.tried().get(0), readings.tried().get(1),
+                "so each of them is a walk of its own");
+    }
+
+    /**
+     * A row holding more readings than a point is tried against says the walk stopped, and names
+     * the figure it stopped at as it stood there; one holding fewer says it tried every one.
+     */
+    @Test
+    void aRowWithMoreReadingsThanAPointIsTriedAgainstNamesTheLimit() {
+        List<ObservedValue> many = new ArrayList<>();
+        for (int i = 0; i < 257; i++) {
+            many.add(line(i));
+        }
+
+        assertEquals(new StandingAtAPoint.ReadingsTried.StoppedAtTheLimit(
+                        WorkFigure.READINGS_OF_A_ROW_AT_A_POINT.at(256)),
+                readingsOf(AN_AMOUNT, List.of(new ObservedValue.Integer(7),
+                        new ObservedValue.Sequence(many))).whether());
+        assertEquals(StandingAtAPoint.ReadingsTried.EVERY_ONE,
+                readingsOf(AN_AMOUNT, List.of(new ObservedValue.Integer(7),
+                        new ObservedValue.Sequence(many.subList(0, 2)))).whether());
     }
 
     private static StandingAtAPoint.Readings readingsOf(TermPath at, List<ObservedValue> row) {
@@ -89,7 +114,9 @@ class TheReadingTheStepsWereFoundByIsOneOfTheReadingsTriedTest {
         BehaviorInputs where = new BehaviorInputs(List.of("flat", "lines"),
                 List.of(Type.Prim.INT, new Type.ListOf(named("Line"))), rules, POLICY);
         return StandingAtAPoint.readings(where,
-                new ObservedInputs(row, new Generator.Watched.NoAccount()), quantityOf(at));
+                new ObservedInputs(row, new Generator.Watched.NoAccount(),
+                        new AnswerObservation.NotAnswered()),
+                quantityOf(at));
     }
 
     private static BorderQuantity quantityOf(TermPath at) {

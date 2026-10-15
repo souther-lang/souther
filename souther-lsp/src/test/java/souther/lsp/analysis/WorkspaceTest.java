@@ -5,6 +5,7 @@ import souther.compiler.meta.ModulePath;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.PosixFilePermission;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -14,6 +15,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeFalse;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 class WorkspaceTest {
 
@@ -30,6 +33,47 @@ class WorkspaceTest {
 
         assertEquals(1, graph.uris().size(), "only the .sou file is picked up");
         assertTrue(graph.text(a.toUri().toString()).contains("data N"));
+    }
+
+    @Test
+    void aSourceThatIsALinkToAFileElsewhereIsNotRead() throws Exception {
+        Path dir = Files.createTempDirectory("ws");
+        Path elsewhere = Files.writeString(Files.createTempFile("secret", ".txt"), "top secret");
+        Path link = dir.resolve("link.sou");
+        Files.createSymbolicLink(link, elsewhere);
+
+        Workspace ws = new Workspace();
+        ws.setRoots(List.of(dir.toUri().toString()));
+
+        assertEquals(0, ws.snapshot(Map.of()).uris().size(), "a link is not followed out of the workspace");
+    }
+
+    @Test
+    void aDirectoryTheEditorCannotOpenLeavesTheRestOfTheWorkspaceToBeRead() throws Exception {
+        Path dir = Files.createTempDirectory("ws");
+        Path a = dir.resolve("a.sou");
+        Files.writeString(a, "module a\ndata N = { v: Int }\n");
+        Path closed = Files.createDirectories(dir.resolve("private"));
+        Files.writeString(closed.resolve("hidden.sou"), "module hidden\n");
+        Set<PosixFilePermission> had;
+        try {
+            had = Files.getPosixFilePermissions(closed);
+        } catch (UnsupportedOperationException e) {
+            assumeTrue(false, "permissions cannot be taken away here: " + e);
+            return;
+        }
+        Files.setPosixFilePermissions(closed, Set.of());
+        try {
+            assumeFalse(Files.isReadable(closed), "this process reads a directory with no permissions");
+            Workspace ws = new Workspace();
+            ws.setRoots(List.of(dir.toUri().toString()));
+
+            // An editor is open on a workspace that is somebody's repository: what it can read is
+            // analysed, where a compile would refuse the whole tree.
+            assertEquals(Set.of(a.toUri().toString()), Set.copyOf(ws.snapshot(Map.of()).uris()));
+        } finally {
+            Files.setPosixFilePermissions(closed, had);
+        }
     }
 
     @Test

@@ -37,7 +37,7 @@ class AKeptRelationComposesWithWhatTheDomainProvesTest {
 
     /** {@code a + b - c}, which is of neither shape: three atoms, so it is kept as written. */
     private static LinearForm<String> aPlusBMinus(String c) {
-        return atom(A).plus(atom(B)).minus(atom(c));
+        return SmallForm.small(atom(A)).plus(atom(B)).minus(atom(c)).form();
     }
 
     private static Map<String, Granularity> dense(String... atoms) {
@@ -68,7 +68,7 @@ class AKeptRelationComposesWithWhatTheDomainProvesTest {
                 .assume(aPlusBMinus(C), Rel.LE, dense(A, B, C))
                 .assume(atom(C).minus(num(100)), Rel.LE, dense(C));
 
-        assertTrue(d.entails(atom(A).plus(atom(B)).minus(num(100)), Rel.LE),
+        assertTrue(d.entails(SmallForm.small(atom(A)).plus(atom(B)).minus(num(100)).form(), Rel.LE),
                 "a + b <= c and c <= 100 give a + b <= 100");
     }
 
@@ -112,9 +112,12 @@ class AKeptRelationComposesWithWhatTheDomainProvesTest {
     void twoKeptRelationsAreNotAddedTogether() {
         NumericDomain<String> d = NumericDomain.top(CanonicalOrder.asTheyAreSpelled())
                 .assume(aPlusBMinus(C), Rel.LE, dense(A, B, C))
-                .assume(atom(C).minus(atom(D)).minus(atom(E)), Rel.LE, dense(C, D, E));
+                .assume(SmallForm.small(atom(C)).minus(atom(D)).minus(atom(E)).form(), Rel.LE,
+                        dense(C, D, E));
 
-        assertFalse(d.entails(atom(A).plus(atom(B)).minus(atom(D)).minus(atom(E)), Rel.LE),
+        assertFalse(d.entails(
+                        SmallForm.small(atom(A)).plus(atom(B)).minus(atom(D)).minus(atom(E)).form(),
+                        Rel.LE),
                 "adding two kept relations is outside the fragment this derives in");
     }
 }

@@ -62,13 +62,17 @@ class ADocumentSendsItsReaderWhereThatReaderCanGoTest {
 
     @Test
     void everyOperationTheShippedDocumentsOfferAClientIsOneTheServerAnswers() {
+        // Each topic as a client is shown it, read once: which tools an offer may name does not
+        // change what a topic says.
+        LibraryDocs docs = LibraryDocs.on(loader(), Caller.MCP);
+        List<String> shown = docs.topics().stream().map(topic -> docs.read(topic.name())).toList();
         List<String> offered = new ArrayList<>();
         for (String tool : published()) {
             // Named against the published table rather than by shape, because a code span of a
             // record literal is written the same way and is not an offer to call anything.
             Pattern call = Pattern.compile("`(" + tool + ") (\\{[^`]*})`");
-            for (LibraryDocs.Topic topic : LibraryDocs.on(loader(), Caller.MCP).topics()) {
-                Matcher offer = call.matcher(read(topic.name(), Caller.MCP));
+            for (String text : shown) {
+                Matcher offer = call.matcher(text);
                 while (offer.find()) {
                     if (!STANDS_IN.matcher(offer.group(2)).find()) {
                         offered.add(offer.group(1) + " " + offer.group(2));
@@ -78,9 +82,12 @@ class ADocumentSendsItsReaderWhereThatReaderCanGoTest {
         }
 
         assertFalse(offered.isEmpty(), "there are offers to check, so this is not passing on silence");
-        for (String call : offered) {
-            int space = call.indexOf(' ');
-            JsonNode answer = called(call.substring(0, space), call.substring(space + 1));
+        List<JsonNode> answers = called(offered);
+        assertEquals(offered.size(), answers.size(), "one answer for each offer: " + answers);
+        for (int i = 0; i < offered.size(); i++) {
+            String call = offered.get(i);
+            JsonNode answer = answers.get(i);
+            assertEquals(i + 1, answer.get("id").asInt(), call + " → " + answer);
             assertFalse(answer.has("error"), call + " → " + answer);
             assertFalse(answer.get("result").get("isError").asBoolean(),
                     call + " → " + answer.get("result").get("content").get(0).get("text").asString());
@@ -164,22 +171,31 @@ class ADocumentSendsItsReaderWhereThatReaderCanGoTest {
     }
 
     /**
-     * Makes the call a document offered, as written.
+     * Makes the calls the documents offered, as written, one after another in one session — the way
+     * a client asks — and answers them in the order they were asked, each request numbered by its
+     * place.
      *
      * <p>An offer is written to be read by whoever is reading the document, so its argument object
      * names its properties the way prose does. Reading it back here is lenient about that and
      * strict about everything else: what reaches the server is the operation and the arguments the
      * document named, and the server checks those against its own published schema.
      */
-    private JsonNode called(String tool, String arguments) {
-        String request = "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\""
-                + tool + "\",\"arguments\":" + JSON.writeValueAsString(AS_WRITTEN.readTree(arguments))
-                + "}}";
+    private List<JsonNode> called(List<String> offered) {
+        StringBuilder requests = new StringBuilder();
+        for (int i = 0; i < offered.size(); i++) {
+            String call = offered.get(i);
+            int space = call.indexOf(' ');
+            requests.append("{\"jsonrpc\":\"2.0\",\"id\":").append(i + 1)
+                    .append(",\"method\":\"tools/call\",\"params\":{\"name\":\"")
+                    .append(call, 0, space).append("\",\"arguments\":")
+                    .append(JSON.writeValueAsString(AS_WRITTEN.readTree(call.substring(space + 1))))
+                    .append("}}\n");
+        }
         ByteArrayInputStream in = new ByteArrayInputStream(
-                (request + "\n").getBytes(StandardCharsets.UTF_8));
+                requests.toString().getBytes(StandardCharsets.UTF_8));
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         McpServer.serve(in, out);
-        return JSON.readTree(out.toString(StandardCharsets.UTF_8).strip());
+        return out.toString(StandardCharsets.UTF_8).lines().map(JSON::readTree).toList();
     }
 
     @Test

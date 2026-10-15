@@ -213,6 +213,27 @@ public record UndividedPosition(TermPath at, Why why) {
         /** The values the comparison is against are not ones a line can be drawn on here. */
         UNSUPPORTED_DOMAIN,
         /**
+         * The comparison is against values a line can be drawn on, and the number it falls at is one
+         * this compiler has no representation for.
+         *
+         * <p>Its own word beside {@link #UNSUPPORTED_DOMAIN}, which says the values carry no order
+         * to draw a line on. Here they do; a constant the rule is written with stands so near the
+         * end of the range of exponents that the place the line falls at, in the quantity's own
+         * units, is a number nothing here can name.
+         */
+        LINE_AT_A_NUMBER_NO_RATIO_HOLDS,
+        /**
+         * The comparison is against values a line can be drawn on, the line is placed, and a value
+         * beside it is one this compiler could not work out.
+         *
+         * <p>Its own word beside {@link #LINE_AT_A_NUMBER_NO_RATIO_HOLDS}, which says the line has no
+         * place. Here it has one, and what could not be written down is what the order holds on
+         * either side of it — the host had no room for the count, or the number has no representation
+         * on the position's carrier. Told the first, an author looks for a constant at the end of the
+         * range, and the line is fine.
+         */
+        LINE_SIDE_NOT_WORKED_OUT,
+        /**
          * The line reaches positions under the cases each side of it, and which of them go together
          * is not worked out.
          *
@@ -225,14 +246,48 @@ public record UndividedPosition(TermPath at, Why why) {
          */
         UNRESOLVED_CASE_PAIRING,
         /**
-         * The comparison relates two positions rather than dividing one.
+         * What the rule states was read, and it is several lines held together whose lines are not
+         * drawn: what a closure states on each application, a statement one of whose relations is
+         * over what a dependency answered, or a clause, which has nowhere to hold where each of its
+         * lines decides.
          *
-         * <p>`+x < y+` says where one position stands against another, and a class here is a set of
-         * values of one position. Nothing is missing from the carrier — both sides are ordered and a
+         * <p>Its own word and not one saying the rule went unread: what it states is known, and
+         * what is missing is a division by it.
+         */
+        SEVERAL_LINES_IN_ONE_RULE,
+        /**
+         * What the rule states was read, and it relates the value here to another value not shown
+         * to reach every value here.
+         *
+         * <p>Its own word and not the one below. A value here the other side never reaches settles
+         * the rule on its own — {@code n == String.length(s)} is false wherever {@code n} is below
+         * nought — so the values here are not all alike under it, and which of them are not is
+         * what nothing here worked out. Told the rule relates two values, a reader would take every
+         * value here as one the rule leaves open.
+         */
+        RELATION_NOT_SHOWN_TO_REACH_EVERY_VALUE,
+        /**
+         * The rule says how the elements of the container here stand to each other, and which
+         * containers it leaves is not worked out.
+         *
+         * <p>{@code List.allDistinctBy(k -> k, value)} is about pairs of elements and not about any
+         * one value the position holds. It was recognised — a container composed here keeps it —
+         * so it is not {@link #UNSUPPORTED_SYNTAX}, and a reader told so would rewrite a rule that
+         * is not the difficulty. Nor is it a rule read to the end: the containers it refuses are
+         * still among what the position is taken to hold.
+         */
+        RULE_RELATING_ELEMENTS,
+        /**
+         * The rule relates the value here to another value rather than dividing the values here.
+         *
+         * <p>{@code x < y} says where one position stands against another, and a class here is a
+         * set of values of one position. The other value may be no position at all — what an
+         * operation looked up, an element a walk was handed, the index it is at — and the rule says
+         * the same kind of thing. Nothing is missing from the carrier — both sides are ordered and a
          * line drawn on either against a number would be read — so saying the values cannot carry a
          * line would send a reader after the wrong thing entirely.
          */
-        UNSUPPORTED_PARTITION_SHAPE,
+        RULE_RELATING_TWO_VALUES,
         /**
          * The rule draws its line on a number taken over a run of this position's values, so it
          * divides none of them.
@@ -245,6 +300,17 @@ public record UndividedPosition(TermPath at, Why why) {
          * that is not there.
          */
         RULE_ABOUT_A_RUN,
+        /**
+         * The rule draws its line on what a division by a written number leaves of a number made of
+         * this position and others, so it divides none of them.
+         *
+         * <p>Its own word and not the shape above. The rule is read and its border is drawn, on the
+         * remainder, which runs from nought to one below the divisor. The values here that leave
+         * one remainder come round at every divisor, so there is no run of them for a class to be:
+         * a reader told the rule relates two positions would go looking for a pair, and one told it
+         * is about a run would go looking for a total.
+         */
+        RULE_ABOUT_A_REMAINDER,
         /**
          * The rule holds this position to the values it admits, and places no end on them.
          *
@@ -279,31 +345,30 @@ public record UndividedPosition(TermPath at, Why why) {
          */
         TYPE_UNRESOLVED,
         /**
-         * A rule is written about a value that came from this position rather than about it.
+         * A rule relates a number no position of the input holds — a value the body works out from
+         * this position, or what a run of its values comes to.
          *
-         * <p>The rule was read and where its value came from is known. What it says about the values
-         * at this position is not: an operation made them into something else first, and reading the
-         * rule back through that is a capability nothing here has.
+         * <p>What the rule states was read to the end, and it is a relation of that number, which is
+         * no line on the input's numbers: a line divides a position's values, and this number is
+         * worked out from them.
          *
          * <p>Its own word, so that a reader is not sent after a form this compiler cannot parse.
-         * What would lift it is a reading of what a closure does to a value, and not a wider
-         * fragment of comparisons.
          */
         RULE_ABOUT_A_DERIVED_VALUE,
         /**
-         * A rule is written about an element of a sequence, inside a block handed to more than one
+         * A rule is written about an element of a container, inside a block handed to more than one
          * walk — so it is about this position or another and nothing here says which.
          *
          * <p>The rule was read and every position it might be about is known; each of them is told
          * this. What is missing is not a reading of the rule but a way to tell the walks apart, and
          * an author can see it in their own model: the block is written once and given to two
-         * operations over two sequences.
+         * operations over two containers.
          *
          * <p>Its own word beside {@link #RULE_ABOUT_A_DERIVED_VALUE}, which says an operation made
          * the value into something else. Nothing was made here — the value is the element — and a
          * reader told the other would go looking for a computation to invert that is not there.
          */
-        RULE_ABOUT_AN_ELEMENT_OF_SEVERAL_SEQUENCES,
+        RULE_ABOUT_AN_ELEMENT_OF_SEVERAL_CONTAINERS,
         /**
          * A rule naming this position was read to the end and cuts nothing at all: what it compares
          * is a number the position does not appear in.
@@ -367,13 +432,54 @@ public record UndividedPosition(TermPath at, Why why) {
          */
         NOTHING_ARRIVES_AT_THE_RULES_LINE,
         /**
-         * The position holds its values inside something this does not reach into — the elements of
-         * a collection, what an optional holds, what a map holds. One word for all of them: which
-         * reaching is missing is a fact about this compiler, and the model reads the same either
-         * way. What this compiler could not do is told apart internally
-         * ({@link BlockReason.UnsupportedTraversal}).
+         * A rule naming this position states several relations held together, and one of its
+         * lines is here — rows arrive at it, and wherever they do the rule comes out the same on
+         * both sides of it.
+         *
+         * <p>Its own word beside {@link #NOTHING_ARRIVES_AT_THE_RULES_LINE}: nothing on the way
+         * rules the line out. What leaves it nothing to turn is the rest of the rule — {@code
+         * Int.max(a, a + 1) > 5} already holds wherever {@code a} reaches five — so a reader looks
+         * inside the rule and not above it.
          */
-        UNSUPPORTED_TRAVERSAL
+        RULE_NEVER_TURNS_ON_THIS_LINE,
+        /**
+         * A rule naming this position states something part of which was not read: what stopped it
+         * is the reading's, said where the rule's meaning is reported.
+         *
+         * <p>Its own word beside {@link #UNSUPPORTED_SYNTAX}, which is a form nothing takes apart,
+         * and {@link #RULE_ABOUT_A_DERIVED_VALUE}, which is what an operation answered: those keep
+         * their words when the part they name is what the statement left unread. This is every
+         * other part — which case a called behavior answers, a clause of an invariant an attempt
+         * checks, a step of the reading not yet written, more readings than are made.
+         */
+        RULE_MEANING_NOT_READ,
+        /**
+         * A rule naming this position compares a product of two values neither of which is a
+         * constant, and a form over the input's numbers has no term for one.
+         *
+         * <p>Its own word beside {@link #RULE_ABOUT_A_DERIVED_VALUE}. Nothing was made out of the
+         * position and no operation is left to read the rule back through: the comparison depends
+         * on the position and on another number, and the line it draws over them is not one a form
+         * says. A reader told the other would go looking for an operation to invert.
+         */
+        NON_AFFINE_PRODUCT,
+        /**
+         * The same for a quotient by a value that is not a constant.
+         *
+         * <p>Its own word beside {@link #NON_AFFINE_PRODUCT}, because what an author does differs:
+         * a product of two numbers may be re-stated over one of them, while a divisor that
+         * varies is a different shape of rule.
+         */
+        NON_CONSTANT_DIVISOR,
+        /**
+         * The same for a remainder by a value that is not a constant.
+         *
+         * <p>Its own word beside {@link #NON_CONSTANT_DIVISOR}. A quotient by a varying value is a
+         * shape of rule no line says; a remainder by one has, besides, no period — the values it
+         * holds of come round at a distance the row chooses, so there is no remainder to draw a
+         * line on either.
+         */
+        NON_CONSTANT_REMAINDER_DIVISOR
     }
 
     /**

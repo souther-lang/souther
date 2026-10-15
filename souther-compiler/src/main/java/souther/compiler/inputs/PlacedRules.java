@@ -2,6 +2,7 @@ package souther.compiler.inputs;
 
 import souther.compiler.ast.Hir;
 import souther.compiler.check.NumberAt;
+import souther.compiler.check.DeclarationKinds;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.DeclarationReadings;
@@ -13,9 +14,9 @@ import souther.compiler.check.Requirement;
 import souther.compiler.check.RuleAccounting;
 import souther.compiler.check.RuleCitation;
 import souther.compiler.check.ProjectionEvidence;
-import souther.compiler.check.PublishedDeclarations;
 import souther.compiler.check.Rules;
 import souther.compiler.check.Shape;
+import souther.compiler.check.SumCases;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeView;
 import souther.compiler.numeric.NumericDomain;
@@ -94,7 +95,7 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
     static PlacedRules of(TermPath root, Type type, RuleReadingContext reading,
                           Reaching alsoReaching) {
         RuleReadingSource source = reading.source();
-        TypeSymbol read = readAs(type, source.symbols(), source.published());
+        TypeSymbol read = readAs(type, source.symbols(), source.kinds(), source.sums());
         // What this keeps of the world is the lender alone: the questions asked of these rules after
         // the walk borrow what the walk made.
         DeclarationReadings machines = reading.retainedReadings();
@@ -187,20 +188,9 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
     }
 
     /**
-     * The same rules with some of this value's coordinates settled.
-     *
-     * <p>The value's own paths and not this input's: what a caller out here calls {@code p.x} is
-     * {@code x} to the rules of the value {@code p} holds, and the translation is the caller's.
-     */
-    FieldDomains.Settled given(java.util.Map<NumberAt<RuleKey>,
-            souther.compiler.numeric.Count> settled) {
-        return bounds().given(settled);
-    }
-
-    /**
      * What is left for the position at {@code path}, which is read from the value this is of.
      *
-     * <p>Nothing at a position inside a sequence, and nothing at the value's own path. The clauses
+     * <p>Nothing at a position inside a container, and nothing at the value's own path. The clauses
      * read here relate the fields of a record ({@link TermPath#ruleKeyUnder}, since the value this
      * is of need not be the parameter), and neither of those is one of them.
      */
@@ -505,7 +495,7 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
      * What the rules of this value call {@code path}, for the questions every position answers.
      *
      * <p>Every position under this reading's root has a name here, the root's own included. What a
-     * sequence holds is not one of them: an element is a value with a declaration of its own and a
+     * container holds is not one of them: an element is a value with a declaration of its own and a
      * reading is opened at it, so a path under this root never steps into one — and a position this
      * reading is not of is not a position it may be asked about.
      */
@@ -673,11 +663,11 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
      * declaration that may have no clause about the pair at all.
      */
     private static TypeSymbol readAs(Type type, Symbols symbols,
-                                     PublishedDeclarations published) {
+                                     DeclarationKinds kinds, SumCases sums) {
         TypeSymbol written = nameOf(type);
         return written != null
                 && symbols.declaredNode(written) instanceof Hir.Data
-                ? written : heldIn(type, symbols, published);
+                ? written : heldIn(type, symbols, kinds, sums);
     }
 
     /**
@@ -690,8 +680,8 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
      * rather than to nothing.
      */
     private static TypeSymbol heldIn(Type type, Symbols symbols,
-                                     PublishedDeclarations published) {
-        TypeSymbol record = recordIn(type, symbols, published);
+                                     DeclarationKinds kinds, SumCases sums) {
+        TypeSymbol record = recordIn(type, symbols, kinds, sums);
         return record != null ? record : nameOf(type);
     }
 
@@ -699,9 +689,9 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
      *  {@code data SlotN = Slot} is a {@code Slot}, and the clauses relating its fields are
      *  {@code Slot}'s. */
     private static TypeSymbol recordIn(Type type, Symbols symbols,
-                                       PublishedDeclarations published) {
-        return TypeView.asWritten(type, symbols, published).shape() instanceof Shape.Product product
-                ? product.name() : null;
+                                       DeclarationKinds kinds, SumCases sums) {
+        return TypeView.asWritten(type, symbols, kinds, sums).shape()
+                instanceof Shape.Product product ? product.name() : null;
     }
 
     private static TypeSymbol nameOf(Type type) {

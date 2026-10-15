@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.carrier.Lookup;
+import souther.compiler.carrier.Membership;
 import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
 import org.junit.jupiter.api.Test;
@@ -8,13 +9,16 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
+import souther.compiler.check.TypeCardinality;
 import souther.compiler.check.DeclaredSig;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.observe.Classification;
 import souther.compiler.observe.Incompleteness;
+import souther.compiler.observe.Limits;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
+import souther.compiler.query.ReadAs;
 import souther.compiler.report.GeneratedRows;
 
 import java.util.LinkedHashMap;
@@ -74,10 +78,12 @@ class AGenerationThatWentOnDoesNotSayItStoppedTest {
         Map<String, DeclaredSig> sigs =
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
         RuleReadingSource rules = RuleReadings.of(compilation, module);
-        InputDomain domain = InputDomain.of(sigs.get("submit"), RuleReadingContext.unshared(rules,
-                souther.compiler.query.ReadAs.THE_COMPILATION_DOES));
+        RuleReadingContext context = RuleReadingContext.unshared(rules,
+                ReadAs.THE_COMPILATION_DOES);
+        InputDomain domain = InputDomain.of(sigs.get("submit"), context,
+                TypeCardinality.Counts.workedOutIn(context), Membership.none());
         return MeasuredInput.of("submit", domain.reading(rules),
-                Partitions.of("submit", domain, rules,
+                Partitions.of("submit", domain.reading(rules),
                         souther.compiler.query.ReadAs.THE_COMPILATION_DOES));
     }
 
@@ -116,7 +122,8 @@ class AGenerationThatWentOnDoesNotSayItStoppedTest {
         Axis second = subject.axes().get(1);
         Lookup<AxisId, Classification> row = Lookup.built(put -> {
             put.put(first.id(), new Classification.Unclassified(Incompleteness.atPosition(
-                    Incompleteness.Code.VALUE_TRUNCATED, first.id().behavior(),
+                    Incompleteness.Cause.at(Incompleteness.Code.VALUE_TRUNCATED,
+                            Limits.DEFAULT.nodesFigure()), first.id().behavior(),
                     first.id().term())));
             put.put(second.id(), Classification.in(second.classes().get(0).id()));
         });

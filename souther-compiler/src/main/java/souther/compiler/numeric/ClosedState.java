@@ -1,5 +1,8 @@
 package souther.compiler.numeric;
 
+import souther.compiler.numeric.DifferenceBounds.Apart;
+
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -49,6 +52,34 @@ import java.util.function.Function;
  * relation can still narrow — and that, rather than the rounds having settled, is what a reading of
  * one position at a time rests on. Asserted where the state is made and held to as a property
  * elsewhere.
+ *
+ * <p><b>Rules that name no position in common are closed apart, and what they leave together is the
+ * product of what each part leaves.</b> The parts are the connected pieces of the rules taken as
+ * edges over every position each of them weighs — a sum over three positions joins all three, and
+ * not only two of them pairwise ({@link ClosureQuestion#independentRules}). This is a property of the
+ * closure as it is defined, and parting the rules is where it is used:
+ *
+ * <ul>
+ *   <li>A path of differences runs along rules, so the difference closure never leaves a part.</li>
+ *   <li>A round narrows only the positions of the rule it reduces, so each part's box moves by its
+ *       own rules; once a part stops moving it stays where it stopped for every round another part
+ *       still takes, and the whole has stopped when the last of them has.</li>
+ *   <li>A query does read a premise from another part ({@link FormReach}): for a form {@code F} and
+ *       a premise {@code P <= b} naming none of its positions, what it bounds {@code F} by is
+ *       {@code F - P + b}, which the ends bound by the most {@code F} comes to and the most
+ *       {@code b - P} comes to apart. Where the ends of {@code P}'s part leave {@code P <= b} a value,
+ *       the second is at or above nought and the premise bounds {@code F} no tighter than its own ends
+ *       do. Where they leave it none, that part holds nothing in the same round and the whole is
+ *       empty either way: a premise over several positions is a form the rules leave nothing
+ *       ({@link #theRulesLeaveAFormNothing}), and one over a single position is a bound the
+ *       differences already put in the box, whose ends have then crossed before any round. A
+ *       sum the exact arithmetic cannot hold drops a route, which only ever leaves an answer wider,
+ *       so no route across parts proves what the parts do not.</li>
+ * </ul>
+ *
+ * <p>So a reader that changes how a premise is read across parts, or lets a round narrow a position
+ * the reduced rule does not weigh, has to hold the product to the closure in one run again — which is
+ * what the theorem test of this does.
  *
  * <p><b>What emptiness means here, in one direction.</b> Where this says nothing is left, nothing is.
  * Two routes reach that word and each is sound on its own: every step that narrows is implied by the
@@ -117,6 +148,58 @@ public final class ClosedState<A> {
     public static <A> ClosedState<A> of(List<AffineConstraint<A>> constraints,
                                         Function<A, Granularity> spacing,
                                         CanonicalOrder<A> order) {
+        List<List<AffineConstraint<A>>> independent = ClosureQuestion.independentRules(constraints);
+        List<ClosedState<A>> closed = new ArrayList<>(independent.size());
+        for (List<AffineConstraint<A>> rules : independent) {
+            closed.add(closedTogether(rules, spacing, order));
+        }
+        return product(closed);
+    }
+
+    /**
+     * What closures of rules no two of which name one position leave, as the closure of all their
+     * rules — see the class comment for why the two are one.
+     *
+     * <p>Nothing is left where any of them leaves nothing. Otherwise each position is where its own
+     * closure put it and each difference is its own closure's
+     * ({@link DifferenceBounds#product}); the rounds ran out where they ran out for one of them, and
+     * every bound was composed where every one of them composed its own.
+     */
+    static <A> ClosedState<A> product(List<ClosedState<A>> closures) {
+        if (closures.size() == 1) {
+            return closures.getFirst();
+        }
+        List<DifferenceBounds<A>> each = new ArrayList<>(closures.size());
+        closures.forEach(closure -> each.add(closure.differences));
+        DifferenceBounds<A> differences = DifferenceBounds.product(each);
+        Map<A, ExactCut> least = new LinkedHashMap<>();
+        Map<A, ExactCut> most = new LinkedHashMap<>();
+        Status status = Status.STABLE;
+        boolean everyBoundWasComposed = true;
+        for (ClosedState<A> closure : closures) {
+            if (closure.holdsNothing) {
+                return empty(differences);
+            }
+            least.putAll(closure.box.atLeast());
+            most.putAll(closure.box.atMost());
+            if (closure.status == Status.BUDGET_EXHAUSTED) {
+                status = Status.BUDGET_EXHAUSTED;
+            }
+            everyBoundWasComposed &= closure.everyBoundWasComposed;
+        }
+        return settled(new Box<>(least, most), differences, status, everyBoundWasComposed);
+    }
+
+    /**
+     * What {@code constraints} leave, every rule read against every other in one run of the rounds.
+     *
+     * <p>The closure as it is defined, whether or not the rules are independent of each other.
+     * {@link #of} is this over each independent part and the product of those; this is the one a
+     * test holds that product to.
+     */
+    static <A> ClosedState<A> closedTogether(List<AffineConstraint<A>> constraints,
+                                             Function<A, Granularity> spacing,
+                                             CanonicalOrder<A> order) {
         DifferenceBounds<A> differences = DifferenceBounds.over(constraints, order);
         if (differences.holdsNothing()) {
             return empty(differences);
@@ -155,6 +238,24 @@ public final class ClosedState<A> {
             box = next;
         }
         return settled(box, differences, Status.BUDGET_EXHAUSTED, everyBoundWasComposed);
+    }
+
+    /**
+     * What the rules of {@code question} leave, worked out from the question and from nothing else.
+     *
+     * <p>The spacing and the order are the question's own, read back off it rather than taken from
+     * whoever stated it, so a closure is settled by the question it answers — which is what lets
+     * one closure stand for every question equal to it ({@link ClosedStates}). Over the positions
+     * the rules weigh, which are the only positions a closure asks about, they are the spacing and
+     * the order the question was stated with, so this is the closure {@link #of(List, Function,
+     * CanonicalOrder)} works out from those.
+     *
+     * <p>Closed in one run and not parted first. The questions a closure is kept for are parted
+     * already ({@link ClosureQuestion#independent}), and a question that is not is closed to the
+     * same state either way.
+     */
+    static <A> ClosedState<A> of(ClosureQuestion<A> question) {
+        return closedTogether(question.rules(), question::spacingOf, question.order());
     }
 
     /**
@@ -267,46 +368,47 @@ public final class ClosedState<A> {
      * differences only at the start would answer differently depending on whether a rule happened to
      * arrive as a difference or as a sum — which is the spelling deciding the answer again, one level
      * up.
+     *
+     * <p>Along the relations the differences hold and not along every two positions. A difference
+     * through nought is two positions' own bounds, and every box this is handed lies inside the
+     * bounds the differences were closed to — it starts there and is only narrowed — so a bound
+     * carried that way lands outside an end the box already has, unless the box has emptied, which
+     * the caller asks of the box itself.
      */
     private static <A> Carried<A> throughDifferences(Box<A> box, DifferenceBounds<A> differences,
                                                       Set<A> positions) {
         Map<A, ExactCut> least = new LinkedHashMap<>();
         Map<A, ExactCut> most = new LinkedHashMap<>();
-        boolean everyBoundWasComposed = true;
         for (A here : positions) {
-            ExactCut high = box.mostOf(here);
-            ExactCut low = box.leastOf(here);
-            for (A there : positions) {
-                if (here.equals(there)) {
-                    continue;
-                }
-                // `here - there <= d` with `there <= h` puts `here` at `h + d`. Where the exact sum
-                // cannot be held, this carries no bound from `there` onto `here` this round — the
-                // same as `apart` not having been found — which only ever leaves `here` wider.
-                ExactCut apart = differences.differenceBound(here, there);
-                if (apart != null && box.mostOf(there) != null) {
-                    switch (ExactCut.meetingBoth(box.mostOf(there), apart)) {
-                        case ExactAnswer.Held<ExactCut> composed ->
-                                high = ExactCut.tighterUpper(high, composed.value());
-                        case ExactAnswer.Unheld<ExactCut> _ -> everyBoundWasComposed = false;
-                    }
-                }
-                // `there - here <= d` with `there >= l` puts `here` at `l - d`.
-                ExactCut back = differences.differenceBound(there, here);
-                if (back != null && box.leastOf(there) != null) {
-                    switch (box.leastOf(there).at().minus(back.at())) {
-                        case ExactAnswer.Held<ExactRatio> at -> low = ExactCut.tighterLower(low,
-                                new ExactCut(at.value(),
-                                        box.leastOf(there).inclusive() && back.inclusive()));
-                        case ExactAnswer.Unheld<ExactRatio> _ -> everyBoundWasComposed = false;
-                    }
+            if (box.leastOf(here) != null) {
+                least.put(here, box.leastOf(here));
+            }
+            if (box.mostOf(here) != null) {
+                most.put(here, box.mostOf(here));
+            }
+        }
+        boolean everyBoundWasComposed = true;
+        for (Apart<A> apart : differences.relations()) {
+            // `above - below <= d` with `below <= h` puts `above` at `h + d`. Where the exact sum
+            // cannot be held, this carries no bound from `below` onto `above` this round — the same
+            // as the relation not having been found — which only ever leaves `above` wider.
+            ExactCut onto = box.mostOf(apart.below());
+            if (onto != null && positions.contains(apart.above())) {
+                switch (ExactCut.meetingBoth(onto, apart.by())) {
+                    case ExactAnswer.Held<ExactCut> composed ->
+                            most.merge(apart.above(), composed.value(), ExactCut::tighterUpper);
+                    case ExactAnswer.Unheld<ExactCut> _ -> everyBoundWasComposed = false;
                 }
             }
-            if (low != null) {
-                least.put(here, low);
-            }
-            if (high != null) {
-                most.put(here, high);
+            // `above - below <= d` with `above >= l` puts `below` at `l - d`.
+            ExactCut from = box.leastOf(apart.above());
+            if (from != null && positions.contains(apart.below())) {
+                switch (from.at().minus(apart.by().at())) {
+                    case ExactAnswer.Held<ExactRatio> at -> least.merge(apart.below(),
+                            new ExactCut(at.value(), from.inclusive() && apart.by().inclusive()),
+                            ExactCut::tighterLower);
+                    case ExactAnswer.Unheld<ExactRatio> _ -> everyBoundWasComposed = false;
+                }
             }
         }
         return new Carried<>(new Box<>(least, most), everyBoundWasComposed);

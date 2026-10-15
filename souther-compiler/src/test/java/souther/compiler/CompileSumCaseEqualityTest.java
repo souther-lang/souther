@@ -54,6 +54,52 @@ class CompileSumCaseEqualityTest {
         assertEquals(true, seniorRole.get("notJunior"), "/= is true for a different case");
     }
 
+    /**
+     * A newtype a sum lists as a case is compared with the sum as the value of the sum it is, and
+     * is not opened to what it wraps: a {@code Code} opened beside a {@code Key} would be an
+     * {@code Int} beside a reference, and a {@code Name} opened would be text no {@code Key} is
+     * equal to. Each is written both ways round and through a newtype that wraps another.
+     */
+    @Test
+    void aNewtypeCaseIsComparedWithItsSumAsTheValueOfTheSumItIs() throws Exception {
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compile("""
+                module demo
+
+                data Inner = Int
+                data Code = Inner
+                data Name = String
+                data Key = Code | Name
+
+                data In = { named: Bool }
+                data Out = { seven: Bool, sevenTurned: Bool, a: Bool, aTurned: Bool, notA: Bool }
+
+                behavior run : (i: In) -> Out constructs Out, Name, Code, Inner
+
+                let run (i) = {
+                    let k = if i.named then Name("a") else Code(Inner(7))
+                    let key : Key = k
+                    Out {
+                        seven = key == Code(Inner(7)),
+                        sevenTurned = Code(Inner(7)) == key,
+                        a = key == Name("a"),
+                        aTurned = Name("a") == key,
+                        notA = key /= Name("a")
+                    }
+                }
+                """), getClass().getClassLoader());
+        Object b = behavior(loader);
+
+        Map<?, ?> named = (Map<?, ?>) Codecs.encode(loader, "demo.Out",
+                Codecs.apply(b, Codecs.decoded(loader, "demo.In", Map.of("named", true))));
+        assertEquals(Map.of("seven", false, "sevenTurned", false, "a", true, "aTurned", true,
+                "notA", false), named);
+
+        Map<?, ?> coded = (Map<?, ?>) Codecs.encode(loader, "demo.Out",
+                Codecs.apply(b, Codecs.decoded(loader, "demo.In", Map.of("named", false))));
+        assertEquals(Map.of("seven", true, "sevenTurned", true, "a", false, "aTurned", false,
+                "notA", true), coded);
+    }
+
     @Test
     void collectionsOfACaseAndItsSumDoNotCompare() {
         // the sum↔case exemption is scalar only — it must not leak through collection covariance

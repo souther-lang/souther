@@ -1,7 +1,6 @@
 package souther.compiler.examples;
 
-import souther.compiler.evaluate.DepthLimitExceeded;
-import souther.compiler.evaluate.StepLimitExceeded;
+import souther.compiler.evaluate.EvaluationContext;
 
 /**
  * What a row makes of a failure the code it ran came back with.
@@ -25,8 +24,11 @@ final class RowFailures {
     /** What {@code failure} means for a row that was running {@code what}. */
     static RuntimeException of(InvocationFailure failure, String what) {
         Throwable cause = failure.getCause();
-        if (cause instanceof StepLimitExceeded || cause instanceof DepthLimitExceeded) {
-            return (RuntimeException) cause;
+        // A budget spent and an evaluation given up on are both the evaluation stopping, and neither
+        // is a value the fixture failed to produce.
+        RuntimeException stop = EvaluationContext.overspent(cause);
+        if (stop != null) {
+            return stop;
         }
         if (cause instanceof StackOverflowError) {
             return new StackExhaustedException(what + " overflowed the stack");

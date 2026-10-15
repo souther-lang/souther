@@ -4,12 +4,14 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.Place;
+import souther.compiler.observe.WorkFigure;
 import souther.compiler.partition.Border;
 import souther.compiler.partition.Demand;
 import souther.compiler.partition.DomainPoint;
 import souther.compiler.partition.OrderedAffineBoundary;
-import souther.compiler.partition.QuantityKey;
+import souther.compiler.partition.LinearQuantity;
 import souther.compiler.partition.ReadingGap;
 import souther.compiler.partition.StandingAtAPoint;
 import souther.compiler.partition.WayToTheBorder;
@@ -23,7 +25,6 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
-import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -58,12 +59,16 @@ class WhatAWalkShortOfARowMaySayAboutTheLinesBesideOneTest {
     private static final int[][] AND_ONE_THAT_TELLS_THEM_APART =
             {{0, 0}, {0, 1}, {13, 23}, {12, 24}, {1, 3}};
 
+    /** The line of the family weighing {@code x} one more, which these rows leave standing. */
+    private static final String WEIGHING_X_ONE_MORE = "-3 * x + y";
+
     @Test
     void aWalkThatReadEveryRowNamesTheLineTheyLeaveStanding() {
         AnotherLineTheRowsAllow said = of(ALIKE_UNDER_BOTH, everyOne());
 
-        AnotherLineTheRowsAllow.OneDoes named =
-                assertInstanceOf(AnotherLineTheRowsAllow.OneDoes.class, said,
+        AnotherLineTheRowsAllow.Stands named =
+                assertInstanceOf(AnotherLineTheRowsAllow.Stands.class,
+                        line(said, WEIGHING_X_ONE_MORE),
                         () -> "these rows answer alike under both lines: " + said);
         assertEquals("-3 * x + y = 0", named.label(),
                 "and the line they leave standing is the one weighing `x` one more");
@@ -73,8 +78,9 @@ class WhatAWalkShortOfARowMaySayAboutTheLinesBesideOneTest {
     void aWalkShortOfARowMayNotNameIt() {
         AnotherLineTheRowsAllow said = of(ALIKE_UNDER_BOTH, stoppedShort());
 
-        AnotherLineTheRowsAllow.CouldNotTell open =
-                assertInstanceOf(AnotherLineTheRowsAllow.CouldNotTell.class, said,
+        AnotherLineTheRowsAllow.Undecided open =
+                assertInstanceOf(AnotherLineTheRowsAllow.Undecided.class,
+                        line(said, WEIGHING_X_ONE_MORE),
                         () -> "the row it went without is what would have ruled that line out: "
                                 + said);
         assertInstanceOf(AnotherLineTheRowsAllow.Unsettled.RowsIncomplete.class, open.why(),
@@ -83,21 +89,36 @@ class WhatAWalkShortOfARowMaySayAboutTheLinesBesideOneTest {
 
     @Test
     void andMaySayThatNothingStandsFromTheRowsItDidRead() {
-        assertEquals(AnotherLineTheRowsAllow.NONE_DOES,
-                of(AND_ONE_THAT_TELLS_THEM_APART, stoppedShort()),
-                "a line none of the rows it read allows is one none of the rest would allow"
-                        + " either, so a short walk settles this way and not the other");
+        AnotherLineTheRowsAllow said = of(AND_ONE_THAT_TELLS_THEM_APART, stoppedShort());
+        assertTrue(assertInstanceOf(AnotherLineTheRowsAllow.ByDirection.class, said)
+                        .everyOneRuledOut(),
+                () -> "a line none of the rows it read allows is one none of the rest would allow"
+                        + " either, so a short walk settles this way and not the other: " + said);
     }
 
     /** Which is not the walk answering alike whatever it read: the same short walk over the rows
      *  above comes to the other answer. */
     @Test
     void soTheTwoAnswersOfAShortWalkAreTheRowsAndNotTheWalk() {
-        assertTrue(of(ALIKE_UNDER_BOTH, stoppedShort())
-                        instanceof AnotherLineTheRowsAllow.CouldNotTell
-                && of(AND_ONE_THAT_TELLS_THEM_APART, stoppedShort())
-                        instanceof AnotherLineTheRowsAllow.NoneDoes,
+        assertTrue(line(of(ALIKE_UNDER_BOTH, stoppedShort()), WEIGHING_X_ONE_MORE)
+                        instanceof AnotherLineTheRowsAllow.Undecided
+                && line(of(AND_ONE_THAT_TELLS_THEM_APART, stoppedShort()), WEIGHING_X_ONE_MORE)
+                        instanceof AnotherLineTheRowsAllow.RuledOut,
                 "one short walk settles it and one does not, over the same border");
+    }
+
+    /** What {@code said} came to about the line of the family spelled {@code spelled}. */
+    private static AnotherLineTheRowsAllow.Direction line(AnotherLineTheRowsAllow said,
+                                                          String spelled) {
+        AnotherLineTheRowsAllow.ByDirection lines =
+                assertInstanceOf(AnotherLineTheRowsAllow.ByDirection.class, said,
+                        () -> "the family was held against the rows: " + said);
+        for (AnotherLineTheRowsAllow.Direction each : lines.each()) {
+            if (OrderedAffineBoundary.spelled(each.direction().direction()).equals(spelled)) {
+                return each;
+            }
+        }
+        throw new AssertionError(spelled + " is a line of the family: " + said);
     }
 
     /**
@@ -116,7 +137,7 @@ class WhatAWalkShortOfARowMaySayAboutTheLinesBesideOneTest {
         AnotherLineTheRowsAllow said = AnotherLineTheRowsAllow.of(names, MET,
                 () -> new StandingAtAPoint.RowsRead(rowsOf(names, ALIKE_UNDER_BOTH),
                         Set.of(), StandingAtAPoint.ReadingsTried.EVERY_ONE, false),
-                List.of(), WayToTheBorder.UNTOUCHED);
+                List.of(), WayToTheBorder.UNTOUCHED, _ -> false);
 
         AnotherLineTheRowsAllow.CouldNotTell open =
                 assertInstanceOf(AnotherLineTheRowsAllow.CouldNotTell.class, said,
@@ -133,7 +154,7 @@ class WhatAWalkShortOfARowMaySayAboutTheLinesBesideOneTest {
                 () -> {
                     throw new AssertionError("the rows are not read for a line with no neighbour");
                 },
-                List.of(), WayToTheBorder.UNTOUCHED);
+                List.of(), WayToTheBorder.UNTOUCHED, _ -> false);
 
         assertEquals(new AnotherLineTheRowsAllow.NoSuchQuestion(
                         AnotherLineTheRowsAllow.Reason.THE_LINE_IS_ON_ONE_POSITION), said,
@@ -147,33 +168,33 @@ class WhatAWalkShortOfARowMaySayAboutTheLinesBesideOneTest {
 
     /** And where it stopped at the figure one point is tried against. */
     private static StandingAtAPoint.ReadingsTried stoppedShort() {
-        return new StandingAtAPoint.ReadingsTried.StoppedAtTheLimit(4);
+        return new StandingAtAPoint.ReadingsTried.StoppedAtTheLimit(
+                WorkFigure.READINGS_OF_A_ROW_AT_A_POINT.at(4));
     }
 
     /**
-     * The line it names answers what the model's answers at every row read, and answers differently
-     * at the input it names.
+     * No row already read rules out the line it names, and the input it names does.
      *
-     * <p>Which is what makes it the line the rows allow, and what a row settles it by. The
-     * threshold was chosen to keep every row the model keeps and refuse every row it refuses, so
-     * the two part company nowhere the rows already stand — put to the values here rather than
-     * taken from how the threshold was worked out, because that is how a row offered later is
-     * weighed ({@link AnotherLineTheRowsAllow.OneDoes#keeps}).
+     * <p>Put to the values here rather than taken from how the range was worked out, because that
+     * is how a row offered later is weighed ({@link AnotherLineTheRowsAllow.Stands#ruledOutBy}).
      */
     @Test
-    void theLineItNamesAnswersAlikeAtEveryRowAndDiffersAtTheInputItNames() {
+    void noRowReadRulesOutTheLineItNamesAndTheInputItNamesDoes() {
         Border border = TheLinesBesideABorder.aLineOverTwoPositions();
-        OrderedAffineBoundary drawn = OrderedAffineBoundary.of(border);
-        AnotherLineTheRowsAllow.OneDoes named = assertInstanceOf(
-                AnotherLineTheRowsAllow.OneDoes.class, of(ALIKE_UNDER_BOTH, everyOne()));
+        OrderedAffineBoundary drawn = OrderedAffineBoundary.of(border)
+                .orFail("a line worked out").orElseThrow();
+        AnotherLineTheRowsAllow.Stands named = assertInstanceOf(
+                AnotherLineTheRowsAllow.Stands.class,
+                line(of(ALIKE_UNDER_BOTH, everyOne()), WEIGHING_X_ONE_MORE));
 
         for (Map<NumericTerm, Place> row : rowsOf(border, ALIKE_UNDER_BOTH)) {
-            assertEquals(drawn.satisfiedBy(row), named.keeps(row),
-                    () -> "the two lines answer alike at every row that was read: " + row);
+            assertEquals(ExactAnswer.held(false), named.ruledOutBy(drawn, row),
+                    () -> "a row already read is one the line was left standing beside: " + row);
         }
-        Map<NumericTerm, Place> apart = rowsOf(border, new int[][] {{1, 3}}).getFirst();
-        assertNotEquals(drawn.satisfiedBy(apart), named.keeps(apart),
-                () -> "and differently at the input the answer names: " + apart);
+        Map<NumericTerm, Place> apart = named.tellsApartAt();
+        assertNotNull(apart, "an input is named");
+        assertEquals(ExactAnswer.held(true), named.ruledOutBy(drawn, apart),
+                () -> "and the input the answer names rules the line out: " + apart);
     }
 
     /**
@@ -187,13 +208,13 @@ class WhatAWalkShortOfARowMaySayAboutTheLinesBesideOneTest {
         Border border = TheLinesBesideABorder.aLineOverTwoPositions();
         return AnotherLineTheRowsAllow.of(border, MET,
                 () -> new StandingAtAPoint.RowsRead(rowsOf(border, rows), Set.of(), tried, false),
-                List.of(), WayToTheBorder.UNTOUCHED);
+                List.of(), WayToTheBorder.UNTOUCHED, _ -> false);
     }
 
     /** One reading per row, each value on the term the quantity reads it at. */
     private static List<Map<NumericTerm, Place>> rowsOf(Border border, int[][] rows) {
         List<NumericTerm> terms = new ArrayList<>(
-                QuantityKey.of(border.cut().of().direction()).direction().keySet());
+                ((LinearQuantity) border.cut().of()).direction().coefs().keySet());
         terms.sort(Comparator.comparing(NumericTerm::toString));
         List<Map<NumericTerm, Place>> out = new ArrayList<>();
         for (int[] row : rows) {
@@ -218,9 +239,13 @@ class WhatAWalkShortOfARowMaySayAboutTheLinesBesideOneTest {
     void anUnsettledAnswerIsWhatTheReadingOfTheLinesWentWithout() {
         Border border = TheLinesBesideABorder.aLineOverTwoPositions();
 
-        assertTrue(assessed(border, AnotherLineTheRowsAllow.NONE_DOES)
+        assertTrue(assessed(border, of(AND_ONE_THAT_TELLS_THEM_APART, everyOne()))
                         .besideWeakening().isEmpty(),
                 "a line no other line survives beside is settled, and weakens nothing");
+        assertTrue(assessed(border, of(ALIKE_UNDER_BOTH, stoppedShort()))
+                        .besideWeakening().causes().stream()
+                        .anyMatch(each -> each instanceof Weakening.BorderReadingsNotExhausted),
+                "and one line of the family left undecided weakens it as the border's own would");
         assertTrue(assessed(border, new AnotherLineTheRowsAllow.NoSuchQuestion(
                         AnotherLineTheRowsAllow.Reason.THE_LINE_IS_ON_ONE_POSITION))
                         .besideWeakening().isEmpty(),
@@ -273,10 +298,11 @@ class WhatAWalkShortOfARowMaySayAboutTheLinesBesideOneTest {
         AnotherLineTheRowsAllow said = AnotherLineTheRowsAllow.of(border, MET,
                 () -> new StandingAtAPoint.RowsRead(rowsOf(border, ALIKE_UNDER_BOTH),
                         Set.of(), StandingAtAPoint.ReadingsTried.EVERY_ONE, false),
-                List.of(), TheLinesBesideABorder.aWayThatHoldsXAtNought());
+                List.of(), TheLinesBesideABorder.aWayThatHoldsXAtNought(), _ -> false);
 
-        AnotherLineTheRowsAllow.CouldNotTell open =
-                assertInstanceOf(AnotherLineTheRowsAllow.CouldNotTell.class, said,
+        AnotherLineTheRowsAllow.Undecided open =
+                assertInstanceOf(AnotherLineTheRowsAllow.Undecided.class,
+                        line(said, WEIGHING_X_ONE_MORE),
                         () -> "the rows leave a line standing and no row reaches where it differs: "
                                 + said);
         assertInstanceOf(AnotherLineTheRowsAllow.Unsettled.NoReachableDistinguisher.class,
@@ -303,10 +329,12 @@ class WhatAWalkShortOfARowMaySayAboutTheLinesBesideOneTest {
         AnotherLineTheRowsAllow said = AnotherLineTheRowsAllow.of(border, MET,
                 () -> new StandingAtAPoint.RowsRead(rowsOf(border, ALIKE_UNDER_BOTH),
                         Set.of(), StandingAtAPoint.ReadingsTried.EVERY_ONE, false),
-                List.of(), TheLinesBesideABorder.aWayOverAPositionTheBorderIsNotOn());
+                List.of(), TheLinesBesideABorder.aWayOverAPositionTheBorderIsNotOn(),
+                _ -> false);
 
-        AnotherLineTheRowsAllow.OneDoes named =
-                assertInstanceOf(AnotherLineTheRowsAllow.OneDoes.class, said,
+        AnotherLineTheRowsAllow.Stands named =
+                assertInstanceOf(AnotherLineTheRowsAllow.Stands.class,
+                        line(said, WEIGHING_X_ONE_MORE),
                         () -> "the rows leave this line standing and an input still reaches: "
                                 + said);
         assertNotNull(named.tellsApartAt(), "and the input is named");
@@ -326,10 +354,11 @@ class WhatAWalkShortOfARowMaySayAboutTheLinesBesideOneTest {
         AnotherLineTheRowsAllow said = AnotherLineTheRowsAllow.of(border, MET,
                 () -> new StandingAtAPoint.RowsRead(rowsOf(border, ALIKE_UNDER_BOTH),
                         Set.of(), StandingAtAPoint.ReadingsTried.EVERY_ONE, false),
-                List.of(), TheLinesBesideABorder.aWayWithAConditionNobodyRead());
+                List.of(), TheLinesBesideABorder.aWayWithAConditionNobodyRead(), _ -> false);
 
         assertInstanceOf(AnotherLineTheRowsAllow.Unsettled.NoReachableDistinguisher.class,
-                assertInstanceOf(AnotherLineTheRowsAllow.CouldNotTell.class, said).why(),
+                assertInstanceOf(AnotherLineTheRowsAllow.Undecided.class,
+                        line(said, WEIGHING_X_ONE_MORE)).why(),
                 "nothing here can say a row arrives past a condition nobody took in");
     }
 
@@ -348,9 +377,9 @@ class WhatAWalkShortOfARowMaySayAboutTheLinesBesideOneTest {
                 () -> {
                     throw new AssertionError("the rows are not read before the question is due");
                 },
-                List.of(), WayToTheBorder.UNTOUCHED);
+                List.of(), WayToTheBorder.UNTOUCHED, _ -> false);
 
-        assertEquals(AnotherLineTheRowsAllow.NOT_DUE_YET, said,
+        assertInstanceOf(AnotherLineTheRowsAllow.NotDueYet.class, said,
                 "what the rows are short of here is what the points say they are short of");
     }
 
@@ -362,10 +391,11 @@ class WhatAWalkShortOfARowMaySayAboutTheLinesBesideOneTest {
                 () -> new StandingAtAPoint.RowsRead(rowsOf(border, ALIKE_UNDER_BOTH),
                         Set.of(ReadingGap.NO_VALUE), StandingAtAPoint.ReadingsTried.EVERY_ONE,
                         false),
-                List.of(), WayToTheBorder.UNTOUCHED);
+                List.of(), WayToTheBorder.UNTOUCHED, _ -> false);
 
-        assertNotNull(said);
-        assertInstanceOf(AnotherLineTheRowsAllow.CouldNotTell.class, said,
+        assertInstanceOf(AnotherLineTheRowsAllow.Unsettled.RowsIncomplete.class,
+                assertInstanceOf(AnotherLineTheRowsAllow.Undecided.class,
+                        line(said, WEIGHING_X_ONE_MORE)).why(),
                 "a row that could not be read is a row that was gone without, whatever the walk"
                         + " managed over the rest");
     }

@@ -72,6 +72,19 @@ public record Coordinate(String groupId, String artifactId) {
     }
 
     /**
+     * The module name a directory's name derives where there is no coordinate to derive one from,
+     * or null where it derives none.
+     *
+     * <p>One segment, with a hyphen written as an underscore as the artifact of a coordinate is. A
+     * directory called {@code my.app} or {@code 2fast} is not one the language reads as a name, and
+     * the author is asked for {@code --module}.
+     */
+    static String moduleNameOfDirectory(String directoryName) {
+        String written = directoryName.replace('-', '_');
+        return isAName(written) ? written : null;
+    }
+
+    /**
      * Whether this is a name the language reads as one.
      *
      * <p>Both halves are asked of what decides them. The alphabet is the one a source is scanned

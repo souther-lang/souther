@@ -32,6 +32,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.BiConsumer;
 
 /**
  * The type-level questions the checker asks, independent of any expression being checked: resolving
@@ -292,27 +293,29 @@ public final class TypeOps {
     /** The sum type that {@code t}'s case belongs to, or null when {@code t} is not a case of a named
      * sum. A {@code fold} whose seed is a case ({@code PricedCart}) and whose step grows and matches the
      * accumulator at the sum ({@code PricedCart | NotFound}) is typed at that sum, not the seed case. */
-    public static Type enclosingSum(Type t, Symbols symbols) {
+    public static Type enclosingSum(Type t, Symbols symbols, DeclarationKinds kinds,
+                                    ListedCases listed) {
         // A case of a primitive-headed union belongs to no named sum: nothing declares it, so no
         // module holds a sum it is a case of.
-        if (!(t instanceof Type.Ref(TypeSymbol.AtModule named))
-                || symbols.declaredNode(named) instanceof Hir.SumData) {
+        if (!(t instanceof Type.Ref(TypeSymbol.AtModule named)) || kinds.isSum(named.key())) {
             return null;
         }
         // A sum and its cases are declared together, so only that module can hold the sum this case
         // belongs to. A case may belong to more than one; pick by name so the choice is deterministic
-        // across runs rather than dependent on the symbol map's iteration order.
-        Hir.SumData chosen = null;
+        // across runs rather than dependent on the symbol map's iteration order. Which names are sums
+        // is asked of their form, and what a sum lists only of those.
+        TypeKey chosen = null;
         for (String declared : symbols.declaredNamesIn(named.module())) {
-            if (symbols.declaredNode(new TypeKey(named.module(), declared)) instanceof Hir.SumData sum
-                    && caseNames(sum).contains(named)
-                    && (chosen == null || sum.name().compareTo(chosen.name()) < 0)) {
-                chosen = sum;
+            TypeKey at = new TypeKey(named.module(), declared);
+            if (kinds.isSum(at) && listed.of(at) instanceof List<TypeSymbol> cases
+                    && cases.contains(named)
+                    && (chosen == null || declared.compareTo(chosen.name()) < 0)) {
+                chosen = at;
             }
         }
         // The identity is the one the declaration carries. Put together from this case's module and
         // the sum's spelling instead, it would be an identity for whatever that address names.
-        return chosen == null ? null : Type.ref(chosen.declares());
+        return chosen == null ? null : Type.ref(symbols.declaredNode(chosen).declares());
     }
 
     public static boolean isSumType(Type t, DeclarationKinds kinds) {
@@ -326,9 +329,9 @@ public final class TypeOps {
      *
      * <p>One layer, which is what a descent over the cases would be built out of: hold this and the
      * declarations, and a transitive closure is a loop away. There is one such closure and it is
-     * {@link AtomSpace}. Package-private for that reason and not by accident of who happens to call
-     * it — every reader of a case list is in this package, so nothing outside it can write a second
-     * closure at all, and that much is javac's to say rather than a test's.
+     * {@link AtomSpace}. Package-private for that reason, and read by {@link ListedCases} alone:
+     * every other reader of one layer asks that, and the closure over its answers is
+     * {@link SumCases#asWritten}.
      */
     static List<TypeSymbol> caseNames(Hir.SumData sum) {
         List<TypeSymbol> names = new ArrayList<>();
@@ -533,7 +536,8 @@ public final class TypeOps {
      * declarations state does the same with what it read. Answered apart, the two parted at exactly
      * the positions a declaration leaves open.
      */
-    public static boolean admits(Type declared, Type actual, PublishedDeclarations published) {
+    public static boolean admits(Type declared, Type actual, DeclarationKinds kinds,
+                                 SumCases sums) {
         // A position states nothing where a variable stands at it — one an application has not
         // decided, or one a declaration wrote, which stands for whatever each use of it makes — and
         // where it stands at what an empty collection carries, which is a reading so far and is
@@ -549,32 +553,32 @@ public final class TypeOps {
         }
         return switch (declared) {
             case Type.ListOf l -> actual instanceof Type.ListOf a
-                    && admits(l.element(), a.element(), published);
+                    && admits(l.element(), a.element(), kinds, sums);
             case Type.SetOf s -> actual instanceof Type.SetOf a
-                    && admits(s.element(), a.element(), published);
+                    && admits(s.element(), a.element(), kinds, sums);
             case Type.OptionOf o -> actual instanceof Type.OptionOf a
-                    && admits(o.element(), a.element(), published);
+                    && admits(o.element(), a.element(), kinds, sums);
             case Type.MapOf m -> actual instanceof Type.MapOf a
-                    && admits(m.key(), a.key(), published)
-                    && admits(m.value(), a.value(), published);
+                    && admits(m.key(), a.key(), kinds, sums)
+                    && admits(m.value(), a.value(), kinds, sums);
             case Type.TupleOf t -> actual instanceof Type.TupleOf a
                     && t.elements().size() == a.elements().size()
-                    && admitsEach(t.elements(), a.elements(), published);
+                    && admitsEach(t.elements(), a.elements(), kinds, sums);
             case Type.FnOf f -> actual instanceof Type.FnOf a
                     && f.params().size() == a.params().size()
-                    && admitsEach(f.params(), a.params(), published)
-                    && admits(f.result(), a.result(), published);
+                    && admitsEach(f.params(), a.params(), kinds, sums)
+                    && admits(f.result(), a.result(), kinds, sums);
             // Nothing inside it to weigh position by position, so what is left is the ordinary
             // question. It answers a variable the declaration wrote too, which is not an
             // application's to decide and stands for whatever each use of it makes it.
-            case Type.Leaf _ -> assignable(actual, declared, published);
+            case Type.Leaf _ -> assignable(actual, declared, kinds, sums);
         };
     }
 
     private static boolean admitsEach(List<Type> declared, List<Type> actual,
-                                      PublishedDeclarations published) {
+                                      DeclarationKinds kinds, SumCases sums) {
         for (int i = 0; i < declared.size(); i++) {
-            if (!admits(declared.get(i), actual.get(i), published)) {
+            if (!admits(declared.get(i), actual.get(i), kinds, sums)) {
                 return false;
             }
         }
@@ -584,7 +588,8 @@ public final class TypeOps {
     /** Whether a {@code from} value can be assigned where {@code to} is expected. Lists are
      * covariant, and a data-like type widens to the set of leaf cases it can be — so a list of
      * a sum's cases is assignable to a list of the sum (spec §sum-data, §unmarked-output). */
-    public static boolean assignable(Type from, Type to, PublishedDeclarations published) {
+    public static boolean assignable(Type from, Type to, DeclarationKinds kinds,
+                                     SumCases sums) {
         if (from.equals(to)) {
             return true;
         }
@@ -606,29 +611,29 @@ public final class TypeOps {
         // smuggle a sibling case in — the same reason Scala's immutable List and Kotlin's read-only
         // List are covariant, and Java's mutable arrays are not.
         if (from instanceof Type.ListOf a && to instanceof Type.ListOf b) {
-            return assignable(a.element(), b.element(), published);
+            return assignable(a.element(), b.element(), kinds, sums);
         }
         if (from instanceof Type.MapOf a && to instanceof Type.MapOf b) {
-            return assignable(a.key(), b.key(), published)
-                    && assignable(a.value(), b.value(), published);
+            return assignable(a.key(), b.key(), kinds, sums)
+                    && assignable(a.value(), b.value(), kinds, sums);
         }
         if (from instanceof Type.SetOf a && to instanceof Type.SetOf b) {
-            return assignable(a.element(), b.element(), published);
+            return assignable(a.element(), b.element(), kinds, sums);
         }
         if (from instanceof Type.OptionOf a && to instanceof Type.OptionOf b) {
-            return assignable(a.element(), b.element(), published);
+            return assignable(a.element(), b.element(), kinds, sums);
         }
         if (from instanceof Type.TupleOf a && to instanceof Type.TupleOf b
                 && a.elements().size() == b.elements().size()) {
             for (int i = 0; i < a.elements().size(); i++) {
-                if (!assignable(a.elements().get(i), b.elements().get(i), published)) {
+                if (!assignable(a.elements().get(i), b.elements().get(i), kinds, sums)) {
                     return false;
                 }
             }
             return true;
         }
-        List<TypeSymbol> fa = AtomSpace.subjectAtoms(from, published);
-        List<TypeSymbol> ta = AtomSpace.subjectAtoms(to, published);
+        List<TypeSymbol> fa = AtomSpace.subjectAtoms(from, kinds, sums);
+        List<TypeSymbol> ta = AtomSpace.subjectAtoms(to, kinds, sums);
         return !fa.isEmpty() && !ta.isEmpty() && ta.containsAll(fa);
     }
 
@@ -738,9 +743,9 @@ public final class TypeOps {
      * caller reading the map afterwards cannot tell those from what was there before.
      */
     public static Fit unify(Type param, Type arg, Map<String, Type> bindings,
-                            PublishedDeclarations published) {
+                            DeclarationKinds kinds, SumCases sums) {
         Map<String, Type> settled = new HashMap<>(bindings);
-        Fit fit = unify(param, arg, settled, published, true);
+        Fit fit = unify(param, arg, settled, kinds, sums, true);
         if (fit instanceof Fit.Disagrees) {
             return fit;
         }
@@ -760,16 +765,17 @@ public final class TypeOps {
      * walk's question.
      */
     public static void bindVars(Type param, Type arg, Map<String, Type> bindings,
-                                PublishedDeclarations published) {
-        unify(param, arg, bindings, published, false);
+                                DeclarationKinds kinds, SumCases sums) {
+        unify(param, arg, bindings, kinds, sums, false);
     }
 
     private static Fit unify(Type param, Type arg, Map<String, Type> bindings,
-                             PublishedDeclarations published, boolean refusing) {
+                             DeclarationKinds kinds, SumCases sums,
+                             boolean refusing) {
         switch (param) {
             case Type.Var v -> {
                 Type bound = bindings.get(v.name());
-                if (bound == null || BottomInfer.refines(bound, arg, published)) {
+                if (bound == null || BottomInfer.refines(bound, arg, kinds, sums)) {
                     // first sight, or a reading that says what an earlier one carrying the
                     // empty-collection bottom did not (ADR-0028), at whatever depth: an earlier
                     // `[]` / `Map.empty` / `(0, [])` argument bound the bottom, and a later reading
@@ -777,32 +783,32 @@ public final class TypeOps {
                     bindings.put(v.name(), arg);
                 } else if (arg instanceof Type.Nothing) {
                     // the empty bottom absorbs into the concrete binding already learned
-                } else if (refusing && !assignable(arg, bound, published)
-                        && !assignable(bound, arg, published)) {
+                } else if (refusing && !assignable(arg, bound, kinds, sums)
+                        && !assignable(bound, arg, kinds, sums)) {
                     return new Fit.Disagrees(bound, arg);
                 }
             }
             case Type.ListOf p when arg instanceof Type.ListOf a -> {
-                return unify(p.element(), a.element(), bindings, published, refusing);
+                return unify(p.element(), a.element(), bindings, kinds, sums, refusing);
             }
             case Type.MapOf p when arg instanceof Type.MapOf a -> {
-                Fit key = unify(p.key(), a.key(), bindings, published, refusing);
+                Fit key = unify(p.key(), a.key(), bindings, kinds, sums, refusing);
                 if (key instanceof Fit.Disagrees) {
                     return key;
                 }
-                return unify(p.value(), a.value(), bindings, published, refusing);
+                return unify(p.value(), a.value(), bindings, kinds, sums, refusing);
             }
             case Type.SetOf p when arg instanceof Type.SetOf a -> {
-                return unify(p.element(), a.element(), bindings, published, refusing);
+                return unify(p.element(), a.element(), bindings, kinds, sums, refusing);
             }
             case Type.OptionOf p when arg instanceof Type.OptionOf a -> {
-                return unify(p.element(), a.element(), bindings, published, refusing);
+                return unify(p.element(), a.element(), bindings, kinds, sums, refusing);
             }
             case Type.TupleOf p when arg instanceof Type.TupleOf a
                     && p.elements().size() == a.elements().size() -> {
                 for (int i = 0; i < p.elements().size(); i++) {
-                    Fit at = unify(p.elements().get(i), a.elements().get(i), bindings, published,
-                            refusing);
+                    Fit at = unify(p.elements().get(i), a.elements().get(i), bindings, kinds,
+                            sums, refusing);
                     if (at instanceof Fit.Disagrees) {
                         return at;
                     }
@@ -810,16 +816,16 @@ public final class TypeOps {
             }
             case Type.FnOf p when arg instanceof Type.FnOf a && p.params().size() == a.params().size() -> {
                 for (int i = 0; i < p.params().size(); i++) {
-                    Fit at = unify(p.params().get(i), a.params().get(i), bindings, published,
-                            refusing);
+                    Fit at = unify(p.params().get(i), a.params().get(i), bindings, kinds,
+                            sums, refusing);
                     if (at instanceof Fit.Disagrees) {
                         return at;
                     }
                 }
-                return unify(p.result(), a.result(), bindings, published, refusing);
+                return unify(p.result(), a.result(), bindings, kinds, sums, refusing);
             }
             default -> {
-                if (refusing && !assignable(arg, param, published)) {
+                if (refusing && !assignable(arg, param, kinds, sums)) {
                     return new Fit.Disagrees(param, arg);
                 }
             }
@@ -912,12 +918,13 @@ public final class TypeOps {
      * {@code match} arm names and what the {@code "type"} discriminator carries — a sum contributes
      * its cases, not itself.
      */
-    static TypeSymbol.AtModule[] ambiguousMembers(Type out, PublishedDeclarations published) {
+    static TypeSymbol.AtModule[] ambiguousMembers(Type out, DeclarationKinds kinds,
+                                                  SumCases sums) {
         Map<String, TypeSymbol.AtModule> byName = new LinkedHashMap<>();
         // Only a module's declarations can collide by spelling here: a module may not declare a
         // name the language gives, so a union holding one holds it under a spelling nothing else
         // in it has.
-        for (TypeSymbol atom : AtomSpace.subjectAtoms(out, published)) {
+        for (TypeSymbol atom : AtomSpace.subjectAtoms(out, kinds, sums)) {
             if (!(atom instanceof TypeSymbol.AtModule member)) {
                 continue;
             }
@@ -936,8 +943,9 @@ public final class TypeOps {
      * nested sum contributes its cases rather than itself.
      */
     static TypeSymbol memberCarryingField(Type out, String key, Symbols symbols,
-                                          PublishedDeclarations published) {
-        for (TypeSymbol member : AtomSpace.subjectAtoms(out, published)) {
+                                          DeclarationKinds kinds,
+                                          SumCases sums) {
+        for (TypeSymbol member : AtomSpace.subjectAtoms(out, kinds, sums)) {
             if (declaresField(member, key, symbols)) {
                 return member;
             }
@@ -964,9 +972,10 @@ public final class TypeOps {
      * what is left here is which types this reader will take an answer about. A primitive output
      * names one atom like any other type, and is not a case list.
      */
-    public static Set<TypeSymbol> outputCases(Type t, PublishedDeclarations published) {
+    public static Set<TypeSymbol> outputCases(Type t, DeclarationKinds kinds,
+                                              SumCases sums) {
         return t instanceof Type.Union || t instanceof Type.Ref
-                ? new LinkedHashSet<>(AtomSpace.subjectAtoms(t, published))
+                ? new LinkedHashSet<>(AtomSpace.subjectAtoms(t, kinds, sums))
                 : Set.of();
     }
 
@@ -1227,14 +1236,18 @@ public final class TypeOps {
      * sum's shared part is a reader of what a position is, which is {@link Shape}'s to say; asked
      * here directly, a reader would have a second way to find out what kind of sum it is holding.
      */
-    static Shape.CommonProduct commonSpreadOf(Hir.SumData sum, Symbols symbols,
-                                              PublishedDeclarations published) {
-        return commonSpreadOf(AtomSpace.subjectAtoms(Type.ref(sum.declares()), published), symbols);
+    static Shape.CommonProduct commonSpreadOf(SumCases.Cases reaches, Symbols symbols) {
+        // Every case of an enumeration is a unit, and a unit spreads nothing, so its cases share
+        // nothing and none of them is opened to find that out.
+        if (reaches instanceof SumCases.Enumeration) {
+            return new Shape.CommonProduct.None();
+        }
+        return commonSpreadOf(reaches.cases(), symbols);
     }
 
-    /** As {@link #commonSpreadOf(Hir.SumData, Symbols, PublishedDeclarations)}, for cases already
-     *  flattened to leaves. */
-    static Shape.CommonProduct commonSpreadOf(List<TypeSymbol> cases, Symbols symbols) {
+    /** As {@link #commonSpreadOf(SumCases.Cases, Symbols)}, for cases already flattened to
+     *  leaves. */
+    private static Shape.CommonProduct commonSpreadOf(List<TypeSymbol> cases, Symbols symbols) {
         if (cases == null || cases.isEmpty()) {
             return new Shape.CommonProduct.None();
         }
@@ -1566,9 +1579,9 @@ public final class TypeOps {
      */
     public static boolean isMapKeyAdmissibleInSignature(Type key, Symbols symbols,
                                                         DeclarationKinds kinds,
-                                                        PublishedDeclarations published) {
+                                                        SumCases sums) {
         return key instanceof Type.Var
-                || classifyConcreteMapKey(key, symbols, kinds, published) != null;
+                || classifyConcreteMapKey(key, symbols, kinds, sums) != null;
     }
 
     /**
@@ -1601,13 +1614,13 @@ public final class TypeOps {
      */
     public static MapKeyRepresentation classifyConcreteMapKey(Type key, Symbols symbols,
                                                               DeclarationKinds kinds,
-                                                              PublishedDeclarations published) {
-        return classifyMapKey(key, symbols, kinds, published, new HashSet<>());
+                                                              SumCases sums) {
+        return classifyMapKey(key, symbols, kinds, sums, new HashSet<>());
     }
 
     private static MapKeyRepresentation classifyMapKey(Type key, Symbols symbols,
                                                        DeclarationKinds kinds,
-                                                       PublishedDeclarations published,
+                                                       SumCases sums,
                                                        Set<TypeSymbol> unwrapping) {
         // Exhaustive over the primitives: whether a key has a text form is a question about each one,
         // and a chain of comparisons answers "no" for a primitive added later without being asked.
@@ -1629,12 +1642,12 @@ public final class TypeOps {
         // Whether a key renders as a bare name is the boundary's question and is asked of it. Asked
         // as `isUnitOnlySum`, this read the language's notion of an enumeration for an answer about
         // how a value is written, and the two would part the day either moved.
-        if (Boundary.of(key, kinds, published).representation()
+        if (Boundary.of(key, kinds, sums).representation()
                 instanceof Boundary.Representation.Enumeration) {
             return new MapKeyRepresentation.NamedKey(r.name());
         }
         Type base = newtypeInner(r.name(), symbols);
-        return base != null && classifyMapKey(base, symbols, kinds, published, unwrapping) != null
+        return base != null && classifyMapKey(base, symbols, kinds, sums, unwrapping) != null
                 ? new MapKeyRepresentation.NamedKey(r.name())
                 : null;
     }
@@ -1645,47 +1658,33 @@ public final class TypeOps {
      * case's name, a bare string, so it renders and parses in key position like any other string
      * (issue #161, ADR-0040). A sum with even one field-bearing case keeps the discriminator object.
      */
-    public static boolean isUnitOnlySum(Type t, DeclarationKinds kinds,
-                                        PublishedDeclarations published) {
+    public static boolean isUnitOnlySum(Type t, DeclarationKinds kinds, SumCases sums) {
         return t instanceof Type.Ref(TypeSymbol.AtModule named)
-                && isUnitOnlySum(named, kinds, published);
+                && isUnitOnlySum(named, kinds, sums);
     }
 
-    /** The same, of the sum by name. What every case of it is is what those declarations say about
-     *  themselves, so nothing here reads the tree any of them was written in. */
+    /** The same, of the sum by name: what {@code sums} answers for it, which is read off what the
+     *  declarations say about themselves and never off the tree any of them was written in. */
     public static boolean isUnitOnlySum(TypeSymbol.AtModule sum, DeclarationKinds kinds,
-                                        PublishedDeclarations published) {
-        if (!kinds.isSum(sum.key())) {
-            return false;
-        }
-        List<TypeSymbol> leaves = AtomSpace.subjectAtoms(Type.ref(sum), published);
-        if (leaves.isEmpty()) {
-            return false;
-        }
-        for (TypeSymbol leaf : leaves) {
-            if (!(leaf instanceof TypeSymbol.AtModule at
-                    && kinds.of(at.key()) == DeclarationKind.UNIT)) {
-                return false;
-            }
-        }
-        return true;
+                                        SumCases sums) {
+        return kinds.isSum(sum.key()) && sums.of(sum) instanceof SumCases.Enumeration;
     }
 
     /** The key of the first {@code Map} inside {@code t} that cannot cross the boundary, or null when
      * every one can — what a data field or a behavior's input/output is checked against. */
     public static Type nonBoundaryMapKey(Type t, Symbols symbols, DeclarationKinds kinds,
-                                         PublishedDeclarations published) {
+                                         SumCases sums) {
         if (t instanceof Type.MapOf m
-                && !isMapKeyAdmissibleInSignature(m.key(), symbols, kinds, published)) {
+                && !isMapKeyAdmissibleInSignature(m.key(), symbols, kinds, sums)) {
             return m.key();
         }
         return switch (t) {
-            case Type.ListOf l -> nonBoundaryMapKey(l.element(), symbols, kinds, published);
-            case Type.SetOf s -> nonBoundaryMapKey(s.element(), symbols, kinds, published);
-            case Type.OptionOf o -> nonBoundaryMapKey(o.element(), symbols, kinds, published);
-            case Type.MapOf m -> nonBoundaryMapKey(m.value(), symbols, kinds, published);
+            case Type.ListOf l -> nonBoundaryMapKey(l.element(), symbols, kinds, sums);
+            case Type.SetOf s -> nonBoundaryMapKey(s.element(), symbols, kinds, sums);
+            case Type.OptionOf o -> nonBoundaryMapKey(o.element(), symbols, kinds, sums);
+            case Type.MapOf m -> nonBoundaryMapKey(m.value(), symbols, kinds, sums);
             case Type.TupleOf tu -> tu.elements().stream()
-                    .map(e -> nonBoundaryMapKey(e, symbols, kinds, published))
+                    .map(e -> nonBoundaryMapKey(e, symbols, kinds, sums))
                     .filter(k -> k != null).findFirst().orElse(null);
             default -> null;
         };
@@ -1707,33 +1706,37 @@ public final class TypeOps {
      * here. What it answers reaches the backend as the type the comparison reads its operands in,
      * so no reader after the checker asks it again.
      */
-    static TypeSymbol comparisonEnumeration(Type lt, Type rt, Symbols symbols,
-                                            DeclarationKinds kinds,
-                                            PublishedDeclarations published) {
-        TypeSymbol named = orderingEnumeration(lt, symbols, kinds, published);
+    static TypeSymbol comparisonEnumeration(Type lt, Type rt, DeclarationKinds kinds,
+                                            SumCases sums, EnumerationListings listings) {
+        TypeSymbol named = orderingEnumeration(lt, kinds, sums, listings);
         if (named == null) {
-            named = orderingEnumeration(rt, symbols, kinds, published);
+            named = orderingEnumeration(rt, kinds, sums, listings);
         }
-        return named != null && isValueOfEnumeration(lt, named, published)
-                && isValueOfEnumeration(rt, named, published) ? named : null;
+        return named != null && isValueOfEnumeration(lt, named, listings)
+                && isValueOfEnumeration(rt, named, listings) ? named : null;
     }
 
-    /** Whether {@code t} is that enumeration, one of its leaves, or a union of them. */
+    /**
+     * Whether {@code t} is that enumeration, one of its leaves, or a union of them.
+     *
+     * <p>A leaf is asked of what lists it and not found among the enumeration's cases: the
+     * enumeration is one {@link #orderingEnumeration} answered, so it is a sum of units, and what
+     * lists a unit is read off exactly those cases. Opening the enumeration here instead pays for
+     * every case of it on each comparison.
+     */
     private static boolean isValueOfEnumeration(Type t, TypeSymbol enumeration,
-                                                PublishedDeclarations published) {
+                                                EnumerationListings listings) {
         if (t instanceof Type.Union union) {
             for (TypeSymbol member : union.members()) {
-                if (!isValueOfEnumeration(Type.ref(member), enumeration, published)) {
+                if (!isValueOfEnumeration(Type.ref(member), enumeration, listings)) {
                     return false;
                 }
             }
             return !union.members().isEmpty();
         }
         return t instanceof Type.Ref ref && (ref.name().equals(enumeration)
-                || (enumeration instanceof TypeSymbol.AtModule at
-                    && published.of(at.key())
-                        instanceof PublishedDeclarationResult.Found(DeclarationMeaning.Sum _)
-                    && AtomSpace.subjectAtoms(Type.ref(at), published).contains(ref.name())));
+                || (ref.name() instanceof TypeSymbol.AtModule at
+                    && listings.of(at).contains(enumeration)));
     }
 
     /**
@@ -1745,11 +1748,70 @@ public final class TypeOps {
      * <p>Null when the type is not one and when more than one enumeration lists it: a unit data may
      * be a case of two sums, which place it differently, so no one order is the value's own. The
      * order therefore belongs to the sum and not to the case value.
+     *
+     * @param sums     what a value of a sum can be
+     * @param listings every enumeration that lists a value
      */
-    static TypeSymbol orderingEnumeration(Type t, Symbols symbols, DeclarationKinds kinds,
-                                          PublishedDeclarations published) {
-        Set<TypeSymbol> candidates = orderingCandidates(t, symbols, kinds, published);
+    static TypeSymbol orderingEnumeration(Type t, DeclarationKinds kinds, SumCases sums,
+                                          EnumerationListings listings) {
+        Set<TypeSymbol> candidates = orderingCandidates(t, kinds, sums, listings);
         return candidates != null && candidates.size() == 1 ? candidates.iterator().next() : null;
+    }
+
+    /**
+     * Every enumeration {@code module} declares, by each value it lists: the cases it reaches,
+     * nested sums opened. For a reader asking of many values of one module, which reads each of its
+     * sums once rather than once for each value.
+     *
+     * <p>Unmodifiable all the way down, so it can be held as an answer and compared as one.
+     *
+     * @param declared the names {@code module} declares
+     */
+    public static Map<TypeKey, Set<TypeSymbol>> enumerationsListing(
+            String module, Iterable<String> declared, DeclarationKinds kinds, SumCases sums) {
+        Map<TypeKey, Set<TypeSymbol>> listing = new HashMap<>();
+        forEachEnumeration(module, declared, kinds, sums, (enumeration, listed) -> {
+            for (TypeSymbol value : listed) {
+                if (value instanceof TypeSymbol.AtModule at) {
+                    listing.computeIfAbsent(at.key(), _ -> new LinkedHashSet<>()).add(enumeration);
+                }
+            }
+        });
+        Map<TypeKey, Set<TypeSymbol>> held = new HashMap<>();
+        listing.forEach((value, owners) -> held.put(value, Set.copyOf(owners)));
+        return Map.copyOf(held);
+    }
+
+    /**
+     * Each enumeration {@code module} declares, with the values it lists, handed to {@code each}.
+     *
+     * <p>A sum and its cases are declared together (a case declared elsewhere cannot join a union
+     * here, E1606), so every enumeration that lists a case is in the case's own module. Asking that
+     * module rather than what is visible keeps the answer the same in every module that reads the
+     * value.
+     *
+     * <p>Read off what {@code sums} answers for each sum, so which values an enumeration lists is
+     * the same answer as what a value of it can be, and not a second reading of its cases.
+     *
+     * @param names the names {@code module} declares
+     */
+    static void forEachEnumeration(
+            String module, Iterable<String> names, DeclarationKinds kinds, SumCases sums,
+            BiConsumer<TypeSymbol.AtModule, List<TypeSymbol>> each) {
+        for (String declared : names) {
+            // Which form the declaration is, first and on its own. What its cases are is asked only
+            // of the ones that have any — a sweep that asked every declaration what it says would
+            // ask that of the declaration whose own meaning is being worked out, which is asking for
+            // the answer being made.
+            TypeKey address = new TypeKey(module, declared);
+            if (kinds.of(address) != DeclarationKind.SUM) {
+                continue;
+            }
+            if (TypeSymbols.declared(address) instanceof TypeSymbol.AtModule at
+                    && sums.of(at) instanceof SumCases.Enumeration enumeration) {
+                each.accept(at, enumeration.cases());
+            }
+        }
     }
 
     /**
@@ -1758,14 +1820,13 @@ public final class TypeOps {
      * types, and what orders it is the enumeration that lists all of them — so the candidates are
      * intersected across the members rather than each member having to name one on its own.
      */
-    private static Set<TypeSymbol> orderingCandidates(Type t, Symbols symbols,
-                                                      DeclarationKinds kinds,
-                                                      PublishedDeclarations published) {
+    private static Set<TypeSymbol> orderingCandidates(
+            Type t, DeclarationKinds kinds, SumCases sums, EnumerationListings listings) {
         if (t instanceof Type.Union union) {
             Set<TypeSymbol> shared = null;
             for (TypeSymbol member : union.members()) {
                 Set<TypeSymbol> owners =
-                        orderingCandidates(Type.ref(member), symbols, kinds, published);
+                        orderingCandidates(Type.ref(member), kinds, sums, listings);
                 if (owners == null) {
                     return null;
                 }
@@ -1783,32 +1844,12 @@ public final class TypeOps {
             return null;
         }
         if (kinds.isSum(named.key())) {
-            return isUnitOnlySum(named, kinds, published) ? Set.of(named) : null;
+            return isUnitOnlySum(named, kinds, sums) ? Set.of(named) : null;
         }
         if (kinds.of(named.key()) != DeclarationKind.UNIT) {
             return null;
         }
-        // A sum and its cases are declared together (a case declared elsewhere cannot join a union
-        // here, E1606), so every enumeration that lists this case is in the case's own module. Asking
-        // that module rather than what is visible keeps the answer the same in every module that
-        // reads the value.
-        Set<TypeSymbol> owners = new LinkedHashSet<>();
-        for (String declared : symbols.declaredNamesIn(named.module())) {
-            // Which form the declaration is, first and on its own. What its cases are is asked only
-            // of the ones that have any — a sweep that asked every declaration what it says would
-            // ask that of the declaration whose own meaning is being worked out, which is asking for
-            // the answer being made.
-            TypeKey address = new TypeKey(named.module(), declared);
-            if (kinds.of(address) != DeclarationKind.SUM) {
-                continue;
-            }
-            if (TypeSymbols.declared(address) instanceof TypeSymbol.AtModule at
-                    && isUnitOnlySum(at, kinds, published)
-                    && AtomSpace.subjectAtoms(Type.ref(at), published).contains(named)) {
-                owners.add(at);
-            }
-        }
-        return owners;
+        return listings.of(named);
     }
 
     /**
@@ -1817,7 +1858,7 @@ public final class TypeOps {
      * A newtype's value is what its comparison and equality read.
      */
     public static Type base(Type t, NewtypeInners inners) {
-        return newtypeSpine(t, inners).terminal();
+        return inners.terminal(t);
     }
 
     /**
@@ -1827,7 +1868,8 @@ public final class TypeOps {
      * is asking, and two readers deciding it apart is what #461 was: a comparison reaching the base
      * while the range beside it stopped at the first name. Everything that needs to know derives from
      * here — what a value is carried as, which declarations' rules apply to it, whether it is a
-     * number at all.
+     * number at all. A reader that wants only the terminal asks {@link NewtypeInners#terminal},
+     * which a compilation answers for each name once and has to answer as this walk does.
      *
      * <p>Stops on a name already worn, so a declaration reachable from itself ends the walk rather
      * than repeating it, and stops where a newtype's {@code value} is not declared.
@@ -1844,21 +1886,41 @@ public final class TypeOps {
         Set<TypeSymbol> worn = new LinkedHashSet<>();
         Type at = t;
         while (at instanceof Type.Ref ref && worn.add(ref.name())) {
-            // What the name wraps, asked once. A name that wraps nothing is where the walk stops,
-            // and it is one answer whether the name wears no one value or wears one whose written
-            // type denotes nothing — the walk has nowhere further to go either way.
-            Type inner = inners.under(at);
-            if (inner == null) {
+            Unwrapped step = outermost(at, inners);
+            if (step == null) {
                 break;
             }
-            layers.add(new Layer(ref.name()));
-            at = inner;
+            layers.add(step.layer());
+            at = step.inner();
         }
         return new NewtypeSpine(List.copyOf(layers), at);
     }
 
     /** The names a value wears, and the type underneath them. */
     public record NewtypeSpine(List<Layer> layers, Type terminal) {}
+
+    /**
+     * The outermost name a value of {@code t} wears and what it wraps, or null where it wears none.
+     *
+     * <p>The step {@link #newtypeSpine} takes at every name, and the whole of its first one. A reader
+     * that only reads the name on the outside asks this, and is not handed the rest of the spine to
+     * throw away: over a chain of newtypes a walk asks at every link, and the spine under a link is
+     * the rest of the chain.
+     *
+     * <p>What the name wraps is asked once. A name that wraps nothing is where a walk stops, and it
+     * is one answer whether the name wears no one value or wears one whose written type denotes
+     * nothing — there is nowhere further to go either way.
+     */
+    public static Unwrapped outermost(Type t, NewtypeInners inners) {
+        if (!(t instanceof Type.Ref ref)) {
+            return null;
+        }
+        Type inner = inners.under(t);
+        return inner == null ? null : new Unwrapped(new Layer(ref.name()), inner);
+    }
+
+    /** One name taken off a value, and the type it was worn over. */
+    public record Unwrapped(Layer layer, Type inner) {}
 
     /**
      * One name a value wears.
@@ -1896,7 +1958,7 @@ public final class TypeOps {
      * {@link #directNumericNewtypeBase} and stops at one layer, which the language means.
      */
     public static Type numericBase(Type t, NewtypeInners inners) {
-        Type carried = newtypeSpine(t, inners).terminal();
+        Type carried = inners.terminal(t);
         return carried == Type.INT || carried == Type.DECIMAL ? carried : null;
     }
 

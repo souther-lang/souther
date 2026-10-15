@@ -1,0 +1,664 @@
+package souther.compiler;
+
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
+
+import souther.compiler.ast.Hir;
+import souther.compiler.diag.SourceRendering;
+import souther.compiler.partition.CameToNothing;
+import souther.compiler.partition.FixtureTemplate;
+import souther.compiler.partition.GenerationOutcome;
+import souther.compiler.partition.Generator;
+import souther.compiler.query.About;
+import souther.compiler.query.Adequacy;
+import souther.compiler.query.Compilation;
+import souther.compiler.report.AdequacyReport;
+
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+/**
+ * A list whose rules say no two of its elements come to one answer of a closure is composed with
+ * its elements apart at what that closure answers, wherever a list of it is built.
+ *
+ * <p>Said as the rule it is: {@code List.allDistinctBy(k -> k, value)} keeps the elements apart as
+ * values, and {@code List.allDistinctBy(l -> l.sku, value)} keeps them apart at their {@code sku}.
+ * A list built around an element some element is asked of, around every element, to a size the
+ * declaration's own line is drawn at, and to a count of the elements meeting a statement is each
+ * built that way, and a row put back with what was composed is one the decoder takes.
+ */
+class AListWhoseRulesKeepItsElementsApartIsComposedApartTest {
+
+    /** Some element filed in a map, of a list the rules make hold several apart. */
+    private static final String SOME = """
+            module p
+            data Keys = List<String>
+                invariant several = List.length(value) >= 2
+                invariant apart = List.allDistinctBy(k -> k, value)
+            behavior pick : (ks: Keys, shelf: Map<String, String>) -> Int
+            let pick (ks, shelf) =
+                if List.any(k -> match Map.get(k, shelf) with
+                        | Some v -> true
+                        | None -> false, ks.value) then 1 else 0
+            example pick
+                | "a" : (Keys(["a", "b"]), []) -> 0
+            """;
+
+    /** Every element filed, of the same list. */
+    private static final String EVERY = SOME.replace("List.any(", "List.all(");
+
+    /** Some element of a list of records apart at a field, filed by that field. */
+    private static final String SOME_BY_FIELD = """
+            module p
+            data Line = { sku: String, q: Int }
+            data Lines = List<Line>
+                invariant several = List.length(value) >= 2
+                invariant apart = List.allDistinctBy(l -> l.sku, value)
+            behavior pick : (ls: Lines, shelf: Map<String, String>) -> Int
+            let pick (ls, shelf) =
+                if List.any(l -> match Map.get(l.sku, shelf) with
+                        | Some v -> true
+                        | None -> false, ls.value) then 1 else 0
+            example pick
+                | "a" : (Lines([Line { sku = "a", q = 0 }, Line { sku = "b", q = 0 }]), []) -> 0
+            """;
+
+    /** The same, kept apart as records as well: apart at the field is apart as records. */
+    private static final String SOME_BY_FIELD_AND_WHOLE = SOME_BY_FIELD.replace(
+            "    invariant apart =",
+            "    invariant whole = List.allDistinctBy(l -> l, value)\n    invariant apart =");
+
+    /** The same, kept apart at a second field besides. */
+    private static final String SOME_BY_TWO_FIELDS = SOME_BY_FIELD
+            .replace("{ sku: String, q: Int }", "{ sku: String, serial: String, q: Int }")
+            .replace("    invariant apart =",
+                    "    invariant serials = List.allDistinctBy(l -> l.serial, value)\n"
+                            + "    invariant apart =")
+            .replace("sku = \"a\", q = 0", "sku = \"a\", serial = \"s\", q = 0")
+            .replace("sku = \"b\", q = 0", "sku = \"b\", serial = \"t\", q = 0");
+
+    /** So many elements over a line, of a list of numbers the rules keep apart. */
+    private static final String COUNTED = """
+            module p
+            data Keys = List<Int>
+                invariant several = List.length(value) >= 3
+                invariant apart = List.allDistinctBy(k -> k, value)
+            behavior pick : (ks: Keys) -> Int
+            let pick (ks) =
+                if List.length(List.filter(k -> k > 5, ks.value)) >= 2 then 1 else 0
+            example pick
+                | "a" : (Keys([1, 2, 3])) -> 0
+            """;
+
+    /** So many elements filed in a map, where what is counted is handed on to the map. */
+    private static final String HANDED_ON = """
+            module p
+            import List ( filterMap, length )
+            data Keys = List<String>
+                invariant several = List.length(value) >= 2
+                invariant apart = List.allDistinctBy(k -> k, value)
+            behavior pick : (ks: Keys, shelf: Map<String, String>) -> Int
+            let pick (ks, shelf) = {
+                let pickable = filterMap(k -> Map.get(k, shelf), ks.value)
+                if length(pickable) >= 2 then 1 else 0
+            }
+            example pick
+                | "filed" : (Keys(["a", "b"]), [("a", "x"), ("b", "x")]) -> 1
+            """;
+
+    /**
+     * Some element filed in a map, of a list a record holds and whose rules keep the elements
+     * apart: the rule is the record's, and the list composed at its field keeps it.
+     */
+    private static final String SOME_IN_A_RECORD = """
+            module p
+            data Box = { ks: List<String> }
+                invariant several = List.length(ks) >= 2
+                invariant apart = List.allDistinctBy(k -> k, ks)
+            behavior pick : (b: Box, shelf: Map<String, String>) -> Int
+            let pick (b, shelf) =
+                if List.any(k -> match Map.get(k, shelf) with
+                        | Some v -> true
+                        | None -> false, b.ks) then 1 else 0
+            example pick
+                | "a" : (Box { ks = ["a", "b"] }, []) -> 0
+            """;
+
+    /** So many elements over a line, of a list of numbers a record holds and keeps apart. */
+    private static final String COUNTED_IN_A_RECORD = """
+            module p
+            data Box = { ks: List<Int> }
+                invariant several = List.length(ks) >= 3
+                invariant apart = List.allDistinctBy(k -> k, ks)
+            behavior pick : (b: Box) -> Int
+            let pick (b) =
+                if List.length(List.filter(k -> k > 5, b.ks)) >= 2 then 1 else 0
+            example pick
+                | "a" : (Box { ks = [1, 2, 3] }) -> 0
+            """;
+
+    /**
+     * A list held by a record held by another, the inner record keeping its elements apart and the
+     * outer one asking it to hold several: both are rules about the one list.
+     */
+    private static final String IN_A_RECORD_INSIDE_ANOTHER = """
+            module p
+            data Inner = { ks: List<String> }
+                invariant apart = List.allDistinctBy(k -> k, ks)
+            data Outer = { inner: Inner }
+                invariant several = List.length(inner.ks) >= 2
+            behavior pick : (o: Outer, shelf: Map<String, String>) -> Int
+            let pick (o, shelf) =
+                if List.any(k -> match Map.get(k, shelf) with
+                        | Some v -> true
+                        | None -> false, o.inner.ks) then 1 else 0
+            example pick
+                | "a" : (Outer { inner = Inner { ks = ["a", "b"] } }, []) -> 0
+            """;
+
+    /**
+     * A list a record holds, the record wrapped by a name whose rules keep the elements apart and
+     * ask for several: the rules are the name's, about a field of the value it wraps.
+     */
+    private static final String IN_A_RECORD_A_NAME_WRAPS = """
+            module p
+            data Box = { ks: List<String> }
+            data Held = Box
+                invariant several = List.length(value.ks) >= 2
+                invariant apart = List.allDistinctBy(k -> k, value.ks)
+            behavior pick : (h: Held, shelf: Map<String, String>) -> Int
+            let pick (h, shelf) =
+                if List.any(k -> match Map.get(k, shelf) with
+                        | Some v -> true
+                        | None -> false, h.value.ks) then 1 else 0
+            example pick
+                | "a" : (Held(Box { ks = ["a", "b"] }), []) -> 0
+            """;
+
+    /**
+     * The same, the record keeping its elements apart and the name wrapping it asking for several:
+     * the record composed under the name is held to the rules of both.
+     */
+    private static final String A_NAME_COUNTING_A_RECORDS_LIST = IN_A_RECORD_A_NAME_WRAPS
+            .replace("data Box = { ks: List<String> }\n",
+                    "data Box = { ks: List<String> }\n"
+                            + "    invariant apart = List.allDistinctBy(k -> k, ks)\n")
+            .replace("    invariant apart = List.allDistinctBy(k -> k, value.ks)\n", "");
+
+    /** A total over a line, of a list of numbers the rules keep apart: the total is spread over
+     *  numbers no two of which are alike. */
+    private static final String SUMMED = """
+            module p
+            data Keys = List<Int>
+                invariant several = List.length(value) >= 3
+                invariant apart = List.allDistinctBy(k -> k, value)
+            behavior pick : (ks: Keys) -> Int
+            let pick (ks) =
+                if List.sum(ks.value) >= 10 then 1 else 0
+            example pick
+                | "a" : (Keys([1, 2, 3])) -> 0
+            """;
+
+    /** A total of one field, of a list of records the rules keep apart at another: each element is
+     *  given a value of its own there beside its share of the total. */
+    private static final String SUMMED_APART_AT_ANOTHER_FIELD = """
+            module p
+            data Line = { sku: String, q: Int }
+            data Lines = List<Line>
+                invariant several = List.length(value) >= 3
+                invariant apart = List.allDistinctBy(l -> l.sku, value)
+            behavior pick : (ls: Lines) -> Int
+            let pick (ls) =
+                if List.sum(List.map(l -> l.q, ls.value)) >= 10 then 1 else 0
+            example pick
+                | "a" : (Lines([Line { sku = "a", q = 0 }, Line { sku = "b", q = 0 },
+                        Line { sku = "c", q = 0 }])) -> 0
+            """;
+
+    /**
+     * A total of what the lists of a list hold, each level kept apart by its own record: the
+     * postings of an entry at the field totalled and at another, the entries as wholes.
+     */
+    private static final String SUMMED_OVER_LISTS_OF_A_LIST = """
+            module p
+            data Posting = { sku: String, q: Int }
+            data Entry = { postings: List<Posting> }
+                invariant several = List.length(postings) >= 2
+                invariant apart = List.allDistinctBy(p -> p.q, postings)
+                invariant skus = List.allDistinctBy(p -> p.sku, postings)
+            data Ledger = { entries: List<Entry> }
+                invariant several = List.length(entries) >= 2
+                invariant apart = List.allDistinctBy(e -> e, entries)
+            behavior pick : (ledger: Ledger) -> Int
+            let pick (ledger) =
+                if List.sum(List.map(p -> p.q, List.flatMap(.postings, ledger.entries))) >= 10
+                then 1 else 0
+            example pick
+                | "a" : (Ledger { entries = [
+                        Entry { postings = [Posting { sku = "a", q = 1 },
+                                Posting { sku = "b", q = 2 }] },
+                        Entry { postings = [Posting { sku = "c", q = 3 },
+                                Posting { sku = "d", q = 0 }] }] }) -> 0
+            """;
+
+    /**
+     * The same, with entries free to hold nothing and the ledger asking for five: two entries
+     * holding none are alike whatever the postings come to, so a grouping that leaves two of them
+     * empty is no ledger the rules keep — and offered, the groupings of every count of leaves
+     * short of four are as many ledgers as a total is offered in, every one of them refused.
+     */
+    private static final String SUMMED_OVER_LISTS_SOME_EMPTY = """
+            module p
+            data Posting = { q: Int }
+            data Entry = { postings: List<Posting> }
+                invariant apart = List.allDistinctBy(p -> p.q, postings)
+            data Ledger = { entries: List<Entry> }
+                invariant several = List.length(entries) >= 5
+                invariant apart = List.allDistinctBy(e -> e, entries)
+            behavior pick : (ledger: Ledger) -> Int
+            let pick (ledger) =
+                if List.sum(List.map(p -> p.q, List.flatMap(.postings, ledger.entries))) >= 10
+                then 1 else 0
+            example pick
+                | "a" : (Ledger { entries = [Entry { postings = [Posting { q = 1 }] },
+                        Entry { postings = [Posting { q = 2 }] },
+                        Entry { postings = [Posting { q = 3 }] },
+                        Entry { postings = [Posting { q = 0 }] },
+                        Entry { postings = [] }] }) -> 0
+            """;
+
+    /** Each form, with the row composed for the decision rule no example takes and what the model
+     *  answers it. */
+    private static final Map<String, Composed> COMPOSED = Map.ofEntries(
+            Map.entry(SOME, new Composed(List.of("Keys([\"x\", \"xx\"])", "[(\"x\", \"x\")]"),
+                    1)),
+            Map.entry(EVERY, new Composed(List.of("Keys([\"x\", \"xx\"])",
+                    "[(\"x\", \"x\"), (\"xx\", \"x\")]"), 1)),
+            Map.entry(SOME_BY_FIELD, new Composed(List.of(
+                    "Lines([Line { sku = \"x\", q = 0 }, Line { sku = \"xx\", q = 0 }])",
+                    "[(\"x\", \"x\")]"), 1)),
+            Map.entry(SOME_BY_FIELD_AND_WHOLE, new Composed(List.of(
+                    "Lines([Line { sku = \"x\", q = 0 }, Line { sku = \"xx\", q = 0 }])",
+                    "[(\"x\", \"x\")]"), 1)),
+            Map.entry(SOME_BY_TWO_FIELDS, new Composed(List.of(
+                    "Lines([Line { sku = \"x\", serial = \"x\", q = 0 },"
+                            + " Line { sku = \"xx\", serial = \"xx\", q = 0 }])",
+                    "[(\"x\", \"x\")]"), 1)),
+            Map.entry(COUNTED, new Composed(List.of("Keys([4, 6, 7])"), 1)),
+            Map.entry(HANDED_ON, new Composed(List.of("Keys([\"x\", \"xx\"])", "[]"), 0)),
+            Map.entry(SOME_IN_A_RECORD, new Composed(List.of("Box { ks = [\"x\", \"xx\"] }",
+                    "[(\"x\", \"x\")]"), 1)),
+            Map.entry(COUNTED_IN_A_RECORD, new Composed(List.of("Box { ks = [4, 6, 7] }"), 1)),
+            Map.entry(IN_A_RECORD_INSIDE_ANOTHER, new Composed(List.of(
+                    "Outer { inner = Inner { ks = [\"x\", \"xx\"] } }", "[(\"x\", \"x\")]"), 1)),
+            Map.entry(IN_A_RECORD_A_NAME_WRAPS, new Composed(List.of(
+                    "Held(Box { ks = [\"x\", \"xx\"] })", "[(\"x\", \"x\")]"), 1)),
+            Map.entry(A_NAME_COUNTING_A_RECORDS_LIST, new Composed(List.of(
+                    "Held(Box { ks = [\"x\", \"xx\"] })", "[(\"x\", \"x\")]"), 1)),
+            Map.entry(SUMMED, new Composed(List.of("Keys([0, 1, 9])"), 1)),
+            Map.entry(SUMMED_APART_AT_ANOTHER_FIELD, new Composed(List.of(
+                    "Lines([Line { sku = \"x\", q = 10 }, Line { sku = \"xx\", q = 0 },"
+                            + " Line { sku = \"xxx\", q = 0 }])"), 1)),
+            Map.entry(SUMMED_OVER_LISTS_OF_A_LIST, new Composed(List.of(
+                    "Ledger { entries = [Entry { postings = [Posting { sku = \"x\", q = 0 },"
+                            + " Posting { sku = \"xx\", q = 1 }] },"
+                            + " Entry { postings = [Posting { sku = \"x\", q = 2 },"
+                            + " Posting { sku = \"xx\", q = 7 }] }] }"), 1)),
+            Map.entry(SUMMED_OVER_LISTS_SOME_EMPTY, new Composed(List.of(
+                    "Ledger { entries = [Entry { postings = [Posting { q = 0 }] },"
+                            + " Entry { postings = [Posting { q = 1 }] },"
+                            + " Entry { postings = [Posting { q = 2 }] },"
+                            + " Entry { postings = [Posting { q = 7 }] }, Entry { postings = [] }] }"),
+                    1)));
+
+    private record Composed(List<String> inputs, int answer) {}
+
+    /** The runs each form keeps its elements apart at, as the test reads a composed list. */
+    private static final Map<String, List<List<String>>> APART_AT = Map.ofEntries(
+            Map.entry(SOME, List.of(List.of())),
+            Map.entry(EVERY, List.of(List.of())),
+            Map.entry(SOME_BY_FIELD, List.of(List.of("sku"))),
+            Map.entry(SOME_BY_FIELD_AND_WHOLE, List.of(List.of("sku"))),
+            Map.entry(SOME_BY_TWO_FIELDS, List.of(List.of("sku"), List.of("serial"))),
+            Map.entry(COUNTED, List.of(List.of())),
+            Map.entry(HANDED_ON, List.of(List.of())),
+            Map.entry(SOME_IN_A_RECORD, List.of(List.of())),
+            Map.entry(COUNTED_IN_A_RECORD, List.of(List.of())),
+            Map.entry(IN_A_RECORD_INSIDE_ANOTHER, List.of(List.of())),
+            Map.entry(IN_A_RECORD_A_NAME_WRAPS, List.of(List.of())),
+            Map.entry(A_NAME_COUNTING_A_RECORDS_LIST, List.of(List.of())),
+            Map.entry(SUMMED, List.of(List.of())),
+            Map.entry(SUMMED_APART_AT_ANOTHER_FIELD, List.of(List.of("sku"))));
+
+    /** Each model measured once for the class: the methods below read the same models, and only
+     *  read them. */
+    private static final Map<String, Compilation> MEASURED = new ConcurrentHashMap<>();
+
+    private static Compilation measured(String source) {
+        return MEASURED.computeIfAbsent(source, text -> {
+            Compilation compilation = Compilation.ofSource(text, "Main");
+            compilation.measure(Adequacy.Asked.fullReport());
+            compilation.answerEverything();
+            return compilation;
+        });
+    }
+
+    private static String report(Compilation compilation) {
+        return AdequacyReport.of(compilation)
+                .human(SourceRendering.namedByIdentity(compilation.texts()));
+    }
+
+    private static List<String> errors(Compilation compilation) {
+        return compilation.errors().stream()
+                .map(each -> each.diagnostic().code() + " " + each.diagnostic().said())
+                .toList();
+    }
+
+    private static List<GenerationOutcome> outcomes(Compilation compilation) {
+        return Adequacy.generatedOf(compilation.db(), compilation.modules().get(0)).get("pick")
+                .generation().stream().map(each -> each.outcome()).toList();
+    }
+
+    /** The rows composed for the decision rules no row takes, each as the texts of its inputs. */
+    private static List<List<String>> composedForTheRules(Compilation compilation) {
+        List<List<String>> out = new ArrayList<>();
+        Adequacy.generatedOf(compilation.db(), compilation.modules().get(0)).get("pick")
+                .generation().stream()
+                .filter(each -> each.finding().about() instanceof About.ARuleNoRowTakes)
+                .forEach(each -> {
+                    GenerationOutcome.Generated made = assertInstanceOf(
+                            GenerationOutcome.Generated.class, each.outcome(),
+                            () -> "a row is composed for the rule: " + each.outcome());
+                    made.candidates().forEach(row -> out.add(
+                            row.inputs().stream().map(FixtureTemplate::text).toList()));
+                });
+        return out;
+    }
+
+    /** The elements of the list {@code value} writes, under whatever names it wears, or of the one
+     *  list a record it writes holds somewhere among its fields. */
+    private static List<Hir.Expr> elementsOf(Hir.Expr value) {
+        Hir.Expr at = value;
+        while (at instanceof Hir.Apply applied && applied.args().size() == 1) {
+            at = applied.args().getFirst();
+        }
+        if (at instanceof Hir.ListLit list) {
+            return list.elements();
+        }
+        if (at instanceof Hir.NewData record) {
+            for (Hir.FieldInit each : record.inits()) {
+                List<Hir.Expr> inside = elementsOf(each.value());
+                if (inside != null) {
+                    return inside;
+                }
+            }
+        }
+        return null;
+    }
+
+    /** What {@code element} holds at the end of {@code run}, under whatever names it wears. */
+    private static Hir.Expr at(Hir.Expr element, List<String> run) {
+        Hir.Expr at = element;
+        for (String field : run) {
+            while (at instanceof Hir.Apply applied && applied.args().size() == 1) {
+                at = applied.args().getFirst();
+            }
+            Hir.NewData record = assertInstanceOf(Hir.NewData.class, at);
+            at = record.inits().stream().filter(each -> each.name().equals(field)).findFirst()
+                    .orElseThrow().value();
+        }
+        return at;
+    }
+
+    @Test
+    void eachFormIsComposedWithItsElementsApart() {
+        COMPOSED.forEach((model, expected) -> assertEquals(List.of(expected.inputs()),
+                composedForTheRules(measured(model)), model));
+    }
+
+    /**
+     * Every list composed for anything at all — a rule, a line the declaration draws, a class —
+     * holds its elements apart at every run its rules keep them apart at.
+     */
+    @Test
+    void everyListComposedHoldsItsElementsApart() {
+        APART_AT.forEach((model, runs) -> {
+            int lists = 0;
+            for (GenerationOutcome outcome : outcomes(measured(model))) {
+                if (!(outcome instanceof GenerationOutcome.Generated made)) {
+                    continue;
+                }
+                for (var row : made.candidates()) {
+                    List<Hir.Expr> elements = elementsOf(row.inputs().getFirst().value());
+                    lists++;
+                    for (List<String> run : runs) {
+                        Set<Hir.Expr> seen = new HashSet<>();
+                        for (Hir.Expr each : elements) {
+                            assertTrue(seen.add(at(each, run)), () -> model + " composed "
+                                    + row.inputs().getFirst().text() + ", repeated at " + run);
+                        }
+                    }
+                }
+            }
+            assertTrue(lists > 0, model);
+        });
+    }
+
+    /**
+     * A total over a list kept apart has a row at every point of its line, every list in it apart
+     * at every level as its record keeps it, and every row is one the model takes with the answer
+     * its total gives.
+     *
+     * <p>The lists are found by the field of the record holding each — the empty name for the
+     * parameter's own — and each is held to the runs written against what holds it: a list of
+     * lists is two levels of the same question.
+     */
+    @Test
+    void aTotalIsSpreadOverElementsKeptApartAtEveryLevel() {
+        Map<String, Map<String, List<List<String>>>> apartIn = Map.of(
+                SUMMED, Map.of("", List.of(List.of())),
+                SUMMED_APART_AT_ANOTHER_FIELD, Map.of("", List.of(List.of("sku"))),
+                SUMMED_OVER_LISTS_OF_A_LIST, Map.of(
+                        "entries", List.of(List.of()),
+                        "postings", List.of(List.of("q"), List.of("sku"))),
+                SUMMED_OVER_LISTS_SOME_EMPTY, Map.of(
+                        "entries", List.of(List.of()),
+                        "postings", List.of(List.of("q"))));
+        apartIn.forEach((model, runsOf) -> {
+            Compilation compilation = measured(model);
+            int points = 0;
+            for (var generated : Adequacy.generatedOf(compilation.db(),
+                    compilation.modules().get(0)).get("pick").generation()) {
+                if (!(generated.finding().about() instanceof About.APointOfABorder)) {
+                    continue;
+                }
+                GenerationOutcome.Generated made = assertInstanceOf(
+                        GenerationOutcome.Generated.class, generated.outcome(),
+                        () -> model + " composes a row at " + generated.finding().about());
+                for (var row : made.candidates()) {
+                    points++;
+                    Hir.Expr value = row.inputs().getFirst().value();
+                    String input = row.inputs().getFirst().text();
+                    listsIn(value, "").forEach((holder, lists) ->
+                            lists.forEach(elements -> runsOf.getOrDefault(holder, List.of())
+                                    .forEach(run -> {
+                                        Set<Hir.Expr> seen = new HashSet<>();
+                                        for (Hir.Expr each : elements) {
+                                            assertTrue(seen.add(at(each, run)), () -> model
+                                                    + " composed " + input + ", repeated at `"
+                                                    + holder + "` " + run);
+                                        }
+                                    })));
+                    Compilation answered = measured(model + "    | \"composed\" : (" + input
+                            + ") -> " + (totalOf(value) >= 10 ? 1 : 0) + "\n");
+                    assertEquals(List.of(), errors(answered), input);
+                }
+            }
+            assertEquals(3, points, model);
+        });
+    }
+
+    /**
+     * Every list {@code value} writes, by the field of the record holding it — {@code holder} for
+     * the one {@code value} is, under whatever names it wears.
+     */
+    private static Map<String, List<List<Hir.Expr>>> listsIn(Hir.Expr value, String holder) {
+        Map<String, List<List<Hir.Expr>>> out = new LinkedHashMap<>();
+        Hir.Expr at = value;
+        while (at instanceof Hir.Apply applied && applied.args().size() == 1) {
+            at = applied.args().getFirst();
+        }
+        if (at instanceof Hir.ListLit list) {
+            out.computeIfAbsent(holder, _ -> new ArrayList<>()).add(list.elements());
+            for (Hir.Expr each : list.elements()) {
+                listsIn(each, holder).forEach((key, lists) ->
+                        out.computeIfAbsent(key, _ -> new ArrayList<>()).addAll(lists));
+            }
+        }
+        if (at instanceof Hir.NewData record) {
+            for (Hir.FieldInit each : record.inits()) {
+                listsIn(each.value(), each.name()).forEach((key, lists) ->
+                        out.computeIfAbsent(key, _ -> new ArrayList<>()).addAll(lists));
+            }
+        }
+        return out;
+    }
+
+    /** Every whole number {@code value} writes, added up: the numbers each of these models totals
+     *  are the only ones its rows hold. */
+    private static long totalOf(Hir.Expr value) {
+        return switch (value) {
+            case Hir.IntLit number -> number.value();
+            case Hir.Apply applied -> applied.args().stream().mapToLong(each -> totalOf(each))
+                    .sum();
+            case Hir.ListLit list -> list.elements().stream().mapToLong(each -> totalOf(each))
+                    .sum();
+            case Hir.NewData record -> record.inits().stream()
+                    .mapToLong(each -> totalOf(each.value())).sum();
+            default -> 0;
+        };
+    }
+
+    /**
+     * The rows composed, put back as examples, take the rule they were composed for: the decoder
+     * takes the list, and no rule is left that no row takes.
+     */
+    @Test
+    void theRowsComposedTakeTheRuleTheyWereComposedFor() {
+        COMPOSED.forEach((model, expected) -> {
+            Compilation answered = measured(model + "    | \"composed\" : ("
+                    + String.join(", ", expected.inputs()) + ") -> " + expected.answer() + "\n");
+
+            assertEquals(List.of(), errors(answered), model);
+            assertFalse(report(answered).contains("no row takes a decision rule"),
+                    () -> report(answered));
+        });
+    }
+
+    /**
+     * A list of booleans the rules keep apart and make hold three is a list no value is, and
+     * nothing here proves it: the values put beside each other ran out, which is this compiler
+     * not finding a third and not the model refusing one. So nothing composed for it is said as
+     * what the rules leave.
+     */
+    @Test
+    void aListTheElementsRunOutForIsNoProofTheRulesLeaveNone() {
+        String bools = """
+                module p
+                data Flags = List<Bool>
+                    invariant several = List.length(value) >= 3
+                    invariant apart = List.allDistinctBy(k -> k, value)
+                behavior pick : (fs: Flags) -> Int
+                let pick (fs) =
+                    if List.any(k -> k, fs.value) then 1 else 0
+                example pick
+                    | "a" : (Flags([true, false, true])) -> 0
+                """;
+        List<Generator.UnresolvedCombination.Reason> said = new ArrayList<>();
+        for (GenerationOutcome outcome : outcomes(measured(bools))) {
+            assertFalse(outcome instanceof GenerationOutcome.Generated, outcome::toString);
+            if (outcome instanceof GenerationOutcome.CannotGenerate(List<CameToNothing> why)) {
+                why.forEach(each -> said.add(each.why().reason()));
+            }
+        }
+        assertFalse(said.isEmpty());
+        assertFalse(said.contains(
+                Generator.UnresolvedCombination.Reason.NO_VALUE_CAN_STAND_THERE),
+                said::toString);
+    }
+
+    /**
+     * Records told apart by how many a list of theirs holds run out where that list's values do,
+     * and the walk over sizes stops there: a list of booleans kept apart holds two at the most,
+     * and nothing caps how many the rules let it hold.
+     */
+    @Test
+    @Timeout(value = 30, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
+    void recordsToldApartBySizeRunOutWhereTheirListsValuesDo() {
+        String flags = """
+                module p
+                data Flags = { fs: List<Bool> }
+                    invariant apart = List.allDistinctBy(k -> k, fs)
+                data Many = List<Flags>
+                    invariant several = List.length(value) >= 5
+                    invariant apart = List.allDistinctBy(f -> f, value)
+                behavior pick : (m: Many) -> Int
+                let pick (m) =
+                    if List.any(f -> List.isEmpty(f.fs), m.value) then 1 else 0
+                example pick
+                    | "a" : (Many([Flags { fs = [] }, Flags { fs = [true] },
+                            Flags { fs = [false] }, Flags { fs = [true, false] },
+                            Flags { fs = [false, true] }])) -> 1
+                """;
+        List<GenerationOutcome> outcomes = outcomes(measured(flags));
+        assertFalse(outcomes.isEmpty());
+    }
+
+    /**
+     * The rule is said to be one about how the elements stand to each other, and not one written in
+     * a form this compiler does not read — and still as a rule the position's values were not
+     * worked out under, since a list saying one element twice is among what the position is taken
+     * to hold. A closure this does not read is a form it does not read, which is the control.
+     */
+    @Test
+    void theRuleIsSaidToRelateTheElementsWhereItsClosureIsRead() {
+        String unread = "not accounted for: invariant Keys (apart) — which values may stand at ks:";
+        COMPOSED.keySet().stream().filter(model -> model.contains("Keys")).forEach(model -> {
+            String report = report(measured(model));
+            assertTrue(report.contains(unread + " it says how the elements here stand to each"
+                    + " other, and which containers it leaves is not worked out"), report);
+            assertFalse(report.contains("written in a form this compiler does not read"), report);
+        });
+        String report = report(measured(SOME.replace("List.allDistinctBy(k -> k, value)",
+                "List.allDistinctBy(k -> String.length(k), value)")));
+        assertTrue(report.contains(unread + " written in a form this compiler does not read"),
+                report);
+    }
+
+    /**
+     * Nothing the declaration's own lines are drawn at is left as a point no value tried could be
+     * written at: what was refused there was a list saying one element twice.
+     */
+    @Test
+    void noPointOfTheDeclarationIsLeftAsEveryValueRefused() {
+        Set<String> models = new HashSet<>(COMPOSED.keySet());
+        models.add(SUMMED_APART_AT_ANOTHER_FIELD);
+        models.add(SUMMED_OVER_LISTS_OF_A_LIST);
+        models.forEach(model -> {
+            String report = report(measured(model));
+            assertFalse(report.contains("every value tried at"), () -> model + report);
+            assertFalse(report.contains("how many values a point is tried with"),
+                    () -> model + report);
+        });
+    }
+}

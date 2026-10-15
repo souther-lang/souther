@@ -2,6 +2,8 @@ package souther.compiler.values;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.observe.WorkFigure;
+
 import java.util.List;
 import java.util.Set;
 
@@ -110,7 +112,9 @@ class WhatIsUnreadAtOnePositionIsUnreadAtTheOnesItIsOneValueWithTest {
         // description says so of the position it was written at, and the reading it comes to says
         // it of the block that position is on.
         AdmissibleValues<String> wide = built(PlannedValues.<String>holdingAsOne("p", "r")
-                .alsoStanding(Standing.of(Set.of("p"), UnreadReason.EXACT_VALUES_TOO_COSTLY)));
+                .alsoStanding(Standing.of(Set.of("p"), new StoppedReading(
+                        UnreadReason.EXACT_VALUES_TOO_COSTLY,
+                        WorkFigure.ADMITTED_VALUES_ONE_MACHINE.at(300)))));
 
         assertFalse(wide.projectionExactAt("p"));
         assertFalse(wide.projectionExactAt("r"), "one machine, one answer about it");

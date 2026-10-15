@@ -24,6 +24,7 @@ import souther.compiler.doc.JapiCommand;
 import souther.compiler.doc.McpServer;
 import souther.compiler.fmt.Deviations;
 import souther.compiler.fmt.Formatter;
+import souther.compiler.io.ConfinedTree;
 import souther.compiler.meta.ModuleMetadata;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Adequacy;
@@ -34,16 +35,24 @@ import souther.compiler.report.GeneratedRows;
 import souther.compiler.report.UnifiedDiff;
 import souther.lsp.LspServer;
 import souther.lsp.ToolingMetadata;
+import souther.cli.backend.BackendFetch;
+import souther.cli.backend.BackendProcess;
+import souther.cli.backend.Backends;
+import souther.cli.backend.Central;
+import souther.cli.backend.Shown;
+import souther.cli.backend.Unavailable;
 import souther.cli.init.InitCommand;
 
 import java.io.Console;
 import java.io.IOException;
+import java.io.PrintStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * The command line's entry point: it resolves the command a line names, holds the line against what
@@ -105,9 +114,16 @@ public final class Main {
      * here, each of those is an ordinary result.
      */
     static int dispatch(String[] args) {
+        return dispatch(args, Path.of(""));
+    }
+
+    /**
+     * As {@link #dispatch(String[])}, with a project's version file looked for from
+     * {@code workingDirectory}.
+     */
+    static int dispatch(String[] args, Path workingDirectory) {
         String named = args.length == 0 ? "" : args[0];
-        String[] rest = args.length == 0 ? args : java.util.Arrays.copyOfRange(args, 1, args.length);
-        // Written where a command goes, `--help` asks what `help` asks. Read as an option it would
+        String[] rest = args.length == 0 ? args : java.util.Arrays.copyOfRange(args, 1, args.length);        // Written where a command goes, `--help` asks what `help` asks. Read as an option it would
         // be an option of no command, since which command's options are read is what has not been
         // said yet; read as its own shape it would be a line whose remaining arguments nothing
         // looks at, and `souther --help compile` would answer with the listing.
@@ -124,6 +140,22 @@ public final class Main {
             System.err.println(hint);
             System.err.println(Usage.all());
             return 2;
+        }
+        // Before the check below, which reads the arguments as the CLI's own: an installed target's
+        // arguments are the backend's, and are held against nothing here.
+        if (command == CliCommand.COMPILE) {
+            switch (CompileInvocation.read(rest)) {
+                case CompileInvocation.Unnamed unnamed -> {
+                    System.err.println(Messages.get("cli.target.unnamed",
+                            RenderOptions.asking(null).locale()));
+                    System.err.println(Usage.of(command));
+                    return 2;
+                }
+                case CompileInvocation.Target target -> {
+                    return delegated(target, workingDirectory);
+                }
+                case CompileInvocation.Jvm jvm -> rest = jvm.arguments().toArray(String[]::new);
+            }
         }
         // Before the command, and the same check whichever one was named. What each parser used to
         // ask for itself — is this token mine — three of them asked and two did not, and none of
@@ -149,7 +181,187 @@ public final class Main {
             System.err.println(Usage.of(command));
             return 2;
         }
+        // After everything the line itself says, and before anything runs: what a project asks of
+        // the Souther is a fact about where the command is run, which no word of the line changes.
+        if (command.scope() == CliCommand.Scope.PROJECT
+                && refusedByProject(workingDirectory, RenderOptions.asking(read.lang()))) {
+            return 2;
+        }
         return work(command, rest).getAsInt();
+    }
+
+    /**
+     * {@code souther compile --target <target> <arguments>...}: runs the backend that answers to the
+     * target, fetching it where it is not installed, and answers with its exit status.
+     *
+     * <p>Held to the project's version like every compile, and to nothing else the CLI reads: the
+     * backend's arguments, {@code --help} among them, are its own.
+     */
+    private static int delegated(CompileInvocation.Target target, Path workingDirectory) {
+        RenderOptions render = RenderOptions.asking(null);
+        if (refusedByProject(workingDirectory, render)) {
+            return 2;
+        }
+        Locale locale = render.locale();
+        Backends backends = Backends.installed();
+        try {
+            Optional<Backends.Backend> backend = switch (backends.find(target.name(),
+                    ModuleMetadata.compilerVersion())) {
+                case Backends.Found found -> Optional.of(found.backend());
+                case Backends.Absent absent -> fetchedFor(backends, absent, locale);
+            };
+            if (backend.isEmpty()) {
+                return 2;
+            }
+            return BackendProcess.run(backend.get(), target.arguments());
+        } catch (Backends.Refused e) {
+            System.err.println(Messages.get(e.key(), locale, e.arguments()));
+            return 2;
+        } catch (IOException e) {
+            System.err.println("io error: " + e.getMessage());
+            return 1;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return 1;
+        }
+    }
+
+    /**
+     * The backend fetched for a pair no directory holds, or none once it is said why none was.
+     *
+     * <p>Fetching is said on standard error, which is the backend's too once it runs: standard
+     * output is what the backend writes, and a line of this command's there would be read as one.
+     * {@value #OFFLINE} set to anything but the empty string tells a compile to fetch nothing, as
+     * {@code NO_COLOR} is read; it is not an argument, since from the target's name on the line is
+     * the backend's.
+     */
+    private static Optional<Backends.Backend> fetchedFor(Backends backends,
+                                                         Backends.Absent absent, Locale locale)
+            throws Backends.Refused, IOException, InterruptedException {
+        BackendFetch.Source source = Central.configured(System.getenv());
+        Central.Failure failure;
+        String offline = System.getenv(OFFLINE);
+        if (offline != null && !offline.isEmpty()) {
+            failure = new Central.Failure.NotAsked();
+        } else {
+            switch (BackendFetch.whereAbsent(backends, source, absent.target(),
+                    absent.southerVersion(),
+                    release -> fetching(System.err, locale, release))) {
+                case BackendFetch.Fetched fetched -> {
+                    System.err.println(fetched(locale, fetched));
+                    return Optional.of(fetched.backend());
+                }
+                case BackendFetch.Present present -> {
+                    return Optional.of(present.backend());
+                }
+                case BackendFetch.Failed failed -> failure = failed.failure();
+            }
+        }
+        List<Unavailable.Line> lines = Unavailable.of(absent, failure, source.name());
+        for (int i = 0; i < lines.size(); i++) {
+            System.err.println((i == 0 ? "" : "  ")
+                    + Messages.get(lines.get(i).key(), locale, lines.get(i).array()));
+        }
+        return Optional.empty();
+    }
+
+    /** What tells a compile for a target to fetch no backend. */
+    static final String OFFLINE = "SOUTHER_BACKEND_OFFLINE";
+
+    private static void fetching(PrintStream to, Locale locale, Central.Release release) {
+        to.println(Messages.get("cli.backend.fetching", locale, release.artifactId(),
+                release.version(), Shown.address(release.jar())));
+    }
+
+    private static String fetched(Locale locale, BackendFetch.Fetched fetched) {
+        return Messages.get("cli.backend.fetched", locale, fetched.release().artifactId(),
+                fetched.release().version(), fetched.backend().jar());
+    }
+
+    /**
+     * {@code souther backend fetch <target>}: fetches the newest release of the target's backend
+     * built against this Souther, compiling nothing.
+     *
+     * <p>For a machine that will not reach the repository when it compiles, and for taking a newer
+     * release than the one fetched before. It is held to no project's version: what it fetches is
+     * for the Souther that runs it.
+     */
+    private static int backendSubcommand(String[] args) {
+        Locale locale = RenderOptions.asking(null).locale();
+        if (args.length != 2 || !args[0].equals("fetch") || args[1].startsWith("-")) {
+            System.err.println(Messages.get("cli.backend.arguments", locale,
+                    String.join(" ", args)));
+            System.err.println(Usage.of(CliCommand.BACKEND));
+            return 2;
+        }
+        String target = args[1];
+        if (target.equals("jvm")) {
+            System.err.println(Messages.get("cli.backend.jvm", locale));
+            return 2;
+        }
+        String version = ModuleMetadata.compilerVersion();
+        BackendFetch.Source source = Central.configured(System.getenv());
+        try {
+            return switch (BackendFetch.again(Backends.installed(), source, target, version,
+                    release -> fetching(System.out, locale, release))) {
+                case BackendFetch.Fetched fetched -> {
+                    System.out.println(fetched(locale, fetched));
+                    yield 0;
+                }
+                case BackendFetch.Current current -> {
+                    System.out.println(Messages.get("cli.backend.fetch.current", locale,
+                            current.release().artifactId(), current.release().version(),
+                            current.backend().jar()));
+                    yield 0;
+                }
+                case BackendFetch.Failed failed -> {
+                    System.err.println(Messages.get("cli.backend.fetch.failed", locale, target,
+                            version));
+                    for (Unavailable.Line line : Unavailable.repository(failed.failure(),
+                            source.name())) {
+                        System.err.println("  " + Messages.get(line.key(), locale, line.array()));
+                    }
+                    yield 2;
+                }
+            };
+        } catch (Backends.Refused e) {
+            System.err.println(Messages.get(e.key(), locale, e.arguments()));
+            return 2;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return 1;
+        }
+    }
+
+    /** Whether the project this command is run in refuses this Souther, which is then said. */
+    private static boolean refusedByProject(Path workingDirectory, RenderOptions render) {
+        String refusal = projectRefusal(workingDirectory, render);
+        if (refusal != null) {
+            System.err.println(refusal);
+        }
+        return refusal != null;
+    }
+
+    /**
+     * Why the project this command is run in refuses this Souther, or null where nothing does.
+     *
+     * <p>Compared as text with this compiler's own version. A build tree that has no version to
+     * give says {@code unreleased}, which equals only a file that says it.
+     */
+    private static String projectRefusal(Path workingDirectory, RenderOptions render) {
+        Locale locale = render.locale();
+        return switch (ProjectVersion.nearest(workingDirectory)) {
+            case ProjectVersion.Absent absent -> null;
+            case ProjectVersion.Malformed malformed ->
+                    Messages.get("cli.project.malformed", locale, malformed.file());
+            case ProjectVersion.Unreadable unreadable ->
+                    Messages.get("cli.project.unreadable", locale, unreadable.file(),
+                            unreadable.reason());
+            case ProjectVersion.Declared declared ->
+                    declared.version().equals(ModuleMetadata.compilerVersion()) ? null
+                            : Messages.get("cli.project.version", locale, declared.file(),
+                                    declared.version(), ModuleMetadata.compilerVersion());
+        };
     }
 
     /**
@@ -165,6 +377,7 @@ public final class Main {
             case INIT -> () -> initSubcommand(rest);
             case RUN -> () -> runSubcommand(rest);
             case COMPILE -> () -> compileSubcommand(rest);
+            case BACKEND -> () -> backendSubcommand(rest);
             case FMT -> () -> fmtSubcommand(rest);
             case EXAMPLES -> () -> examplesSubcommand(rest);
             case DOC -> () -> DocCommand.run(rest, System.out, System.err);
@@ -1088,12 +1301,10 @@ public final class Main {
     /** Writes each class under {@code outDir}, and answers with the paths written, in order. */
     static List<Path> writeClasses(Map<String, ClassFileImage> classes, Path outDir)
             throws IOException {
+        ConfinedTree output = ConfinedTree.at(outDir);
         List<Path> written = new ArrayList<>();
         for (Map.Entry<String, ClassFileImage> entry : classes.entrySet()) {
-            Path file = outDir.resolve(JvmClassName.classFile(entry.getKey()));
-            Files.createDirectories(file.getParent());
-            Files.write(file, entry.getValue().bytes());
-            written.add(file);
+            written.add(output.write(JvmClassName.classFile(entry.getKey()), entry.getValue().bytes()));
         }
         return written;
     }

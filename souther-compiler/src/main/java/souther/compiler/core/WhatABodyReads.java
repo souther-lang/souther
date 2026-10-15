@@ -1,0 +1,72 @@
+package souther.compiler.core;
+
+import souther.compiler.types.BindingId;
+
+import java.util.Objects;
+import java.util.Optional;
+
+/**
+ * Which names a tree reads, asked of the tree that runs.
+ *
+ * <p>One walk for the question a reader of a body asks of an expression: whether it reads a
+ * binding anywhere inside it. A {@link Core.Read} says which binding it is, so a binding of the
+ * same spelling further in is not the one asked about.
+ */
+public final class WhatABodyReads {
+
+    private WhatABodyReads() {}
+
+    /** Whether {@code e} reads the binding {@code binding} anywhere inside it. */
+    public static boolean binding(Core e, BindingId binding) {
+        if (e instanceof Core.Read read && read.binding().equals(binding)) {
+            return true;
+        }
+        boolean[] found = {false};
+        Core.forEachChild(e, child -> found[0] = found[0] || binding(child, binding));
+        return found[0];
+    }
+
+    /**
+     * That {@code e} reads {@code binding} nowhere inside it, as the walk {@link #binding} found
+     * it — or empty where it reads it somewhere.
+     */
+    public static Optional<ReadsNothingOf> without(Core e, BindingId binding) {
+        return binding(e, binding) ? Optional.empty() : Optional.of(new ReadsNothingOf(binding));
+    }
+
+    /**
+     * That a tree was walked and reads {@code binding} nowhere inside it.
+     *
+     * <p>Made only by {@link #without}, after the walk, so holding one is that walk's answer and
+     * not a claim about it. It keeps the binding and not the tree: what it answers is said once,
+     * and a value holding it is compared by the binding alone.
+     */
+    public static final class ReadsNothingOf {
+
+        private final BindingId binding;
+
+        private ReadsNothingOf(BindingId binding) {
+            this.binding = Objects.requireNonNull(binding, "a walk asks after some binding");
+        }
+
+        /** The binding the tree reads nowhere. */
+        public BindingId binding() {
+            return binding;
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof ReadsNothingOf that && binding.equals(that.binding);
+        }
+
+        @Override
+        public int hashCode() {
+            return binding.hashCode();
+        }
+
+        @Override
+        public String toString() {
+            return "reads nothing of " + binding;
+        }
+    }
+}

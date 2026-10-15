@@ -2,9 +2,9 @@ package souther.compiler.values;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.regex.PatternParser;
+import net.unit8.notation199x.pattern.PatternParser;
 import souther.compiler.regex.PatternPlan;
-import souther.compiler.regex.PatternRead;
+import net.unit8.notation199x.pattern.PatternRead;
 
 import java.util.List;
 
@@ -48,7 +48,7 @@ class WhatAPositionPublishesAboutItsStringsIsAllOfItOrNoneTest {
     }
 
     private static PatternPlan.Budget budget(int states) {
-        return new PatternPlan.Budget(states, states);
+        return new PatternPlan.Budget(states, states, 1_000_000_000L);
     }
 
     @Test

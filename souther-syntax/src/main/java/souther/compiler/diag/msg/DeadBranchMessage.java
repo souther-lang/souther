@@ -34,6 +34,9 @@ public sealed interface DeadBranchMessage extends Message {
     /** One of those conditions, on a way here that needs it to fail. */
     record ThisOneFailsOnTheWayHere() implements DeadBranchMessage, Supporting {}
 
+    /** An arm of a {@code match} on the way here, which the value it matched has to take. */
+    record ThisArmIsTakenOnTheWayHere() implements DeadBranchMessage, Supporting {}
+
     /** The values it is written for are not values the position can hold. */
     record ThePositionStopsShortOfIt(String position, String admits) implements DeadBranchMessage,
             Supporting {}
@@ -41,6 +44,29 @@ public sealed interface DeadBranchMessage extends Message {
     /** Every case the arm names is one the rules refuse where it is matched on. */
     record EveryCaseItIsWrittenForIsRefused(String position, String cases)
             implements DeadBranchMessage, Supporting {}
+
+    /** The value matched on is one the source wrote, and never a case the arm names. */
+    record TheValueMatchedOnIsNeverItsCase(String canBe, String cases)
+            implements DeadBranchMessage, Supporting {}
+
+    /** The position matched on is declared as cases none of which the arm is for. */
+    record ItsDeclarationHoldsNoneOfTheCases(String position, String declared, String cases)
+            implements DeadBranchMessage, Supporting {}
+
+    /** The position matched on is declared as cases every one of which the arms before this one
+     *  take. */
+    record ItsDeclarationHoldsNothingTheArmsBeforeLeave(String position, String declared,
+                                                        String cases)
+            implements DeadBranchMessage, Supporting {}
+
+    /** The arm is entered by one of several ways, and each of them is ruled out, as the notes after
+     *  this one say. */
+    record EveryWayInIsRuledOut() implements DeadBranchMessage, Supporting {}
+
+    /** The branch is in a closure applied to the elements of containers nothing on the way here
+     *  leaves one. */
+    record ItsClosureIsAppliedToNothing(String containers) implements DeadBranchMessage,
+            Supporting {}
 
     /** What to do about it. */
     record TakeItOutOrLetSomethingReachIt() implements DeadBranchMessage, Supporting {}

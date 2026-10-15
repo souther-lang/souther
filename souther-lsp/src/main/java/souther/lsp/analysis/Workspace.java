@@ -5,6 +5,9 @@ import java.io.UncheckedIOException;
 import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import souther.compiler.io.BoundedRead;
+import souther.compiler.io.ConfinedTree;
+import souther.compiler.io.LimitExceededException;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Abandonment;
 import java.util.ArrayList;
@@ -14,7 +17,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.stream.Stream;
 
 /**
  * The Souther sources of a workspace: the {@code .sou} files under the roots the client announced at
@@ -119,9 +121,12 @@ public final class Workspace {
         if (diskScan == null) {
             diskScan = scanDisk();
         }
-        Map<String, String> sources = new LinkedHashMap<>(diskScan);
-        sources.putAll(openBuffers);
-        return ModuleGraph.of(sources, modulesOnThePath());
+        return ModuleGraph.overlaying(diskScan, openBuffers, modulesOnThePath());
+    }
+
+    /** The same, over the documents the editor has open, which are read here and not handed out. */
+    public ModuleGraph snapshot(DocumentStore documents) {
+        return snapshot(documents.openDocuments());
     }
 
     /**
@@ -202,20 +207,47 @@ public final class Workspace {
             if (!Files.isDirectory(root)) {
                 continue;
             }
-            try (Stream<Path> walk = Files.walk(root, PROJECT_DEPTH)) {
-                // Asked of every path the walk reaches, and not of the ones that turn out to be
-                // projects. What costs time is the walk, and a root with no project in it is a root
-                // this would read to the end after being told to stop.
-                walk.forEach(project -> {
-                    abandonment.stopIfAsked();
-                    if (!Files.isDirectory(project)) {
-                        return;
+            ConfinedTree walked = ConfinedTree.at(root);
+            try {
+                walked.walk(BoundedRead.MOST_ENTRIES, PROJECT_DEPTH, new ConfinedTree.Entries() {
+                    // Asked of every entry the walk reaches, and not of the ones that turn out to
+                    // be projects. What costs time is the walk, and a root with no project in it
+                    // is a root this would read to the end after being told to stop.
+                    @Override
+                    public void visited() {
+                        abandonment.stopIfAsked();
                     }
-                    for (Path layout : CLASS_OUTPUTS) {
-                        Path output = project.resolve(layout);
-                        if (Files.isDirectory(output)) {
-                            outputs.add(output);
+
+                    // A project is a directory. A link is not one, and a class output that is one
+                    // is not read: the repository is somebody else's, and where a link leads is
+                    // not part of it.
+                    @Override
+                    public void reached(ConfinedTree.Reached entry) {
+                        switch (entry) {
+                            case ConfinedTree.Reached.Directory directory -> {
+                                Path project = walked.root().resolve(directory.relative());
+                                ConfinedTree tree = ConfinedTree.at(project);
+                                for (Path layout : CLASS_OUTPUTS) {
+                                    if (tree.isDirectory(layout.toString())) {
+                                        outputs.add(project.resolve(layout));
+                                    }
+                                }
+                            }
+                            case ConfinedTree.Reached.RegularFile _, ConfinedTree.Reached.Link _,
+                                 ConfinedTree.Reached.Other _ -> {
+                            }
                         }
+                    }
+
+                    // A directory the editor cannot open holds no project it could read, and the
+                    // rest of the workspace is still worth analysing; so is the part of one too
+                    // large to look through.
+                    @Override
+                    public void unreadable(String relative, IOException cause) {
+                    }
+
+                    @Override
+                    public void limitReached(LimitExceededException cause) {
                     }
                 });
             } catch (IOException _) {
@@ -239,13 +271,46 @@ public final class Workspace {
             if (!Files.isDirectory(root)) {
                 continue;
             }
-            try (Stream<Path> walk = Files.walk(root)) {
-                // Every path, as above: the walk is what a workspace of a hundred thousand files
-                // spends its time on, and how many of them end in `.sou` says nothing about that.
-                walk.forEach(path -> {
-                    abandonment.stopIfAsked();
-                    if (Files.isRegularFile(path) && path.getFileName().toString().endsWith(SUFFIX)) {
-                        sources.put(path.toUri().toString(), readOrEmpty(path));
+            ConfinedTree tree = ConfinedTree.at(root);
+            try {
+                // A workspace is somebody else's repository: what is under it is read only as a
+                // regular file of bounded size, and a link is not followed out of it.
+                tree.walk(BoundedRead.MOST_ENTRIES, new ConfinedTree.Entries() {
+                    // Every entry, not only the sources: the walk is what a workspace of a hundred
+                    // thousand files spends its time on, and how many of them end in `.sou` says
+                    // nothing about that.
+                    @Override
+                    public void visited() {
+                        abandonment.stopIfAsked();
+                    }
+
+                    // A source the editor reads is a regular file. One that is a link is not
+                    // followed out of the workspace, and one that is a directory or a pipe has no
+                    // text to analyse; an editor open on the rest is still worth more than none.
+                    @Override
+                    public void reached(ConfinedTree.Reached entry) {
+                        switch (entry) {
+                            case ConfinedTree.Reached.RegularFile file -> {
+                                if (file.relative().endsWith(SUFFIX)) {
+                                    sources.put(tree.root().resolve(file.relative()).toUri().toString(),
+                                            readOrEmpty(tree, file.relative()));
+                                }
+                            }
+                            case ConfinedTree.Reached.Directory _, ConfinedTree.Reached.Link _,
+                                 ConfinedTree.Reached.Other _ -> {
+                            }
+                        }
+                    }
+
+                    // An editor is open on what it can read, so a directory it cannot open, or a
+                    // workspace beyond the bound, leaves the rest of it to be analysed rather than
+                    // none of it.
+                    @Override
+                    public void unreadable(String relative, IOException cause) {
+                    }
+
+                    @Override
+                    public void limitReached(LimitExceededException cause) {
                     }
                 });
             } catch (IOException e) {
@@ -255,9 +320,9 @@ public final class Workspace {
         return sources;
     }
 
-    private static String readOrEmpty(Path p) {
+    private static String readOrEmpty(ConfinedTree tree, String relative) {
         try {
-            return Files.readString(p);
+            return tree.readString(relative, BoundedRead.SOURCE_FILE_BYTES);
         } catch (IOException _) {
             return "";   // a file that cannot be read contributes nothing, but never crashes the scan
         }

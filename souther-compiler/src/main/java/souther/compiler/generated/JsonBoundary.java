@@ -3,6 +3,7 @@ package souther.compiler.generated;
 import souther.compiler.check.BoundaryInput;
 import souther.compiler.check.CrossingMapKey;
 import souther.compiler.check.BoundaryOutput;
+import souther.compiler.evaluate.EvaluationContext;
 import souther.compiler.jvm.GeneratedClass;
 import souther.compiler.jvm.SoutherJvmAbi;
 import souther.compiler.types.LeafScalar;
@@ -111,7 +112,7 @@ public final class JsonBoundary {
             case BoundaryInput.Nominal n -> codecOf(loader, n.name(), "jsonDecoder");
             case BoundaryInput.ListOf l -> JsonDecoders.list(decoderFor(loader, l.element()));
             case BoundaryInput.SetOf s -> JsonDecoders.list(decoderFor(loader, s.element()))
-                    .map(elements -> Sets.fromList(new ArrayList<Object>(elements)));
+                    .map(elements -> Sets.fromList(new ArrayList<Object>(elements), EvaluationContext.checkpoint()));
             case BoundaryInput.MapOf m -> {
                 Decoder<Object, ?> key = keyDecoder(loader, m.key());
                 yield JsonDecoders.map(decoderFor(loader, m.value()))
@@ -156,7 +157,9 @@ public final class JsonBoundary {
      * still chain {@code .date()} etc. on it.
      */
     private static <I> StringDecoder<I> admitted(StringDecoder<I> text) {
-        return StringDecoder.from(text.map(Strings::admission).flatMapWithPath(JsonBoundary::textOf));
+        // The checkpoint is asked for each time a text is admitted, since the decoder may be kept.
+        return StringDecoder.from(text.map(t -> Strings.admission(t, EvaluationContext.checkpoint()))
+                .flatMapWithPath(JsonBoundary::textOf));
     }
 
     /** The text an admission let in, or the failure at {@code path} saying why it is not a
@@ -303,10 +306,10 @@ public final class JsonBoundary {
      *  decoder's own {@code __dateText} and its siblings say. */
     private static Result<String> temporalText(LeafScalar scalar, String text, Path path) {
         String refusal = switch (scalar) {
-            case DATE -> Temporals.dateRefusal(text);
-            case TIME -> Temporals.timeRefusal(text);
-            case DATETIME -> Temporals.dateTimeRefusal(text);
-            case INSTANT -> Temporals.instantRefusal(text);
+            case DATE -> Temporals.dateRefusal(text, EvaluationContext.checkpoint());
+            case TIME -> Temporals.timeRefusal(text, EvaluationContext.checkpoint());
+            case DATETIME -> Temporals.dateTimeRefusal(text, EvaluationContext.checkpoint());
+            case INSTANT -> Temporals.instantRefusal(text, EvaluationContext.checkpoint());
             case STRING, INT, BOOL, DECIMAL ->
                     throw new IllegalStateException(scalar + " is not a temporal");
         };
@@ -338,12 +341,13 @@ public final class JsonBoundary {
             // is done here as well as in the generated codecs because this is where the shape is still
             // known: encoded, a Set and a List are both a java.util.List, and only one is reordered.
             case BoundaryOutput.SetOf s -> Representations.sortedArray(
-                    encodeElements(loader, pkg, behavior, s.element(), (Collection<?>) result));
+                    encodeElements(loader, pkg, behavior, s.element(), (Collection<?>) result),
+                    EvaluationContext.checkpoint());
             case BoundaryOutput.MapOf m -> {
                 Map<String, Object> encoded = new LinkedHashMap<>();
                 ((Map<?, ?>) result).forEach((k, v) -> encoded.put(encodeKey(loader, m.key(), k),
                         write(loader, pkg, behavior, m.value(), v)));
-                yield Representations.sortedObject(encoded);
+                yield Representations.sortedObject(encoded, EvaluationContext.checkpoint());
             }
             case BoundaryOutput.Nominal n ->
                     encodeThrough(loader, SoutherJvmAbi.nameOf(new GeneratedClass.Value(n.name())).binaryName(), result);
@@ -398,7 +402,8 @@ public final class JsonBoundary {
             case INT -> ObjectEncoders.long_().encode((Long) value);
             case BOOL -> ObjectEncoders.bool().encode((Boolean) value);
             case DECIMAL -> ObjectEncoders.decimal()
-                    .encode(Representations.canonicalNumber((java.math.BigDecimal) value));
+                    .encode(Representations.canonicalNumber((java.math.BigDecimal) value,
+                            EvaluationContext.checkpoint()));
             case DATE -> ObjectEncoders.date().encode((java.time.LocalDate) value);
             case TIME -> ObjectEncoders.time().encode((java.time.LocalTime) value);
             case DATETIME -> ObjectEncoders.dateTime().encode((java.time.LocalDateTime) value);

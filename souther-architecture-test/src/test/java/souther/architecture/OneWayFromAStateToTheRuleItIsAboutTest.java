@@ -561,12 +561,19 @@ class OneWayFromAStateToTheRuleItIsAboutTest {
         private static Set<String> namesIn(Signature type, Through through, ClassModel declaredBy,
                                            Map<String, Given> given) {
             Set<String> out = new LinkedHashSet<>();
-            collect(type, through, declaredBy, given, out);
+            collect(type, through, declaredBy, given, out, new LinkedHashSet<>());
             return out;
         }
 
+        /**
+         * The same, where {@code bounding} names the type variables whose bounds are being read on
+         * the way here. A variable may be bounded by a type that names it again ({@code N extends
+         * Names<E, N>}), and what its bound names is read once: read again, the bound names the
+         * variable and the variable the bound, and the walk never ends.
+         */
         private static void collect(Signature type, Through through, ClassModel declaredBy,
-                                    Map<String, Given> given, Set<String> into) {
+                                    Map<String, Given> given, Set<String> into,
+                                    Set<String> bounding) {
             switch (type) {
                 case Signature.BaseTypeSig _ -> { }
                 // Many of what is inside it, as a collection is. A state keeping an array of rules
@@ -574,7 +581,8 @@ class OneWayFromAStateToTheRuleItIsAboutTest {
                 // the reason it stops at a collection.
                 case Signature.ArrayTypeSig array -> {
                     if (through == Through.ANYTHING) {
-                        collect(array.componentSignature(), through, declaredBy, given, into);
+                        collect(array.componentSignature(), through, declaredBy, given, into,
+                                bounding);
                     }
                 }
                 // What was handed in first, and the bound its declaration gives it after. A bound
@@ -585,7 +593,13 @@ class OneWayFromAStateToTheRuleItIsAboutTest {
                 case Signature.TypeVarSig variable -> {
                     Given handedIn = given.get(variable.identifier());
                     if (handedIn != null) {
-                        collect(handedIn.type(), through, handedIn.frame(), handedIn.env(), into);
+                        collect(handedIn.type(), through, handedIn.frame(), handedIn.env(), into,
+                                bounding);
+                    }
+                    String bounded =
+                            declaredBy.thisClass().asInternalName() + "#" + variable.identifier();
+                    if (!bounding.add(bounded)) {
+                        return;
                     }
                     for (Signature.TypeParam declared
                             : WhatASignatureReaches.typeParametersOf(declaredBy)) {
@@ -593,11 +607,12 @@ class OneWayFromAStateToTheRuleItIsAboutTest {
                             continue;
                         }
                         declared.classBound().ifPresent(
-                                each -> collect(each, through, declaredBy, given, into));
+                                each -> collect(each, through, declaredBy, given, into, bounding));
                         for (Signature.RefTypeSig each : declared.interfaceBounds()) {
-                            collect(each, through, declaredBy, given, into);
+                            collect(each, through, declaredBy, given, into, bounding);
                         }
                     }
+                    bounding.remove(bounded);
                 }
                 case Signature.ClassTypeSig named -> {
                     String owner = named.classDesc().descriptorString().replaceAll("^L|;$", "");
@@ -607,7 +622,8 @@ class OneWayFromAStateToTheRuleItIsAboutTest {
                     }
                     for (Signature.TypeArg argument : named.typeArgs()) {
                         if (argument instanceof Signature.TypeArg.Bounded bounded) {
-                            collect(bounded.boundType(), through, declaredBy, given, into);
+                            collect(bounded.boundType(), through, declaredBy, given, into,
+                                    bounding);
                         }
                     }
                 }

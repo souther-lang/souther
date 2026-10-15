@@ -40,7 +40,7 @@ class AValuesPlacesAreOwedByEveryBehaviorThatCallsItTest {
         return Compiler.compiled(SHARED, "m").db().ask(new Bodies.Checked("m")).value().plan();
     }
 
-    private static List<ComparisonEmissionSite> comparisonProbes(
+    private static List<ConditionOutcomeSite> comparisonProbes(
             List<CoverageSites.ComparisonSite> sites) {
         return sites.stream().map(CoverageSites.ComparisonSite::index).toList();
     }
@@ -86,8 +86,8 @@ class AValuesPlacesAreOwedByEveryBehaviorThatCallsItTest {
     void twoCallersOweOneSetOfPlacesAndNotTwo() {
         CoverageSites.Plan plan = plan();
 
-        List<ComparisonEmissionSite> ofF = comparisonProbes(plan.comparisons("f"));
-        List<ComparisonEmissionSite> ofG = comparisonProbes(plan.comparisons("g"));
+        List<ConditionOutcomeSite> ofF = comparisonProbes(plan.comparisons("f"));
+        List<ConditionOutcomeSite> ofG = comparisonProbes(plan.comparisons("g"));
 
         assertFalse(ofF.isEmpty());
         // What each writes for itself differs, and what `big` writes is the same probe in both.

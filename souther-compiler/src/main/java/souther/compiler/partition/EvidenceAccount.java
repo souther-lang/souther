@@ -25,8 +25,9 @@ import java.util.Map;
  * it names, so an outcome added to the stage is an outcome named at the place it happens; gathered
  * here from what was left over, the name would be this account's guess about somebody else's code.
  *
- * <p>The filing that runs before this owns its own losses — a rule it could not place comes out as a
- * finding naming the rule ({@link LinesWhereTheyFall.Filed#notPlaced}), and those never reach here.
+ * <p>The filing that runs before this owns its own losses — a rule it could not place, and a line at a
+ * position whose quantity stops short of it, come out as findings naming the rule
+ * ({@link LinesWhereTheyFall.Filed#noLine}), and those never reach here.
  * Each stage answers for what it was given.
  */
 final class EvidenceAccount {

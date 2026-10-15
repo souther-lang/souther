@@ -28,10 +28,20 @@ import java.util.Objects;
  */
 public sealed interface GenerationAnswer
         permits GenerationAnswer.Class, GenerationAnswer.Arm, GenerationAnswer.Pair,
-                GenerationAnswer.Meeting {
+                GenerationAnswer.Meeting, GenerationAnswer.Replacement {
 
     /** The obligation this is an answer to. */
     GenerationObligation obligation();
+
+    /** What became of the search for a row telling one rewrite of the body from the body. */
+    record Replacement(GenerationObligation.Replacement obligation,
+                       ReplacementDisposition disposition) implements GenerationAnswer {
+
+        public Replacement {
+            Objects.requireNonNull(obligation, "an answer is to some obligation");
+            Objects.requireNonNull(disposition, "an answer says what became of the obligation");
+        }
+    }
 
     /** What became of one class the plan asked for. */
     record Class(GenerationObligation.Class obligation, ClassDisposition disposition)

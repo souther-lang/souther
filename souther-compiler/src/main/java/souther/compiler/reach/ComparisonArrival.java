@@ -6,6 +6,12 @@ import souther.compiler.numeric.NumericDomain;
 /**
  * What arrives at one comparison, said as much of it as a reader downstream may safely use.
  *
+ * <p>Or at one application whose answer states a line — an emptiness check states a size against
+ * nought — which is dropped by the same fact a comparison's is. Such an application is answered
+ * {@link NothingArrives} or {@link NoProjection} and never {@link Values}: it has arguments and no
+ * side, so there is no position a projection could be of. A reader holding one of these is not
+ * holding a comparison's by that alone.
+ *
  * <p>A comparison's border stands or falls by whether the values that reach the comparison reach
  * the line it draws — not by whether either of its outcomes is one the paths prove nothing takes.
  * The two questions have different answers: a guard shadowed by a stricter guard above it draws a
@@ -38,9 +44,12 @@ public sealed interface ComparisonArrival {
      * Not proven empty, and what arrives leaves the value at {@code path} within {@code bounds}.
      *
      * <p>An over-approximation of the values that arrive, and never a claim that any row does:
-     * unsettled is not reachable, and a condition the walk could not read narrowed nothing here. So
-     * a line these bounds do not reach is a line no arriving row reaches — that direction is sound —
-     * while a line they do reach proves nothing.
+     * unsettled is not reachable, and a condition the walk could not read narrowed nothing here.
+     *
+     * <p>A constraint and not an answer about a line. It is taken in beside what the declarations
+     * leave and what the way states, and the line is asked of all of them at once: bounds have no
+     * word for a value taken out of their middle, so asked on their own they would hold a line at
+     * a hole the way leaves.
      */
     record Values(TermPath path, NumericDomain.Bounds bounds) implements ComparisonArrival {
 
@@ -59,7 +68,7 @@ public sealed interface ComparisonArrival {
      * can name a value for, a rule that stands in no body for anything to be on the way to, and a
      * reader handed no entry at all because the walk fell over before finishing. All three read
      * alike because all three license the same thing — nothing. Not being able to project is not a
-     * proof of anything, so a border under this stands as the declarations alone leave it.
+     * proof of anything, so a border under this stands as the declarations and the way leave it.
      */
     record NoProjection() implements ComparisonArrival {}
 }

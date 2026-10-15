@@ -1,5 +1,7 @@
 package souther.compiler.query;
 
+import souther.compiler.check.StandingSignature;
+import souther.compiler.cst.CstLexer;
 import souther.compiler.execute.ExampleExecution;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.observe.RowOutcome;
@@ -111,9 +113,10 @@ public final class Output {
             }
             // A module that imports one that failed is not emitted: the bodies it would expand from
             // it are ones that were not settled, and emitting them would reach the emitter's own
-            // refusal, which says less than the failure already reported.
-            List<String> reached = db.ask(new Reaches(name)).value();
-            for (String imported : reached == null ? List.<String>of() : reached) {
+            // refusal, which says less than the failure already reported. A module read off the path
+            // was made elsewhere and is not asked.
+            List<String> generated = generatedReach(db, name);
+            for (String imported : generated == null ? List.<String>of() : generated) {
                 if (!imported.equals(name) && failed(db, imported)) {
                     return Answer.absent();
                 }
@@ -141,13 +144,10 @@ public final class Output {
             }
         }
 
-        /** Whether {@code module}, one this compilation is making, did not come out. A module read
-         *  off the path was made elsewhere and is not asked. */
+        /** Whether {@code module}, one this compilation is making, did not come out. */
         private static boolean failed(Db db, String module) {
-            List<String> declared = db.ask(new Front.Declared()).value();
-            return declared != null && declared.contains(module)
-                    && (!db.ask(new Bodies.Sound(module)).present()
-                    || !db.ask(new Bodies.PublishedBodiesRunElsewhere(module)).present());
+            return !db.ask(new Bodies.Sound(module)).present()
+                    || !db.ask(new Bodies.PublishedBodiesRunElsewhere(module)).present();
         }
 
         /**
@@ -205,7 +205,7 @@ public final class Output {
                       Map<ValueName.Behavior, EnsuresEnforcement> checks,
                       Set<String> rowMethods,
                       Set<String> fixtureOnlyMethods,
-                      Map<String, souther.compiler.types.Type> standingCalls,
+                      Map<String, StandingSignature> standingCalls,
                       LinkageReader linkage) {
 
             Inputs {
@@ -241,6 +241,12 @@ public final class Output {
         }
 
         static Inputs inputs(Db db, String name, Elaboration of) {
+            // A module read off the path was generated where it was compiled. What it published
+            // declares its behaviors and carries none of their bodies, so there is nothing here to
+            // generate it from.
+            if (!Front.declaredHere(db, name)) {
+                return null;
+            }
             Answer<Bodies.Elaborated> checked = switch (of) {
                 case WHOLE -> db.ask(new Bodies.Checked(name));
                 case OBSERVABLE -> db.ask(new Bodies.Observable(name));
@@ -280,7 +286,7 @@ public final class Output {
             // against. The emitter re-types the expressions it emits (a clause, a rule), so a
             // signature table of its own would be a second reading of what a name means, and the two
             // would agree only until one of them was edited.
-            Answer<Map<String, souther.compiler.types.Type>> standing =
+            Answer<Map<String, StandingSignature>> standing =
                     db.ask(new Bodies.RecursiveCallSigs(name, souther.compiler.check.InliningPolicy.FULL));
             if (!checked.present() || !compositions.present()
                     || !lowering.present()
@@ -348,9 +354,11 @@ public final class Output {
          * every example of the module something to establish again. What an edit does to the
          * positions under it is another matter and reaches an evaluation either way.
          *
-         * <p>Nothing here can fail in a way worth reporting. A module with no source of its own was
-         * read off the path, and its jar was stamped where it was built; and the declarations are
-         * only asked for once the module has checked, so they are there.
+         * <p>What is asked for here is there. A module with no source of its own was read off the
+         * path, and its jar was stamped where it was built; and the declarations are only asked for
+         * once the module has checked. What can still fail is the writing: a declaration's text may
+         * be longer than one constant of a class file holds, and that is said as the declaration's
+         * like any other limit of the class file.
          */
         private void publishDeclarations(Db db, Emissions classes) {
             Front.Layout.Of layout = db.ask(new Front.Layout()).value();
@@ -455,8 +463,35 @@ public final class Output {
     }
 
     /**
-     * The classes an evaluation of one module's code loads: its own, and those of every module it
-     * reaches.
+     * The modules {@code name} reaches that this compilation generates, furthest first so the module
+     * itself comes last: a name two of them generate is the near one's, which is the order
+     * {@link All} puts them in as well. {@code null} when what it reaches is not known.
+     *
+     * <p>Only the modules this compilation declares. A module from the path is not generated here at
+     * all: what a published one carries is what an importer needs to read its declarations, so
+     * regenerating it would produce some of its classes and not the rest — a behavior's body stays in
+     * the classes it was built into — and a module split between this compilation's loader and the
+     * parent hands its own types to its own implementation under two different definitions of them.
+     * The path's classes are taken whole through the parent loader instead.
+     */
+    private static List<String> generatedReach(Db db, String name) {
+        List<String> reaches = db.ask(new Reaches(name)).value();
+        if (reaches == null) {
+            return null;
+        }
+        List<String> generated = new ArrayList<>();
+        for (int i = reaches.size() - 1; i >= 0; i--) {
+            if (Front.declaredHere(db, reaches.get(i))) {
+                generated.add(reaches.get(i));
+            }
+        }
+        return generated;
+    }
+
+    /**
+     * The classes code of one module loads at compile time: its own, and those of every module it
+     * reaches that this compilation generates. The rest of what it reaches is on the path, and
+     * {@link #loader} puts the path under these.
      *
      * <p>Not {@link All}. What a module comes out as changes whenever anything its generation reads
      * changes, and {@link All} reads every module's — so a key built on it is recomputed by an edit
@@ -471,15 +506,13 @@ public final class Output {
 
         @Override
         public Answer<Map<String, ClassFileImage>> compute(Db db) {
-            List<String> reaches = db.ask(new Reaches(name)).value();
-            if (reaches == null) {
+            List<String> generated = generatedReach(db, name);
+            if (generated == null) {
                 return Answer.of(Map.of());
             }
             Map<String, ClassFileImage> linked = new LinkedHashMap<>();
-            // Furthest first, so the module being evaluated is put on last: a name two of them
-            // generate is the near one's, which is the order All puts them in as well.
-            for (int i = reaches.size() - 1; i >= 0; i--) {
-                Map<String, ClassFileImage> classes = db.ask(new Classes(reaches.get(i))).value();
+            for (String reached : generated) {
+                Map<String, ClassFileImage> classes = db.ask(new Classes(reached)).value();
                 if (classes != null) {
                     linked.putAll(classes);
                 }
@@ -553,12 +586,9 @@ public final class Output {
      * counted while it is in there, or the counting stops at the module boundary and the clock decides
      * again.
      *
-     * <p>Only the modules this compilation declares are here. A module from the path is not
-     * regenerated at all: what a published one carries is what an importer needs to read its
-     * declarations, so regenerating it would produce some of its classes and not the rest, and a
-     * module split between this set and the parent hands its own types to its own implementation
-     * under two definitions of them. {@link #evaluationLoader} takes the path's classes whole and
-     * counts them on the way in, so the counting still does not stop at the import.
+     * <p>Only the modules this compilation declares are here, for the reason {@link #generatedReach}
+     * gives. {@link #evaluationLoader} takes the path's classes whole and counts them on the way in,
+     * so the counting still does not stop at the import.
      */
     public record EvaluationLinked(String name, ArmObservation arms)
             implements Key<EvaluationArtifact> {
@@ -569,8 +599,8 @@ public final class Output {
 
         @Override
         public Answer<EvaluationArtifact> compute(Db db) {
-            List<String> reaches = db.ask(new Reaches(name)).value();
-            if (reaches == null) {
+            List<String> generated = generatedReach(db, name);
+            if (generated == null) {
                 // What this module reaches always includes this module, so there is no such answer.
                 // Absent rather than an empty set of classes with an empty manifest beside it: a
                 // manifest saying nothing is generated is an answer, and it would tell every row that
@@ -578,22 +608,10 @@ public final class Output {
                 // like. Nothing was worked out, so nothing is said.
                 return Answer.absent();
             }
-            Front.Layout.Of layout = db.ask(new Front.Layout()).value();
             Map<String, ClassFileImage> linked = new LinkedHashMap<>();
             GeneratedImplementations implemented = null;
             ProbeImage probes = new ProbeImage.Uninstrumented();
-            // Furthest first, so the module being evaluated is put on last, as Linked does.
-            for (int i = reaches.size() - 1; i >= 0; i--) {
-                String reached = reaches.get(i);
-                // Only the modules this compilation declares. A module from the path is not generated
-                // here at all: what a published one carries is what an importer needs to read its
-                // declarations, so regenerating it would produce some of its classes and not the rest
-                // — and a module split between this loader and the parent hands its own types to its
-                // own implementation under two different definitions of them. The evaluation loader
-                // takes the path's classes whole and counts them on the way in.
-                if (layout == null || !layout.idOfModule().containsKey(reached)) {
-                    continue;
-                }
+            for (String reached : generated) {
                 Answer<EvaluationArtifact> classes = db.ask(new Evaluated(reached,
                         reached.equals(name) ? arms : ArmObservation.OMIT));
                 // A module this compilation declares and could not generate makes this absent rather
@@ -801,7 +819,7 @@ public final class Output {
          *  this is a message a reader reads and not source pasted back. */
         private static String shown(ConstantConstruction written) {
             return written.typeName() + "(" + switch (written.value()) {
-                case WrittenValue.Text(String text) -> "\"" + text + "\"";
+                case WrittenValue.Text(String text) -> CstLexer.literalOf(text);
                 case WrittenValue.Whole(long whole) -> String.valueOf(whole);
                 case WrittenValue.Truth(boolean truth) -> String.valueOf(truth);
                 case WrittenValue.Decimal(BigDecimal decimal) -> ExactDecimals.spelledBounded(decimal);

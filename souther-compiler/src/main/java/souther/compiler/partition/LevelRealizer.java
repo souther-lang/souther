@@ -3,8 +3,11 @@ package souther.compiler.partition;
 import souther.compiler.check.Carrier;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.NumericTerms;
+import souther.compiler.inputs.ReadingsOfEachValue;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.numeric.AdditiveImage;
+import souther.compiler.numeric.AffinePreimage;
+import souther.compiler.numeric.Congruences;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.UnheldNumber;
@@ -15,14 +18,21 @@ import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.PlacesApart;
-import souther.compiler.regex.Meter;
+import souther.compiler.numeric.Rel;
+import net.unit8.notation199x.pattern.Meter;
 import souther.compiler.values.ValueSet;
 import java.math.BigDecimal;
+import java.math.BigInteger;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 /**
@@ -135,16 +145,202 @@ public final class LevelRealizer {
             case Standing.OfOneCoordinate one -> ofOne(one, within, runs, looking, tried);
             case Standing.OfTwoOnOneCarrier two -> ofTwo(two, within, runs, looking, tried);
             case Standing.OfAForm over -> ofAForm(over, within, runs, tried);
+            case Standing.OfARemainder remainder -> ofARemainder(remainder, within, runs, tried);
+            case Standing.OfACount count -> ofACount(count, within, looking, tried);
+            case Standing.OfACountAndAForm both ->
+                    ofACountAndAForm(both, within, runs, looking, tried);
         };
     }
 
-    /** Every position the item asks a value at: where the item names them in an order, that one,
-     *  and where it is a form, the order its terms are walked in. */
+    /**
+     * A count the item asks the sum of, with a form of the input's numbers added to it, and a
+     * place for each number of the form and for each number the statement reads beside an element.
+     *
+     * <p>The count and the form are met together: a count is chosen, the form is asked to come to
+     * what is left of the level, and the numbers that come of it are fixed before the elements are
+     * chosen against them. Which counts to try is the same {@link #ofACount} walks, from none up;
+     * a level is reached by many of them and by none, and which a row is built at is the first
+     * that a place can be found for.
+     *
+     * <p>Never a proof. That no count and no place of the form add up to the level is no
+     * statement about the counts the walk did not look at, so the walk that finds none leaves the
+     * item open, as a form does when the walk of it is spent.
+     */
+    private Realization ofACountAndAForm(Standing.OfACountAndAForm over, SearchRegion within,
+                                         Map<NumericTerm, NumericDomain.Bounds> runs,
+                                         WitnessSearch looking, ValuesTried tried) {
+        RealizationTarget.ACount counted = new RealizationTarget.ACount(over.count());
+        List<Map.Entry<RealizationTarget.OfANumber, ExactRatio>> terms = new ArrayList<>();
+        for (Map.Entry<NumericTerm, ExactRatio> each : AffineReading.ordered(over.form())) {
+            terms.add(Map.entry(RealizationTarget.of(each.getKey()), each.getValue()));
+        }
+        Set<CompositionBudget> stoppedBy = EnumSet.noneOf(CompositionBudget.class);
+        Set<CompositionCapacity> unheld = new HashSet<>();
+        Set<CompositionRepertoire> notAllOf = EnumSet.noneOf(CompositionRepertoire.class);
+        LevelCandidateSource.Offered offered =
+                LevelCandidateSource.forItem(over.where(), over.levels());
+        if (offered.stoppedShort()) {
+            stoppedBy.add(CompositionBudget.LEVELS_A_SIDE_IS_ASKED_AT);
+        }
+        int most = CompositionBudget.ELEMENTS_A_COUNT_IS_COMPOSED_WITH.maximum();
+        for (Level level : offered.levels()) {
+            for (int many = 0; many <= most; many++) {
+                // What the form is left to come to once this many elements are counted.
+                if (!(level.asAnExactNumber().minus(ExactRatio.of(many))
+                        instanceof ExactAnswer.Held<ExactRatio>(ExactRatio rest))) {
+                    unheld.add(new CompositionCapacity(
+                            CompositionCapacity.Where.COUNTS_AN_ITEM_IS_TRIED_AT,
+                            UnheldNumber.NO_REPRESENTATION_EXISTS));
+                    continue;
+                }
+                Search search = new Search(terms, over.on(), within, runs, tried);
+                Reached reached = search.solve(rest);
+                stoppedBy.addAll(search.stoppedBy());
+                unheld.addAll(search.unheld());
+                if (reached != Reached.FOUND) {
+                    continue;
+                }
+                Map<RealizationTarget, Place> fixing = new LinkedHashMap<>(search.fixing());
+                SearchRegion placed = within;
+                for (Map.Entry<RealizationTarget, Place> each : fixing.entrySet()) {
+                    if (each.getKey() instanceof RealizationTarget.OfANumber number) {
+                        placed = placed.given(number.term(), each.getValue());
+                    }
+                }
+                switch (over.count().placesBeside(placed, many > 0, looking)) {
+                    case NumericWitness.Standing.Found beside -> {
+                        fixing.put(counted, Count.of(many));
+                        for (NumericWitness.Standing.Found.Placed each : beside.inFixingOrder()) {
+                            if (!each.term().subjectPath().insideAContainer()) {
+                                fixing.putIfAbsent(RealizationTarget.of(each.term()),
+                                        each.place());
+                            }
+                        }
+                        Realization made = found(fixing, within, tried);
+                        if (made instanceof Realization.Found) {
+                            return made;
+                        }
+                    }
+                    case NumericWitness.Standing.ProvedImpossible _ -> { }
+                    case NumericWitness.Standing.NotFound(CompositionShortfall met) -> {
+                        stoppedBy.addAll(met.figures());
+                        notAllOf.addAll(met.populations());
+                        unheld.addAll(met.unheld());
+                    }
+                }
+            }
+        }
+        // The counts past the last tried are counts left untried, and no proof about them.
+        stoppedBy.add(CompositionBudget.ELEMENTS_A_COUNT_IS_COMPOSED_WITH);
+        return Realization.Unknown.leftOpen(
+                Realization.Unknown.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED,
+                stoppedBy, notAllOf, unheld);
+    }
+
+    /**
+     * A count the item asks for, and a place for each number the statement reads beside an
+     * element.
+     *
+     * <p>Not which elements. A count is met by many containers, and which of them a row holds is
+     * the composing's choice ({@link CardinalityComposer}); a count and the numbers beside it are
+     * what a row is asked to be built at, and the numbers are numbers of the row and are put to
+     * the rules as any item's are. Which counts to try is {@link LevelCandidateSource}'s, as it is
+     * for any item.
+     *
+     * <p>The numbers beside an element are placed together, with an element meeting the statement
+     * where the count is one or more ({@link CountedElements#placesBeside}).
+     *
+     * <p>Never a proof. That no container holds so many elements meeting the statement is not
+     * something a walk over counts settles: the elements are the composing's to choose, and a count
+     * nothing here composed is a count left open — even where no element the region leaves meets
+     * the statement, since the region was narrowed by the statement here and not by the rules.
+     */
+    private Realization ofACount(Standing.OfACount count, SearchRegion within,
+                                 WitnessSearch looking, ValuesTried tried) {
+        RealizationTarget.ACount counted = new RealizationTarget.ACount(count.count());
+        Set<CompositionBudget> stoppedBy = EnumSet.noneOf(CompositionBudget.class);
+        Set<CompositionCapacity> unheld = new HashSet<>();
+        Set<CompositionRepertoire> notAllOf = EnumSet.noneOf(CompositionRepertoire.class);
+        LevelCandidateSource.Offered offered =
+                LevelCandidateSource.forItem(count.where(), count.count().levels());
+        if (offered.stoppedShort()) {
+            stoppedBy.add(CompositionBudget.LEVELS_A_SIDE_IS_ASKED_AT);
+        }
+        for (Level level : offered.levels()) {
+            // A count is whole and from none, so a level below none is no count at all; one this
+            // could not write as a count is a number not held, and said as that.
+            Count asked;
+            switch (Count.written(level.asAnExactNumber())) {
+                case ExactAnswer.Held<Optional<Count>>(Optional<Count> written)
+                        when written.isPresent() -> asked = written.get();
+                case ExactAnswer.Held<Optional<Count>> _ -> {
+                    unheld.add(new CompositionCapacity(
+                            CompositionCapacity.Where.COUNTS_AN_ITEM_IS_TRIED_AT,
+                            UnheldNumber.NO_REPRESENTATION_EXISTS));
+                    continue;
+                }
+                case ExactAnswer.Unheld<Optional<Count>> notHeld -> {
+                    unheld.add(new CompositionCapacity(
+                            CompositionCapacity.Where.COUNTS_AN_ITEM_IS_TRIED_AT, notHeld.why()));
+                    continue;
+                }
+            }
+            if (asked.at().signum() < 0) {
+                continue;
+            }
+            switch (count.count().placesBeside(within, asked.at().signum() > 0, looking)) {
+                case NumericWitness.Standing.Found beside -> {
+                    Map<RealizationTarget, Place> fixing = new LinkedHashMap<>();
+                    fixing.put(counted, asked);
+                    for (NumericWitness.Standing.Found.Placed each : beside.inFixingOrder()) {
+                        if (!each.term().subjectPath().insideAContainer()) {
+                            fixing.put(RealizationTarget.of(each.term()), each.place());
+                        }
+                    }
+                    Realization made = found(fixing, within, tried);
+                    if (made instanceof Realization.Found) {
+                        return made;
+                    }
+                }
+                case NumericWitness.Standing.ProvedImpossible _ -> { }
+                case NumericWitness.Standing.NotFound(CompositionShortfall met) -> {
+                    stoppedBy.addAll(met.figures());
+                    notAllOf.addAll(met.populations());
+                    unheld.addAll(met.unheld());
+                }
+            }
+        }
+        return Realization.Unknown.leftOpen(
+                Realization.Unknown.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED,
+                stoppedBy, notAllOf, unheld);
+    }
+
+    /**
+     * Every position the item asks a value at: where the item names them in an order, that one,
+     * and where it is a form, the order its terms are walked in.
+     *
+     * <p>Of a count, the numbers its statement reads beside an element and none of the elements'.
+     * An element is chosen and not asked to stand anywhere: where the rules leave it nowhere the
+     * container holds none, which is a count of none, so the elements' numbers settle nothing here.
+     */
     private static List<NumericTerm> termsOf(Standing standing) {
         return switch (standing) {
             case Standing.OfOneCoordinate one -> List.of(one.term());
             case Standing.OfTwoOnOneCarrier two -> List.of(two.on(), two.against());
             case Standing.OfAForm over -> NumericTerms.inOrder(over.form().coefs().keySet());
+            case Standing.OfARemainder over ->
+                    NumericTerms.inOrder(over.dividend().coefs().keySet());
+            case Standing.OfACount count -> count.numbers().stream()
+                    .filter(term -> !term.subjectPath().insideAContainer()).toList();
+            case Standing.OfACountAndAForm both -> {
+                List<NumericTerm> out = new ArrayList<>(NumericTerms.inOrder(
+                        both.form().coefs().keySet()));
+                both.count().numbers().stream()
+                        .filter(term -> !term.subjectPath().insideAContainer()
+                                && !out.contains(term))
+                        .forEach(out::add);
+                yield List.copyOf(out);
+            }
         };
     }
 
@@ -153,10 +349,46 @@ public final class LevelRealizer {
                               SearchRegion within,
                               Map<NumericTerm, NumericDomain.Bounds> runs,
                               WitnessSearch looking, ValuesTried tried) {
-        Place at = placeMeeting(one.where(), one.term(), one.of(), runs.get(one.term()),
-                looking, tried, Map.of());
-        return at == null ? Realization.Unknown.nothingComposedOne()
-                : found(Map.of(new RealizationTarget.AtOnePosition(one.term()), at), within, tried);
+        Congruences members = one.term() instanceof NumericTerm.ValueOf value
+                ? within.valueClassAt(value) : null;
+        Set<CompositionBudget> stoppedBy = EnumSet.noneOf(CompositionBudget.class);
+        // A place the rules refuse once it stands with the rest of the row is not offered again
+        // here: the places a point is offered are the ones before it that were not refused, and a
+        // search that handed back the one it was just refused would be read as having found nothing
+        // else to offer.
+        List<Place> refused = new ArrayList<>();
+        for (int offered = 0; offered < PLACES_A_POSITION_IS_OFFERED; offered++) {
+            Place at = placeMeeting(one.where(), one.term(), one.of(), runs.get(one.term()),
+                    members, looking, within, tried, Map.of(), refused, stoppedBy);
+            if (at == null) {
+                return stoppedShort(stoppedBy);
+            }
+            Realization made =
+                    found(Map.of(RealizationTarget.of(one.term()), at), within, tried);
+            if (made instanceof Realization.Found) {
+                return made;
+            }
+            refused.add(at);
+        }
+        stoppedBy.add(CompositionBudget.VALUES_OF_AN_UNBOUNDED_PROGRESSION_TRIED);
+        return stoppedShort(stoppedBy);
+    }
+
+    /** How many places one point of a position is offered before a search says it stopped. */
+    private static final int PLACES_A_POSITION_IS_OFFERED =
+            CompositionBudget.VALUES_OF_AN_UNBOUNDED_PROGRESSION_TRIED.maximum();
+
+    /**
+     * Nothing composed, and the figures the search ran out of where it ran out of any.
+     *
+     * <p>The word is the walk's and the figures are beside it ({@link Realization.Unknown}): a search
+     * that met none composed nothing, and one that met one left places untried.
+     */
+    private static Realization stoppedShort(Set<CompositionBudget> stoppedBy) {
+        return stoppedBy.isEmpty() ? Realization.Unknown.nothingComposedOne()
+                : Realization.Unknown.leftOpen(
+                        Realization.Unknown.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED, stoppedBy,
+                        Set.of(), Set.of());
     }
 
     /**
@@ -182,6 +414,15 @@ public final class LevelRealizer {
                               SearchRegion within,
                               Map<NumericTerm, NumericDomain.Bounds> runs,
                               WitnessSearch looking, ValuesTried tried) {
+        // Two numbers of one position stand apart by what one value comes to of both, where the
+        // order counts and the distance is their difference.
+        if (two.of().counts()) {
+            Realization named = amongTheValuesNamed(
+                    LinearForm.difference(two.on(), two.against()), two.where(), within, tried);
+            if (named != null) {
+                return named;
+            }
+        }
         // What each reading left behind, in the three vocabularies there are for it. Kept apart
         // all the way here: how a walk ended says which of them it is, and a reader told the wrong
         // one is sent to raise a figure that reached its end or told that no number would have
@@ -242,15 +483,18 @@ public final class LevelRealizer {
                 }
                 Criterion here = related.where();
                 Place at = here == null ? null
-                        : placeMeeting(here, reading.settles(), two.of(), settled, looking, tried,
-                                Map.of(new RealizationTarget.AtOnePosition(reading.anchors()),
-                                        common));
+                        : placeMeeting(here, reading.settles(), two.of(), settled,
+                                reading.settles() instanceof NumericTerm.ValueOf value
+                                        ? within.valueClassAt(value) : null,
+                                looking, within, tried,
+                                Map.of(RealizationTarget.of(reading.anchors()), common),
+                                List.of(), stoppedBy);
                 if (at == null) {
                     continue;
                 }
                 Map<RealizationTarget, Place> fixing = new LinkedHashMap<>();
-                fixing.put(new RealizationTarget.AtOnePosition(reading.settles()), at);
-                fixing.put(new RealizationTarget.AtOnePosition(reading.anchors()), common);
+                fixing.put(RealizationTarget.of(reading.settles()), at);
+                fixing.put(RealizationTarget.of(reading.anchors()), common);
                 if (found(fixing, within, tried) instanceof Realization.Found made) {
                     return made;
                 }
@@ -348,7 +592,7 @@ public final class LevelRealizer {
         // Composed from and not narrowed by, because the place walked here is written into a row.
         // A pair standing at a value out of a set nobody established is the same row this class
         // declines to offer at one position, offered because it was reached through two.
-        ValueSet admits = looking.toComposeFrom(anchored).toCrossTheRunWith();
+        ValueSet admits = looking.toComposeFrom(anchored, within).toCrossTheRunWith();
         if (admits == null) {
             return null;
         }
@@ -384,10 +628,14 @@ public final class LevelRealizer {
         // the answer rather than being told apart by a caught exception.
         return switch (Count.number(from).exactly().plus(apart)) {
             case ExactAnswer.Unheld<ExactRatio> unheld -> new MovedTo(null, unheld.why());
-            case ExactAnswer.Held<ExactRatio> held -> {
-                Count at = Count.at(held.value());
-                yield new MovedTo(at == null ? null : carrier.onTheGrid(at), null);
-            }
+            // And the count put on the carrier: a host with no room to write it out composed
+            // nothing from `from` either, and says so the same way.
+            case ExactAnswer.Held<ExactRatio> held -> switch (Count.written(held.value())) {
+                case ExactAnswer.Unheld<Optional<Count>> unheldCount ->
+                        new MovedTo(null, unheldCount.why());
+                case ExactAnswer.Held<Optional<Count>> written ->
+                        new MovedTo(written.value().map(carrier::onTheGrid).orElse(null), null);
+            };
         };
     }
 
@@ -438,21 +686,16 @@ public final class LevelRealizer {
     private Realization ofAForm(Standing.OfAForm over,
                                 SearchRegion within,
                                 Map<NumericTerm, NumericDomain.Bounds> runs, ValuesTried tried) {
+        Realization named = amongTheValuesNamed(over.form(), over.where(), within, tried);
+        if (named != null) {
+            return named;
+        }
         LevelSpace levels = over.levels();
         // In the form's own order and not the map's. A form is a map, so the order its coefficients
         // were recorded in is a hash order — and which position is solved last decides whether the
         // walk finds an answer inside its budget, so an answer that depended on it would depend on
         // nothing a reader can see.
-        List<Map.Entry<RealizationTarget, ExactRatio>> terms = new java.util.ArrayList<>();
-        for (Map.Entry<NumericTerm, ExactRatio> each : AffineReading.ordered(over.form())) {
-            // Every number is realized by rebuilding one value, so what the walk assigns is a demand
-            // and there is one for each term of the form. Whether anything writes such a value is
-            // not asked here and is not this reader's to answer: a walk that turned a term away for
-            // being of the wrong kind would be deciding what is buildable from the shape of the
-            // number, which is the answer that went stale the first time something learned to build
-            // one.
-            terms.add(Map.entry(RealizationTarget.of(each.getKey()), each.getValue()));
-        }
+        List<Map.Entry<RealizationTarget.OfANumber, ExactRatio>> terms = targetsOf(over.form());
         boolean bounded = true;
         // Every budget any of the level walks ran out of. Collected and not chosen between: two
         // levels stopped by two figures are two things this compiler declined to do, and a reader
@@ -466,22 +709,12 @@ public final class LevelRealizer {
             stoppedBy.add(CompositionBudget.LEVELS_A_SIDE_IS_ASKED_AT);
         }
         for (Level level : offered.levels()) {
-            Search search = new Search(terms, over.on(), within, runs, tried);
-            Reached reached = search.solve(level.asAnExactNumber());
-            stoppedBy.addAll(search.stoppedBy());
-            unheld.addAll(search.unheld());
-            if (reached == Reached.FOUND) {
-                Realization made = found(search.fixing(), within, tried);
-                if (made instanceof Realization.Found) {
-                    return made;
-                }
-                // An assignment the walk reached that no row came of. Nothing about the level
-                // follows from it: what refused the row is the writing of it and not the rules the
-                // walk held the assignment to.
-                bounded = false;
-            } else {
-                bounded &= reached == Reached.EXHAUSTED;
+            LevelWalk walk = walkLevel(over.form(), terms, over.on(), level.asAnExactNumber(),
+                    within, runs, tried, stoppedBy, unheld);
+            if (walk.found() != null) {
+                return walk.found();
             }
+            bounded &= walk.exhausted();
         }
         // A point asks for one level and a side asks for any level past one, so only the first can
         // be settled by looking: a walk of the whole box that reaches the level nothing else does is
@@ -498,6 +731,274 @@ public final class LevelRealizer {
         return Realization.Unknown.leftOpen(
                 Realization.Unknown.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED,
                 stoppedBy, Set.of(), unheld);
+    }
+
+    /**
+     * A form over numbers of one position whose rules name finitely many values, at what one of
+     * those values comes to where {@code where} asks — or null where the form is not that.
+     *
+     * <p>Each value read through every term together and the form worked out of what that one
+     * value reads as ({@link SearchRegion#readingsOfEach}), and never each term placed on its own:
+     * {@code c - Int.floorMod(c, 3)} of {@code 4}, {@code 8} and {@code 10} comes to three, six
+     * and nine, and a number for {@code c} and a remainder chosen apart reach five, which no value
+     * does — and reach nine through a value the rules refuse.
+     *
+     * <p>Every value the position admits is one of these, so where none comes to a level the item
+     * asks, the item is out of reach — a side as well as a point, since the values are all there
+     * is to look at. A value that comes to one and that no row was made of says nothing about the
+     * others, and nothing about the item.
+     */
+    private Realization amongTheValuesNamed(LinearForm<NumericTerm> form, Criterion where,
+                                            SearchRegion within, ValuesTried tried) {
+        return amongTheValuesNamed(form.coefs().keySet(),
+                values -> OrderedAffineBoundary.at(form, values).map(Optional::of), where, within,
+                tried);
+    }
+
+    /**
+     * The same, of a quantity over {@code terms} that is at the level {@code comesTo} says where
+     * its terms read as given — or at none, as a remainder of a form that comes to no whole number
+     * is.
+     */
+    private Realization amongTheValuesNamed(
+            Collection<NumericTerm> over,
+            Function<Map<NumericTerm, Place>, ExactAnswer<Optional<ExactRatio>>> comesTo,
+            Criterion where, SearchRegion within, ValuesTried tried) {
+        List<NumericTerm.FromOnePosition> terms = new ArrayList<>();
+        for (NumericTerm each : NumericTerms.inOrder(over)) {
+            if (each.atOnePosition() == null) {
+                return null;
+            }
+            terms.add(each.atOnePosition());
+        }
+        ReadingsOfEachValue named = within.readingsOfEach(terms);
+        if (named == null) {
+            return null;
+        }
+        boolean cameToOne = false;
+        for (ReadingsOfEachValue.Read each : named.each()) {
+            if (!(comesTo.apply(each.numbers())
+                    instanceof ExactAnswer.Held<Optional<ExactRatio>>(var level))) {
+                return null;
+            }
+            if (level.isEmpty() || !where.holds(new Level.OfTheQuantity(level.get()))) {
+                continue;
+            }
+            cameToOne = true;
+            Map<RealizationTarget, Place> fixing = new LinkedHashMap<>();
+            each.numbers().forEach((term, number) -> fixing.put(RealizationTarget.of(term), number));
+            Realization made = found(fixing, within, tried);
+            if (made instanceof Realization.Found) {
+                return made;
+            }
+        }
+        return cameToOne ? Realization.Unknown.nothingComposedOne() : new Realization.Impossible();
+    }
+
+    /**
+     * What each number of a form is realized as, in the form's own order and not the map's. A form
+     * is a map, so the order its coefficients were recorded in is a hash order — and which position
+     * is solved last decides whether the walk finds an answer inside its budget, so an answer that
+     * depended on it would depend on nothing a reader can see.
+     *
+     * <p>Every number is realized by rebuilding one value, so what the walk assigns is a demand and
+     * there is one for each term of the form. Whether anything writes such a value is not asked here
+     * and is not this reader's to answer: a walk that turned a term away for being of the wrong kind
+     * would be deciding what is buildable from the shape of the number, which is the answer that
+     * went stale the first time something learned to build one.
+     */
+    private static List<Map.Entry<RealizationTarget.OfANumber, ExactRatio>> targetsOf(
+            LinearForm<NumericTerm> form) {
+        List<Map.Entry<RealizationTarget.OfANumber, ExactRatio>> terms = new ArrayList<>();
+        for (Map.Entry<NumericTerm, ExactRatio> each : AffineReading.ordered(form)) {
+            terms.add(Map.entry(RealizationTarget.of(each.getKey()), each.getValue()));
+        }
+        return terms;
+    }
+
+    /**
+     * What walking a form at one level came to: a realization where a row was found, and otherwise
+     * whether the walk proved that nothing stands there.
+     *
+     * @param found the realization, or null where the walk found none
+     * @param exhausted whether every assignment the level has was tried and none stands
+     */
+    private record LevelWalk(Realization found, boolean exhausted) {}
+
+    /**
+     * The form held at one level, walked as {@link #ofAForm} walks each level it is offered.
+     *
+     * <p>The budgets the walk ran out of go to {@code stoppedBy} and {@code unheld}, which the
+     * caller reads over every level it walked.
+     */
+    private LevelWalk walkLevel(LinearForm<NumericTerm> form,
+                                List<Map.Entry<RealizationTarget.OfANumber, ExactRatio>> terms,
+                                Map<NumericTerm, Carrier> on, ExactRatio target,
+                                SearchRegion within,
+                                Map<NumericTerm, NumericDomain.Bounds> runs, ValuesTried tried,
+                                Set<CompositionBudget> stoppedBy,
+                                Set<CompositionCapacity> unheld) {
+        AtTheLevel here = atTheLevel(form, target, within, runs);
+        if (here == null) {
+            // The rules leave nothing at this level: a proof about it and about no other.
+            return new LevelWalk(null, true);
+        }
+        Search search = new Search(terms, on, here.region(), here.runs(), tried);
+        Reached reached = search.solve(target);
+        stoppedBy.addAll(search.stoppedBy());
+        unheld.addAll(search.unheld());
+        if (reached == Reached.FOUND) {
+            Realization made = found(search.fixing(), within, tried);
+            if (made instanceof Realization.Found) {
+                return new LevelWalk(made, false);
+            }
+            // An assignment the walk reached that no row came of. Nothing about the level follows
+            // from it: what refused the row is the writing of it and not the rules the walk held
+            // the assignment to.
+            return new LevelWalk(null, false);
+        }
+        return new LevelWalk(null, reached == Reached.EXHAUSTED);
+    }
+
+    /**
+     * A form whose remainder by a written number the item asks for, held at the values of the form
+     * that leave it.
+     *
+     * <p>The remainders the criterion offers are walked as the levels of any quantity are, and each
+     * is a class of values of the form: those the divisor leaves the remainder at, among those the
+     * form's own coefficients reach. A class that is empty is proof that the form never leaves the
+     * remainder, whatever the rules say. Where it is not, its members nearest the run the rules
+     * leave the form are walked as levels of the form, and the first a row stands at is the answer.
+     *
+     * <p>A walk of a class is a proof only where it was the whole of the class: a run with an end
+     * nothing bounds has members past the last one tried, and a point is settled by looking only
+     * where every member was.
+     */
+    private Realization ofARemainder(Standing.OfARemainder over, SearchRegion within,
+                                     Map<NumericTerm, NumericDomain.Bounds> runs,
+                                     ValuesTried tried) {
+        // A remainder of a form over numbers of one position is what one value leaves, as a form
+        // over them is what one value comes to.
+        Realization named = amongTheValuesNamed(over.dividend().coefs().keySet(),
+                values -> OrderedAffineBoundary.remainderAt(over.dividend(), over.divisor(),
+                        values), over.where(), within, tried);
+        if (named != null) {
+            return named;
+        }
+        LinearForm<NumericTerm> form = new LinearForm<>(ExactRatio.ZERO, over.dividend().coefs());
+        BigInteger moved = ((ExactAnswer.Held<BigInteger>) over.dividend().constant().floor())
+                .value();
+        // What the coefficients reach: every multiple of the step they generate.
+        Congruences reached = new Congruences(BigInteger.ZERO,
+                wholeStepOf(over.dividend().coefs().values()));
+        List<Map.Entry<RealizationTarget.OfANumber, ExactRatio>> terms = targetsOf(form);
+        Set<CompositionBudget> stoppedBy = EnumSet.noneOf(CompositionBudget.class);
+        Set<CompositionCapacity> unheld = new HashSet<>();
+        boolean bounded = true;
+        LevelCandidateSource.Offered offered =
+                LevelCandidateSource.forItem(over.where(), over.levels());
+        if (offered.stoppedShort()) {
+            stoppedBy.add(CompositionBudget.LEVELS_A_SIDE_IS_ASKED_AT);
+        }
+        NumericDomain.Bounds reach = NumericDomain.Bounds.OPEN;
+        switch (within.projectionOf(form)) {
+            case NumericDomain.FormProjection.Within(NumericDomain.Bounds held) ->
+                    reach = held == null ? NumericDomain.Bounds.OPEN : held;
+            case NumericDomain.FormProjection.NothingIsLeft _ -> {
+                return new Realization.Impossible();
+            }
+            case null -> { }
+        }
+        for (Level level : offered.levels()) {
+            ExactRatio asked = level.asAnExactNumber();
+            if (asked == null || !asked.isWhole()
+                    || !(asked.floor() instanceof ExactAnswer.Held<BigInteger> remainder)
+                    || remainder.value().signum() < 0
+                    || remainder.value().compareTo(over.divisor()) >= 0) {
+                // A remainder the divisor cannot leave: no value of the form is at it.
+                continue;
+            }
+            Congruences wanted = new Congruences(remainder.value().subtract(moved), over.divisor())
+                    .meet(reached);
+            if (wanted == null) {
+                continue;
+            }
+            ClassMembers members = ClassMembers.within(wanted, reach, null,
+                    VALUES_A_PROGRESSION_WITHOUT_AN_END_IS_TRIED_AT);
+            if (members.stoppedShort()) {
+                stoppedBy.add(CompositionBudget.VALUES_OF_AN_UNBOUNDED_PROGRESSION_TRIED);
+                bounded = false;
+            }
+            for (BigInteger at : members.values()) {
+                LevelWalk walk = walkLevel(form, terms, over.on(), ExactRatio.of(at), within, runs,
+                        tried, stoppedBy, unheld);
+                if (walk.found() != null) {
+                    return walk.found();
+                }
+                bounded &= walk.exhausted();
+                // A member whose walk spent every step it is given says the next one is as far from
+                // an answer: members of one class are walked at the same cost, so one that ran out
+                // would take a second whole allowance for nothing.
+                if (!walk.exhausted()
+                        && stoppedBy.contains(CompositionBudget.STEPS_A_SEARCH_MAY_TAKE)) {
+                    break;
+                }
+            }
+        }
+        if (bounded && over.where() instanceof Criterion.AtTheLevel) {
+            return new Realization.Impossible();
+        }
+        return Realization.Unknown.leftOpen(
+                Realization.Unknown.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED,
+                stoppedBy, Set.of(), unheld);
+    }
+
+    /** The step a form's whole coefficients generate: the greatest number that divides them all. */
+    private static BigInteger wholeStepOf(Collection<ExactRatio> coefficients) {
+        BigInteger step = BigInteger.ZERO;
+        for (ExactRatio each : coefficients) {
+            step = step.gcd(((ExactAnswer.Held<BigInteger>) each.floor()).value());
+        }
+        return step.signum() == 0 ? BigInteger.ONE : step;
+    }
+
+    /** The region a walk of one level is held to, and where each position runs in it. */
+    private record AtTheLevel(SearchRegion region, Map<NumericTerm, NumericDomain.Bounds> runs) {}
+
+    /**
+     * The rules with the form's own equation at {@code target} taken in, or null where they are
+     * then left nothing.
+     *
+     * <p>Each position's run is read from a region that carries the equation and the rules it was
+     * already held to, so it is narrower wherever a rule relates the positions. A run is a bound
+     * and not a set: it can still hold values the other positions cannot complete, which is why
+     * the walk puts every whole assignment to the rules at its end. Narrowing, and only for this
+     * level: the region is no statement about the side. Where the region cannot carry the
+     * equation, the walk is handed what it had.
+     */
+    private static AtTheLevel atTheLevel(LinearForm<NumericTerm> form, ExactRatio target,
+                                         SearchRegion within,
+                                         Map<NumericTerm, NumericDomain.Bounds> runs) {
+        LinearForm<NumericTerm> equation = new LinearForm<>(target.negated(), form.coefs());
+        if (!(within.assuming(equation, Rel.EQ) instanceof SearchRegion.Assumption.Taken(
+                SearchRegion narrowed))) {
+            return new AtTheLevel(within, runs);
+        }
+        if (narrowed.emptiness().isPresent()) {
+            return null;
+        }
+        Map<NumericTerm, NumericDomain.Bounds> narrowedRuns = new LinkedHashMap<>();
+        for (NumericTerm term : form.coefs().keySet()) {
+            switch (narrowed.projectionOf(term)) {
+                case NumericDomain.FormProjection.Within(NumericDomain.Bounds held) ->
+                        narrowedRuns.put(term, held == null ? NumericDomain.Bounds.OPEN : held);
+                case NumericDomain.FormProjection.NothingIsLeft _ -> {
+                    return null;
+                }
+                case null -> narrowedRuns.put(term, NumericDomain.Bounds.OPEN);
+            }
+        }
+        return new AtTheLevel(narrowed, narrowedRuns);
     }
 
     /** How many assignments the search will try before it stops and says it did not settle it. */
@@ -582,7 +1083,7 @@ public final class LevelRealizer {
      */
     private final class Search {
 
-        private final List<Map.Entry<RealizationTarget, ExactRatio>> terms;
+        private final List<Map.Entry<RealizationTarget.OfANumber, ExactRatio>> terms;
         /**
          * The order each position is read and written on, in the order the terms are walked.
          *
@@ -648,7 +1149,7 @@ public final class LevelRealizer {
             return true;
         }
 
-        Search(List<Map.Entry<RealizationTarget, ExactRatio>> terms,
+        Search(List<Map.Entry<RealizationTarget.OfANumber, ExactRatio>> terms,
                Map<NumericTerm, Carrier> on, SearchRegion within,
                Map<NumericTerm, NumericDomain.Bounds> runs, ValuesTried tried) {
             this.tried = tried;
@@ -742,8 +1243,14 @@ public final class LevelRealizer {
             // rather than beside it — a residue off what the rest can reach is one no assignment of
             // them arrives at, and a position offering one candidate has nothing for a test applied
             // afterwards to leave.
+            AffinePreimage reaches = fromHere[i + 1].affinePreimage(coef, owed, carriers[i].spacing());
+            // And the numbers the position's own rules hold it to: a value of the class that the
+            // rest cannot complete, and a value the rest can complete that is not of it, are one
+            // refusal, and a walk that kept them apart tries what neither leaves.
+            Congruences classOf = terms.get(i).getKey().term() instanceof NumericTerm.ValueOf value
+                    ? here.valueClassAt(value) : null;
             CandidateDomain may = CandidateDomain.of(
-                    fromHere[i + 1].affinePreimage(coef, owed, carriers[i].spacing()), left);
+                    classOf == null ? reaches : reaches.heldTo(classOf), left);
             return switch (may) {
                 case CandidateDomain.None _ -> Reached.EXHAUSTED;
                 case CandidateDomain.One only -> trying(i, only.at().at(), owed, coef, here);
@@ -774,6 +1281,22 @@ public final class LevelRealizer {
          * reported as every value having been tried. Nothing being left is proved by the rules, so
          * stepping past it takes nothing out of a walk that reaches the end.
          */
+        private Reached tryingRatio(int i, ExactRatio x, ExactRatio owed, ExactRatio coef,
+                                    SearchRegion here) {
+            // A value the host has no room to write out is a value this walk cannot try, which is
+            // not a proof the rules leave nothing there: the third vocabulary and `INCOMPLETE`.
+            return switch (x.writtenDecimal()) {
+                case ExactAnswer.Unheld<Optional<BigDecimal>> unheldValue -> {
+                    unheld.add(new CompositionCapacity(
+                            CompositionCapacity.Where.VALUES_OF_A_PROGRESSION_WALKED_TO,
+                            unheldValue.why()));
+                    yield Reached.INCOMPLETE;
+                }
+                case ExactAnswer.Held<Optional<BigDecimal>> written ->
+                        trying(i, written.value().orElse(null), owed, coef, here);
+            };
+        }
+
         private Reached trying(int i, BigDecimal x, ExactRatio owed,
                                ExactRatio coef, SearchRegion here) {
             SearchRegion next =
@@ -785,7 +1308,7 @@ public final class LevelRealizer {
             // this position's own value is fine enough. That is never a proof the rules leave
             // nothing here — the walk simply could not go on past this value — so it is the third
             // vocabulary and `INCOMPLETE`, and this value is neither taken nor refused.
-            ExactAnswer<ExactRatio> remaining = owed.minus(coef.times(ExactRatio.of(x)));
+            ExactAnswer<ExactRatio> remaining = coef.times(ExactRatio.of(x)).flatMap(owed::minus);
             if (remaining instanceof ExactAnswer.Unheld<ExactRatio> unheldRest) {
                 unheld.add(new CompositionCapacity(
                         CompositionCapacity.Where.VALUES_A_POSITION_ON_THE_WAY_IS_WALKED_TO,
@@ -883,7 +1406,7 @@ public final class LevelRealizer {
                                        SearchRegion here) {
             ExactRatio x = ExactRatio.of(every.first());
             ExactRatio last = ExactRatio.of(every.last());
-            Reached reached = trying(i, x.asWrittenDecimal(), owed, coef, here);
+            Reached reached = tryingRatio(i, x, owed, coef, here);
             if (reached == Reached.FOUND) {
                 return Reached.FOUND;
             }
@@ -915,7 +1438,7 @@ public final class LevelRealizer {
                     return Reached.INCOMPLETE;
                 }
                 x = next.orNull();
-                Reached reached = trying(i, x.asWrittenDecimal(), owed, coef, here);
+                Reached reached = tryingRatio(i, x, owed, coef, here);
                 if (reached == Reached.FOUND) {
                     return Reached.FOUND;
                 }
@@ -1006,7 +1529,19 @@ public final class LevelRealizer {
          */
         private Reached solving(int i, ExactRatio owed, ExactRatio coef,
                                 NumericDomain.Bounds left) {
-            ExactRatio quotient = owed.dividedBy(coef);
+            // The quotient itself can be a value no ratio holds, where what is owed and what this
+            // position weighs stand at the two ends of the exponents. That is this walk meeting the
+            // arithmetic's own limit, the same as the value below being too fine to write.
+            ExactRatio quotient;
+            switch (owed.dividedBy(coef)) {
+                case ExactAnswer.Held<ExactRatio> held -> quotient = held.value();
+                case ExactAnswer.Unheld<ExactRatio> unheldQuotient -> {
+                    unheld.add(new CompositionCapacity(
+                            CompositionCapacity.Where.VALUES_A_POSITION_ON_THE_WAY_IS_WALKED_TO,
+                            unheldQuotient.why()));
+                    return Reached.INCOMPLETE;
+                }
+            }
             BigDecimal solved;
             if (carriers[i].spacing() == souther.compiler.numeric.Granularity.DISCRETE) {
                 if (!quotient.isWhole()) {
@@ -1027,9 +1562,20 @@ public final class LevelRealizer {
                     }
                 }
             } else {
-                solved = quotient.asWrittenDecimal();
-                if (solved == null) {
-                    return Reached.EXHAUSTED;
+                switch (quotient.writtenDecimal()) {
+                    case ExactAnswer.Held<Optional<BigDecimal>> written -> {
+                        // No decimal is the quotient, so no value of a dense position is.
+                        if (written.value().isEmpty()) {
+                            return Reached.EXHAUSTED;
+                        }
+                        solved = written.value().get();
+                    }
+                    case ExactAnswer.Unheld<Optional<BigDecimal>> unheldQuotient -> {
+                        unheld.add(new CompositionCapacity(
+                                CompositionCapacity.Where.VALUES_A_POSITION_ON_THE_WAY_IS_WALKED_TO,
+                                unheldQuotient.why()));
+                        return Reached.INCOMPLETE;
+                    }
                 }
             }
             // Held against the ends themselves, which say whether they are their own values. A bound
@@ -1039,7 +1585,7 @@ public final class LevelRealizer {
                 return Reached.EXHAUSTED;
             }
             at[i] = new Count(solved);
-            if (!theRulesHaveNotRefused()) {
+            if (!theDeclarationsHaveNotRefused()) {
                 at[i] = null;
                 return Reached.EXHAUSTED;
             }
@@ -1070,7 +1616,7 @@ public final class LevelRealizer {
          * <p>What giving this up may not give up is the answer. An assignment out of the wider box
          * that nothing held against the rules is one the record can refuse, and offered as a row it
          * comes back refused where it is built — which is the defect this reading exists to remove,
-         * arriving by way of a budget. So the last step is {@link #theRulesHaveNotRefused} and is
+         * arriving by way of a budget. So the last step is {@link #theDeclarationsHaveNotRefused} and is
          * not budgeted.
          */
         private SearchRegion narrowing(
@@ -1099,12 +1645,12 @@ public final class LevelRealizer {
          * never put to the rules at all, so asking about the last of them alone would hold the walk
          * to nothing it had not already checked.
          */
-        private boolean theRulesHaveNotRefused() {
+        private boolean theDeclarationsHaveNotRefused() {
             java.util.Map<RealizationTarget, Place> all = new LinkedHashMap<>();
             for (int j = 0; j < terms.size(); j++) {
                 all.put(terms.get(j).getKey(), at[j]);
             }
-            return LevelRealizer.this.theRulesHaveNotRefused(all, within);
+            return LevelRealizer.this.theDeclarationsHaveNotRefused(all, within);
         }
 
         /**
@@ -1137,8 +1683,11 @@ public final class LevelRealizer {
             if (oneApart == null || otherApart == null) {
                 return within;
             }
-            ExactRatio one = oneApart.dividedBy(coef);
-            ExactRatio other = otherApart.dividedBy(coef);
+            ExactRatio one = oneApart.dividedBy(coef).orNull();
+            ExactRatio other = otherApart.dividedBy(coef).orNull();
+            if (one == null || other == null) {
+                return within;
+            }
             ExactRatio low = one.compareTo(other) <= 0 ? one : other;
             ExactRatio high = one.compareTo(other) <= 0 ? other : one;
             Count lowWritten = written(low, java.math.RoundingMode.FLOOR);
@@ -1166,9 +1715,13 @@ public final class LevelRealizer {
          * it is past where the rules stop rather than short of it.
          */
         private static Count written(ExactRatio at, java.math.RoundingMode towards) {
-            Count exactly = Count.at(at);
-            if (exactly != null) {
-                return exactly;
+            // No end where the host has no room to write the count out: the end is dropped and the
+            // range is wider, which is sound for the reason above.
+            if (!(Count.written(at) instanceof ExactAnswer.Held<Optional<Count>> exactly)) {
+                return null;
+            }
+            if (exactly.value().isPresent()) {
+                return exactly.value().get();
             }
             BigDecimal outward =
                     at.asDecimal(towards, DIGITS_A_DERIVED_END_KEEPS).orNull();
@@ -1190,12 +1743,16 @@ public final class LevelRealizer {
                 if (low == null || high == null) {
                     return null;
                 }
-                ExactRatio one = coef.times(low);
-                ExactRatio other = coef.times(high);
+                ExactRatio one = coef.times(low).orNull();
+                ExactRatio other = coef.times(high).orNull();
+                if (one == null || other == null) {
+                    return null;
+                }
                 // A model's own ends can be far enough apart in scale, running, that the exact
-                // arithmetic cannot carry the sum this narrowing is built from. Nothing to say is
-                // already this method's own answer for an end nothing bounds, so an unheld sum reads
-                // the same way: `leaving` narrows by nothing rather than by a value this cannot hold.
+                // arithmetic cannot carry the product or the sum this narrowing is built from.
+                // Nothing to say is already this method's own answer for an end nothing bounds, so
+                // an unheld number reads the same way: `leaving` narrows by nothing rather than by
+                // a value this cannot hold.
                 least = least.plus(one.compareTo(other) <= 0 ? one : other).orNull();
                 most = most.plus(one.compareTo(other) <= 0 ? other : one).orNull();
                 if (least == null || most == null) {
@@ -1270,9 +1827,16 @@ public final class LevelRealizer {
      */
     private static Place placeMeeting(Criterion where, NumericTerm.FromOnePosition term,
                                       Carrier carrier, NumericDomain.Bounds bounds,
-                                      WitnessSearch looking, ValuesTried tried,
-                                      Map<RealizationTarget, Place> given) {
-        PlacesApart apart = tried.apartFor(new RealizationTarget.AtOnePosition(term), given);
+                                      Congruences members, WitnessSearch looking,
+                                      SearchRegion region, ValuesTried tried,
+                                      Map<RealizationTarget, Place> given,
+                                      List<Place> refused, Set<CompositionBudget> stoppedBy) {
+        PlacesApart apart = tried.apartFor(RealizationTarget.of(term), given);
+        if (!refused.isEmpty()) {
+            List<Place> held = new ArrayList<>(apart.places());
+            held.addAll(refused);
+            apart = PlacesApart.of(held);
+        }
         Place offered = switch (where) {
             // The level itself, and the set is not asked. A point on a line stands where the rule
             // wrote it; held to what the declarations admit, a line drawn at a value they refuse
@@ -1290,9 +1854,10 @@ public final class LevelRealizer {
             // A path the reading puts no position at is not that, and the run is what a value there
             // is composed from.
             case Criterion.Within within -> {
-                ValueSet admits = looking.toComposeFrom(term).toCrossTheRunWith();
+                ValueSet admits = looking.toComposeFrom(term, region).toCrossTheRunWith();
                 yield admits == null ? null
-                        : someValueIn(within, carrier, bounds, admits, apart, looking::meter);
+                        : someValueIn(within, carrier, bounds, admits, members, apart,
+                                looking::meter, stoppedBy);
             }
         };
         if (offered == null) {
@@ -1329,9 +1894,16 @@ public final class LevelRealizer {
      */
     private static Place someValueIn(Criterion.Within within, Carrier carrier,
                                      NumericDomain.Bounds bounds, ValueSet admits,
-                                     PlacesApart apart, Supplier<Meter> allowance) {
+                                     Congruences members, PlacesApart apart,
+                                     Supplier<Meter> allowance, Set<CompositionBudget> stoppedBy) {
         LevelSpace space = LevelSpace.onACarrier(carrier);
         List<LevelInterval> runs = within.runsInside(carrier, bounds.min(), bounds.max());
+        // A value held to a class is a value of the class, so the places are drawn from it. What
+        // walks the run does not know the class, and a place it names that is outside it is one the
+        // rules refuse: the second walk below is no way to a member the first did not reach.
+        if (members != null) {
+            return someMemberIn(within, runs, carrier, admits, members, apart, stoppedBy);
+        }
         for (LevelInterval look : runs) {
             // And not one this point was already tried at. The run's own representative is the
             // cheap answer and stays the first one offered; offered again after the row built from
@@ -1354,6 +1926,43 @@ public final class LevelRealizer {
     }
 
     /**
+     * The first member of a class that a run of the item holds and the position's values take in,
+     * which is not one already tried or refused — or null where none is.
+     *
+     * <p>Every run in turn, each from the end the item is named for, so the row is the one beside
+     * the boundary. A run is a number of the class at its ends only by luck, which is why the ends
+     * are not what is offered: what a place is held apart for is asked of each member in turn, and a
+     * member refused leaves the next one to try rather than the search having nothing to go on.
+     *
+     * <p>Where the runs held more members than were looked at, that is said beside the answer: a
+     * search that left members untried found no proof that there is none.
+     */
+    private static Place someMemberIn(Criterion.Within within, List<LevelInterval> runs,
+                                      Carrier carrier, ValueSet admits, Congruences members,
+                                      PlacesApart apart, Set<CompositionBudget> stoppedBy) {
+        boolean leftSome = false;
+        for (LevelInterval look : runs) {
+            OrderedInterval run = runOf(look, carrier);
+            if (run == null) {
+                continue;
+            }
+            ClassMembers inside = ClassMembers.within(members,
+                    new NumericDomain.Bounds(run.low(), run.high()), within.away(),
+                    VALUES_A_PROGRESSION_WITHOUT_AN_END_IS_TRIED_AT);
+            for (Place each : inside.notApart(apart)) {
+                if (carrier.admitted(admits, each)) {
+                    return each;
+                }
+            }
+            leftSome |= inside.stoppedShort();
+        }
+        if (leftSome) {
+            stoppedBy.add(CompositionBudget.VALUES_OF_AN_UNBOUNDED_PROGRESSION_TRIED);
+        }
+        return null;
+    }
+
+    /**
      * One run of the levels as a run of the carrier's own places, or null where its ends are not
      * places of the position.
      *
@@ -1361,7 +1970,7 @@ public final class LevelRealizer {
      * a run is in the written form's units, and a set of the position's values has nothing to say
      * about a number in them — put to one, the set would be answering about a value nobody holds.
      */
-    private static OrderedInterval runOf(LevelInterval look, Carrier carrier) {
+    static OrderedInterval runOf(LevelInterval look, Carrier carrier) {
         Endpoint low = endOf(look.low(), carrier);
         Endpoint high = endOf(look.high(), carrier);
         boolean lost = (look.low() != null && low == null)
@@ -1445,8 +2054,12 @@ public final class LevelRealizer {
         if (moved == null) {
             return null;
         }
-        Count at = Count.at(moved);
-        return at == null ? null : new Endpoint(at, end.inclusive());
+        // And none where the host has no room to write the count out, for the same reason.
+        return switch (Count.written(moved)) {
+            case ExactAnswer.Held<Optional<Count>> written ->
+                    written.value().map(at -> new Endpoint(at, end.inclusive())).orElse(null);
+            case ExactAnswer.Unheld<Optional<Count>> _ -> null;
+        };
     }
 
     /**
@@ -1475,14 +2088,14 @@ public final class LevelRealizer {
         if (tried.holds(fixing)) {
             return Realization.Unknown.nothingComposedOne();
         }
-        return theRulesHaveNotRefused(fixing, within)
+        return theDeclarationsHaveNotRefused(fixing, within)
                 ? new Realization.Found(fixing)
                 : Realization.Unknown.nothingComposedOne();
     }
 
     /**
-     * Whether the rules, with every position of an item fixed at what was chosen, were not shown to
-     * leave nothing.
+     * Whether the declarations — the types and the rules written on them — with every position of
+     * an item fixed at what was chosen, were not shown to leave nothing.
      *
      * <p>Not that a value exists. Nothing here builds one, and an emptiness nobody proved is not a
      * value proven to exist — what settles that is the row itself, where it is built. What this
@@ -1501,10 +2114,15 @@ public final class LevelRealizer {
      * about the values in it. Anything more would be a claim about an order this reading does not
      * reach.
      */
-    private boolean theRulesHaveNotRefused(Map<RealizationTarget, Place> fixing,
+    private boolean theDeclarationsHaveNotRefused(Map<RealizationTarget, Place> fixing,
                                            SearchRegion within) {
         Map<NumericTerm, Place> standing = new LinkedHashMap<>();
-        fixing.forEach((target, at) -> standing.put(target.term(), at));
+        // A count is no number the region holds a range of; the numbers fixed beside it are.
+        fixing.forEach((target, at) -> {
+            if (target instanceof RealizationTarget.OfANumber number) {
+                standing.put(number.term(), at);
+            }
+        });
         return standing.isEmpty() || within.given(standing).emptiness().isEmpty();
     }
 }

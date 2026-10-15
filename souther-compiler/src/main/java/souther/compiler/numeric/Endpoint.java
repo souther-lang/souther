@@ -54,6 +54,17 @@ public record Endpoint(Place at, boolean inclusive) {
     }
 
     /**
+     * This end with {@code taken} taken out of what it keeps, or null where that value is not the
+     * one it keeps.
+     *
+     * <p>A range that keeps the value it stops at, less that value, stops at the same place without
+     * it. A value taken out anywhere else is not at this end, and no end says it.
+     */
+    public Endpoint without(Place taken) {
+        return inclusive && at.sameAs(taken) ? exclusive(at) : null;
+    }
+
+    /**
      * Whether this is the same end as {@code other}: the same place, admitted or refused the same
      * way.
      *

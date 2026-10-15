@@ -9,6 +9,7 @@ import souther.compiler.diag.msg.DeclarationMessage;
 import souther.compiler.diag.msg.TypeMessage;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
@@ -48,7 +49,7 @@ public final class BinaryElaborator {
             throw new Unanswerable(bin.pos());
         }
         if (bin.op().joinsTwoConditions()) {
-            return Elaborator.standing(e, read, Type.BOOL, ctx.published(),
+            return Elaborator.standing(e, read, Type.BOOL, ctx.kinds(), ctx.sums(),
                     "operand of logical operator");
         }
         return read;
@@ -74,7 +75,7 @@ public final class BinaryElaborator {
                 Type lt = left.type();
                 Type rt = right.type();
                 OrderedReading ordered = orderedReading(lt, rt, bin.left(), bin.right(),
-                        ctx.inners(), ctx.symbols(), ctx.kinds(), ctx.published());
+                        ctx.symbols(), ctx.declarations());
                 if (ordered == null) {
                     throw CompileException.of(Diagnostic
                                     .at(bin.pos()).say(new TypeMessage.ComparisonNeedsOrderedValuesOfOneType(Type.show(lt), Type.show(rt))).build());
@@ -107,7 +108,8 @@ public final class BinaryElaborator {
                         // the right side stands as the left's type, and the pair is read as it
                         // stands.
                         yield new Core.Binary(bin.op(), left,
-                                Elaborator.standing(bin.right(), right, lt, ctx.published(),
+                                Elaborator.standing(bin.right(), right, lt, ctx.kinds(),
+                                        ctx.sums(),
                                         "operand of arithmetic"),
                                 Core.BinaryReading.AS_THEY_STAND,
                                 ctx.occurrenceOf(bin.origin()), lt, bin.pos());
@@ -206,19 +208,19 @@ public final class BinaryElaborator {
      * by the enumeration listing {@code w}.
      */
     static OrderedReading orderedReading(Type lt, Type rt, Hir.Expr le, Hir.Expr re,
-                                         NewtypeInners inners,
-                                         Symbols symbols, DeclarationKinds kinds,
-                                         PublishedDeclarations published) {
+                                         Symbols symbols, DeclarationAccess declarations) {
+        NewtypeInners inners = declarations.inners();
         // Two of the same type, where that type has an order: 金額 <= 金額, Stage <= Stage, and
         // StageN <= StageN, whose order is the enumeration it wraps (ADR-0047 over ADR-0069).
         if (lt.equals(rt)) {
-            Ordering how = Ordering.of(lt, inners, symbols, kinds, published);
+            Ordering how = Ordering.of(lt, declarations);
             return how == null ? null
                     : new OrderedReading(Core.BinaryReading.AS_THEY_STAND, basisOf(how));
         }
         // Two values of one enumeration that are not one type: a case value is a value of its sum
         // (spec §sum-data), so `stage < Won` compares in the sum both sides belong to (issue #161).
-        TypeSymbol enumeration = TypeOps.comparisonEnumeration(lt, rt, symbols, kinds, published);
+        TypeSymbol enumeration = TypeOps.comparisonEnumeration(lt, rt, declarations.kinds(),
+                declarations.sums(), declarations.enumerations());
         if (enumeration != null) {
             Type sum = Type.ref(enumeration);
             return new OrderedReading(new Core.BinaryReading.In(sum), new Core.OrderingBasis(sum));
@@ -231,11 +233,10 @@ public final class BinaryElaborator {
         // Int variable, and not 金額 <= 数量. Ordering asks in addition that the wrapped value be
         // ordered, which the equality rule this shares does not. The pair is ordered by what both
         // sides open to, which the two sharing a base makes the one the left is ordered by.
-        Ordering how = Ordering.of(lt, inners, symbols, kinds, published);
+        Ordering how = Ordering.of(lt, declarations);
         return how != null && TypeOps.base(lt, inners).equals(TypeOps.base(rt, inners))
                 && literalPairsNewtype(lt, rt, le, re, symbols)
-                ? new OrderedReading(new Core.BinaryReading.In(newtypeOfThePair(lt, rt, symbols)),
-                        basisOf(how))
+                ? new OrderedReading(openedPair(lt, rt, inners, symbols), basisOf(how))
                 : null;
     }
 
@@ -276,12 +277,11 @@ public final class BinaryElaborator {
             return Core.BinaryReading.EXACT_NUMBERS;
         }
         if (eqCoercible(lt, rt, le, re, ctx.inners(), ctx.symbols())) {
-            return new Core.BinaryReading.In(newtypeOfThePair(lt, rt, ctx.symbols()));
+            return openedPair(lt, rt, ctx.inners(), ctx.symbols());
         }
-        List<TypeSymbol> lCases = AtomSpace.subjectAtoms(lt, ctx.published());
-        List<TypeSymbol> rCases = AtomSpace.subjectAtoms(rt, ctx.published());
-        if (!lCases.isEmpty() && !rCases.isEmpty()
-                && (lCases.containsAll(rCases) || rCases.containsAll(lCases))) {
+        List<TypeSymbol> lCases = AtomSpace.subjectAtoms(lt, ctx.kinds(), ctx.sums());
+        List<TypeSymbol> rCases = AtomSpace.subjectAtoms(rt, ctx.kinds(), ctx.sums());
+        if (!lCases.isEmpty() && !rCases.isEmpty() && oneHoldsTheOther(lCases, rCases)) {
             // Read in the cases both sides range over, and not in either side's name: two sums
             // listing one set of cases are both that set, and a sum and the union of its cases are
             // one set spelled twice. Taken from a side, the reading would turn on which side was
@@ -296,10 +296,27 @@ public final class BinaryElaborator {
         return BottomInfer.isBottom(rt) ? new Core.BinaryReading.In(lt) : null;
     }
 
-    /** The side of a newtype-and-literal pair that wears the newtype, which is what the literal is
-     *  read as. */
-    private static Type newtypeOfThePair(Type lt, Type rt, Symbols symbols) {
-        return TypeOps.isSingleValueNewtype(lt, symbols) ? lt : rt;
+    /**
+     * Whether every case of one side is a case of the other.
+     *
+     * <p>Each side lists a case once, so only the side with more cases can hold the other, and the
+     * two are one set where they hold the same number. That side is read into a set once, so a case
+     * of the other is found in one step and not by reading along every case of two large sums.
+     */
+    private static boolean oneHoldsTheOther(List<TypeSymbol> left, List<TypeSymbol> right) {
+        List<TypeSymbol> wider = left.size() >= right.size() ? left : right;
+        List<TypeSymbol> narrower = wider == left ? right : left;
+        return new HashSet<>(wider).containsAll(narrower);
+    }
+
+    /**
+     * A newtype-and-literal pair, read as what the newtype wraps under every name it wears: the
+     * newtype's side is opened to that, and the literal already is it.
+     */
+    private static Core.BinaryReading.Opened openedPair(Type lt, Type rt, NewtypeInners inners,
+                                                        Symbols symbols) {
+        Type newtype = TypeOps.isSingleValueNewtype(lt, symbols) ? lt : rt;
+        return new Core.BinaryReading.Opened(newtype, TypeOps.base(newtype, inners));
     }
 
     /**

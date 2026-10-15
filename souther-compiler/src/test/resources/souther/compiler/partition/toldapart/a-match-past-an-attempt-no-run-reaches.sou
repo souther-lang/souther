@@ -1,0 +1,42 @@
+// Nor does one past an attempted construction, where no run reaches the attempt.
+//
+// Past an attempt no way in is stated, which is no reason to forget that no run got to the attempt in
+// the first place: a way in nothing states is still held to what holds above it. And the attempt
+// itself, which no run makes, leaves no position unread.
+//
+// told apart at f: 2 groups of 2
+// told apart at r: untouched
+// told apart at n: 2 groups of 2
+module example.unreachedattempt
+
+data Yes
+data No
+data Flag = Yes | No
+
+data Draft
+data Submitted
+data Request = Draft | Submitted
+
+data Note = String
+    invariant String.length(value) >= 1
+data NoNote
+
+data Ok = { n: Int }
+
+behavior judge : (f: Flag, r: Request, text: String, n: Int) -> Ok | NoNote
+    constructs Ok, Note
+
+let judge (f, r, text, n) = {
+    guard n > 10 else Ok { n = 0 }
+    match f with
+        | Yes -> Ok { n = 1 }
+        | No ->
+            match f with
+                | Yes -> {
+                    guard Note(text) as note else NoNote
+                    match r with
+                        | Draft -> Ok { n = 2 }
+                        | Submitted -> Ok { n = 3 }
+                }
+                | No -> Ok { n = 4 }
+}

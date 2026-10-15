@@ -1,9 +1,11 @@
 package souther.compiler.partition;
 
+import souther.compiler.meaning.WhyUnread;
 import souther.compiler.publish.CanonicalSelection;
 import souther.compiler.publish.PublicationOrders;
 
-import java.util.Collection;
+import java.util.List;
+import java.util.Objects;
 
 /**
  * A condition on the way to a border that a row for it was not composed against, and which stage
@@ -52,6 +54,31 @@ public sealed interface ReachabilityGap {
     }
 
     /**
+     * The walk stated it as one of several ways, and the row was looked for along the way whole
+     * past it rather than along each of them: the ways it and the others like it split the way into
+     * are more than {@code figure} lets this look along.
+     *
+     * <p>Said because it changes what a search finds. Along one of the ways a row is composed
+     * against that way's alternative as well, which along the whole it is not, so a row the search
+     * did not find here is one it may have found along one of them.
+     */
+    record LookedAlongWhole(OnTheWay condition, CompositionBudget figure)
+            implements ReachabilityGap {
+
+        public LookedAlongWhole {
+            if (condition == null || figure == null || !condition.ofSeveralWays()) {
+                throw new IllegalArgumentException(
+                        "a way looked along whole is past some condition, at some figure");
+            }
+        }
+
+        @Override
+        public ConditionReportAnchor anchor() {
+            return condition.anchor();
+        }
+    }
+
+    /**
      * The walk stated it, and the rules of the way it is on leave nothing.
      *
      * <p>Apart from {@link Uncomposed} and not one of its reasons, because it is not one. Every
@@ -79,6 +106,61 @@ public sealed interface ReachabilityGap {
     }
 
     /**
+     * What a cut comes to where it could be written several ways and none of them was placed.
+     *
+     * <p><b>The rules leave nothing only where every way was shown to leave nothing</b>, and no
+     * way was left unlooked at. The rules leaving one case of a sum nothing say nothing about the
+     * case beside it, and a way this compiler did not get to the end of may have the values the
+     * others lacked — so anything short of every way proved is this compiler not composing the cut,
+     * which a reader may conclude nothing about the model from.
+     *
+     * <p>Said in the words of what stopped it, and the same words whichever order the ways were
+     * walked in. The order is the order the model declares its cases in, and a report that changed
+     * with it would be telling a reader about the declaration rather than the cut.
+     *
+     * <p>A figure that stopped one of the ways is said before anything else, because raising it is
+     * something a reader can do and may find the row. Two numbers met at one location is said
+     * before a way that found nothing, since it names the population this compiler does not compose
+     * rather than only that nothing was found.
+     *
+     * @param ways          what each way of the row came to. A case the row cannot be beside what
+     *                      it already is is not among them: it is no way of this row, and leaves
+     *                      nothing open
+     * @param someUnsettled whether some way of the row was not looked at to its end — one whose
+     *                      place nothing worked out
+     */
+    static ReachabilityGap overEveryWay(OnTheWay.TakenIn cut, List<ReachabilityGap> ways,
+                                        boolean someUnsettled) {
+        if (!someUnsettled && !ways.isEmpty()
+                && ways.stream().allMatch(each -> each instanceof ProvedImpossible)) {
+            return new ProvedImpossible(cut);
+        }
+        CompositionShortfall met = CompositionShortfall.NONE;
+        boolean twoAtOneLocation = false;
+        for (ReachabilityGap each : ways) {
+            switch (each) {
+                case Uncomposed(var _, Why.TheWalkForItsPositionsWasStopped(
+                        var by, var writes, var unheld)) ->
+                        met = met.and(CompositionShortfall.of(by.written(), writes.written(),
+                                unheld.written()));
+                case Uncomposed(var _, Why.TwoNumbersAtOneLocation _) -> twoAtOneLocation = true;
+                case Uncomposed(var _, Why.NoValueComposedForItsPositions _),
+                     Uncomposed(var _, Why.ElementsWrittenAlike _),
+                     Uncomposed(var _, Why.NoComposerWritesIt _),
+                     ProvedImpossible _ -> { }
+                case Unstated _, LookedAlongWhole _ -> throw new IllegalArgumentException(
+                        "a way of writing a cut is one the walk stated as a cut: " + each);
+            }
+        }
+        if (!met.nothing()) {
+            return new Uncomposed(cut, Why.TheWalkForItsPositionsWasStopped.by(met));
+        }
+        return new Uncomposed(cut, twoAtOneLocation
+                ? new Why.TwoNumbersAtOneLocation()
+                : new Why.NoValueComposedForItsPositions());
+    }
+
+    /**
      * What stopped a stated condition from being composed against.
      *
      * <p>Each says what this composer did rather than what the model says. A row is written without
@@ -86,6 +168,16 @@ public sealed interface ReachabilityGap {
      * and a word going away is a capability gained.
      */
     sealed interface Why {
+
+        /**
+         * What a walk for a condition's positions that found nothing comes to: stopped, where it
+         * met something of this compiler's, and found nothing in what it walked where it did not.
+         */
+        static Why ofAWalkThatFoundNothing(CompositionShortfall met) {
+            return met.nothing()
+                    ? new NoValueComposedForItsPositions()
+                    : TheWalkForItsPositionsWasStopped.by(met);
+        }
 
         /**
          * No value was composed at some position the condition is over.
@@ -99,40 +191,45 @@ public sealed interface ReachabilityGap {
         record NoValueComposedForItsPositions() implements Why {}
 
         /**
-         * The same, where a budget of this compiler's, or a value it could not hold, is what stopped
-         * the walk that would have placed the positions.
+         * The same, where something of this compiler's is what stopped the walk that would have
+         * placed the positions: a budget, a population the composing of a value there writes some of,
+         * or a value it could not hold.
          *
          * <p>A case beside the one above rather than a field on it. The two are different news: one
          * says nothing was found in what was walked, the other says the walking stopped, and only
-         * the second names something a reader could raise. Held as a set that is sometimes empty,
-         * every reader would decide again which of the two it had.
+         * the second names something a reader could do something about. Held as a set that is
+         * sometimes empty, every reader would decide again which of the two it had.
          *
          * <p>Not an {@link souther.compiler.query.EstablishmentGap}. A row was composed here; what
          * the budget cost is one condition on the way being composed against, and reporting it as a
          * point nothing could be established at would say more than happened.
          */
         record TheWalkForItsPositionsWasStopped(CanonicalSelection<CompositionBudget> by,
+                                                CanonicalSelection<CompositionRepertoire> writes,
                                                 CanonicalSelection<CompositionCapacity> unheld)
                 implements Why {
 
             /**
-             * Stopped by a figure, by a value it could not hold, or by both: the walk that would
-             * have placed the positions did not reach its end either way, and each is said in its
-             * own vocabulary since what a reader does about them differs.
+             * Stopped by a figure, by a population written in part, by a value it could not hold,
+             * or by more than one: the walk that would have placed the positions did not reach its
+             * end either way, and each is said in its own vocabulary since what a reader does about
+             * them differs.
              */
             public TheWalkForItsPositionsWasStopped {
-                if (by == null || unheld == null || (by.isEmpty() && unheld.isEmpty())) {
+                if (by == null || writes == null || unheld == null
+                        || (by.isEmpty() && writes.isEmpty() && unheld.isEmpty())) {
                     throw new IllegalArgumentException("a walk this compiler stopped says what"
-                            + " stopped it: a budget, or a value it could not hold");
+                            + " stopped it: a budget, a population it writes some of, or a value"
+                            + " it could not hold");
                 }
             }
 
-            /** What a walk met, in the order a report says it. */
-            public static TheWalkForItsPositionsWasStopped by(Collection<CompositionBudget> met,
-                                                              Collection<CompositionCapacity> unheld) {
+            /** What a walk met, every vocabulary of it, in the order a report says it. */
+            public static TheWalkForItsPositionsWasStopped by(CompositionShortfall met) {
                 return new TheWalkForItsPositionsWasStopped(
-                        PublicationOrders.COMPOSITION_BUDGETS.keep(met),
-                        PublicationOrders.COMPOSITION_CAPACITIES.keep(unheld));
+                        PublicationOrders.COMPOSITION_BUDGETS.keep(met.figures()),
+                        PublicationOrders.COMPOSITION_REPERTOIRES.keep(met.populations()),
+                        PublicationOrders.COMPOSITION_CAPACITIES.keep(met.unheld()));
             }
         }
 
@@ -158,5 +255,34 @@ public sealed interface ReachabilityGap {
          * positions hold no value.
          */
         record TwoNumbersAtOneLocation() implements Why {}
+
+        /**
+         * The condition was read to the end and is of a kind no composer writes a row toward —
+         * a value the body works out, two subjects being one value — so only the run says whether
+         * it held.
+         *
+         * @param past where the reading of what the values it is over were made from stopped
+         *             ({@link RowDemand.ForTheRun#past}), which is what a row would have to be
+         *             composed past
+         */
+        record NoComposerWritesIt(RowDemand.NoComposer what, List<WhyUnread> past)
+                implements Why {
+
+            public NoComposerWritesIt {
+                Objects.requireNonNull(what, "a statement no composer writes is of some kind");
+                past = List.copyOf(past);
+            }
+        }
+
+        /**
+         * A condition about a container's elements, which no row of elements written alike meets.
+         *
+         * <p>A row writes every element of a container as the one element composed for it, so what
+         * this looked through is the rows whose elements are all one value. Some element meeting a
+         * condition while another fails it, or a container holding none where the size could not
+         * be said, is beyond that — so this is never the rules leaving nothing, and a reader is not
+         * told the way is closed.
+         */
+        record ElementsWrittenAlike() implements Why {}
     }
 }

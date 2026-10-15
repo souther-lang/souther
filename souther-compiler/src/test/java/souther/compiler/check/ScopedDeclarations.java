@@ -38,6 +38,21 @@ public final class ScopedDeclarations {
         return NewtypeInners.asWritten(symbols);
     }
 
+    /** What a value of each of {@code symbols}'s sums can be, read off the same scope. */
+    public static SumCases sumsOf(Symbols symbols) {
+        return SumCases.asWritten(kindsOf(symbols), listedOf(symbols));
+    }
+
+    /** The cases each of {@code symbols}'s sums lists, read off the same scope. */
+    public static ListedCases listedOf(Symbols symbols) {
+        return ListedCases.asWritten(symbols);
+    }
+
+    /** Everything a check asks of {@code symbols}'s declarations, each read off the same scope. */
+    public static DeclarationAccess accessOf(Symbols symbols) {
+        return DeclarationAccess.asWritten(symbols, of(symbols), kindsOf(symbols));
+    }
+
     /** What {@code symbols} declares, as the readers of a published declaration ask for it. */
     public static PublishedDeclarations of(Symbols symbols) {
         RuleReadingSource source = RuleReadings.ofNoClauseFiled(symbols);

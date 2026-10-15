@@ -83,7 +83,8 @@ class ARegionShownToHoldNothingIsNotWalkedTest {
         assertEquals(Set.of(CompositionBudget.VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT),
                 assertInstanceOf(NumericWitness.Standing.NotFound.class,
                         witnessIn(NothingTheRulesSay.REGION),
-                        "nothing was shown empty, so nothing is proved about the pair").stoppedBy(),
+                        "nothing was shown empty, so nothing is proved about the pair")
+                        .met().figures(),
                 "and what it came back with is the figure it stopped at");
     }
 
@@ -136,7 +137,7 @@ class ARegionShownToHoldNothingIsNotWalkedTest {
     @Test
     void aFormTheRulesLeaveNowhereSettlesTheItemThoughItsPositionsStand() {
         Standing standing = new BorderQuantity.OverAForm("decide",
-                LinearForm.atom((NumericTerm) WIDE).plus(LinearForm.atom((NumericTerm) NOWHERE)),
+                LinearForm.sumOfAtoms((NumericTerm) WIDE, (NumericTerm) NOWHERE),
                 Map.of(WIDE, WHOLE,
                         NOWHERE, TermOrdersFixtures.itself(NOWHERE, new Carrier.Whole())))
                 .standingAt(new Criterion.AtTheLevel(Level.OfTheQuantity.of(4)));
@@ -162,7 +163,7 @@ class ARegionShownToHoldNothingIsNotWalkedTest {
     @Test
     void aPositionLeftNothingByAFixingEndsThatBranchAndNotTheSearch() {
         Standing standing = new BorderQuantity.OverAForm("decide",
-                LinearForm.atom((NumericTerm) WIDE).plus(LinearForm.atom((NumericTerm) NOWHERE)),
+                LinearForm.sumOfAtoms((NumericTerm) WIDE, (NumericTerm) NOWHERE),
                 Map.of(WIDE, WHOLE, NOWHERE, TermOrdersFixtures.itself(NOWHERE, new Carrier.Whole())))
                 .standingAt(new Criterion.AtTheLevel(Level.OfTheQuantity.of(4)));
 

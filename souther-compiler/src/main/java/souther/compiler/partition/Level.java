@@ -2,8 +2,11 @@ package souther.compiler.partition;
 
 import souther.compiler.check.Carrier;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Place;
+
+import java.util.Optional;
 
 /**
  * One value of a {@link BorderQuantity}.
@@ -45,7 +48,7 @@ public sealed interface Level {
          * holds one.
          *
          * <p><b>Both halves of what a value of a carrier is.</b> A number becomes one by being a
-         * count at all ({@link Count#number(ExactRatio)}) and by being a count this order stands at
+         * count at all ({@link Count#written(ExactRatio)}) and by being a count this order stands at
          * ({@link Carrier#onTheGrid}) — halfway between two adjacent moments is a count and is no
          * date-time. Asking only the first builds a level saying it is a value of an order that has
          * nothing there, which is what this record's own account says it is not.
@@ -65,18 +68,25 @@ public sealed interface Level {
          *
          * <p>For a number this compiler worked out. A place the carrier itself handed over has
          * already been answered for by the carrier, and the constructor takes those as they are.
+         *
+         * <p><b>Unheld where the host had no room to write the count out.</b> That is a fact about
+         * the run and not about the number, so it is not one of the two refusals above: the caller
+         * says what a level it could not write means to its own question.
          */
-        public static OnACarrier held(Carrier of, ExactRatio number) {
-            Count count = Count.number(number);
-            Place value = of.onTheGrid(count);
-            if (value != null) {
-                return new OnACarrier(of, value);
-            }
-            if (of.extent().admits(count)) {
-                throw new IllegalStateException(
-                        "this order stands at no value there: " + of + " at " + number);
-            }
-            return new OnACarrier(of, count);
+        public static ExactAnswer<OnACarrier> held(Carrier of, ExactRatio number) {
+            return Count.written(number).flatMap(written -> {
+                Count count = written.orElseThrow(() -> new IllegalStateException(
+                        "no count on any carrier's order is this number: " + number));
+                Place value = of.onTheGrid(count);
+                if (value != null) {
+                    return ExactAnswer.held(new OnACarrier(of, value));
+                }
+                if (of.extent().admits(count)) {
+                    throw new IllegalStateException(
+                            "this order stands at no value there: " + of + " at " + number);
+                }
+                return ExactAnswer.held(new OnACarrier(of, count));
+            });
         }
 
         @Override
@@ -162,11 +172,11 @@ public sealed interface Level {
      *
      * <p>The carrier edge for a level, and the one of them: a place on a carrier is already one, and
      * a number the quantity counts to is a place exactly where a carrier's order could count to it
-     * ({@link Count#at}). Written out at each reader instead, four of them had the same two lines
-     * and none of them said what happens to a number no order counts to.
+     * ({@link Count#written}). Written out at each reader instead, four of them had the same two
+     * lines and none of them said what happens to a number no order counts to.
      *
-     * <p>Refused rather than answered with a rounding, which is {@link Count#number(ExactRatio)}'s
-     * to say. Every caller here is holding a level it has established is a place — an end of a run
+     * <p>Refused rather than answered with a rounding, which is not this edge's to do. Every caller
+     * here is holding a level it has established is a place — an end of a run
      * on a carrier, a line a place is compared against — and a level at a third reaching one of them
      * is this compiler having mixed two orders. A reader that means to ask whether a line is a value
      * of something asks {@link CutPosition#asAValueOf}, which answers.
@@ -174,23 +184,28 @@ public sealed interface Level {
     default Place asAPlace() {
         return switch (this) {
             case OnACarrier on -> on.at();
-            case OfTheQuantity(ExactRatio at) -> Count.number(at);
+            case OfTheQuantity(ExactRatio at) -> Count.written(at)
+                    .orFail(() -> "a level of the quantity was asked for its place, and the host has"
+                            + " no room to write the count of " + at)
+                    .orElseThrow(() -> new IllegalStateException(
+                            "no count on any carrier's order is this number: " + at));
         };
     }
 
     /**
-     * The same question asked rather than established: this level as a place, or null where no
-     * order counts to the number it is.
+     * The same question asked rather than established: this level as a place, empty where no order
+     * counts to the number it is, and unheld where the host had no room to write the count out.
      *
-     * <p>The pair {@link Count#at} and {@link Count#number} are, one step out. A reader that means
-     * to write the level down is asking whether there is anything to write — a quantity reaching a
-     * third has a level there and no order has a value at it — and an absence is the answer to
-     * that, not a premise it broke.
+     * <p>A reader that means to write the level down is asking whether there is anything to write —
+     * a quantity reaching a third has a level there and no order has a value at it — and an absence
+     * is the answer to that, not a premise it broke. A count the host cannot write is a third
+     * answer, and it says nothing about which values the order has.
      */
-    default Place asAPlaceOrNothing() {
+    default ExactAnswer<Optional<Place>> asAPlaceOrNothing() {
         return switch (this) {
-            case OnACarrier on -> on.at();
-            case OfTheQuantity(ExactRatio at) -> Count.at(at);
+            case OnACarrier on -> ExactAnswer.held(Optional.of(on.at()));
+            case OfTheQuantity(ExactRatio at) ->
+                    Count.written(at).map(count -> count.<Place>map(place -> place));
         };
     }
 

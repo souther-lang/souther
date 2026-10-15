@@ -11,8 +11,10 @@ import souther.compiler.reach.Reachability;
 
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -157,6 +159,55 @@ class AGuardTheGuardsAboveItRuleOutIsProvenTest {
     }
 
     /**
+     * A departure between the values a declaration names is shown by those values.
+     *
+     * <p>{@code 2} lies inside where the three run between, so the range alone would not rule it
+     * out; the proof carries the values, which do.
+     */
+    @Test
+    void aDepartureBetweenTheValuesADeclarationNamesIsShownByThem() {
+        List<Proof> proven = provenIn("""
+                module d
+
+                data Low
+                data High
+                data Odd = Int
+                    invariant value == 1 || value == 3 || value == 7
+
+                behavior charge : (c: Odd) -> Low | High
+                let charge (c) = if c.value == 2 then Low else High
+                """);
+
+        assertEquals(1, proven.size(), "no `Odd` is two");
+        String said = WhatAnAnswerSays.positionOutrunIn(proven.get(0));
+        assertTrue(said != null && said.startsWith("c ") && said.endsWith("[1, 3, 7]"),
+                () -> "the position, and the values its rule names: " + said);
+    }
+
+    /**
+     * And a departure at the value a declaration refuses is shown by that refusal.
+     *
+     * <p>Nothing bounds a {@code Level} at either end, so there is no range to name, and nothing
+     * stands above the guard either: said as the conditions on the way, the proof would send an
+     * author to look for a guard that is not there.
+     */
+    @Test
+    void aDepartureAtAValueADeclarationRefusesIsShownByTheRefusal() {
+        List<Proof> proven = provenIn("""
+                module d
+
+                data Level = Int invariant value /= 5
+                behavior charge : (x: Level) -> String
+                let charge (x) = if x.value == 5 then "never" else "other"
+                """);
+
+        assertEquals(1, proven.size(), "no `Level` is five");
+        String said = WhatAnAnswerSays.positionOutrunIn(proven.get(0));
+        assertTrue(said != null && said.startsWith("x ") && said.endsWith("~[5]"),
+                () -> "the position, and the value its rule refuses: " + said);
+    }
+
+    /**
      * The two proofs are told apart, and by what does the work rather than by the shape of the
      * model.
      *
@@ -205,17 +256,30 @@ class AGuardTheGuardsAboveItRuleOutIsProvenTest {
      */
     @Test
     void theModelAsksForWhatTheModelWithoutThatGuardAsksFor() {
-        assertEquals(rowsAskedOf(ONE_GUARD), rowsAskedOf(TWO_GUARDS),
+        assertEquals(work(rowsAskedOf(ONE_GUARD)), work(rowsAskedOf(TWO_GUARDS)),
                 "a guard whose departure nothing takes draws no line");
+    }
+
+    /**
+     * The block less the lines that say a decision rule. A rule is said by every condition its way
+     * consults, and the second guard is one the way past the first consults whether or not it
+     * divides anything — so the two models' rules read differently while the rows asked for, and
+     * the classes each is for, are the same.
+     */
+    private static String work(String block) {
+        return block.lines().filter(line -> !line.startsWith("// fills a decision rule"))
+                .collect(Collectors.joining("\n"));
     }
 
     /**
      * A call hands a library's own fork an argument one side of it can never take.
      *
      * <p>{@code Int.max} is a fork, and {@code Int.max(0, c.value)} over a {@code Count} never takes
-     * the side that answers zero. That is true, it is proven, and it is not this author's to act on:
-     * the fork is written in another module, and the same fork is alive wherever else that module
-     * is used. So the proof is made and the report is not.
+     * the side that answers zero. It is not this author's to act on: the fork is written in another
+     * module, and the same fork is alive wherever else that module is used. Its condition is no
+     * rule of the model, but it is what the path runs through, so it is taken in and the arm this
+     * call cannot reach is proven unreachable here — and nothing is reported, because the author
+     * cannot take a branch out of another module.
      */
     private static final String A_LIBRARY_FORK = """
             module d
@@ -233,7 +297,7 @@ class AGuardTheGuardsAboveItRuleOutIsProvenTest {
             """;
 
     @Test
-    void aForkAnotherModuleWroteIsProvenAndIsNotThisModulesToBeToldAbout() {
+    void aForkAnotherModuleWroteIsProvenHereAndNotToldAbout() {
         Compilation c = Compilation.ofSource(A_LIBRARY_FORK, "d");
         Map<String, PathReachability.Answers> byBehavior =
                 c.db().ask(new Adequacy.PathReached("d")).value();
@@ -243,10 +307,8 @@ class AGuardTheGuardsAboveItRuleOutIsProvenTest {
                 .filter(ControlPlace.Arm.class::isInstance)
                 .map(ControlPlace.Arm.class::cast)
                 .toList();
-        assertTrue(!proven.isEmpty(),
-                "the argument makes one side of the library's fork unreachable, and that is proven");
-        assertTrue(proven.stream().noneMatch(arm -> arm.writtenBy("d")),
-                "none of what is proven here was written by this module");
+        assertFalse(proven.isEmpty(),
+                "the side of the library's fork this call cannot take is proven unreachable");
         assertTrue(c.db().ask(new Adequacy.DeadBranches("d")).reports().stream()
                         .noneMatch(report -> "E1327".equals(report.diagnostic().code())),
                 "so nothing is reported: the author cannot take a branch out of another module");
@@ -356,9 +418,10 @@ class AGuardTheGuardsAboveItRuleOutIsProvenTest {
      * and where it is, the proof names it.
      *
      * <p>The two questions this reading answers came apart when every value got an identity. A guard
-     * over an answer nothing may share is a condition whose shape runs out — there is no reading of
-     * what {@code opaque()} computes — and it narrows the state all the same, through the subject the
-     * answer is. So it is not among the reasons and among them at once: not read, and taken in.
+     * over a value the body bound from something no form reads is a condition whose shape runs out —
+     * there is no reading of what {@code Int.floorMod} answers where its divisor is no constant —
+     * and it narrows the state all the same, through the subject the binding is. So it is not among
+     * the reasons and among them at once: not read, and taken in.
      *
      * <p>Answered from the wrong one of the two, this proof said the readable guard cannot hold, and
      * that guard can hold perfectly well. A proof is a claim about the program; a limit of this
@@ -373,13 +436,10 @@ class AGuardTheGuardsAboveItRuleOutIsProvenTest {
                 data Free
                 data Charged = { yen: Int }
 
-                behavior opaque : () -> Int
-
                 behavior charge : (a: Amount) -> Free | Charged
                     constructs Charged
-                    depends on opaque
-                let charge (a, opaque) = {
-                    let x = opaque()
+                let charge (a) = {
+                    let x = Int.floorMod(1000, a.value + 1)
                     guard a.value < 900 else Free
                     guard x < 5 else Free
                     guard x < 6 else Free
@@ -400,5 +460,112 @@ class AGuardTheGuardsAboveItRuleOutIsProvenTest {
                         .map(each -> ((Reachability.Unsettled) each).why())
                         .anyMatch(WhatAnAnswerSays::isAConditionNotRead),
                 "its shape ran out, and an arm left unsettled by it says so");
+    }
+
+    /**
+     * A divisor the least or greatest signed 64-bit number is a divisor all the same: what is asked
+     * is whether the divisor itself fits, and the least such number is one whose magnitude does not.
+     */
+    @Test
+    void theLeastAndGreatestDivisorsAreReadLikeAnyOther() {
+        // How many departures nothing reaches. A remainder by a divisor above nought can be five or
+        // six, so only the second guard's departure is out of reach, by the first. One by a divisor
+        // below nought is never above nought, so both guards hold of every value.
+        Map<String, Integer> unreachable = Map.of("9223372036854775807", 1,
+                "0 - 9223372036854775807 - 1", 2);
+        for (String divisor : List.of("9223372036854775807", "0 - 9223372036854775807 - 1")) {
+            String source = """
+                    module d
+
+                    data Amount = Int invariant value >= 0 && value <= 1000
+                    data Free
+                    data Charged = { yen: Int }
+
+                    behavior charge : (a: Amount) -> Free | Charged
+                        constructs Charged
+                    let charge (a) = {
+                        let x = Int.floorMod(a.value, %s)
+                        guard x < 5 else Free
+                        guard x < 6 else Free
+                        Charged { yen = 1 }
+                    }
+                    """.formatted(divisor);
+
+            assertEquals(unreachable.get(divisor), provenIn(source, "charge").size(),
+                    "what no value reaches, whatever `x` is: " + divisor);
+            assertTrue(armsOf(source, "charge").stream()
+                            .filter(Reachability.Unsettled.class::isInstance)
+                            .map(each -> ((Reachability.Unsettled) each).why())
+                            .noneMatch(WhatAnAnswerSays::isAConditionNotRead),
+                    "every condition is read: " + divisor);
+        }
+    }
+
+    /**
+     * A remainder of a place moved by a number keeps what the guards say of it.
+     *
+     * <p>Read as the remainder of the place over two stretches, what a guard over the moved
+     * remainder says is one of two things, and a path holds facts that all hold and not one of
+     * several. The guards still rule the same departure out, since they are about one value, and
+     * what they say of it is taken in as the value they are about.
+     */
+    @Test
+    void aGuardOverARemainderOfAMovedPlaceStillRulesOutWhatItRulesOut() {
+        String source = """
+                module d
+
+                data Amount = Int invariant value >= 0 && value <= 1000
+                data Free
+                data Charged = { yen: Int }
+
+                behavior charge : (a: Amount) -> Free | Charged
+                    constructs Charged
+                let charge (a) = {
+                    let x = Int.floorMod(a.value + 1, 7)
+                    guard x < 5 else Free
+                    guard x < 6 else Free
+                    Charged { yen = 1 }
+                }
+                """;
+
+        assertEquals(1, provenIn(source, "charge").size(),
+                "nothing under five is six or more, whatever `x` is");
+    }
+
+    /**
+     * What a division leaves of a value is read, and what a guard says of it is taken in as what it
+     * says of the call.
+     *
+     * <p>Named as the call is, so the remainder a guard names and the value the body bound the call
+     * to are one number: nothing under five is six or more of it, and what the operation answers is
+     * carried with it, so a remainder by seven is never seven.
+     */
+    @Test
+    void aRemainderOfAPlaceIsReadAndTheEndsItsOperationGivesAreCarried() {
+        String source = """
+                module d
+
+                data Amount = Int invariant value >= 0 && value <= 1000
+                data Free
+                data Charged = { yen: Int }
+
+                behavior charge : (a: Amount) -> Free | Charged
+                    constructs Charged
+                let charge (a) = {
+                    let x = Int.floorMod(a.value, 7)
+                    guard x < 5 else Free
+                    guard x < 6 else Free
+                    guard x < 7 else Free
+                    Charged { yen = 1 }
+                }
+                """;
+
+        assertEquals(2, provenIn(source, "charge").size(),
+                "the second guard's departure by the first, and the third's by the ends of the call");
+        assertTrue(armsOf(source, "charge").stream()
+                        .filter(Reachability.Unsettled.class::isInstance)
+                        .map(each -> ((Reachability.Unsettled) each).why())
+                        .noneMatch(WhatAnAnswerSays::isAConditionNotRead),
+                "every condition is read");
     }
 }

@@ -2,10 +2,12 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.carrier.Membership;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
+import souther.compiler.check.TypeCardinality;
 import souther.compiler.check.DeclaredSig;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
@@ -13,11 +15,13 @@ import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.observe.Classification;
 import souther.compiler.observe.Incompleteness;
+import souther.compiler.observe.Limits;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.observe.RowOutcome;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Output;
+import souther.compiler.query.ReadAs;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -87,10 +91,12 @@ class AnObservationSaysTheSameThingWhereverThePathMeetsItTest {
         assertNotNull(checked, "the model under test compiles");
         Core body = checked.behaviorBodies().get("book");
         CoverageSites.Plan plan = checked.plan();
-        InputDomain read = InputDomain.of(sigs.get("book"), RuleReadingContext.unshared(rules,
-                souther.compiler.query.ReadAs.THE_COMPILATION_DOES));
+        RuleReadingContext reading = RuleReadingContext.unshared(rules,
+                ReadAs.THE_COMPILATION_DOES);
+        InputDomain read = InputDomain.of(sigs.get("book"), reading,
+                TypeCardinality.Counts.workedOutIn(reading), Membership.none());
         Partitions.Partitioning partitioning = ThresholdFixtures.withThresholds(
-                Partitions.of("book", read, rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
+                Partitions.of("book", read.reading(rules), souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
                 read.quantities(rules),
                 ThresholdFixtures.guardsOf("book", checked.analysisBodies().get("book"), body, plan,
                 compilation.db().ask(new souther.compiler.query.Adequacy.Inputs(module)).value().get("book"), rules).thresholds(),
@@ -113,11 +119,12 @@ class AnObservationSaysTheSameThingWhereverThePathMeetsItTest {
         return new RowOutcome(read.row().at(), read.row().target(), read.row().identity(),
                 read.row().expectation(),
                 read.row().stage(), read.row().disposition(), read.row().failurePhase(),
-                read.row().expectedArm(), read.row().resultArm(), read.row().inputCases(),
+                read.row().expectedArm(), read.row().resultArm(), read.row().answer(),
+                read.row().inputCases(),
                 List.of(new ObservedValue.Constructed(request.type(), fields)),
                 statingTheSame(read.row(),
                         List.of(new ObservedValue.Constructed(request.type(), fields))),
-                read.row().run());
+                read.row().run(), read.row().replaced());
     }
 
     /**
@@ -169,10 +176,10 @@ class AnObservationSaysTheSameThingWhereverThePathMeetsItTest {
         Read read = read();
 
         assertEquals(Incompleteness.Code.VALUE_TRUNCATED,
-                why(read, givingInterval(read, intervalHolding(read, new ObservedValue.Truncated()))),
+                why(read, givingInterval(read, intervalHolding(read, new ObservedValue.Truncated(Limits.DEFAULT.nodesFigure())))),
                 "the limit was reached at the position");
         assertEquals(Incompleteness.Code.VALUE_TRUNCATED,
-                why(read, givingInterval(read, new ObservedValue.Truncated())),
+                why(read, givingInterval(read, new ObservedValue.Truncated(Limits.DEFAULT.nodesFigure()))),
                 "the limit was reached one field above the position");
     }
 
@@ -222,11 +229,11 @@ class AnObservationSaysTheSameThingWhereverThePathMeetsItTest {
 
         assertInstanceOf(ObservedValue.Truncated.class,
                 theOneValueAt(read, givingInterval(read, intervalHolding(read,
-                        new ObservedValue.Truncated())).inputs()),
+                        new ObservedValue.Truncated(Limits.DEFAULT.nodesFigure()))).inputs()),
                 "the limit was reached at the position");
         assertInstanceOf(ObservedValue.Truncated.class,
                 theOneValueAt(read,
-                        givingInterval(read, new ObservedValue.Truncated()).inputs()),
+                        givingInterval(read, new ObservedValue.Truncated(Limits.DEFAULT.nodesFigure())).inputs()),
                 "the limit was reached one field above the position");
     }
 

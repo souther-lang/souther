@@ -4,10 +4,10 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.numeric.Text;
 import souther.compiler.regex.Language;
-import souther.compiler.regex.Meter;
-import souther.compiler.regex.PatternParser;
+import net.unit8.notation199x.pattern.Meter;
+import net.unit8.notation199x.pattern.PatternParser;
 import souther.compiler.regex.PatternPlan;
-import souther.compiler.regex.PatternRead;
+import net.unit8.notation199x.pattern.PatternRead;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -143,7 +143,7 @@ class WhereAStringRuleStopsIsReadOffTheLanguageItAdmitsTest {
     void anAllowanceThatRanOutIsSaidAsItself() {
         Language prefix = languageOf("JP[\\s\\S]*");
         assertInstanceOf(TextExtent.NotBuilt.class,
-                TextExtents.of(prefix, new Meter(2, 2)),
+                TextExtents.of(prefix, new Meter(2, 2, 1_000_000_000L)),
                 "a rule that names a run under an allowance that holds nothing");
     }
 
@@ -152,11 +152,11 @@ class WhereAStringRuleStopsIsReadOffTheLanguageItAdmitsTest {
     void andWhichLimitRefusedIt() {
         Language prefix = languageOf("JP[\\s\\S]*");
         TextExtent.NotBuilt one = assertInstanceOf(TextExtent.NotBuilt.class,
-                TextExtents.of(prefix, new Meter(2, 1000)));
+                TextExtents.of(prefix, new Meter(2, 1000, 1_000_000_000L)));
         assertEquals(Meter.Stopped.ONE_MACHINE, one.stopped());
 
         TextExtent.NotBuilt all = assertInstanceOf(TextExtent.NotBuilt.class,
-                TextExtents.of(prefix, new Meter(100_000, 3)));
+                TextExtents.of(prefix, new Meter(100_000, 3, 1_000_000_000L)));
         assertEquals(Meter.Stopped.THE_ANSWER, all.stopped());
     }
 

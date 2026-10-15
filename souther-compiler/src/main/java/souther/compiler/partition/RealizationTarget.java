@@ -2,6 +2,9 @@ package souther.compiler.partition;
 
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.Proposition;
+
+import java.util.Optional;
 
 /**
  * The value a row rebuilds to put a number where a search asked for it.
@@ -27,14 +30,18 @@ import souther.compiler.inputs.TermPath;
  * <p>Whether anything can be built at a target is a different question and is not asked here.
  * {@link TermRealizations} owns it, and answers it for a target that exists — so "there is nowhere
  * to write this" and "nothing writes this" stay two sentences with one owner apiece.
+ *
+ * <p><b>Two kinds of demand, and only one of them is a number of the row.</b> A number is read off
+ * the row's values and a search can put it to the rules ({@link OfANumber}). How many elements of a
+ * container meet a statement is read off every element and whatever else the statement names, and
+ * is no number the rules hold a range of ({@link ACount}). Both are met by rebuilding one value, so
+ * both are targets; a reader that asks for the number asks it of the first kind only.
  */
 public sealed interface RealizationTarget {
 
-    /** The number to be realized, which is what the rules and the report are about. */
-    NumericTerm term();
-
     /**
-     * The location whose whole value is rebuilt so that {@link #term} answers what was asked.
+     * The location whose whole value is rebuilt so that what is asked of it is answered: the
+     * number a {@link OfANumber} names, or how many elements an {@link ACount} counts.
      *
      * <p>Not where the number is written. {@code List.sum(lines[*].amount)} is answered by no
      * location and its root is {@code lines}, at which no total is written and out of which every
@@ -56,11 +63,19 @@ public sealed interface RealizationTarget {
      * builds {@link AtOnePositionElsewhere} instead — and only such a caller can, which is why
      * this answers with the place the term names rather than guessing at a case.
      */
-    static RealizationTarget of(NumericTerm term) {
+    static OfANumber of(NumericTerm term) {
         return switch (term) {
+            case NumericTerm.Multiplicity among -> new AmongTheElements(among);
             case NumericTerm.FromOnePosition one -> new AtOnePosition(one);
             case NumericTerm.TakenOver over -> new OverARun(over);
         };
+    }
+
+    /** A number of the row, which the rules hold a range of and a search can put to them. */
+    sealed interface OfANumber extends RealizationTarget {
+
+        /** The number to be realized, which is what the rules and the report are about. */
+        NumericTerm term();
     }
 
     /**
@@ -69,7 +84,7 @@ public sealed interface RealizationTarget {
      * <p>The root and the position are the same location here, which is the case the vocabulary
      * grew out of and is not what a root means.
      */
-    record AtOnePosition(NumericTerm.FromOnePosition term) implements RealizationTarget {
+    record AtOnePosition(NumericTerm.FromOnePosition term) implements OfANumber {
 
         @Override
         public TermPath writeRoot() {
@@ -108,7 +123,7 @@ public sealed interface RealizationTarget {
      *                  the row rebuilds
      */
     record AtOnePositionElsewhere(NumericTerm.FromOnePosition term,
-                                  TermPath writeRoot) implements RealizationTarget {
+                                  TermPath writeRoot) implements OfANumber {
 
         public AtOnePositionElsewhere {
             if (term == null || writeRoot == null) {
@@ -130,27 +145,139 @@ public sealed interface RealizationTarget {
     }
 
     /**
-     * A number taken over a run of values, realized by writing the sequence they are read from.
+     * A number taken over a run of values, realized by writing the container they are read from.
      *
      * <p>What makes the root one location is the run's own invariant: a run is over every occurrence
-     * of the path it is read from, and a path standing inside two sequences is not one
-     * ({@code inputs.RunSource}). So there is exactly one sequence holding all of the values, and
-     * rebuilding it is the whole of what moves the number.
+     * of the path it is read from ({@code inputs.RunSource}). So the outermost container holds all
+     * of the values, and rebuilding it is the whole of what moves the number — whether they stand
+     * in the elements of it or in containers inside those.
      *
      * <p>The values themselves are not written anywhere and no position of the row holds them. A
      * row that fixed the place they are read from would fix one of them, which is a rule about one
      * value where the model wrote one about what they come to.
      */
-    record OverARun(NumericTerm.TakenOver term) implements RealizationTarget {
+    record OverARun(NumericTerm.TakenOver term) implements OfANumber {
 
         @Override
         public TermPath writeRoot() {
-            return term.source().subjectPath().containingSequence();
+            return term.source().subjectPath().outermostContainer();
         }
 
         @Override
         public String toString() {
             return term.toString();
+        }
+    }
+
+    /**
+     * How often the value an element holds occurs among the elements of its container, realized by
+     * writing the container with that many elements holding it.
+     *
+     * <p>A number one position reads and no position holds: it is the number of elements the
+     * container has at the element's value, so the row that moves it is one that rebuilds the
+     * container, as it is for a total of what the container holds.
+     */
+    record AmongTheElements(NumericTerm.Multiplicity term) implements OfANumber {
+
+        @Override
+        public TermPath writeRoot() {
+            return term.container().element().outermostContainer();
+        }
+
+        @Override
+        public String toString() {
+            return term.toString();
+        }
+    }
+
+    /**
+     * How many elements of a container meet a statement, realized by writing the container with
+     * that many of them meeting it.
+     *
+     * <p>The place a search fixes for this is the count, and it says nothing about which elements:
+     * the same count is met by many containers, and which of them a row holds is the composing's
+     * choice ({@link CardinalityComposer}). A number the statement reads beside an element is a
+     * number of the row and a target of its own.
+     *
+     * <p>Rooted where a number taken over the elements is, for the same reason: the container's
+     * elements stand inside the outermost container holding them, and rebuilding that is what moves
+     * the count.
+     */
+    record ACount(CountedElements count) implements RealizationTarget {
+
+        public ACount {
+            if (count == null) {
+                throw new IllegalArgumentException("a count of nothing is no demand");
+            }
+        }
+
+        @Override
+        public TermPath writeRoot() {
+            return count.container().element().outermostContainer();
+        }
+
+        @Override
+        public String toString() {
+            return count.toString();
+        }
+    }
+
+    /**
+     * A statement about the elements of a container taken together, realized by writing the
+     * container so that its elements meet it — one of several ways, which ways are the statement's
+     * and which one the elements meet is the composing's choice ({@link CardinalityComposer}).
+     *
+     * <p>Where a condition on the way came out one of more ways than are looked along one at a
+     * time, and every way is something the elements of one container meet: a row meets one of them
+     * where the container meets the statement, so the container is composed against the statement
+     * whole and no way is chosen first.
+     *
+     * <p>The place a search fixes for this is one, the statement holding: nothing about it is a
+     * number of the row, and what it asks is the container's elements and nothing else.
+     *
+     * @param behavior  the behavior whose input the statement reads, which says which order each
+     *                  number it reads is on
+     * @param container the container whose elements the statement is about, a parameter's own
+     * @param stated    the statement, about nothing but that container and its elements
+     */
+    record ElementsMeetingTogether(String behavior, TermPath container, Proposition stated)
+            implements RealizationTarget {
+
+        public ElementsMeetingTogether {
+            if (behavior == null || container == null || stated == null) {
+                throw new IllegalArgumentException(
+                        "a statement about a container's elements is some statement about one");
+            }
+        }
+
+        /**
+         * What {@code several}, a condition of several ways, states as a statement the elements of
+         * one container meet together — or empty where no one proposition states it, where a row
+         * cannot be asked it, or where it reads anything but the elements of one container a
+         * parameter is. A narrowing to several cases states which case one value is, which is
+         * none of these.
+         *
+         * @param behavior the behavior whose input the statement reads
+         */
+        public static Optional<ElementsMeetingTogether> of(String behavior, OnTheWay several) {
+            if (!(several instanceof OnTheWay.OneOf oneOf) || oneOf.stated().isEmpty()
+                    || !AStatementAtARow.askable(oneOf.stated().get())) {
+                return Optional.empty();
+            }
+            Proposition stated = oneOf.stated().get();
+            TermPath container = AStatementAtARow.containerItIsAbout(stated);
+            return container == null || !container.steps().isEmpty() ? Optional.empty()
+                    : Optional.of(new ElementsMeetingTogether(behavior, container, stated));
+        }
+
+        @Override
+        public TermPath writeRoot() {
+            return container.element().outermostContainer();
+        }
+
+        @Override
+        public String toString() {
+            return container + " meeting " + stated.key();
         }
     }
 }

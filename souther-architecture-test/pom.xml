@@ -7,7 +7,7 @@
     <parent>
         <groupId>org.souther-lang</groupId>
         <artifactId>souther-parent</artifactId>
-        <version>0.3.0</version>
+        <version>0.3.1-SNAPSHOT</version>
     </parent>
 
     <artifactId>souther-architecture-test</artifactId>
@@ -32,6 +32,11 @@
         because that is what they are for: compiling and running these tests, and telling Maven what
         must be built before them.
     </description>
+
+    <properties>
+        <!-- Nothing ships from here; not published to Central. -->
+        <souther.publish.skip>true</souther.publish.skip>
+    </properties>
 
     <dependencies>
         <dependency>
@@ -94,28 +99,27 @@
             <version>${project.version}</version>
             <scope>test</scope>
         </dependency>
+        <!-- The Checkstyle the pre-commit hook runs, at the version it runs, so that what the
+             hook's rules match is asked of the code that matches it and not of a reading of
+             their XPath. -->
+        <dependency>
+            <groupId>com.puppycrawl.tools</groupId>
+            <artifactId>checkstyle</artifactId>
+            <version>${checkstyle.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <!-- The Error Prone the lint build runs, at the version it runs: the hook's rule for
+             NonApiType is held against the check itself, which is run over the same sources. -->
+        <dependency>
+            <groupId>com.google.errorprone</groupId>
+            <artifactId>error_prone_core</artifactId>
+            <version>${errorprone.version}</version>
+            <scope>test</scope>
+        </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
             <scope>test</scope>
         </dependency>
     </dependencies>
-
-    <profiles>
-        <!-- Nothing ships from here; keep it out of the Central bundle. -->
-        <profile>
-            <id>release</id>
-            <build>
-                <plugins>
-                    <plugin>
-                        <groupId>org.sonatype.central</groupId>
-                        <artifactId>central-publishing-maven-plugin</artifactId>
-                        <configuration>
-                            <skipPublishing>true</skipPublishing>
-                        </configuration>
-                    </plugin>
-                </plugins>
-            </build>
-        </profile>
-    </profiles>
 </project>

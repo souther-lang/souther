@@ -4,17 +4,29 @@ import souther.compiler.check.Carrier;
 import souther.compiler.check.NewtypeInners;
 import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.NumericAnswers;
+import souther.compiler.check.NumericMeasures;
 import souther.compiler.check.Symbols;
+import souther.compiler.check.TypeOps;
+import souther.compiler.numeric.Count;
+import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.UnheldNumber;
+import souther.compiler.numeric.ValueTransformation;
 import souther.compiler.observe.Incompleteness;
+import souther.compiler.semantics.CodePointClass;
 import souther.compiler.semantics.ConstantArguments;
 import souther.compiler.semantics.ResultRange;
 import souther.compiler.semantics.TakenArguments;
 import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.function.UnaryOperator;
 
 /**
  * The number a rule compares, and where that number is read from.
@@ -43,7 +55,8 @@ import souther.compiler.types.ValueName;
  * operation. An operation added to the language is read by everything here without a line being
  * written for it.
  */
-public sealed interface NumericTerm permits NumericTerm.FromOnePosition, NumericTerm.TakenOver {
+public sealed interface NumericTerm
+        permits NumericTerm.FromOnePosition, NumericTerm.TakenOver, NumericTerm.Multiplicity {
 
     /**
      * A number a row can be asked for at one place, because one value stands there.
@@ -54,7 +67,8 @@ public sealed interface NumericTerm permits NumericTerm.FromOnePosition, Numeric
      * a search for a row need, and it is a capability rather than a shape: a reader that has one of
      * these may act on the position, and a reader holding a bare {@link NumericTerm} may not.
      */
-    sealed interface FromOnePosition extends NumericTerm permits ValueOf, TakenOf {
+    sealed interface FromOnePosition extends NumericTerm
+            permits ValueOf, TakenOf, CodePointClassCount {
 
         /**
          * The single input position this term is read from.
@@ -71,10 +85,19 @@ public sealed interface NumericTerm permits NumericTerm.FromOnePosition, Numeric
             return position();
         }
 
+        /** The same number, of the one value standing where {@code moved} puts {@link
+         *  #position()}: never null, since one place moved is one place. */
+        @Override
+        FromOnePosition movedTo(UnaryOperator<TermPath> moved);
     }
 
     /** The number a location holds: a numeric parameter, a field of one, a numeric newtype's value. */
     record ValueOf(TermPath position) implements FromOnePosition {
+
+        @Override
+        public ValueOf movedTo(UnaryOperator<TermPath> moved) {
+            return new ValueOf(moved.apply(position));
+        }
 
         @Override
         public String toString() {
@@ -132,7 +155,7 @@ public sealed interface NumericTerm permits NumericTerm.FromOnePosition, Numeric
     final class TakenOf implements FromOnePosition {
 
         private final ValueName.Stdlib operation;
-        private final TermPath position;
+        private final ObservationSource source;
         private final TakenArguments arguments;
 
         /**
@@ -149,18 +172,58 @@ public sealed interface NumericTerm permits NumericTerm.FromOnePosition, Numeric
          * this package rather than of the term — and this package's own tests were already going
          * round it (#1027).
          */
-        private TakenOf(ValueName.Stdlib operation, TermPath position, TakenArguments arguments) {
+        private TakenOf(ValueName.Stdlib operation, ObservationSource source,
+                        TakenArguments arguments) {
             this.operation = java.util.Objects.requireNonNull(operation,
                     "a taken number is taken by an operation");
-            this.position = java.util.Objects.requireNonNull(position, "and taken of somewhere");
+            this.source = java.util.Objects.requireNonNull(source, "and taken of somewhere");
             this.arguments = java.util.Objects.requireNonNull(arguments,
                     "and with whatever it was given beside that value, which is nothing where it"
                             + " was given nothing");
         }
 
         /**
-         * The term for what {@code operation} answers of what stands at {@code path}, or null where
-         * the two do not go together.
+         * The term for how many the value at {@code position} holds, taken by {@code operation} —
+         * or null where the operation takes no such number of it.
+         *
+         * <p>The one way a container's size is named as a term. A rule counting it names the
+         * operation, and a reader with only the type takes the one that counts what the type holds
+         * ({@link NumericMeasures#takenOf}); both come to the same term for
+         * a container, and a reader building it apart could hold one that answers something else.
+         */
+        public static TakenOf howManyHeldAt(ValueName.Stdlib operation, TermPath position,
+                                            Type at, NewtypeInners inners, Symbols symbols) {
+            TakenOf term = asItStands(operation, position, at, inners, symbols);
+            return term != null && term.takenAs() instanceof TakenAs.HowManyItHolds ? term : null;
+        }
+
+        /**
+         * The term for what {@code operation} answers of the value at {@code position} as it
+         * stands, given nothing beside it, or null where the two do not go together.
+         *
+         * <p>Named for what it says of the value: the one the operation takes its number of is the
+         * one at the position and nothing made of it. A caller that has what the value was made
+         * into takes {@link #of} and says so, and cannot hand over the position alone and be read
+         * as taking the number of it as it stands.
+         */
+        public static TakenOf asItStands(ValueName.Stdlib operation, TermPath position, Type at,
+                                         NewtypeInners inners, Symbols symbols) {
+            return of(operation, ObservationSource.asItStands(position), TakenArguments.NONE, at,
+                    inners, symbols);
+        }
+
+        /** The same, for a taking the operation was given {@code arguments} beside the value at
+         *  {@code position}. */
+        public static TakenOf asItStands(ValueName.Stdlib operation, TermPath position,
+                                         TakenArguments arguments, Type at, NewtypeInners inners,
+                                         Symbols symbols) {
+            return of(operation, ObservationSource.asItStands(position), arguments, at, inners,
+                    symbols);
+        }
+
+        /**
+         * The term for what {@code operation} answers of the value {@code source} says — the one
+         * at its position, or what it was made into — or null where the two do not go together.
          *
          * <p><b>The one way one of these is made.</b> Four things have to hold and each of them is
          * a proposition somebody already owns: there is an account of what such a call takes, from
@@ -172,6 +235,10 @@ public sealed interface NumericTerm permits NumericTerm.FromOnePosition, Numeric
          * operation and the location agree, by construction" — which is a claim about who happens
          * to build one today and not an invariant (#1027).
          *
+         * <p>And a value made into something is one the account reads
+         * ({@link TakenAs#readsWhatItWasMadeFrom}): the year of a moved date is a number a row is
+         * written for and a month of one is not.
+         *
          * <p>Null and not a refusal. Whether a call names a number the model has a term for is a
          * question every reader of an expression asks, and the answer "it does not" is one they all
          * have somewhere to put: no line is drawn and the rule is reported as one nothing read.
@@ -179,14 +246,7 @@ public sealed interface NumericTerm permits NumericTerm.FromOnePosition, Numeric
          * <p>Asked of what the names wrap, since a name around a list is still a list — the same
          * reach {@link Carrier#ofValue} takes, and taken here so that no caller takes it itself.
          */
-        public static TakenOf of(ValueName.Stdlib operation, TermPath position, Type at,
-                                 NewtypeInners inners, Symbols symbols) {
-            return of(operation, position, TakenArguments.NONE, at, inners, symbols);
-        }
-
-        /** The same, for a taking the operation was given {@code arguments} beside the value at
-         *  {@code position}. */
-        public static TakenOf of(ValueName.Stdlib operation, TermPath position,
+        public static TakenOf of(ValueName.Stdlib operation, ObservationSource source,
                                  TakenArguments arguments, Type at, NewtypeInners inners,
                                  Symbols symbols) {
             TakenAs how = DefaultBoundOperationFacts.get().takenAs(operation, arguments);
@@ -194,12 +254,14 @@ public sealed interface NumericTerm permits NumericTerm.FromOnePosition, Numeric
             // what the container holds. Asked of the operation alone, a sum answered no number this
             // could name and no term was made for any rule written on one.
             Type answers = NumericAnswers.typeOf(operation, at, inners, symbols);
-            if (how == null || answers == null || at == null || arguments == null) {
+            if (how == null || answers == null || at == null || arguments == null
+                    || source == null) {
                 return null;
             }
             return how.takenOf(souther.compiler.check.TypeOps.base(at, inners), answers)
                     && how.settledBy(arguments)
-                    ? new TakenOf(operation, position, arguments) : null;
+                    && how.readsWhatItWasMadeFrom(source.transformation())
+                    ? new TakenOf(operation, source, arguments) : null;
         }
 
         /** The operation whose answer this term is. */
@@ -207,7 +269,15 @@ public sealed interface NumericTerm permits NumericTerm.FromOnePosition, Numeric
             return operation;
         }
 
-        /** What it was given beside the value at {@link #position()}, read as constants — and
+        /** The same taking, of the value at the place {@code moved} puts this one's. What stands
+         *  there is a value of the same type, so the account the operation is taken by holds of it
+         *  as it did here. */
+        @Override
+        public TakenOf movedTo(UnaryOperator<TermPath> moved) {
+            return new TakenOf(operation, source.movedTo(moved), arguments);
+        }
+
+        /** What it was given beside the value it takes its number of, read as constants — and
          *  nothing where it was given nothing. */
         public TakenArguments arguments() {
             return arguments;
@@ -215,7 +285,33 @@ public sealed interface NumericTerm permits NumericTerm.FromOnePosition, Numeric
 
         @Override
         public TermPath position() {
-            return position;
+            return source.position();
+        }
+
+        /** What the value the operation took its number of was made from the one at
+         *  {@link #position()}, which is nothing where it is that one. */
+        public ValueTransformation transformation() {
+            return source.transformation();
+        }
+
+        /** The value the operation takes its number of: where it stands and what it was made
+         *  into. */
+        public ObservationSource source() {
+            return source;
+        }
+
+        /**
+         * Where the operation states its answers lie, of any value it could be given, with what it
+         * was handed beside the value: a size at or above nought, an hour from nought to
+         * twenty-three.
+         *
+         * <p>Without where the value it is taken of can stand, which {@link #intrinsicBounds} meets
+         * this with: a date moved a year's days back is never the last date, and the year that keeps
+         * it from is where dates stop being written rather than anything the operation answers.
+         */
+        public NumericDomain.Bounds whatTheOperationStates() {
+            return ResultRange.of(DefaultBoundOperationFacts.get().boundsOnTheResult(operation),
+                    argument -> Optional.ofNullable(arguments.at(argument.position())));
         }
 
         /** What this operation takes of the value at {@link #position()}, given what it was handed
@@ -224,23 +320,176 @@ public sealed interface NumericTerm permits NumericTerm.FromOnePosition, Numeric
             return DefaultBoundOperationFacts.get().takenAs(operation, arguments);
         }
 
-        /** By the operation, the location and what it was given beside it, which is what makes two
-         *  of these one term. */
+        /** By the operation, the value it takes its number of and what it was given beside it,
+         *  which is what makes two of these one term. */
         @Override
         public boolean equals(Object other) {
             return other instanceof TakenOf taken
-                    && operation.equals(taken.operation) && position.equals(taken.position)
+                    && operation.equals(taken.operation) && source.equals(taken.source)
                     && arguments.equals(taken.arguments);
         }
 
         @Override
         public int hashCode() {
-            return java.util.Objects.hash(operation, position, arguments);
+            return java.util.Objects.hash(operation, source, arguments);
         }
 
         @Override
         public String toString() {
-            return operation.qualified() + arguments.writtenWith(position.toString());
+            return operation.qualified() + arguments.writtenWith(
+                    source.transformation().writtenAround(source.position().toString()));
+        }
+    }
+
+    /**
+     * How many of the code points of the string a location holds are in a class: the ones that are
+     * not whitespace, that are neither whitespace nor one separator, or that are one of a set.
+     *
+     * <p>A number a rule can be about without any operation of the language answering it. What
+     * {@code String.trim} leaves of a string holds something exactly where this is above nought,
+     * the pieces a split by one code point leaves hold something between them under the same
+     * condition, and some character of the string meets what is asked of it exactly where the
+     * string holds a code point of the set a character meeting it is one of — so a rule about
+     * any of them is a rule about this count of the string it was made from.
+     * Nothing the language declares is a taking of it: a term {@link TakenOf} stands for is an
+     * operation's answer, this is a quantity the reading works out, and the two are kept apart so
+     * that a taking is still only of an operation that declares one.
+     *
+     * <p>Counted by what the run time counts by: in scalar values, against the one whitespace
+     * alphabet the library's own operations scan with ({@link CodePointClass}).
+     *
+     * <p>Only of a string. The number a count of one string's code points comes to is bounded by
+     * the string's own length, and where a rule is also drawn on that length the two are one
+     * string's numbers and are realized together.
+     */
+    final class CodePointClassCount implements FromOnePosition {
+
+        private final TermPath position;
+        private final CodePointClass counted;
+
+        private CodePointClassCount(TermPath position, CodePointClass counted) {
+            this.position = Objects.requireNonNull(position, "counted of somewhere");
+            this.counted = Objects.requireNonNull(counted, "and of some code points");
+        }
+
+        /**
+         * The count of the code points of the string at {@code position} that are in
+         * {@code counted}, or null where what stands there is no string.
+         *
+         * <p>Asked of what the names wrap, as a taking is: a name around a string is still one.
+         */
+        public static CodePointClassCount of(TermPath position, CodePointClass counted, Type at,
+                                             NewtypeInners inners) {
+            return at != null && TypeOps.base(at, inners) == Type.STRING
+                    ? new CodePointClassCount(position, counted) : null;
+        }
+
+        /** The code points this counts. */
+        public CodePointClass counted() {
+            return counted;
+        }
+
+        @Override
+        public TermPath position() {
+            return position;
+        }
+
+        @Override
+        public CodePointClassCount movedTo(UnaryOperator<TermPath> moved) {
+            return new CodePointClassCount(moved.apply(position), counted);
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof CodePointClassCount count
+                    && position.equals(count.position) && counted.equals(count.counted);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(position, counted);
+        }
+
+        @Override
+        public String toString() {
+            return "#(" + counted + ")(" + position + ")";
+        }
+    }
+
+    /**
+     * How many elements of a container hold, at one place inside the element, the value the
+     * element under consideration holds there.
+     *
+     * <p>A number of an element, read off the container it stands in: every element of a list of
+     * keys is a key, and it occurs as many times as the list holds that key. What a fold that files
+     * a counter under each key answers for the key of an element is this number, shifted and scaled
+     * by what the fold starts the counter at and adds to it. Nothing the language declares takes
+     * it of a value — it is a quantity the reading works out — so it is kept apart from
+     * {@link TakenOf}, which is only ever an operation's answer.
+     *
+     * <p>The element is whichever one a statement about some element of the container is about, so
+     * this is one number for each element and no number of the container. Two elements holding the
+     * same value at {@code place} read the same number, and every element reads at least one, since
+     * it is one of those it counts.
+     */
+    final class Multiplicity implements NumericTerm {
+
+        private final TermPath container;
+        private final TermPath place;
+
+        private Multiplicity(TermPath container, TermPath place) {
+            this.container = Objects.requireNonNull(container, "counted among a container's elements");
+            this.place = Objects.requireNonNull(place, "by the value standing at a place");
+        }
+
+        /**
+         * The number of times the value at {@code place} occurs among the elements of
+         * {@code container}, or null where {@code place} is not inside an element of it.
+         *
+         * @param container the container whose elements are counted
+         * @param place     where, inside an element of {@code container}, the value compared stands
+         */
+        public static Multiplicity of(TermPath container, TermPath place) {
+            return container != null && place != null && place.isAtOrUnder(container.element())
+                    ? new Multiplicity(container, place) : null;
+        }
+
+        /** The container whose elements are counted. */
+        public TermPath container() {
+            return container;
+        }
+
+        /** Where the value compared stands, inside an element of {@link #container()}. */
+        public TermPath place() {
+            return place;
+        }
+
+        /** Where the value compared stands, which is where a reader is sent and no place the
+         *  number stands at. */
+        @Override
+        public TermPath subjectPath() {
+            return place;
+        }
+
+        @Override
+        public Multiplicity movedTo(UnaryOperator<TermPath> moved) {
+            return new Multiplicity(moved.apply(container), moved.apply(place));
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof Multiplicity that
+                    && container.equals(that.container) && place.equals(that.place);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(container, place);
+        }
+
+        @Override
+        public String toString() {
+            return "multiplicity(" + place + ")";
         }
     }
 
@@ -297,7 +546,10 @@ public sealed interface NumericTerm permits NumericTerm.FromOnePosition, Numeric
                     : new Type.ListOf(souther.compiler.check.TypeOps.base(each, inners));
             Type answers = over == null ? null
                     : NumericAnswers.typeOf(operation, over, inners, symbols);
-            if (how == null || answers == null || source == null) {
+            // How many values a run holds is how many the walk that made it answered, which the
+            // law of the walk's operation says, and no account over the values themselves.
+            if (how == null || how instanceof TakenAs.HowManyItHolds || answers == null
+                    || source == null) {
                 return null;
             }
             return how.takenOf(over, answers) ? new TakenOver(operation, source) : null;
@@ -309,6 +561,15 @@ public sealed interface NumericTerm permits NumericTerm.FromOnePosition, Numeric
 
         public RunSource source() {
             return source;
+        }
+
+        /** The same taking, over the run read from where {@code moved} puts this one's — or null
+         *  where what stands there is no one run, as a run inside an element of another container
+         *  is not. */
+        @Override
+        public TakenOver movedTo(UnaryOperator<TermPath> moved) {
+            RunSource at = source.movedTo(moved);
+            return at == null ? null : new TakenOver(operation, at);
         }
 
         /** What this operation takes of what it is given. Never null: one of these cannot be made
@@ -346,7 +607,7 @@ public sealed interface NumericTerm permits NumericTerm.FromOnePosition, Numeric
      *
      * <p>Not a position at which this term may be divided. What a reader may do with this is go and
      * look — read the values, ask what the declarations put there, send an author to it — and none
-     * of those is drawing a line. A term whose values come from a run of a sequence answers here as
+     * of those is drawing a line. A term whose values come from a run of a container answers here as
      * readily as one answered by a single place, and only the second of them has a position a class
      * can be a class of ({@link FromOnePosition#position}).
      *
@@ -354,6 +615,28 @@ public sealed interface NumericTerm permits NumericTerm.FromOnePosition, Numeric
      * reading one as the other is what this type exists to stop.
      */
     TermPath subjectPath();
+
+    /**
+     * The same number, of the value standing where {@code moved} puts each place it is read from —
+     * or null where that is no such number. What a behavior states of a number of its parameter is
+     * what it states of the same number of whatever a call handed that parameter.
+     */
+    NumericTerm movedTo(UnaryOperator<TermPath> moved);
+
+    /**
+     * Every place this number is read off: each place {@link #movedTo} hands the move, which is
+     * every place there is to move, so the two cannot come to name different places.
+     */
+    default List<TermPath> placesReadOff() {
+        List<TermPath> places = new ArrayList<>();
+        if (movedTo(at -> {
+            places.add(at);
+            return at;
+        }) == null) {
+            throw new IllegalStateException(this + " moved nowhere is no number, and is one");
+        }
+        return List.copyOf(places);
+    }
 
     /**
      * This number where one input position answers it, or null where no single place does.
@@ -373,6 +656,9 @@ public sealed interface NumericTerm permits NumericTerm.FromOnePosition, Numeric
             // A run of values is answered by no single place, which is the whole of what this term
             // is. Every reader that goes on to draw a line or ask for a value gets the answer here.
             case TakenOver _ -> null;
+            // And how often a value occurs among its neighbours is read off all of them, so no
+            // value standing at one place is it.
+            case Multiplicity _ -> null;
         };
     }
 
@@ -395,12 +681,21 @@ public sealed interface NumericTerm permits NumericTerm.FromOnePosition, Numeric
     default NumericTerm movedTo(TermPath other, Type at, NewtypeInners inners, Symbols symbols) {
         return switch (this) {
             case ValueOf _ -> new ValueOf(other);
-            case TakenOf taken -> TakenOf.of(taken.operation(), other, at, inners, symbols);
+            // With what it was given beside the value, which is part of which number it is: a
+            // quotient is the one its divisor says, and a taking given none is no quotient.
+            case TakenOf taken -> TakenOf.of(taken.operation(),
+                    new ObservationSource(other, taken.transformation()), taken.arguments(), at,
+                    inners, symbols);
+            case CodePointClassCount count ->
+                    CodePointClassCount.of(other, count.counted(), at, inners);
             // What moves here is where a number is taken, and a run is not taken anywhere: its
-            // values come from a place inside a sequence, and the name that would move is the
+            // values come from a place inside a container, and the name that would move is the
             // container's. Answered as "not there" rather than by rebuilding the run at a
             // location, which would be this reading inventing where a walk got its values.
             case TakenOver _ -> null;
+            // How often a value occurs is read off the container it stands in, so a place moved
+            // alone is a count of some other container's elements.
+            case Multiplicity _ -> null;
         };
     }
 
@@ -419,19 +714,27 @@ public sealed interface NumericTerm permits NumericTerm.FromOnePosition, Numeric
      * (#1016). Nor is it read off what the operation takes: every operation sharing an account of
      * what it takes would carry one bound, which is the same defect one level along.
      *
-     * <p>Read with nothing said about the arguments, because a term of this kind carries none: what
-     * a size is taken of is a container and what a magnitude is taken of is the one number, and a
-     * bound may only name an argument that is a number ({@code check.OperationFactBinder}), so
-     * an operation like these declares no row that names one. A term whose operation does take
-     * numbers would have to answer them here rather than be read the same way and quietly come back
-     * wider.
+     * <p>A taking is read with what it was given beside the value, which is what a bound stated
+     * under a divisor reads: a remainder by seven lies from nought up to seven, and by an unknown
+     * divisor lies nowhere in particular. A taking over a run carries none, because what a total is
+     * taken of is a container, and an operation like that declares no row that names one.
      */
     default NumericDomain.Bounds intrinsicBounds() {
         return switch (this) {
             case ValueOf _ -> NumericDomain.Bounds.OPEN;
-            case TakenOf taken -> ResultRange.of(
-                    DefaultBoundOperationFacts.get().boundsOnTheResult(taken.operation()),
-                    ConstantArguments.none());
+            // And what the value it was taken of can be: a date moved a year's days back is never
+            // the last date, so its year is never the last year, whatever the operation answers of
+            // any date.
+            case TakenOf taken -> taken.whatTheOperationStates()
+                    .meet(taken.takenAs().reachedFrom(taken.transformation()));
+            // A count of some of a string's code points is never negative, as how many it holds is
+            // not. What it is at most is the string's own length, which is another number of the
+            // same place and is held where the two are realized together.
+            case CodePointClassCount _ ->
+                    new NumericDomain.Bounds(Endpoint.inclusive(Count.of(0)), null);
+            // An element is one of the elements it counts, so there is always at least one.
+            case Multiplicity _ ->
+                    new NumericDomain.Bounds(Endpoint.inclusive(Count.of(1)), null);
             // Asked of the operation, as a taking is. That a total of non-negative amounts is
             // itself non-negative is not among the answers: it follows from what the values the run
             // walks guarantee, together with the value the operation starts from and the step it
@@ -465,8 +768,24 @@ public sealed interface NumericTerm permits NumericTerm.FromOnePosition, Numeric
          * never reaches this type: given a code instead, the nearest one is borrowed, and a reader
          * downstream that words a code as what an observation did then says an observation did
          * something that never happened.
+         *
+         * <p>With the figure it stopped at where a limit stopped it, which only the observation
+         * knows and a reader that says a limit stopped it names.
          */
-        record Missing(Incompleteness.Code code) implements Reading {}
+        record Missing(Incompleteness.Cause cause) implements Reading {
+
+            public Missing {
+                if (cause == null) {
+                    throw new IllegalArgumentException("an observation that did not come back"
+                            + " whole says what it met");
+                }
+            }
+
+            /** What the observation met, as the word it writes for it. */
+            public Incompleteness.Code code() {
+                return cause.code();
+            }
+        }
 
         /** The value was read and this term is not a number of it. An answer about the value and not
          * about the observation: a {@code Text} where a number was expected is a class nothing holds,

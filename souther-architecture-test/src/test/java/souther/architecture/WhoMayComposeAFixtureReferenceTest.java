@@ -67,7 +67,8 @@ class WhoMayComposeAFixtureReferenceTest {
             // that definition, so it is not told apart from another by a number.
             "souther/compiler/check/ValueEntries -> " + ORIGIN + "#<init>(I)V",
             "souther/compiler/partition/FixtureReferences -> " + ORIGIN + "#<init>(I)V",
-            "souther/compiler/partition/Generator -> " + MINTER + "#<init>()V");
+            "souther/compiler/partition/Generator -> " + MINTER
+                    + "#<init>(Ljava/lang/String;Ljava/lang/String;)V");
 
     /**
      * And the run makes one of them.
@@ -132,17 +133,25 @@ class WhoMayComposeAFixtureReferenceTest {
         return made;
     }
 
-    /** Every class naming one of the two makers, as the class and the maker it names. */
+    /**
+     * Every class naming one of the two makers, as the class and the maker it names.
+     *
+     * <p>Any constructor of the minter, whatever it takes. What it is handed is the minter's own
+     * business, and a row written against one descriptor would let a constructor added beside it
+     * make minters nothing here sees.
+     */
     private static Set<String> namingAMaker() {
-        Set<String> makers = Set.of(ORIGIN + "#<init>(I)V", MINTER + "#<init>()V");
         Set<String> found = new TreeSet<>();
         for (Path module : COMPILED.modules()) {
             for (ClassModel each : COMPILED.classesOf(module)) {
                 for (PoolEntry entry : each.constantPool()) {
                     if (entry instanceof MemberRefEntry member) {
-                        String named = member.owner().name().stringValue() + "#"
-                                + member.name().stringValue() + member.type().stringValue();
-                        if (makers.contains(named)) {
+                        String owner = member.owner().name().stringValue();
+                        String named = owner + "#" + member.name().stringValue()
+                                + member.type().stringValue();
+                        if (named.equals(ORIGIN + "#<init>(I)V")
+                                || (owner.equals(MINTER)
+                                        && member.name().stringValue().equals("<init>"))) {
                             found.add(each.thisClass().asInternalName() + " -> " + named);
                         }
                     }

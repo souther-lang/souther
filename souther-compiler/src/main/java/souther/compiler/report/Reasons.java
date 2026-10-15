@@ -3,6 +3,7 @@ package souther.compiler.report;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.Target;
+import souther.compiler.partition.CameToNothing;
 import souther.compiler.partition.CompositionBudget;
 import souther.compiler.partition.CompositionCapacity;
 import souther.compiler.partition.CompositionRepertoire;
@@ -12,6 +13,7 @@ import souther.compiler.publish.PublicationOrders;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 /**
  * What a reason reads as to a person.
@@ -132,46 +134,12 @@ final class Reasons {
         };
     }
 
-    /**
-     * What a budget of this compiler's is called where a reader meets one.
-     *
-     * <p>Its own words and not the constant's name. What the compiler calls a figure is a name for
-     * the code that reads it; what a reader wants is what this compiler declined to do, in a phrase
-     * they can act on — and a budget added arrives here as a compile error rather than as a name
-     * nobody wrote a sentence for.
-     */
+    /** What the budgets of this compiler's that stopped something are called where a reader meets
+     *  them: each in its own words ({@link CompositionBudget#counts}). */
     static String said(CanonicalSelection<CompositionBudget> budgets) {
         List<String> out = new ArrayList<>();
         for (CompositionBudget each : budgets.written()) {
-            out.add(switch (each) {
-                case ELEMENTS_A_PROPOSAL_HOLDS -> "how many elements a proposed collection holds";
-                case CHARACTERS_A_PROPOSAL_HOLDS -> "how many characters a proposed string holds";
-                case PAIRINGS_BUILT_AT_ONCE -> "how many of a map's pairings are built at once";
-                case ELEMENTS_A_TOTAL_IS_SPREAD_OVER ->
-                        "how many elements a total is spread over";
-                case SHAPES_OF_A_TOTAL_OFFERED -> "how many containers are offered for one total";
-                case WAYS_DOWN_TO_A_TOTAL_TRIED ->
-                        "how many ways down to what a total adds up are tried";
-                case PLACES_A_PAIR_IS_TRIED_AT -> "how many places a pair is tried at";
-                case PLACES_A_PAIR_IS_LOOKED_AT ->
-                        "how many places along a pair's line are looked at";
-                case STEPS_A_SEARCH_MAY_TAKE -> "how many steps a search takes";
-                case ASSIGNMENTS_A_SEARCH_COMPOSES -> "how many assignments a search composes";
-                case VALUES_OF_AN_UNBOUNDED_PROGRESSION_TRIED ->
-                        "how many values of an unbounded progression are tried";
-                case LEVELS_A_SIDE_IS_ASKED_AT -> "how many levels a side is asked at";
-                case TIMES_THE_RULES_ARE_ASKED_AGAIN -> "how often the rules are read again";
-                case VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT ->
-                        "how many values a position on the way is tried at";
-                case PLACES_A_POSITION_ON_THE_WAY_IS_LOOKED_AT ->
-                        "how many places of a position on the way are looked at";
-                case VALUES_A_POINT_IS_TRIED_WITH -> "how many values a point is tried with";
-                case DEPTH_A_CONSTRUCTION_PLAN_DESCENDS -> "how deep a value is built";
-                case PATHS_OF_A_DECISION_READ ->
-                        "how many paths through one body a decision is read for";
-                case NUMBERS_OF_A_SET_TRIED ->
-                        "how many of the numbers a class admits are tried";
-            });
+            out.add(each.counts());
         }
         return String.join(", ", out);
     }
@@ -195,6 +163,11 @@ final class Reasons {
                         "the values that answer several of their own numbers";
                 case PLACES_IN_A_RUN_THAT_ARE_NAMED ->
                         "the places inside one run a value is named at";
+                case ELEMENTS_CHOSEN_FOR_A_COUNT ->
+                        "the elements chosen for how many of them meet a statement";
+                case ELEMENTS_A_COMPUTED_TOTAL_IS_SOLVED_FOR ->
+                        "the elements whose computed number is made of several fields or chosen"
+                                + " by a flag";
             });
         }
         return String.join(", ", out);
@@ -220,6 +193,10 @@ final class Reasons {
                 case VALUES_A_POSITION_ON_THE_WAY_IS_WALKED_TO ->
                         "the next value of a position on the way";
                 case VALUES_A_TOTAL_IS_SPREAD_OVER -> "one element's share of a total";
+                case THE_LEAST_COUNT_ASKED_FOR -> "the least count the conditions on a count leave";
+                case COUNTS_AN_ITEM_IS_TRIED_AT -> "a count a line on a count is tried at";
+                case PLACES_AN_ELEMENT_TURNS_AT ->
+                        "a place a statement about an element turns over at";
             };
             out.add(what + switch (each.why()) {
                 case MORE_ROOM_COULD_ANSWER -> ", which this host had no room to work out";
@@ -245,25 +222,47 @@ final class Reasons {
      * model and has no opening of this kind to make.
      */
     static String met(CompositionShortfall shortfall) {
-        if (shortfall.nothing()) {
-            return "";
-        }
+        return met(PublicationOrders.COMPOSITION_BUDGETS.keep(shortfall.figures()),
+                PublicationOrders.COMPOSITION_REPERTOIRES.keep(shortfall.populations()),
+                PublicationOrders.COMPOSITION_CAPACITIES.keep(shortfall.unheld()),
+                PublicationOrders.COMPOSITION_BUDGETS.keep(Set.of()));
+    }
+
+    /** The same, of a search that came to nothing: what it met, and what cut its plan short. */
+    static String met(CameToNothing came) {
+        return met(PublicationOrders.COMPOSITION_BUDGETS.keep(came.met().figures()),
+                PublicationOrders.COMPOSITION_REPERTOIRES.keep(came.met().populations()),
+                PublicationOrders.COMPOSITION_CAPACITIES.keep(came.met().unheld()),
+                PublicationOrders.COMPOSITION_BUDGETS.keep(came.planCut()));
+    }
+
+    /**
+     * The same, of what was met already put in the order each kind is said in.
+     *
+     * <p>A figure that cut the plan short is said as a limit on the plan and never as a stop. The
+     * search ran to the end of what it was handed, or was never made, so a reader told it stopped
+     * would go looking for a search that did not finish. Nor as a search over a plan cut short:
+     * where nothing was planned, no search was made, and the word after the clause says so.
+     */
+    static String met(CanonicalSelection<CompositionBudget> figures,
+                      CanonicalSelection<CompositionRepertoire> populations,
+                      CanonicalSelection<CompositionCapacity> unheld,
+                      CanonicalSelection<CompositionBudget> planCut) {
         List<String> out = new ArrayList<>();
-        if (!shortfall.figures().isEmpty()) {
-            out.add("this compiler stopped at "
-                    + said(PublicationOrders.COMPOSITION_BUDGETS.keep(shortfall.figures())));
+        if (!figures.isEmpty()) {
+            out.add("this compiler stopped at " + said(figures));
         }
-        if (!shortfall.populations().isEmpty()) {
-            out.add("this compiler writes some of "
-                    + writes(PublicationOrders.COMPOSITION_REPERTOIRES.keep(
-                            shortfall.populations()))
+        if (!planCut.isEmpty()) {
+            out.add("this compiler's plan of the value was limited by " + said(planCut));
+        }
+        if (!populations.isEmpty()) {
+            out.add("this compiler writes some of " + writes(populations)
                     + " rather than all of them");
         }
-        if (!shortfall.unheld().isEmpty()) {
-            out.add("this compiler could not hold "
-                    + unheld(PublicationOrders.COMPOSITION_CAPACITIES.keep(shortfall.unheld())));
+        if (!unheld.isEmpty()) {
+            out.add("this compiler could not hold " + unheld(unheld));
         }
-        return String.join(", and ", out) + ": ";
+        return out.isEmpty() ? "" : String.join(", and ", out) + ": ";
     }
 
     private Reasons() {}

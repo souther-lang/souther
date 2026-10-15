@@ -17,6 +17,8 @@ import souther.compiler.observe.FieldTypes;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.Limits;
 import souther.compiler.observe.ObservedValue;
+import souther.compiler.observe.WorkFigure;
+import souther.compiler.partition.AnObservationOfAForm;
 import souther.compiler.partition.BorderQuantity;
 import souther.compiler.partition.Criterion;
 import souther.compiler.partition.Level;
@@ -78,7 +80,8 @@ class ALimitThatFiredIsNotALimitTheTermReadTest {
         ObservedValue observed = observed(FOUR_NODES, longs(6));
 
         assertEquals(BorderQuantity.Stands.couldNotTell(
-                        ReadingGap.of(Incompleteness.Code.VALUE_TRUNCATED)),
+                        ReadingGap.of(Incompleteness.Cause.at(Incompleteness.Code.VALUE_TRUNCATED,
+                                WorkFigure.OBSERVED_NODES.at(4)))),
                 QuantityFixtures.stands(form(), atTheLevel(15), run(observed)),
                 "the elements the walk stopped at are the ones the total is over");
     }
@@ -133,7 +136,7 @@ class ALimitThatFiredIsNotALimitTheTermReadTest {
      * pair: the walk stops in the same places and this term never looks at any of them.
      */
     private static BorderQuantity.OverAForm howMany() {
-        NumericTerm.TakenOf counted = NumericTerm.TakenOf.of(
+        NumericTerm.TakenOf counted = NumericTerm.TakenOf.asItStands(
                 ValueName.Stdlib.operation("List", "length"),
                 TermPath.of("lines"),
                 new souther.compiler.types.Type.ListOf(souther.compiler.types.Type.Prim.INT),
@@ -144,7 +147,7 @@ class ALimitThatFiredIsNotALimitTheTermReadTest {
 
     /** A row whose only readable place is the container itself. */
     private static BorderQuantity.Observation at(ObservedValue observed) {
-        return new BorderQuantity.Observation() {
+        return new AnObservationOfAForm() {
 
             @Override
             public WalkResult<ObservationAtPoint> at(TermPath path) {
@@ -161,7 +164,7 @@ class ALimitThatFiredIsNotALimitTheTermReadTest {
 
     /** A row whose only readable place is the run, holding what {@code observed} came to. */
     private static BorderQuantity.Observation run(ObservedValue observed) {
-        return new BorderQuantity.Observation() {
+        return new AnObservationOfAForm() {
 
             @Override
             public WalkResult<ObservationAtPoint> at(TermPath path) {
@@ -180,7 +183,7 @@ class ALimitThatFiredIsNotALimitTheTermReadTest {
         Symbols symbols = Symbols.none(DefaultStdlib.get());
         // No module is being read, so nothing here declares a data whose fields could be asked for.
         return ObservedValues.of(live, symbols,
-                new NeutralForm(symbols, ScopedDeclarations.of(symbols),
+                new NeutralForm(symbols, ScopedDeclarations.sumsOf(symbols),
                         ScopedDeclarations.kindsOf(symbols),
                         FieldTypes.over(new CheckedDeclarations(_ -> null, _ -> null))), limits);
     }

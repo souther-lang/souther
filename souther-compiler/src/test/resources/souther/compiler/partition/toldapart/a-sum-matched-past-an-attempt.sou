@@ -1,0 +1,30 @@
+// A sum matched past an attempted construction is told apart in full.
+//
+// Which way the attempt goes is a decision nothing names a subject for, and what it tells apart is
+// not known. But the `match` after it tells both cases of `r` apart, and the guard both classes of
+// `n`, and nothing the attempt could tell apart would tell them apart further.
+//
+// told apart at r: 2 groups of 2
+// told apart at n: 2 groups of 2
+module example.attempted
+
+data Draft
+data Submitted
+data Request = Draft | Submitted
+
+data Note = String
+    invariant String.length(value) >= 1
+data NoNote
+
+data Ok = { n: Int }
+
+behavior judge : (r: Request, text: String, n: Int) -> Ok | NoNote
+    constructs Ok, Note
+
+let judge (r, text, n) = {
+    guard Note(text) as note else NoNote
+    guard n > 10 else Ok { n = 0 }
+    match r with
+        | Draft -> Ok { n = 1 }
+        | Submitted -> Ok { n = 2 }
+}

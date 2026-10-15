@@ -248,12 +248,19 @@ public final class SoutherJvmAbi {
     }
 
     /**
-     * A behavior's name with its first letter capitalized (spec §jvm-behavior). A Japanese leading
-     * character has no upper-case form, so a Japanese-named behavior is emitted unchanged. The
-     * behavior's name stays lower-case wherever it is an identity — an injected field name, a
-     * requirement-set entry, a signature-map key — and only the emitted class name is capitalized.
+     * A behavior's name with its first character capitalized (spec §jvm-behavior): the simple
+     * uppercase mapping of its first code point, against the Unicode version the language fixes
+     * ({@link SimpleUppercase}). A Japanese leading character has no upper-case form, so a
+     * Japanese-named behavior is emitted unchanged. The behavior's name stays lower-case wherever
+     * it is an identity — an injected field name, a requirement-set entry, a signature-map key — and
+     * only the emitted class name is capitalized.
+     *
+     * <p>The whole first character, so that one past the basic plane is mapped as the character it
+     * is rather than left as the first half of its pair.
      */
     private static String capitalized(String behavior) {
-        return Character.toUpperCase(behavior.charAt(0)) + behavior.substring(1);
+        int first = behavior.codePointAt(0);
+        return Character.toString(SimpleUppercase.of(first))
+                + behavior.substring(Character.charCount(first));
     }
 }

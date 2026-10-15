@@ -1,10 +1,20 @@
 package souther.compiler.check;
 
+import net.unit8.notation199x.pattern.PatternMeaning;
+import net.unit8.raoh.Ok;
+import net.unit8.raoh.Path;
+import net.unit8.raoh.decode.Decoder;
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.Compiler;
 import souther.compiler.DefaultStdlib;
+import souther.compiler.Emitted;
 import souther.compiler.KeptCalls;
 import souther.compiler.core.Kernel;
+import souther.compiler.jvm.ClassFileImage;
+import souther.compiler.regex.Language;
+import souther.compiler.regex.PatternPlan;
+import souther.runtime.Behavior;
 import souther.compiler.stdlib.Stdlib;
 import souther.compiler.types.ValueName;
 
@@ -68,6 +78,83 @@ class WhichArgumentsAStringPredicateNamesAreOnesItsDeclarationHasTest {
             assertNotEquals(predicate.subject(), predicate.written(),
                     operation.qualified() + " is read for both at one argument");
         });
+    }
+
+    /**
+     * And they are the places the operation reads them from when it runs.
+     *
+     * <p>That a place exists says nothing about what the operation does with it: every one of these
+     * takes two strings, so a table naming the subject where the text goes would be answered by every
+     * call and read every rule the wrong way round. So each predicate is written as a call with the
+     * text at the place named for what was written and a row's string at the place named for the
+     * subject, and run over strings either side of the language it is read as.
+     */
+    @Test
+    void theSubjectIsWhereTheOperationReadsItsSubjectFrom() throws Exception {
+        List<String> wrong = new ArrayList<>();
+        for (Map.Entry<StringPredicates, ValueName.Stdlib.Operation> each : declaring().entrySet()) {
+            StringPredicates predicate = each.getKey();
+            if (predicate.takesAPattern()) {
+                continue;   // what a pattern accepts is the pattern's, and no text here is one
+            }
+            String[] arguments = new String[predicate.arity()];
+            arguments[predicate.written()] = "\"ab\"";
+            arguments[predicate.subject()] = "i.s";
+            Runs runs = Runs.of("""
+                    module demo
+
+                    data In = { s: String }
+                    data Out = { n: Int }
+                    data Missed
+
+                    behavior run : (i: In) -> Out | Missed constructs Out
+                    let run (i) = {
+                        guard %s(%s) else Missed
+                        Out { n = 1 }
+                    }
+                    """.formatted(each.getValue().qualified(), String.join(", ", arguments)));
+            Language admits = languageOf(predicate.accepting("ab"));
+            for (String probe : List.of("ab", "xab", "abx", "xabx", "a", "b", "ba", "")) {
+                if (admits.has(probe) != runs.holds(probe)) {
+                    wrong.add(each.getValue().qualified() + " on \"" + probe + "\"");
+                }
+            }
+        }
+        assertEquals(List.of(), wrong, "a predicate is read with its subject where the operation"
+                + " reads it");
+    }
+
+    /** One compiled module, run on a row's string, answering whether its guard held. */
+    private record Runs(Behavior<Object, Object> behavior, Decoder<Object, ?> decoder) {
+
+        @SuppressWarnings("unchecked")
+        static Runs of(String module) throws Exception {
+            Map<String, ClassFileImage> classes = Compiler.compile(module);
+            ClassLoader loader = new ClassLoader(Runs.class.getClassLoader()) {
+                @Override
+                protected Class<?> findClass(String className) throws ClassNotFoundException {
+                    ClassFileImage image = classes.get(className);
+                    if (image == null) {
+                        throw new ClassNotFoundException(className);
+                    }
+                    byte[] bytes = image.bytes();
+                    return defineClass(className, bytes, 0, bytes.length);
+                }
+            };
+            return new Runs((Behavior<Object, Object>) Emitted.behavior(loader, "demo", "run")
+                    .getConstructor().newInstance(),
+                    (Decoder<Object, ?>) loader.loadClass("demo.In").getMethod("decoder")
+                            .invoke(null));
+        }
+
+        boolean holds(String s) {
+            Object in = ((Ok<?>) decoder.decode(Map.of("s", s), Path.ROOT)).value();
+            return !behavior.apply(in).getClass().getSimpleName().endsWith("Missed");
+        }
+    }
+
+    private static Language languageOf(PatternMeaning syntax) {
+        return PatternPlan.of(syntax).compile(PatternPlan.Budget.OF_A_WITNESS.meter());
     }
 
     /**

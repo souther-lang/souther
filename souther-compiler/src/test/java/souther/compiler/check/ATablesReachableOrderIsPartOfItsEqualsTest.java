@@ -53,7 +53,7 @@ class ATablesReachableOrderIsPartOfItsEqualsTest {
     }
 
     private static HelperTable tableOf(Map<String, Hir.FnDef> declared) {
-        return HelperTable.of("demo", declared, Map.of(), Map.of(), InliningPolicy.FULL,
+        return HelperTable.of("demo", declared, Map.of(), InliningPolicy.FULL,
                 DefaultStdlib.get());
     }
 

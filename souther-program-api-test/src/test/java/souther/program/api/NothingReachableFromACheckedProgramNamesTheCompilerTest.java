@@ -1,5 +1,6 @@
 package souther.program.api;
 
+import net.unit8.notation199x.pattern.PatternMeaning;
 import souther.compiler.program.CheckedProgram;
 
 import org.junit.jupiter.api.Test;
@@ -14,6 +15,7 @@ import java.util.Deque;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.TreeSet;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -45,6 +47,10 @@ class NothingReachableFromACheckedProgramNamesTheCompilerTest {
             "souther.compiler.codegen.",
             "souther.compiler.check.",
             "souther.compiler.ast.");
+
+    /** The library holding the text rules the language shares with Raoh, which the walk follows
+     *  into as it follows this compiler's own types. */
+    private static final String THE_TEXT_RULES = "net.unit8.notation199x.";
 
     /**
      * And the walk above reaches what an output actually reads.
@@ -79,7 +85,7 @@ class NothingReachableFromACheckedProgramNamesTheCompilerTest {
                 () -> "no kernel signature in " + reached);
         // And what a pattern means, reached through the fact a String.matches call carries — the
         // form an output lowers a pattern from, since none of them reads the text.
-        assertTrue(reached.contains("souther.compiler.regex.PatternMeaning"),
+        assertTrue(reached.contains(PatternMeaning.class.getName()),
                 () -> "no pattern meaning in " + reached);
         // And what a behavior's rows said: the row, what it states, the values it states them with,
         // and what asking whether an answer keeps one comes to. Each is reached through the arm
@@ -144,6 +150,38 @@ class NothingReachableFromACheckedProgramNamesTheCompilerTest {
                 "an output outside this compiler would have to name these to read a program");
     }
 
+    /**
+     * Of the text rules the language shares with Raoh, an output reaches what a pattern means and
+     * nothing else.
+     *
+     * <p>What a pattern means is the specification's vocabulary, so an output reads it as the
+     * library that holds it writes it, and naming it is not naming this compiler. The reader, the
+     * machines and what they cost are how a pattern is run and asked about, which is this
+     * compiler's business as much as its own analysis is. So what is let through is computed from
+     * what a pattern means, by the same walk, and not listed: a type it comes to hold is let
+     * through with it, and anything else of the library an output could get to is refused.
+     */
+    @Test
+    void ofTheSharedTextRulesAnOutputReachesWhatAPatternMeansAndNoMore() {
+        Set<String> meaning = textRules(everythingReachableFrom(PatternMeaning.class));
+        Set<String> reached = textRules(everythingReachableFrom(CheckedProgram.class));
+
+        assertTrue(meaning.contains(PatternMeaning.class.getName()) && meaning.size() > 1,
+                () -> "the walk went into what a pattern means: " + meaning);
+        assertEquals(meaning, reached,
+                "an output would have to name these of the text rules to read a program");
+    }
+
+    private static Set<String> textRules(List<Reached> reached) {
+        Set<String> out = new TreeSet<>();
+        for (Reached each : reached) {
+            if (each.type().getName().startsWith(THE_TEXT_RULES)) {
+                out.add(each.type().getName());
+            }
+        }
+        return out;
+    }
+
     /** A type an output can get to, and the shortest way it was got to — so a failure says where to
      *  look rather than that something, somewhere, is wrong. */
     private record Reached(Class<?> type, String how) {}
@@ -206,7 +244,8 @@ class NothingReachableFromACheckedProgramNamesTheCompilerTest {
                 while (element.isArray()) {
                     element = element.getComponentType();
                 }
-                if (element.getName().startsWith("souther.")) {
+                if (element.getName().startsWith("souther.")
+                        || element.getName().startsWith(THE_TEXT_RULES)) {
                     named.add(element);
                 }
             }

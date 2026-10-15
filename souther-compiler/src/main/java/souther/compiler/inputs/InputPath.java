@@ -1,5 +1,6 @@
 package souther.compiler.inputs;
 
+import souther.compiler.check.BoundOperationFacts;
 import souther.compiler.check.CallArguments;
 import souther.compiler.check.DeclaredArgument;
 import souther.compiler.check.DeclarationNewtypes;
@@ -8,11 +9,16 @@ import souther.compiler.check.Location;
 import souther.compiler.core.ConstructionProjection;
 import souther.compiler.core.Core;
 import souther.compiler.semantics.BuiltFrom;
+import souther.compiler.semantics.ElementLineage;
+import souther.compiler.semantics.MapPart;
+import souther.compiler.semantics.PieceOfAnElement;
 import souther.compiler.types.BindingId;
+import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Function;
 
 /**
  * Which position of a behavior's input an expression names, and that it names none where it names
@@ -66,11 +72,31 @@ final class InputPath {
 
     private final DeclarationNewtypes newtypes;
     private final ElementQuestion asked;
+    /** What the reading this walk is asked on takes a node as ({@link InputReads#taking}). */
+    private final Function<Core, Denotation> taken;
     private final BindingTrail trail = new BindingTrail();
 
-    private InputPath(DeclarationNewtypes newtypes, ElementQuestion asked) {
+    private InputPath(DeclarationNewtypes newtypes, ElementQuestion asked,
+                      Function<Core, Denotation> taken) {
         this.newtypes = newtypes;
         this.asked = asked;
+        this.taken = taken;
+    }
+
+    /**
+     * {@code e} where the reading takes it as another value: that value, read where it was given,
+     * by a walk asking the same question there — or null where it is not taken. A node taken is
+     * the value on that reading wherever it is reached from, so the container a choice answered on
+     * the arm a reading is on is the container an element handed from it is in.
+     */
+    private PathResolution whereTaken(Core e, Wanted wanted) {
+        Denotation as = taken.apply(e);
+        if (as == null || Core.withoutStanding(as.value()) == Core.withoutStanding(e)) {
+            return null;
+        }
+        InputPath there = new InputPath(newtypes, asked, as.at()::taken);
+        return wanted == null ? there.named(as.value(), as.at().names())
+                : there.heldAt(as.value(), wanted, as.at().names());
     }
 
     /**
@@ -92,8 +118,9 @@ final class InputPath {
      * only the outermost name would leave every claim inside an expanded helper about a position
      * nothing here can name.
      */
-    static PathResolution of(Core e, BindingEnvironment names, DeclarationNewtypes newtypes) {
-        return new InputPath(newtypes, ElementQuestion.NAMED_POSITION).named(e, names);
+    static PathResolution of(Core e, BindingEnvironment names, DeclarationNewtypes newtypes,
+                             Function<Core, Denotation> taken) {
+        return new InputPath(newtypes, ElementQuestion.NAMED_POSITION, taken).named(e, names);
     }
 
     /**
@@ -112,8 +139,9 @@ final class InputPath {
      * follow.
      */
     static PathResolution cameFrom(Core e, BindingEnvironment names,
-                                   DeclarationNewtypes newtypes) {
-        return new InputPath(newtypes, ElementQuestion.VALUE_ORIGIN).named(e, names);
+                                   DeclarationNewtypes newtypes,
+                                   Function<Core, Denotation> taken) {
+        return new InputPath(newtypes, ElementQuestion.VALUE_ORIGIN, taken).named(e, names);
     }
 
     /**
@@ -125,11 +153,46 @@ final class InputPath {
      * handed to the next names no position of its own, and the elements are the same elements.
      */
     static PathResolution elementAt(BindingId binding, BindingEnvironment names,
-                                    DeclarationNewtypes newtypes) {
-        return new InputPath(newtypes, ElementQuestion.NAMED_POSITION).elementOf(binding, names);
+                                    DeclarationNewtypes newtypes,
+                                    Function<Core, Denotation> taken) {
+        return new InputPath(newtypes, ElementQuestion.NAMED_POSITION, taken)
+                .elementOf(binding, names);
+    }
+
+    /**
+     * The position whose every occurrence {@code e} holds the values of, each as often, and that it
+     * holds those of none where it does not.
+     *
+     * <p>Beside {@link #of} and the stronger question. That one answers which position an
+     * expression names, and an expression that keeps some of what a container holds names the
+     * container's. A total over the values wants more: that nothing standing at the position is
+     * left out and nothing is counted twice. So this crosses only what puts the elements in another
+     * order, answers each as it is, or puts the elements of what a closure answered end to end, and
+     * starts only at a container no other container holds — a list inside the elements of another
+     * holds some of the occurrences of its path, and the path says no more than the whole of them.
+     *
+     * @return the position of the elements of {@code e}
+     */
+    static PathResolution everyElementOf(Core e, BindingEnvironment names,
+                                         DeclarationNewtypes newtypes,
+                                         Function<Core, Denotation> taken) {
+        return new InputPath(newtypes, ElementQuestion.EVERY_OCCURRENCE, taken)
+                .heldAt(e, new Wanted.APart(HeldIn.Part.ELEMENT), names).heldAt();
+    }
+
+    /** The same, of the elements handed to {@code binding}. */
+    static PathResolution everyElementAt(BindingId binding, BindingEnvironment names,
+                                         DeclarationNewtypes newtypes,
+                                         Function<Core, Denotation> taken) {
+        return new InputPath(newtypes, ElementQuestion.EVERY_OCCURRENCE, taken)
+                .elementOf(binding, names).heldAt();
     }
 
     private PathResolution named(Core e, BindingEnvironment names) {
+        PathResolution where = whereTaken(e, null);
+        if (where != null) {
+            return where;
+        }
         return switch (e) {
             // What the name is, asked once, and the step that answers is the answer. An element is
             // answered by the container it came from even where that container is at no position:
@@ -141,7 +204,7 @@ final class InputPath {
                 case BindingRole.Element _ -> elementOf(r.binding(), names);
                 // An element of more than one container is at one of their places and which is not
                 // settled. Answered with the first, a rule under this name would be filed at a
-                // sequence it says nothing about; answered with none, it would read as a name that
+                // container it says nothing about; answered with none, it would read as a name that
                 // holds nothing of the input, and a rule the author wrote about their input would
                 // leave the measurement without a word.
                 case BindingRole.ElementOfSeveral(var containers) ->
@@ -169,6 +232,15 @@ final class InputPath {
                     // says or on where it is written.
                     Location.isStep(fa.target().type(), fa.field(), newtypes)
                             ? base -> base.then(fa.field()) : base -> base);
+            // The two rules above a name at a time, from the base.
+            case Core.FieldProjection p -> namedAlong(p.base(), p.steps().inOrder(), 0, names);
+            // A newtype made of one value is that value wearing a name, so it stands where the value
+            // does: the other way round from reading its `value`, which is no step either. Read as
+            // no position, `Slug(draft.title)` handed to a dependency asked it about nothing a row
+            // writes, where `draft.title` asked it about a position.
+            case Core.Construct construct when newtypes.of(construct.typeName().key())
+                    && construct.values().size() == 1 ->
+                    named(construct.values().getFirst().value(), names);
             // What an expression that binds a name comes to is what its body comes to, under that
             // name. Whether the name may stand for the position its value names is not asked here
             // and is not a question about this shape: it is asked where the name is read, of what
@@ -203,11 +275,11 @@ final class InputPath {
                     new PathResolution.NotAPosition();
             // A choice between values, which stands at no one place.
             case Core.If _, Core.IfConstructed _, Core.Match _ -> new PathResolution.NotAPosition();
-            // A place inside a tuple, which is no position of an input: what a path is made of is a
-            // field, an element of a sequence and a case ({@link TermPath.Step}), and a tuple's
-            // places are none of the three. This is what the model says and not what this walk
-            // declined to follow — there is nothing here to name.
-            case Core.TupleGet _ -> new PathResolution.NotAPosition();
+            // A place inside a tuple is no position of an input of its own: what a path is made of
+            // is a field, what a container holds, a key and a case ({@link TermPath.Step}). Where
+            // the tuple is an entry of a map a walk was handed, its places are that map's key and
+            // value, and that is the container's to say.
+            case Core.TupleGet get -> placeOf(get, names);
             // A closure is a value the language hands an operation, and what it answers about an
             // element is read where the operation stood ({@link ElementProjection}).
             case Core.Block _ -> new PathResolution.NotAPosition();
@@ -265,6 +337,8 @@ final class InputPath {
             // what a value built out of values written where they stand looks like.
             case Core.FieldAccess fa -> introducing(fa.target(), names,
                     (construct, at) -> introducing(given(construct, fa), at, found));
+            case Core.FieldProjection p ->
+                    introducingAlong(p.base(), p.steps().inOrder(), 0, names, found);
             case null, default -> null;
         };
     }
@@ -277,12 +351,58 @@ final class InputPath {
      * with itself and is said where it is found.
      */
     private static Core given(Core.Construct construct, Core.FieldAccess fa) {
-        Core written = ConstructionProjection.given(construct, fa.field());
+        return given(construct, fa.field());
+    }
+
+    private static Core given(Core.Construct construct, String field) {
+        Core written = ConstructionProjection.given(construct, field);
         if (written == null) {
             throw new IllegalStateException("a construction of " + construct.typeName()
-                    + " was read for a field it has none of: " + fa.field());
+                    + " was read for a field it has none of: " + field);
         }
         return written;
+    }
+
+    /**
+     * Where the value {@code steps} from {@code next} on read off {@code from} stands: the two
+     * rules for a field access, asked a name at a time.
+     *
+     * <p>A construction the names start from cancels against the first of them, and what that field
+     * was given is read on. Where none does, each name is one more step of where {@code from}
+     * stands, taken along the names: how many there are is as long as the declarations chain, and
+     * only a cancellation — which is as deep as the constructions the source wrote — goes down the
+     * stack.
+     */
+    private PathResolution namedAlong(Core from, List<Core.FieldProjection.Step> steps, int next,
+                                      BindingEnvironment names) {
+        PathResolution reduced = introducing(from, names, (construct, at) -> {
+            Core given = given(construct, steps.get(next).field());
+            return next + 1 == steps.size() ? named(given, at)
+                    : namedAlong(given, steps, next + 1, at);
+        });
+        if (reduced != null) {
+            return reduced;
+        }
+        PathResolution at = named(from, names);
+        Type read = from.type();
+        for (int i = next; i < steps.size(); i++) {
+            Core.FieldProjection.Step step = steps.get(i);
+            at = at.deeper(Location.isStep(read, step.field(), newtypes)
+                    ? base -> base.then(step.field()) : base -> base);
+            read = step.type();
+        }
+        return at;
+    }
+
+    /** What {@code found} makes of the construction the value {@code steps} from {@code next} on
+     *  read off {@code from} stands for, each name cancelling against a construction in turn. */
+    private <T> T introducingAlong(Core from, List<Core.FieldProjection.Step> steps, int next,
+                                   BindingEnvironment names, OfAConstruction<T> found) {
+        if (next == steps.size()) {
+            return introducing(from, names, found);
+        }
+        return introducing(from, names, (construct, at) -> introducingAlong(
+                given(construct, steps.get(next).field()), steps, next + 1, at, found));
     }
 
     /**
@@ -295,68 +415,155 @@ final class InputPath {
      * a walk over a list written in the body states the caller's rule about the input on the first
      * run whatever the second does.
      */
-    private PathResolution oneOfTheElementsOf(BindingId binding, List<Core> containers,
+    private PathResolution oneOfTheElementsOf(BindingId binding, List<HeldIn> containers,
                                               BindingEnvironment names) {
         List<PathResolution> each = new ArrayList<>();
-        for (Core container : containers) {
-            each.add(trail.through(binding, () -> containerPath(container, names))
-                    .deeper(TermPath::element));
+        for (HeldIn held : containers) {
+            each.add(at(binding, held, names));
         }
         return PathResolution.anyOf(each);
     }
 
     private PathResolution elementOf(BindingId binding, BindingEnvironment names) {
-        if (!(names.roleOf(binding) instanceof BindingRole.Element(var container))) {
+        if (!(names.roleOf(binding) instanceof BindingRole.Element(var held))) {
             return new PathResolution.NotAPosition();
         }
-        // The container names no position of this behavior's input — it is what another operation
-        // answered, or something this does not read — so neither does an element of it. Where a
-        // reading of provenance goes on from there is not this walk's.
-        return trail.through(binding, () -> containerPath(container, names))
-                .deeper(TermPath::element);
+        return at(binding, held, names);
     }
 
     /**
-     * Which position holds the elements {@code e} holds, and that none does where none does.
+     * Where the part {@code held} names of its container stands.
+     *
+     * <p>The container names no position of this behavior's input — it is what another operation
+     * answered, or something this does not read — so neither does anything it holds. Where a reading
+     * of provenance goes on from there is not this walk's.
+     */
+    private PathResolution at(BindingId binding, HeldIn held, BindingEnvironment names) {
+        return trail.through(binding,
+                () -> heldAt(held.container(), new Wanted.APart(held.part()), names));
+    }
+
+    /**
+     * Where a place of the pair a name read out of holds stands — a key or a value, where the pair
+     * is an entry of a map.
+     *
+     * <p>An element a walk was handed may be a pair, and a pair is no position: it is two values
+     * written together. What it is a pair of is the container's to say, and where the container is a
+     * list of a map's entries, the first place of each is a key of that map and the second the value
+     * filed under it. Any other pair says nothing about where its places stand.
+     */
+    private PathResolution placeOf(Core.TupleGet get, BindingEnvironment names) {
+        if (!(Core.withoutStanding(get.tuple()) instanceof Core.Read r)) {
+            return new PathResolution.NotAPosition();
+        }
+        Wanted place = new Wanted.APlaceOfAnElement(get.index());
+        return switch (names.roleOf(r.binding())) {
+            case BindingRole.Element(var held) -> held.part() != HeldIn.Part.ELEMENT
+                    ? new PathResolution.NotAPosition()
+                    : trail.through(r.binding(), () -> heldAt(held.container(), place, names));
+            case BindingRole.ElementOfSeveral(var held) -> {
+                List<PathResolution> each = new ArrayList<>();
+                for (HeldIn one : held) {
+                    if (one.part() == HeldIn.Part.ELEMENT) {
+                        each.add(trail.through(r.binding(),
+                                () -> heldAt(one.container(), place, names)));
+                    }
+                }
+                yield PathResolution.anyOf(each);
+            }
+            case BindingRole.Alias(var value) -> trail.through(r.binding(),
+                    () -> placeOf(new Core.TupleGet(value, get.index(), get.arity(), get.type(),
+                            get.pos()), names));
+            case BindingRole.Root _, BindingRole.Unknown _ -> new PathResolution.NotAPosition();
+        };
+    }
+
+    /**
+     * What of a container a walk is after.
+     *
+     * <p>A part of what it holds — its elements, or a map's keys — or one place of the pair each of
+     * its elements is. Which it is decides what an operation between the container and the input
+     * passes on: a list of a map's keys holds those keys as its elements, and a list of its entries
+     * holds them at the first place of its elements.
+     */
+    private sealed interface Wanted {
+
+        /** What the container holds, or the keys a map files it under. */
+        record APart(HeldIn.Part part) implements Wanted {}
+
+        /** The place at {@code index} of the pair each element of the container is. */
+        record APlaceOfAnElement(int index) implements Wanted {}
+    }
+
+    /**
+     * Where {@code wanted} of what {@code e} holds stands, and that it stands nowhere where it does.
      *
      * <p>Beside {@link #named} and not the same question. That one answers what an expression names,
      * and an operation's answer names no position — {@code List.reverse(xs)} is a value, not a place
-     * a row writes at. What is asked here is where the elements of that value are, and the library
-     * says: a {@code reverse} answers the elements it was given and a {@code filter} some of them,
-     * so an element of either is an element of what went in.
+     * a row writes at. What is asked here is where what that value holds is, and the library says: a
+     * {@code reverse} answers the elements it was given and a {@code filter} some of them, so an
+     * element of either is an element of what went in.
      *
      * <p>Only where they are the same values. Where an answer holds what a closure made of an
      * element, what it holds came from a position and is not one — and a line drawn there would be
      * at a position whose values are not the ones the rule is about, which an author cannot tell
      * from a line their model states.
      */
-    private PathResolution containerPath(Core e, BindingEnvironment names) {
-        // And where the expression names no position, its elements may still be at one, so the ways
-        // an operation's answer holds them are tried beside it.
+    private PathResolution heldAt(Core e, Wanted wanted, BindingEnvironment names) {
+        PathResolution where = whereTaken(e, wanted);
+        if (where != null) {
+            return where;
+        }
+        // And where the expression names no position, what it holds may still be at one, so the
+        // ways an operation's answer holds it are tried beside it.
         return switch (named(e, names)) {
-            case PathResolution.At at -> at;
+            // A container at a position holds its parts under it. What an input's container holds
+            // is never a pair, since a pair has no form a boundary writes, so a place of one names
+            // nothing there.
+            case PathResolution.At at -> switch (wanted) {
+                case Wanted.APart(var part) -> asked == ElementQuestion.EVERY_OCCURRENCE
+                        && at.path().insideAContainer()
+                        ? new PathResolution.NotAPosition() : at.deeper(part::of);
+                case Wanted.APlaceOfAnElement _ -> new PathResolution.NotAPosition();
+            };
             // Each is a way to the same place, and neither is asked unless the other came back
             // without it, so whichever reached a position is the answer.
-            case PathResolution.NotAPosition _ -> elementsOf(e, names);
-            // A container standing at one of several places is where its elements are, and there
-            // are as many of those as there are of it. Read further for one of them, the elements
-            // would come back at a single place while the container they are of stands at more.
-            case PathResolution.MayStandAt among -> among;
+            case PathResolution.NotAPosition _ -> through(e, wanted, names);
+            // A container standing at one of several places holds its parts at each of them. Read
+            // further for one of them, what it holds would come back at a single place while the
+            // container stands at more.
+            case PathResolution.MayStandAt among -> switch (wanted) {
+                case Wanted.APart(var part) -> asked == ElementQuestion.EVERY_OCCURRENCE
+                        ? new PathResolution.NotAPosition() : among.deeper(part::of);
+                case Wanted.APlaceOfAnElement _ -> new PathResolution.NotAPosition();
+            };
         };
     }
 
-    /** The ways an operation's answer holds the elements of what it was given, and no position
-     *  where the expression is not one of them. */
-    private PathResolution elementsOf(Core standing, BindingEnvironment names) {
+    /**
+     * The ways an operation's answer holds what {@code wanted} names of what it was given, and no
+     * position where the expression is not one of them.
+     *
+     * <p>Where an answer's elements came from, which keys it is filed under, and which part of a
+     * map it lists are three facts about an operation, and each kind of thing wanted is followed by
+     * the one that is about it.
+     */
+    private PathResolution through(Core standing, Wanted wanted, BindingEnvironment names) {
         // Which elements a value holds does not turn on the type it stands as.
         Core e = Core.withoutStanding(standing);
         if (e instanceof Core.Read r) {
-            return switch (names.stepFrom(r.binding(), asked)) {
+            // A place of an element is crossed where the elements are: the same elements are the
+            // same pairs.
+            HeldIn.Part edge = switch (wanted) {
+                case Wanted.APart(var part) -> part;
+                case Wanted.APlaceOfAnElement _ -> HeldIn.Part.ELEMENT;
+            };
+            return switch (names.stepFrom(r.binding(), asked, edge)) {
                 // Through a binding an expansion wrote, where the operation it removed answered the
-                // elements it was given. The operation is gone from this tree, so what says so was
-                // written where it still stood.
+                // part asked about as it was given. The operation is gone from this tree, so what
+                // says so was written where it still stood.
                 case ElementStep.Through(var same) -> trail.through(r.binding(),
-                        () -> containerPath(new Core.Read(r.name(), same, r.type(), r.pos()),
+                        () -> heldAt(new Core.Read(r.name(), same, r.type(), r.pos()), wanted,
                                 names));
                 // The question this walk is asking does not cross what was written here, which is
                 // an answer and not a road not taken. What the binding holds is what the walk on
@@ -369,8 +576,36 @@ final class InputPath {
                 case ElementStep.NoEdge _ -> {
                     Core held = names.heldAnywhereBy(r.binding());
                     yield held == null ? new PathResolution.NotAPosition()
-                            : trail.through(r.binding(), () -> containerPath(held, names));
+                            : trail.through(r.binding(), () -> heldAt(held, wanted, names));
                 }
+            };
+        }
+        // What a binding's body answers is read with the binding in scope, as a body a call was
+        // expanded into binds its parameters around what it answers.
+        if (e instanceof Core.LetIn let) {
+            return heldAt(let.body(), wanted, names.inside(let.binder(), let.value()));
+        }
+        // A container chosen by cases holds, on each run, what the one the case taken answers
+        // holds. How the cases come together is the question's.
+        List<Core> arms = switch (e) {
+            case Core.If iff -> List.of(iff.then(), iff.els());
+            case Core.Match match -> match.cases().stream().map(Core.Case::body).toList();
+            default -> null;
+        };
+        if (arms != null) {
+            List<PathResolution> each = new ArrayList<>();
+            for (Core arm : arms) {
+                // Where a value stands or came from, a list written empty holds none for it to
+                // be; every occurrence of a position is held on every run or by none.
+                boolean holdsNone = Core.withoutStanding(arm) instanceof Core.ListLit written
+                        && written.elements().isEmpty();
+                if (!holdsNone || asked == ElementQuestion.EVERY_OCCURRENCE) {
+                    each.add(heldAt(arm, wanted, names));
+                }
+            }
+            return switch (asked) {
+                case NAMED_POSITION, VALUE_ORIGIN -> PathResolution.anyOf(each);
+                case EVERY_OCCURRENCE -> PathResolution.inEveryCase(each);
             };
         }
         // Or through an operation that answers what it was given, in either of the two shapes a
@@ -392,23 +627,173 @@ final class InputPath {
                 return new PathResolution.NotAPosition();
             }
         }
+        Crossing crossing = crossing(operation, wanted);
+        if (crossing == null) {
+            crossing = throughAnIdentityMap(operation, args, wanted);
+        }
+        if (crossing == null) {
+            PathResolution flattened = throughAFlattening(operation, args, wanted, names);
+            return flattened != null ? flattened : new PathResolution.NotAPosition();
+        }
+        // The call may be the runnable tree's and not a kept one, so its argument count is checked
+        // here rather than by a kept call's own constructor.
+        int argument = CallArguments.positionOf(crossing.argument(), operation);
+        return argument < 0 || argument >= args.size() ? new PathResolution.NotAPosition()
+                : heldAt(args.get(argument), crossing.wanted(), names);
+    }
+
+    /** Which argument of an operation what is wanted of its answer is found in, and what of that
+     *  argument it is. */
+    private record Crossing(DeclaredArgument argument, Wanted wanted) {}
+
+    /**
+     * The crossing of an operation answering what a closure made of each element, where the closure
+     * made nothing of it ({@link AnIdentityMap}): the elements of the answer are the elements of the
+     * argument, and a place of one is a place of the other. Null where it is any other operation, or
+     * where what is wanted is no element of the answer.
+     */
+    private static Crossing throughAnIdentityMap(ValueName operation, List<Core> args,
+                                                 Wanted wanted) {
+        boolean ofAnElement = switch (wanted) {
+            case Wanted.APart(HeldIn.Part part) -> part == HeldIn.Part.ELEMENT;
+            case Wanted.APlaceOfAnElement _ -> true;
+        };
+        DeclaredArgument same = ofAnElement
+                ? AnIdentityMap.of(operation, args, InputPath::blockStanding) : null;
+        return same == null ? null : new Crossing(same, wanted);
+    }
+
+    /**
+     * Where the elements of what {@code operation} answers stand, where it puts end to end the lists
+     * its closure answered of each element of a container, and the closure answers a place of the
+     * element ({@link PieceOfAnElement#WHAT_THE_CLOSURE_ANSWERS}) — or null where
+     * it is any other operation or closure.
+     *
+     * <p>Each element of the answer is the value at that place of an element of the container, so
+     * it stands inside the container's elements at the place and one container further in. The
+     * container's elements are asked of the question in hand: where this walk wants every
+     * occurrence, so does it of the container, and the answer is every occurrence of a position
+     * with the container's containers and one more.
+     */
+    private PathResolution throughAFlattening(ValueName operation, List<Core> args, Wanted wanted,
+                                              BindingEnvironment names) {
+        if (!(wanted instanceof Wanted.APart(HeldIn.Part part)) || part != HeldIn.Part.ELEMENT) {
+            return null;
+        }
+        BoundOperationFacts.Assembled assembled =
+                DefaultBoundOperationFacts.get().assembles(operation);
+        if (assembled == null
+                || assembled.piece() != PieceOfAnElement.WHAT_THE_CLOSURE_ANSWERS) {
+            return null;
+        }
+        int at = CallArguments.positionOf(assembled.source(), operation);
+        Core.Block closure = at < 0 || at >= args.size() ? null
+                : AnIdentityMap.closureBeside(args, at, InputPath::blockStanding);
+        if (closure == null || closure.params().size() != 1
+                || closure.params().getFirst().binding() == null) {
+            return null;
+        }
+        ElementProjection answered = ElementProjection.read(closure.body(),
+                closure.params().getFirst().binding(), names.heldByTheBody(), newtypes);
+        if (answered == null) {
+            return null;
+        }
+        PathResolution within = heldAt(args.get(at), wanted, names);
+        return within instanceof PathResolution.NotAPosition ? null
+                : within.deeper(base -> answered.from(base).element());
+    }
+
+    private static Core.Block blockStanding(Core closure) {
+        return Core.withoutStanding(closure) instanceof Core.Block block ? block : null;
+    }
+
+    /**
+     * Where {@code wanted} of what {@code operation} answers comes from, or null where the
+     * operation says it comes from no argument.
+     *
+     * <p>Exhaustive over what can be wanted and over the parts of a map a list may hold, with no
+     * {@code default}: each pair is the operation's fact read for one question, and a kind added to
+     * either is a pair this has to answer.
+     */
+    private Crossing crossing(ValueName operation, Wanted wanted) {
+        BoundOperationFacts facts = DefaultBoundOperationFacts.get();
+        BoundOperationFacts.Listed listed = facts.listsAPartOf(operation);
+        return switch (wanted) {
+            // An element of a list of a map's keys or values is a key or a value of the map; an
+            // element of a list of its entries is a pair, at no one position.
+            case Wanted.APart(HeldIn.Part part) when part == HeldIn.Part.ELEMENT && listed != null ->
+                    switch (listed.part()) {
+                        case KEYS -> new Crossing(listed.map(), new Wanted.APart(HeldIn.Part.KEY));
+                        case VALUES ->
+                                new Crossing(listed.map(), new Wanted.APart(HeldIn.Part.ELEMENT));
+                        case ENTRIES -> null;
+                    };
+            case Wanted.APart(HeldIn.Part part) when part == HeldIn.Part.ELEMENT -> {
+                DeclaredArgument holds = holdingTheElements(operation);
+                yield holds == null ? null : new Crossing(holds, wanted);
+            }
+            // A key is the same key in the answer only where the operation keeps the keys of a
+            // map it was given, which is its own fact: an answer holding a map's very values may
+            // hold them under other keys, and one whose values a closure rewrote keeps every key.
+            case Wanted.APart _ -> {
+                DeclaredArgument kept = facts.keepsTheKeysOf(operation);
+                yield kept == null ? null : new Crossing(kept, wanted);
+            }
+            // The first place of an entry is its key and the second the value filed under it.
+            case Wanted.APlaceOfAnElement(int index) when listed != null ->
+                    listed.part() != MapPart.ENTRIES || index < 0 || index > 1 ? null
+                            : new Crossing(listed.map(), new Wanted.APart(
+                                    index == 0 ? HeldIn.Part.KEY : HeldIn.Part.ELEMENT));
+            // The same elements are the same pairs, so a place of one is a place of the other.
+            case Wanted.APlaceOfAnElement _ -> {
+                DeclaredArgument holds = holdingTheElements(operation);
+                yield holds == null ? null : new Crossing(holds, wanted);
+            }
+        };
+    }
+
+    /**
+     * The argument whose very elements {@code operation}'s answer holds, or null where it holds no
+     * argument's.
+     *
+     * <p>The one statement of it, for every walk that crosses an operation to the value it was
+     * given: where a position stands and where a dependency's answer does are asked of the same
+     * fact, so an element of a reordered or filtered list is an element of the list it came from
+     * whichever of the two that list is.
+     */
+    static DeclaredArgument argumentWhoseElementsItHolds(ValueName operation) {
         BuiltFrom<DeclaredArgument> built =
                 DefaultBoundOperationFacts.get().buildsItsResultFrom(operation);
         DeclaredArgument holds = built == null ? null : built.holdsTheElementsOf();
+        // A set of a list's values holds the very values the list does, though not as often.
+        if (holds == null && DefaultBoundOperationFacts.get().holdsTheImageOfEveryElement(operation)
+                instanceof ElementLineage.SameAs<DeclaredArgument> same) {
+            holds = same.source().argument();
+        }
+        return holds;
+    }
+
+    /** The argument whose elements {@code operation}'s answer holds, as far as this walk's question
+     *  crosses, or null where it crosses to none. */
+    private DeclaredArgument holdingTheElements(ValueName operation) {
+        BuiltFrom<DeclaredArgument> built =
+                DefaultBoundOperationFacts.get().buildsItsResultFrom(operation);
+        // Each as often is more than the same values: an answer that keeps some of what it was
+        // given holds those and not the rest.
+        if (asked == ElementQuestion.EVERY_OCCURRENCE) {
+            return built == null ? null : built.permutesTheElementsOf();
+        }
+        DeclaredArgument holds = argumentWhoseElementsItHolds(operation);
         // What is made from a position came from it and is not it, so an answer holding only that
         // is crossed by the walk after where a value came from and not by the walk after which
         // position an expression names — the same two licences an edge written by an expansion
         // carries ({@link souther.compiler.check.ElementProvenance#stepFrom}), read here from the
         // declaration that states them because the operation is still standing to be asked.
-        DeclaredArgument which = holds != null ? holds
+        return holds != null ? holds
                 : switch (asked) {
-                    case VALUE_ORIGIN -> built == null ? null : built.derivesItsElementsFrom();
-                    case NAMED_POSITION -> null;
+                    case VALUE_ORIGIN -> built != null ? built.derivesItsElementsFrom()
+                            : DefaultBoundOperationFacts.get().elementsMadeFromAlone(operation);
+                    case NAMED_POSITION, EVERY_OCCURRENCE -> null;
                 };
-        // The call may be the runnable tree's and not a kept one, so its argument count is checked
-        // here rather than by a kept call's own constructor.
-        int argument = which == null ? -1 : CallArguments.positionOf(which, operation);
-        return argument < 0 || argument >= args.size() ? new PathResolution.NotAPosition()
-                : containerPath(args.get(argument), names);
     }
 }

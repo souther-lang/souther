@@ -2,17 +2,21 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.carrier.Membership;
 import souther.compiler.check.DeclaredBounds;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
+import souther.compiler.check.TypeCardinality;
 import souther.compiler.check.DeclaredSig;
 import souther.compiler.inputs.Case;
+import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.Requirements;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
+import souther.compiler.query.ReadAs;
 
 import java.util.List;
 import java.util.Map;
@@ -35,8 +39,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class AnOptionalsClassesStateWhichNarrowingTheyAreTest {
 
     /** The rules asking a collection to hold one and capping it in no way. */
-    private static final ConstructionPlan.HowManyItHolds ONE_AT_LEAST =
-            (_, _) -> new DeclaredBounds.CountRange(1, Integer.MAX_VALUE);
+    private static final ConstructionPlan.WhatItMayHold ONE_AT_LEAST = (_, _) ->
+            ConstructionPlan.ItMayHold.counting(new DeclaredBounds.CountRange(1, Integer.MAX_VALUE));
 
 
     private static final String FLAGGED = """
@@ -112,7 +116,8 @@ class AnOptionalsClassesStateWhichNarrowingTheyAreTest {
         ConstructionPlan.Held many = assertInstanceOf(ConstructionPlan.Held.class,
                 root.under().get("many"),
                 "the list is built around what it was asked to hold, and not proposed whole");
-        ConstructionPlan.Exact exact = assertInstanceOf(ConstructionPlan.Exact.class, many.under(),
+        ConstructionPlan.Exact exact = assertInstanceOf(ConstructionPlan.Exact.class,
+                many.under().orElseThrow(),
                 "and what it holds is the value the narrowing settled");
         assertEquals(element.refine(Refinement.of(new Case.Presence(false))), exact.at());
         assertEquals("None", exact.exact().text());
@@ -135,8 +140,9 @@ class AnOptionalsClassesStateWhichNarrowingTheyAreTest {
         Read read = read(HOLDING);
         return assertInstanceOf(ConstructionPlan.Result.Planned.class,
                 ConstructionPlan.of(read.sig().inputs().get(0).type(), TermPath.of("query"),
-                        read.rules().inners(), read.rules().symbols(), read.rules().published(),
-                        Set.of(), required,
+                        read.rules().inners(), read.rules().symbols(), read.rules().kinds(),
+                        read.rules().sums(),
+                        Set.of(), required, ConstructionPlan.ContentsComposed.NONE,
                         ONE_AT_LEAST),
                 "nothing here asks one position to be two things").plan();
     }
@@ -155,11 +161,12 @@ class AnOptionalsClassesStateWhichNarrowingTheyAreTest {
 
     private static Partitions.Partitioning partitioningOf() {
         Read read = read(FLAGGED);
+        RuleReadingContext reading = RuleReadingContext.unshared(read.rules(),
+                ReadAs.THE_COMPILATION_DOES);
         return Partitions.of("look",
-                souther.compiler.inputs.InputDomain.of(read.sig(),
-                        RuleReadingContext.unshared(read.rules(),
-                                souther.compiler.query.ReadAs.THE_COMPILATION_DOES)),
-                read.rules(), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+                InputDomain.of(read.sig(), reading,
+                        TypeCardinality.Counts.workedOutIn(reading), Membership.none())
+                .reading(read.rules()), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
     }
 
     private record Read(DeclaredSig sig, RuleReadingSource rules) {}

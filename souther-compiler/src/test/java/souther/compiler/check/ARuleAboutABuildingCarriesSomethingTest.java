@@ -241,6 +241,18 @@ class ARuleAboutABuildingCarriesSomethingTest {
                         Index(Map.difference(a, b))
                     }
                     """),
+            new Carries("Map.fromList", """
+                    module demo
+                    data TooMany
+                    data Index = Map<String, Int>
+                        invariant Map.size(value) <= 10
+                    behavior build : (es: List<String>) -> Index | TooMany constructs Index
+                    let build (es) = {
+                        guard List.length(es) <= 10
+                            else TooMany
+                        Index(Map.fromList(List.map(e -> (e, 1), es)))
+                    }
+                    """),
             new Carries("Set.filter", """
                     module demo
                     data TooMany

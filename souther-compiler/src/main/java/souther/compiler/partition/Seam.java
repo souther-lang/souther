@@ -1,9 +1,15 @@
 package souther.compiler.partition;
 
+import souther.compiler.check.ComparisonClaim;
+import souther.compiler.numeric.Count;
+import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Towards;
 
+import java.util.List;
 import java.util.Optional;
+import java.util.function.Function;
+import java.util.function.UnaryOperator;
 
 /**
  * Where a rule parts one quantity's values: the last value on one side and the first on the other.
@@ -39,8 +45,9 @@ public record Seam(CutPosition at, Level below, Level above) {
      *
      * @param belongsTo the side the cut's own value falls on where the quantity takes it, which is
      *                  what the operator says and the order does not
+     * @return the seam, or the way a number it needs was not held
      */
-    public static Seam of(LevelSpace space, Level cut, Towards belongsTo) {
+    public static ExactAnswer<Seam> of(LevelSpace space, Level cut, Towards belongsTo) {
         return of(space, cut, belongsTo, null);
     }
 
@@ -51,8 +58,13 @@ public record Seam(CutPosition at, Level below, Level above) {
      * which levels the written form attains — and then read back in the quantity's own units. Exact
      * both ways: a level the written form attains is a multiple of what it wrote, so nothing rounds,
      * and where it attains no level there is nothing to read back.
+     *
+     * @return the seam, or the way a number it holds was not held: the line, or a value beside it
+     *         read back in the quantity's own units, past what an exact ratio holds or what the host
+     *         has room to write out, or a question of the order the exact arithmetic could not
+     *         answer. A seam is only ever whole, so a caller told otherwise has no seam to ask about
      */
-    public static Seam of(LevelSpace space, Level cut, Towards belongsTo, Scale into) {
+    public static ExactAnswer<Seam> of(LevelSpace space, Level cut, Towards belongsTo, Scale into) {
         // Whether the order has a place there at all, which is not whether the quantity takes the
         // level: `2 * a <= 9` cuts between eight and ten and nine is neither. An order whose only
         // number is where two positions meet has one place and no others, and a level three along
@@ -62,18 +74,18 @@ public record Seam(CutPosition at, Level below, Level above) {
             throw new IllegalArgumentException(
                     "this order has no place at " + cut + " for a line to be");
         }
-        // `.orNull()` and not the refusal Border carries up to a report: a Seam has no arm for
-        // "not worked out" yet, so a run the exact arithmetic could not read here still answers as
-        // an order with no room for the line does, until Seam itself is widened the same way.
-        boolean attains = Boolean.TRUE.equals(space.attainable(cut).orNull());
-        Level below = attains && belongsTo == Towards.BELOW ? cut
-                : beside(space, cut, Towards.BELOW);
-        Level above = attains && belongsTo == Towards.ABOVE ? cut
-                : beside(space, cut, Towards.ABOVE);
-        return new Seam(
-                new CutPosition(cut,
-                        into == null ? ExactRatio.ONE : into.per()),
-                inUnitsOf(below, into), inUnitsOf(above, into));
+        // Every number this reads back is asked before any is built. The line and the two values
+        // beside it are divided by how much of the quantity the rule wrote, and a rule written at
+        // one end of the exponents a ratio holds can put any of them past the other, or past the
+        // room the host has to write the count out. Which of the two is the answer's, and a seam
+        // holding a number it cannot name is never built.
+        return space.attainable(cut).flatMap(attains ->
+                CutPosition.placed(cut, into == null ? ExactRatio.ONE : into.per()).flatMap(line ->
+                        valueBeside(space, cut, Towards.BELOW, attains, belongsTo).flatMap(below ->
+                        valueBeside(space, cut, Towards.ABOVE, attains, belongsTo).flatMap(above ->
+                        inUnitsOf(below, into).flatMap(readBelow ->
+                        inUnitsOf(above, into).map(readAbove ->
+                                new Seam(line, readBelow.orElse(null), readAbove.orElse(null))))))));
     }
 
     /**
@@ -93,15 +105,40 @@ public record Seam(CutPosition at, Level below, Level above) {
      *              the quantity twice, under what it names and over it, and this is the lower of the
      *              two — a place the values genuinely part, rather than a side chosen for a rule
      *              that has none
+     * @return the seam, or the way a number it needs was not held, as {@link #of(LevelSpace, Level,
+     *         Towards, Scale)} says it
      */
-    public static Seam where(BorderQuantity of, Level at, souther.compiler.check.ComparisonClaim claim) {
-        Towards belongsTo = claim instanceof souther.compiler.check.ComparisonClaim.Cut order
-                ? order.valueBelongs() : Towards.ABOVE;
-        souther.compiler.numeric.LinearForm<souther.compiler.inputs.NumericTerm> direction =
-                of.direction();
-        ExactRatio per = QuantityKey.per(direction);
-        return of(of.levels(), at, belongsTo, new Scale(per, direction.coefs().size() == 1
-                ? of.carrierOf(direction.coefs().keySet().iterator().next()) : null));
+    public static ExactAnswer<Seam> where(BorderQuantity of, Level at, ComparisonClaim claim) {
+        return where(of, at, claim instanceof ComparisonClaim.Cut order
+                ? order.valueBelongs() : Towards.ABOVE);
+    }
+
+    /**
+     * Every place a rule parts a quantity's values at, each found by {@code towards} on the side it
+     * is asked for: one for a rule that orders the values, on the side its own value belongs to,
+     * and two for one that names a value, over it and under it.
+     *
+     * <p>The one answer to which places a claim parts, for every reader that asks it of a line —
+     * where a quantity is arranged, and whether a line's sides were worked out. Answered from the
+     * one place {@link #where} gives, a value singled out kept only the side over it, and the side
+     * under it was left out of the runs beside every other line on its quantity.
+     */
+    static ExactAnswer<List<Seam>> eachOf(ComparisonClaim claim,
+                                          Function<Towards, ExactAnswer<Seam>> towards) {
+        return switch (claim) {
+            case ComparisonClaim.Cut order -> towards.apply(order.valueBelongs()).map(List::of);
+            case ComparisonClaim.Singled _ -> towards.apply(Towards.ABOVE).flatMap(above ->
+                    towards.apply(Towards.BELOW).map(below -> List.of(above, below)));
+        };
+    }
+
+    /**
+     * The same, with the value at the line on the side {@code belongsTo} says: which of the two
+     * places beside a value is asked about, for a reader that has no rule ordering the values to
+     * read it off.
+     */
+    static ExactAnswer<Seam> where(BorderQuantity of, Level at, Towards belongsTo) {
+        return of(of.levels(), at, belongsTo, new Scale(of.per(), of.writtenBackOn()));
     }
 
     /**
@@ -129,25 +166,28 @@ public record Seam(CutPosition at, Level below, Level above) {
      * kept the form's shape would read the same and write differently — which is the split that had
      * a day count printed as the number a model wrote.
      */
-    private static Level inUnitsOf(Level level, Scale into) {
+    private static ExactAnswer<Optional<Level>> inUnitsOf(Optional<Level> level, Scale into) {
         // A rule that wrote the whole of the quantity wrote it in the quantity's own units, so
         // there is nothing to read back — including where the quantity has no numbers at all. A
         // rule holds two strings apart and writes the whole of what it cuts, and asking such a
         // level for its number is what {@link Level#asAnExactNumber} exists to refuse.
-        if (level == null || into == null
+        if (level.isEmpty() || into == null
                 || into.per().equals(ExactRatio.ONE)) {
-            return level;
+            return ExactAnswer.held(level);
         }
-        ExactRatio at = level.asAnExactNumber().dividedBy(into.per());
-        if (into.onto() == null) {
-            return new Level.OfTheQuantity(at);
-        }
-        // The carrier edge, crossed by a reader that has established it can be: a level the written
-        // form attains is a whole multiple of what that form wrote, so reading it back in the
-        // quantity's own units lands on a value the position holds. Both halves of that are asked,
-        // because a number can be a count and be no value of this order — a half is a count and no
-        // whole number is one.
-        return Level.OnACarrier.held(into.onto(), at);
+        return level.get().asAnExactNumber().dividedBy(into.per()).flatMap(at -> {
+            if (into.onto() == null) {
+                return ExactAnswer.<Optional<Level>>held(
+                        Optional.of(new Level.OfTheQuantity(at)));
+            }
+            // The carrier edge, crossed by a reader that has established it can be: a level the
+            // written form attains is a whole multiple of what that form wrote, so reading it back
+            // in the quantity's own units lands on a value the position holds. Both halves of that
+            // are asked, because a number can be a count and be no value of this order — a half is
+            // a count and no whole number is one. And the count is one the host may have no room
+            // to write out, which is the answer's to say and not a refusal.
+            return Level.OnACarrier.held(into.onto(), at).map(Optional::<Level>of);
+        });
     }
 
     /**
@@ -233,12 +273,24 @@ public record Seam(CutPosition at, Level below, Level above) {
      * is held in the quantity's own units, because that is the only order every rule about it is
      * on, and each rule reads its rows through the form it was written as. Nothing here needs the
      * line to be a value of anything — it is a change of unit and not a change of order.
+     *
+     * @return the seam, or the way a number it holds was not held in the smaller units
      */
-    Seam scaledBy(ExactRatio k) {
+    ExactAnswer<Seam> scaledBy(ExactRatio k) {
         if (k.equals(ExactRatio.ONE)) {
-            return this;
+            return ExactAnswer.held(this);
         }
-        return new Seam(at.times(k), scaled(below, k), scaled(above, k));
+        return at.times(k).flatMap(line ->
+                scaled(below, k).flatMap(scaledBelow ->
+                scaled(above, k).map(scaledAbove ->
+                        new Seam(line, scaledBelow.orElse(null), scaledAbove.orElse(null)))));
+    }
+
+    private static ExactRatio numberOf(Level level) {
+        return switch (level) {
+            case Level.OfTheQuantity counted -> counted.at();
+            case Level.OnACarrier on -> on.at() instanceof Count count ? count.exactly() : null;
+        };
     }
 
     /**
@@ -248,20 +300,16 @@ public record Seam(CutPosition at, Level below, Level above) {
      * times a decimal is not a decimal the position is written at. So what comes back is counted
      * rather than carried on a carrier, whichever of the two went in.
      */
-    private static Level scaled(Level level, ExactRatio k) {
+    private static ExactAnswer<Optional<Level>> scaled(Level level, ExactRatio k) {
         if (level == null) {
-            return null;
+            return ExactAnswer.held(Optional.empty());
         }
-        ExactRatio at = switch (level) {
-            case Level.OfTheQuantity counted -> counted.at();
-            case Level.OnACarrier on -> on.at() instanceof souther.compiler.numeric.Count count
-                    ? count.exactly() : null;
-        };
+        ExactRatio at = numberOf(level);
         if (at == null) {
             throw new IllegalStateException(
                     "an order with no numbers was asked for a multiple of one: " + level);
         }
-        return new Level.OfTheQuantity(at.times(k));
+        return at.times(k).map(times -> Optional.<Level>of(new Level.OfTheQuantity(times)));
     }
 
     /**
@@ -272,7 +320,7 @@ public record Seam(CutPosition at, Level below, Level above) {
      * end rather than by handing one level to all of them, which left a run with the same value at
      * both ends and a reader that could no longer tell which side of the line it lay.
      */
-    Seam mappedBy(java.util.function.UnaryOperator<Level> onto) {
+    Seam mappedBy(UnaryOperator<Level> onto) {
         Level line = at.asALevelOfTheQuantity();
         if (line == null) {
             // A line at a place the quantity has no value for has nothing to read on another order:
@@ -309,7 +357,7 @@ public record Seam(CutPosition at, Level below, Level above) {
      *               answer where the reader has one to ask
      */
     public String asARuleAbout(
-            java.util.function.Function<ExactRatio, String> muchOf,
+            Function<ExactRatio, String> muchOf,
             Towards side) {
         ExactRatio.Terms rule = at.asARule();
         if (rule == null) {
@@ -384,10 +432,12 @@ public record Seam(CutPosition at, Level below, Level above) {
      * to ask for, because nine is not a level it stands at, and the level it stands at below nine is
      * not one step from anything.
      */
-    private static Level beside(LevelSpace space, Level cut, Towards towards) {
-        boolean attains = Boolean.TRUE.equals(space.attainable(cut).orNull());
-        Optional<Level> found = (attains ? space.neighbour(cut, towards)
-                : space.nearestAtOrBeyond(cut, towards)).orNull();
-        return found == null ? null : found.orElse(null);
+    private static ExactAnswer<Optional<Level>> valueBeside(LevelSpace space, Level cut,
+                                                            Towards towards, boolean attains,
+                                                            Towards belongsTo) {
+        if (attains && belongsTo == towards) {
+            return ExactAnswer.held(Optional.of(cut));
+        }
+        return attains ? space.neighbour(cut, towards) : space.nearestAtOrBeyond(cut, towards);
     }
 }

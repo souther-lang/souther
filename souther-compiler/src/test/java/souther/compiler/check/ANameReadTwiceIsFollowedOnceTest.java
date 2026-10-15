@@ -57,18 +57,8 @@ class ANameReadTwiceIsFollowedOnceTest {
         }
 
         @Override
-        public PublishedDeclarations published() {
-            return PublishedDeclarations.NONE;
-        }
-
-        @Override
-        public DeclarationKinds kinds() {
-            return DeclarationKinds.NONE;
-        }
-
-        @Override
-        public NewtypeInners inners() {
-            return NewtypeInners.NONE;
+        public DeclarationAccess declarations() {
+            return DeclarationAccess.NONE;
         }
 
         /** Nothing is an atom here: what this measures is how often the walk asks to follow a
@@ -84,17 +74,17 @@ class ANameReadTwiceIsFollowedOnceTest {
         }
 
         @Override
-        public AffineForms.ReadThrough<Chain> readThrough(Core.Read read, Chain at) {
+        public ValueStanding.ReadThrough<Chain> readThrough(Core.Read read, Chain at) {
             Core value = given.get(read.binding());
             if (value == null) {
                 return null;
             }
             asked.merge(read.binding(), 1, Integer::sum);
-            return new AffineForms.ReadThrough<>(value, at);
+            return new ValueStanding.ReadThrough<>(value, at);
         }
 
         @Override
-        public List<AffineForms.ReadThrough<Chain>> alternativesOf(Core.Read read, Chain at) {
+        public List<ValueStanding.ReadThrough<Chain>> alternativesOf(Core.Read read, Chain at) {
             return null;
         }
 

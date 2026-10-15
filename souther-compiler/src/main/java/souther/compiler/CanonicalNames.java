@@ -1,6 +1,6 @@
 package souther.compiler;
 
-import souther.unicode.Normalization;
+import net.unit8.notation199x.Normalization;
 
 /**
  * The name a spelling denotes, canonicalized to NFC.
@@ -16,8 +16,8 @@ import souther.unicode.Normalization;
  * source file, the module name a header-less source is given, the file stem the CLI derives one
  * from, and the identifiers an invocation names on the command line. Held here rather than beside
  * {@link Reserved}'s registry, which every one of those callers is downstream of anyway: this needs
- * {@code souther-runtime}'s {@link Normalization#nfc}, and {@code souther-fmt} reads
- * {@link Reserved#MODULES} without depending on the compiler or on {@code souther-runtime} either.
+ * {@link Normalization#nfc}, and {@code souther-fmt} reads {@link Reserved#MODULES} without
+ * depending on the compiler.
  *
  * <p>A string literal is canonicalized too, but separately and for its own reason: it is a value
  * that crosses a boundary, not a name. Both go through {@link Normalization#nfc}, the one

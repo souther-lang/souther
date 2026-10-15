@@ -4,16 +4,17 @@ import souther.compiler.core.Core;
 import souther.compiler.coverage.NormalReturn;
 import souther.compiler.types.ValueName;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Deque;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.function.Function;
 import java.util.Set;
 
 /**
@@ -38,89 +39,105 @@ import java.util.Set;
 public sealed interface ValueOrigin<K> {
 
     /**
-     * What {@code answering} makes of this, asking it of each part once however many places reach
-     * that part.
+     * Every position {@code gathering} finds in this, in the order the source wrote them, going into
+     * each part once however many places reach it.
      *
-     * <p>The one way to read what an origin is made of. A name read in several places is one origin
-     * standing in several places ({@link #of(Core, Object, Reading)}), so a value in which each link
-     * names the one before it twice is a graph as long as the source wrote it and a tree that doubles
-     * at each link. A reader that walks it by recursing into the parts walks the tree; one that goes
-     * through this reads the graph. Parts are held by identity and not by equality: equality of two
+     * <p>The way a question that collects positions reads an origin. A name read in several places is
+     * one origin standing in several places ({@link #of(Core, Object, Reading)}), so a value in which
+     * each link names the one before it twice is a graph as long as the source wrote it and a tree
+     * that doubles at each link. Parts are held by identity and not by equality: equality of two
      * origins is a walk of both, which is the cost this is here to spare.
      *
-     * @param answering what an origin comes to, given what each of its parts came to
+     * <p>Walked on a stack of its own and not on the call stack, because how deep an origin goes is
+     * as long as a chain of declarations: a record holding the one before it in a field is read as
+     * one layer per declaration. And collected into one set as it goes rather than one per part,
+     * because each part's set holds everything below it, and copying those up is quadratic in the
+     * depth.
+     *
+     * <p>Which parts a question goes into is the question's, so it is asked of {@code gathering} and
+     * not read off the node: what decided a choice is something a value depends on and not
+     * something it came from.
      */
-    default <R> R answered(Answering<K, R> answering) {
-        return new Answers<>(answering).of(this);
+    default Set<K> gathered(Gathering<K> gathering) {
+        Set<ValueOrigin<K>> met = Collections.newSetFromMap(new IdentityHashMap<>());
+        Deque<ValueOrigin<K>> pending = new ArrayDeque<>();
+        Set<K> out = new LinkedHashSet<>();
+        pending.push(this);
+        while (!pending.isEmpty()) {
+            ValueOrigin<K> origin = pending.pop();
+            // Marked when it is read and not when it is put off: a part put off behind its
+            // neighbours and then reached again under an earlier one is read where it is first
+            // written, which is where its positions belong in the order.
+            if (!met.add(origin)) {
+                continue;
+            }
+            switch (gathering.at(origin)) {
+                case Gathering.Holds<K>(K at) -> out.add(at);
+                case Gathering.Into<K>(List<ValueOrigin<K>> parts) -> {
+                    for (int i = parts.size() - 1; i >= 0; i--) {
+                        pending.push(parts.get(i));
+                    }
+                }
+            }
+        }
+        return Collections.unmodifiableSet(out);
     }
 
     /**
-     * What one origin comes to, given what its parts came to.
+     * What one question that collects positions reads out of an origin it meets.
      *
      * @param <K> what the caller calls a position
-     * @param <R> what the reading answers
      */
     @FunctionalInterface
-    interface Answering<K, R> {
+    interface Gathering<K> {
+
+        /** What {@code origin} gives this question: a position, or the parts it goes on into. */
+        Met<K> at(ValueOrigin<K> origin);
 
         /**
-         * What {@code origin} comes to.
+         * What a question met at one origin.
          *
-         * @param origin the origin being answered
-         * @param part   what each of its parts came to, asked of a part and answered once for it
+         * @param <K> what the caller calls a position
          */
-        R of(ValueOrigin<K> origin, Function<ValueOrigin<K>, R> part);
-    }
+        sealed interface Met<K> {}
 
-    /** One reading of one origin, holding what each part came to. */
-    final class Answers<K, R> {
+        /** A position this question collects. */
+        record Holds<K>(K at) implements Met<K> {
 
-        private final Answering<K, R> answering;
-        private final Map<ValueOrigin<K>, R> answered = new IdentityHashMap<>();
-
-        private Answers(Answering<K, R> answering) {
-            this.answering = answering;
+            public Holds {
+                Objects.requireNonNull(at, "a position held is one that is named");
+            }
         }
 
-        private R of(ValueOrigin<K> origin) {
-            if (answered.containsKey(origin)) {
-                return answered.get(origin);
+        /** The parts this question goes on into, in the order they were written — none where it
+         *  stops here. */
+        record Into<K>(List<ValueOrigin<K>> parts) implements Met<K> {
+
+            public Into {
+                parts = List.copyOf(parts);
             }
-            R came = answering.of(origin, this::of);
-            answered.put(origin, came);
-            return came;
         }
     }
 
     /** Every position this names, however deeply, in the order the reader met them. */
     default Set<K> positions() {
-        return answered(ValueOrigin::positionsOf);
+        return gathered(ValueOrigin::positionsOf);
     }
 
-    private static <K> Set<K> positionsOf(ValueOrigin<K> origin,
-                                          Function<ValueOrigin<K>, Set<K>> part) {
+    private static <K> Gathering.Met<K> positionsOf(ValueOrigin<K> origin) {
         return switch (origin) {
-            case IsAPosition<K> it -> Set.of(it.at());
-            case Applied<K> it -> across(it.arguments(), part);
-            case Composed<K> it -> across(it.parts(), part);
-            case Constructed<K> it -> across(it.fields().values(), part);
+            case IsAPosition<K> it -> new Gathering.Holds<>(it.at());
+            case Applied<K> it -> new Gathering.Into<>(it.arguments());
+            case Composed<K> it -> new Gathering.Into<>(it.parts());
+            case Constructed<K> it -> new Gathering.Into<>(List.copyOf(it.fields().values()));
             case OneOf<K> it -> {
-                Set<K> out = new LinkedHashSet<>(across(it.decidedBy(), part));
-                out.addAll(across(it.alternatives(), part));
-                yield Collections.unmodifiableSet(out);
+                List<ValueOrigin<K>> parts = new ArrayList<>(it.decidedBy());
+                parts.addAll(it.alternatives());
+                yield new Gathering.Into<>(parts);
             }
-            case NoValue<K> _, Written<K> _, MadeFromAPosition<K> _, Unnameable<K> _ -> Set.of();
+            case NoValue<K> _, Written<K> _, MadeFromAPosition<K> _, Unnameable<K> _ ->
+                    new Gathering.Into<>(List.of());
         };
-    }
-
-    /** What every part in {@code of} came to, together, in the order they were met. */
-    private static <K> Set<K> across(Collection<ValueOrigin<K>> of,
-                                     Function<ValueOrigin<K>, Set<K>> part) {
-        Set<K> out = new LinkedHashSet<>();
-        for (ValueOrigin<K> each : of) {
-            out.addAll(part.apply(each));
-        }
-        return Collections.unmodifiableSet(out);
     }
 
     /** The expression is the position itself, or a number taken of it. */
@@ -268,29 +285,115 @@ public sealed interface ValueOrigin<K> {
      *  the whole rather than of a part: a value made from a position is one value however many
      *  operations stand over it. */
     default K madeFrom() {
-        return answered(ValueOrigin::madeFromOf);
+        return derivation().madeFrom();
     }
 
-    private static <K> K madeFromOf(ValueOrigin<K> origin, Function<ValueOrigin<K>, K> part) {
+    /**
+     * Whether this is a value an operation made of a position: where every value it may be is one,
+     * a rule about it is one to be followed back through that operation.
+     */
+    default boolean madeByAnOperation() {
+        return derivation().madeByAnOperation();
+    }
+
+    /**
+     * Where this was made from and whether an operation made it, which are answered together because
+     * the second is read off the first. Arithmetic over a value made from a position is an operation
+     * made of that position, so a reading of one that started the other over at each layer of
+     * arithmetic would walk what is under that layer once for every layer above it.
+     *
+     * @param madeFrom          the position this is made from where it is made from one and names
+     *                          none, or null
+     * @param madeByAnOperation whether every value this may be is one an operation made of a
+     *                          position
+     * @param <K>               what the caller calls a position
+     */
+    record Derivation<K>(K madeFrom, boolean madeByAnOperation) {}
+
+    /**
+     * What this is made from, each part answered once however many places reach it and before
+     * anything that reaches it.
+     *
+     * <p>Answered on a stack of its own and not on the call stack, for the reason {@link #gathered}
+     * is: an origin is as deep as a chain of declarations. A part is put off again until everything
+     * under it is answered, and then answered from what that came to. Every part this is asked of is
+     * one {@link #derivedFrom} said it reads, so none is asked before it has an answer.
+     */
+    private Derivation<K> derivation() {
+        Map<ValueOrigin<K>, Derivation<K>> answered = new IdentityHashMap<>();
+        Deque<ValueOrigin<K>> pending = new ArrayDeque<>();
+        pending.push(this);
+        while (!pending.isEmpty()) {
+            ValueOrigin<K> origin = pending.peek();
+            if (answered.containsKey(origin)) {
+                pending.pop();
+                continue;
+            }
+            boolean ready = true;
+            for (ValueOrigin<K> part : derivedFrom(origin)) {
+                if (!answered.containsKey(part)) {
+                    pending.push(part);
+                    ready = false;
+                }
+            }
+            if (ready) {
+                pending.pop();
+                answered.put(origin, derivationOf(origin, answered));
+            }
+        }
+        return answered.get(this);
+    }
+
+    /** The parts what {@code origin} is made from is read off. What decided a choice is not one of
+     *  them: a choice made on what stands at a position is not a value made from it. */
+    private static <K> List<ValueOrigin<K>> derivedFrom(ValueOrigin<K> origin) {
         return switch (origin) {
-            case MadeFromAPosition<K> from -> from.at();
-            case Applied<K> applied -> firstMadeFrom(applied.arguments(), part);
-            case Composed<K> composed -> firstMadeFrom(composed.parts(), part);
-            case Constructed<K> built -> firstMadeFrom(built.fields().values(), part);
-            // Only where every value it could be came from the one position, since the value is
-            // one of them and nothing here says which. What decided it is not asked: a choice made
-            // on what stands at a position is not a value made from it.
-            case OneOf<K> choice -> sameMadeFrom(choice.alternatives(), part);
-            case IsAPosition<K> _, Written<K> _, Unnameable<K> _, NoValue<K> _ -> null;
+            case Applied<K> applied -> applied.arguments();
+            case Composed<K> composed -> composed.parts();
+            case Constructed<K> built -> List.copyOf(built.fields().values());
+            case OneOf<K> choice -> choice.alternatives();
+            case MadeFromAPosition<K> _, IsAPosition<K> _, Written<K> _, Unnameable<K> _,
+                 NoValue<K> _ -> List.of();
+        };
+    }
+
+    private static <K> Derivation<K> derivationOf(ValueOrigin<K> origin,
+                                                  Map<ValueOrigin<K>, Derivation<K>> parts) {
+        return switch (origin) {
+            case MadeFromAPosition<K> from -> new Derivation<>(from.at(), true);
+            case Applied<K> applied -> new Derivation<>(firstMadeFrom(applied.arguments(), parts),
+                    true);
+            // Arithmetic the terms do not take apart — unless what is under it came from a
+            // position, which is the same rule about a value made from one with a layer of
+            // arithmetic over it.
+            case Composed<K> composed -> {
+                K from = firstMadeFrom(composed.parts(), parts);
+                yield new Derivation<>(from, from != null);
+            }
+            // A construction is not an operation, whatever it was given. A value an operation made
+            // is followed back by reading that operation backwards; a reader that cannot take a
+            // construction as a quantity has not got that to do. Reading what it was built with is
+            // a separate ability.
+            case Constructed<K> built ->
+                    new Derivation<>(firstMadeFrom(built.fields().values(), parts), false);
+            // Only where every value it could be came from the one position, and was made by an
+            // operation, since the value is one of them and nothing here says which. Where one arm
+            // of a choice is a position's own values or a literal, a rule about the choice is not
+            // one to follow back through an operation.
+            case OneOf<K> choice -> new Derivation<>(sameMadeFrom(choice.alternatives(), parts),
+                    everyMadeByAnOperation(choice.alternatives(), parts));
+            case IsAPosition<K> _, Written<K> _, Unnameable<K> _, NoValue<K> _ ->
+                    new Derivation<>(null, false);
         };
     }
 
     /** The one position everything in {@code of} is made from, or null where they differ or any of
      *  them is made from none. */
-    private static <K> K sameMadeFrom(List<ValueOrigin<K>> of, Function<ValueOrigin<K>, K> part) {
+    private static <K> K sameMadeFrom(List<ValueOrigin<K>> of,
+                                      Map<ValueOrigin<K>, Derivation<K>> parts) {
         K agreed = null;
         for (ValueOrigin<K> each : of) {
-            K from = part.apply(each);
+            K from = parts.get(each).madeFrom();
             if (from == null || (agreed != null && !agreed.equals(from))) {
                 return null;
             }
@@ -300,14 +403,24 @@ public sealed interface ValueOrigin<K> {
     }
 
     private static <K> K firstMadeFrom(Collection<ValueOrigin<K>> of,
-                                       Function<ValueOrigin<K>, K> part) {
+                                       Map<ValueOrigin<K>, Derivation<K>> parts) {
         for (ValueOrigin<K> each : of) {
-            K from = part.apply(each);
+            K from = parts.get(each).madeFrom();
             if (from != null) {
                 return from;
             }
         }
         return null;
+    }
+
+    private static <K> boolean everyMadeByAnOperation(List<ValueOrigin<K>> of,
+                                                      Map<ValueOrigin<K>, Derivation<K>> parts) {
+        for (ValueOrigin<K> each : of) {
+            if (!parts.get(each).madeByAnOperation()) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**
@@ -323,13 +436,54 @@ public sealed interface ValueOrigin<K> {
          *  under it, so a position names itself and what is inside it is the same position. */
         K positionOf(Core e, E at);
 
+        /**
+         * The longest of {@code p} and the projections shorter than it that is a position, or null
+         * where none is: what {@link #positionOf} answers of each of them in turn, the longest first,
+         * stopping at the first that is one.
+         *
+         * <p>One question and not one per projection, so that a reader can answer it walking the
+         * names once. What it takes to name a projection grows with the projection, so asked of each
+         * shorter one in turn, a projection as long as a chain of declarations costs the square of
+         * that — and where the reader's positions stop short of the projection, every one of them is
+         * asked.
+         */
+        default Along<K> positionAlong(Core.FieldProjection p, E at) {
+            K here = positionOf(p, at);
+            if (here != null) {
+                return new Along<>(p.steps(), here);
+            }
+            for (Core.FieldProjection shorter : p.shorter()) {
+                K there = positionOf(shorter, at);
+                if (there != null) {
+                    return new Along<>(shorter.steps(), there);
+                }
+            }
+            return null;
+        }
+
+        /**
+         * A position some projection's names reach.
+         *
+         * @param upTo the names of the projection that is the position: the projection's own, or
+         *             one of the shorter chains it shares
+         * @param at   the position
+         * @param <K>  what the caller calls a position
+         */
+        record Along<K>(Core.FieldProjection.Steps upTo, K at) {
+
+            public Along {
+                Objects.requireNonNull(upTo, "a position along a projection is some of its names");
+                Objects.requireNonNull(at, "and it is some position");
+            }
+        }
+
         /** The position the value {@code e} came from without being one, or null. Asked only where
          *  nothing under {@code e} is a position. */
         K madeFrom(Core e, E at);
 
         /** The value {@code read}'s name denotes and what to read it in, or null where the name
          *  stands for something of its own. */
-        AffineForms.ReadThrough<E> readThrough(Core.Read read, E at);
+        ValueStanding.ReadThrough<E> readThrough(Core.Read read, E at);
 
         /** What {@code li}'s body is read in. */
         E inside(Core.LetIn li, E at);
@@ -387,12 +541,15 @@ public sealed interface ValueOrigin<K> {
     private static <K, E> ValueOrigin<K> of(Core raw, E at, Reading<K, E> reading,
                                             BindingWalk<ValueOrigin<K>> following) {
         Core e = Terms.asOperator(raw);
+        if (e instanceof Core.FieldProjection projection) {
+            return projected(projection, at, reading, following);
+        }
         K here = reading.positionOf(e, at);
         if (here != null) {
             return new IsAPosition<>(here);
         }
         if (e instanceof Core.Read read) {
-            AffineForms.ReadThrough<E> through = reading.readThrough(read, at);
+            ValueStanding.ReadThrough<E> through = reading.readThrough(read, at);
             if (through != null && following.enter(read.binding())) {
                 ValueOrigin<K> inside = following.readingOf(read.binding(), through.value(),
                         through.at(), () -> of(through.value(), through.at(), reading, following));
@@ -439,21 +596,9 @@ public sealed interface ValueOrigin<K> {
         // of, and the field the reader asked for is the one it is answered about — the other fields
         // of the construction hold none of the values the rule is over.
         if (e instanceof Core.FieldAccess access) {
-            ValueOrigin<K> target = of(access.target(), at, reading, following);
-            if (target instanceof Constructed<K> built) {
-                ValueOrigin<K> given = built.fields().get(access.field());
-                if (given == null) {
-                    // A construction holds every declared field and a field access names a field of
-                    // the type it reads, so a field missing here is this compiler disagreeing with
-                    // itself rather than a provenance nothing can state. Said as the one it is.
-                    throw new IllegalStateException("a construction of " + built.fields().keySet()
-                            + " was read for a field it has none of: " + access.field());
-                }
-                return given;
-            }
             // A field of anything else is the one child this node has, read once here rather than
             // walked again below.
-            return new Composed<>(List.of(target));
+            return fieldOf(of(access.target(), at, reading, following), access.field());
         }
         // What a {@code let} is made of is its body, read in the binding. The initializer is not a
         // part of the value: {@code let $x = a in 0} is zero, and reading both made a helper that
@@ -478,6 +623,74 @@ public sealed interface ValueOrigin<K> {
             return leafOf(e, at, reading);
         }
         return new Composed<>(partsOf(children, at, reading, following));
+    }
+
+    /**
+     * What {@code p} is made of: the rule for a field access below, asked of each of its names in
+     * turn.
+     *
+     * <p>A projection or one shorter than it that is a position is that position, and nothing
+     * under it is asked; which one is, is the reading's one answer ({@link Reading#positionAlong}).
+     * Where none is, what the base is made of is read, and each name taken off it is either the
+     * field a construction was given or one more value made of what it is read off — which is what
+     * the accesses written out come to. Taken along the names rather than on the stack, because
+     * how many there are is as long as the declarations chain.
+     *
+     * <p>The names past the last a construction answers come to what the first of them does
+     * ({@link #madeOf}), so the walk stops there and the names above a position are not walked.
+     */
+    private static <K, E> ValueOrigin<K> projected(Core.FieldProjection p, E at,
+                                                   Reading<K, E> reading,
+                                                   BindingWalk<ValueOrigin<K>> following) {
+        Reading.Along<K> found = reading.positionAlong(p, at);
+        if (found != null) {
+            // A position is no construction, so the names above it come to what one of them does.
+            IsAPosition<K> position = new IsAPosition<>(found.at());
+            return found.upTo() == p.steps() ? position : madeOf(position);
+        }
+        ValueOrigin<K> origin = of(p.base(), at, reading, following);
+        for (Core.FieldProjection.Step step : p.steps().inOrder()) {
+            if (!(origin instanceof Constructed<K>)) {
+                return madeOf(origin);
+            }
+            origin = fieldOf(origin, step.field());
+        }
+        return origin;
+    }
+
+    /**
+     * What a field read off {@code target} is made of: the expression a construction gave it, or a
+     * value made of what it is read off.
+     *
+     * <p>The one rule for a field, whether it is written as an access or stands among a
+     * projection's names, so the two spellings of one value are one origin.
+     */
+    private static <K> ValueOrigin<K> fieldOf(ValueOrigin<K> target, String field) {
+        if (!(target instanceof Constructed<K> built)) {
+            return madeOf(target);
+        }
+        ValueOrigin<K> given = built.fields().get(field);
+        if (given == null) {
+            // A construction holds every declared field and a field access names a field of the
+            // type it reads, so a field missing here is this compiler disagreeing with itself rather
+            // than a provenance nothing can state. Said as the one it is.
+            throw new IllegalStateException("a construction of " + built.fields().keySet()
+                    + " was read for a field it has none of: " + field);
+        }
+        return given;
+    }
+
+    /**
+     * A value made of {@code under}, which is not a construction: one layer over it, or {@code
+     * under} itself where it is already a value made of something.
+     *
+     * <p>A value made of one made of something is made of it the way the one under it is — what it
+     * is made from, whether an operation made it, which positions it names — so a layer over a
+     * layer says nothing one does not, and names read one after another as deep as a chain of
+     * declarations would hand every reader an origin as deep, to walk at each question.
+     */
+    private static <K> ValueOrigin<K> madeOf(ValueOrigin<K> under) {
+        return under instanceof Composed<K> ? under : new Composed<>(List.of(under));
     }
 
     /**
@@ -529,7 +742,7 @@ public sealed interface ValueOrigin<K> {
      */
     private static List<Core> decidedBy(Choice.Decides decidedBy) {
         return switch (decidedBy) {
-            case Choice.Decides.ACondition(Core cond, boolean _) -> List.of(cond);
+            case Choice.Decides.ACondition(Core.If fork, boolean _) -> List.of(fork.cond());
             case Choice.Decides.ACase(Core.Case _, Core scrutinee) -> List.of(scrutinee);
             // What the attempt tried to build is what its invariant was tested on, whichever way
             // the test went.

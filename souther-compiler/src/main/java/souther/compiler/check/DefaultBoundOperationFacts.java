@@ -13,6 +13,10 @@ import souther.compiler.DefaultStdlib;
  * something none of them varies in. A reader that binds against a library of its own asks the
  * binder with that library and holds the answer itself.
  *
+ * <p>What is proved of the operations the library writes is read off what proving them came to
+ * when this compiler was built ({@link LibraryProofsAsBuilt}), which is the same answer as proving
+ * them again and costs the start of a compilation nothing.
+ *
  * <p>What it publishes is a complete {@link BoundOperationFacts} or nothing at all: the holder's
  * class initializer runs the binding to completion before {@link #get} can return, so no reader
  * can catch the facts half held. That, and not an initialization order somewhere else, is what
@@ -26,8 +30,8 @@ public final class DefaultBoundOperationFacts {
 
     /** Bound when first asked for, not when this class is mentioned. */
     private static final class Holder {
-        private static final BoundOperationFacts INSTANCE =
-                OperationFactBinder.bindAll(DefaultStdlib.get());
+        private static final BoundOperationFacts INSTANCE = OperationFactBinder.bindAll(
+                DefaultStdlib.get(), LibraryProofsAsBuilt.shippedOrProving());
     }
 
     /** The facts, held to the shipped library. */

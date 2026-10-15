@@ -5,13 +5,16 @@ import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Predicate;
 
 /**
  * What a type guarantees of a value, asked one value at a time.
@@ -52,9 +55,9 @@ final class TypeGuarantees {
         this.predicates = predicates;
     }
 
-    /** What the declarations these guarantees are read against say. */
-    private PublishedDeclarations published() {
-        return clauses.source().published();
+    /** What a value of each sum these guarantees are read against can be. */
+    private SumCases sums() {
+        return clauses.source().sums();
     }
 
     /** What each name this reading goes through wraps, for the walk that takes the names off. */
@@ -89,11 +92,14 @@ final class TypeGuarantees {
      * asked about.
      */
     At at(Core root, Denotations denotations, PartsLeftOut withoutParts) {
-        ValueReading written = ValueReading.of(root.type(), inners(), kinds(), symbols, published());
+        ValueReading written = ValueReading.of(root.type(), inners(), kinds(), symbols, sums());
         Map<String, Core> values = new LinkedHashMap<>();
         List<At.Readable> readable = new ArrayList<>();
         for (Map.Entry<String, Type> field : written.named().entrySet()) {
-            Core value = new Core.FieldAccess(root, field.getKey(), field.getValue(), root.pos());
+            // One node however far down the root already is: a walk reaches a value one name at a
+            // time, as far as the declarations chain, and a value nested once per name would make
+            // every reader of a rule read at the bottom recurse that far.
+            Core value = Core.FieldProjection.then(root, field.getKey(), field.getValue());
             values.put(field.getKey(), value);
             readable.add(new At.Readable(field.getKey(), value, field.getValue()));
         }
@@ -156,7 +162,7 @@ final class TypeGuarantees {
     /** Whether {@code type} holds a rule that is not one this value already stated, nor one under a
      * name this reading already reaches. */
     private boolean beyond(Type type, ValueReading here, Set<Object> stated) {
-        ValueReading there = ValueReading.of(type, inners(), kinds(), symbols, published());
+        ValueReading there = ValueReading.of(type, inners(), kinds(), symbols, sums());
         for (ValueReading.Owner owner : there.owners()) {
             for (ClauseMeaning each : clauses.declared(owner.named())) {
                 if (!stated.contains(each.ref())) {
@@ -233,30 +239,43 @@ final class TypeGuarantees {
      * a rule the walk has already gone one name down to, and no row can discharge it.
      */
     boolean anyRuleUnder(Type type) {
-        return anyRuleUnder(type, new HashSet<>());
+        return anyRuleUnder(type, clauses.source(), owner -> !clauses.declared(owner).isEmpty());
     }
 
-    /** {@code seen} stops a type that holds its own kind. A name met on the way here was read where
-     * it was met, so what it holds is accounted for and reaching it again adds nothing. */
-    private boolean anyRuleUnder(Type type, Set<TypeSymbol> seen) {
-        ValueReading written = ValueReading.of(type, inners(), kinds(), symbols, published());
-        if (written.entering() != null && !seen.add(written.entering())) {
-            return false;
-        }
-        for (ValueReading.Owner owner : written.owners()) {
-            if (!clauses.declared(owner.named()).isEmpty()) {
-                return true;
+    /**
+     * The same, asked of {@code source} by a reader holding no reading of its own, with whether a
+     * declaration writes a rule answered by {@code writes}.
+     *
+     * <p>Here so that there is one closure over {@link ValueReading} and not two: a reader asking
+     * whether a reading would have anything to stop on is asking what a stop asks.
+     */
+    static boolean anyRuleUnder(Type type, RuleReadingSource source,
+                                Predicate<TypeSymbol.AtModule> writes) {
+        // `seen` stops a type that holds its own kind. A name met on the way here was read
+        // where it was met, so what it holds is accounted for and reaching it again adds nothing.
+        // On a stack of its own, because what is under a type is as deep as its declarations chain.
+        Set<TypeSymbol> seen = new HashSet<>();
+        Deque<Type> left = new ArrayDeque<>();
+        List<Type> under = new ArrayList<>();
+        left.push(type);
+        while (!left.isEmpty()) {
+            ValueReading written = ValueReading.of(left.pop(), source.inners(), source.kinds(),
+                    source.symbols(), source.sums());
+            if (written.entering() != null && !seen.add(written.entering())) {
+                continue;
             }
-        }
-        for (Type under : written.named().values()) {
-            if (anyRuleUnder(under, seen)) {
-                return true;
+            for (ValueReading.Owner owner : written.owners()) {
+                if (writes.test(owner.named())) {
+                    return true;
+                }
             }
-        }
-        for (Type under : written.handedOn()) {
-            if (anyRuleUnder(under, seen)) {
-                return true;
+            // Pushed last first, so what is under here is read in the order it is written.
+            under.addAll(written.named().values());
+            under.addAll(written.handedOn());
+            for (Type each : under.reversed()) {
+                left.push(each);
             }
+            under.clear();
         }
         return false;
     }

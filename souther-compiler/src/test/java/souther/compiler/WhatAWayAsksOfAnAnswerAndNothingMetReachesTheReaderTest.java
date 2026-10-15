@@ -10,6 +10,7 @@ import souther.compiler.query.RuleSearch;
 import souther.compiler.query.RuleSettlement;
 import souther.compiler.report.AdequacyReport;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -48,10 +49,32 @@ class WhatAWayAsksOfAnAnswerAndNothingMetReachesTheReaderTest {
 
             behavior decides : (at: Int) -> Answer
                 depends on look
-            let decides (at, look) = if look(at).k == look(at).j then Yes else No
+            let decides (at, look) = {
+                let found = look(at)
+                if found.k == found.j then Yes else No
+            }
             """;
 
-    /** And one the reading has no way of stating at all. */
+    /** And one the reading has no way of stating at all: what one dependency answered against what
+     *  another did. */
+    private static final String THE_ANSWER_AGAINST_ANOTHER = """
+            module example.against
+
+            data Reading = { n: Int, at: Int }
+            data Yes
+            data No
+            data Answer = Yes | No
+
+            behavior look : (at: Int) -> Reading
+            behavior peek : (at: Int) -> Reading
+
+            behavior decides : (at: Int) -> Answer
+                depends on look, peek
+            let decides (at, look, peek) = if look(at).n > peek(at).n then Yes else No
+            """;
+
+    /** A truth of a place inside the answer, which the reading states and the answer is composed
+     *  holding. */
     private static final String A_TRUTH_INSIDE_THE_ANSWER = """
             module example.inside
 
@@ -87,7 +110,10 @@ class WhatAWayAsksOfAnAnswerAndNothingMetReachesTheReaderTest {
 
             behavior decides : (at: Int) -> Answer
                 depends on look
-            let decides (at, look) = if look(at).n < look(at).m then Yes else No
+            let decides (at, look) = {
+                let found = look(at)
+                if found.n < found.m then Yes else No
+            }
             """;
 
     /**
@@ -117,11 +143,13 @@ class WhatAWayAsksOfAnAnswerAndNothingMetReachesTheReaderTest {
 
             behavior decides : (r: R, at: Int) -> Answer
                 depends on look
-            let decides (r, at, look) = if look(at).n < look(at).m then Yes else No
+            let decides (r, at, look) = {
+                let found = look(at)
+                if found.n < found.m then Yes else No
+            }
             """;
 
-    private static final String LEFT_OUT =
-            "not every condition on the way to the rule is one the row was composed against";
+    private static final String LEFT_OUT = "not composed against: ";
 
     /** What the composer could not carry is named, and where it is written. */
     @Test
@@ -132,20 +160,32 @@ class WhatAWayAsksOfAnAnswerAndNothingMetReachesTheReaderTest {
         assertTrue(said.contains("a comparison of places inside an answer whose values stand on no"
                         + " order this measures them on"),
                 () -> "in the words of the stage that let it go: " + said);
-        assertTrue(said.contains("13:40"),
+        assertTrue(said.contains("15:16"),
                 () -> "and at the place the condition is written: " + said);
     }
 
     /** And so is what the reading could not state. */
     @Test
     void aDemandTheReadingCannotStateIsNamedWhereItIsWritten() {
-        String said = whereNothingCouldShowARow(A_TRUTH_INSIDE_THE_ANSWER);
+        String said = whereNothingCouldShowARow(THE_ANSWER_AGAINST_ANOTHER);
 
         assertTrue(said.contains(LEFT_OUT), () -> said);
-        assertTrue(said.contains("a truth read off a place inside what a dependency answers"),
+        assertTrue(said.contains("a comparison over more than one answer"),
                 () -> "in the words of the stage that let it go: " + said);
-        assertTrue(said.contains("12:38"),
+        assertTrue(said.contains("13:46"),
                 () -> "and at the place the condition is written: " + said);
+    }
+
+    /**
+     * A truth of a place inside the answer is stated and composed against, so it is not among what
+     * a row was composed without.
+     */
+    @Test
+    void aTruthInsideTheAnswerIsNotLeftOut() {
+        String page = human(A_TRUTH_INSIDE_THE_ANSWER);
+
+        assertFalse(page.contains(LEFT_OUT),
+                () -> "the demand was stated and a value was composed against it: " + page);
     }
 
     /**
@@ -159,6 +199,26 @@ class WhatAWayAsksOfAnAnswerAndNothingMetReachesTheReaderTest {
     void aConditionTheAnswerSideTookUpIsNotReportedAsLeftOut() {
         String page = human(NUMBERS_COMPARED);
 
+        assertFalse(page.contains(LEFT_OUT),
+                () -> "the demand was stated and a value was composed against it: " + page);
+    }
+
+    /**
+     * Two calls of one dependency are two answers, and a row stands the dependency in with one
+     * value that answers both — so a comparison of two places across them is a comparison inside
+     * that value, stated and composed against like one written over a single call.
+     */
+    @Test
+    void aComparisonAcrossTwoCallsOfOneDependencyIsComposedInsideTheOneValue() {
+        String twoCalls = NUMBERS_COMPARED.replace("""
+                let decides (at, look) = {
+                    let found = look(at)
+                    if found.n < found.m then Yes else No
+                }""", """
+                let decides (at, look) = if look(at).n < look(at).m then Yes else No""");
+        assertTrue(twoCalls.contains("look(at).n < look(at).m"), twoCalls);
+
+        String page = human(twoCalls);
         assertFalse(page.contains(LEFT_OUT),
                 () -> "the demand was stated and a value was composed against it: " + page);
     }
@@ -201,6 +261,7 @@ class WhatAWayAsksOfAnAnswerAndNothingMetReachesTheReaderTest {
                 """);
 
         List<RuleSettlement> unsettled = behavior.ruleSettlements().values().stream()
+                .map(each -> each.answer().settlement())
                 .filter(each -> !(each.requirement() instanceof RuleRequirement.Required))
                 .toList();
         assertFalse(unsettled.isEmpty(), "a rule of this body is one no row was seen taking");
@@ -219,14 +280,22 @@ class WhatAWayAsksOfAnAnswerAndNothingMetReachesTheReaderTest {
 
     /** The line of the page that says nothing could show a row can be written at the rules. */
     private static String whereNothingCouldShowARow(String model) {
+        List<String> entry = new ArrayList<>();
         for (String line : human(model).split("\n")) {
-            if (line.contains("nothing could show a row can be written at")
+            if (entry.isEmpty() && line.contains("nothing could show a row can be written at")
                     && line.contains("decision rule")) {
-                return line;
+                entry.add(line);
+            } else if (!entry.isEmpty() && line.startsWith("          · ")) {
+                entry.add(line);
+            } else if (!entry.isEmpty()) {
+                break;
             }
         }
-        throw new AssertionError("this model has rules nothing composed a row for:\n"
-                + human(model));
+        if (entry.isEmpty()) {
+            throw new AssertionError("this model has rules nothing composed a row for:\n"
+                    + human(model));
+        }
+        return String.join("\n", entry);
     }
 
     private static AdequacyReport.BehaviorReport reportOf(String source) {

@@ -47,6 +47,20 @@ class SoutherJvmAbiTest {
         rows.add(new Object[] {new GeneratedClass.BehaviorImpl("在庫", "引き当てる"),
                 "在庫.引き当てる$Impl"});
 
+        // The upper-case form is Unicode 18.0.0's simple mapping and not the running JDK's.
+        // U+0277 has had no upper case until 18.0.0 gave it U+A7DD, which no JDK of an earlier
+        // Unicode knows.
+        rows.add(new Object[] {new GeneratedClass.BehaviorInterface("shop", "ɷrder"),
+                "shop.꟝rder"});
+        // The whole first character, past the basic plane too: U+10428 maps to U+10400, which
+        // neither half of its pair does on its own.
+        rows.add(new Object[] {new GeneratedClass.BehaviorInterface("shop",
+                new String(Character.toChars(0x10428)) + "rder"),
+                "shop." + new String(Character.toChars(0x10400)) + "rder"});
+        // And one letter, never the several a full mapping gives: ß has no simple upper case.
+        rows.add(new Object[] {new GeneratedClass.BehaviorInterface("shop", "ße"),
+                "shop.ße"});
+
         // A bridge case belongs to the module that emits it, not to the member's own module.
         rows.add(new Object[] {new GeneratedClass.BridgeCase("ship", TypeSymbols.declared(new TypeKey("inv", "Shortage"))),
                 "ship.ShortageCase"});

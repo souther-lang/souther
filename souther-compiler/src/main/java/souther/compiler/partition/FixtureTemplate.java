@@ -3,13 +3,16 @@ package souther.compiler.partition;
 import souther.compiler.ast.Hir;
 import souther.compiler.ast.WrittenName;
 import souther.compiler.check.Carrier;
+import souther.compiler.cst.CstLexer;
 import souther.compiler.diag.Region;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Place;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.inputs.TermPath;
 import souther.compiler.types.ApplicationOrigin;
 import souther.compiler.types.FixtureReferenceOrigin;
 import souther.compiler.types.ReachName;
+import souther.compiler.types.RuleOrigin;
 import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.types.TypeReachName;
 import souther.compiler.types.ValueName;
@@ -20,6 +23,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.SequencedMap;
+import java.util.function.UnaryOperator;
 
 /**
  * A value written the way a row writes it — {@code Amount(0)}, {@code None}, {@code Overseas} — held
@@ -99,31 +103,8 @@ public record FixtureTemplate(String text, Hir.Expr value) {
      * the line the row is on as well.
      */
     public static FixtureTemplate string(String value) {
-        return new FixtureTemplate(quoted(value), new Hir.StringLit(value, NOWHERE, NO_SOURCE));
-    }
-
-    /**
-     * {@code value} as the language writes a string literal, quotes and escapes and all.
-     *
-     * <p>Here and not at each place that writes one. Every writer of a literal wants the same
-     * escapes for the same reason — what it writes is pasted back and read as the value it was made
-     * from — and a second spelling of the rule is a place where a value with a quote in it comes
-     * out as source that says something else, or does not parse at all.
-     */
-    public static String quoted(String value) {
-        StringBuilder written = new StringBuilder("\"");
-        for (int i = 0; i < value.length(); i++) {
-            char c = value.charAt(i);
-            switch (c) {
-                case '\\' -> written.append("\\\\");
-                case '"' -> written.append("\\\"");
-                case '\n' -> written.append("\\n");
-                case '\t' -> written.append("\\t");
-                case '\r' -> written.append("\\r");
-                default -> written.append(c);
-            }
-        }
-        return written.append('"').toString();
+        return new FixtureTemplate(CstLexer.literalOf(value),
+                new Hir.StringLit(value, NOWHERE, NO_SOURCE));
     }
 
     public static FixtureTemplate bool(boolean value) {
@@ -160,7 +141,7 @@ public record FixtureTemplate(String text, Hir.Expr value) {
         // The namespace applied, which builds a primitive rather than reaching an operation — so
         // the reference says namespace, and no reader that emits calls can be handed it.
         ValueName.Stdlib.Namespace namespace = ValueName.Stdlib.namespace(type);
-        return new FixtureTemplate(type + "(\"" + iso + "\")",
+        return new FixtureTemplate(type + "(" + CstLexer.literalOf(iso) + ")",
                 Hir.Apply.synthetic(type, new ReachName.TheNamespace(namespace), null,
                         new ApplicationOrigin.ComposedFixture(),
                         List.of(new Hir.StringLit(iso, NOWHERE, NO_SOURCE)), NOWHERE, NO_SOURCE));
@@ -347,6 +328,50 @@ public record FixtureTemplate(String text, Hir.Expr value) {
                 type.rendered() + " { ..." + base.text() + ", " + String.join(", ", written) + " }",
                 Hir.NewData.syntheticWithEveryFieldWritten(Hir.Name.reached(type, NOWHERE), inits,
                         List.of(spread), NOWHERE, NO_SOURCE));
+    }
+
+    /**
+     * {@code List.map(each -> edited, list)} — a list the model already states, with one edit made
+     * to every element of it.
+     *
+     * <p>What a spread is for a record, for a list. A position under {@code [*]} is a position of
+     * every element and of no element in particular ({@link TermPath.Step.Element}),
+     * so moving it is moving it in each of them, and the elements stay as many as the list had and
+     * everything else about them stays what the model put there.
+     *
+     * <p>The text is a row an author can paste, and is read as one: through the method the row's
+     * operand is compiled to. The tree is read by {@code FixtureReader}, which applies {@code edited}
+     * to each element of what it read {@code list} as, and evaluates nothing else — so {@code edited}
+     * is a fixture over {@code each} and nothing more, and the application says it was composed here
+     * ({@link ApplicationOrigin.ComposedFixture}), which is what that reader is asked about.
+     *
+     * <p>Null where {@code edit} is, which is an element this cannot be written for.
+     *
+     * @param list       the list being edited, which a row can name
+     * @param name       what an element is called while it is edited
+     * @param edit       the edit, written over the element it is handed
+     * @param references the run's minter, which says which binding the element is and which
+     *                   reference of {@code List.map} this is
+     */
+    public static FixtureTemplate elementWise(FixtureTemplate list, String name,
+                                              UnaryOperator<FixtureTemplate> edit,
+                                              FixtureReferences references) {
+        Hir.Binder each = references.binder(name, NOWHERE);
+        FixtureTemplate edited = edit.apply(
+                new FixtureTemplate(each.name(), Hir.Var.local(each, NOWHERE)));
+        if (edited == null) {
+            return null;
+        }
+        ReachName.OfLibrary map =
+                new ReachName.OfLibrary(ApplicationOrigin.ComposedFixture.ELEMENT_WISE);
+        Hir.Block block = new Hir.Block(List.of(each), edited.value(), RuleOrigin.unwritten(),
+                null, NOWHERE, NO_SOURCE);
+        return new FixtureTemplate(
+                map.rendered() + "(" + each.name() + " -> " + edited.text() + ", " + list.text()
+                        + ")",
+                Hir.Apply.synthetic(map.rendered(), map, references.next(),
+                        new ApplicationOrigin.ComposedFixture(), List.of(block, list.value()),
+                        NOWHERE, NO_SOURCE));
     }
 
     /** A record, field by field, in the order the fields were declared — which the fields are handed

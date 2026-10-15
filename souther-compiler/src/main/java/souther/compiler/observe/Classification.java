@@ -155,8 +155,8 @@ public sealed interface Classification {
         return java.util.List.copyOf(out);
     }
 
-    static Classification unreadable(Incompleteness.Code code, String behavior, String path) {
-        return new Unclassified(Incompleteness.atPosition(code, behavior, path));
+    static Classification unreadable(Incompleteness.Cause cause, String behavior, String path) {
+        return new Unclassified(Incompleteness.atPosition(cause, behavior, path));
     }
 
     default boolean isClassified() {

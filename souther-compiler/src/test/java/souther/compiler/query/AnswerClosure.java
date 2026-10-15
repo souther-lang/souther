@@ -430,7 +430,7 @@ final class AnswerClosure {
                 m("souther.compiler.partition.Recognition$OfASet", "values"),
                 m("souther.compiler.values.ValueSet$Matching", "language"),
                 m("souther.compiler.regex.Language", "machine")));
-        return new Known(at(question, "souther.compiler.regex.Automaton",
+        return new Known(at(question, "net.unit8.notation199x.pattern.Automaton",
                 way.toArray(new Locus.Step[0])), A_MACHINE_UNDER_A_LANGUAGE, Set.of(met));
     }
 
@@ -447,7 +447,7 @@ final class AnswerClosure {
         way.addAll(List.of(
                 m("souther.compiler.values.ValueSet$Matching", "language"),
                 m("souther.compiler.regex.Language", "machine")));
-        return new Known(at(question, "souther.compiler.regex.Automaton",
+        return new Known(at(question, "net.unit8.notation199x.pattern.Automaton",
                 way.toArray(new Locus.Step[0])), A_MACHINE_UNDER_A_LANGUAGE, Set.of(met));
     }
 
@@ -663,7 +663,7 @@ final class AnswerClosure {
     /** The machine a language is held as, under the class that denotes a pattern's strings. */
     private static void theMachineUnderALanguage(List<KnownDeclared> into, String question,
                                                  TypePath.Step... under) {
-        into.add(new KnownDeclared(declared(question, "souther.compiler.regex.Automaton",
+        into.add(new KnownDeclared(declared(question, "net.unit8.notation199x.pattern.Automaton",
                 then(under, arm("souther.compiler.values.ValueSet$Matching"),
                         part("souther.compiler.values.ValueSet$Matching", "language"),
                         part("souther.compiler.regex.Language", "machine"))),
@@ -884,6 +884,38 @@ final class AnswerClosure {
                     part("souther.compiler.partition.BehaviorInputs", "rules"),
                     part("souther.compiler.check.RuleReadingSource", "declarations"),
                     part("souther.compiler.check.DeclarationAccess", "layout")),
+            // And what a value of each sum among them can be. One input, and the answer is read off
+            // the sum's declaration and the sums under it, so what a reading holds is a way to ask.
+            generationReader("souther.compiler.check.SumCases",
+                    Traversal.Why.NOTHING_CLOSES_IT,
+                    part("souther.compiler.partition.MeasuredInput", "written"),
+                    part("souther.compiler.partition.BehaviorInputs", "rules"),
+                    part("souther.compiler.check.RuleReadingSource", "declarations"),
+                    part("souther.compiler.check.DeclarationAccess", "sums")),
+            // And which cases each sum lists, one layer. One input, and the answer is read off the
+            // sum's declaration as its names resolved, so what a reading holds is a way to ask.
+            generationReader("souther.compiler.check.ListedCases",
+                    Traversal.Why.NOTHING_CLOSES_IT,
+                    part("souther.compiler.partition.MeasuredInput", "written"),
+                    part("souther.compiler.partition.BehaviorInputs", "rules"),
+                    part("souther.compiler.check.RuleReadingSource", "declarations"),
+                    part("souther.compiler.check.DeclarationAccess", "listed")),
+            // And which enumerations list each of them. One input, and the answer is read off the
+            // sums of the value's module, so what a reading holds is a way to ask.
+            generationReader("souther.compiler.check.EnumerationListings",
+                    Traversal.Why.NOTHING_CLOSES_IT,
+                    part("souther.compiler.partition.MeasuredInput", "written"),
+                    part("souther.compiler.partition.BehaviorInputs", "rules"),
+                    part("souther.compiler.check.RuleReadingSource", "declarations"),
+                    part("souther.compiler.check.DeclarationAccess", "enumerations")),
+            // And which case each behavior's answer is. One input, and the answer is read off the
+            // body of the behavior asked about, so what a reading holds is a way to ask.
+            generationReader("souther.compiler.check.BehaviorAnswers",
+                    Traversal.Why.NOTHING_CLOSES_IT,
+                    part("souther.compiler.partition.MeasuredInput", "written"),
+                    part("souther.compiler.partition.BehaviorInputs", "rules"),
+                    part("souther.compiler.check.RuleReadingSource", "declarations"),
+                    part("souther.compiler.check.DeclarationAccess", "answers")),
             generationReader("souther.compiler.inputs.ReadQuantities",
                     part("souther.compiler.partition.MeasuredInput", "quantities"),
                     arm("souther.compiler.inputs.ReadQuantities")),
@@ -963,7 +995,7 @@ final class AnswerClosure {
         theMachineUnderALanguage(out, Q + "Machines$OfDeclaration",
                 part(facts, "extents"), MAP_KEY);
         out.add(new KnownDeclared(declared(Q + "Machines$OfDeclaration",
-                "souther.compiler.regex.Automaton",
+                "net.unit8.notation199x.pattern.Automaton",
                 part(facts, "inside"), MAP_KEY,
                 part(facts + "$Stretch", "language"),
                 part("souther.compiler.regex.Language", "machine")),

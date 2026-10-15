@@ -2,22 +2,30 @@ package souther.compiler.inputs;
 
 import souther.compiler.check.Carrier;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.DateTranslation;
 import souther.compiler.numeric.Dates;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.UnheldNumber;
+import souther.compiler.numeric.ValueTransformation;
+import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.semantics.Arithmetic;
+import souther.compiler.semantics.CodePointClass;
 import souther.compiler.semantics.TakenArguments;
 import souther.compiler.semantics.TakenAs;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
+import java.util.function.Function;
 
 import souther.compiler.inputs.NumericTerm.Reading;
-import souther.unicode.ScalarValues;
+import net.unit8.notation199x.ScalarValues;
 
 /**
  * The number a term names at an observation of its position, or why there is none.
@@ -58,7 +66,7 @@ final class TermReading {
         Objects.requireNonNull(at, "a term is read at a value the walk came to");
         Membership.Incomplete unread = Membership.unread(at);
         if (unread != null) {
-            return new Reading.Missing(unread.code());
+            return new Reading.Missing(unread.cause());
         }
         // A newtype is not a step in a path, so what sits at the position may be the construction and
         // the value one inside it. Asked again of what is inside rather than walked into: a limit
@@ -70,8 +78,95 @@ final class TermReading {
         }
         return switch (term) {
             case NumericTerm.ValueOf _ -> asItStands(at, observed);
-            case NumericTerm.TakenOf taken -> taken(taken.takenAs(), taken.arguments(), at, on);
+            case NumericTerm.TakenOf taken ->
+                    taken(taken.takenAs(), taken.arguments(), taken.transformation(), at, on);
+            case NumericTerm.CodePointClassCount count -> codePointsOfAClass(count.counted(), at);
         };
+    }
+
+    /**
+     * How many of the values {@code every} holds are the value {@code own} is.
+     *
+     * <p>Equal as the place's order has them: two values are one where the order puts them at one
+     * place, which is how the language holds a decimal's amount and the value inside a newtype,
+     * and so what a fold that files a counter under each key files them by. Read as the
+     * observation's own equality, two decimals of one amount written to different scales would be
+     * two values. A value the order puts nowhere, or one that was not read whole at any depth of
+     * the newtypes around it, is not counted as the same or as another: no one number is read of
+     * it, which is a reading that could not be made and not a statement that there is no number.
+     * {@code every} holds {@code own} among them, since an element is one of the elements, so the
+     * number is at least one.
+     */
+    static Reading among(TermOrders on, ObservedValue own, List<ObservedValue> every) {
+        Objects.requireNonNull(own, "a term is read at a value the walk came to");
+        Objects.requireNonNull(every, "and among the values a walk came to");
+        Where ownWhere = whereTheOrderPuts(on.observed(), own);
+        if (!(ownWhere instanceof Where.At(Place ownPlace))) {
+            return ((Where.Nowhere) ownWhere).why();
+        }
+        long same = 0;
+        for (ObservedValue each : every) {
+            Objects.requireNonNull(each, "every value the walk came to is a value");
+            switch (whereTheOrderPuts(on.observed(), each)) {
+                case Where.At(Place place) -> {
+                    if (place.sameAs(ownPlace)) {
+                        same++;
+                    }
+                }
+                case Where.Nowhere nowhere -> {
+                    return nowhere.why();
+                }
+            }
+        }
+        return new Reading.Number(Count.of(same));
+    }
+
+    /** Where an order puts a value, or why it puts it nowhere. */
+    private sealed interface Where {
+
+        record At(Place place) implements Where {}
+
+        record Nowhere(Reading why) implements Where {}
+    }
+
+    /**
+     * Where {@code observed} puts {@code value}, read through each newtype around it as {@link
+     * #at} reads one: whether what stands at each depth was read whole is asked again at that
+     * depth, since a newtype that was read may hold a value that was not.
+     */
+    private static Where whereTheOrderPuts(Carrier observed, ObservedValue value) {
+        ObservedValue at = value;
+        while (true) {
+            Membership.Incomplete unread = Membership.unread(at);
+            if (unread != null) {
+                return new Where.Nowhere(new Reading.Missing(unread.cause()));
+            }
+            if (at instanceof ObservedValue.Constructed c && c.field("value") != null) {
+                at = c.field("value");
+            } else {
+                break;
+            }
+        }
+        Place place = observed == null ? null : observed.placeOf(at);
+        return place == null
+                ? new Where.Nowhere(new Reading.Missing(
+                        Incompleteness.Cause.of(Incompleteness.Code.VALUE_UNREADABLE)))
+                : new Where.At(place);
+    }
+
+    /**
+     * How many of the code points a string holds are in a class.
+     *
+     * <p>Counted in scalar values, as {@code String.length} counts, and against the one whitespace
+     * alphabet the library's own operations scan with ({@link CodePointClass}). What is read is the
+     * string as the row wrote it, so a count read here is the count the run time's own scan of that
+     * string comes to.
+     */
+    private static Reading codePointsOfAClass(CodePointClass counted, ObservedValue at) {
+        return at instanceof ObservedValue.Text text
+                ? new Reading.Number(Count.of(text.value().codePoints()
+                        .filter(counted::contains).count()))
+                : new Reading.NotNumber();
     }
 
     /**
@@ -100,14 +195,127 @@ final class TermReading {
             Objects.requireNonNull(each, "every value of a run the walk came to is a value");
             Membership.Incomplete unread = Membership.unread(each);
             if (unread != null) {
-                return new Reading.Missing(unread.code());
+                return new Reading.Missing(unread.cause());
             }
         }
         return switch (term.takenAs()) {
             case TakenAs.TheSumOfWhatItHolds _ -> addedUp(values, on);
             case TakenAs.HowManyItHolds _, TakenAs.PartOfTime _, TakenAs.PartOfDate _,
-                    TakenAs.TheTruncatingQuotient _ -> new Reading.NotNumber();
+                    TakenAs.TheTruncatingQuotient _, TakenAs.TheFloorRemainder _ ->
+                    new Reading.NotNumber();
         };
+    }
+
+    /**
+     * The number a term names over what a walk computed of each element, or why there is none.
+     *
+     * <p>One reading per element, each answering what stands at a field of that element, because
+     * the computation reads several of them and values gathered field by field would pair one
+     * element's number with another's. What an element comes to is the computation's, applied to
+     * the numbers its fields hold; what is added up is those, in the exact arithmetic.
+     *
+     * <p>An element whose computed number the carrier of what the walk answers cannot hold is one
+     * the program stops at rather than one it answers, so the row has no number for the run. Read as
+     * the exact sum it would be a total the program never returns.
+     */
+    static Reading overElements(TermOrders on,
+                                List<Function<ElementProjection, ObservedValue>> each) {
+        NumericTerm.TakenOver term = (NumericTerm.TakenOver) on.term();
+        Objects.requireNonNull(each, "a term is read over the elements a walk came to");
+        if (!(term.source() instanceof RunSource.ComputedOccurrences computed)
+                || !(term.takenAs() instanceof TakenAs.TheSumOfWhatItHolds)) {
+            return new Reading.NotNumber();
+        }
+        Carrier answeredPerElement = on.observed();
+        if (answeredPerElement == null) {
+            return new Reading.NotNumber();
+        }
+        List<ExactRatio> terms = new ArrayList<>();
+        for (Function<ElementProjection, ObservedValue> element : each) {
+            // The fields are asked for as the computation needs them, so what a row holds at a
+            // field the element's own choice does not reach is no part of this element's number.
+            OneElement fields = new OneElement(on, element);
+            ExactAnswer<ExactRatio> made =
+                    computed.computation().at(fields::number, fields::flag);
+            if (made == null) {
+                return fields.stopped != null ? fields.stopped : new Reading.NotNumber();
+            }
+            if (!(made instanceof ExactAnswer.Held<ExactRatio> exact)) {
+                return new Reading.NotWorkedOut(
+                        ((ExactAnswer.Unheld<ExactRatio>) made).why());
+            }
+            // The one the program computes, which is what the carrier of the answer holds.
+            switch (exact.value().writtenDecimal()) {
+                case ExactAnswer.Unheld<Optional<BigDecimal>> unheld -> {
+                    return new Reading.NotWorkedOut(unheld.why());
+                }
+                case ExactAnswer.Held<Optional<BigDecimal>> written -> {
+                    if (written.value().isEmpty()) {
+                        return new Reading.NotWorkedOut(UnheldNumber.NO_REPRESENTATION_EXISTS);
+                    }
+                    if (answeredPerElement.onTheGrid(new Count(written.value().get())) == null) {
+                        return new Reading.NotNumber();
+                    }
+                }
+            }
+            terms.add(exact.value());
+        }
+        return sumOf(terms);
+    }
+
+    /**
+     * What one element holds at the fields a computation asks it for, and why it stopped where it
+     * did.
+     *
+     * <p>A field answered as nothing records why no number came of it and says nothing to the
+     * computation, which gives up on that element; the reading is then what was recorded and not a
+     * guess at what a field with no value would have meant.
+     */
+    private static final class OneElement {
+
+        private final TermOrders on;
+        private final Function<ElementProjection, ObservedValue> element;
+        private Reading stopped;
+
+        OneElement(TermOrders on, Function<ElementProjection, ObservedValue> element) {
+            this.on = on;
+            this.element = element;
+        }
+
+        ExactRatio number(ElementProjection field) {
+            ObservedValue at = held(field);
+            Carrier carrier = at == null ? null : on.fieldCarrier(field);
+            Place place = carrier == null ? null : carrier.placeOf(at);
+            if (at != null && !(place instanceof Count)) {
+                stopped = new Reading.NotNumber();
+            }
+            return place instanceof Count count ? count.exactly() : null;
+        }
+
+        Boolean flag(ElementProjection field) {
+            ObservedValue at = held(field);
+            if (at != null && !(at instanceof ObservedValue.Bool)) {
+                stopped = new Reading.NotNumber();
+            }
+            return at instanceof ObservedValue.Bool set ? set.value() : null;
+        }
+
+        /** The value at the field, or null with the reason recorded where there is none to use. */
+        private ObservedValue held(ElementProjection field) {
+            ObservedValue at = element.apply(field);
+            // A field the element holds no value at is an element this is no number of, as an
+            // observation of the wrong shape is.
+            if (at == null) {
+                stopped = new Reading.NotNumber();
+                return null;
+            }
+            Membership.Incomplete unread = Membership.unread(at);
+            if (unread != null) {
+                stopped = new Reading.Missing(unread.cause());
+                return null;
+            }
+            return at;
+        }
     }
 
     /** The number the term is, where the term is what the location holds. */
@@ -135,15 +343,41 @@ final class TermReading {
      * nothing to say so with — and a container is written on no order at all, so the one that adds
      * its elements up is handed nothing.
      */
-    private static Reading taken(TakenAs how, TakenArguments arguments, ObservedValue at,
-                                 TermOrders on) {
+    private static Reading taken(TakenAs how, TakenArguments arguments, ValueTransformation from,
+                                 ObservedValue at, TermOrders on) {
         return switch (how) {
             case TakenAs.HowManyItHolds _ -> howMany(at);
             case TakenAs.TheSumOfWhatItHolds _ -> addedUp(at, on);
             case TakenAs.PartOfTime taken -> partOfTime(taken.part(), at, on.observed());
-            case TakenAs.PartOfDate taken -> partOfDate(taken.part(), at, on.observed());
+            case TakenAs.PartOfDate taken -> partOfDate(taken.part(), from, at, on.observed());
             case TakenAs.TheTruncatingQuotient taken ->
                     quotient(taken.read(arguments), at, on.observed());
+            case TakenAs.TheFloorRemainder taken ->
+                    remainder(taken.read(arguments), at, on.observed());
+        };
+    }
+
+    /**
+     * The remainder of an observed value by the divisor the term carries, floored.
+     *
+     * <p>Divided the way the operation divides, so what is read off a row is the number that row's
+     * run computes. Both ends are the order the value is written on, as a quotient's are. No divisor
+     * is a term nothing built, and is answered as an observation of the wrong shape is.
+     */
+    private static Reading remainder(BigDecimal by, ObservedValue at, Carrier observed) {
+        if (observed == null || by == null || by.signum() == 0) {
+            return new Reading.NotNumber();
+        }
+        Place read = observed.placeOf(at);
+        if (!(read instanceof Count count)) {
+            return new Reading.NotNumber();
+        }
+        return switch (Arithmetic.AFloorRemainder.remainderOf(count.at(), by)) {
+            case ExactAnswer.Unheld<BigDecimal> unheld -> new Reading.NotWorkedOut(unheld.why());
+            case ExactAnswer.Held<BigDecimal> held -> {
+                Place remainder = observed.onTheGrid(new Count(held.value()));
+                yield remainder == null ? new Reading.NotNumber() : new Reading.Number(remainder);
+            }
         };
     }
 
@@ -231,11 +465,11 @@ final class TermReading {
         if (elements == null) {
             return new Reading.NotNumber();
         }
-        ExactRatio total = ExactRatio.ZERO;
+        List<ExactRatio> terms = new ArrayList<>();
         for (ObservedValue each : values) {
             Membership.Incomplete unread = Membership.unread(each);
             if (unread != null) {
-                return new Reading.Missing(unread.code());
+                return new Reading.Missing(unread.cause());
             }
             // Through the name an element is written under, as the one value a place holds is read
             // through it. A run of a newtype over a whole number holds constructions, and the
@@ -246,22 +480,41 @@ final class TermReading {
             if (!(read instanceof Count count)) {
                 return new Reading.NotNumber();
             }
-            // A container may hold a model's own decimals, spaced as widely apart in scale as any
-            // two of them this compiler ever adds — the same hazard `check.ConstantAlgebra` guards
-            // against when a rule adds two of them. The values are numbers and the sum is a number
-            // of them; what a sum this wide meets is the exact arithmetic's own limit and not a
-            // question about whether this term is one, so it is read as `NotWorkedOut` rather than
-            // let throw or folded into a sentence that says the values are not numbers at all.
-            ExactAnswer<ExactRatio> summed = total.plus(count.exactly());
-            if (summed instanceof ExactAnswer.Unheld<ExactRatio> unheld) {
+            terms.add(count.exactly());
+        }
+        return sumOf(terms);
+    }
+
+    /**
+     * What the numbers add up to, as the number a term answers.
+     *
+     * <p>One sum of them all, for both of the readers that gather numbers a run holds: the one that
+     * reads a value at a place of each element and the one that computes one from several places of
+     * it. The two are one account of one operation, so what a sum too wide for the exact arithmetic
+     * comes to is one answer.
+     */
+    private static Reading sumOf(List<ExactRatio> terms) {
+        // A container may hold a model's own decimals, spaced as widely apart in scale as any two
+        // of them this compiler ever adds — the same hazard `check.ConstantAlgebra` guards against
+        // when a rule adds two of them. The values are numbers and the sum is a number of them;
+        // what a sum this wide meets is the exact arithmetic's own limit and not a question about
+        // whether a term is one, so it is read as `NotWorkedOut` rather than let throw or folded
+        // into a sentence that says the values are not numbers at all. One sum of them all, so
+        // whether it is held does not turn on the order the container holds them in.
+        ExactRatio total;
+        switch (ExactRatio.sum(terms)) {
+            case ExactAnswer.Held<ExactRatio> held -> total = held.value();
+            case ExactAnswer.Unheld<ExactRatio> unheld -> {
                 return new Reading.NotWorkedOut(unheld.why());
             }
-            total = ((ExactAnswer.Held<ExactRatio>) summed).value();
         }
-        BigDecimal written = total.asWrittenDecimal();
-        return written == null
-                ? new Reading.NotWorkedOut(UnheldNumber.NO_REPRESENTATION_EXISTS)
-                : new Reading.Number(new Count(written));
+        return switch (total.writtenDecimal()) {
+            case ExactAnswer.Unheld<Optional<BigDecimal>> unheld ->
+                    new Reading.NotWorkedOut(unheld.why());
+            case ExactAnswer.Held<Optional<BigDecimal>> held -> held.value().isEmpty()
+                    ? new Reading.NotWorkedOut(UnheldNumber.NO_REPRESENTATION_EXISTS)
+                    : new Reading.Number(new Count(held.value().get()));
+        };
     }
 
     /**
@@ -291,7 +544,8 @@ final class TermReading {
         // about the number and not the places it came written to, and the whole number of this
         // part's seconds in it is one the exact arithmetic says it could not hold rather than
         // one a decimal division throws over.
-        return switch (count.exactly().dividedBy(ExactRatio.of(part.seconds())).truncated()) {
+        return switch (count.exactly().dividedBy(ExactRatio.of(part.seconds()))
+                .flatMap(ExactRatio::truncated)) {
             case ExactAnswer.Unheld<BigInteger> unheld -> new Reading.NotWorkedOut(unheld.why());
             case ExactAnswer.Held<BigInteger> whole -> new Reading.Number(Count.of(new BigDecimal(
                     whole.value().remainder(BigInteger.valueOf(part.many())))));
@@ -312,7 +566,8 @@ final class TermReading {
      * travels on, and for the same reason: a line at the twelfth month is not a line at the twelfth
      * day.
      */
-    private static Reading partOfDate(TakenAs.DatePart part, ObservedValue at, Carrier observed) {
+    private static Reading partOfDate(TakenAs.DatePart part, ValueTransformation from,
+                                      ObservedValue at, Carrier observed) {
         if (observed == null) {
             return new Reading.NotNumber();
         }
@@ -323,11 +578,36 @@ final class TermReading {
         if (!(read instanceof Count count) || observed.onTheGrid(count) == null) {
             return new Reading.NotNumber();
         }
-        java.time.LocalDate date = Dates.dateAt(count);
+        Count moved = from instanceof ValueTransformation.Identity ? count : movedBy(from, count);
+        if (moved == null) {
+            // The date is one the shifts that made the value this is taken of stop at: the program
+            // aborts before there is a date to take a part of, as it does for a quotient past what
+            // a whole number holds.
+            return new Reading.NotWorkedOut(UnheldNumber.NO_REPRESENTATION_EXISTS);
+        }
+        java.time.LocalDate date = Dates.dateAt(moved);
         return new Reading.Number(Count.of(switch (part) {
             case YEAR -> date.getYear();
             case MONTH -> date.getMonthValue();
             case DAY -> date.getDayOfMonth();
         }));
+    }
+
+    /**
+     * The day {@code day} becomes under {@code from}, or null where some step of it is not defined
+     * there.
+     *
+     * <p>Null is the answer of the program the value was made by and not a gap in what is read: the
+     * date is one it never gets past, so there is no date to take a part of.
+     */
+    private static Count movedBy(ValueTransformation from, Count day) {
+        DateTranslation translation = from.translation();
+        // A day of a date the carrier holds, which is a whole number inside the calendar's range,
+        // so the whole number it truncates to is the day itself.
+        if (!(day.exactly().truncated() instanceof ExactAnswer.Held<BigInteger> whole)) {
+            return null;
+        }
+        long origin = whole.value().longValue();
+        return translation.definedAt(origin) ? Count.of(origin + translation.offsetDays()) : null;
     }
 }

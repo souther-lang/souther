@@ -45,6 +45,10 @@ class WhereAClauseIsReadIntoItsShapeIsWrittenDownTest {
     private record Licence(String who, int calls, String why) { }
 
     private static final List<Licence> MAY_READ = List.of(
+            new Licence("souther.compiler.check.BooleanMeaning.underADenial", 1,
+                    "what a truth another package's walk holds stands over once its denials are"
+                            + " off, read under the way that walk met it — the polarity is the"
+                            + " caller's and comes back turned, and no part is numbered or filed"),
             new Licence("souther.compiler.check.ClauseReading.read", 1,
                     "the fold every reading of a clause is written as, which reads the shape and"
                             + " hands each reading its parts"),

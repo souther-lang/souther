@@ -5,7 +5,6 @@ import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.check.RuleCitation;
 import souther.compiler.check.RuleRef;
 import souther.compiler.check.UnreadComparison;
-import souther.compiler.core.Core;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.PredicateStatement;
 import souther.compiler.check.StatedContract;
@@ -13,6 +12,7 @@ import souther.compiler.check.Symbols;
 import souther.compiler.check.StringPredicates;
 import souther.compiler.check.ValueOrigin;
 import souther.compiler.inputs.BlockReason;
+import souther.compiler.inputs.Denotation;
 import souther.compiler.inputs.FilingCoordinate;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.NumericTerm;
@@ -27,7 +27,6 @@ import souther.compiler.values.Sameness;
 import souther.compiler.types.BindingId;
 
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -35,7 +34,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.SequencedMap;
 import java.util.Set;
-import java.util.function.Function;
 
 /**
  * What a behavior's rules about the strings at its positions state of those positions.
@@ -193,6 +191,9 @@ public final class BehaviorSetStatements {
      * here so that what is stated of one position is what the two come to between them. Read apart,
      * a term written about in both places would be measured twice and the second measure would be
      * told nothing of the first's classes.
+     *
+     * <p>A fork on what a dependency answered states no rule of its own: the decision table holds
+     * it as a column.
      */
     public static Read of(String behavior, AnalysisBody body, StatedContract stated,
                           InputReading read,
@@ -202,7 +203,7 @@ public final class BehaviorSetStatements {
                           RuleReachNumbering reaches) {
         return of(behavior,
                 PredicateReadings.of(behavior, body, stated, read, parameters, elements, reaches),
-                read.symbols(), read.newtypes(), allowance, forks, reaches);
+                read, allowance, forks, reaches, WhatAnAnswerTakesUp.of(read));
     }
 
     /**
@@ -213,11 +214,12 @@ public final class BehaviorSetStatements {
      * one of these rules has been expanded into what it does, so the behavior would come back
      * stating nothing about the strings at any of its positions.
      */
-    static Read of(String behavior, PredicateReadings read, Symbols symbols,
-                   DeclarationNewtypes newtypes,
+    static Read of(String behavior, PredicateReadings read, InputReading reading,
                    Allowance<NumericTerm.FromOnePosition> allowance,
                    List<ComparisonReadings.ForkMet> forks,
-                   RuleReachNumbering reaches) {
+                   RuleReachNumbering reaches, WhatAnAnswerTakesUp dependencies) {
+        Symbols symbols = reading.symbols();
+        DeclarationNewtypes newtypes = reading.newtypes();
         List<Asked> asked = new ArrayList<>();
         List<ClassingBlocker> blocked = new ArrayList<>();
         List<StandingQuestion.NothingClassifiesIt> nothingClassifies = new ArrayList<>();
@@ -235,7 +237,7 @@ public final class BehaviorSetStatements {
                 // over a reading that stopped — while the report went on naming the rule.
                 case Outcome.SayingNothing(var at, var why) -> at.forEach(where ->
                         nothingClassifies.add(StandingQuestion.NothingClassifiesIt
-                                .of(each.origin().cited(), where, why)));
+                                .of(each.origin().cited(), each.origin().readAt(), where, why)));
                 // Nothing places it, so there is nobody to say it to. Which is the answer the
                 // reading of a comparison gives the same shape, and not this walk being quiet.
                 case Outcome.Nowhere _ -> { }
@@ -258,7 +260,7 @@ public final class BehaviorSetStatements {
             state(each, answers.get(each.term()), statements, blocked);
         }
         return new Read(statements, blocked, nothingClassifies,
-                ofTheirOwn(behavior, read, symbols, newtypes, forks, reaches));
+                ofTheirOwn(behavior, read, reading, forks, reaches, dependencies));
     }
 
     /**
@@ -338,8 +340,6 @@ public final class BehaviorSetStatements {
                     new Outcome.OfADistinction(new Asked(each.origin(), each.statement(), term,
                             new AdmittedPlan.Pattern(PatternPlan.of(it.accepts())),
                             new AdmittedPlan.Pattern(PatternPlan.notMatching(it.accepts()))));
-            case StringPredicates.Reading.PatternNotRead _ ->
-                    new Outcome.NotGot(term, BlockReason.forAPatternNotRead());
             // A rule whose text this compiler did not work out is a rule it did not read. Said as
             // anything about the values, it would be a distinction reported as absent from the model
             // when what is absent is this compiler's reading of it.
@@ -430,49 +430,41 @@ public final class BehaviorSetStatements {
      * says the provenance of before this compiles.
      */
     private static Set<TermPath> positionsItCameFrom(ValueOrigin<TermPath> origin) {
-        return origin.answered(BehaviorSetStatements::cameFrom);
+        return origin.gathered(BehaviorSetStatements::cameFrom);
     }
 
-    /** Where {@code origin} came from, given where each of its parts did. */
-    private static Set<TermPath> cameFrom(ValueOrigin<TermPath> origin,
-                                          Function<ValueOrigin<TermPath>, Set<TermPath>> part) {
+    /** Where {@code origin} came from, or which of its parts to ask. */
+    private static ValueOrigin.Gathering.Met<TermPath> cameFrom(ValueOrigin<TermPath> origin) {
         return switch (origin) {
-            case ValueOrigin.IsAPosition<TermPath> it -> Set.of(it.at());
-            case ValueOrigin.MadeFromAPosition<TermPath> it -> Set.of(it.at());
+            case ValueOrigin.IsAPosition<TermPath> it -> new ValueOrigin.Gathering.Holds<>(it.at());
+            case ValueOrigin.MadeFromAPosition<TermPath> it ->
+                    new ValueOrigin.Gathering.Holds<>(it.at());
             // What an operation answered came from whatever its arguments came from, each of them:
             // a string joined out of two positions is made out of both, and an author who wrote a
             // rule about the joined value is owed the sentence at each.
-            case ValueOrigin.Applied<TermPath> it -> across(it.arguments(), part);
+            case ValueOrigin.Applied<TermPath> it -> new ValueOrigin.Gathering.Into<>(it.arguments());
             // A value that is one of several came from wherever each of those came from, and from
             // nowhere else: what decided which of them it is holds none of the values the rule is
             // about, and an author sent there is sent to a position the rule says nothing of.
-            case ValueOrigin.OneOf<TermPath> it -> across(it.alternatives(), part);
+            case ValueOrigin.OneOf<TermPath> it ->
+                    new ValueOrigin.Gathering.Into<>(it.alternatives());
             // A value written where it stands came from no position, one nothing here can name came
             // from none this can name, and a path that comes to no value came from nowhere at all.
             case ValueOrigin.Written<TermPath> _, ValueOrigin.Unnameable<TermPath> _,
-                 ValueOrigin.NoValue<TermPath> _ -> Set.of();
+                 ValueOrigin.NoValue<TermPath> _ -> new ValueOrigin.Gathering.Into<>(List.of());
             // A constructed value was made out of everything the construction was given, each of
             // them. A field taken back out of one is that field's own value and reaches here as
             // whatever it was given, so this arm answers about the construction itself.
-            case ValueOrigin.Constructed<TermPath> it -> across(it.fields().values(), part);
-            case ValueOrigin.Composed<TermPath> _ -> Set.of();
+            case ValueOrigin.Constructed<TermPath> it ->
+                    new ValueOrigin.Gathering.Into<>(List.copyOf(it.fields().values()));
+            case ValueOrigin.Composed<TermPath> _ -> new ValueOrigin.Gathering.Into<>(List.of());
         };
-    }
-
-    /** The positions everything in {@code of} came from, in the order they were met. */
-    private static Set<TermPath> across(Collection<ValueOrigin<TermPath>> of,
-                                        Function<ValueOrigin<TermPath>, Set<TermPath>> part) {
-        Set<TermPath> out = new LinkedHashSet<>();
-        for (ValueOrigin<TermPath> each : of) {
-            out.addAll(part.apply(each));
-        }
-        return out;
     }
 
     /** A rule about a value that is what stands at one of {@code among}, said at each of them. */
     private static Outcome mayStandAt(List<TermPath> among) {
         return new Outcome.SayingNothing(among.stream().map(FilingCoordinate::at).toList(),
-                new BlockReason.RuleAboutAnElementOfSeveralSequences());
+                new BlockReason.RuleAboutAnElementOfSeveralContainers());
     }
 
     /**
@@ -485,13 +477,14 @@ public final class BehaviorSetStatements {
      */
     private static void state(Asked each, Realizations answer,
                               List<RuleEvidence> statements, List<ClassingBlocker> blocked) {
-        if (!(answer instanceof Realizations.Exact built)) {
-            blocked.add(new ClassingBlocker(each.term(), each.by(),
-                    new BlockReason.BehaviorDistinctionsTooCostly()));
-            return;
+        switch (answer) {
+            case Realizations.NotBuilt it -> blocked.add(new ClassingBlocker(each.term(), each.by(),
+                    new BlockReason.BehaviorDistinctionsTooCostly(
+                            Classing.ofTheDistinctions(it.refused()))));
+            case Realizations.Exact built -> statements.add(new RuleEvidence.BySet(
+                    new SetStatement(each.term(), built.of(each.whenTrue()),
+                            built.of(each.whenFalse()), each.states(), each.by())));
         }
-        statements.add(new RuleEvidence.BySet(new SetStatement(each.term(),
-                built.of(each.whenTrue()), built.of(each.whenFalse()), each.states(), each.by())));
     }
 
     /**
@@ -515,7 +508,7 @@ public final class BehaviorSetStatements {
      *
      * <p><b>Taken part by part, as every other owner is.</b> A fork owned for one part of its
      * condition still states the other one, and a fork rule owns what it decides rather than the
-     * fork around it: {@code List.any(closure, xs) && List.isEmpty(ys)} states the closure's rule
+     * fork around it: {@code List.any(closure, xs) && List.contains(0, ys)} states the closure's rule
      * at the first part and something nobody read at the second, and dropping the whole fork for
      * the first would take the second's question with it.
      *
@@ -530,16 +523,19 @@ public final class BehaviorSetStatements {
      * that reached the first condition goes on through it to the second along the same edges.
      */
     private static List<ForkOfItsOwn> ofTheirOwn(String behavior, PredicateReadings read,
-                                                 Symbols symbols, DeclarationNewtypes newtypes,
+                                                 InputReading reading,
                                                  List<ComparisonReadings.ForkMet> forks,
-                                                 RuleReachNumbering reaches) {
+                                                 RuleReachNumbering reaches,
+                                                 WhatAnAnswerTakesUp dependencies) {
+        Symbols symbols = reading.symbols();
+        DeclarationNewtypes newtypes = reading.newtypes();
         List<Standing> standing =
-                standingRules(behavior, read, symbols, newtypes, forks, reaches);
+                standingRules(behavior, read, reading, forks, reaches, dependencies);
         List<ForkOfItsOwn> out = new ArrayList<>();
         for (Standing each : standing) {
             List<Unread> left = new ArrayList<>();
             for (Unread was : each.unread()) {
-                List<Core> parts = was.parts().stream()
+                List<Denotation> parts = was.parts().stream()
                         .filter(part -> standing.stream().noneMatch(other -> other != each
                                 && other.states(part)))
                         .toList();
@@ -560,8 +556,8 @@ public final class BehaviorSetStatements {
     }
 
     /** One part of a condition that no reader answers for, and the parts of what it decides that
-     *  the reading was left with. */
-    private record Unread(Core atom, List<Core> parts) {}
+     *  the reading was left with — each read where it is written. */
+    private record Unread(Denotation atom, List<Denotation> parts) {}
 
     /** One fork that states a rule of its own, before any of its parts is asked whether another
      *  one's rule is what it states. */
@@ -582,9 +578,9 @@ public final class BehaviorSetStatements {
          * first would go with them. What tells them apart is which of the two the source wrote it
          * inside, which is the condition it is a part of.
          */
-        boolean states(Core part) {
+        boolean states(Denotation part) {
             for (Unread each : unread) {
-                if (each.atom() == part) {
+                if (each.atom().value() == part.value()) {
                     return true;
                 }
             }
@@ -593,22 +589,31 @@ public final class BehaviorSetStatements {
     }
 
     private static List<Standing> standingRules(String behavior, PredicateReadings read,
-                                                Symbols symbols, DeclarationNewtypes newtypes,
+                                                InputReading reading,
                                                 List<ComparisonReadings.ForkMet> forks,
-                                                RuleReachNumbering reaches) {
+                                                RuleReachNumbering reaches,
+                                                WhatAnAnswerTakesUp dependencies) {
+        Symbols symbols = reading.symbols();
+        DeclarationNewtypes newtypes = reading.newtypes();
         List<Standing> out = new ArrayList<>();
         for (ComparisonReadings.ForkMet each : forks) {
             // The parts of what it tests that no reader answers for. Asked part by part and not of
-            // the fork: `a > 0 && List.isEmpty(xs)` states a comparison and something nothing read,
+            // the fork: `a > 0 && List.contains(0, xs)` states a comparison and something nothing read,
             // and a fork answered for by one owner having claimed one part would leave the other
             // part unsaid — a model reported as fully read over a condition half of which nobody
             // took in.
+            //
+            // And a part that is what a dependency answered has an owner, on the other side: no
+            // reader of the input reads `known(name)`, and the decision table holds its truth as a
+            // column. Filed here, it went out as a rule about `name` — the position the call was
+            // asked about, which is not what the fork turns on.
             List<Unread> unread = new ArrayList<>();
-            for (Core atom : each.leftHere()) {
-                List<Core> parts =
-                        ComparisonReadings.leftUnread(atom, read, each.reads(), symbols, newtypes);
+            for (ComparisonReadings.Atom atom : each.leftHere()) {
+                List<Denotation> parts = ComparisonReadings.leftUnread(atom, read).stream()
+                        .filter(part -> !dependencies.part(part.value(), part.at()))
+                        .toList();
                 if (!parts.isEmpty()) {
-                    unread.add(new Unread(atom, parts));
+                    unread.add(new Unread(atom.at(), parts));
                 }
             }
             if (unread.isEmpty()) {
@@ -628,7 +633,7 @@ public final class BehaviorSetStatements {
      *
      * <p>Both answers come from the reading of what the part is made of
      * ({@link GuardThresholds#namesIn}), which is the same reading a comparison's stop is described
-     * by. Written apart, a fork on {@code List.isEmpty(xs)} and a comparison against what the same
+     * by. Written apart, a fork on {@code List.contains(0, xs)} and a comparison against what the same
      * call answers would be two accounts of one shape, and an author reading them would be sent
      * after two different pieces of work.
      *
@@ -639,7 +644,7 @@ public final class BehaviorSetStatements {
      *
      * <p><b>Null where no part of it names a position of the input.</b> Such a fork is not a rule
      * this compiler failed to read: it is a rule about something the input has no part in —
-     * {@code List.isEmpty([1, 2, 3])} says nothing about any position, so there is no position for
+     * {@code List.contains(0, [1, 2, 3])} says nothing about any position, so there is no position for
      * a question to be about. The same threshold a comparison is held to, decided by the same
      * reading ({@link ComparisonAssessment.NoInput}), so a fork and a comparison over one shape do
      * not disagree about whether the model states anything.
@@ -663,25 +668,25 @@ public final class BehaviorSetStatements {
             //
             // And the atom itself where those parts are about nothing of the input. What such a
             // fork turns on is still what the atom reaches: a closure that says nothing about the
-            // element leaves the fork turning on the sequence it walks, and that is where a reader
+            // element leaves the fork turning on the container it walks, and that is where a reader
             // is owed the question.
-            List<Core> places = each.parts().stream()
-                    .anyMatch(one -> namesSomething(one, fork, symbols, newtypes, answering))
+            List<Denotation> places = each.parts().stream()
+                    .anyMatch(one -> namesSomething(one, symbols, newtypes, answering))
                     ? each.parts() : List.of(each.atom());
-            for (Core part : places) {
+            for (Denotation part : places) {
             // Where the part stands at places this could not choose between, those are the places,
             // and they are what the walk below cannot give: it reads a part as one term over the
             // positions it names, and a term over a place nothing settled is a term at whichever
             // place a reader picked. Asked first, so a fork over such a part is filed at each of
             // them rather than at none — which is where the rule the author wrote would go.
-            if (fork.reads().pathOf(part, newtypes)
+            if (part.at().pathOf(part.value(), newtypes)
                     instanceof PathResolution.MayStandAt(var among)) {
                 among.forEach(at -> filed.putIfAbsent(FilingCoordinate.at(at),
-                        new BlockReason.RuleAboutAnElementOfSeveralSequences()));
+                        new BlockReason.RuleAboutAnElementOfSeveralContainers()));
                 continue;
             }
-            GuardThresholds.Names names =
-                    GuardThresholds.namesIn(part, fork.reads(), symbols, newtypes, answering);
+            GuardThresholds.Names names = GuardThresholds.namesIn(part.value(), part.at(),
+                    symbols, newtypes, answering);
             BlockReason.RuleReadingStopped why =
                     UnreadComparison.notAboutOwnValues(names.origin());
             names.met().keySet().forEach(at -> filed.putIfAbsent(FilingCoordinate.at(at), why));
@@ -693,11 +698,11 @@ public final class BehaviorSetStatements {
     }
 
     /** Whether {@code part} names a position of the input, however the reading gets there. */
-    private static boolean namesSomething(Core part, ComparisonReadings.ForkMet fork,
-                                          Symbols symbols, DeclarationNewtypes newtypes,
+    private static boolean namesSomething(Denotation part, Symbols symbols,
+                                          DeclarationNewtypes newtypes,
                                           souther.compiler.coverage.Arrivals answering) {
-        return fork.reads().pathOf(part, newtypes) instanceof PathResolution.MayStandAt
-                || !GuardThresholds.namesIn(part, fork.reads(), symbols, newtypes, answering)
+        return part.at().pathOf(part.value(), newtypes) instanceof PathResolution.MayStandAt
+                || !GuardThresholds.namesIn(part.value(), part.at(), symbols, newtypes, answering)
                         .met().isEmpty();
     }
 }

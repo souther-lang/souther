@@ -36,10 +36,10 @@ public record DeclarationFacts(FieldRead read, DeclarationNewtypes newtypes) {
         return read.symbols();
     }
 
-    /** What the declarations a reading is made against say, which is the reading's for the reason
-     *  above: two that could differ are two answers about what a declaration states. */
-    public PublishedDeclarations published() {
-        return read.published();
+    /** What a value of each sum a reading is made against can be, which is the reading's for the
+     *  reason above: two that could differ are two answers about what a declaration states. */
+    public SumCases sums() {
+        return read.sums();
     }
 
     /** Which form each of those declarations was written in. */

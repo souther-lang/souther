@@ -298,10 +298,11 @@ public final class ValueAnswers {
             };
         }
 
-        /** A counted name: read by its length and by nothing about what it holds. */
+        /** A counted name: read by its length and by nothing about what it holds. The length is
+         *  written in ASCII digits, as every number of this format is. */
         String text() {
             int from = at;
-            while (at < text.length() && Character.isDigit(text.charAt(at))) {
+            while (at < text.length() && text.charAt(at) >= '0' && text.charAt(at) <= '9') {
                 at++;
             }
             int length;
@@ -322,13 +323,17 @@ public final class ValueAnswers {
         /** One of this format's own words, which are ASCII by construction. */
         private String word() {
             int from = at;
-            while (at < text.length() && Character.isLetter(text.charAt(at)) && text.charAt(at) < 128) {
+            while (at < text.length() && isAsciiLetter(text.charAt(at))) {
                 at++;
             }
             if (at == from) {
                 throw new Unreadable();
             }
             return text.substring(from, at);
+        }
+
+        private static boolean isAsciiLetter(char c) {
+            return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z');
         }
     }
 }

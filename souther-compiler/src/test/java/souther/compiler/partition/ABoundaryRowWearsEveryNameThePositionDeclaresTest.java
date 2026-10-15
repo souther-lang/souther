@@ -95,7 +95,7 @@ class ABoundaryRowWearsEveryNameThePositionDeclaresTest {
                         plan, domain, rules);
         souther.compiler.inputs.Quantities reading = domain.quantities(rules);
         Partitions.Partitioning p = ThresholdFixtures.withThresholds(
-                Partitions.of(spec.name(), domain, rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
+                Partitions.of(spec.name(), domain.reading(rules), souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
                 reading,
                 guards.thresholds(),
                 RuleReadingContext.unshared(rules,
@@ -109,7 +109,8 @@ class ABoundaryRowWearsEveryNameThePositionDeclaresTest {
         List<String> out = new ArrayList<>();
         for (Axis axis : p.axes()) {
             for (Border border
-                    : Partitions.bordersOf(axis, reading, reading.runsBetween(axis.term()), new LinesRead())) {
+                    : Partitions.bordersOf(axis, reading, reading.runsBetween(axis.term()),
+                            new LinesRead(), (one, other) -> false)) {
               for (PointRole role : List.of(PointRole.ON, PointRole.OFF)) {
                 if (!(border.demand(role).criterion()
                         instanceof Criterion.AtTheLevel each)) {

@@ -3,6 +3,7 @@ package souther.compiler.check;
 import souther.compiler.WhatWasCompiled;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.hash.SaysWhatStandsForIt;
 import souther.compiler.types.ApplicationOrigin;
 import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.MaterialisationSite;
@@ -63,19 +64,39 @@ class AReadingReadsEverythingATermSaysAndNothingOfWhereItStandsTest {
             MaterialisationSite.class);
 
     /**
-     * The records a reading walks: every kind of term, and the three a term holds that are not terms
+     * The records a reading walks: every kind of term, and the parts a term holds that are not terms
      * themselves.
      *
      * <p>The kinds come from the language's own list of what a term can be, so one added later is
-     * here without anybody adding it. The other three are named because nothing declares them as a
-     * family — an arm, a field's value and a departure are parts of the three kinds that have them.
+     * here without anybody adding it. The parts are named because nothing declares them as a
+     * family — an arm, a field's value, a departure, and the names of a projection and each name of
+     * them are parts of the kinds that have them.
      */
     private static List<Class<?>> walked() {
         List<Class<?>> out = new ArrayList<>(List.of(Core.class.getPermittedSubclasses()));
         out.add(Core.Case.class);
         out.add(Core.FieldValue.class);
         out.add(Core.ElseArm.class);
+        out.add(Core.FieldProjection.Steps.class);
+        out.add(Core.FieldProjection.Step.class);
         return out;
+    }
+
+    /**
+     * What {@code kind} is made of: its record components, or those of the record it names as what
+     * stands for it ({@link SaysWhatStandsForIt}) where it keeps a number beside them and so is no
+     * record itself — the same reading {@code Term.readersOf} gives such a value. Its accessors are
+     * the ones a reading calls, so the components are named by the kind and not by the record.
+     */
+    private static RecordComponent[] componentsOf(Class<?> kind) {
+        if (!SaysWhatStandsForIt.class.isAssignableFrom(kind)) {
+            return kind.getRecordComponents();
+        }
+        try {
+            return kind.getMethod("standsFor").getReturnType().getRecordComponents();
+        } catch (NoSuchMethodException e) {
+            throw new IllegalStateException(kind + " does not say what stands for it", e);
+        }
     }
 
     @Test
@@ -83,7 +104,7 @@ class AReadingReadsEverythingATermSaysAndNothingOfWhereItStandsTest {
         Set<String> unread = new TreeSet<>();
         Set<String> called = componentsReadByTheIdentity();
         for (Class<?> kind : walked()) {
-            for (RecordComponent component : kind.getRecordComponents()) {
+            for (RecordComponent component : componentsOf(kind)) {
                 if (!WHERE_IT_STANDS.contains(component.getType())
                         && !called.contains(kind.getSimpleName() + "." + component.getName())) {
                     unread.add(kind.getSimpleName() + "." + component.getName());
@@ -101,7 +122,7 @@ class AReadingReadsEverythingATermSaysAndNothingOfWhereItStandsTest {
         Set<String> read = new TreeSet<>();
         Set<String> called = componentsReadByTheIdentity();
         for (Class<?> kind : walked()) {
-            for (RecordComponent component : kind.getRecordComponents()) {
+            for (RecordComponent component : componentsOf(kind)) {
                 if (WHERE_IT_STANDS.contains(component.getType())
                         && called.contains(kind.getSimpleName() + "." + component.getName())) {
                     read.add(kind.getSimpleName() + "." + component.getName());
@@ -127,7 +148,7 @@ class AReadingReadsEverythingATermSaysAndNothingOfWhereItStandsTest {
     void andWhatItReadsOfATermAreItsComponents() {
         Set<String> components = new TreeSet<>();
         for (Class<?> kind : walked()) {
-            for (RecordComponent component : kind.getRecordComponents()) {
+            for (RecordComponent component : componentsOf(kind)) {
                 components.add(kind.getSimpleName() + "." + component.getName());
             }
         }
@@ -146,7 +167,7 @@ class AReadingReadsEverythingATermSaysAndNothingOfWhereItStandsTest {
         int says = 0;
         int stands = 0;
         for (Class<?> kind : walked()) {
-            for (RecordComponent component : kind.getRecordComponents()) {
+            for (RecordComponent component : componentsOf(kind)) {
                 if (WHERE_IT_STANDS.contains(component.getType())) {
                     stands++;
                 } else {

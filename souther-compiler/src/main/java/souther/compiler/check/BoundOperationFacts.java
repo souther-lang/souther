@@ -1,15 +1,32 @@
 package souther.compiler.check;
 
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.Rel;
+import souther.compiler.proof.Proof;
+import souther.compiler.proof.Slot;
+import souther.compiler.proof.Unproved;
 import souther.compiler.semantics.Accumulation;
 import souther.compiler.semantics.AnswerAspect;
 import souther.compiler.semantics.Arithmetic;
 import souther.compiler.semantics.BuiltFrom;
+import souther.compiler.semantics.CodePointClass;
 import souther.compiler.semantics.DefinitionCase;
+import souther.compiler.semantics.ElementLineage;
+import souther.compiler.semantics.LawNumber;
+import souther.compiler.semantics.LawProposition;
+import souther.compiler.semantics.LawSubject;
+import souther.compiler.semantics.MapPart;
 import souther.compiler.semantics.NumericResult;
+import souther.compiler.semantics.PieceOfAnElement;
+import souther.compiler.semantics.OperationLaw;
 import souther.compiler.semantics.ResultBound;
+import souther.compiler.semantics.SideAnswered;
+import souther.compiler.semantics.SizeAgainstItsSource;
 import souther.compiler.semantics.TakenArguments;
 import souther.compiler.semantics.TakenAs;
+import souther.compiler.semantics.Unsayable;
+import souther.compiler.stdlib.Stdlib;
 import souther.compiler.types.BinOp;
 import souther.compiler.types.ValueName;
 
@@ -19,6 +36,8 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.OptionalInt;
 import java.util.Set;
 import java.util.function.Function;
 
@@ -71,37 +90,87 @@ public final class BoundOperationFacts {
     private final Map<ValueName, List<DeclaredArgument>> noSmallerThan;
     private final Map<ValueName, List<DefinitionCase<DeclaredArgument>>> cases;
     private final Map<BinOp, List<ValueName>> writtenAs;
+    private final Map<ValueName, List<LawProposition<Slot>>> relations;
+    private final Stdlib stdlib;
+    private final Map<ValueName, Map<OperationLaw.Observed, Settled>> settled;
+    private final List<BoundOperationFact> notProvedOfTheirBodies;
 
     /** Made by the binder and by nothing else: what these are is what a binding came to, and a
      *  set of facts gathered anywhere else would say so of facts nothing bound. Counted from the
-     *  class files, as the arms' own constructors are. */
-    BoundOperationFacts(List<BoundOperationFact> bound) {
+     *  class files, as the arms' own constructors are. {@code stdlib} is the library they were
+     *  held to, whose written operations' laws are proved against their bodies, by
+     *  {@code proofs}. */
+    BoundOperationFacts(Stdlib stdlib, List<BoundOperationFact> bound,
+                        LibraryProofs.Source proofs) {
+        this.stdlib = stdlib;
         this.held = List.copyOf(bound);
+        // What is stated of an operation the library writes is filed once its body proves it and
+        // not before: a proof reads what is filed here, and a statement not proved is no fact.
+        List<BoundOperationFact> awaiting = new ArrayList<>();
         for (BoundOperationFact fact : held) {
-            ValueName key = fact.operation().operation();
-            // No default. A family added is a family this has to say how to collect.
-            switch (fact) {
-                case BoundOperationFact.OneAboutAnOperation one -> {
-                    Map<ValueName, BoundOperationFact.OneAboutAnOperation> byOperation =
-                            ones.computeIfAbsent(one.getClass(), _ -> new LinkedHashMap<>());
-                    if (byOperation.put(key, one) != null) {
-                        throw new IllegalStateException(key + " is declared to "
-                                + one.getClass().getSimpleName() + " twice");
-                    }
-                }
-                case BoundOperationFact.SeveralAboutAnOperation many ->
-                        several.computeIfAbsent(many.getClass(), _ -> new LinkedHashMap<>())
-                                .computeIfAbsent(key, _ -> new ArrayList<>()).add(many);
+            if (writes(fact.operation().operation())) {
+                awaiting.add(fact);
+            } else {
+                file(fact);
             }
         }
+        writtenAs = writtenAs();
+        relations = relations(projected(BoundOperationFact.IsRelated.class,
+                BoundOperationFact.IsRelated::holds), projected(BoundOperationFact.HasALaw.class,
+                BoundOperationFact.HasALaw::beside));
+        Settling settling = settle(awaiting, proofs);
+        settled = settling.settled();
+        // One the body does not prove is an obligation, held apart, and no reader takes it. The
+        // cases a definition is written in stand or fall together: a reader takes them as every
+        // way the operation answers, so they are filed where every one of them is proved and some
+        // one of them is reached however the arguments stand ({@link DefinitionCase#coverEveryWay}),
+        // and otherwise none of them is.
+        List<BoundOperationFact> unproved = new ArrayList<>();
+        Map<ValueName, List<BoundOperationFact.IsDefinedByCases>> definitions =
+                new LinkedHashMap<>();
+        for (BoundOperationFact fact : awaiting) {
+            if (fact instanceof BoundOperationFact.IsDefinedByCases one) {
+                definitions.computeIfAbsent(one.operation().operation(), _ -> new ArrayList<>())
+                        .add(one);
+            } else if (settling.proving().proves(fact)) {
+                file(fact);
+            } else {
+                unproved.add(fact);
+            }
+        }
+        definitions.forEach((operation, cases) -> {
+            boolean defined = cases.stream().allMatch(settling.proving()::proves)
+                    && DefinitionCase.coverEveryWay(cases.stream()
+                            .map(BoundOperationFact.IsDefinedByCases::one).toList());
+            cases.forEach(defined ? this::file : unproved::add);
+        });
+        notProvedOfTheirBodies = List.copyOf(unproved);
         // What each query over a family answers with, projected once from what was filed.
-        bounds = projected(BoundOperationFact.BoundsItsResult.class,
-                BoundOperationFact.BoundsItsResult::bound);
         noSmallerThan = projected(BoundOperationFact.ResultIsNoSmallerThan.class,
                 BoundOperationFact.ResultIsNoSmallerThan::container);
+        bounds = projected(BoundOperationFact.BoundsItsResult.class,
+                BoundOperationFact.BoundsItsResult::bound);
         cases = projected(BoundOperationFact.IsDefinedByCases.class,
                 BoundOperationFact.IsDefinedByCases::one);
-        writtenAs = writtenAs();
+    }
+
+    /** Files {@code fact} under its operation, in its family. */
+    private void file(BoundOperationFact fact) {
+        ValueName key = fact.operation().operation();
+        // No default. A family added is a family this has to say how to collect.
+        switch (fact) {
+            case BoundOperationFact.OneAboutAnOperation one -> {
+                Map<ValueName, BoundOperationFact.OneAboutAnOperation> byOperation =
+                        ones.computeIfAbsent(one.getClass(), _ -> new LinkedHashMap<>());
+                if (byOperation.put(key, one) != null) {
+                    throw new IllegalStateException(key + " is declared to "
+                            + one.getClass().getSimpleName() + " twice");
+                }
+            }
+            case BoundOperationFact.SeveralAboutAnOperation many ->
+                    several.computeIfAbsent(many.getClass(), _ -> new LinkedHashMap<>())
+                            .computeIfAbsent(key, _ -> new ArrayList<>()).add(many);
+        }
     }
 
     /** Which operation computes what each operator computes, read off the arithmetic each of them
@@ -131,9 +200,27 @@ public final class BoundOperationFacts {
         Map<ValueName, List<V>> out = new LinkedHashMap<>();
         byOperation.forEach((operation, facts) -> {
             List<V> parts = new ArrayList<>(facts.size());
-            facts.forEach(each -> parts.add(part.apply(kind.cast(each))));
+            for (BoundOperationFact.SeveralAboutAnOperation each : facts) {
+                parts.add(part.apply(kind.cast(each)));
+            }
             out.put(operation, List.copyOf(parts));
         });
+        return Collections.unmodifiableMap(out);
+    }
+
+    /** What is stated of each kernel beside others: what is declared so, and what its laws say
+     *  beside the memberships their cases turn on. */
+    private static Map<ValueName, List<LawProposition<Slot>>> relations(
+            Map<ValueName, List<LawProposition<Slot>>> declared,
+            Map<ValueName, List<List<LawProposition<Slot>>>> besideALaw) {
+        Map<ValueName, List<LawProposition<Slot>>> out = new LinkedHashMap<>();
+        declared.forEach((operation, holds) -> out.put(operation, new ArrayList<>(holds)));
+        besideALaw.forEach((operation, each) -> each.forEach(beside -> {
+            if (!beside.isEmpty()) {
+                out.computeIfAbsent(operation, _ -> new ArrayList<>()).addAll(beside);
+            }
+        }));
+        out.replaceAll((operation, holds) -> List.copyOf(holds));
         return Collections.unmodifiableMap(out);
     }
 
@@ -151,6 +238,16 @@ public final class BoundOperationFacts {
      */
     List<BoundOperationFact> all() {
         return held;
+    }
+
+    /** Whether any fact is stated of {@code operation}, whatever the fact is about. */
+    public boolean statesAnythingOf(ValueName operation) {
+        for (BoundOperationFact fact : held) {
+            if (fact.operation().operation().equals(operation)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private <F extends BoundOperationFact.OneAboutAnOperation> F one(Class<F> kind,
@@ -200,6 +297,18 @@ public final class BoundOperationFacts {
         return ones(BoundOperationFact.ShiftsBy.class);
     }
 
+    /** How {@code operation} counts whole units between its two arguments, or null where it
+     *  counts none. */
+    public BoundOperationFact.CountsWholeUnitsBetween countsWholeUnitsBetween(
+            ValueName operation) {
+        return one(BoundOperationFact.CountsWholeUnitsBetween.class, operation);
+    }
+
+    /** The operations that count whole units between two values. */
+    public Set<ValueName> countsWholeUnitsBetween() {
+        return ones(BoundOperationFact.CountsWholeUnitsBetween.class);
+    }
+
     /** What holds of the number {@code operation} answers, wherever it is called, in the order
      *  declared. */
     public List<ResultBound<DeclaredArgument>> boundsOnTheResult(ValueName operation) {
@@ -223,6 +332,318 @@ public final class BoundOperationFacts {
         return ones(BoundOperationFact.BuildsItsResultFrom.class);
     }
 
+    /**
+     * The argument whose elements the answer of {@code operation} is made from where that is all
+     * the operation says, or null where it says more or says nothing.
+     *
+     * <p>An operation with a building says it there ({@link BuiltFrom#derivesItsElementsFrom}), and
+     * a reader that has already fetched the building asks it and comes here only without one. This
+     * is the lineage declared apart from a count, which is what an operation answering any number
+     * for each element states.
+     */
+    public DeclaredArgument elementsMadeFromAlone(ValueName operation) {
+        BoundOperationFact.ElementsComeFrom held =
+                one(BoundOperationFact.ElementsComeFrom.class, operation);
+        return held == null ? null : held.lineage().source().argument();
+    }
+
+    /**
+     * Which arguments of {@code operation} the pieces it answers are of — the separator, where
+     * there is one, and the string — or null where it answers no pieces of a string.
+     */
+    public Pieces piecesOf(ValueName operation) {
+        BoundOperationFact.HoldsThePiecesOf held =
+                one(BoundOperationFact.HoldsThePiecesOf.class, operation);
+        return held == null ? null : new Pieces(held.separator(), held.string());
+    }
+
+    /** The separator and the string an operation answers the pieces of; with no separator, each
+     *  piece is one code point. */
+    public record Pieces(Optional<DeclaredArgument> separator, DeclaredArgument string) {}
+
+    /**
+     * The option whose value {@code operation} hands its closure, and the closure, where what it
+     * answers holds the closure's answer on that value exactly where the option holds one — or
+     * null where it says no such thing ({@link BoundOperationFact.AnswersTheClosureOnWhatItHolds}).
+     */
+    public ClosureOnWhatItHolds answersTheClosureOnWhatItHolds(ValueName operation) {
+        BoundOperationFact.AnswersTheClosureOnWhatItHolds held =
+                one(BoundOperationFact.AnswersTheClosureOnWhatItHolds.class, operation);
+        return held == null ? null : new ClosureOnWhatItHolds(held.option(), held.closure());
+    }
+
+    /** The option whose value a closure is handed, and the closure. */
+    public record ClosureOnWhatItHolds(DeclaredArgument option, DeclaredArgument closure) {}
+
+    /**
+     * The side every element of what {@code operation} answers comes out on, or null where it says
+     * no such thing.
+     */
+    public SideAnswered everyElementOfItsAnswerIs(ValueName operation) {
+        BoundOperationFact.EveryElementOfItsAnswerIs held =
+                one(BoundOperationFact.EveryElementOfItsAnswerIs.class, operation);
+        return held == null ? null : held.side();
+    }
+
+    /**
+     * Which code points what {@code operation} answers holds one of exactly where an argument of it
+     * does, and which argument — or null where it keeps no such thing.
+     */
+    public KeptCodePoints keepsWhetherItHoldsACodePointOf(ValueName operation) {
+        BoundOperationFact.KeepsWhetherItHoldsACodePointOf held =
+                one(BoundOperationFact.KeepsWhetherItHoldsACodePointOf.class, operation);
+        return held == null ? null
+                : new KeptCodePoints(held.counted(), held.string(), held.held());
+    }
+
+    /** The class of code points an operation's answer holds one of where {@code string} does, or
+     *  some element of it, as {@code held} says. */
+    public record KeptCodePoints(CodePointClass counted, DeclaredArgument string,
+                                 BoundOperationFact.KeepsWhetherItHoldsACodePointOf.HeldBy held) {}
+
+    /**
+     * What the answer of {@code operation} holds an image of every element of, or null where it
+     * says no such thing: the image is the element itself or what the closure answered on it.
+     */
+    public ElementLineage<DeclaredArgument> holdsTheImageOfEveryElement(ValueName operation) {
+        BoundOperationFact.HoldsTheImageOfEveryElement held =
+                one(BoundOperationFact.HoldsTheImageOfEveryElement.class, operation);
+        return held == null ? null : held.image();
+    }
+
+    /** Which part of which map {@code operation} answers a list of, or null where it lists no
+     *  map's. */
+    public Listed listsAPartOf(ValueName operation) {
+        BoundOperationFact.ListsAPartOf held =
+                one(BoundOperationFact.ListsAPartOf.class, operation);
+        return held == null ? null : new Listed(held.map(), held.part());
+    }
+
+    /** A map an operation answers a list of what it holds, and which part of it. */
+    public record Listed(DeclaredArgument map, MapPart part) {}
+
+    /** How {@code operation}'s answer is put together of a piece for each element of an argument,
+     *  or null where it is not ({@link BoundOperationFact.AssemblesPieces}). */
+    public Assembled assembles(ValueName operation) {
+        BoundOperationFact.AssemblesPieces held =
+                one(BoundOperationFact.AssemblesPieces.class, operation);
+        return held == null ? null : new Assembled(held.source(), held.closure(), held.piece());
+    }
+
+    /** The argument a piece is made of each element of, the closure that makes it, and what the
+     *  piece is. */
+    public record Assembled(DeclaredArgument source, DeclaredArgument closure,
+                            PieceOfAnElement piece) {}
+
+    /** The count and the list {@code operation} answers the elements of that list from that index
+     *  on of, or null where nothing says it does. */
+    public BoundOperationFact.HoldsTheElementsFrom holdsTheElementsFrom(ValueName operation) {
+        return one(BoundOperationFact.HoldsTheElementsFrom.class, operation);
+    }
+
+    /** Which argument {@code operation} puts in which, or null where it puts nothing in. Read by
+     *  the proofs of what the library's written operations build, and by no reader of a
+     *  condition. */
+    BoundOperationFact.PutsAValueIn putsAValueIn(ValueName operation) {
+        return one(BoundOperationFact.PutsAValueIn.class, operation);
+    }
+
+    /** The map whose keys {@code operation} answers a map keyed by, or null where it keeps none. */
+    public DeclaredArgument keepsTheKeysOf(ValueName operation) {
+        BoundOperationFact.KeepsTheKeysOf held =
+                one(BoundOperationFact.KeepsTheKeysOf.class, operation);
+        return held == null ? null : held.map();
+    }
+
+    /**
+     * How the observation {@code observed} of {@code operation}'s answer is settled, or null where
+     * nothing settles it.
+     *
+     * <p>The one place this is asked, and one answer to it: a law declared, a law derived from what
+     * the operation is declared to build, or a closing. An answer as many as the one source it was
+     * built from holds something where that source does and is as many as it — and so is a list of
+     * what a map holds — so those laws are read off that declaration, and one declared beside it is
+     * refused where these are collected, as is a law beside a closing.
+     */
+    public Settled settled(ValueName operation, OperationLaw.Observed observed) {
+        Map<OperationLaw.Observed, Settled> of = operation == null ? null : settled.get(operation);
+        return of == null ? null : of.get(observed);
+    }
+
+    /** What is stated of operations the library writes that their bodies do not prove, and that
+     *  no query answers with. */
+    List<BoundOperationFact> notProvedOfTheirBodies() {
+        return notProvedOfTheirBodies;
+    }
+
+    /** The operations some observation of whose answer is settled, each with how. */
+    public Map<ValueName, Map<OperationLaw.Observed, Settled>> settled() {
+        return settled;
+    }
+
+    /** How an observation of an operation's answer is settled. */
+    public sealed interface Settled {
+
+        /** By {@code law}, standing on {@code grounds}. */
+        record ByALaw(OperationLaw<DeclaredArgument> law, Grounds grounds) implements Settled {}
+
+        /** By a closing: it comes to {@code why}, which no statement over the arguments says. */
+        record Unsaid(Unsayable why) implements Settled {}
+
+        /**
+         * By nothing: what was stated of it ({@code stated}, null where it was a closing) is not
+         * proved against the body, for {@code why}. An obligation and no law, which no reader takes.
+         */
+        record Open(OperationLaw<DeclaredArgument> stated, Unproved why) implements Settled {}
+    }
+
+    /** What a law stands on. */
+    public sealed interface Grounds {
+
+        /** It is declared of a kernel, which has no body to prove it of: an axiom, held to what the
+         *  kernel computes by running it. */
+        record Axiom() implements Grounds {}
+
+        /** It is read off what a kernel is declared to build: as many as one source, or a list of a
+         *  part of a map. An axiom all the same, said once. */
+        record WhatItBuilds() implements Grounds {}
+
+        /** It is proved against the operation's body, as {@code proof} says. */
+        record Proved(Proof proof) implements Grounds {}
+
+        /** It was proved against the operation's body when this compiler was built, which is
+         *  what the proofs shipped with it record ({@link LibraryProofsAsBuilt}). */
+        record ProvedWhenBuilt() implements Grounds {}
+    }
+
+    /** Every settling, read once off the facts: what is declared of the kernels and what follows
+     *  from what they are declared to build, and what is proved of the operations the library
+     *  writes in the language. */
+    private Settling settle(List<BoundOperationFact> awaiting, LibraryProofs.Source proofs) {
+        Map<ValueName, Map<OperationLaw.Observed, Settled>> out = new LinkedHashMap<>();
+        Map<ValueName.Stdlib.Operation, Map<OperationLaw.Observed, ProvingTheLibrary.Stated>>
+                stated = new LinkedHashMap<>();
+        for (BoundOperationFact fact : held) {
+            ValueName operation = fact.operation().operation();
+            Settled settling;
+            OperationLaw.Observed observed;
+            switch (fact) {
+                case BoundOperationFact.HasALaw law -> {
+                    settling = new Settled.ByALaw(law.law(), new Grounds.Axiom());
+                    observed = law.law().observed();
+                }
+                case BoundOperationFact.LeavesUnsaid unsaid when writes(operation) -> {
+                    put(stated, operation, unsaid.observed(),
+                            new ProvingTheLibrary.Stated(null, List.of(), unsaid.why()));
+                    continue;
+                }
+                case BoundOperationFact.LeavesUnsaid unsaid -> {
+                    settling = new Settled.Unsaid(unsaid.why());
+                    observed = unsaid.observed();
+                }
+                case BoundOperationFact.HasALemma lemma -> {
+                    put(stated, operation, lemma.states().observed(),
+                            new ProvingTheLibrary.Stated(lemma.states(), lemma.carries(), null));
+                    continue;
+                }
+                default -> {
+                    continue;
+                }
+            }
+            if (out.computeIfAbsent(operation, _ -> new LinkedHashMap<>())
+                    .put(observed, settling) != null) {
+                throw new IllegalStateException(operation + " settles what "
+                        + observed + " of its answer comes to twice");
+            }
+        }
+        for (BoundOperationFact fact : held) {
+            ValueName operation = fact.operation().operation();
+            if (writes(operation)) {
+                continue;   // what a body builds is proved of it, not read off a declaration
+            }
+            for (OperationLaw<DeclaredArgument> law : derivedFrom(fact)) {
+                if (out.computeIfAbsent(operation, _ -> new LinkedHashMap<>())
+                        .put(law.observed(), new Settled.ByALaw(law, new Grounds.WhatItBuilds()))
+                        != null) {
+                    throw new IllegalStateException(operation + " is declared to be something"
+                            + " that says what " + law.observed() + " of its answer comes to,"
+                            + " and settles it again");
+                }
+            }
+        }
+        LibraryProofs proving = proofs.over(stdlib, this, out, stated, awaiting);
+        stated.forEach((operation, of) -> of.keySet().forEach(observed ->
+                out.computeIfAbsent(operation, _ -> new LinkedHashMap<>())
+                        .put(observed, proving.settle(operation, observed))));
+        Map<ValueName, Map<OperationLaw.Observed, Settled>> fixed = new LinkedHashMap<>();
+        out.forEach((operation, of) -> fixed.put(operation, Collections.unmodifiableMap(of)));
+        return new Settling(Collections.unmodifiableMap(fixed), proving);
+    }
+
+    /** The settlings, with what proved those of the operations the library writes, which proves
+     *  what else is stated of them. */
+    private record Settling(Map<ValueName, Map<OperationLaw.Observed, Settled>> settled,
+                            LibraryProofs proving) {}
+
+    /** Whether {@code operation} is one the library writes in the language. */
+    private boolean writes(ValueName operation) {
+        return operation instanceof ValueName.Stdlib.Operation library
+                && stdlib.helpers().containsKey(library);
+    }
+
+    private static void put(
+            Map<ValueName.Stdlib.Operation, Map<OperationLaw.Observed, ProvingTheLibrary.Stated>>
+                    stated, ValueName operation, OperationLaw.Observed observed,
+            ProvingTheLibrary.Stated what) {
+        if (stated.computeIfAbsent((ValueName.Stdlib.Operation) operation,
+                _ -> new LinkedHashMap<>()).put(observed, what) != null) {
+            throw new IllegalStateException(operation + " states what " + observed
+                    + " of its answer comes to twice");
+        }
+    }
+
+    /** What is stated of {@code operation}'s answer beside what other kernels answer, in the
+     *  words of a walk, for the proofs of the library's written operations. */
+    List<LawProposition<Slot>> relationsOf(ValueName operation) {
+        return operation == null ? List.of() : relations.getOrDefault(operation, List.of());
+    }
+
+    /**
+     * The laws {@code fact} says by being declared: an answer as many as one source holds
+     * something where that source does and is as many as it, and an emptiness check comes out
+     * true where its argument holds nothing.
+     */
+    private static List<OperationLaw<DeclaredArgument>> derivedFrom(BoundOperationFact fact) {
+        if (fact instanceof BoundOperationFact.MeansTheSameAsASizeOfNought means) {
+            return List.of(new OperationLaw.Observation<>(AnswerAspect.TRUTH,
+                    new LawProposition.Observed<>(new LawSubject.Argument<>(means.of()),
+                            new SideAnswered(AnswerAspect.EMPTINESS, false))));
+        }
+        DeclaredArgument source = soleSource(fact);
+        if (source == null) {
+            return List.of();
+        }
+        LawSubject<DeclaredArgument> it = new LawSubject.Argument<>(source);
+        return List.of(
+                new OperationLaw.Observation<>(AnswerAspect.EMPTINESS,
+                        new LawProposition.Observed<>(it,
+                                new SideAnswered(AnswerAspect.EMPTINESS, true))),
+                new OperationLaw.Size<>(LinearForm.atom(new LawNumber.SizeOf<>(it))));
+    }
+
+    /** The one argument {@code fact} says the answer is as many as, or null where it says no
+     *  such thing: a building of exactly as many from one source, or a list of a map's parts. */
+    private static DeclaredArgument soleSource(BoundOperationFact fact) {
+        return switch (fact) {
+            case BoundOperationFact.BuildsItsResultFrom builds ->
+                    builds.built().outputs().size() == 1
+                            && builds.built().size() == SizeAgainstItsSource.SAME
+                            ? builds.built().lineage().source().argument() : null;
+            case BoundOperationFact.ListsAPartOf lists -> lists.map();
+            default -> null;
+        };
+    }
+
     /** The containers {@code operation}'s result is never smaller than, in the order declared. */
     public List<DeclaredArgument> resultIsNoSmallerThan(ValueName operation) {
         return operation == null ? List.of() : noSmallerThan.getOrDefault(operation, List.of());
@@ -239,15 +660,6 @@ public final class BoundOperationFacts {
         return ones(BoundOperationFact.ReadsItsContainer.class);
     }
 
-    /** Which argument {@code aspect} of {@code operation}'s answer turns on, or null where the
-     *  library says nothing about what decides it. */
-    public BoundOperationFact.TurnsOnWhetherAnArgumentHolds turnsOnWhetherAnArgumentHolds(
-            ValueName operation, AnswerAspect aspect) {
-        BoundOperationFact.TurnsOnWhetherAnArgumentHolds held =
-                one(BoundOperationFact.TurnsOnWhetherAnArgumentHolds.class, operation);
-        return held == null || held.aspect() != aspect ? null : held;
-    }
-
     /** Where {@code operation}'s predicate is stated over a projection, or null where it is stated
      *  over the element itself. */
     public DeclaredArgument isStatedOverAProjection(ValueName operation) {
@@ -260,6 +672,66 @@ public final class BoundOperationFacts {
     public Set<ValueName> isStatedOverAProjection() {
         return ones(BoundOperationFact.IsStatedOverAProjection.class);
     }
+
+    /**
+     * Whether {@code operation} comes out true exactly where its first argument does not: a
+     * denial, as the law settling its truth says.
+     */
+    public boolean deniesItsArgument(ValueName operation) {
+        return settled(operation, OperationLaw.Observed.TRUTH)
+                instanceof Settled.ByALaw(OperationLaw.Observation<DeclaredArgument>(
+                        AnswerAspect aspect, LawProposition.Observed<DeclaredArgument>(
+                                LawSubject.Argument<DeclaredArgument>(DeclaredArgument of),
+                                SideAnswered side)), var _)
+                && aspect == AnswerAspect.TRUTH && side.aspect() == AnswerAspect.TRUTH
+                && !side.holds() && of.position() == 0;
+    }
+
+    /**
+     * Where {@code operation} comes out true exactly where no two elements of a container it is
+     * handed come to one answer of a closure it is handed: which argument is the container and
+     * which the closure — or null where it states no such thing.
+     *
+     * <p>Read off the law its body is proved to come to: as many different answers of that closure
+     * on the container's elements as the container holds elements.
+     */
+    public NoTwoAlike statesNoTwoAlike(ValueName operation) {
+        if (!(settled(operation, OperationLaw.Observed.TRUTH) instanceof Settled.ByALaw(
+                OperationLaw.Observation<DeclaredArgument>(var _,
+                        LawProposition.Compared<DeclaredArgument>(var form, Rel states)), var _))
+                || states != Rel.EQ || !form.constant().isZero() || form.coefs().size() != 2) {
+            return null;
+        }
+        DeclaredArgument container = null;
+        DeclaredArgument by = null;
+        DeclaredArgument sized = null;
+        ExactRatio different = null;
+        ExactRatio size = null;
+        for (var term : form.coefs().entrySet()) {
+            switch (term.getKey()) {
+                case LawNumber.HowManyDifferent<DeclaredArgument>(var over,
+                        LawSubject.WhatTheClosureAnswers<DeclaredArgument>(var closure)) -> {
+                    container = over;
+                    by = closure;
+                    different = term.getValue();
+                }
+                case LawNumber.SizeOf<DeclaredArgument>(
+                        LawSubject.Argument<DeclaredArgument>(var of)) -> {
+                    sized = of;
+                    size = term.getValue();
+                }
+                default -> {
+                    return null;
+                }
+            }
+        }
+        return container == null || !container.equals(sized)
+                || !different.negated().equals(size) ? null : new NoTwoAlike(container, by);
+    }
+
+    /** The container no two elements of which are alike, and the closure whose answers they are
+     *  alike by. */
+    public record NoTwoAlike(DeclaredArgument container, DeclaredArgument by) {}
 
     /** Whether {@code operation} states its predicate of every element. */
     public boolean statesItsPredicateOfEveryElement(ValueName operation) {
@@ -293,6 +765,20 @@ public final class BoundOperationFacts {
     /** The operations that compute arithmetic of their own. */
     public Set<ValueName> computesANumber() {
         return ones(BoundOperationFact.ComputesANumber.class);
+    }
+
+    /**
+     * Which argument {@code operation} divides by, where what it answers is what a division leaves
+     * with the quotient floored — or empty where it answers something else.
+     *
+     * <p>The arithmetic's own answer, carried as a position and read off what the operation computes,
+     * so a reader asking which calls leave a floored remainder is not asking which operation it is
+     * by its name.
+     */
+    public OptionalInt divisorOfAFloorRemainder(ValueName operation) {
+        NumericResult<DeclaredArgument> result = computesANumber(operation);
+        return result != null && result.computes() instanceof Arithmetic.AFloorRemainder remainder
+                ? OptionalInt.of(remainder.divisor()) : OptionalInt.empty();
     }
 
     /**
@@ -340,6 +826,12 @@ public final class BoundOperationFacts {
     /** The operations that answer what a container holds accumulated. */
     public Set<ValueName> accumulates() {
         return ones(BoundOperationFact.AccumulatesItsContainer.class);
+    }
+
+    /** The number {@code operation} is declared to answer, taken of which of its arguments, or
+     *  null where none is declared. */
+    BoundOperationFact.AnswersANumberTakenOfAValueItIsGiven numberTakenOf(ValueName operation) {
+        return one(BoundOperationFact.AnswersANumberTakenOfAValueItIsGiven.class, operation);
     }
 
     /**

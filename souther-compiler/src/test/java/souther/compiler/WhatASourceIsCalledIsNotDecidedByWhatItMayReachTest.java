@@ -143,6 +143,22 @@ class WhatASourceIsCalledIsNotDecidedByWhatItMayReachTest {
                 .contains("orders.Order"));
     }
 
+    /**
+     * A stem is a module's name where it is a name as the language spells one, read a whole
+     * character at a time, and otherwise the file is {@code main}.
+     *
+     * <p>U+10330 is a letter a name may begin with; asked of the JDK a UTF-16 unit at a time,
+     * neither half of it was one and the file was called {@code main}. A hyphen is no part of a
+     * name.
+     */
+    @Test
+    void aStemIsTheModulesNameWhereItIsAName() {
+        String gothic = new String(Character.toChars(0x10330));
+        assertEquals(gothic + "rders", ImplicitModuleName.ofFileName(gothic + "rders.sou"));
+        assertEquals("main", ImplicitModuleName.ofFileName("my-orders.sou"));
+        assertEquals("main", ImplicitModuleName.ofFileName("1orders.sou"));
+    }
+
     @Test
     void anAnalysisNamesTheLoneFileTheWayACompileDoes() {
         List<Located> warnings = new ArrayList<>();

@@ -122,6 +122,23 @@ class AComparisonCallStatesTheOrderItDecidesTest {
                 + "}\n";
     }
 
+    /** A name given the sign is the sign: the guard over it states the order the call decides. */
+    @Test
+    void aSignGivenANameStatesTheOrderItDecides() {
+        String m = DECIMALS + """
+
+                behavior settle : (paid: Decimal, fee: Decimal) -> Refund | FeeTooHigh
+                    constructs Refund, Net
+
+                let settle (paid, fee) = {
+                    let sign = Decimal.compare(paid, fee)
+                    guard sign >= 0 else FeeTooHigh
+                    Refund { net = Net(paid - fee) }
+                }
+                """;
+        reads("Net", Verdict.PROVED, m);
+    }
+
     /** What the table above settles, it settles no more of. */
     @Test
     void aDecimalComparisonAgainstZeroSettlesNoMore() {

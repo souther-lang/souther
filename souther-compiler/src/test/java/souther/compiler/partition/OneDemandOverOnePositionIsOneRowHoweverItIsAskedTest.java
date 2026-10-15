@@ -80,7 +80,7 @@ class OneDemandOverOnePositionIsOneRowHoweverItIsAskedTest {
     @Test
     void anArmOnePositionSettlesIsOfferedTheRowThatPositionsClassIs() {
         Model model = Model.of(SHIPPING, "shippingFee");
-        List<Axis> axes = model.subject().axes().axes();
+        MeasuredInput.MeasuredAxes axes = model.subject().axes();
         int asked = 0;
         for (ArmProbe probe : model.read().arms().keySet()) {
             for (Map.Entry<Integer, Integer> pin : onePinWaysInto(probe, model, axes)) {
@@ -99,7 +99,7 @@ class OneDemandOverOnePositionIsOneRowHoweverItIsAskedTest {
     /** The ways into {@code probe} that settle exactly one position, as that position and its
      *  class. */
     private static List<Map.Entry<Integer, Integer>> onePinWaysInto(ArmProbe probe, Model model,
-                                                                    List<Axis> axes) {
+                                                                    MeasuredInput.MeasuredAxes axes) {
         List<Map.Entry<Integer, Integer>> out = new ArrayList<>();
         if (!(model.read().armAt(probe) instanceof souther.compiler.reading.PathAccess.Ways ways)) {
             return out;
@@ -162,11 +162,10 @@ class OneDemandOverOnePositionIsOneRowHoweverItIsAskedTest {
             Core body = checked.behaviorBodies().get(behavior);
             assertNotNull(body, "the behavior under test has a body");
             return new Model(MeasuredInput.of(spec.name(), inputs.reading(rules),
-                    Partitions.of(spec.name(), inputs, rules,
+                    Partitions.of(spec.name(), inputs.reading(rules),
                             souther.compiler.query.ReadAs.THE_COMPILATION_DOES)),
-                    CoverageRead.of(spec.name(), body,
-                            checked.plan(), inputs,
-                            rules));
+                    CoverageRead.of(spec.name(),
+                            checked.run(spec.name()), inputs.reading(rules)));
         }
     }
 }

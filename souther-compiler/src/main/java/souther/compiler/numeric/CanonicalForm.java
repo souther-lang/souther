@@ -81,11 +81,13 @@ public record CanonicalForm<A>(Map<A, ExactRatio> coefs) {
      * <p>Positions with a zero coefficient are dropped: a rule mentioning a position it does not
      * weigh says nothing about it, and keeping it would make two writings of one rule two rules.
      *
-     * @return the form and the factor the threshold has to be divided by to go with it, or
-     *         {@code null} where nothing is left — a form that weighs no position is a constant, and
-     *         what a constant comparison settles is not a constraint about anybody
+     * @return the form and the factor the threshold has to be divided by to go with it; {@link
+     *         NoTerms} where nothing is left — a form that weighs no position is a constant, and
+     *         what a constant comparison settles is not a constraint about anybody; or {@link
+     *         Unheld} where a coefficient over what they share has no representation, which is a
+     *         form that exists and that this cannot write, and is not a form with no terms
      */
-    public static <A> Scaled<A> of(Map<A, ExactRatio> coefs) {
+    public static <A> Normalized<A> of(Map<A, ExactRatio> coefs) {
         // The mapping being built, in no order — what a form holds is in none, and one kept here
         // would be one a reader could start taking again on the way in.
         Map<A, ExactRatio> weighed = new HashMap<>();
@@ -95,15 +97,25 @@ public record CanonicalForm<A>(Map<A, ExactRatio> coefs) {
             }
         });
         if (weighed.isEmpty()) {
-            return null;
+            return new NoTerms<>();
         }
         // What every weight shares, which is a question about the weights and not about which of
         // them comes first — see AdditiveImage#divisorOf, where the fold is commutative.
         ExactRatio shared = AdditiveImage.divisorOf(weighed.values());
         Map<A, ExactRatio> primitive = new HashMap<>();
-        weighed.forEach((atom, coef) -> primitive.put(atom, coef.dividedBy(shared)));
+        for (Map.Entry<A, ExactRatio> each : weighed.entrySet()) {
+            switch (each.getValue().dividedBy(shared)) {
+                case ExactAnswer.Held<ExactRatio> held -> primitive.put(each.getKey(), held.value());
+                case ExactAnswer.Unheld<ExactRatio> unheld -> {
+                    return new Unheld<>(unheld.why());
+                }
+            }
+        }
         return new Scaled<>(new CanonicalForm<>(primitive), shared);
     }
+
+    /** What writing a set of coefficients in lowest terms comes to. */
+    public sealed interface Normalized<A> {}
 
     /**
      * A canonical form and what the writing of it was multiplied by.
@@ -111,7 +123,13 @@ public record CanonicalForm<A>(Map<A, ExactRatio> coefs) {
      * @param by never zero and always positive, so dividing a threshold by it leaves which side of
      *           the threshold a value falls on
      */
-    public record Scaled<A>(CanonicalForm<A> form, ExactRatio by) {}
+    public record Scaled<A>(CanonicalForm<A> form, ExactRatio by) implements Normalized<A> {}
+
+    /** Every coefficient was zero, so the writing weighs no position. */
+    public record NoTerms<A>() implements Normalized<A> {}
+
+    /** The writing weighs positions, and its lowest terms are numbers this cannot hold. */
+    public record Unheld<A>(UnheldNumber why) implements Normalized<A> {}
 
     /**
      * What this form weighs, in the one order {@code order} puts its positions in.

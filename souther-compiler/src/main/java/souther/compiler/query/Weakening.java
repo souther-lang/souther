@@ -1,10 +1,18 @@
 package souther.compiler.query;
 
 import souther.compiler.coverage.CoverageSites;
+import souther.compiler.observe.Figure;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.RunSensitivity;
 import souther.compiler.partition.ClosureGap;
+import souther.compiler.partition.CompositionBudget;
+import souther.compiler.partition.DecisionReading;
+import souther.compiler.partition.DecisionRule;
+import souther.compiler.partition.Replacement;
 import souther.compiler.types.SourceConstructOrigin;
+
+import java.util.List;
+import java.util.Objects;
 
 /**
  * One thing that leaves a measurement weaker than it looks.
@@ -61,6 +69,46 @@ public sealed interface Weakening {
      * because for those there is nothing further in to ask.
      */
     RunSensitivity runSensitivity();
+
+    /**
+     * Every figure of this compiler's that stopped it, each as it stood where the comparison was
+     * made, whatever else stopped it beside them: a weakening a wider run leaves standing may have
+     * reached a figure on the way, and a reader is told it did.
+     *
+     * <p>Carried and never worked out here. Each arm hands over what the place that stopped put in
+     * it, and an arm that holds what stopped it asks that, as {@link #runSensitivity} does: a
+     * figure named from the word an arm is published as would name one of the figures that share
+     * the word, and a reader raising it may be raising the one that stopped nothing.
+     *
+     * <p>Not every {@link RunSensitivity#MAY_CHANGE} has one. A border left out because nothing
+     * watched the runs ({@link ABorderNotHeldAgainstTheLinesBesideIt.Why#NOTHING_WATCHED_THE_RUNS})
+     * was stopped by what this build was asked to record, which is a way of running and not a
+     * figure. It is the one: every other stop a wider run may get past was compared against a
+     * figure, and carries it.
+     */
+    default List<Figure> figures() {
+        return switch (this) {
+            case ObservationIncomplete it -> it.met().figures();
+            case OutputCasesUnreadable _, InputCasesUnreadable _,
+                 ItemsPlaceNotWorkedOut _, AReadingNotTiedToItsLine _,
+                 ABorderNotHeldAgainstTheLinesBesideIt _,
+                 BodyNotInEvaluation _, BoundaryNotDerived _, InputNotRead _,
+                 ProofContradicted _, ProofOfAWayContradicted _, ArmsUnsettled _,
+                 DecisionOfRowUnreadable _, DecisionRunNotWatched _, DecisionRuleReadShort _,
+                 KeyedOverwriteCasesUnmeasured _, MeetingsNotPlaced _ -> List.of();
+            case BorderValueUnreadable it -> it.why().figures();
+            case BorderReadingsNotExhausted it -> it.limits();
+            case ModelReadingIncomplete it -> it.cause().figures();
+            case PairSpaceTruncated it -> it.limits();
+            case MeetingsNotWalked it -> it.limits();
+            case DecisionReadingIncomplete it -> switch (it.why()) {
+                case DecisionReading.Enumeration.Complete _ -> List.of();
+                case DecisionReading.Enumeration.StoppedAtAFigure(CompositionBudget figure) ->
+                        List.of(figure.figure());
+            };
+            case RewriteUndecided it -> it.why().figures();
+        };
+    }
 
     /**
      * Something the rows were to be measured from was not observed.
@@ -147,6 +195,32 @@ public sealed interface Weakening {
     }
 
     /**
+     * A reading of a comparison a body wrote that this compiler could not tie to the line its author
+     * drew: the comparison turns at the reading's line, and the turn is where a caller's choice turns
+     * rather than anywhere shown to be the author's line.
+     *
+     * <p>A helper's {@code x <= 10} handed {@code if a > 0 then 10 else 11} turns at {@code a = 0},
+     * where {@code x} is eleven. Rows at such a line are evidence about the comparison that this
+     * reading cannot count for or against a point of the author's line, so what they came to for that
+     * point is undecided rather than settled either way.
+     */
+    record AReadingNotTiedToItsLine(souther.compiler.partition.Border border) implements Weakening {
+
+        public AReadingNotTiedToItsLine {
+            if (border == null) {
+                throw new IllegalArgumentException("a reading not tied to its line is some line's");
+            }
+        }
+
+        /** Unaffected either way: what would tie it is a reading this compiler does not make, and
+         *  no allowance of a run reaches it. */
+        @Override
+        public RunSensitivity runSensitivity() {
+            return RunSensitivity.UNAFFECTED;
+        }
+    }
+
+    /**
      * A coverage item's own place on the order — whether a row is owed there at all — is one a
      * model's own decimals put far enough apart in scale that the exact arithmetic could not read,
      * so what became of it is undecided rather than settled either way.
@@ -188,12 +262,28 @@ public sealed interface Weakening {
      * <p><b>The border and not the row.</b> Two rows can stop this walk at one border and a third
      * can run out, and what is owed a reader is that the border was not searched to the end. How
      * large the search was is what one row happened to hold rather than what is true of the point,
-     * so a figure of it here would make two facts of one.
+     * so a figure of it here would make two facts of one. Which figure stopped it is evidence of
+     * the fact for the same reason, and two walks of one border stopped at two are one fact met at
+     * both ({@code WeakeningSet}).
      *
-     * @param limit how many readings of one row a point is tried against
+     * @param limits how many readings of one row a point is tried against, as each stood where a
+     *               walk over them stopped, each once and in {@link Figure#inOrder}
      */
-    record BorderReadingsNotExhausted(souther.compiler.partition.Border border, int limit)
-            implements Weakening {
+    record BorderReadingsNotExhausted(souther.compiler.partition.Border border,
+                                      List<Figure> limits) implements Weakening {
+
+        public BorderReadingsNotExhausted {
+            Objects.requireNonNull(border, "a walk stopped at some border");
+            limits = Figure.inOrder(limits);
+            if (limits.isEmpty()) {
+                throw new IllegalArgumentException("a walk stopped at a limit says which");
+            }
+        }
+
+        /** Stopped at one limit, which is how a walk meets it. */
+        public BorderReadingsNotExhausted(souther.compiler.partition.Border border, Figure limit) {
+            this(border, List.of(limit));
+        }
 
         /** The figure is this compiler's, so a run allowed more readings comes to another answer. */
         @Override
@@ -354,7 +444,20 @@ public sealed interface Weakening {
      * the one warrant a measure did carry — a {@code truncated} flag beside the status, which #951
      * had to add a constructor check to keep the two in step.
      */
-    record PairSpaceTruncated(String behavior, long total, int limit) implements Weakening {
+    record PairSpaceTruncated(String behavior, long total, List<Figure> limits)
+            implements Weakening {
+
+        public PairSpaceTruncated {
+            limits = Figure.inOrder(limits);
+            if (limits.isEmpty()) {
+                throw new IllegalArgumentException("a walk stopped at a limit says which");
+            }
+        }
+
+        /** Stopped at one limit, which is how a walk meets it. */
+        public PairSpaceTruncated(String behavior, long total, Figure limit) {
+            this(behavior, total, List.of(limit));
+        }
 
         /** The one arm that is a figure of its own. {@code limit} is what the walk was compared
          *  against, and it is a number the query graph hands the analysis, so a run under a wider
@@ -380,6 +483,29 @@ public sealed interface Weakening {
      * token nobody outside the numbering could read.
      */
     record ProofContradicted(CoverageSites.Obligation arm) implements Weakening {
+
+        /** An analysis that does not hold is one that does not hold however much a run allows. */
+        @Override
+        public RunSensitivity runSensitivity() {
+            return RunSensitivity.UNAFFECTED;
+        }
+    }
+
+    /**
+     * A row went down a way through {@code behavior}'s body this compiler had proven no input takes
+     * ({@link DecisionReading#impossible}).
+     *
+     * <p>The same fact as {@link ProofContradicted}, about a way rather than an arm: the proof is
+     * wrong, and the rules counted are short of whatever lies past the way, since none of them was
+     * read. Its own arm because what it is about is a way of the decision, which is the
+     * behavior's, and no arm a reader can be sent to.
+     */
+    record ProofOfAWayContradicted(String behavior, DecisionRule way) implements Weakening {
+
+        public ProofOfAWayContradicted {
+            Objects.requireNonNull(behavior, "a way is some behavior's");
+            Objects.requireNonNull(way, "a proof is of some way");
+        }
 
         /** An analysis that does not hold is one that does not hold however much a run allows. */
         @Override
@@ -463,6 +589,36 @@ public sealed interface Weakening {
     }
 
     /**
+     * A meeting of the body's decisions whose combinations the classes of the input do not place.
+     *
+     * <p>A way of settling one of its factors, or the way to it, narrows no position — the arm
+     * itself, where what a run is seen doing does not tell the ways into it apart — or two ways of
+     * settling one factor leave the same classes. No row can be steered into one of its
+     * combinations rather than another, so none is asked for, and which of them the rows make is
+     * not measured. Nothing is owed at any of them, because nothing established that a row is
+     * missing.
+     *
+     * <p>Beside {@link MeetingsNotWalked}, which a wider run walks. This is how the body is read,
+     * and allowing more reads it the same way.
+     */
+    record MeetingsNotPlaced(String behavior, int groups) implements Weakening {
+
+        public MeetingsNotPlaced {
+            Objects.requireNonNull(behavior, "a meeting is a meeting of some behavior");
+            if (groups < 1) {
+                throw new IllegalArgumentException(
+                        "a measure that placed every group went without nothing here: " + groups);
+            }
+        }
+
+        /** The classes place what they place however much a run allows. */
+        @Override
+        public RunSensitivity runSensitivity() {
+            return RunSensitivity.UNAFFECTED;
+        }
+    }
+
+    /**
      * A meeting of the body's decisions the measure would not walk the combinations of.
      *
      * <p>The group is read and its combinations are not enumerated, so which of them the rows make
@@ -472,13 +628,21 @@ public sealed interface Weakening {
      *
      * <p>Beside {@link PairSpaceTruncated}, which is the same figure running out on the other
      * criterion. Two words because a reader raising a limit raises a different one for each.
+     *
+     * @param limits what the groups held back were compared against, as each stood there: one
+     *               figure handed to the run, said once however many groups it held back
      */
-    record MeetingsNotWalked(String behavior, int groups) implements Weakening {
+    record MeetingsNotWalked(String behavior, int groups, List<Figure> limits)
+            implements Weakening {
 
         public MeetingsNotWalked {
             if (groups < 1) {
                 throw new IllegalArgumentException(
                         "a measure that walked every group went without nothing here: " + groups);
+            }
+            limits = Figure.inOrder(limits);
+            if (limits.isEmpty()) {
+                throw new IllegalArgumentException("a group held back was held back by a limit");
             }
         }
 
@@ -547,6 +711,62 @@ public sealed interface Weakening {
         @Override
         public RunSensitivity runSensitivity() {
             return RunSensitivity.UNAFFECTED;
+        }
+    }
+
+    /**
+     * A decision of a body turns on which of several elements of one key a map filed from a list
+     * holds — the last — and what that decides was not measured.
+     *
+     * <p>The last value for a key is read as it is: what a statement says of an entry is said of
+     * the last element of its key. What is not established is which distinctions the body draws
+     * are told apart by that order — a row where an earlier element of a key meets a condition and
+     * the last does not, and the other way round. The rows this compiler writes hold one element
+     * of each key, so a distinction that only a repeated key makes is one nothing here has a row
+     * for, and a measurement that said it was whole would be saying the rows it has are every row
+     * the model distinguishes.
+     *
+     * <p>About the behavior and not about a rule: the order is a property of the map the body
+     * looks values up in, and each decision downstream of the lookup rests on it.
+     */
+    record KeyedOverwriteCasesUnmeasured(String behavior) implements Weakening {
+
+        public KeyedOverwriteCasesUnmeasured {
+            Objects.requireNonNull(behavior, "an overwrite order is that of some body's map");
+        }
+
+        /**
+         * What is missing is a capacity: this compiler writes no row holding a key twice, and a
+         * run allowed more of everything writes none either.
+         */
+        @Override
+        public RunSensitivity runSensitivity() {
+            return RunSensitivity.UNAFFECTED;
+        }
+    }
+
+    /**
+     * A rewrite of one behavior's body nothing here could decide about: whether a row tells it from
+     * the body is not known, and not that none does.
+     *
+     * <p>Named by the rewrite, because each is an obligation of its own and what left one open says
+     * nothing about the next.
+     */
+    record RewriteUndecided(String behavior, Replacement replacement,
+                            ReplacementEvidence.Undecided.LeftOpen why)
+            implements Weakening {
+
+        public RewriteUndecided {
+            Objects.requireNonNull(behavior, "a rewrite is of some behavior's body");
+            Objects.requireNonNull(replacement, "a rewrite left open is some rewrite");
+            Objects.requireNonNull(why, "a rewrite left open was left open for a reason");
+        }
+
+        /** Asked of the ways it was left open, each of which the place that left it open
+         *  answered: a wider run could come to another answer where any of them could. */
+        @Override
+        public RunSensitivity runSensitivity() {
+            return why.runSensitivity();
         }
     }
 }

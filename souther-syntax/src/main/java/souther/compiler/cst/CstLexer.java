@@ -109,6 +109,35 @@ public final class CstLexer {
         return sb.toString();
     }
 
+    /**
+     * The string literal that denotes {@code text}: in quotes, with every character this scan would
+     * read otherwise written as its escape.
+     *
+     * <p>The other direction of {@link #textOf}, and here for the reason that one is: which
+     * characters are written with a backslash is what {@link #escapes} says, and a writer that kept
+     * its own list would write a literal the scan reads as another string, or refuses. So
+     * {@code textOf(literalOf(text))} is {@code text}, for every text — a line terminator is the
+     * only thing a literal cannot hold as written, and both of its characters have an escape.
+     *
+     * <p>For a value written for a reader as a model writes it: a row, a construction quoted in a
+     * message, a value a rule names.
+     */
+    public static String literalOf(String text) {
+        StringBuilder sb = new StringBuilder(text.length() + 2).append('"');
+        for (int i = 0; i < text.length(); i++) {
+            char c = text.charAt(i);
+            switch (c) {
+                case '\n' -> sb.append("\\n");
+                case '\t' -> sb.append("\\t");
+                case '\r' -> sb.append("\\r");
+                case '"' -> sb.append("\\\"");
+                case '\\' -> sb.append("\\\\");
+                default -> sb.append(c);
+            }
+        }
+        return sb.append('"').toString();
+    }
+
     /** The lexer's result: the token stream (trivia and a trailing {@code EOF} included) and any
      * lexical errors, positioned by offset. */
     public record Result(List<GreenToken> tokens, List<CstError<?>> errors) {}

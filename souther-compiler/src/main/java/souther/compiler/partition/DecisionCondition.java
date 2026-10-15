@@ -1,7 +1,18 @@
 package souther.compiler.partition;
 
+import souther.compiler.inputs.CasesLeft;
+import souther.compiler.meaning.DecisionAtom;
+import souther.compiler.meaning.DecisionSubject;
+import souther.compiler.meaning.Proposition;
+import souther.compiler.meaning.WhyNotTaken;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
+
+import java.util.Collections;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Set;
+import java.util.TreeSet;
 
 /**
  * One distinction a body draws to decide, apart from what any path made of it.
@@ -129,22 +140,79 @@ public sealed interface DecisionCondition {
      * stand a dependency in; "the second arm was taken" is a fact about the text, and a fork's arms
      * are the answers to one question about one subject rather than a question apiece.
      *
-     * @param of the scrutinee, before any arm narrows it
+     * <p>And the answers it has, because one subject can be asked two questions. A fork on whether a
+     * visit is a {@code OnceKind} or a {@code Renkei} and a fork inside the first on whether it is a
+     * {@code Station} or a {@code Hospital} are both about the visit's kind, and a rule through
+     * {@code Station} answers both: {@code Station} or {@code Hospital} to the first and
+     * {@code Station} to the second. Told apart by the subject alone, the two would be one column
+     * answered two ways, and the rule a contradiction. Two forks dividing a subject the same way
+     * are one column however often a path meets them.
+     *
+     * <p>That the second answer implies the first is not this column's to say. Which values a row
+     * may be at once is what the requirements on the way put together, and they do it by
+     * intersection ({@code Requirements.merge}); a column is a question the body asked.
+     *
+     * @param of      the scrutinee, before any arm narrows it
+     * @param answers what each arm that is a column leaves it. A set, so two forks dividing the
+     *                subject alike are one question whatever order their arms are written in, and
+     *                held in the one order the set makes ({@link CasesLeft#compare}) so that one
+     *                question spells one way
      */
-    record ACase(DecisionSubject of) implements DecisionCondition {
+    record ACase(DecisionSubject of, Set<CasesLeft> answers) implements DecisionCondition {
 
         public ACase {
-            if (of == null) {
-                throw new IllegalArgumentException("a fork of a decision is asked of something");
+            if (of == null || answers == null || answers.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "a fork of a decision is asked of something, and has answers");
             }
+            Set<CasesLeft> ordered = new TreeSet<>(CasesLeft::compare);
+            ordered.addAll(answers);
+            answers = Collections.unmodifiableSet(ordered);
+        }
+    }
+
+    /**
+     * A condition read to the end that no column above is: what it states over the input, as the
+     * column itself — some element of a container meeting something, several things asked at once,
+     * an arm entered where a computed value is of its case.
+     *
+     * <p>A statement and its denial are one column, and which of the two stands for it is the one
+     * whose spelling comes first ({@link #of}), so the two ways a condition comes out are the two
+     * answers of one column wherever each was met.
+     */
+    record AStatement(Proposition statement) implements DecisionCondition {
+
+        public AStatement {
+            if (statement == null || Proposition.leavesSomethingUnread(statement)) {
+                throw new IllegalArgumentException(
+                        "a statement is a column where all of it was read: " + statement);
+            }
+            if (statement.denied().key().compareTo(statement.key()) < 0) {
+                throw new IllegalArgumentException("a statement and its denial are one column,"
+                        + " read as " + statement.denied().key() + " rather than as "
+                        + statement.key());
+            }
+        }
+
+        /**
+         * {@code stated} coming out {@code held}, as the answer to the one column it and its
+         * denial are.
+         *
+         * @param denied what holds exactly where {@code stated} does not — handed in, so that the
+         *               two ways one condition comes out name the column with one value
+         */
+        static DecidedCondition.Held of(Proposition stated, Proposition denied, boolean held) {
+            return denied.key().compareTo(stated.key()) < 0
+                    ? new DecidedCondition.Held(new AStatement(denied), !held)
+                    : new DecidedCondition.Held(new AStatement(stated), held);
         }
     }
 
     /**
      * A condition this reading has no words for, named by the reading that met it.
      *
-     * <p>The one shape told apart by a name. What the other two carry says what they mean, and two
-     * conditions nothing could read mean nothing to be told apart by — so without a name, two
+     * <p>The one shape told apart by a name. What the other shapes carry says what they mean, and
+     * two conditions nothing could read mean nothing to be told apart by — so without a name, two
      * distinctions this compiler does distinguish would be one column and the table would say a
      * body decides less than it does.
      *
@@ -153,15 +221,24 @@ public sealed interface DecisionCondition {
      * every distinction on its path.
      *
      * @param met which condition of the reading it is
-     * @param why what stopped it, in the walk's own words
+     * @param whys what stopped it, in the walk's own words, each once
      */
-    record AConditionNotRead(ConditionOccurrence met, OnTheWay.Why why)
+    record AConditionNotRead(ConditionOccurrence met, List<WhyNotTaken> whys)
             implements DecisionCondition {
 
+        public AConditionNotRead(ConditionOccurrence met, WhyNotTaken why) {
+            this(met, List.of(why));
+        }
+
         public AConditionNotRead {
-            if (met == null || why == null) {
+            if (met == null) {
                 throw new IllegalArgumentException(
                         "a condition nothing read is one some reading met, for a reason");
+            }
+            whys = List.copyOf(new LinkedHashSet<>(whys));
+            if (whys.isEmpty()) {
+                throw new IllegalArgumentException("a condition nothing read is unread for some"
+                        + " reason");
             }
         }
     }

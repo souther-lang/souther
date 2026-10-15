@@ -7,10 +7,12 @@ import souther.compiler.numeric.CanonicalOrder;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.Rel;
+import souther.compiler.numeric.SmallForm;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
 import souther.compiler.query.Scopes;
@@ -21,7 +23,6 @@ import souther.compiler.types.TypeSymbols;
 import java.lang.reflect.RecordComponent;
 import java.math.BigDecimal;
 import java.util.Arrays;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -278,8 +279,8 @@ class WhatIsRequiredOfAPositionIsAskedWithWhatItAdmitsTest {
         ConstraintState<String> nowhere = ConstraintState.top(CanonicalOrder.asTheyAreSpelled())
                 .taking(LinearForm.<String>atom("x"), Rel.GE,
                         Map.of("x", souther.compiler.numeric.Granularity.DISCRETE))
-                .taking(LinearForm.<String>constant(ExactRatio.of(-1))
-                                .minus(LinearForm.atom("x")), Rel.GE,
+                .taking(SmallForm.small(LinearForm.<String>constant(ExactRatio.of(-1)))
+                                .minus(LinearForm.atom("x")).form(), Rel.GE,
                         Map.of("x", souther.compiler.numeric.Granularity.DISCRETE));
         assertTrue(nowhere.numbers().isBottom(), "x is at nought or above and below minus one");
         assertEquals(Map.of(), nowhere.confinement().carriers(), "and no position is read at all");
@@ -329,7 +330,11 @@ class WhatIsRequiredOfAPositionIsAskedWithWhatItAdmitsTest {
                 invariant yes = (x == 1 || x == 7) && x == y
             """;
 
-    /** Whether nothing satisfies {@link #CHOICE} once {@code y} is settled at {@code at}. */
+    /**
+     * Whether nothing satisfies {@link #CHOICE} once {@code y} is settled at {@code at}, settled
+     * after the rules were handed over in a caller's names — which is where a reader of an input
+     * settles what it fixes.
+     */
     private static boolean settling(int at) {
         Compilation compilation = Compilation.ofSource(CHOICE, "Main");
         compilation.answerEverything();
@@ -337,12 +342,12 @@ class WhatIsRequiredOfAPositionIsAskedWithWhatItAdmitsTest {
         FieldDomains domains = FieldDomains.of(named(symbols, "Held"),
                 RuleReadingContext.unshared(RuleReadings.of(compilation, "demo"),
                         ReadAs.THE_COMPILATION_DOES));
-        Map<NumberAt<RuleKey>, Count> fixed = new LinkedHashMap<>();
-        fixed.put(NumberAt.valueOf(RuleKey.of("y")), new Count(BigDecimal.valueOf(at)));
-        return domains.given(fixed)
+        ConstraintState<String> handedOver = domains
                 .constraintsOver(claim -> "at:" + claim, other -> "other:" + other,
                         CanonicalOrder.asTheyAreSpelled())
-                .constraints().isBottom();
+                .constraints();
+        return ConstraintState.settling(handedOver, "at:" + NumberAt.valueOf(RuleKey.of("y")),
+                new Count(BigDecimal.valueOf(at)), Granularity.DISCRETE).isBottom();
     }
 
     /** What the one declaration of {@code source} was shown to have no value by, or null. */

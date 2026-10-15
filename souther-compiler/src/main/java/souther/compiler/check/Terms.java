@@ -10,11 +10,13 @@ import souther.compiler.types.ReferenceOrigin;
 import souther.compiler.ast.Hir;
 import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.OrderedInterval;
+import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
@@ -25,7 +27,9 @@ import souther.compiler.types.ReachName;
 import souther.compiler.types.ValueName;
 
 import java.math.BigDecimal;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
@@ -79,10 +83,10 @@ final class Terms {
         return symbols;
     }
 
-    /** What the declarations this reading was made against say, for the readings below that ask
-     *  which of them is a sum and what its cases are. */
-    PublishedDeclarations published() {
-        return ruleReading.source().published();
+    /** What a value of each sum this reading was made against can be, for the readings below that
+     *  ask which declarations are sums and what their cases are. */
+    SumCases sums() {
+        return ruleReading.source().sums();
     }
 
     /** Which form each declaration this reading was made against was written in. */
@@ -99,6 +103,12 @@ final class Terms {
     /** What each of them wears one of, for the readings below that go through the name. */
     NewtypeInners newtypeInners() {
         return ruleReading.source().inners();
+    }
+
+    /** Everything asked of the declarations this reading was made against, for the readings below
+     *  that ask what orders a value. */
+    DeclarationAccess declarations() {
+        return ruleReading.source().declarations();
     }
 
     /**
@@ -532,7 +542,7 @@ final class Terms {
      * fact about that expression, and a caller handed nothing back had to reconstruct it from the
      * shape of what it asked about — which is a second account of this walk, written by whoever
      * needed one. The environment travels with the expression for the reason
-     * {@link AffineForms.ReadThrough} gives.
+     * {@link ValueStanding.ReadThrough} gives.
      *
      * <p>The narrowing is for a reader whose subjects are narrower than this one's. What may be named here is what
      * the discharge procedure can carry a fact about, which is every number it can identify; what a
@@ -555,18 +565,8 @@ final class Terms {
             }
 
             @Override
-            public PublishedDeclarations published() {
-                return Terms.this.published();
-            }
-
-            @Override
-            public DeclarationKinds kinds() {
-                return Terms.this.kinds();
-            }
-
-            @Override
-            public NewtypeInners inners() {
-                return Terms.this.newtypeInners();
+            public DeclarationAccess declarations() {
+                return Terms.this.declarations();
             }
 
             @Override
@@ -582,13 +582,13 @@ final class Terms {
             }
 
             @Override
-            public AffineForms.ReadThrough<Denotations> readThrough(Core.Read read,
+            public ValueStanding.ReadThrough<Denotations> readThrough(Core.Read read,
                                                                     Denotations where) {
                 return affineReading.readThrough(read, where);
             }
 
             @Override
-            public java.util.List<AffineForms.ReadThrough<Denotations>> alternativesOf(
+            public java.util.List<ValueStanding.ReadThrough<Denotations>> alternativesOf(
                     Core.Read read, Denotations where) {
                 return affineReading.alternativesOf(read, where);
             }
@@ -618,18 +618,8 @@ final class Terms {
                 }
 
                 @Override
-                public PublishedDeclarations published() {
-                    return Terms.this.published();
-                }
-
-                @Override
-                public DeclarationKinds kinds() {
-                    return Terms.this.kinds();
-                }
-
-                @Override
-                public NewtypeInners inners() {
-                    return Terms.this.newtypeInners();
+                public DeclarationAccess declarations() {
+                    return Terms.this.declarations();
                 }
 
                 @Override
@@ -643,7 +633,7 @@ final class Terms {
                 }
 
                 @Override
-                public AffineForms.ReadThrough<Denotations> readThrough(Core.Read read,
+                public ValueStanding.ReadThrough<Denotations> readThrough(Core.Read read,
                                                                         Denotations at) {
                     return Terms.this.readThrough(read, at);
                 }
@@ -658,7 +648,7 @@ final class Terms {
                  * such a clause is read once for the value in front of it.
                  */
                 @Override
-                public java.util.List<AffineForms.ReadThrough<Denotations>> alternativesOf(
+                public java.util.List<ValueStanding.ReadThrough<Denotations>> alternativesOf(
                         Core.Read read, Denotations at) {
                     return null;
                 }
@@ -700,8 +690,8 @@ final class Terms {
         // answered about and not the edge that stood for it. The type the binding is in force at
         // says nothing about which value it holds, so that is set aside.
         Core value = Core.withoutStanding(li.value());
-        Core given = value instanceof Core.MaterialisedValue build
-                ? templates.bodyOf(build) : value;
+        Core built = templates.builtBy(value);
+        Core given = built != null ? built : value;
         // Entering a binding a walk is already inside is not a second binding of it. A branch is
         // read from where its conditional stood, which is inside these, over a tree that still holds
         // them.
@@ -716,7 +706,7 @@ final class Terms {
         }
         // The names a value's body holds are its own, so it is read where nothing outside it is in
         // force, and the same environment answers for every build of it.
-        Denotations reading = value instanceof Core.MaterialisedValue ? insideATemplate : at;
+        Denotations reading = built != null ? insideATemplate : at;
         // What the name is about is what it was given is about. Where even the identity reading has
         // nothing to name — an expression answering nothing at all — the name is what there is, and
         // it is one value however many times it is read.
@@ -773,7 +763,7 @@ final class Terms {
      * The number {@code e} folds to at compile time, or {@code null} where it folds to none.
      *
      * <p>Over the tree alone, for a walk that carries an environment of its own and has entered the
-     * bindings above what it hands over ({@link AffineForms.Reading#inside}). A binding standing
+     * bindings above what it hands over ({@link ValueStanding.Names#inside}). A binding standing
      * <em>inside</em> what is handed over is not read here, and the walks that meet one are named in
      * the issue on which readings cross a binding.
      */
@@ -785,21 +775,53 @@ final class Terms {
         return folded instanceof BigDecimal d ? d : null;
     }
 
-    /** A linear form scaled by a constant, when one side is a bare constant (a scalar multiply); null
-     * when neither side is constant (a non-linear product). */
-    static <A> LinearForm<A> scale(LinearForm<A> a, LinearForm<A> b) {
-        if (a == null || b == null) {
-            return null;
+    /**
+     * What an operator over two forms comes to under the rule this arithmetic has for it: the form,
+     * or why there is none.
+     *
+     * <p>The reasons are the rule's own and not the expression's. A reader that says why a reading
+     * stopped asks this; one that only needs a form takes {@link #formOrNull}, where every reason
+     * is no form.
+     */
+    sealed interface Operated<A> {
+
+        /** The form the parts come to. */
+        record Form<A>(LinearForm<A> form) implements Operated<A> {}
+
+        /** Arithmetic no form over the atoms says: a product of two unknowns, a quotient by one. */
+        record NotLinear<A>(NonAffineOperation operation) implements Operated<A> {}
+
+        /** A quotient by nought, which no run has a number for. */
+        record NoNumberOnARun<A>() implements Operated<A> {}
+
+        /** A number of the form, worked out exactly, that could not be held. */
+        record NotHeld<A>(UnheldNumber why) implements Operated<A> {}
+
+        /** The form, or null whatever the reason there is none. */
+        default LinearForm<A> formOrNull() {
+            return this instanceof Form<A>(LinearForm<A> form) ? form : null;
         }
+
+        /** {@code answer} as the form it holds or the number it could not. */
+        static <A> Operated<A> of(ExactAnswer<LinearForm<A>> answer) {
+            return switch (answer) {
+                case ExactAnswer.Held<LinearForm<A>>(LinearForm<A> form) -> new Form<>(form);
+                case ExactAnswer.Unheld<LinearForm<A>>(UnheldNumber why) -> new NotHeld<>(why);
+            };
+        }
+    }
+
+    /** The product of two forms: a scalar multiply where one side is a bare constant. */
+    static <A> Operated<A> product(LinearForm<A> a, LinearForm<A> b) {
         if (a.coefs().isEmpty()) {
-            return b.times(a.constant());
+            return Operated.of(b.times(a.constant()));
         }
-        return b.coefs().isEmpty() ? a.times(b.constant()) : null;
+        return b.coefs().isEmpty() ? Operated.of(a.times(b.constant()))
+                : new Operated.NotLinear<>(NonAffineOperation.PRODUCT_OF_NON_CONSTANT_VALUES);
     }
 
     /**
-     * A linear form over a constant divisor, which is that form scaled by the divisor's reciprocal;
-     * null where the divisor is no constant, or is the constant nought.
+     * The quotient of two forms: the first with each of its numbers divided by a constant divisor.
      *
      * <p><b>Constant is what the divisor was read as and not how it was spelled.</b> A form with no
      * coefficients is a number whatever expression came to it, so {@code x / 2}, {@code x / (1 + 1)}
@@ -810,15 +832,27 @@ final class Terms {
      * <p>Unlike a product, which is a scalar multiply from either side: {@code 1 / x} states an
      * inverse and is outside this fragment however plain it looks.
      *
-     * <p>A divisor of nought has no reciprocal to scale by, and the operation it was written in
-     * aborts wherever it is reached — so there is no value for a form to be about, and composing one
-     * would state an arithmetic meaning for an expression that answers nothing.
+     * <p>A divisor of nought divides nothing, and the operation it was written in aborts wherever it
+     * is reached — so there is no value for a form to be about, and composing one would state an
+     * arithmetic meaning for an expression that answers nothing.
+     *
+     * <p>Divided, and not multiplied by a reciprocal: the reciprocal of a divisor at the least
+     * exponent has no exponent, while a form over that divisor can be one whose numbers are all
+     * held.
      */
-    static <A> LinearForm<A> overAConstant(LinearForm<A> a, LinearForm<A> b) {
-        if (a == null || b == null || !b.coefs().isEmpty() || b.constant().isZero()) {
-            return null;
+    static <A> Operated<A> quotient(LinearForm<A> a, LinearForm<A> b) {
+        if (!b.coefs().isEmpty()) {
+            return new Operated.NotLinear<>(NonAffineOperation.DIVISION_BY_NON_CONSTANT_VALUE);
         }
-        return a.times(ExactRatio.ONE.dividedBy(b.constant()));
+        if (b.constant().isZero()) {
+            return new Operated.NoNumberOnARun<>();
+        }
+        return Operated.of(a.dividedBy(b.constant()));
+    }
+
+    /** The sum or the difference of two forms. */
+    static <A> Operated<A> sum(LinearForm<A> a, LinearForm<A> b, boolean subtract) {
+        return Operated.of(subtract ? a.minus(b) : a.plus(b));
     }
 
     /** A node the affine walk composes nothing out of, as a form: a numeric atom, what a name was
@@ -851,7 +885,7 @@ final class Terms {
      * {@link AffineForms}'s: this once did the reading itself, and a caller that can answer with a
      * form is a caller that can keep an account of the arithmetic beside the one walk that has one.
      */
-    AffineForms.ReadThrough<Denotations> readThrough(Core.Read read, Denotations at) {
+    ValueStanding.ReadThrough<Denotations> readThrough(Core.Read read, Denotations at) {
         if (!computesAsWhatItWasGiven(read.binding(), at) || !carriesANumber(read.type())) {
             return null;
         }
@@ -861,7 +895,7 @@ final class Terms {
         // whatever was bound after it; a binding tells itself from every other, so nothing bound
         // later answers for a name this one holds.
         return given == null || given == read ? null
-                : new AffineForms.ReadThrough<>(given, at);
+                : new ValueStanding.ReadThrough<>(given, at);
     }
 
     /**
@@ -907,7 +941,7 @@ final class Terms {
      * <p><b>This is what the environment holds and not what a reading is licensed to follow.</b>
      * Every name a binding gives a value to is peeled here, which is the question a reader asking
      * what was built wants answered. What one occurrence may be read as another is a narrower
-     * answer with an owner of its own ({@link AffineForms.Reading#readThrough}), and the walk that
+     * answer with an owner of its own ({@link ValueStanding.Names#readThrough}), and the walk that
      * resolves an occurrence under it is held to that owner rather than to this one — so the two
      * are not made one, however alike the shapes they peel look.
      */
@@ -928,11 +962,17 @@ final class Terms {
         return f == null ? null : f.negate();
     }
 
+    /**
+     * The sum or the difference of two forms, or null where either is no form or a number of the
+     * result has no representation.
+     *
+     * <p>Null is the one word this boundary has, and it is enough for what stands on it: a fact
+     * about a comparison is stated from a form, and a comparison with no form states none. The
+     * reading of a comparison that has to tell the two apart, because it answers a reader with which
+     * one it was, asks {@link #sum} itself.
+     */
     static <A> LinearForm<A> add(LinearForm<A> a, LinearForm<A> b, boolean subtract) {
-        if (a == null || b == null) {
-            return null;
-        }
-        return subtract ? a.minus(b) : a.plus(b);
+        return a == null || b == null ? null : sum(a, b, subtract).formOrNull();
     }
 
     /**
@@ -1021,7 +1061,7 @@ final class Terms {
 
     /** The same, of a type a caller already holds. */
     private boolean carriesANumber(Type t) {
-        Carrier carrier = Carrier.ofValue(t, newtypeInners(), symbols, kinds(), published());
+        Carrier carrier = Carrier.ofValue(t, declarations());
         return carrier != null && carrier.counts();
     }
 
@@ -1234,7 +1274,7 @@ final class Terms {
                                               FactSubject accumulator, FactSubject element,
                                               Granularity spacing) {
         return switch (combine) {
-            case ADD -> LinearForm.atom(accumulator).plus(LinearForm.atom(element));
+            case ADD -> LinearForm.sumOfAtoms(accumulator, element);
             case MULTIPLY -> {
                 FactSubject product = named(FactSubject.of(interned.operator(
                         BinOp.MUL, accumulator.identity(), element.identity())), spacing);
@@ -1272,7 +1312,7 @@ final class Terms {
 
     /** The product of {@code left} and {@code right}, or null where either factor is a value nothing
      * can be said of. A factor that is a written constant is not this: that product is a scalar
-     * multiply and the fragment carries it ({@link #scale}). */
+     * multiply and the fragment carries it ({@link #product(LinearForm, LinearForm)}). */
     private Derivation product(Core left, Core right, Denotations at) {
         LinearForm<FactSubject> over = affineOf(left, at);
         LinearForm<FactSubject> by = affineOf(right, at);
@@ -1613,7 +1653,7 @@ final class Terms {
      * failure of this compiler.
      */
     private NumericDomain.Bounds extentOf(Type type) {
-        Carrier carrier = Carrier.ofValue(type, newtypeInners(), symbols, kinds(), published());
+        Carrier carrier = Carrier.ofValue(type, declarations());
         if (carrier == null) {
             return null;
         }
@@ -1767,11 +1807,70 @@ final class Terms {
             // The rules are about how the container was built, so they are read of the expression
             // that built it — and in the environment that expression's own names mean something in,
             // which is not the one the name was read in where a binding stands between them.
-            Given built = given(container, at);
-            carrying(atom, IntrinsicNumericFacts.ofSize(size,
-                    DischargeRules.sizeSource(built.value()), atom, built.at(), this));
+            Given built = sizedBy(container, at);
+            carrying(atom, IntrinsicNumericFacts.ofSize(size, built.value(), atom, built.at(),
+                    this));
+            Derivation held = IntrinsicNumericFacts.heldWhereItsLawSays(built.value(), built.at(),
+                    this);
+            if (held != null) {
+                computedBy(atom, new AtomKnowledge.Computation.Derived(held));
+            }
         }
         return atom;
+    }
+
+    /**
+     * The value whose size {@code container}'s is, where it stands: through each name to the value
+     * it was given, and through each building as many as its source to that source, until neither
+     * leads further.
+     *
+     * <p>Both, and in turn, because the atom is named through both: a size of
+     * {@code List.reverse(xs)} is the size of {@code xs}, and {@code xs} may be a name for a value
+     * built some other way. Stopping at the first of them would read a name where the atom is named
+     * after the value behind it, and one atom would carry what the value says and, named the other
+     * way, what a name says.
+     */
+    private Given sizedBy(Core container, Denotations at) {
+        Given given = given(container, at);
+        Core source = DischargeRules.sizeSource(given.value());
+        return source == Core.withoutStanding(given.value()) ? new Given(source, given.at())
+                : sizedBy(source, given.at());
+    }
+
+    /**
+     * The value at {@code place}, of type {@code type}, as the atom a rule reading it names — or null
+     * where it is no number the domain carries.
+     *
+     * <p>For a reader that holds a place and not the expression that reads it: what a proposition
+     * read off another tree says of a position. Named the way {@link #atomOfIdentity} names one, so
+     * the atom a guard here names and the atom such a proposition names are one.
+     */
+    FactSubject atomAt(FactSubject place, Type type) {
+        Carrier carrier = place == null ? null : Carrier.ofValue(type, declarations());
+        if (carrier == null || !carrier.counts()) {
+            return null;
+        }
+        FactSubject atom = named(place, granularityOf(type));
+        if (atom != null) {
+            atomExtents.putIfAbsent(atom, extentOf(type));
+        }
+        return atom;
+    }
+
+    /** What {@code remainder} leaves of what stands at {@code place} when divided by
+     *  {@code divisor}, named as the call that takes it is: the call over the place and the number
+     *  written, so a guard on it and a body's name for the call are about one number. */
+    FactSubject remainderAtPlace(ValueName remainder, FactSubject place, long divisor) {
+        return place == null ? null
+                : named(interned.called(remainder,
+                        List.of(place.identity(), interned.written(divisor))),
+                        Granularity.DISCRETE);
+    }
+
+    /** The size {@code size} takes of what stands at {@code place}, named as {@link #sizeKeyOf}
+     *  names it, so a guard on the size here and a proposition about it are about one atom. */
+    FactSubject sizeAtPlace(ValueName size, FactSubject place) {
+        return place == null ? null : sizeKeyOf(size, place.identity());
     }
 
     /** The size {@code size} takes of {@code container}, named as the whole number it is. A size
@@ -1861,7 +1960,7 @@ final class Terms {
      * in it.
      */
     Granularity granularityOf(Type t) {
-        Carrier carrier = Carrier.ofValue(t, newtypeInners(), symbols, kinds(), published());
+        Carrier carrier = Carrier.ofValue(t, declarations());
         if (carrier == null || !carrier.counts()) {
             throw new IllegalStateException("not a number the domain carries: " + Type.show(t));
         }
@@ -2274,7 +2373,7 @@ final class Terms {
                     : Naming.of(pathKey(e, at, leaf), Naming.Reason.A_BINDING_STANDS_FOR_NOTHING);
         }
         return switch (e) {
-            case Core.Read _, Core.FieldAccess _ ->
+            case Core.Read _, Core.FieldAccess _, Core.FieldProjection _ ->
                     Naming.of(pathKey(e, at, leaf), Naming.Reason.A_BINDING_STANDS_FOR_NOTHING);
             case Core.Int i -> new Naming.Named(interned.written(i.value()));
             case Core.Decimal d -> new Naming.Named(interned.written(d.value()));
@@ -2532,6 +2631,7 @@ final class Terms {
         return switch (Core.withoutStanding(e)) {
             case Core.Read r -> r.binding();
             case Core.FieldAccess fa -> rootBinding(fa.target());
+            case Core.FieldProjection p -> rootBinding(p.base());
             default -> null;
         };
     }
@@ -2544,9 +2644,16 @@ final class Terms {
     }
 
     private static void chainInto(Core e, List<String> out) {
-        if (Core.withoutStanding(e) instanceof Core.FieldAccess fa) {
-            chainInto(fa.target(), out);
-            out.add(fa.field());
+        switch (Core.withoutStanding(e)) {
+            case Core.FieldAccess fa -> {
+                chainInto(fa.target(), out);
+                out.add(fa.field());
+            }
+            case Core.FieldProjection p -> {
+                chainInto(p.base(), out);
+                p.steps().inOrder().forEach(step -> out.add(step.field()));
+            }
+            default -> { }
         }
     }
 
@@ -2602,9 +2709,134 @@ final class Terms {
                     Location.isStep(fa.target().type(), fa.field(), newtypes())
                             ? interned.on(subjectKey(fa.target(), at), List.of(fa.field()))
                             : subjectKey(fa.target(), at);
+            // The rule above taken a name at a time, along the names rather than down the stack.
+            // The steps are read off together: a term read on by one name and then another is the
+            // term read on by both, and building each one between is a term per name.
+            case Core.FieldProjection p ->
+                    interned.on(subjectKey(p.base(), at), stepsOf(p));
             default -> interned.evaluated(evaluationIdOf(e));
         };
     }
+
+    /** The names of {@code p} that are steps of a position, the first one first: a newtype's own
+     *  {@code value} is the value under the name and no step ({@link Location#isStep}). */
+    private FieldPath stepsOf(Core.FieldProjection p) {
+        return stepsOf(p.base().type(), p.steps());
+    }
+
+    /** The same, of the chain {@code steps} read off a value of {@code base}. */
+    private FieldPath stepsOf(Type base, Core.FieldProjection.Steps steps) {
+        // The names not yet worked out under this base, the nearest to the base on top.
+        Deque<Core.FieldProjection.Steps> unread = new ArrayDeque<>();
+        FieldPath out = FieldPath.NONE;
+        Type from = base;
+        for (Core.FieldProjection.Steps at = steps; at != null; at = at.before()) {
+            Located held = located.get(at);
+            if (held != null && held.base().equals(base)) {
+                out = held.steps();
+                from = at.last().type();
+                break;
+            }
+            unread.push(at);
+        }
+        // Each chain worked out here is the one before it with its last name read on, so none of
+        // them is a copy of the one before.
+        while (!unread.isEmpty()) {
+            Core.FieldProjection.Steps next = unread.pop();
+            if (Location.isStep(from, next.last().field(), newtypes())) {
+                out = out.then(next.last().field());
+            }
+            located.put(next, new Located(base, out));
+            from = next.last().type();
+        }
+        return out;
+    }
+
+    /**
+     * Of {@code p} and the projections shorter than it, the longest whose subject is one {@code
+     * among} holds, or null where none is: what {@link #subjectOf} names each of them, asked of
+     * {@code among} in turn, the longest first.
+     *
+     * <p>Kept for each chain of names, under the value they are read off and what is asked. A chain
+     * shares every name but its last with the chain one shorter, and the clauses of a value read
+     * under a chain of declarations are read at projections sharing the chain down to that value —
+     * so the longest held under a chain is the chain's own subject where that is held and the answer
+     * for the chain one shorter where it is not, and going down a chain stops at the first chain
+     * already answered. Gone down the whole of each, a reading of the rules of every value under it
+     * would pay the depth of each rule's projection once per rule.
+     *
+     * <p>Where two chains name the same subject — a newtype's {@code value} is no step — the longer
+     * is the one met first going down, which is the one this answers with.
+     */
+    Along longestHeld(Core.FieldProjection p, Denotations at, Term.Chains among) {
+        Term base = subjectKey(p.base(), at);
+        Type baseType = p.base().type();
+        Map<Core.FieldProjection.Steps, Along> answered = heldAlong.computeIfAbsent(
+                new HeldUnder(among, base, baseType), _ -> new IdentityHashMap<>());
+        List<Core.FieldProjection.Steps> asked = new ArrayList<>();
+        Along found = null;
+        for (Core.FieldProjection.Steps each = p.steps(); each != null; each = each.before()) {
+            if (answered.containsKey(each)) {
+                found = answered.get(each);
+                break;
+            }
+            asked.add(each);
+            Term named = interned.on(base, stepsOf(baseType, each));
+            if (among.holds(named)) {
+                found = new Along(each, FactSubject.of(named));
+                break;
+            }
+        }
+        for (Core.FieldProjection.Steps each : asked) {
+            answered.put(each, found);
+        }
+        return found;
+    }
+
+    /** What {@link #longestHeld} answered, by what was asked, the value the names are read off and
+     *  its type, and then by the chain of names — which is shared, so held by which chain it is. */
+    private final Map<HeldUnder, Map<Core.FieldProjection.Steps, Along>> heldAlong =
+            new HashMap<>();
+
+    /** What a chain's longest held projection is asked of and read off. */
+    private record HeldUnder(Term.Chains among, Term base, Type baseType) {}
+
+    /**
+     * The first of the subexpressions standing at {@code e} ({@link Core#subexpressionsAt}) whose
+     * subject {@code among} holds, or null where none is: {@code e}'s own, or for a projection, its
+     * own or that of the longest projection shorter than it ({@link #longestHeld}).
+     */
+    FactSubject heldAt(Core e, Denotations at, Term.Chains among) {
+        if (e instanceof Core.FieldProjection p) {
+            Along held = longestHeld(p, at, among);
+            return held == null ? null : held.subject();
+        }
+        FactSubject here = subjectOf(e, at);
+        return here != null && among.holds(here.identity()) ? here : null;
+    }
+
+    /**
+     * A projection a table holds the subject of.
+     *
+     * @param upTo    the names of the projection
+     * @param subject what it is called
+     */
+    record Along(Core.FieldProjection.Steps upTo, FactSubject subject) {}
+
+    /**
+     * The names of each projection's chain that reach somewhere, by the chain, for this reading.
+     *
+     * <p>A chain shares its names with every chain one name shorter, and a value read under a chain
+     * of names is asked about at every name of it — so worked out from the whole chain each time,
+     * a chain as long as the names are deep costs the square of that for one reading. Kept by
+     * identity because a chain is shared rather than copied, and a chain made again elsewhere is
+     * worked out again rather than hashed along its whole length.
+     */
+    private final Map<Core.FieldProjection.Steps, Located> located = new IdentityHashMap<>();
+
+    /** The names of a chain that reach somewhere, read off {@code base}: which of a chain's names
+     *  are steps turns on what the first is read off. */
+    private record Located(Type base, FieldPath steps) {}
 
     /**
      * The same, for a chain already found to be nowhere — so what it is read from is nowhere too.
@@ -2627,6 +2859,10 @@ final class Terms {
                 }
                 Term base = keyOfNowhere(fa.target(), at);
                 yield base == null ? null : interned.on(base, List.of(fa.field()));
+            }
+            case Core.FieldProjection p -> {
+                Term base = keyOfNowhere(p.base(), at);
+                yield base == null ? null : interned.on(base, stepsOf(p));
             }
             default -> null;
         };
@@ -2680,7 +2916,7 @@ final class Terms {
      * term grammar names a chain by. A reader that only wants to know whether there is one asks
      * {@link #isAPlace}. */
     Location locationOf(Core e, Denotations at) {
-        return Location.of(e, newtypes(), at::locationOf);
+        return Location.of(e, newtypes(), at::locationOf, this::stepsOf);
     }
 
     /**
@@ -3019,7 +3255,7 @@ final class Terms {
      * readable there. What a value has of its own is the one reading's answer, so a field every case
      * of a sum spreads is read off the sum here exactly as it is where a body reads one. */
     Type fieldType(Type owner, String field) {
-        return ValueReading.of(owner, newtypeInners(), kinds(), symbols, published()).named().get(field);
+        return ValueReading.of(owner, newtypeInners(), kinds(), symbols, sums()).named().get(field);
     }
 
     /** What a container hands its closure: a list's or set's element, a map's value (the key is the

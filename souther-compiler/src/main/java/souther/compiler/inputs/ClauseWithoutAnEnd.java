@@ -37,7 +37,9 @@ import souther.compiler.types.TypeSymbol;
  *                 clause was written on. A name wrapped round a record is a governing declaration of
  *                 its own and the record's clauses are read under it, so what its reads are bound to
  *                 is that name's — matched against the writing declaration's bindings alone, a
- *                 clause under a name names no position at all
+ *                 clause under a name names no position at all. Nor is it always the name the
+ *                 value was written as: a name that writes nothing over another that writes nothing
+ *                 is read as that one, and its reads are bound to that one's value
  */
 public record ClauseWithoutAnEnd(InvariantStatementId statement, StatedComparison states,
                                  SourcePos wrote, souther.compiler.core.Core readOutOf,

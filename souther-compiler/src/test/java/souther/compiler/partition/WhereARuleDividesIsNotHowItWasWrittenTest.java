@@ -40,8 +40,8 @@ class WhereARuleDividesIsNotHowItWasWrittenTest {
      */
     @Test
     void twoOperatorsOverTheWholeNumbersDivideThemInOnePlace() {
-        Seam closed = Seam.of(WHOLE, at("4"), Towards.BELOW);
-        Seam open = Seam.of(WHOLE, at("5"), Towards.ABOVE);
+        Seam closed = HeldSeams.of(WHOLE, at("4"), Towards.BELOW);
+        Seam open = HeldSeams.of(WHOLE, at("5"), Towards.ABOVE);
 
         assertEquals(at("4"), closed.below(), "four is the last value `n <= 4` keeps");
         assertEquals(at("5"), closed.above(), "and five the first one it gives away");
@@ -59,11 +59,11 @@ class WhereARuleDividesIsNotHowItWasWrittenTest {
      */
     @Test
     void twoSpellingsOfOneNumberPartTheValuesInOnePlace() {
-        assertEquals(Seam.of(WHOLE, at("0"), Towards.BELOW).key(),
-                Seam.of(WHOLE, at("0.00"), Towards.BELOW).key(),
+        assertEquals(HeldSeams.of(WHOLE, at("0"), Towards.BELOW).key(),
+                HeldSeams.of(WHOLE, at("0.00"), Towards.BELOW).key(),
                 "0 and 0.00 are one number and one place to part them");
-        assertNotEquals(Seam.of(WHOLE, at("0"), Towards.BELOW).key(),
-                Seam.of(WHOLE, at("1"), Towards.BELOW).key(),
+        assertNotEquals(HeldSeams.of(WHOLE, at("0"), Towards.BELOW).key(),
+                HeldSeams.of(WHOLE, at("1"), Towards.BELOW).key(),
                 "and two places to part them are two seams");
     }
 
@@ -81,8 +81,8 @@ class WhereARuleDividesIsNotHowItWasWrittenTest {
         Level half = new Level.OnACarrier(new Carrier.Dense(),
                 new Count(new java.math.BigDecimal("0.5")));
 
-        Seam closed = Seam.of(decimals, half, Towards.BELOW);
-        Seam open = Seam.of(decimals, half, Towards.ABOVE);
+        Seam closed = HeldSeams.of(decimals, half, Towards.BELOW);
+        Seam open = HeldSeams.of(decimals, half, Towards.ABOVE);
 
         assertEquals(half, closed.below(), "`<= 0.5` keeps 0.5 on the lower side");
         assertEquals(null, closed.above(), "and a decimal names no value one step over it");
@@ -105,8 +105,8 @@ class WhereARuleDividesIsNotHowItWasWrittenTest {
     void twoDivisionsWithNoValueEitherSideOfThemAreStillTwo() {
         LevelSpace thirds =
                 LevelSpace.overFiniteDecimals(ExactRatio.of(3));
-        Seam one = Seam.of(thirds, count("1"), Towards.BELOW);
-        Seam two = Seam.of(thirds, count("2"), Towards.BELOW);
+        Seam one = HeldSeams.of(thirds, count("1"), Towards.BELOW);
+        Seam two = HeldSeams.of(thirds, count("2"), Towards.BELOW);
 
         assertEquals(null, one.below(), "no finite decimal is the greatest one under a third");
         assertEquals(null, one.above(), "and none is the least one over it");
@@ -125,8 +125,8 @@ class WhereARuleDividesIsNotHowItWasWrittenTest {
     @Test
     void aRuleWrittenInTwosPartsTheWholeNumbersWhereOneWrittenInOnesDoes() {
         ExactRatio two = ExactRatio.of(2);
-        Seam plain = Seam.of(WHOLE, at("4"), Towards.BELOW);
-        Seam scaled = Seam.of(LevelSpace.steppingBy(two), count("9"), Towards.BELOW,
+        Seam plain = HeldSeams.of(WHOLE, at("4"), Towards.BELOW);
+        Seam scaled = HeldSeams.of(LevelSpace.steppingBy(two), count("9"), Towards.BELOW,
                 new Seam.Scale(two, new Carrier.Whole()));
 
         assertEquals("4", scaled.below().spelled(), "eight of a doubled position is four of it");
@@ -152,9 +152,9 @@ class WhereARuleDividesIsNotHowItWasWrittenTest {
         LevelSpace sixths = LevelSpace.overFiniteDecimals(
                 LevelSpace.generatorOverFiniteDecimals(six));
 
-        Seam one = Seam.of(thirds, count("1"), Towards.BELOW,
+        Seam one = HeldSeams.of(thirds, count("1"), Towards.BELOW,
                 new Seam.Scale(three, new Carrier.Dense()));
-        Seam two = Seam.of(sixths, count("2"), Towards.BELOW,
+        Seam two = HeldSeams.of(sixths, count("2"), Towards.BELOW,
                 new Seam.Scale(six, new Carrier.Dense()));
 
         assertEquals(null, one.below(), "a third is no finite decimal, so neither side names one");
@@ -177,10 +177,10 @@ class WhereARuleDividesIsNotHowItWasWrittenTest {
         LevelSpace evens = LevelSpace.steppingBy(two);
 
         assertEquals(true,
-                Seam.of(evens, count("8"), Towards.BELOW, scale).keepsItsOwnValueBelow(),
+                HeldSeams.of(evens, count("8"), Towards.BELOW, scale).keepsItsOwnValueBelow(),
                 "`2 * n <= 8` is a line at four, and four is on the lower side of it");
         assertEquals(false,
-                Seam.of(evens, count("9"), Towards.BELOW, scale).keepsItsOwnValueBelow(),
+                HeldSeams.of(evens, count("9"), Towards.BELOW, scale).keepsItsOwnValueBelow(),
                 "`2 * n <= 9` is a line between four and five, and neither is on it");
     }
 
@@ -193,7 +193,7 @@ class WhereARuleDividesIsNotHowItWasWrittenTest {
      */
     @Test
     void aLevelReadBackIntoTheQuantitysUnitsIsAValueOfThePosition() {
-        Seam scaled = Seam.of(LevelSpace.steppingBy(ExactRatio.of(2)), count("8"), Towards.BELOW,
+        Seam scaled = HeldSeams.of(LevelSpace.steppingBy(ExactRatio.of(2)), count("8"), Towards.BELOW,
                 new Seam.Scale(ExactRatio.of(2), new Carrier.Whole()));
 
         assertEquals(new Level.OnACarrier(new Carrier.Whole(), new Count(new java.math.BigDecimal(4))),
@@ -215,7 +215,7 @@ class WhereARuleDividesIsNotHowItWasWrittenTest {
         Seam.Scale thirds = new Seam.Scale(ExactRatio.of(3), new Carrier.Whole());
 
         assertThrows(IllegalStateException.class,
-                () -> Seam.of(WHOLE_NUMBERS, count("1"), Towards.BELOW, thirds),
+                () -> HeldSeams.of(WHOLE_NUMBERS, count("1"), Towards.BELOW, thirds),
                 "a third is no value of a whole-numbered position, and this is the edge that says so");
     }
 
@@ -233,7 +233,7 @@ class WhereARuleDividesIsNotHowItWasWrittenTest {
         Seam.Scale halves = new Seam.Scale(ExactRatio.of(2), new Carrier.Whole());
 
         assertThrows(IllegalStateException.class,
-                () -> Seam.of(WHOLE_NUMBERS, count("1"), Towards.BELOW, halves),
+                () -> HeldSeams.of(WHOLE_NUMBERS, count("1"), Towards.BELOW, halves),
                 "a half is a count, and the whole numbers stand at none of them");
     }
 

@@ -25,6 +25,17 @@ public enum UnreadReason {
     RELATES_TWO_POSITIONS,
 
     /**
+     * The rule says how the elements of a container stand to each other rather than which values
+     * the container holds.
+     *
+     * <p>{@code List.allDistinctBy(k -> k, value)} says no two elements are equal, which is a fact
+     * about pairs of them, and what is held here is a set of the position's values. The rule was
+     * recognised — the values built for the position keep it — so this is not a form this failed
+     * on, and it is not the whole of what the position may hold either.
+     */
+    RELATES_ELEMENTS_OF_A_CONTAINER,
+
+    /**
      * A rule naming this position is written in a form this reading does not take apart as a set of
      * values: a call, a pattern, a comparison against something other than a written value.
      */
@@ -152,8 +163,8 @@ public enum UnreadReason {
     /** What this reason is a fact about — see {@link About}. */
     public About about() {
         return switch (this) {
-            case RELATES_TWO_POSITIONS, FORM_NOT_READ, ALTERNATIVE_NOT_READ,
-                 PATTERN_TOO_COSTLY -> About.A_RULE;
+            case RELATES_TWO_POSITIONS, RELATES_ELEMENTS_OF_A_CONTAINER, FORM_NOT_READ,
+                 ALTERNATIVE_NOT_READ, PATTERN_TOO_COSTLY -> About.A_RULE;
             case EXACT_VALUES_TOO_COSTLY -> About.THE_ANSWER;
             case NOT_REACHED, NOT_REACHED_PAST_DEPTH_LIMIT -> About.NEITHER;
         };

@@ -11,6 +11,7 @@ import souther.compiler.check.ValueTemplates;
 import souther.compiler.core.Core;
 import souther.compiler.diag.Citation;
 import souther.compiler.inputs.InputReads;
+import souther.compiler.inputs.ValueDefinitions;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
@@ -81,10 +82,11 @@ class WhyAComparisonBearsNoLineIsAnAnswerAndNotAnAbsenceTest {
                 : ComparisonReadings.of("read",
                         new AnalysisBody(body, ElementProvenance.NONE, ValueTemplates.NONE),
                         inputs.reading(rules),
-                        InputReads.ofParameters(inputs.parameterReads(),
-                                checked.elementBindings().get("read")),
-                        InputReads.ofParameters(Map.of(),
-                                checked.elementBindings().get("read"))).comparisons()) {
+                        InputReads.ofParameters(inputs.parameterReads(), inputs.declared(rules),
+                                checked.elementBindings().get("read"),
+                                ValueDefinitions.of(checked.analysisBodies().get("read"),
+                                        rules.newtypes()),
+                                inputs.dependencies())).comparisons()) {
             Citation.Written at = assertInstanceOf(
                     Citation.Written.class, each.at(),
                     "the model under test is written in this compile's own source");

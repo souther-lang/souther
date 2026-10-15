@@ -2,10 +2,14 @@ package souther.compiler.query;
 
 import souther.compiler.coverage.ArmProbe;
 import souther.compiler.coverage.CoverageSites;
+import souther.compiler.partition.WhereNothingIsAnswered;
+import souther.compiler.publish.CanonicalSelection;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.Function;
 
 /**
  * One arm an author wrote, and what this compilation found out about it.
@@ -77,14 +81,29 @@ public sealed interface ArmObligation {
      * short leaves the arms it did not light open and the arms it lit alight. The two states with no
      * value are not here either — where nothing read the rows there is no arm account at all, and a
      * counted arm carrying one of them would be an account holding an arm it cannot answer for.
+     *
+     * <p>What is open about the arm itself is beside the coverage and not in it. Every row through
+     * the arm reaching an {@code unreachable} is a fact about the arm and the body, and the rows were
+     * read in full all the same; held as something the reading went without, it would be a fact
+     * about the arm said as one about the measure.
+     *
+     * @param open what is open about whether a row through the arm can be written, and nothing where
+     *             one can be as far as anything here says. Nothing for an arm a row went through
      */
     record Counted(List<CoverageSites.ArmSite> occurrences, Measurement<ArmCoverage> coverage,
-                   Awaited awaited) implements ArmObligation {
+                   Awaited awaited, CanonicalSelection<ObligationDisposition.Uncertainty> open)
+            implements ArmObligation {
 
         public Counted {
             occurrences = oneArm(occurrences);
             Objects.requireNonNull(awaited,
                     "an arm says whether a row at it is waiting for its answer");
+            Objects.requireNonNull(open, "an arm says what is open about it, if nothing");
+            if (!open.isEmpty() && coverage.made().map(ArmCoverage::hit).orElse(false)) {
+                throw new IllegalArgumentException(
+                        "a row went through an arm, so one can be written there: "
+                                + occurrences.getFirst().obligation());
+            }
             switch (coverage) {
                 case Measurement.Complete<ArmCoverage> _ -> { }
                 case Measurement.Partial<ArmCoverage> it -> {
@@ -106,8 +125,14 @@ public sealed interface ArmObligation {
             if (coverage.made().map(ArmCoverage::hit).orElse(false)) {
                 return ArmDisposition.MET;
             }
-            return coverage.weakening().isEmpty()
+            return coverage.weakening().isEmpty() && open.isEmpty()
                     ? ArmDisposition.UNMET : ArmDisposition.UNDECIDED;
+        }
+
+        /** The parts of the body every row through this arm would reach, where that is what keeps
+         *  it open; empty otherwise. */
+        public List<WhereNothingIsAnswered.Premise> premises() {
+            return ObligationDisposition.premisesIn(open);
         }
     }
 
@@ -149,7 +174,10 @@ public sealed interface ArmObligation {
      * from what was observed, and nothing downstream works either of them out again.
      *
      * @param occurrences every copy of the arm, in the order the body holds them
-     * @param covered     the probes a row that states what it expects went through
+     * @param covered     the probes a row that states what it expects went through, and which rows
+     *                    did. The arm is covered by the rows of every occurrence together: one
+     *                    copy lit only by a row that does not hold and another lit by any other
+     *                    row is an arm another row goes through
      * @param awaiting    the probes a row whose answer is owed went through. Handed in beside
      *                    {@code covered} rather than taken out of it: the two answer different
      *                    questions about one arm, and an arm both sets hold is covered and has a
@@ -159,9 +187,14 @@ public sealed interface ArmObligation {
      *
      * @param rowsUnread  what the reading of this behavior's rows went without, which is empty
      *                    where it read them all
+     * @param premisesOf  the parts of the body every row through the occurrences handed to it would
+     *                    reach, or nothing where some such row answers
      */
-    static ArmObligation of(List<CoverageSites.ArmSite> occurrences, Set<ArmProbe> covered,
-                            Set<ArmProbe> awaiting, WeakeningSet rowsUnread) {
+    static ArmObligation of(List<CoverageSites.ArmSite> occurrences,
+                            Map<ArmProbe, RowWitnesses> covered,
+                            Set<ArmProbe> awaiting, WeakeningSet rowsUnread,
+                            Function<List<CoverageSites.ArmSite>,
+                                    List<WhereNothingIsAnswered.Premise>> premisesOf) {
         // An obligation whose occurrences were put together without anything establishing that they
         // are one is not one the rows can answer: a row through either of them may or may not be a
         // row through this one, and a hit or a miss over them is a number about however many rules
@@ -172,13 +205,25 @@ public sealed interface ArmObligation {
         }
         Awaited awaited = occurrences.stream().anyMatch(site -> awaiting.contains(site.index()))
                 ? Awaited.A_ROW_IS : Awaited.NOTHING_IS;
-        if (occurrences.stream().anyMatch(site -> covered.contains(site.index()))) {
-            return new Counted(occurrences, new Measurement.Complete<>(new ArmCoverage.Hit()),
-                    awaited);
+        RowWitnesses.Gathering by = null;
+        for (CoverageSites.ArmSite site : occurrences) {
+            RowWitnesses here = covered.get(site.index());
+            if (here != null) {
+                if (by == null) {
+                    by = new RowWitnesses.Gathering();
+                }
+                by.add(here);
+            }
+        }
+        if (by != null) {
+            return new Counted(occurrences,
+                    new Measurement.Complete<>(new ArmCoverage.Hit(by.done())), awaited,
+                    ObligationDisposition.openOn(List.of()));
         }
         return new Counted(occurrences, rowsUnread.isEmpty()
                 ? new Measurement.Complete<>(new ArmCoverage.NoHit())
-                : new Measurement.Partial<>(new ArmCoverage.NoHit(), rowsUnread), awaited);
+                : new Measurement.Partial<>(new ArmCoverage.NoHit(), rowsUnread), awaited,
+                ObligationDisposition.openOn(premisesOf.apply(occurrences)));
     }
 
     /** The occurrences of one arm, which is what an entry of this account is over. */

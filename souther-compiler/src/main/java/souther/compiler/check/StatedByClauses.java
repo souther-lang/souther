@@ -2,6 +2,9 @@ package souther.compiler.check;
 
 import souther.compiler.core.Core;
 import souther.compiler.numeric.OrderedIntervals;
+import souther.compiler.inputs.BlockReason;
+import souther.compiler.observe.RunSensitivity;
+import souther.compiler.observe.WorkFigure;
 import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.Type;
 import souther.compiler.values.AdmissibleValues;
@@ -13,6 +16,7 @@ import souther.compiler.values.PlannedValues;
 import souther.compiler.values.Realizations;
 import souther.compiler.values.Realized;
 import souther.compiler.values.Sameness;
+import souther.compiler.values.StoppedReading;
 import souther.compiler.values.Unbuilt;
 import souther.compiler.values.UnreadReason;
 import souther.compiler.values.ValueSet;
@@ -150,6 +154,12 @@ sealed interface StatedByClauses {
      * is what a position was left holding, which is kept once by the carrier that answers for the
      * position and copied nowhere.
      *
+     * @param byDerivedNumbers where the reading of the numbers an operation answers took this part
+     *                         in, which it does at the position a number is answered of. Its own
+     *                         account beside the other two, because it reads what neither of them
+     *                         has a word for: {@code String.length(value) == 3} is no end of the
+     *                         position's order and no set of strings, and it is the one length it
+     *                         leaves
      * @param aboutStrings what this part states about the strings at each position it states a rule
      *                     about. The position is here whether or not the rule was read, because
      *                     which of a position's numbers a rule is written about is settled by the
@@ -199,6 +209,7 @@ sealed interface StatedByClauses {
      */
     record Part(Adoption<FactSubject, ReadingLanguage.Values> byValues,
                 Adoption<FactSubject, ReadingLanguage.Order> byOrder,
+                Adoption<FactSubject, ReadingLanguage.DerivedNumbers> byDerivedNumbers,
                 Set<FactSubject> stopped,
                 Map<FactSubject, StringRestriction> aboutStrings,
                 Set<AdmissibleReading.AskedAt> asked,
@@ -209,7 +220,7 @@ sealed interface StatedByClauses {
 
         /** What a clause of no connective, that no reading has a word for, took in. */
         static Part nothing() {
-            return new Part(Adoption.nothing(), Adoption.nothing(), Set.of(),
+            return new Part(Adoption.nothing(), Adoption.nothing(), Adoption.nothing(), Set.of(),
                     Map.of(), Set.of(), Set.of(),
                     EndsLeftOpen.nothing(), BoundaryState.nothing(), Map.of());
         }
@@ -230,6 +241,7 @@ sealed interface StatedByClauses {
          */
         Part both(Part other) {
             return new Part(byValues.both(other.byValues()), byOrder.both(other.byOrder()),
+                    byDerivedNumbers.both(other.byDerivedNumbers()),
                     // And what either of them stops. A meet with a range covering the order is that
                     // range, so a conjunction stops a position exactly where one of its parts does.
                     stoppedIn(stopped, other.stopped()),
@@ -317,7 +329,7 @@ sealed interface StatedByClauses {
             // be in leaves is nothing anybody is held to, and a reader asking whether this part
             // holds a position down would be told about rules written where nobody is.
             return new Part(byValues.inADeadBranch(), byOrder.inADeadBranch(),
-                    Set.of(), Map.of(),
+                    byDerivedNumbers.inADeadBranch(), Set.of(), Map.of(),
                     Set.of(), Set.of(), EndsLeftOpen.nothing(), BoundaryState.nothing(), Map.of());
         }
 
@@ -330,8 +342,8 @@ sealed interface StatedByClauses {
          * {@code ||} the author wrote.
          */
         Part underACollapsedChoice() {
-            return new Part(byValues, byOrder, stopped, aboutStrings, asked, ruleShortfalls,
-                    endsLeftOpen.underACollapsedChoice(), boundary,
+            return new Part(byValues, byOrder, byDerivedNumbers, stopped, aboutStrings, asked,
+                    ruleShortfalls, endsLeftOpen.underACollapsedChoice(), boundary,
                     underACollapsedChoice(boundsLeftOpen));
         }
 
@@ -380,6 +392,10 @@ sealed interface StatedByClauses {
                     ruleShortfalls, shortfalls);
             return new Part(byValues.either(opening.byValues(), other.byValues()),
                     byOrder.either(opening.byOrder(), other.byOrder()),
+                    // And no opening for the numbers an operation answers: what that reading makes
+                    // of a choice is the envelope of what its branches leave
+                    // ({@link BoundaryState#either}), which is not the rule the choice states.
+                    byDerivedNumbers.eitherWithoutAJoin(other.byDerivedNumbers()),
                     // And what the choice stops, which is not what its alternatives stop between
                     // them: two bounds reaching opposite ends of a carrier stop the position on
                     // each side and leave all of it here. What the pair leaves is worked out where
@@ -456,7 +472,7 @@ sealed interface StatedByClauses {
                     .filter(each -> !accountedFor(each, unread))
                     .forEach(each -> out.add(new ReadingShortfall(choice.writtenIn(),
                             choice.writtenAs(), RuleShortfall.Kind.CHOICE,
-                            UnreadReason.ALTERNATIVE_NOT_READ, each)));
+                            StoppedReading.of(UnreadReason.ALTERNATIVE_NOT_READ), each)));
         }
 
         /** Whether {@code unread} holds an account of {@code at}. */
@@ -652,9 +668,16 @@ sealed interface StatedByClauses {
                              Symbols symbols, Alternatives alternatives,
                              Allowance<FactSubject> allowed, StringMachineAnswers machines,
                              StatedLines lines, BoundaryReading boundaries) {
+        // The positions as chains of names, made once beside the table for every reading that asks
+        // which subexpression of a clause is a position.
+        List<Term> held = new ArrayList<>(byName.size());
+        for (FactSubject each : byName.keySet()) {
+            held.add(each.identity());
+        }
+        Term.Chains chains = new Term.Chains(held);
         return new Reading(
-                AdmissibleReading.of(terms, byName, symbols, terms.published(), allowed),
-                OrderedReading.of(terms, byName, symbols), terms, byName, alternatives,
+                AdmissibleReading.of(terms, byName, chains, symbols, terms.sums(), allowed),
+                OrderedReading.of(terms, byName), terms, byName, chains, alternatives,
                 machines, lines, boundaries);
     }
 
@@ -681,7 +704,7 @@ sealed interface StatedByClauses {
      * ({@link ConstraintState#positionEnvelope} is asked where the readings have finished.)
      */
     record Reading(AdmissibleReading values, OrderedReading ordered, Terms terms,
-                   Map<FactSubject, Type> byName, Alternatives alternatives,
+                   Map<FactSubject, Type> byName, Term.Chains chains, Alternatives alternatives,
                    StringMachineAnswers machines, StatedLines lines, BoundaryReading boundaries)
             implements ClauseReading<StatedByClauses, Denotations> {
 
@@ -730,6 +753,16 @@ sealed interface StatedByClauses {
                     // choice offering an alternative nothing could read.
                     Adoption.at(mentions, said.adoptedAt(), values.gaveUpAt(e)),
                     Adoption.at(mentions, range.boundedAt(), ordered.gaveUpAt(e)),
+                    // And the numbers an operation answers, taken in at the position the number is
+                    // of where the leaf leaves it a range holding a value. A line nothing here
+                    // placed is a leaf this reading gave up on. A value with no such number is
+                    // most values, and none of its leaves can be taken in, so there is no account
+                    // to make for every leaf and compose at every connective.
+                    boundaries.holdsNoNumber() ? Adoption.nothing()
+                            : Adoption.at(mentions,
+                                    bounds instanceof BoundaryReading.Read.Bounded it
+                                            ? it.readWholeAt() : Set.of(),
+                                    bounds instanceof BoundaryReading.Read.LeftOpen),
                     // And what the leaf leaves them, beside which of them it was about. The second
                     // is a projection of the first and the two answer different questions: a
                     // reader asking whether the clause holds a position down wants the values, and
@@ -801,8 +834,9 @@ sealed interface StatedByClauses {
                 gather(li.body(), found, terms.inside(li, at));
                 return;
             }
-            FactSubject here = terms.subjectOf(e, at);
-            if (here != null && byName.containsKey(here)) {
+            // Every subexpression standing here, for the reason AdmissibleReading.gather gives.
+            FactSubject here = terms.heldAt(e, at, chains);
+            if (here != null) {
                 found.add(here);
                 return;
             }
@@ -1132,7 +1166,7 @@ sealed interface StatedByClauses {
             // holds of everything waiting on it; what a pattern asked for and was refused is a fact
             // about the pattern, and travels to whoever asked rather than to the place they asked
             // about.
-            Map<FactSubject, List<UnreadReason>> answered =
+            Map<FactSubject, List<StoppedReading>> answered =
                     new LinkedHashMap<>();
             made.aboutTheAnswer().forEach(each -> answered.merge(each.at(),
                     List.of(each.why()), ReadByClauses::alsoSaying));
@@ -1294,6 +1328,7 @@ sealed interface StatedByClauses {
             took.parts().forEach((each, part) -> parts.put(each, new PartAccount(
                     part.byValues().unbuiltAt(unbuilt),
                     part.byOrder().unbuiltAt(unbuilt),
+                    part.byDerivedNumbers().unbuiltAt(unbuilt),
                     part.stopped(),
                     // What the part's own reading decided, and the machines it asked for that were
                     // refused while the positions were worked out. The second is routed by what the
@@ -1520,6 +1555,7 @@ sealed interface StatedByClauses {
             return mapped(part -> new Part(
                     part.byValues().unbuiltAt(known.unbuilt()),
                     part.byOrder().unbuiltAt(known.unbuilt()),
+                    part.byDerivedNumbers().unbuiltAt(known.unbuilt()),
                     // Where its ends stopped the positions is what it is whether or not a machine
                     // beside them was built: an end is read off the clause and waits on nothing.
                     part.stopped(),
@@ -1887,18 +1923,41 @@ sealed interface StatedByClauses {
                         }
                     })));
             Map<FactSubject, Realizations> answers = new LinkedHashMap<>();
+            Map<FactSubject, BlockReason.RulesNotHandedOnAsSets> notHandedOn =
+                    new LinkedHashMap<>();
             // Built for the block the position is on, which is what the machine is being made for:
             // positions the rules hold as one value have one answer between them, and one purse.
-            asked.forEach((position, plans) -> answers.put(position,
-                    answered.speaksFor(position)
-                            ? handingOn.realizeAll(answered.blockOf(position), plans)
-                            : new Realizations.NotBuilt()));
+            asked.forEach((position, plans) -> {
+                if (!answered.speaksFor(position)) {
+                    // Nothing was asked for, so no limit of the sets' allowance is why: what
+                    // stopped them is what stopped the position's own answer, figure and all —
+                    // every figure it reached, and whether anything else stopped it too.
+                    // Asked of each stop in the words it is reported in, which is where a figure
+                    // fixed where it is declared is said as well as one carried here.
+                    List<BlockReason.ReadingStopReason> stopped = answered.stoppedAt(position)
+                            .stream().map(BlockReason::of).toList();
+                    notHandedOn.put(position, new BlockReason.RulesNotHandedOnAsSets(
+                            stopped.stream().flatMap(each -> each.figures().stream()).toList(),
+                            stopped.isEmpty() || stopped.stream().anyMatch(each ->
+                                    each.runSensitivity() == RunSensitivity.UNAFFECTED)));
+                    return;
+                }
+                Realizations made = handingOn.realizeAll(answered.blockOf(position), plans);
+                if (made instanceof Realizations.NotBuilt it) {
+                    notHandedOn.put(position, new BlockReason.RulesNotHandedOnAsSets(
+                            List.of(it.refused().as(WorkFigure.RULE_SETS_ONE_MACHINE,
+                                    WorkFigure.RULE_SETS_IN_ALL)), false));
+                } else {
+                    answers.put(position, made);
+                }
+            });
             Map<K, Map<ClauseOccurrence, ReadByClauses.OfAPart>> out = new LinkedHashMap<>();
             said.forEach((key, mine) -> {
                 Map<ClauseOccurrence, ReadByClauses.OfAPart> here = new LinkedHashMap<>();
                 mine.forEach((each, part) -> here.put(each, new ReadByClauses.OfAPart(
-                        part.byValues(), part.byOrder(), part.stopped(), part.aboutARule(),
-                        admitted(part.aboutStrings(), answers), part.endsLeftOpen(),
+                        part.byValues(), part.byOrder(), part.byDerivedNumbers(),
+                        part.stopped(), part.aboutARule(),
+                        admitted(part.aboutStrings(), answers, notHandedOn), part.endsLeftOpen(),
                         part.boundsLeftOpen())));
                 out.put(key, here);
             });
@@ -1917,7 +1976,8 @@ sealed interface StatedByClauses {
          */
         private static Map<FactSubject, AdmittedStrings> admitted(
                 Map<FactSubject, StringRestriction> stated,
-                Map<FactSubject, Realizations> answers) {
+                Map<FactSubject, Realizations> answers,
+                Map<FactSubject, BlockReason.RulesNotHandedOnAsSets> notHandedOn) {
             if (stated.isEmpty()) {
                 return Map.of();
             }
@@ -1929,7 +1989,8 @@ sealed interface StatedByClauses {
                     case StringRestriction.Admitting it ->
                             out.put(position, answers.get(position) instanceof Realizations.Exact made
                                     ? new AdmittedStrings.Admitting(made.of(it.plan()))
-                                    : new AdmittedStrings.NotPublished());
+                                    : new AdmittedStrings.NotPublished(
+                                            notHandedOn.get(position)));
                 }
             });
             return Collections.unmodifiableMap(out);
@@ -1972,6 +2033,7 @@ sealed interface StatedByClauses {
      */
     record PartAccount(Adoption<FactSubject, ReadingLanguage.Values> byValues,
                        Adoption<FactSubject, ReadingLanguage.Order> byOrder,
+                       Adoption<FactSubject, ReadingLanguage.DerivedNumbers> byDerivedNumbers,
                        Set<FactSubject> stopped,
                        Set<ReadingShortfall> aboutARule,
                        Map<FactSubject, StringRestriction> aboutStrings,

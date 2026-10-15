@@ -1,7 +1,11 @@
 package souther.compiler.partition;
 
+import souther.compiler.check.ComparisonClaim;
 import souther.compiler.diag.SourceLayouts;
-import souther.compiler.coverage.ComparisonEmissionSite;
+import souther.compiler.coverage.ConditionOutcomeSite;
+import souther.compiler.meaning.AuthoredPointMapping;
+import souther.compiler.meaning.Derivation;
+import souther.compiler.meaning.WrittenLine;
 import souther.compiler.coverage.Numberings;
 import souther.compiler.types.ExpansionLineage;
 import souther.compiler.types.ModelOccurrence;
@@ -26,6 +30,7 @@ import souther.compiler.inputs.TermOrdersFixtures;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.EndSide;
+import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.Towards;
 import souther.compiler.types.TypeKey;
@@ -145,7 +150,7 @@ class AClauseOfATypeDoesNotPartItsValuesTest {
     /** A bound is where what it leaves stops, and stops nothing else. */
     @Test
     void aBoundPartsNothing() {
-        assertEquals(List.of(), Border.partedBy(aLineAt(100), aBound()),
+        assertEquals(ExactAnswer.held(List.of()), Border.partedBy(aLineAt(100), aBound()),
                 "nothing is outside a bound, so there is no run on the far side to be beside");
     }
 
@@ -153,7 +158,7 @@ class AClauseOfATypeDoesNotPartItsValuesTest {
     @Test
     void aBoundADeclarationTookInPartsNothingEither() {
         Endpoint at = Endpoint.inclusive(Count.of(100));
-        assertEquals(List.of(), Border.partedBy(aLineAt(100),
+        assertEquals(ExactAnswer.held(List.of()), Border.partedBy(aLineAt(100),
                         LineOrigin.NarrowedOrigin.of(aBound(), at, aDeclarationHolding(at))),
                 "taking an end in moves where the position stops, which is not dividing it");
     }
@@ -203,7 +208,7 @@ class AClauseOfATypeDoesNotPartItsValuesTest {
 
     /** The place this fixture's comparison is at. One of them, so that two readings built here
      *  address one place. */
-    private static final ComparisonEmissionSite WHERE = Numberings.comparison(1, 0);
+    private static final ConditionOutcomeSite WHERE = Numberings.comparison(1, 0);
 
     private static LineOrigin aComparison() {
         SourceConstructOrigin wrote = new SourceConstructOrigin(
@@ -213,7 +218,11 @@ class AClauseOfATypeDoesNotPartItsValuesTest {
                         new RuleRef.Comparison("weigh", wrote),
                         new ModelOccurrence(wrote, ExpansionLineage.ORIGINAL),
                         new RuleReportAnchor.ByTheModuleThatWroteIt(),
-                        List.of(WHERE)),
-                new LineFacts(new souther.compiler.check.ComparisonClaim.Cut(Towards.BELOW, true)));
+                        List.of(WHERE), ElementsMetOn.EVERY),
+                Optional.empty(),
+                new LineFacts(new ComparisonClaim.Cut(Towards.BELOW, true)),
+                new AuthoredPointMapping.Proven(WrittenLine.THE_COMPARISON,
+                        new ComparisonClaim.Cut(Towards.BELOW, true),
+                        Derivation.AComparisonRead.Facing.NOTHING_WRITTEN, true));
     }
 }

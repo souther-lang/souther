@@ -7,6 +7,7 @@ import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.check.NumberAt;
+import souther.compiler.check.TypeCardinality;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactRatio;
@@ -155,7 +156,7 @@ class WhatIsKnownOfOneTermSurvivesWhatIsUnknownBesideItTest {
         assertNull(read.inputs().at(deep), "the walk stopped at the return above this");
         souther.compiler.types.Type there =
                 read.inputs().at(TermPath.of("p").then("ys")).type();
-        NumericTerm buried = NumericTerm.TakenOf.of(
+        NumericTerm buried = NumericTerm.TakenOf.asItStands(
                 souther.compiler.check.NumericMeasures.takenOf(there, read.rules().inners()),
                 deep, there, read.rules().inners(), read.rules().symbols());
         assertNotNull(buried, "the term is one the operation may be taken of");
@@ -201,16 +202,16 @@ class WhatIsKnownOfOneTermSurvivesWhatIsUnknownBesideItTest {
     void twoOperationsTakenOfOneLocationAreTwoCoordinates() {
         souther.compiler.check.RuleKey path =
                 new souther.compiler.check.RuleKey(List.of("p", "xs"));
-        NumberAt<souther.compiler.check.RuleKey> byLength = NumberAt.takenOf(path,
+        NumberAt<souther.compiler.check.RuleKey> byLength = NumberAt.takenAsItStands(path,
                 souther.compiler.types.ValueName.Stdlib.operation("List", "length"));
-        NumberAt<souther.compiler.check.RuleKey> bySize = NumberAt.takenOf(path,
+        NumberAt<souther.compiler.check.RuleKey> bySize = NumberAt.takenAsItStands(path,
                 souther.compiler.types.ValueName.Stdlib.operation("Set", "size"));
 
         assertNotEquals(byLength, bySize,
                 "one path, two operations, two numbers — and the claim says which");
         assertNotEquals(byLength, NumberAt.valueOf(path),
                 "and neither of them is the value the position holds");
-        assertEquals(byLength, NumberAt.takenOf(path,
+        assertEquals(byLength, NumberAt.takenAsItStands(path,
                         souther.compiler.types.ValueName.Stdlib.operation("List", "length")),
                 "while two namings of one number are one coordinate");
     }
@@ -336,7 +337,7 @@ class WhatIsKnownOfOneTermSurvivesWhatIsUnknownBesideItTest {
     private static NumericTerm size(Read read, String field) {
         TermPath at = TermPath.of("p").then(field);
         souther.compiler.types.Type type = read.inputs().at(at).type();
-        NumericTerm.TakenOf made = NumericTerm.TakenOf.of(
+        NumericTerm.TakenOf made = NumericTerm.TakenOf.asItStands(
                 souther.compiler.check.NumericMeasures.takenOf(type, read.rules().inners()),
                 at, type, read.rules().inners(), read.rules().symbols());
         assertNotNull(made, at + " is counted by what its type is counted by");
@@ -365,7 +366,10 @@ class WhatIsKnownOfOneTermSurvivesWhatIsUnknownBesideItTest {
         Map<String, DeclaredSig> sigs =
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
         RuleReadingSource rules = RuleReadings.of(compilation, module);
-        return new Read(InputDomain.of(sigs.get("take"),
-                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES)), rules);
+        RuleReadingContext reading =
+                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES);
+        return new Read(InputDomain.of(sigs.get("take"), reading,
+                TypeCardinality.Counts.workedOutIn(reading),
+                souther.compiler.carrier.Membership.none()), rules);
     }
 }

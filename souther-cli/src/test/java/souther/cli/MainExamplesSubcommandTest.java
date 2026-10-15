@@ -69,11 +69,15 @@ class MainExamplesSubcommandTest {
     }
 
     /** What the command wrote, kept apart: a build reads one of these and a person reads the other. */
-    private record Streams(String out, String err) {}
+    private record Streams(String out, String err, int exitCode) {}
 
     private static Streams both(String... extraArgs) throws Exception {
+        return bothFor(MODEL, extraArgs);
+    }
+
+    private static Streams bothFor(String model, String... extraArgs) throws Exception {
         Path file = Files.createTempDirectory("souther-examples").resolve("trip.sou");
-        Files.writeString(file, MODEL);
+        Files.writeString(file, model);
         List<String> args = new ArrayList<>(List.of("examples", file.toString()));
         args.addAll(List.of(extraArgs));
 
@@ -83,14 +87,15 @@ class MainExamplesSubcommandTest {
         ByteArrayOutputStream err = new ByteArrayOutputStream();
         System.setOut(new PrintStream(out, true, StandardCharsets.UTF_8));
         System.setErr(new PrintStream(err, true, StandardCharsets.UTF_8));
+        int exitCode;
         try {
-            Main.main(args.toArray(String[]::new));
+            exitCode = Main.guarded(() -> Main.dispatch(args.toArray(String[]::new)));
         } finally {
             System.setOut(originalOut);
             System.setErr(originalErr);
         }
         return new Streams(out.toString(StandardCharsets.UTF_8),
-                err.toString(StandardCharsets.UTF_8));
+                err.toString(StandardCharsets.UTF_8), exitCode);
     }
 
     @Test
@@ -102,6 +107,26 @@ class MainExamplesSubcommandTest {
         assertTrue(out.contains("implemented"), out);
         assertTrue(out.contains("2 behaviors: 1 implemented, 0 unimplemented, 1 injected; 2 rows waiting for a `let`."),
                 out);
+    }
+
+    /**
+     * A function the call hands a list with no element to apply it to is not emitted, so the
+     * measurement holds no probe for what is written in it.
+     */
+    @Test
+    void aFunctionNeverAppliedIsReportedOnWithoutAnInternalError() throws Exception {
+        Streams streams = bothFor("""
+                module p
+
+                behavior f : (rows: List<Int>) -> List<Int>
+                let f (rows) =
+                    List.flatMap(e -> List.filter(x -> x == e, rows), [ ])
+                """, "--format", "json");
+
+        assertEquals(0, streams.exitCode(), streams.err());
+        JsonNode module = JSON.readTree(streams.out()).get("modules").get(0);
+        assertEquals("p", module.get("module").asString());
+        assertEquals("f", module.get("behaviors").get(0).get("name").asString());
     }
 
     @Test

@@ -3,6 +3,7 @@ package souther.compiler.check;
 import souther.compiler.ast.Hir;
 import souther.compiler.core.Kernel;
 import souther.compiler.stdlib.Stdlib;
+import souther.compiler.core.TheWalk;
 import souther.compiler.diag.CompileException;
 import souther.compiler.types.Denotation;
 import souther.compiler.types.TypeKey;
@@ -151,13 +152,8 @@ public final class ResolvedSymbols implements Symbols {
     }
 
     @Override
-    public ValueName.Stdlib.Operation theWalk() {
+    public TheWalk theWalk() {
         return table.theWalk();
-    }
-
-    @Override
-    public ValueName.Stdlib.Operation theDistinctnessPredicate() {
-        return table.theDistinctnessPredicate();
     }
 
     @Override

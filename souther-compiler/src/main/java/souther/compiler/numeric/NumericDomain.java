@@ -1,11 +1,14 @@
 package souther.compiler.numeric;
 
+import souther.compiler.collect.AppendOnly;
+
 import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.math.RoundingMode;
-import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -52,7 +55,8 @@ public final class NumericDomain<A> {
     private static final int DIGITS_WHEN_IT_IS_NOT_A_DECIMAL = 34;
 
     private final StatedRules<A> stated;
-    private final Map<A, Granularity> kinds;
+    /** How the values at each position are spaced, told one rule at a time ({@link AppendOnly}). */
+    private final AppendOnly<A, Granularity> kinds;
     private final boolean readARuleNothingSatisfies;
 
     /**
@@ -65,15 +69,28 @@ public final class NumericDomain<A> {
      * something a reading is.
      */
     private final CanonicalOrder<A> order;
+
+    /**
+     * Where what the rules leave is worked out, and whether a closure another domain already worked
+     * out stands for this one's.
+     *
+     * <p>Carried like {@link #order} and not part of what this domain is: it decides whether the
+     * work is done again, never what it comes to. Lent to every domain made from this one, and to
+     * whatever this one is met with — the receiver of a meeting is the reading the result belongs
+     * to.
+     */
+    private final ClosedStates closedStates;
     private List<AffineConstraint<A>> distinctRules;
     private ClosedState<A> closed;
 
-    private NumericDomain(StatedRules<A> stated, Map<A, Granularity> kinds,
-                          boolean readARuleNothingSatisfies, CanonicalOrder<A> order) {
+    private NumericDomain(StatedRules<A> stated, AppendOnly<A, Granularity> kinds,
+                          boolean readARuleNothingSatisfies, CanonicalOrder<A> order,
+                          ClosedStates closedStates) {
         this.stated = stated;
         this.kinds = kinds;
         this.readARuleNothingSatisfies = readARuleNothingSatisfies;
         this.order = order;
+        this.closedStates = closedStates;
     }
 
     /**
@@ -83,9 +100,20 @@ public final class NumericDomain<A> {
      * what such a walk takes first has to be settled by the positions rather than by how the rules
      * were typed. What it is belongs to whatever a position of this domain is, which this is generic
      * over and the caller is not — see {@link CanonicalOrder}.
+     *
+     * <p>Each domain made from this works out what its rules leave for itself.
      */
     public static <A> NumericDomain<A> top(CanonicalOrder<A> order) {
-        return new NumericDomain<>(StatedRules.none(), Map.of(), false, order);
+        return top(order, ClosedStates.NONE);
+    }
+
+    /**
+     * The same, with what the rules leave worked out through {@code closedStates} — so a domain made
+     * from this one is lent the closure of any other made from it that held the same rules.
+     */
+    public static <A> NumericDomain<A> top(CanonicalOrder<A> order, ClosedStates closedStates) {
+        return new NumericDomain<>(StatedRules.none(), AppendOnly.empty(), false, order,
+                closedStates);
     }
 
     /**
@@ -115,6 +143,21 @@ public final class NumericDomain<A> {
     // --- assume: take in one more rule ------------------------------------------------------------
 
     /**
+     * The domain with {@code f rel 0} taken in, where {@code f} was held.
+     *
+     * <p>A form this arithmetic could not hold is a rule it cannot write, which narrows nothing: the
+     * sound answer with less, and the one {@link AffineConstraint.Read.NotWorkedOut} gives for a
+     * rule whose lowest terms are not held.
+     *
+     * @param atomKinds see {@link #assume(LinearForm, Rel, Map)}
+     */
+    public NumericDomain<A> assume(ExactAnswer<LinearForm<A>> f, Rel rel,
+                                   Map<A, Granularity> atomKinds) {
+        return f instanceof ExactAnswer.Held<LinearForm<A>> held
+                ? assume(held.value(), rel, atomKinds) : this;
+    }
+
+    /**
      * The domain with {@code f rel 0} taken in.
      *
      * @param atomKinds how the values of each atom of {@code f} are spaced. Required rather than
@@ -132,10 +175,13 @@ public final class NumericDomain<A> {
         return switch (read) {
             // Nothing satisfies it, so nothing satisfies it together with anything else.
             case AffineConstraint.Read.HoldsNever<A> _ ->
-                    new NumericDomain<>(StatedRules.none(), knowing.kinds, true, knowing.order);
+                    new NumericDomain<>(StatedRules.none(), knowing.kinds, true, knowing.order,
+                            closedStates);
             // Every value satisfies it, so there is nothing to keep.
             case AffineConstraint.Read.HoldsAlways<A> _ -> knowing;
             case AffineConstraint.Read.Stated<A> stated -> knowing.keeping(stated.constraint());
+            // A rule this cannot write narrows nothing, which is the sound answer with less.
+            case AffineConstraint.Read.NotWorkedOut<A> _ -> knowing;
         };
     }
 
@@ -149,7 +195,8 @@ public final class NumericDomain<A> {
      * said before it, and a path stating many of them would pay that for each.
      */
     private NumericDomain<A> keeping(AffineConstraint<A> rule) {
-        return new NumericDomain<>(stated.and(StatedRules.of(rule)), kinds, false, order);
+        return new NumericDomain<>(stated.and(StatedRules.of(rule)), kinds, false, order,
+                closedStates);
     }
 
     /**
@@ -161,16 +208,15 @@ public final class NumericDomain<A> {
      * differently. Two of them had.
      */
     public NumericDomain<A> assuming(A atom, Bounds bounds, Map<A, Granularity> atomKinds) {
-        LinearForm<A> form = LinearForm.atom(atom);
         NumericDomain<A> out = this;
         if (bounds.min() != null) {
             out = out.assume(
-                    form.minus(LinearForm.constant(Count.number(bounds.min().at()).exactly())),
+                    LinearForm.atomMinusConstant(atom, Count.number(bounds.min().at()).exactly()),
                     bounds.min().inclusive() ? Rel.GE : Rel.GT, atomKinds);
         }
         if (bounds.max() != null) {
             out = out.assume(
-                    form.minus(LinearForm.constant(Count.number(bounds.max().at()).exactly())),
+                    LinearForm.atomMinusConstant(atom, Count.number(bounds.max().at()).exactly()),
                     bounds.max().inclusive() ? Rel.LE : Rel.LT, atomKinds);
         }
         return out;
@@ -185,26 +231,24 @@ public final class NumericDomain<A> {
      * stop rather than to pick the safer of the two.
      */
     private NumericDomain<A> knowing(Set<A> atoms, Map<A, Granularity> atomKinds) {
-        Map<A, Granularity> next = null;
+        AppendOnly<A, Granularity> next = kinds;
         for (A atom : atoms) {
             Granularity given = atomKinds.get(atom);
             if (given == null) {
                 throw new IllegalStateException("no granularity given for atom `" + atom + "`");
             }
-            Granularity had = kinds.get(atom);
+            Granularity had = next.get(atom);
             if (had == given) {
                 continue;
             }
             if (had != null) {
                 throw new IllegalStateException("atom `" + atom + "` is " + had + " and " + given);
             }
-            if (next == null) {
-                next = new HashMap<>(kinds);
-            }
-            next.put(atom, given);
+            next = next.with(atom, given);
         }
-        return next == null ? this
-                : new NumericDomain<>(stated, Map.copyOf(next), readARuleNothingSatisfies, order);
+        return next == kinds ? this
+                : new NumericDomain<>(stated, next, readARuleNothingSatisfies, order,
+                        closedStates);
     }
 
     // --- renaming and joining ---------------------------------------------------------------------
@@ -235,9 +279,9 @@ public final class NumericDomain<A> {
         // rule of it does. A rule asked whether a naming is one-to-one can only answer about its own
         // positions, so two independent rules would be carried across as two rules about one number
         // and a box holding something would come back holding nothing.
-        Renaming<A, B> called = Renaming.of(kinds.keySet(), naming);
+        Renaming<A, B> called = Renaming.of(kinds.keys(), naming);
         Map<B, Granularity> spacing = new LinkedHashMap<>();
-        kinds.forEach((atom, spaced) -> spacing.put(called.of(atom), spaced));
+        kinds.asMap().forEach((atom, spaced) -> spacing.put(called.of(atom), spaced));
         StatedRules<B> out = StatedRules.none();
         for (AffineConstraint<A> rule : rules()) {
             out = out.and(StatedRules.of(rule.over(called)));
@@ -245,7 +289,10 @@ public final class NumericDomain<A> {
         // The order of the names arrived at, and not this one carried across. What puts two
         // positions in an order is a fact about what a position of that vocabulary is, and the
         // caller is the one that knows it — the same reason the order is asked for at the top.
-        return new NumericDomain<>(out, Map.copyOf(spacing), readARuleNothingSatisfies, order);
+        // Nothing is lent across either: rules under other names are another reader's rules, and
+        // they join the closures of the reading they are met into.
+        return new NumericDomain<>(out, AppendOnly.of(spacing), readARuleNothingSatisfies, order,
+                ClosedStates.NONE);
     }
 
     /**
@@ -262,21 +309,28 @@ public final class NumericDomain<A> {
      * <p>Spacings are checked rather than merged. Two readings calling one position by one name and
      * spacing it two ways is the naming and the typing disagreeing, and picking the safer of the two
      * would answer about a position neither reading was about.
+     *
+     * <p>What the result leaves is worked out through this domain's {@link #closedStates} and not
+     * through {@code other}'s. The receiver is the reading the result is part of, and that is
+     * nothing about what the rules mean.
      */
     public NumericDomain<A> meet(NumericDomain<A> other) {
         if (other == null || (other.stated.isNothing() && other.kinds.isEmpty()
                 && !other.readARuleNothingSatisfies)) {
             return this;
         }
-        Map<A, Granularity> both = new LinkedHashMap<>(kinds);
-        other.kinds.forEach((atom, spacing) -> {
-            Granularity had = both.put(atom, spacing);
-            if (had != null && had != spacing) {
-                throw new IllegalStateException("atom `" + atom + "` is " + had + " and " + spacing);
+        AppendOnly<A, Granularity> both = kinds;
+        for (Map.Entry<A, Granularity> each : other.kinds.asMap().entrySet()) {
+            Granularity had = both.get(each.getKey());
+            if (had == null) {
+                both = both.with(each.getKey(), each.getValue());
+            } else if (had != each.getValue()) {
+                throw new IllegalStateException("atom `" + each.getKey() + "` is " + had + " and "
+                        + each.getValue());
             }
-        });
-        return new NumericDomain<>(stated.and(other.stated), Map.copyOf(both),
-                readARuleNothingSatisfies || other.readARuleNothingSatisfies, order);
+        }
+        return new NumericDomain<>(stated.and(other.stated), both,
+                readARuleNothingSatisfies || other.readARuleNothingSatisfies, order, closedStates);
     }
 
     // --- what the rules leave, worked out once ----------------------------------------------------
@@ -290,7 +344,7 @@ public final class NumericDomain<A> {
      */
     private ClosedState<A> closed() {
         if (closed == null) {
-            closed = ClosedState.of(rules(), kinds::get, order);
+            closed = closedStates.of(rules(), kinds::get, order);
         }
         return closed;
     }
@@ -441,7 +495,7 @@ public final class NumericDomain<A> {
             return true;   // an infeasible path discharges anything
         }
         Map<A, ExactRatio> coefs = weighed(f);
-        if (!kinds.keySet().containsAll(coefs.keySet())) {
+        if (!coefs.keySet().stream().allMatch(kinds::contains)) {
             // A position this has never been told about is one nothing here bounds, so nothing here
             // proves about it either. Said before the reading, which would want its spacing.
             return false;
@@ -450,6 +504,8 @@ public final class NumericDomain<A> {
             case AffineConstraint.Read.HoldsAlways<A> _ -> true;
             case AffineConstraint.Read.HoldsNever<A> _ -> false;
             case AffineConstraint.Read.Stated<A> stated -> proven(stated.constraint(), withRules);
+            // What could not be written is not proven, and not disproven either.
+            case AffineConstraint.Read.NotWorkedOut<A> _ -> false;
         };
     }
 
@@ -542,12 +598,16 @@ public final class NumericDomain<A> {
         // Canonicalised by the one thing that canonicalises, so a question and a rule that say the
         // same thing are put into the same words by the same code. Doing the division here instead
         // would be a second account of what one rule is — which is the thing being removed.
-        CanonicalForm.Scaled<A> scaled = CanonicalForm.of(coefs);
-        if (scaled == null) {
-            return new Asked<>(new Goal<>(Map.of(), constant), ExactRatio.ONE);
-        }
-        return new Asked<>(
-                new Goal<>(scaled.form().coefs(), constant.dividedBy(scaled.by())), scaled.by());
+        return switch (CanonicalForm.of(coefs)) {
+            case CanonicalForm.NoTerms<A> _ ->
+                    new Asked<>(new Goal<>(Map.of(), constant), ExactRatio.ONE);
+            case CanonicalForm.Unheld<A> _ -> null;
+            case CanonicalForm.Scaled<A> scaled -> switch (constant.dividedBy(scaled.by())) {
+                case ExactAnswer.Held<ExactRatio> held ->
+                        new Asked<>(new Goal<>(scaled.form().coefs(), held.value()), scaled.by());
+                case ExactAnswer.Unheld<ExactRatio> _ -> null;
+            };
+        };
     }
 
     /**
@@ -649,7 +709,7 @@ public final class NumericDomain<A> {
         if (isBottom()) {
             return new Projection.NothingIsLeft();
         }
-        return atomsSpokenOf().contains(atom)
+        return kinds.contains(atom)
                 ? new Projection.Within(boundsOf(atom)) : new Projection.NotSpokenOf();
     }
 
@@ -707,15 +767,26 @@ public final class NumericDomain<A> {
             return new Bounds(null, null);
         }
         Asked<A> asked = goalOf(f);
+        if (asked == null) {
+            // A form whose lowest terms have no representation is one nothing here can bound.
+            return new Bounds(null, null);
+        }
         ExactCut highest = highestProven(asked.goal(), true);
         ExactCut lowest = highestProven(asked.goal().negated(), true);
         // Back into the units the caller asked in. The question was answered about the form divided
         // through by what its weights share, and the caller wants the form it wrote.
         return new Bounds(
-                lowest == null ? null : written(new ExactCut(
-                        lowest.at().negated().times(asked.by()), lowest.inclusive()), false),
-                highest == null ? null : written(new ExactCut(
-                        highest.at().times(asked.by()), highest.inclusive()), true));
+                lowest == null ? null : written(
+                        backInto(lowest.at().negated(), asked.by(), lowest.inclusive()), false),
+                highest == null ? null : written(
+                        backInto(highest.at(), asked.by(), highest.inclusive()), true));
+    }
+
+    /** A cut scaled back by {@code by}, or {@code null} where the scaled value has no
+     *  representation — no end, which is what an unbounded end already means to every reader. */
+    private static ExactCut backInto(ExactRatio at, ExactRatio by, boolean inclusive) {
+        ExactRatio scaled = at.times(by).orNull();
+        return scaled == null ? null : new ExactCut(scaled, inclusive);
     }
 
     /**
@@ -731,9 +802,17 @@ public final class NumericDomain<A> {
         if (cut == null) {
             return null;
         }
-        BigDecimal exactly = cut.at().asWrittenDecimal();
-        if (exactly != null) {
-            return new Endpoint(new Count(exactly), cut.inclusive());
+        // A decimal the host has no room to write out is an end this cannot hand over, and the sound
+        // answer with less is no end here for the reason below. It is not the answer that no decimal
+        // is this number, which would send it to the rounding: that one is about the number, and
+        // this is about the run.
+        ExactAnswer<Optional<BigDecimal>> exactly = cut.at().writtenDecimal();
+        if (exactly instanceof ExactAnswer.Unheld<Optional<BigDecimal>>) {
+            return null;
+        }
+        Optional<BigDecimal> written = ((ExactAnswer.Held<Optional<BigDecimal>>) exactly).value();
+        if (written.isPresent()) {
+            return new Endpoint(new Count(written.get()), cut.inclusive());
         }
         // Rounded outward, so that what is handed over admits everything the rules admit and a hair
         // besides. Where the exact arithmetic cannot hold that rounding either — an end this compiler
@@ -755,7 +834,7 @@ public final class NumericDomain<A> {
      * because it is one a rule was written about.
      */
     public Set<A> atomsSpokenOf() {
-        return kinds.keySet();
+        return kinds.keys();
     }
 
     /**
@@ -800,6 +879,20 @@ public final class NumericDomain<A> {
          */
         public boolean holdsAValue() {
             return Endpoint.someValueLiesBetween(min, max);
+        }
+
+        /**
+         * The one whole number both ends are written at, or null where the range holds more than
+         * one value or an end is no whole number this reads.
+         */
+        public BigInteger holdsOneWholeNumber() {
+            if (min == null || max == null || !min.inclusive() || !max.inclusive()
+                    || !(min.at() instanceof Count low) || !(max.at() instanceof Count high)
+                    || !low.exactly().equals(high.exactly()) || !low.exactly().isWhole()
+                    || !(low.exactly().floor() instanceof ExactAnswer.Held<BigInteger> whole)) {
+                return null;
+            }
+            return whole.value();
         }
 
         /** The values this and {@code other} both hold. Each end is the tighter of the two, which

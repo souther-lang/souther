@@ -7,6 +7,8 @@ import souther.compiler.check.ComparisonPlacement;
 import souther.compiler.core.Core;
 import souther.compiler.numeric.Place;
 
+import java.util.Optional;
+
 /**
  * One binary of a body, said as the number it is about and what its operator places on that number.
  *
@@ -30,9 +32,12 @@ import souther.compiler.numeric.Place;
  *               too and places nothing on them
  * @param at     where the other side falls on the number's order, or null where it is not a value
  *               that order writes — another position, a value this compiler does not place
+ * @param against the number of this input the other side names, where it names one: the second
+ *                of two positions held against each other. Null where the other side is a value
+ *                or names no number here
  */
 public record ComparedNumber(NumericTerm term, TermOrders orders, ComparisonPlacement placed,
-                             Place at) {
+                             Place at, NumericTerm against) {
 
     public ComparedNumber {
         // The orders say which number they are of, and the number is held here as well because a
@@ -85,16 +90,21 @@ public record ComparedNumber(NumericTerm term, TermOrders orders, ComparisonPlac
      * needs no more.
      */
     static ComparedNumber of(Core.Binary binary, InputReading read, InputReads reads) {
-        OnASide side = sideOf(binary.left(), binary.right(), read, reads);
+        ComparisonPlacement placed = ComparisonPlacement.of(binary.op());
+        OnASide side = sideOf(binary.left(), binary.right(), placed, read, reads);
         if (side == null) {
             return null;
         }
+        // The other side as a number only where it is no value the order writes: a value placed
+        // on the order is the line, and asked as a number it would be the same side twice.
+        Named other = side.at() != null ? null
+                : namedBy(side.turned() ? binary.left() : binary.right(), read, reads);
         // Turned round as what it states and not as the operator it would have been written with:
         // which side a number stands on is how the source was spelled, and what the rule places is
         // read off the operator once.
-        ComparisonPlacement placed = ComparisonPlacement.of(binary.op());
         return new ComparedNumber(side.named().term(), side.named().orders(),
-                side.turned() ? placed.turned() : placed, side.at());
+                side.turned() ? placed.turned() : placed, side.at(),
+                other == null ? null : other.term());
     }
 
     /**
@@ -112,7 +122,8 @@ public record ComparedNumber(NumericTerm term, TermOrders orders, ComparisonPlac
      */
     public static DrawnLine lineOf(StatedComparison comparison, InputReading read,
                                    InputReads reads) {
-        OnASide side = sideOf(comparison.left(), comparison.right(), read, reads);
+        OnASide side = sideOf(comparison.left(), comparison.right(), comparison.claim(), read,
+                reads);
         NumericTerm.FromOnePosition position =
                 side == null ? null : side.named().term().atOnePosition();
         if (position == null || side.at() == null || side.named().orders() == null) {
@@ -124,6 +135,21 @@ public record ComparedNumber(NumericTerm term, TermOrders orders, ComparisonPlac
     }
 
     /**
+     * Whether the number the line of {@code comparison} is drawn on is the one written on the right,
+     * so that above the line is where the right side is above the left — or nothing where no line
+     * is drawn on one number.
+     *
+     * <p>Asked of the reading {@link #lineOf} makes and not of the claim it hands over, which says
+     * the same of a value singled out whichever side it was written on.
+     */
+    public static Optional<Boolean> writtenOnTheRight(StatedComparison comparison,
+                                                      InputReading read, InputReads reads) {
+        OnASide side = sideOf(comparison.left(), comparison.right(), comparison.claim(), read,
+                reads);
+        return side == null || side.at() == null ? Optional.empty() : Optional.of(side.turned());
+    }
+
+    /**
      * Which side of a binary the reading is about, and whether saying so turned the two round.
      *
      * <p>Whichever side draws a line, and the left where neither does and it names a number. A
@@ -131,24 +157,44 @@ public record ComparedNumber(NumericTerm term, TermOrders orders, ComparisonPlac
      * about, unless the right is a number the left is a value of — then the line is on that one,
      * and the comparison is read turned round.
      */
-    private static OnASide sideOf(Core one, Core other, InputReading read, InputReads reads) {
-        OnASide left = onOneSide(one, other, false, read, reads);
+    private static OnASide sideOf(Core one, Core other, ComparisonPlacement placed,
+                                  InputReading read, InputReads reads) {
+        OnASide left = onOneSide(one, other, false, placed, read, reads);
         if (left != null && left.at() != null) {
             return left;
         }
-        OnASide right = onOneSide(other, one, true, read, reads);
+        OnASide right = onOneSide(other, one, true, placed, read, reads);
         return right != null && right.at() != null ? right : left != null ? left : right;
     }
 
-    /** What {@code side} names, or null where it names no number of this input. */
-    private static OnASide onOneSide(Core side, Core other, boolean turned, InputReading read,
+    /**
+     * What {@code side} names, or null where it names no number of this input.
+     *
+     * <p>Both sides are read where they stand. The number is what this reading says {@code side}
+     * names, and the other side is the value it stands for here — a value given a name, a parameter
+     * a helper was handed, a value the module declares — before the order is asked where it falls.
+     * Read as written, a value behind a name would place no line where the same value written out
+     * places one.
+     *
+     * <p>A case of an enumeration held equal to the value, or not, places nothing on the order the
+     * cases are declared in: it asks which case the value is ({@link CaseCompared}), and the case
+     * declared after it is no nearer to it than any other. The order is what an order relation
+     * asks, and only that places a case on it.
+     */
+    private static OnASide onOneSide(Core side, Core other, boolean turned,
+                                     ComparisonPlacement placed, InputReading read,
                                      InputReads reads) {
         Named named = namedBy(side, read, reads);
         if (named == null) {
             return null;
         }
         Carrier order = named.orders() == null ? null : named.orders().answered();
-        return new OnASide(named, order == null ? null : order.literalOf(other, read.symbols()),
+        boolean placesOnTheOrder = order != null
+                && !(order instanceof Carrier.Ordinal && placed instanceof ComparisonClaim.Singled);
+        return new OnASide(named, placesOnTheOrder
+                ? order.literalOf(reads.standingValue(other, read.symbols(), read.newtypes()),
+                        read.symbols())
+                : null,
                 turned);
     }
 
@@ -185,7 +231,7 @@ public record ComparedNumber(NumericTerm term, TermOrders orders, ComparisonPlac
     /** The number an expression names together with the orders it is read and counted on, or null
      *  where it names none. */
     private static Named namedBy(Core e, InputReading read, InputReads reads) {
-        NumericTerm term = InputNumber.of(e, read.domain(), reads, read.rules());
+        NumericTerm term = InputNumber.ofAlone(e, read.domain(), reads, read.rules());
         if (term == null) {
             return null;
         }

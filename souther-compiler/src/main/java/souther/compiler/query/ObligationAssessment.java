@@ -1,6 +1,9 @@
 package souther.compiler.query;
 
 import souther.compiler.partition.Criterion;
+import souther.compiler.publish.CanonicalSelection;
+
+import java.util.Optional;
 
 /**
  * What became of one point of an authored line, over every reading of that line.
@@ -15,6 +18,9 @@ import souther.compiler.partition.Criterion;
  * rows showed is read off what this compilation ran, what the rules prove about a value existing
  * here is read off the rules, and what a search did is what a search did.
  *
+ * @param criterion  what a row at the point has to do, where every reading asks it alike — a line a
+ *                   declaration drew. Nothing for a comparison a body wrote, whose readings each ask
+ *                   for the point at a place of their own
  * @param projection what reading the rules reaching the value this point sits in established about a
  *                   value being there
  * @param searches   what building a value here came to under each reading of the line, and empty
@@ -22,17 +28,22 @@ import souther.compiler.partition.Criterion;
  *                   search of one reading came to is a fact about this point, two readings can have
  *                   come to two different things, and neither takes the other back. Kept as one, the
  *                   fact a reader was given was whichever the readings were walked in front of
+ * @param open       what is open about whether a row at the point can be written, read off the body
+ *                   and not off the readings: every row at it, by every reading, reaching an
+ *                   {@code unreachable}. Nothing where one can be as far as anything here says
  */
-public record ObligationAssessment(Criterion criterion, ObligationCoverage coverage,
+public record ObligationAssessment(Optional<Criterion> criterion, ObligationCoverage coverage,
                                    ItemAssessment.WritabilityProjection projection,
-                                   SearchOutcomes searches) {
+                                   SearchOutcomes searches,
+                                   CanonicalSelection<ObligationDisposition.Uncertainty> open) {
 
     public ObligationAssessment {
-        if (criterion == null || coverage == null || projection == null || searches == null) {
+        if (criterion == null || coverage == null || projection == null || searches == null
+                || open == null) {
             throw new IllegalArgumentException(
-                    "an obligation is a criterion, what the readings came to, what the rules prove"
-                            + " and what was searched for: " + criterion + " " + coverage + " "
-                            + projection + " " + searches);
+                    "an obligation is a criterion, what the readings came to, what the rules prove,"
+                            + " what was searched for and what is open about it: " + criterion
+                            + " " + coverage + " " + projection + " " + searches + " " + open);
         }
     }
 
@@ -47,8 +58,13 @@ public record ObligationAssessment(Criterion criterion, ObligationCoverage cover
      * <p>The measurement's own answer and not the search's. A point a row already sits at needs no
      * candidate, and one whose measurement never happened is not a piece of work to hand to anybody
      * — offered anyway, both put a specific row in front of an author that may already be written.
+     * And a point every row at which reaches an {@code unreachable} is not either: a row built there
+     * is one the compiler refuses.
      */
     public boolean worthSearching() {
+        if (!open.isEmpty()) {
+            return false;
+        }
         return switch (coverage) {
             case ObligationCoverage.Missed _ -> true;
             // Asked of the reasons rather than of one constant. A point nothing was read against is
@@ -101,6 +117,6 @@ public record ObligationAssessment(Criterion criterion, ObligationCoverage cover
      * to the two answers this holds, and {@link ObligationDisposition} is that question asked once.
      */
     public ObligationDisposition disposition() {
-        return ObligationDisposition.of(coverage, writabilityKnowledge());
+        return ObligationDisposition.of(coverage, writabilityKnowledge(), open);
     }
 }

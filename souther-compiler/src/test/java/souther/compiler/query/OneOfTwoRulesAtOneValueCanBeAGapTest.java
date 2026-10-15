@@ -23,6 +23,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>The model here is the smallest one that gets there. The row writes a hundred, which is
  * {@code N}'s own minimum, and takes the branch above the guard: the invariant's line at a hundred
  * is met, the guard's at the same hundred is not.
+ *
+ * <p>The way to the guard is a comparison, so a row is composed through it and the guard's line is
+ * one a row can be written at. Behind a condition no row is composed against, nothing would show
+ * that, and the line would not be a gap at all.
  */
 class OneOfTwoRulesAtOneValueCanBeAGapTest {
 
@@ -30,20 +34,20 @@ class OneOfTwoRulesAtOneValueCanBeAGapTest {
             module demo
 
             data N = Int invariant value >= 100
-            data Amount = { flag: Bool, n: N }
+            data Amount = { mode: Int, n: N }
             data Ok = { n: Int }
             data Refused = { why: String }
 
             behavior charge : (a: Amount) -> Ok | Refused
                 constructs Ok, Refused
             let charge (a) =
-                if a.flag then
+                if a.mode > 0 then
                     Ok { n = 1 }
                 else
                     if a.n.value > 100 then Ok { n = 2 } else Refused { why = "small" }
 
             example charge
-                | (Amount { flag = true, n = N(100) }) -> Ok { n = 1 }
+                | (Amount { mode = 1, n = N(100) }) -> Ok { n = 1 }
             """;
 
     @Test

@@ -23,9 +23,8 @@ import java.util.List;
  * its own.
  *
  * <p>Each of these is a caller supplying a default or an assembled parameter and delegating whole
- * to the one production computation — {@link GuardThresholds#of(String, AnalysisBody, Core,
- * CoverageSites.Plan, InputReading, ElementBindings, PathReachability.Answers,
- * RuleReachNumbering)}, {@link EnsuresThresholds#of(StatedContract, InputReading)}
+ * to the one production computation — {@link GuardThresholds#of},
+ * {@link EnsuresThresholds#of(StatedContract, InputReading)}
  * and {@link Partitions#withEvidence}. None of these fixtures reads a comparison or a clause a
  * second way; they only fill in what a caller with a narrower question does not need to say.
  */
@@ -41,7 +40,7 @@ final class ThresholdFixtures {
         return states == null ? GuardThresholds.Guards.NONE
                 : GuardThresholds.of(behavior, states, emitted, plan, inputs.reading(source),
                         ElementBindings.of(states, source.newtypes()),
-                        PathReachability.Answers.NONE,
+                        PathReachability.Arrivals.NONE,
                         new RuleReachNumbering(source.symbols().module(), behavior));
     }
 
@@ -107,7 +106,7 @@ final class ThresholdFixtures {
         singled.forEach(each -> evidence.add(new RuleEvidence.Singles(each)));
         return Partitions.withEvidence(base, reading, evidence, List.of(), allowance, ruleReading,
                 rulesWithoutALine, between, reaching,
-                new MeasureClosure.Drawing.FromTheReading());
+                new MeasureClosure.Drawing.FromTheReading(), WhereTheOperationsStand.NONE);
     }
 
     private ThresholdFixtures() {}

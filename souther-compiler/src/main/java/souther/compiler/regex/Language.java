@@ -1,5 +1,10 @@
 package souther.compiler.regex;
 
+import net.unit8.notation199x.pattern.Automaton;
+import net.unit8.notation199x.pattern.CodePoints;
+import net.unit8.notation199x.pattern.Meter;
+import souther.compiler.cst.CstLexer;
+
 /**
  * A set of strings this compiler can answer about exactly.
  *
@@ -61,9 +66,14 @@ public final class Language {
         return one == null ? null : new Language(one);
     }
 
-    /** Whether the whole of {@code value} is in it. A walk over the value, which builds nothing. */
+    /**
+     * Whether the whole of {@code value} is in it. A walk over the value, which builds nothing.
+     *
+     * <p>One state at a time, since the machine is canonical, and each symbol found by a search: a
+     * value costs its length whatever the machine holds.
+     */
     public boolean has(String value) {
-        return machine.accepts(value);
+        return machine.walks(value);
     }
 
     /**
@@ -169,9 +179,9 @@ public final class Language {
      * One string it holds, or null where it holds none.
      *
      * <p>Never null for a language that has something, which is what ties it to {@link #isEmpty}.
-     * The shortest, and among those one a source can carry where there is one — being writable is
-     * preferred and is never a condition, since what a rule admits is not narrowed by what a person
-     * can paste.
+     * The shortest, and among those one {@link #someWritten} would choose where there is one —
+     * being written is preferred and is never a condition, since what a rule admits is not narrowed
+     * by what is chosen to show a person.
      *
      * <p>A value for a row is a further question and not this one. What is wanted there is a string
      * somebody reads, and a language holds what it holds.
@@ -181,12 +191,15 @@ public final class Language {
     }
 
     /**
-     * One string it holds that a source can carry, or null where it holds none such.
+     * One string it holds with no control code but TAB, LF and CR, or null where it holds none such.
      *
-     * <p>What a caller writing a value into a model wants, which is not {@link #some}. That answers
-     * with what the language holds and prefers a written string where there is one at the same
-     * length; here a string nobody can paste is not an answer, so a language of control characters
-     * has one to offer and none to write.
+     * <p>What a caller writing a value into a model wants, which is not {@link #some}: the value is
+     * shown to a person, and a control code is invisible there, though a string literal may hold one
+     * raw. TAB, LF and CR are chosen, each having an escape it is written by. {@link #some} answers
+     * with what the language holds and prefers such a string where there is one at the same length;
+     * here any other string is not an answer, so a language whose every string holds another
+     * control code has one to offer and none to write. Which strings these are is 199x-notation's
+     * {@code Automaton.shortestWritten}.
      */
     public String someWritten() {
         return machine.shortestWritten();
@@ -272,6 +285,7 @@ public final class Language {
     @Override
     public String toString() {
         String some = some();
-        return "language of " + (some == null ? "nothing" : "\"" + some + "\" and such");
+        return "language of "
+                + (some == null ? "nothing" : CstLexer.literalOf(some) + " and such");
     }
 }

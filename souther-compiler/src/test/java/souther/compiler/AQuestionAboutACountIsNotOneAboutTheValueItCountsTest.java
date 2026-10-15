@@ -51,9 +51,36 @@ class AQuestionAboutACountIsNotOneAboutTheValueItCountsTest {
         return partition.notRead().stream().map(PartitionEvidence.NotRead::at).toList();
     }
 
-    /** A guard on a length, with a bound this cannot fold. */
+    /** A guard on a length, with a bound this cannot read: a product of the length with itself. */
     @Test
     void aGuardOnALengthAsksAboutTheLength() {
+        PartitionEvidence partition = partitionOf("""
+                module example.rooms
+
+                data Code = { text: String }
+
+                behavior price : (c: Code) -> Int
+                let price (c) =
+                    if String.length(c.text) <= String.length(c.text) * String.length(c.text)
+                    then 1 else 2
+
+                example price
+                    | "one" : (Code { text = "a" }) -> 2
+                """, "price");
+
+        assertEquals(List.of("String.length(c.text)"), readFor(partition),
+                () -> "the rule was read for the count and not for the string's own values: "
+                        + partition.notRead());
+    }
+
+    /**
+     * A bound the statement folds is a line on the length, and nothing about it is left unread.
+     *
+     * <p>{@code Int.min(20, 30)} is twenty whatever the input, and what the comparison states is
+     * read through it: a line at twenty on the count.
+     */
+    @Test
+    void aBoundTheStatementFoldsIsALineOnTheLength() {
         PartitionEvidence partition = partitionOf("""
                 module example.rooms
 
@@ -64,12 +91,11 @@ class AQuestionAboutACountIsNotOneAboutTheValueItCountsTest {
                     if String.length(c.text) <= Int.min(20, 30) then 1 else 2
 
                 example price
-                    | "one" : (Code { text = "a" }) -> 2
+                    | "one" : (Code { text = "a" }) -> 1
                 """, "price");
 
-        assertEquals(List.of("String.length(c.text)"), readFor(partition),
-                () -> "the rule was read for the count and not for the string's own values: "
-                        + partition.notRead());
+        assertEquals(List.of(), readFor(partition),
+                () -> "what the comparison states was read: " + partition.notRead());
     }
 
     /** And a clause of an `ensures` on the same shape, which is the other producer. */
@@ -84,7 +110,8 @@ class AQuestionAboutACountIsNotOneAboutTheValueItCountsTest {
 
                 behavior price : (c: Code) -> Ok | TooShort
                     constructs Ok
-                    ensures TooShort -> String.length(c.text) <= Int.min(20, 30)
+                    ensures TooShort ->
+                        String.length(c.text) <= String.length(c.text) * String.length(c.text)
                 let price (c) = TooShort
 
                 example price

@@ -7,6 +7,7 @@ import souther.compiler.inputs.EmptyInput;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.WhyNotTaken;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.PlacesApart;
@@ -105,7 +106,7 @@ class TheCutsAWalkTookInAreTheOnesARegionIsNarrowedByTest {
 
     /** A condition this reading met, named by nothing but which of them it is. */
     private static ConditionOccurrence met(int which) {
-        return new ConditionOccurrence("b", which);
+        return new ConditionOccurrence("b", ConditionOccurrence.Reading.DIVIDING, which);
     }
 
     /** Where a report about it would point, which nothing here reads. */
@@ -121,8 +122,9 @@ class TheCutsAWalkTookInAreTheOnesARegionIsNarrowedByTest {
         Recording region = new Recording();
 
         SearchRegion narrowed = new WayToTheBorder(List.of(
-                new OnTheWay.TakenIn(somewhere(1), first),
-                new OnTheWay.TakenIn(somewhere(2), second))).narrowing(region);
+                new OnTheWay.TakenIn(somewhere(1), new RowDemand.Relational(first)),
+                new OnTheWay.TakenIn(somewhere(2), new RowDemand.Relational(second))))
+                .narrowing(region);
 
         assertEquals(List.of(first, second), region.told,
                 "the region is narrowed by the cuts the account says it was narrowed by");
@@ -142,9 +144,12 @@ class TheCutsAWalkTookInAreTheOnesARegionIsNarrowedByTest {
         Recording region = new Recording();
 
         WayToTheBorder way = new WayToTheBorder(List.of(
-                new OnTheWay.Declined(met(1), somewhere(1), new OnTheWay.Why.NoWordsForTheShape()),
-                new OnTheWay.TakenIn(somewhere(2), only),
-                new OnTheWay.Declined(met(3), somewhere(3), new OnTheWay.Why.OneOfTwoThings())));
+                new OnTheWay.Declined(met(1), somewhere(1),
+                        new WhyNotTaken.OutsideDomain(WhyNotTaken.DomainLimit.A_QUANTITY_ON_NO_ORDER)),
+                new OnTheWay.TakenIn(somewhere(2), new RowDemand.Relational(only)),
+                new OnTheWay.Declined(met(3), somewhere(3),
+                        new WhyNotTaken.OutsideDomain(
+                                WhyNotTaken.DomainLimit.AN_ANSWER_A_ROW_STANDS_IN))));
         way.narrowing(region);
 
         assertEquals(List.of(only), region.told, "a decline is a record and not a cut");
@@ -167,8 +172,9 @@ class TheCutsAWalkTookInAreTheOnesARegionIsNarrowedByTest {
         Recording region = new Recording();
 
         new WayToTheBorder(List.of(
-                new OnTheWay.TakenIn(somewhere(1), arithmetic),
-                new OnTheWay.TakenIn(somewhere(2), ordered))).narrowing(region);
+                new OnTheWay.TakenIn(somewhere(1), new RowDemand.Relational(arithmetic)),
+                new OnTheWay.TakenIn(somewhere(2), new RowDemand.Relational(ordered))))
+                .narrowing(region);
 
         assertEquals(List.of(arithmetic, ordered), region.told,
                 "a condition in either vocabulary narrows the region it landed in");
@@ -191,11 +197,13 @@ class TheCutsAWalkTookInAreTheOnesARegionIsNarrowedByTest {
     @Test
     void aCutIsHandedOverAsTheAccountHoldsIt() {
         TakenConstraint shifted = new TakenConstraint.Affine(
-                LinearForm.<NumericTerm>atom(new NumericTerm.ValueOf(TermPath.of("x")))
-                        .minus(LinearForm.constant(ExactRatio.of(17))), Rel.LE);
+                LinearForm.<NumericTerm>atomMinusConstant(
+                        new NumericTerm.ValueOf(TermPath.of("x")), ExactRatio.of(17)), Rel.LE);
         Recording region = new Recording();
 
-        new WayToTheBorder(List.of(new OnTheWay.TakenIn(somewhere(1), shifted))).narrowing(region);
+        new WayToTheBorder(List.of(
+                new OnTheWay.TakenIn(somewhere(1), new RowDemand.Relational(shifted))))
+                .narrowing(region);
 
         assertEquals(List.of(shifted), region.told);
     }

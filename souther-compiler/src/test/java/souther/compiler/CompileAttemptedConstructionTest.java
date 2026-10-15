@@ -418,6 +418,57 @@ class CompileAttemptedConstructionTest {
                 "a depth this far past the stack only returns if the tail call became a jump");
     }
 
+    /** Runs a helper {@code walk} written as {@code body} over a long walk. It recurses while
+     * {@code Done} does not hold, so the self call stands in a departure rather than in
+     * {@code then}. */
+    private static long walkThroughADeparture(String invariant, String body) throws Exception {
+        String src = """
+                module demo exposing (run, Out)
+
+                data Done = Int
+                    %s
+
+                data Out = { n: Int }
+
+                partial let walk (n: Int, acc: Int): Int =
+                    %s
+
+                behavior run : (n: Int) -> Out
+                    constructs Out, Done
+
+                let run (n) = Out { n = walk(n, 0) }
+                """.formatted(invariant, body);
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src),
+                CompileAttemptedConstructionTest.class.getClassLoader());
+        Object impl = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
+        Map<?, ?> out = (Map<?, ?>) Codecs.encode(loader, "demo.Out", Codecs.apply(impl, 200000L));
+        return (long) out.get("n");
+    }
+
+    /** A departure is emitted apart from {@code then}, so it reaches the self tail call on its own. */
+    @Test
+    void aSelfTailCallInADepartureNamingNoClauseStillLoops() throws Exception {
+        assertEquals(200000L, walkThroughADeparture(
+                        "invariant value <= 0",
+                        "if Done(n) as d then acc + d.value else walk(n - 1, acc + 1)"),
+                "a depth this far past the stack only returns if the tail call became a jump");
+    }
+
+    /** The last arm is the one left to fall through, so the self call stands in the first, which is
+     * selected by comparing the failing clause. {@code bounded} never fails here. */
+    @Test
+    void aSelfTailCallInANamedDepartureStillLoops() throws Exception {
+        assertEquals(200000L, walkThroughADeparture(
+                        """
+                        invariant spent = value <= 0
+                            invariant bounded = value <= 1000000""",
+                        """
+                        if Done(n) as d then acc + d.value else
+                                | spent   -> walk(n - 1, acc + 1)
+                                | bounded -> acc"""),
+                "a depth this far past the stack only returns if the tail call became a jump");
+    }
+
     /**
      * A behavior that reports every reason a request was refused, not the first one it meets, builds
      * the reasons as a list and departs by the case that carries them. What is attempted there is a

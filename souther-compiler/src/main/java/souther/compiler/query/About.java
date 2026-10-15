@@ -11,6 +11,9 @@ import souther.compiler.partition.ClassOfAPosition;
 import souther.compiler.partition.DecisionReading;
 import souther.compiler.partition.ObligationIdentity;
 import souther.compiler.partition.OrderedAffineBoundary;
+import souther.compiler.partition.QuantityKey;
+import souther.compiler.partition.Replacement;
+import souther.compiler.partition.ReplacementOwed;
 import souther.compiler.partition.WhereACaseOfAnInputIsOwed;
 import souther.compiler.types.TypeSymbol;
 
@@ -273,33 +276,54 @@ public sealed interface About {
      * reading folded into one line is at one position and spells the quantity one way, so there is
      * no representative being chosen here — and what the finding is about is that reading's rows,
      * its line, and the line beside it that they allow.
+     *
+     * <p>One finding per line of the family the rows leave standing, and never one for the border.
+     * A row ruling one of them out need not rule out another, so each is owed its own row and is
+     * said on its own.
+     *
+     * @param direction the line of the family this finding is about
      */
-    record ALineTheRowsDoNotTellFromAnother(BorderAssessment line)
+    record ALineTheRowsDoNotTellFromAnother(BorderAssessment line, QuantityKey direction)
             implements OfAnObligation, RuleCitations {
 
         /**
-         * The line, which is one grain coarser than a point of it.
+         * The line held against one line of its family.
          *
          * <p>What a row here shows is which of two lines the model draws, and a line is what two
          * lines are two of. Keyed on a point, this would be owed four times over one border and the
-         * row that answers it would leave three of them open.
+         * row that answers it would leave three of them open; keyed on the border alone, a row
+         * ruling out one line of the family would answer it under every other.
          */
         @Override
         public ObligationIdentity obligationIdentity() {
-            return new ObligationIdentity.OfABorder(line.border().obligation());
+            return new ObligationIdentity.OfABorder(line.border().obligation(), direction);
         }
 
         public ALineTheRowsDoNotTellFromAnother {
             Objects.requireNonNull(line, "a finding is about something");
-            if (!(line.beside() instanceof AnotherLineTheRowsAllow.OneDoes)) {
+            Objects.requireNonNull(direction, "a line is not told from some line beside it");
+            if (standingAt(line, direction) == null) {
                 throw new IllegalArgumentException("a line the rows do not tell from another names"
-                        + " the other one, and this reading has none: " + line.beside());
+                        + " one the rows leave standing, and this reading leaves " + direction
+                        + " no standing: " + line.beside());
             }
         }
 
         /** The line these rows allow beside the one the model drew. */
-        public AnotherLineTheRowsAllow.OneDoes allowed() {
-            return (AnotherLineTheRowsAllow.OneDoes) line.beside();
+        public AnotherLineTheRowsAllow.Stands allowed() {
+            return standingAt(line, direction);
+        }
+
+        private static AnotherLineTheRowsAllow.Stands standingAt(BorderAssessment line,
+                                                                 QuantityKey direction) {
+            if (line.beside() instanceof AnotherLineTheRowsAllow.ByDirection lines) {
+                for (AnotherLineTheRowsAllow.Stands each : lines.standing()) {
+                    if (each.direction().equals(direction)) {
+                        return each;
+                    }
+                }
+            }
+            return null;
         }
 
         /**
@@ -586,6 +610,53 @@ public sealed interface About {
         @Override
         public ObligationIdentity obligationIdentity() {
             return new ObligationIdentity.OfADecisionRule(behavior, ruled.rule());
+        }
+    }
+
+    /**
+     * A rewrite of a body no row tells from the body, where some row shows it answering differently.
+     *
+     * <p>About the rewrite and not about the arm it rewrites. Every row may go through that arm,
+     * which is what the arm's own account asks; what this says is that none of them would fail if
+     * the arm were written as its sibling, or if the body answered one value — and that a row with
+     * {@code shownBy}'s inputs would, once its answer is written down.
+     *
+     * @param behavior    whose body it is a rewrite of
+     * @param written     which rewrite, with what the arms it is about mean
+     * @param reportAt    where it is shown, settled where the arm it rewrites was met
+     * @param shownBy     the row the rewrite answers differently on: one the module writes, or one
+     *                    this compiler composed and ran under both
+     * @param lookFor     the rewrite as a search for a row telling it apart is put to it, which is
+     *                    what a generation offering a row for this finding looks for
+     */
+    record ARewriteNoRowTellsApart(String behavior, ReplacementAsWritten written,
+                                   ReplacementReportAnchor reportAt,
+                                   ReplacementEvidence.ShownBy shownBy, ReplacementOwed lookFor)
+            implements OfAnObligation {
+
+        public ARewriteNoRowTellsApart {
+            Objects.requireNonNull(behavior, "a rewrite is of some behavior's body");
+            Objects.requireNonNull(written, "a finding is about something");
+            Objects.requireNonNull(reportAt, "and is shown somewhere");
+            if (!reportAt.shows(written.replacement())) {
+                throw new IllegalArgumentException(written + " is not shown at " + reportAt);
+            }
+            Objects.requireNonNull(shownBy, "a rewrite no row tells apart was shown to matter");
+            Objects.requireNonNull(lookFor, "and is one a row telling it apart can be looked for");
+            if (!lookFor.replacement().equals(written.replacement())) {
+                throw new IllegalArgumentException("a rewrite is looked for as itself: "
+                        + written + " and " + lookFor);
+            }
+        }
+
+        /** Which rewrite this is about. */
+        public Replacement replacement() {
+            return written.replacement();
+        }
+
+        @Override
+        public ObligationIdentity obligationIdentity() {
+            return new ObligationIdentity.OfAReplacement(behavior, replacement());
         }
     }
 

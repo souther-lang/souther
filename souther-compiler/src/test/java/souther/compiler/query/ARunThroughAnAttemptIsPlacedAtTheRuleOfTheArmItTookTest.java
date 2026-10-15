@@ -71,22 +71,22 @@ class ARunThroughAnAttemptIsPlacedAtTheRuleOfTheArmItTookTest {
     }
 
     /**
-     * What a way declines at an attempt's arm is sent to where that arm is written.
+     * What a way meets at an attempt's arm is sent to where that arm is written.
      *
      * <p>The arm is a condition the source wrote, so the module that wrote it is what places it. A
-     * report about a row composed without it asks there, and a place nothing filed is a report with
+     * report about a row composed against it asks there, and a place nothing filed is a report with
      * nowhere to send its reader.
      */
     @Test
-    void theArmsAWayDeclinesAreSentToWhereTheyAreWritten() {
+    void whatAWayMeetsAtAnArmIsSentToWhereTheArmIsWritten() {
         Compilation compilation = compiled(CHECK);
         DecisionEvidence evidence = evidenceOf(compilation, "check");
         Set<Citation> sentTo = new LinkedHashSet<>();
         for (DecisionReading.Ruled ruled : evidence.read().found()) {
-            for (OnTheWay.Declined declined : ruled.states().declined()) {
-                Citation at = Sites.placeIfKnown(compilation.db(), declined.anchor());
+            for (OnTheWay met : ruled.states().onTheWay()) {
+                Citation at = Sites.placeIfKnown(compilation.db(), met.anchor());
                 assertInstanceOf(Citation.Written.class, at,
-                        () -> "an arm the source wrote is placed where it is written: " + declined);
+                        () -> "an arm the source wrote is placed where it is written: " + met);
                 sentTo.add(at);
             }
         }

@@ -1,6 +1,7 @@
 package souther.compiler;
 
 import souther.compiler.diag.CompileException;
+import souther.compiler.diag.msg.HelperMessage;
 import souther.runtime.Behavior;
 
 import org.junit.jupiter.api.Test;
@@ -10,6 +11,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -113,6 +115,31 @@ class CompileRecursiveHelperTest {
         Object out = Codecs.apply(behavior, bag);
 
         assertEquals(20000100000L, (long) Codecs.encode(loader, "demo.Out", out));
+    }
+
+    /** The tail position is the body of a {@code let}: the binding is a value, and the {@code if}
+     * after it is what the helper answers, so the self call in it is a jump. */
+    @Test
+    void aSelfTailRecursiveHelperUnderALetRunsInConstantStack() throws Exception {
+        String src = """
+                module demo
+                data N = Int
+                data Out = Int
+                behavior run : (n: N) -> Out constructs Out
+                partial let loop (acc: Int, n: Int): Int = {
+                    let m = n - 1
+                    if n == 0 then acc else loop(acc + m + 1, m)
+                }
+                let run (n) = Out(loop(0, n.value))
+                """;
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
+        Object n = Codecs.decoded(loader, "demo.N", 200_000L);
+
+        Object behavior = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
+        Object out = Codecs.apply(behavior, n);
+
+        assertEquals(20000100000L, (long) Codecs.encode(loader, "demo.Out", out),
+                "a depth this far past the stack only returns if the tail call became a jump");
     }
 
     @Test
@@ -324,7 +351,10 @@ class CompileRecursiveHelperTest {
                 """;
         CompileException ex = assertThrows(CompileException.class, () -> Compiler.compile(src));
         assertFalse(ex.getMessage().contains("unknown function"), ex.getMessage());
-        assertTrue(ex.getMessage().contains("expects a block"), ex.getMessage());
+        HelperMessage.AValueWhereAFunctionIsTaken said = assertInstanceOf(
+                HelperMessage.AValueWhereAFunctionIsTaken.class, ex.diagnostic().said(),
+                ex::getMessage);
+        assertEquals("twice", said.written());
     }
 
     @Test

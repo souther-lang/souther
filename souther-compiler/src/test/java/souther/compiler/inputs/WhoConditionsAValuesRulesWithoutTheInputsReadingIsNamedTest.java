@@ -38,26 +38,25 @@ class WhoConditionsAValuesRulesWithoutTheInputsReadingIsNamedTest {
 
     private static final String CONDITIONS = "souther.compiler.check.FieldDomains";
 
-    /** Who settles a position of a value's rules, and why each of them does. */
+    /**
+     * Who settles a position of a value's rules, and why each of them does.
+     *
+     * <p>The reading of an input is not among them. It says every value's rules together first and
+     * settles a position over the whole of that, in its own names, so a value's rules reach it with
+     * nothing settled in them.
+     */
     private static final Set<String> MAY_CONDITION = Set.of(
-            // The reading of an input asking on the input's behalf, which is what the boundary is.
-            "souther.compiler.inputs.PlacedRules",
             // A representative value of a declaration, composed field by field. Its subject is the
             // declaration and not an input — no behavior, no parameter, no path rooted at one — so
             // the declaration's own words are the right ones and there is nothing to translate.
             "souther.compiler.partition.Partitions",
-            // What one position of a row's value can take, which is the same subject as the reader
-            // below and the settling it does at each step. Its own name because the answers are
-            // kept: a search reaches one settling by many routes and asks the same position about
-            // it at each of them, and that is a fact about how the search walks rather than about
-            // what the rules mean.
-            "souther.compiler.partition.ConditionedCandidates",
-            // A row's value for one parameter, composed a position at a time. Its positions are
-            // where a value has to be built and not what the behavior declares it takes: a class
-            // naming a constructor for a sum puts positions under it that no reading of the
-            // declaration holds, however deep it went. So it has nothing to ask the reading of an
-            // input about, and the rules it settles are the rules of whatever it is building.
-            "souther.compiler.partition.Generator");
+            // The rules a row's value for one parameter is composed under, a position at a time.
+            // Its positions are where a value has to be built and not what the behavior declares
+            // it takes: a class naming a constructor for a sum puts positions under it that no
+            // reading of the declaration holds, however deep it went. So which values' rules reach
+            // a position is taken from the reading, and each of those values' rules is settled in
+            // that value's own words.
+            "souther.compiler.partition.ConstructionRules");
 
     @Test
     void nothingElseSettlesAPositionOfAValuesRules() {
@@ -106,7 +105,7 @@ class WhoConditionsAValuesRulesWithoutTheInputsReadingIsNamedTest {
      * the day one was added, which is a check that reads nothing while reporting nothing.
      */
     private static boolean conditions(String member, java.lang.constant.MethodTypeDesc taken) {
-        if (member.equals("given") || member.equals("composing")) {
+        if (member.equals("composing")) {
             return true;
         }
         return (member.equals("of") || member.equals("unshared"))

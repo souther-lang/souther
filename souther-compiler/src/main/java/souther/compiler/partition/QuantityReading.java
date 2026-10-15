@@ -8,8 +8,8 @@ import java.util.Map;
 /**
  * What was read at one row, for each of the orders a quantity reads its terms on.
  *
- * <p>The row read, and not an answer about it. {@link BorderQuantity#standsAt} ranks what the terms
- * came to one way and {@link BorderQuantity#valuesOf} ranks it another — a position the row wrote
+ * <p>The row read, and not an answer about it. {@link LinearQuantity#standsAt} ranks what the terms
+ * came to one way and {@link LinearQuantity#valuesOf} ranks it another — a position the row wrote
  * nothing at outranks what stopped a reading for the first and is put together with it for the
  * second — so neither of their answers can be had from the other, and a walk of the row that came
  * back as either would be a walk the other question has to make again.

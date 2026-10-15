@@ -24,8 +24,21 @@ public sealed interface Membership {
     /** The class does not hold it, which is an answer about a value that was read. */
     record NoMatch() implements Membership {}
 
-    /** There was no value to hold, and this is what stopped there being one. */
-    record Incomplete(Incompleteness.Code code) implements Membership {}
+    /** There was no value to hold, and this is what stopped there being one, with the figure it
+     *  stopped at where a limit did. */
+    record Incomplete(Incompleteness.Cause cause) implements Membership {
+
+        public Incomplete {
+            if (cause == null) {
+                throw new IllegalArgumentException("no value to hold, for a reason");
+            }
+        }
+
+        /** What stopped there being a value, as the word an observation writes for it. */
+        public Incompleteness.Code code() {
+            return cause.code();
+        }
+    }
 
     /**
      * A value arrived and the number a class asks about it is one the exact arithmetic could not
@@ -66,7 +79,7 @@ public sealed interface Membership {
             throw new IllegalArgumentException(
                     "no value arrived, which is not something an observation of one says");
         }
-        Incompleteness.Code why = value.unread();
+        Incompleteness.Cause why = value.cause();
         return why == null ? null : new Incomplete(why);
     }
 }

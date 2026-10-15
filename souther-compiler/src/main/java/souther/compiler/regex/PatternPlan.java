@@ -1,5 +1,15 @@
 package souther.compiler.regex;
 
+import net.unit8.notation199x.pattern.Automaton;
+import net.unit8.notation199x.pattern.CodePoints;
+import net.unit8.notation199x.pattern.Meter;
+import net.unit8.notation199x.pattern.PatternMeaning;
+import souther.compiler.observe.Figure;
+import souther.compiler.observe.WorkFigure;
+
+import java.util.Objects;
+import java.util.concurrent.atomic.AtomicLong;
+
 /**
  * What would be built out of some patterns, said before anything is made of it.
  *
@@ -22,27 +32,48 @@ public final class PatternPlan {
     /**
      * How much a plan is allowed.
      *
-     * <p>States, because that is what everything here costs: a pattern is its states, a meet is the
-     * product of two, and what a walk over any of them takes is bounded by them. Counted over the
-     * whole of the plan and not per pattern — a plan is admitted as a whole or not at all, so what
-     * it is charged is everything it builds.
+     * <p>States, because that is what a machine is made of: a pattern is its states, a meet is the
+     * pairs of two, and a walk over any of them is bounded by them. And the work of making them,
+     * because a state is not one thing to make: a deterministic one is a row as wide as the symbols
+     * the machine tells apart ({@link Meter}). Counted over the whole of the plan and not per
+     * pattern — a plan is admitted as a whole or not at all, so what it is charged is everything
+     * it builds.
      *
      * @param mostStates the largest machine a step of the plan may make
      * @param mostBuilt  how many states the plan may make in all, the intermediate ones counted.
      *                   Beside the first because a plan of many small meets is affordable at each
      *                   step and not as a whole
+     * @param mostWork   how much making them may look at in all, which one machine may not take
+     *                   more of on its own either
      */
-    public record Budget(int mostStates, int mostBuilt) {
+    public record Budget(int mostStates, int mostBuilt, long mostWork) {
 
         public Budget {
-            if (mostStates <= 0 || mostBuilt <= 0) {
+            if (mostStates <= 0 || mostBuilt <= 0 || mostWork <= 0) {
                 throw new IllegalArgumentException("a budget allows something");
             }
         }
 
         /** A meter that allows this much and has spent none of it. */
         public Meter meter() {
-            return new Meter(mostStates, mostBuilt);
+            return new Meter(mostStates, mostBuilt, mostWork);
+        }
+
+        /**
+         * Which of this budget's limits {@code meter} refused at, for a meter this budget made and
+         * a construction out of it that just came back with nothing.
+         *
+         * <p>Read off the meter and never guessed: a meter that came back with nothing and names no
+         * limit is this compiler having lost the reason on the way, and saying a figure there would
+         * be saying one nothing was compared against.
+         */
+        public Refused refusedBy(Meter meter) {
+            Meter.Stopped by = meter.stoppedBy();
+            if (by == null) {
+                throw new IllegalStateException(
+                        "a machine was not built and the allowance refused nothing");
+            }
+            return new Refused(this, by);
         }
 
         /**
@@ -58,7 +89,7 @@ public final class PatternPlan {
          * measurement of anything: it is the size past which this compiler would rather say it did
          * not answer.
          */
-        public static final Budget OF_ADMITTED_VALUES = new Budget(50_000, 200_000);
+        public static final Budget OF_ADMITTED_VALUES = new Budget(50_000, 200_000, 50_000_000);
 
         /**
          * What handing each of a position's rules on as the set it admits is allowed to cost.
@@ -80,7 +111,7 @@ public final class PatternPlan {
          *
          * <p>The same numbers as the others today, and a coincidence rather than a fact.
          */
-        public static final Budget OF_WHAT_A_RULE_LEAVES = new Budget(50_000, 200_000);
+        public static final Budget OF_WHAT_A_RULE_LEAVES = new Budget(50_000, 200_000, 50_000_000);
 
         /**
          * What composing one value somebody can write into a row is allowed to cost.
@@ -102,10 +133,37 @@ public final class PatternPlan {
          * one pattern taken a string out of, the figure would be tuned for the cheapest of the
          * questions it actually pays for.
          *
+         * <p><b>And not what the patterns of those rules cost to build.</b> A pattern's machine is
+         * built once, under an allowance of its own ({@link #OF_A_PATTERN_FOR_A_WITNESS}), and
+         * every question that composes a value out of it borrows it. What is borrowed is not spent:
+         * what this pays for is what the question makes on top of what it borrowed — the meet of
+         * the rules, the strings so many characters long a count leaves and their meet with the
+         * rest, the strings taken out of it. Those it builds itself, since they are machines the
+         * question composes and no rule an author wrote. Charged again here, the
+         * same machine would cost each question that happened to need it, and what a question
+         * could afford would turn on which other questions had been asked first.
+         *
          * <p>The same numbers today, and that is a coincidence rather than a fact. Written as one
          * constant, the day either question wants a different size the other would move with it.
          */
-        public static final Budget OF_A_WITNESS = new Budget(50_000, 200_000);
+        public static final Budget OF_A_WITNESS = new Budget(50_000, 200_000, 50_000_000);
+
+        /**
+         * What building the machine of one pattern a rule states, for a value to be composed out
+         * of, is allowed to cost.
+         *
+         * <p>The producer's, and not the question's that composes the value. A pattern's machine
+         * is settled by the pattern, so it is built once for every question that composes a value
+         * out of it, and each of those borrows it ({@link #OF_A_WITNESS}). So what one pattern
+         * may spend is a figure of its own: what running out of it says is that this pattern is
+         * too large to build, which is about the rule an author wrote, while running out of what
+         * composing a value may spend is about the question and about no rule of it. A machine a
+         * question composes for itself is the question's, and is never built out of this.
+         *
+         * <p>The same numbers as the others today, and a coincidence rather than a fact.
+         */
+        public static final Budget OF_A_PATTERN_FOR_A_WITNESS =
+                new Budget(50_000, 200_000, 50_000_000);
 
         /**
          * What working out where one rule's strings stop on the order is allowed to cost.
@@ -121,7 +179,7 @@ public final class PatternPlan {
          *
          * <p>The same numbers as the two above, and a coincidence rather than a fact.
          */
-        public static final Budget OF_AN_ORDERED_EXTENT = new Budget(50_000, 200_000);
+        public static final Budget OF_AN_ORDERED_EXTENT = new Budget(50_000, 200_000, 50_000_000);
 
         /**
          * What deciding whether a set of values and a range on an order share one is allowed to
@@ -135,7 +193,7 @@ public final class PatternPlan {
          *
          * <p>The same numbers as the rest, and a coincidence rather than a fact.
          */
-        public static final Budget OF_WHAT_A_SET_AND_A_RANGE_SHARE = new Budget(50_000, 200_000);
+        public static final Budget OF_WHAT_A_SET_AND_A_RANGE_SHARE = new Budget(50_000, 200_000, 50_000_000);
 
         /**
          * What working out the classes a behavior's rules about the strings at one position divide
@@ -165,10 +223,12 @@ public final class PatternPlan {
          *
          * <p>The same numbers as the others today, and a coincidence rather than a fact.
          */
-        public static final Budget OF_BEHAVIOR_DISTINCTIONS = new Budget(50_000, 200_000);
+        public static final Budget OF_BEHAVIOR_DISTINCTIONS = new Budget(50_000, 200_000, 50_000_000);
 
         /**
-         * What the machine a compile-time fold of {@code String.matches} walks is allowed to cost.
+         * What the machine a compile-time fold of {@code String.matches} walks is allowed to cost,
+         * and what walking one subject over it may look at: the machine is built once and answers
+         * many subjects, and each of them is given this allowance of its own.
          *
          * <p>Its own, because what it decides is only whether the compiler answers a match or leaves
          * it to the run time. Spent from what a reading of the rules is allowed, a fold would change
@@ -177,7 +237,42 @@ public final class PatternPlan {
          *
          * <p>The same numbers as the others today, and a coincidence rather than a fact.
          */
-        public static final Budget OF_A_FOLD = new Budget(50_000, 200_000);
+        public static final Budget OF_A_FOLD = new Budget(50_000, 200_000, 50_000_000);
+    }
+
+    /**
+     * Which limit of which budget refused a machine, carried from the meter that refused it.
+     *
+     * <p>The budget is the one the meter was made from, so a run whose policy handed it other
+     * numbers names the numbers it used. What it was spent on is not here: the same budget bounds
+     * different questions for different callers, and which figure a refusal is, is said by the one
+     * that knows what it was building ({@link #as}).
+     *
+     * @param budget what the meter that refused allowed
+     * @param by     which of its limits refused
+     */
+    public record Refused(Budget budget, Meter.Stopped by) {
+
+        public Refused {
+            Objects.requireNonNull(budget, "a refusal was made under some budget");
+            Objects.requireNonNull(by, "a refusal was made by one of the limits");
+        }
+
+        /**
+         * The figure this was, said as one of the two figures of what the budget was spent on:
+         * {@code oneMachine} where one machine came to more than a machine may — more states, or
+         * more looked at in making it, which the meter refuses as one limit and does not tell
+         * apart — and {@code inAll} where what everything built for the answer made and looked at
+         * came to more than it may.
+         */
+        public Figure as(WorkFigure oneMachine, WorkFigure inAll) {
+            return switch (by) {
+                case ONE_MACHINE -> oneMachine.at(budget.mostStates() + " states or "
+                        + budget.mostWork() + " looked at");
+                case THE_ANSWER -> inAll.at(budget.mostBuilt() + " states built and "
+                        + budget.mostWork() + " looked at");
+            };
+        }
     }
 
     /** What one step of a plan does. */
@@ -406,6 +501,7 @@ public final class PatternPlan {
      * the guess refused answers this could afford and charged for states nobody built.
      */
     public Language compile(Meter meter) {
+        COMPILED.incrementAndGet();
         // A construction is beginning. The meter is the position's whole allowance and outlives any
         // one of these, so what refused an earlier build is not what refused this.
         meter.starting();
@@ -415,6 +511,19 @@ public final class PatternPlan {
         // there is no allowance and nobody counting.
         return Language.canonical(built(step, meter), meter);
     }
+
+    /**
+     * How many plans have been compiled, whoever asked and whatever came of it, for a test holding
+     * a reader to how many machines it builds.
+     *
+     * <p>What a caller is held to is that a machine settled by its plan is built for the first
+     * question that wants it and borrowed by the rest — a shape, and not a speed.
+     */
+    public static long compilationsMade() {
+        return COMPILED.get();
+    }
+
+    private static final AtomicLong COMPILED = new AtomicLong();
 
     /**
      * One step, or null where it ran past what the meter allows.

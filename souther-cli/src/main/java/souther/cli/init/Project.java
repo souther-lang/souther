@@ -8,7 +8,7 @@ package souther.cli.init;
  * the module name is a header and the name of the file that holds it — and deciding one of them
  * inside a template would be deciding it once per file.
  *
- * @param coordinate what the build calls this project
+ * @param coordinate what the build calls this project, or null where there is no build
  * @param moduleName the header the {@code .sou} declares, which is also the package it generates into
  * @param model how much of a model to start with
  * @param build the build system the project is run by

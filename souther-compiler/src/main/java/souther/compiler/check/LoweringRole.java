@@ -98,7 +98,7 @@ public sealed interface LoweringRole
             ValueName.Helper value = switch (role) {
                 case PublishedValueEntry(ValueName.Helper v) -> v;
                 case FixtureValueEntry(ValueName.Helper v) -> v;
-                default -> null;
+                case Behavior _, ValueDeclaredElsewhere _, ValueHome _, Helper _, RowValue _ -> null;
             };
             if (value != null && value.module().equals(module)) {
                 out.add(value.name());

@@ -89,6 +89,22 @@ class ARuleAboutAnOperationsResultCarriesSomethingTest {
                     behavior wrap : (x: Int) -> NonNeg constructs NonNeg
                     let wrap (x) = NonNeg(Int.floorMod(x, 100))
                     """),
+            // And the two ends it has below nought, where the divisor is a constant below nought:
+            // the remainder is not above nought and is above the divisor.
+            new Discharges("Int.floorMod", """
+                    module demo
+                    data NonPos = Int
+                        invariant value <= 0
+                    behavior wrap : (x: Int) -> NonPos constructs NonPos
+                    let wrap (x) = NonPos(Int.floorMod(x, 0 - 100))
+                    """),
+            new Discharges("Int.floorMod", """
+                    module demo
+                    data AboveTheDivisor = Int
+                        invariant value > 0 - 100
+                    behavior wrap : (x: Int) -> AboveTheDivisor constructs AboveTheDivisor
+                    let wrap (x) = AboveTheDivisor(Int.floorMod(x, 0 - 100))
+                    """),
 
             // The measures, whose row is the one every operation that counts what it was given is
             // declared with rather than one written for it. A program each all the same: what the

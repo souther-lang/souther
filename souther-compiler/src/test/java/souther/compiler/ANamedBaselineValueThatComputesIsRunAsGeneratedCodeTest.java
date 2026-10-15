@@ -94,7 +94,10 @@ class ANamedBaselineValueThatComputesIsRunAsGeneratedCodeTest {
             behavior calc : (c: Cond) -> Out
                 constructs Out
 
-            let calc (c) = Out { n = 0 }
+            let calc (c) =
+                match c.f with
+                    | C -> Out { n = 0 }
+                    | B -> Out { n = 0 }
 
             example calc
                 | "base" : (baseline) -> Out { n = 0 }
@@ -137,7 +140,10 @@ class ANamedBaselineValueThatComputesIsRunAsGeneratedCodeTest {
             behavior calc : (c: Cond) -> Out
                 constructs Out
 
-            let calc (c) = Out { n = 0 }
+            let calc (c) =
+                match c.f with
+                    | C -> Out { n = 0 }
+                    | B -> Out { n = 0 }
             """;
 
     /**
@@ -197,7 +203,10 @@ class ANamedBaselineValueThatComputesIsRunAsGeneratedCodeTest {
             behavior calc : (c: Cond) -> Out
                 constructs Out
 
-            let calc (c) = Out { n = 0 }
+            let calc (c) =
+                match c.f with
+                    | C -> Out { n = 0 }
+                    | B -> Out { n = 0 }
             """;
 
     /**

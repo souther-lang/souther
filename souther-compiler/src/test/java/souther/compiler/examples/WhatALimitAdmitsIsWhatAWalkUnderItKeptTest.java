@@ -123,7 +123,8 @@ class WhatALimitAdmitsIsWhatAWalkUnderItKeptTest {
         while (at instanceof ObservedValue.Sequence s) {
             at = s.elements().get(0);
         }
-        assertEquals(new ObservedValue.Truncated(), at, "the walk stops rather than reading on");
+        assertEquals(new ObservedValue.Truncated(FixtureReader.WHOLE.depthFigure()), at,
+                "the walk stops rather than reading on, at the depth");
     }
 
     /**
@@ -146,7 +147,7 @@ class WhatALimitAdmitsIsWhatAWalkUnderItKeptTest {
         Symbols symbols = Symbols.none(DefaultStdlib.get());
         // No module is being read, so nothing here declares a data whose fields could be asked for.
         return ObservedValues.of(live, symbols,
-                new NeutralForm(symbols, ScopedDeclarations.of(symbols),
+                new NeutralForm(symbols, ScopedDeclarations.sumsOf(symbols),
                         ScopedDeclarations.kindsOf(symbols),
                         FieldTypes.over(new CheckedDeclarations(_ -> null, _ -> null))), limits);
     }

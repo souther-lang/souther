@@ -5,8 +5,9 @@ import souther.compiler.inputs.BlockReason;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
-import java.util.function.Function;
 import java.util.function.Predicate;
 
 /**
@@ -124,6 +125,18 @@ public final class UnreadComparison {
         record CutsNothing<K>() implements Read<K> {}
 
         /**
+         * The arithmetic read both sides as forms, and the difference of the two has no
+         * representation: two coefficients held one by one and standing at the two ends of the
+         * exponents a ratio holds.
+         *
+         * <p>Its own answer beside {@link CutsNothing} and {@link NotRead}. Nothing cancelled, so
+         * the quantity is not empty and it is not a fact about the rule that it cuts nothing;
+         * nothing was left unread, so the reading did not stop. What is missing is a number, and the
+         * places the comparison names are the ones it is filed at, as for a rule that cuts nothing.
+         */
+        record NoRatioHolds<K>() implements Read<K> {}
+
+        /**
          * The arithmetic read no form here, and what it was looking at when it stopped.
          *
          * <p>The expression, because the walk that stopped is the only thing that knows which one it
@@ -133,15 +146,22 @@ public final class UnreadComparison {
          * it could not read beside it, and would go on being blamed as more operations became
          * readable.
          *
+         * <p>And the reason, where the arithmetic gave one: it met a shape no form says and named
+         * it where it composed the operation. That is the reason at every place the comparison is
+         * filed at, and nothing about where the values came from is asked to say it again.
+         *
          * @param stoppedAt what the expression with no rule here is made of
+         * @param decided the arithmetic the reading met, where that is what stopped it
          */
-        record NotRead<K>(ValueOrigin<K> stoppedAt) implements Quantity<K> {
+        record NotRead<K>(ValueOrigin<K> stoppedAt, Optional<NonAffineOperation> decided)
+                implements Quantity<K> {
 
             public NotRead {
                 if (stoppedAt == null) {
                     throw new IllegalArgumentException(
                             "a reading that read no form stopped somewhere");
                 }
+                Objects.requireNonNull(decided, "a reading says whether the arithmetic decided");
             }
         }
     }
@@ -164,6 +184,9 @@ public final class UnreadComparison {
     public static <K> List<K> filedAt(Quantity.Read<K> read, List<K> met) {
         return switch (read) {
             case Quantity.CutsNothing<K> _ -> List.copyOf(met);
+            // Every place the comparison names, for the reason a rule that cuts nothing is: the
+            // difference that would say which of them the rule is about is the number no ratio holds.
+            case Quantity.NoRatioHolds<K> _ -> List.copyOf(met);
             case Quantity.OverOne<K> one -> over(met, Set.of(one.position()));
             case Quantity.OverSeveral<K> several -> over(met, several.positions());
         };
@@ -236,13 +259,32 @@ public final class UnreadComparison {
             // Read to the end and there is no quantity. Nothing about how it was written adds to
             // that: no reading fell short, so no question about what could not be read arises.
             case Quantity.CutsNothing<K> _ -> new BlockReason.ComparisonCuttingNothing();
-            case Quantity.OverSeveral<K> _ -> new BlockReason.ComparisonBetweenPositions();
+            // Read to the end and the difference has no number: a reading that fell short of
+            // writing down what it found, which is a fact about how the rule was written and about
+            // nothing the carrier holds.
+            case Quantity.NoRatioHolds<K> _ -> new BlockReason.LineAtANumberNoRatioHolds();
+            case Quantity.OverSeveral<K> _ -> new BlockReason.ComparisonRelatingTwoValues();
             // A line on one position that the caller's own reading placed nowhere: that reading
             // stopped, and what it stopped on is the position. The carrier says which limit — a
             // position nothing draws a line on wants the carrier, and one lines are drawn on all
             // through the file wants a reader of the form.
             case Quantity.OverOne<K> one -> whereALineWouldFall(ordered.test(one.position()));
         };
+    }
+
+    /**
+     * What a rule read to the end is left with where the line it draws falls outside what its
+     * quantity ever holds.
+     *
+     * <p>Said here once, for every reader that says it: a comparison whose quantity the line does
+     * not reach, at every coordinate of that quantity; the filing of a name at the one position a
+     * line was moved to and found short of it; and an invariant whose end the reading of ends found
+     * past the last value of the order. Each of those is the same fact — the rule admits nothing
+     * there, and no reading fell short of it — and made in three places the three would be free to
+     * say it in three words.
+     */
+    public static BlockReason.RuleWithoutLineReason outsideWhatTheQuantityHolds() {
+        return new BlockReason.ComparisonCuttingOutsideDomain();
     }
 
     /**
@@ -287,6 +329,11 @@ public final class UnreadComparison {
     public static <K> BlockReason.RuleReadingStopped whereItStopped(RuleAt<K> at,
                                                                    Quantity.NotRead<K> notRead,
                                                                    Predicate<K> ordered) {
+        // The arithmetic said what it met, and that is the reason wherever the rule is filed: the
+        // place says where, and has nothing to add about why the reading stopped.
+        if (notRead.decided().isPresent()) {
+            return notAboutOwnValues(notRead.stoppedAt(), notRead.decided());
+        }
         return switch (at) {
             // The values here are what the rule speaks of, so what they are carried on says which
             // limit stopped the reading: `at < DateTime(...)` stops because nothing draws a line on
@@ -304,6 +351,20 @@ public final class UnreadComparison {
     }
 
     /**
+     * Why a reading that stopped, at a place the rule states nothing about the values of: what the
+     * arithmetic said where it said anything, and otherwise what the walk stopped at
+     * ({@link #notAboutOwnValues(ValueOrigin)}).
+     *
+     * <p>Over the two things it reads and not over {@link Quantity}, so that a classification that
+     * only needs a reason does not take the vocabulary an answer is given in.
+     */
+    public static <K> BlockReason.RuleReadingStopped notAboutOwnValues(
+            ValueOrigin<K> stoppedAt, Optional<NonAffineOperation> decided) {
+        return decided.<BlockReason.RuleReadingStopped>map(BlockReason.NonAffineArithmetic::new)
+                .orElseGet(() -> notAboutOwnValues(stoppedAt));
+    }
+
+    /**
      * The same at a place the rule states nothing about the values of, from what the walk stopped
      * at and from nothing else.
      *
@@ -314,52 +375,13 @@ public final class UnreadComparison {
      * looking at the model.
      */
     public static <K> BlockReason.RuleReadingStopped notAboutOwnValues(ValueOrigin<K> stoppedAt) {
-        return madeByAnOperation(stoppedAt)
+        // The word for a value an operation made promises the position was found and only
+        // following the operation back is missing. Where some value the side may be is a position's
+        // own values or a literal, that promise is false and what an author is owed is the other
+        // word.
+        return stoppedAt.madeByAnOperation()
                 ? new BlockReason.RuleAboutADerivedValue()
                 : new BlockReason.UnreadComparisonForm();
-    }
-
-    /** Whether what a reading stopped at is a value an operation made of a position. */
-    private static <K> boolean madeByAnOperation(ValueOrigin<K> stoppedAt) {
-        return stoppedAt.answered(UnreadComparison::madeByAnOperation);
-    }
-
-    /** The same of {@code stoppedAt}, given what each of its parts came to. */
-    private static <K> boolean madeByAnOperation(ValueOrigin<K> stoppedAt,
-                                                 Function<ValueOrigin<K>, Boolean> part) {
-        return switch (stoppedAt) {
-            case ValueOrigin.Applied<K> _, ValueOrigin.MadeFromAPosition<K> _ -> true;
-            // Arithmetic the terms do not take apart — unless what is under it came from a
-            // position, which is the same rule about a value made from one with a layer of
-            // arithmetic over it.
-            case ValueOrigin.Composed<K> composed -> composed.madeFrom() != null;
-            // A construction is not an operation, whatever it was given. The word this decides is
-            // about a value a closure of an operation made of what stands at a position, which is
-            // followed back by reading that operation backwards; a reader that cannot take a
-            // construction as a quantity has not got that to do. Reading what it was built with is
-            // a separate ability, and the side that has it is what a rule is filed from.
-            case ValueOrigin.Constructed<K> _ -> false;
-            // Every value it could be, and not any of them. The word this picks promises the
-            // position was found and only following the operation back is missing; where one arm of
-            // a choice is a position's own values or a literal, that promise is false and what an
-            // author is owed is the other word. What decided the choice is not asked: an operation
-            // over the test made none of the values the rule is about.
-            case ValueOrigin.OneOf<K> choice -> everyOne(choice.alternatives(), part);
-            case ValueOrigin.IsAPosition<K> _, ValueOrigin.Written<K> _,
-                 ValueOrigin.Unnameable<K> _, ValueOrigin.NoValue<K> _ -> false;
-        };
-    }
-
-    /** Whether every value in {@code of} is one an operation made of a position. Stops at the
-     *  first that is not. */
-    private static <K> boolean everyOne(List<ValueOrigin<K>> of,
-                                        Function<ValueOrigin<K>, Boolean> part) {
-        for (ValueOrigin<K> each : of) {
-            if (!part.apply(each)) {
-                return false;
-            }
-        }
-        return true;
     }
 
     private UnreadComparison() {}

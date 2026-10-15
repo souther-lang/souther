@@ -1,7 +1,8 @@
 package souther.compiler.program;
 
+import souther.compiler.CompilationSources;
+import souther.compiler.Compiler;
 import souther.compiler.ast.Ast;
-import souther.compiler.ast.DefinitionRole;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.AtomSpace;
 import souther.compiler.check.BehaviorBodies;
@@ -40,7 +41,6 @@ import souther.compiler.observe.RowOutcome;
 import souther.compiler.observe.RowStatement;
 import souther.compiler.observe.StoodIn;
 import souther.compiler.observe.ValueTypes;
-import souther.compiler.query.Acceptance;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Compositions;
@@ -80,12 +80,13 @@ final class CheckedProgramAssembler {
 
     private CheckedProgramAssembler() {}
 
-    static CheckedProgram of(List<String> sources, ModulePath path) {
-        Compilation compilation = Compilation.ofSources(sources, path);
-        // The language's verdict, asked where a batch compile asks it. Stopping at the check would
-        // make this the one reading that accepts a program with a row that disagrees — and an
-        // output built on it would ship an artifact for what another output refuses to build.
-        Acceptance.of(compilation);
+    static CheckedProgram of(CompilationSources sources, ModulePath path) {
+        // The language's verdict, asked by the batch compile itself rather than restated here.
+        // Stopping at the check would make this the one reading that accepts a program with a row
+        // that disagrees, and building the compilation apart from it would make this the one that
+        // names a lone file differently — and an output built on either would ship an artifact for
+        // what another output refuses to build.
+        Compilation compilation = Compiler.compiled(sources, path, new ArrayList<>());
         Db db = compilation.db();
         List<CheckedData> language = languageDataOf(db);
         List<CheckedData> onThePath = declaredOnThePath(db);
@@ -569,11 +570,12 @@ final class CheckedProgramAssembler {
         }
         // Which definitions this module wrote is the settled tree's to say, and what each of them
         // runs as is what lowering answered for it. A constant folds into whatever reads it and has
-        // no method, so what the emitted definitions hold is not where its declaration is read.
+        // no method, so what the emitted definitions hold is not where its declaration is read. A
+        // value an attached file declares is one of them: lowering answers it as the module's own,
+        // and the module builds it for the rows that name it.
         Set<ValueName.Helper> valuesDeclared = new LinkedHashSet<>();
         for (Hir.FnDef fn : declarations.fns()) {
-            if (fn.role() instanceof DefinitionRole.Ordinary
-                    && lowering.roles().get(fn.name()) instanceof LoweringRole.ValueHome home) {
+            if (lowering.roles().get(fn.name()) instanceof LoweringRole.ValueHome home) {
                 valuesDeclared.add(home.value());
             }
         }

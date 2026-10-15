@@ -11,7 +11,6 @@ import souther.compiler.types.TypeSymbol;
 
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -67,7 +66,7 @@ class WhatOneDeclarationComesToUnderWhatIsKnownTest {
                         TypeSymbols.declared(new TypeKey(symbols.module(), name)), as.apply(def),
                         RuleReadingContext.unshared(RuleReadings.of(compilation, "demo"),
                                 souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
-                        Answers.settled(solution), Set.of());
+                        Answers.settled(solution), Supposing.NOTHING);
             }
         }
         throw new IllegalArgumentException("no such declaration: " + name);

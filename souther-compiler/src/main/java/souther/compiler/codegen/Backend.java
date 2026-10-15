@@ -3,9 +3,12 @@ package souther.compiler.codegen;
 import souther.compiler.query.Bodies;
 
 import souther.compiler.check.EmittedDefinition;
+import souther.compiler.codegen.BodyGen.Places;
 import souther.compiler.check.Boundary;
 import souther.compiler.check.DerivedSymbols;
 import souther.compiler.check.DeclarationKinds;
+import souther.compiler.check.NewtypeInners;
+import souther.compiler.check.StandingSignature;
 import souther.compiler.check.PublishedDeclarations;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
@@ -50,8 +53,10 @@ import java.lang.constant.ClassDesc;
 import java.lang.constant.ConstantDescs;
 import java.lang.constant.MethodTypeDesc;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -169,7 +174,7 @@ public final class Backend {
                                                Map<ValueName.Behavior, Composition> compositions,
                                                Map<TypeSymbol.AtModule, ValueShape> shapes,
                                                Map<ValueName.Behavior, EnsuresEnforcement> checks,
-                                               Map<String, Type> standingCalls,
+                                               Map<String, StandingSignature> standingCalls,
                                                SourceLayouts layouts,
                                                LinkageReader linkage) {
         return generate(module, symbols, published, kinds, kernels, typePackage, sigs,
@@ -201,19 +206,66 @@ public final class Backend {
                                                Map<ValueName.Behavior, Composition> compositions,
                                                Map<TypeSymbol.AtModule, ValueShape> shapes,
                                                Map<ValueName.Behavior, EnsuresEnforcement> checks,
-                                               Map<String, Type> standingCalls,
+                                               Map<String, StandingSignature> standingCalls,
                                                SourceLayouts layouts,
                                                LinkageReader linkage,
                                                Instrumentation instrumentation) {
-        try {
-            return generating(module, symbols, published, kinds, kernels, typePackage, sigs,
-                    requirements, checked, compositions, shapes, checks, standingCalls,
-                    layouts, linkage, instrumentation);
-        } catch (IllegalArgumentException e) {
-            // Something the writer would not hold, from a member no definition here claimed — a
-            // synthesised class, a shared one. It belongs to the module, which is as near as anything
-            // gets to naming it.
-            throw asLimit(e, WrittenName.synthetic(module.name(), module.pos()));
+        // The forks whose siblings a method could not hold, found by writing it and gathered across
+        // as many writings as it takes: a method the JVM refuses only because of the siblings in it
+        // is written again without them, so measuring a model never makes it a model that does not
+        // compile. Which siblings went is what the classes carry, and the image says so.
+        Set<Core> notCarrying = Collections.newSetFromMap(new IdentityHashMap<>());
+        while (true) {
+            try {
+                return generating(module, symbols, published, kinds, kernels, typePackage, sigs,
+                        requirements, checked, compositions, shapes, checks, standingCalls,
+                        layouts, linkage, instrumentation, notCarrying);
+            } catch (CarriedPastTheMethod e) {
+                // Each writing leaves out more, so this ends: a definition that is still too large
+                // with nothing of its siblings in it is the model's to be told about.
+                if (!notCarrying.addAll(e.forks())) {
+                    throw e.limit();
+                }
+            } catch (IllegalArgumentException e) {
+                // Something the writer would not hold, from a member no definition here claimed — a
+                // synthesised class, a shared one. It belongs to the module, which is as near as
+                // anything gets to naming it.
+                throw asLimit(e, WrittenName.synthetic(module.name(), module.pos()));
+            }
+        }
+    }
+
+    /**
+     * A definition the writer refused for its size while it carried siblings of the arms in it.
+     *
+     * <p>Not yet the author's: the siblings are this compiler's, there to measure the model, and a
+     * method holding the model's own code without them may be one the JVM holds. So the module is
+     * written again without them, and only a definition too large without them is said as one.
+     *
+     * <p>It carries the forks the definition wrote siblings in, and what the author is told if the
+     * definition is too large without them.
+     */
+    private static final class CarriedPastTheMethod extends RuntimeException {
+
+        private static final long serialVersionUID = 1L;
+
+        /** Caught within the one emission that threw it and never written anywhere. */
+        private final transient List<Core> forks;
+
+        private final RuntimeException limit;
+
+        CarriedPastTheMethod(List<Core> forks, RuntimeException limit) {
+            super(limit.getMessage(), null, false, false);
+            this.forks = List.copyOf(forks);
+            this.limit = limit;
+        }
+
+        List<Core> forks() {
+            return forks;
+        }
+
+        RuntimeException limit() {
+            return limit;
         }
     }
 
@@ -228,10 +280,11 @@ public final class Backend {
                                                   Map<ValueName.Behavior, Composition> compositions,
                                                   Map<TypeSymbol.AtModule, ValueShape> shapes,
                                                   Map<ValueName.Behavior, EnsuresEnforcement> checks,
-                                                  Map<String, Type> standingCalls,
+                                                  Map<String, StandingSignature> standingCalls,
                                                   SourceLayouts layouts,
                                                   LinkageReader linkage,
-                                                  Instrumentation instrumentation) {
+                                                  Instrumentation instrumentation,
+                                                  Set<Core> notCarrying) {
         Map<String, List<GeneratedClass>> caseToSums = new HashMap<>();
         for (Hir.Def def : module.defs()) {
             if (def instanceof Hir.SumData sum) {
@@ -241,22 +294,27 @@ public final class Backend {
                 }
             }
         }
-        // After the Lower stage the only non-behavior fns left are recursive helpers (spec §fn-declaration);
-        // each is lowered to a static method on the module's `$Fns` class rather than inlined.
+        // What the module emits as a method of its own rather than as a behavior — a value, a helper
+        // left standing where it recurses, a row's value, an entry (`LoweringRole.Emitted`) — is a
+        // static method on the module's `$Fns` class.
         Set<String> behaviorNames = new HashSet<>();
         for (Hir.BehaviorDef bd : module.behaviors()) {
             behaviorNames.add(bd.name());
         }
         // Both components: a method is emitted for what the module declared and for what it took on
         // to emit, and by the time a class is written there is no difference between them.
-        Map<String, Hir.FnDef> recHelpers = new LinkedHashMap<>();
+        Map<String, Hir.FnDef> methods = new LinkedHashMap<>();
         for (Hir.FnDef fn : emitted(module)) {
             if (!behaviorNames.contains(fn.name())) {
-                recHelpers.put(fn.name(), fn);
+                methods.put(fn.name(), fn);
             }
         }
+        // What a name wraps is read off the declarations, for the check a codec's expressions are
+        // elaborated in, so each declaration read through it is recorded as one the classes were
+        // built against. How a value is compared is not read through it: that is read off the
+        // projection of the declared type compared, which says it.
         CodegenContext ctx = new CodegenContext(module.name(), symbols, published, kinds,
-                souther.compiler.check.NewtypeInners.asWritten(symbols), kernels,
+                NewtypeInners.asWritten(symbols), kernels,
                 caseToSums, typePackage,
                 module.published(), standingCalls, layouts,
                 module.pos().quotedFrom(), linkage);
@@ -270,15 +328,28 @@ public final class Backend {
         // Said off what was asked for and not off what the plan came to hold. A module whose bodies
         // have no arm to number is a module a run leaves an empty account of, which is not the same
         // as one a run leaves no account of at all.
+        // And which siblings the classes carry, which is the plan's less the forks a method could not
+        // hold them in: what a run may ask for is what was written, and a reading of the runs is
+        // handed this image rather than the plan for that reason.
+        Set<Integer> leftOut = new HashSet<>();
+        for (Core fork : notCarrying) {
+            for (int site : coverage.probesOf(fork)) {
+                if (site != CoverageSites.NO_SITE) {
+                    leftOut.add(site);
+                }
+            }
+        }
         ProbeImage probes = instrumentation.measuresCoverage()
-                ? new ProbeImage.Instrumented(coverage.identity())
+                ? new ProbeImage.Instrumented(coverage.identity(),
+                        coverage.replacements().carryingNothingAt(leftOut))
                 : new ProbeImage.Uninstrumented();
         ctx.setCoveragePlan(coverage);
+        ctx.setNotCarrying(notCarrying);
         ctx.setCounting(instrumentation.counting());
         Backend b = new Backend(ctx, checked);
         // Before anything is written: a declaration wide enough that its generated method cannot hold
         // its arguments produces a class the JVM refuses at load time, and nothing downstream notices.
-        JvmLimits.checkParameterSlots(module, ctx, recHelpers, sigs, requirements);
+        JvmLimits.checkParameterSlots(module, ctx, methods, sigs, requirements);
         // A behavior's class capitalizes its first letter (spec §jvm-behavior). Data names are already
         // capitalized, so `behavior quote` producing `data Quote` would generate two classes named
         // `Quote`. Reject the collision here rather than let one silently overwrite the other.
@@ -334,7 +405,7 @@ public final class Backend {
             // the union and its encoder belong to the behavior whose output they are, not to the
             // module, though the behavior did not write them
             Hir.BehaviorDef owner = b.behaviorNamed(module, union.behavior());
-            emitting(owner.written(), () -> {
+            emitting(ctx, owner.written(), () -> {
                 out.put(union, b.generateBehaviorResult(union, alternatives));
                 out.put(new GeneratedClass.Encoder(union),
                         b.codec.generateResultUnionEncoder(union, alternatives));
@@ -346,7 +417,7 @@ public final class Backend {
                 out.put(new GeneratedClass.BridgeCase(module.name(), member),
                         b.value.generateBridgeCase(member, unions)));
         for (Hir.Def def : module.defs()) {
-            emitting(def.written(), () -> {
+            emitting(ctx, def.written(), () -> {
                 switch (def) {
                     case Hir.Data data -> b.value.generateData(data, out);
                     case Hir.SumData sum -> b.value.generateSum(sum, out);
@@ -397,7 +468,7 @@ public final class Backend {
                         }
                     }
                 }
-                emitting(spec.written(), () ->
+                emitting(ctx, spec.written(), () ->
                         out.put(new GeneratedClass.BehaviorInterface(module.name(), spec.name()),
                                 b.generateRequiredBase(spec.name(), unitCases, dataConstructs,
                                         reqParams, b.successType(spec.ret()))));
@@ -419,7 +490,7 @@ public final class Backend {
         Map<String, SpecImplementation.Implemented> implementations =
                 SpecImplementation.implementationsOf(module);
         for (Hir.BehaviorDef bd : module.behaviors()) {
-            emitting(bd.written(), () -> {
+            emitting(ctx, bd.written(), () -> {
                 // The class a declared relation is checked by, emitted by the module that declares
                 // it whichever of the two places the check is called from. A crossing is in the
                 // caller's bytecode and calls this one, so the rule has one home and a caller has
@@ -531,24 +602,27 @@ public final class Backend {
                 }
             });
         }
-        if (!recHelpers.isEmpty()) {
-            // The helpers share one class, so the writer names a method rather than a definition: a
-            // method it would not write is the helper whose name it is, and a pool it would not hold
-            // belongs to all of them and so to the module.
+        if (!methods.isEmpty()) {
+            // The methods share one class, so the writer names a method rather than a definition: a
+            // method it would not write is the definition whose name it is, and a pool it would not
+            // hold belongs to all of them and so to the module. So does a text too long for a
+            // constant: one writer refuses it as the method is written and another only as the class
+            // is, and the definition it is said at may not turn on which JDK runs this.
+            int from = ctx.carriedCount();
             try {
-                out.put(new GeneratedClass.Helpers(module.name()), b.generateRecursiveHelpers(recHelpers));
+                out.put(new GeneratedClass.Helpers(module.name()), b.generateMethods(methods));
             } catch (IllegalArgumentException e) {
                 JvmLimits.Exceeded exceeded = JvmLimits.exceeded(e);
-                Hir.FnDef helper = exceeded == null ? null : helperNamed(recHelpers, exceeded.method());
-                throw helper == null
+                Hir.FnDef helper = exceeded == null ? null : helperNamed(methods, exceeded.method());
+                throw refusedFor(ctx, from, e, helper == null
                         ? asLimit(e, WrittenName.synthetic(module.name(), module.pos()))
-                        : asLimit(e, helper.written());
+                        : asLimit(e, helper.written()));
             }
         }
         // Which definition is the entry of which value is what its role says. The name it is emitted
         // under is an address and is never read back for a meaning.
         Map<String, ValueName.Helper> entries = new LinkedHashMap<>();
-        for (Hir.FnDef fn : recHelpers.values()) {
+        for (Hir.FnDef fn : methods.values()) {
             if (fn.role() instanceof DefinitionRole.PublishedValueEntry entry) {
                 entries.put(fn.name(), entry.of());
             }
@@ -580,18 +654,46 @@ public final class Backend {
      * says names its own rule and the method it was writing, and the author has no way back from
      * either to what they wrote — so it is said here, where the definition being emitted is in hand.
      * A refusal that names no limit is not this compiler's to answer for and goes on unchanged.
+     *
+     * <p>Unless the definition carried siblings of its arms. Those are this compiler's, written to
+     * measure the model, so a class past a count the JVM sets with them in it is not yet the
+     * author's to be told about: it is written again without them ({@link CarriedPastTheMethod}).
      */
-    private static void emitting(WrittenName written, Runnable emit) {
+    private static void emitting(CodegenContext ctx, WrittenName written, Runnable emit) {
+        int from = ctx.carriedCount();
         try {
             emit.run();
         } catch (IllegalArgumentException e) {
-            throw asLimit(e, written);
+            throw refusedFor(ctx, from, e, asLimit(e, written));
         }
     }
 
-    /** The refusal as the diagnostic for {@code name}, or unchanged where it names no limit this
-     *  compiler answers for. */
-    private static RuntimeException asLimit(IllegalArgumentException e, WrittenName written) {
+    /**
+     * What a refusal of the writer is, given which forks the definition carried siblings in since
+     * {@code from}: one to write again without them where it went past a count and carried some,
+     * and {@code said} otherwise.
+     *
+     * <p>Any count, not only the length of a method. A sibling's body adds constants as well as
+     * instructions, and each emission here writes whole classes, so a pool that overflowed did so
+     * in a class these forks are in. A text too long for a constant is not among them: a sibling is
+     * another arm of the same fork, so its texts are the author's, already in the class without it.
+     */
+    private static RuntimeException refusedFor(CodegenContext ctx, int from,
+                                               IllegalArgumentException e, RuntimeException said) {
+        List<Core> carried = ctx.carriedSince(from);
+        return JvmLimits.exceeded(e) instanceof JvmLimits.Counted && !carried.isEmpty()
+                ? new CarriedPastTheMethod(carried, said) : said;
+    }
+
+    /**
+     * The refusal as the diagnostic for {@code written}, or unchanged where it names no limit this
+     * compiler answers for.
+     *
+     * <p>Open to what writes onto a class after the backend has emitted it. What a module carries
+     * for its readers is written onto its classes afterwards, and the class file refuses that by the
+     * same rules as anything emitted here.
+     */
+    public static RuntimeException asLimit(IllegalArgumentException e, WrittenName written) {
         JvmLimits.Exceeded exceeded = JvmLimits.exceeded(e);
         return exceeded == null ? e : JvmLimits.tooLarge(exceeded, written);
     }
@@ -625,17 +727,23 @@ public final class Backend {
     }
 
     /**
-     * Emits the module's recursive helpers as {@code static} methods on a package-private {@code $Fns}
-     * class (spec §fn-declaration). Each helper's declared parameter and return types are boxed as {@code Object}
-     * across the method boundary, unboxed on entry and boxed on return, so a self- or mutual call is a
-     * plain {@code invokestatic} — the recursion the inliner cannot express. The body is emitted through
-     * the same {@code emitBodyTail} path a behavior uses; a helper is pure, so it has no injected fields.
+     * Emits what the module runs as methods of its own as {@code static} methods on a package-private
+     * {@code $Fns} class (spec §fn-declaration). Each parameter and the return are boxed as
+     * {@code Object} across the method boundary, unboxed on entry and boxed on return, so a self- or
+     * mutual call of a helper is a plain {@code invokestatic} — the recursion the inliner cannot
+     * express. The body is emitted through the same {@code emitTail} path a behavior uses; none of
+     * these is a behavior, so none has injected fields.
+     *
+     * <p>A value's method records where a run went through it, as a behavior's body does: the plan
+     * numbered its places ({@link EmittedDefinition#onARun()}). A helper a run passes through
+     * records which way each of its comparisons came out and nothing of its arms, which is what the
+     * plan numbered of it. The others are numbered nowhere, and are emitted without a probe.
      */
-    private byte[] generateRecursiveHelpers(Map<String, Hir.FnDef> helpers) {
+    private byte[] generateMethods(Map<String, Hir.FnDef> methods) {
         ClassDesc cdFns = ctx.cd(new GeneratedClass.Helpers(pkg));
         return build(cdFns, cb -> {
             cb.withFlags(ClassFile.ACC_FINAL | ClassFile.ACC_SUPER);   // package-private, not exposed
-            for (Hir.FnDef h : helpers.values()) {
+            for (Hir.FnDef h : methods.values()) {
                 EmittedDefinition definition = emittedDefinition(checked.emittedDefinitions(),
                         h.name());
                 int n = definition.parameters().size();
@@ -655,7 +763,12 @@ public final class Backend {
                 }
                 cb.withMethodBody(emitted, desc, ClassFile.ACC_STATIC,
                         code -> {
-                    BodyGen gen = new BodyGen(ctx, code, null, cdFns, n);
+                    BodyGen gen = new BodyGen(ctx, code, null, cdFns, n,
+                            switch (definition.onARun()) {
+                                case PLACES_COUNTED -> Places.COUNTED;
+                                case PASSED_THROUGH -> Places.COMPARISONS;
+                                case APART -> Places.NUMBERED_NOWHERE;
+                            });
                     for (int i = 0; i < n; i++) {
                         // a function parameter arrives as an Fn value (a closure); every other parameter
                         // as its boxed value. The type is the one the check settled for it.
@@ -926,7 +1039,7 @@ public final class Backend {
                         int slot = 1;   // slot 0 is `this`
                         for (Type t : fields.values()) {
                             load(code, slot, t);
-                            CanonicalizeAtCrossing.emit(code, t);
+                            CanonicalizeAtCrossing.emit(ctx, code, t);
                             slot += width(t);
                         }
                         CodegenContext.invoke(code, ctx.construction(data.declares()));
@@ -1184,7 +1297,7 @@ public final class Backend {
             // encoder and the bridge cases, so none of them is in a position to work the form or a
             // tag out again.
             results.put(new GeneratedClass.BehaviorResult(module.name(), bd.name()),
-                    Boundary.of(sig.outputType(), ctx.kinds, ctx.published));
+                    Boundary.of(sig.outputType(), ctx.kinds, ctx.sums));
         }
         return results;
     }
@@ -1449,6 +1562,46 @@ public final class Backend {
      * is recorded as another text, so a module built under version 34 records copies that this
      * reader would hold to something other than what they were built from.
      *
+     * <p>Version 36 changes what a published class calls the runtime with for a pattern. A
+     * {@code String.matches} call and a decoder's format constraint load the machine the compiler
+     * built as a constant of the class and hand the runtime that, where before they handed it text
+     * for {@code java.util.regex}. A class emitted under version 35 calls a
+     * {@code Strings.matches} that takes a string, which this runtime no longer has.
+     *
+     * <p>Version 37 changes which text a {@code String.matches} pattern is, what a behavior's class
+     * is called, and which imports a module's metadata carries, and takes each from Unicode data
+     * the language fixes rather than from the JDK a compile runs on. The hex digits of an escape
+     * are the ASCII ones, a U+0000 written in the pattern stands for itself, and a backslash before
+     * a letter or a decimal digit of Unicode 18.0.0 is refused whichever plane the character is on.
+     * A reader built under version 36 admits a carried body whose pattern spells an escape with a
+     * fullwidth digit, or puts a backslash before a letter past the basic plane or a digit its
+     * JDK's tables do not know, all of which this reader refuses, and refuses one whose pattern
+     * writes U+0000, which this reader admits. A behavior's class is capitalized by Unicode 18.0.0's
+     * simple uppercase mapping of its first character, so a class emitted under version 36 for a
+     * behavior beginning past the basic plane, or with a letter its JDK had no mapping for, is
+     * called something this compiler does not link against. And a module's metadata carries the
+     * import a name holding a character past the basic plane needs, which a writer under version
+     * 36 left out.
+     *
+     * <p>Version 38 changes what a published class loads a pattern as and which patterns are read.
+     * The constant is a {@code Predicate} made by {@code Patterns.read}, which a class asks
+     * {@code test} of, where before it was a {@code StringPattern} the class handed to
+     * {@code Strings.matches}; and the image it is made from begins with the format it is written
+     * in. A class emitted under version 37 names a {@code StringPattern} and a
+     * {@code Strings.matches} this runtime no longer has. A pattern is read within the three limits
+     * every implementation holds a pattern to, so a carried body whose pattern writes a count past
+     * the most a pattern may count, which a reader under version 37 refused as no pattern, is now a
+     * pattern past a limit, and one whose machine has more states than a pattern may, which that
+     * reader read and only its backend refused, is now refused where it is read.
+     *
+     * <p>Version 39 changes what a declared type offers another module's classes and what a class
+     * comparing one is built against. A type's projection says how a value of it is compared as the
+     * JVM holds it — through its own {@code compareTo}, or by the {@code __order} of the enumeration
+     * that places it — and a newtype over a declared type is built against that one projection
+     * rather than every declaration under it. A module written under version 38 records neither
+     * the fact nor the projection alone, so what it says it provides and was built against is not
+     * what this compiler works out for it.
+     *
      * <p>That is also where this number stops. It says whether a jar and this compiler agree on
      * what the metadata says and on the rules a declaration is turned into JVM facts by — a
      * behavior's class and methods, how one is held and built, a type's layout and codecs. It does
@@ -1459,7 +1612,7 @@ public final class Backend {
      * {@code [#a-published-module-agrees-with-what-it-copied]}). An edit to a declaration moves
      * that and not this; an edit to a rule moves this.
      */
-    public static final int BOUNDARY_VERSION = 35;
+    public static final int BOUNDARY_VERSION = 39;
 
     /** Emits the class a module's own declarations are published on, carrying {@code declarations}.
      * What it says is the caller's; that it is built like every other generated class — the same Java
@@ -1536,9 +1689,8 @@ public final class Backend {
                 emitCheckingApply(cb, cdB, spec, mtdApply, n);
             }
             cb.withMethodBody(bodyMethod, mtdApply, bodyFlags, code -> {
-                BodyGen gen = new BodyGen(ctx, code, null, cdB, n + 1);
-                // The one body a coverage plan is made from, so the one body whose arms are counted.
-                gen.armsAreCounted();
+                // A body the coverage plan is made from, so a body whose places are counted.
+                BodyGen gen = new BodyGen(ctx, code, null, cdB, n + 1, Places.COUNTED);
                 gen.injectsInto(successType(spec.ret()));
                 gen.requireds(held, injected);
                 for (SpecImplementation.ParameterBinding.AnInput input
@@ -1550,7 +1702,7 @@ public final class Backend {
                     // A generated behavior's apply is public, callable by Java directly and not
                     // only from another generated class — the same crossing as an injected
                     // behavior's answer or a factory's field, one door earlier.
-                    CanonicalizeAtCrossing.emit(code, pt);
+                    CanonicalizeAtCrossing.emit(ctx, code, pt);
                     int slot = gen.slot(pt);
                     unbox(code, pt, slot);
                     Hir.Binder binder = input.written().binder();
@@ -1612,7 +1764,7 @@ public final class Backend {
             // the asymmetry a runtime ensures check on the answer alone already had to close.
             for (int i = 0; i < n; i++) {
                 code.aload(i + 1);
-                CanonicalizeAtCrossing.emit(code, successType(spec.params().get(i).type()));
+                CanonicalizeAtCrossing.emit(ctx, code, successType(spec.params().get(i).type()));
                 code.astore(i + 1);
             }
             code.aload(0);
@@ -1775,7 +1927,7 @@ public final class Backend {
                 // injected stage answers with below.
                 for (int i = 0; i < arity; i++) {
                     code.aload(i + 1);
-                    CanonicalizeAtCrossing.emit(code, declared.inputTypes().get(i));
+                    CanonicalizeAtCrossing.emit(ctx, code, declared.inputTypes().get(i));
                     code.astore(i + 1);
                 }
                 // stage 0 consumes the pipeline's arguments unconditionally
@@ -1853,7 +2005,7 @@ public final class Backend {
         }
         CodegenContext.invoke(code, apply);
         projectStage(code, linked, slot);
-        CanonicalizeAtCrossing.emit(code, stageOut);
+        CanonicalizeAtCrossing.emit(ctx, code, stageOut);
         checkStageAtCrossing(code, stage, arity, slot + 1);
         code.astore(1);
     }
@@ -1869,7 +2021,7 @@ public final class Backend {
         code.aload(1);
         CodegenContext.invoke(code, linked.apply());
         projectStage(code, linked, slot);
-        CanonicalizeAtCrossing.emit(code, stageOut);
+        CanonicalizeAtCrossing.emit(ctx, code, stageOut);
         checkStageAtCrossing(code, stage, 1, slot + 1);
         code.astore(1);
     }

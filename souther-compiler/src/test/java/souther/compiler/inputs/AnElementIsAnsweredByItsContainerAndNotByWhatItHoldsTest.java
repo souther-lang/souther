@@ -9,6 +9,7 @@ import souther.compiler.check.ElementProvenance;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.semantics.HowAClosureIsApplied;
 import souther.compiler.types.BinOp;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
@@ -153,7 +154,9 @@ class AnElementIsAnsweredByItsContainerAndNotByWhatItHoldsTest {
 
     /** {@code ELEMENT} handed an element of {@code container}, and nothing else recorded. */
     private static ElementBindings handedAnElementOf(Core container) {
-        return new ElementBindings(Map.of(ELEMENT, List.of(container)), Map.of(),
+        return new ElementBindings(
+                Map.of(ELEMENT, List.of(new HeldIn(container, HeldIn.Part.ELEMENT,
+                        HowAClosureIsApplied.TO_EVERY_ELEMENT, false))), Map.of(),
                 ElementProvenance.NONE, Map.of());
     }
 }

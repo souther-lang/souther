@@ -73,7 +73,7 @@ class AReadingDoesNotWalkTheBindingsItWasHandedTest {
                                                Map<BindingId, BindingEvidence> bound) {
         Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
         return new DeclaredTypeReading(
-                new DeclarationFacts(new FieldRead(symbols, ScopedDeclarations.of(symbols),
+                new DeclarationFacts(new FieldRead(symbols, ScopedDeclarations.sumsOf(symbols),
                         ScopedDeclarations.kindsOf(symbols), new ResolvedFieldTypes(symbols, ScopedDeclarations.wrapsOf(symbols)),
                         FieldRead.Unreadable.MAKES_NOTHING_READABLE),
                         DeclarationNewtypes.asWritten(symbols)),

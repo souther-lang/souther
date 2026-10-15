@@ -94,14 +94,16 @@ class ARowIsOfferedForAPointOnlyWhereItStandsThereTest {
                 "nothing ran the candidate, so nothing says it stands anywhere else");
     }
 
-    /** Two parameters, and a second position under the first so its search has more than one
-     *  candidate to offer — which is what lets a parameter refuse one and still succeed. */
+    /** Two parameters, and a second position under the first that offers two values — so its
+     *  search has two candidates, which is what lets a parameter refuse one and still succeed. */
     private static final String TWO = """
             module example.bounded
 
             data Amount = Int
                 invariant value >= 0 && value <= 100
-            data Req = { cost: Amount, note: String }
+            data Note = String
+                invariant String.matches("[0-9a-z]+", value)
+            data Req = { cost: Amount, note: Note }
             data Other = { n: Int }
             data Res = { n: Int }
 
@@ -119,18 +121,24 @@ class ARowIsOfferedForAPointOnlyWhereItStandsThereTest {
      */
     @Test
     void whatOneParametersSearchFoundOutIsNotSaidOfAnothers() {
-        int[] tried = {0};
+        List<String> first = new ArrayList<>();
         Generator.BoundaryAttempt attempt = attemptOver(TWO, "g", Count.of(100),
-                (parameter, _) -> {
+                (parameter, candidate) -> {
+                    if (parameter == 0) {
+                        first.add(candidate.text());
+                    }
                     if (parameter != 0) {
                         return new Generator.CandidateCheck.Built.Refused("the model refuses it");
                     }
-                    // The first candidate stands away from the point and the next stands on it, so
-                    // this parameter refuses one and succeeds all the same.
+                    // The first candidate stands away from the point and the other stands on it, so
+                    // this parameter refuses one and succeeds all the same. Said of each candidate
+                    // and not of how often it was asked: a check answers the same value the same way.
                     return new Generator.CandidateCheck.Built.Value(
-                            reqWith(++tried[0] == 1 ? 7 : 100));
+                            reqWith(candidate.text().contains("Note(\"0\")") ? 7 : 100));
                 });
 
+        assertEquals(2, first.stream().distinct().count(),
+                "the first parameter refused one candidate and took another: " + first);
         Generator.BoundaryAttempt.Unresolved no = assertInstanceOf(
                 Generator.BoundaryAttempt.Unresolved.class, attempt,
                 "no value of `o` was allowed, so no row builds");
@@ -177,7 +185,7 @@ class ARowIsOfferedForAPointOnlyWhereItStandsThereTest {
                 .ask(new souther.compiler.query.Adequacy.Inputs(module)).value().get(spec.name());
         assertNotNull(domain, "the model under test compiles");
         Partitions.Partitioning partitioning =
-                Partitions.of(spec.name(), domain, rules, ReadAs.THE_COMPILATION_DOES);
+                Partitions.of(spec.name(), domain.reading(rules), ReadAs.THE_COMPILATION_DOES);
 
         List<String> names = new ArrayList<>();
         spec.params().forEach(each -> names.add(each.name()));

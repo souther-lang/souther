@@ -4,6 +4,9 @@ import souther.exact.ExactFailure;
 import souther.exact.ExactRangeExceeded;
 import souther.exact.ExactRoomExceeded;
 
+import java.util.EnumSet;
+import java.util.Set;
+
 /**
  * Why a number this compiler worked out exactly could not be held, in the two ways the arithmetic
  * tells apart.
@@ -36,5 +39,20 @@ public enum UnheldNumber {
             case ExactRoomExceeded _ -> MORE_ROOM_COULD_ANSWER;
             case ExactRangeExceeded _ -> NO_REPRESENTATION_EXISTS;
         };
+    }
+
+    /**
+     * What several numbers not held say of one answer made of them all: more room answers it only
+     * where more room answers every one of them, and otherwise nothing does. The same whichever of
+     * them was met first.
+     *
+     * @param each the ways each part of the answer was not held; one or more
+     */
+    public static UnheldNumber ofAll(Set<UnheldNumber> each) {
+        if (each.isEmpty()) {
+            throw new IllegalArgumentException("an answer not held has some part not held");
+        }
+        return each.equals(EnumSet.of(MORE_ROOM_COULD_ANSWER)) ? MORE_ROOM_COULD_ANSWER
+                : NO_REPRESENTATION_EXISTS;
     }
 }

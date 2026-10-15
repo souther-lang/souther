@@ -3,9 +3,9 @@ package souther.compiler.check;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.numeric.OrderedIntervals;
-import souther.compiler.regex.PatternParser;
+import net.unit8.notation199x.pattern.PatternParser;
 import souther.compiler.regex.PatternPlan;
-import souther.compiler.regex.PatternRead;
+import net.unit8.notation199x.pattern.PatternRead;
 import souther.compiler.values.AdmittedPlan;
 import souther.compiler.values.Allowance;
 import souther.compiler.values.AsACompilationAllows;
@@ -50,7 +50,7 @@ class AReadingShortOfAPositionPublishesNoPositiveAnswerTest {
     /** Room for a machine of {@code states}, which is what settles whether the pattern is built. */
     private static Confinement.Worked<String> readWithRoomFor(int states) {
         return new Confinement.Planned<>(aPatternWorthBuilding(), OrderedIntervals.top(), Map.of())
-                .resolve(Allowance.of(new PatternPlan.Budget(states, states)));
+                .resolve(Allowance.of(new PatternPlan.Budget(states, states, 1_000_000_000L)));
     }
 
     /** Room for the pattern, and room for anything else these readings ask for. */

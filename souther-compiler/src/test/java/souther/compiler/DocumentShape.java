@@ -284,8 +284,8 @@ public final class DocumentShape {
          * Whether the question an {@code if} asks is answered yes by what was written, or null
          * where the question is spelled a way this walk does not read.
          *
-         * <p>A word at a key, or one of several, the keys the question is put of at all, and a
-         * question that is any of a list of those. Null rather than no for the rest: read as a no,
+         * <p>A word at a key, or one of several, a word among the ones a key holds a list of, the
+         * keys the question is put of at all, and a question that is any of a list of those. Null rather than no for the rest: read as a no,
          * the other branch would be applied to every document and the condition would be reported
          * as broken wherever it holds — and read as a yes, it would say nothing anywhere. So it is
          * reported as a question nobody here can answer, which is what it is.
@@ -303,6 +303,27 @@ public final class DocumentShape {
                 for (var each : asked.get("properties").properties()) {
                     JsonNode said = each.getValue();
                     JsonNode held = node.get(each.getKey());
+                    // A question about a word among several written under a key, which is how a
+                    // condition on a list of words is put. Answered no where nothing is written,
+                    // or nothing in it is the word.
+                    if (said.has("contains")) {
+                        JsonNode word = said.get("contains");
+                        if (!word.has("const") && !word.has("enum")) {
+                            wrong.add(at + ": a condition spelled a way this walk does not read: "
+                                    + said);
+                            return null;
+                        }
+                        boolean some = false;
+                        if (held != null && held.isArray()) {
+                            for (JsonNode one : held) {
+                                some |= word.has("const")
+                                        ? word.get("const").asString().equals(one.asString())
+                                        : anyIs(word.get("enum"), one.asString());
+                            }
+                        }
+                        answered &= some;
+                        continue;
+                    }
                     // A question about what stands under a key, which is how a condition on
                     // something written inside another object is put. Asked of the object there,
                     // and answered no where nothing is.
@@ -409,9 +430,7 @@ public final class DocumentShape {
         private JsonNode resolved(JsonNode said) {
             JsonNode at = said;
             while (at.has("$ref")) {
-                String name = at.get("$ref").asString();
-                at = schema.get("$defs").get(name.substring(name.lastIndexOf('/') + 1));
-                assertNotNull(at, () -> "the schema refers to " + name + " and does not define it");
+                at = SchemaReference.resolve(schema, at.get("$ref").asString());
             }
             return at;
         }

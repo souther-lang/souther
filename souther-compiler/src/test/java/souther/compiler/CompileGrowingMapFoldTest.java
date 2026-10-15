@@ -16,8 +16,11 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * Reading is what separates this from the list case — {@code Map.updateOrInsert} looks the key up before it
  * writes — so what these tests hold is that the read answers from what the walk has written so far.
  *
- * <p>The keys are strings because that is what a map crossing the boundary may be keyed by
+ * <p>The keys are mostly strings because that is what a map crossing the boundary may be keyed by
  * (ADR-0040), which says nothing about the rewrite: the walk is the same one whatever the key is.
+ * The builder it carries is not indifferent to the key, though: the unit cases of a sum all hash
+ * alike, so a map keyed by them holds its keys in one collision bucket, and a count over them is
+ * held here too.
  */
 class CompileGrowingMapFoldTest {
 
@@ -80,6 +83,28 @@ class CompileGrowingMapFoldTest {
     void countingWithUpsertReadsWhatTheWalkHasWritten() throws Exception {
         assertEquals(expected("a", 2L, "b", 1L),
                 counted(TALLY.formatted("b.xs"), List.of("a", "b", "a")));
+    }
+
+    @Test
+    void countingKeysThatHashAlikeReadsWhatTheWalkHasWritten() throws Exception {
+        String src = """
+                module demo
+                data Pipeline
+                data BestCase
+                data Category = Pipeline | BestCase
+                data Bag = { xs: List<Category> }
+                data Out = { m: Map<Category, Int> }
+                behavior run : (b: Bag) -> Out constructs Out
+                let run (b) = Out { m = %s }
+                """.formatted(TALLY.formatted("b.xs"));
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
+        Object bag = Codecs.decoded(loader, "demo.Bag",
+                Map.of("xs", List.of("Pipeline", "BestCase", "BestCase")));
+        Object behavior = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
+        Object out = Codecs.apply(behavior, bag);
+        assertEquals(1, callsTo(src, "builder"));
+        assertEquals(Map.of("Pipeline", 1L, "BestCase", 2L),
+                ((Map<?, ?>) Codecs.encode(loader, "demo.Out", out)).get("m"));
     }
 
     @Test

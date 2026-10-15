@@ -1,9 +1,21 @@
 package souther.compiler.inputs;
 
+import souther.compiler.check.GuaranteeWalk;
+import souther.compiler.check.NonAffineOperation;
+import souther.compiler.meaning.WhyUnread;
+import souther.compiler.numeric.UnheldNumber;
+import souther.compiler.observe.Figure;
 import souther.compiler.observe.RunSensitivity;
-import souther.compiler.regex.Meter;
+import souther.compiler.observe.WorkFigure;
+import souther.compiler.values.TextExtents;
+import net.unit8.notation199x.pattern.Meter;
 
+import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
+import souther.compiler.values.StoppedReading;
 import souther.compiler.values.UnreadReason;
 
 /**
@@ -60,6 +72,21 @@ public sealed interface BlockReason {
          * the reasons themselves say, one word at a time.
          */
         RunSensitivity runSensitivity();
+
+        /**
+         * Every figure this compiler compared something against and stopped at, which is some
+         * wherever {@link #runSensitivity} is {@link RunSensitivity#MAY_CHANGE}.
+         *
+         * <p>Not the same question asked again. Which figures a reading reached is what happened;
+         * whether a run allowed more of them gets past it is asked of everything that stopped it,
+         * and a reading stopped at a figure and at a form nothing reads reached the figure all the
+         * same. So none is left out here for the reason that something else stopped it too.
+         *
+         * <p>Carried from where the comparison was made, or fixed where the figure is declared and
+         * the reason can be no other one. Never read off a word several figures share: a reader
+         * told a figure stopped something is told which, and at the number the run used.
+         */
+        List<Figure> figures();
     }
 
     /**
@@ -78,13 +105,28 @@ public sealed interface BlockReason {
      */
     sealed interface AnswerRealizationStopped extends QuestionStandingReason {
 
-        /** All three are an allowance a reading was granted running out, which is a figure a run
-         *  may allow more of. */
+        /** An allowance a reading was granted running out, which is a figure a run may allow more
+         *  of — and for the sets a position hands on, only where nothing but one did. */
         @Override
         default RunSensitivity runSensitivity() {
             return switch (this) {
-                case ExactValuesTooCostly _, RulesNotHandedOnAsSets _,
-                     BehaviorDistinctionsTooCostly _ -> RunSensitivity.MAY_CHANGE;
+                case ExactValuesTooCostly _, BehaviorDistinctionsTooCostly _ ->
+                        RunSensitivity.MAY_CHANGE;
+                // A position whose own answer stopped short publishes no sets, whatever stopped
+                // it, so what this carries is what stopped that: a run allowed more gets past it
+                // only where every one of those was a figure.
+                case RulesNotHandedOnAsSets it -> it.alsoAtNoFigure()
+                        ? RunSensitivity.UNAFFECTED : RunSensitivity.MAY_CHANGE;
+            };
+        }
+
+        /** Every figure each was met at, which every one of them carries. */
+        @Override
+        default List<Figure> figures() {
+            return switch (this) {
+                case ExactValuesTooCostly it -> it.stoppedAt();
+                case BehaviorDistinctionsTooCostly it -> it.stoppedAt();
+                case RulesNotHandedOnAsSets it -> it.stoppedAt();
             };
         }
     }
@@ -152,6 +194,24 @@ public sealed interface BlockReason {
     }
 
     /**
+     * A stop that may be said of a rule an offer of values got nothing from.
+     *
+     * <p>Not a reason about the rule. What an offer holds is the parts an author wrote, so it can
+     * name the rule a stop left it without whether or not any reading got as far as that rule — and
+     * that is what this says may be done. A rule a reading gave up on is one of these. So is a
+     * position whose rules the reading never arrived at, where the walk stopping is not a figure:
+     * nothing reached the rule, and the offer still knows which rule it was.
+     *
+     * <p>Not every stop at a position. One at the depth a run could afford is said of the position
+     * and of no rule, since a run allowed further reads the rule; and a type nothing could work
+     * out, a path back to a declaration already read and a place the walk does not enter are not
+     * met at one rule of the position rather than another. Held as {@link ReadingStopReason}, any of
+     * those could be filed under a rule that nothing was wrong with.
+     */
+    sealed interface RuleOfferShortfallReason extends ReadingStopReason {
+    }
+
+    /**
      * A rule a reading stopped on, which is the half of {@link RuleWithoutLineReason} that says
      * this compiler fell short.
      *
@@ -173,7 +233,8 @@ public sealed interface BlockReason {
      * asking about a stop may be handed, and the only member of {@link QuestionStandingReason}
      * that names a rule.
      */
-    sealed interface RuleReadingStopped extends StoppedWithoutALine, QuestionStandingReason {
+    sealed interface RuleReadingStopped extends StoppedWithoutALine, QuestionStandingReason,
+            RuleOfferShortfallReason {
 
         /**
          * These in a steady order, which is one two of them are equal in only where they are equal.
@@ -194,32 +255,74 @@ public sealed interface BlockReason {
          * rules stand and is asked where the places are ({@code AdequacyReport}). This is what
          * keeps one compiler over one source publishing one document where nobody wrote an order.
          *
-         * <p>A switch and no {@code default}, so a reason added to the vocabulary is placed by
-         * whoever adds it rather than arriving wherever the runtime happened to put it.
+         * <p>Two switches and no {@code default}, so a reason added to the vocabulary is placed and
+         * its components read by whoever adds it, rather than arriving wherever the runtime
+         * happened to put it. A component added to a member that is already here changes neither
+         * switch, and {@code ASteadyOrderTellsApartWhateverEqualityTellsApartTest} is what asks for
+         * it: it varies every component of every member.
          */
         Comparator<RuleReadingStopped> IN_A_STEADY_ORDER =
                 Comparator.<RuleReadingStopped>comparingInt(RuleReadingStopped::rank)
-                        .thenComparing(RuleReadingStopped::carrying,
-                                Comparator.nullsFirst(Comparator.naturalOrder()));
-
-        /** What a member carries, where it carries anything a second of its kind can differ in. */
-        private static Meter.Stopped carrying(RuleReadingStopped reason) {
-            return reason instanceof OrderedExtentTooCostly it ? it.stopped() : null;
-        }
+                        .thenComparing(RuleReadingStopped::byWhatItHolds);
 
         private static int rank(RuleReadingStopped reason) {
             return switch (reason) {
                 case UnreadComparisonForm _ -> 0;
                 case UnreadComparisonDomain _ -> 1;
                 case ValueRuleRelatingTwoPositions _ -> 2;
-                case CasePairingNotDetermined _ -> 3;
-                case RuleAboutADerivedValue _ -> 4;
-                case UnreadValueRule _ -> 5;
-                case PatternTooCostly _ -> 7;
-                case OrderedExtentTooCostly _ -> 8;
-                case RuleAboutAnElementOfSeveralSequences _ -> 9;
-                case EndLeftOpenByAChoice _ -> 10;
-                case ValueRuleLeftOpenByAChoice _ -> 11;
+                case ValueRuleRelatingElements _ -> 3;
+                case CasePairingNotDetermined _ -> 4;
+                case RuleAboutADerivedValue _ -> 5;
+                case UnreadValueRule _ -> 6;
+                case NonAffineArithmetic _ -> 7;
+                case PatternTooCostly _ -> 8;
+                case OrderedExtentTooCostly _ -> 9;
+                case RuleAboutAnElementOfSeveralContainers _ -> 10;
+                case EndLeftOpenByAChoice _ -> 11;
+                case ValueRuleLeftOpenByAChoice _ -> 12;
+                case LineAtANumberNoRatioHolds _ -> 13;
+                case LineSideNotWorkedOut _ -> 14;
+                case SeveralLinesInOneRule _ -> 15;
+                case WhatItStatesIsNoLine(WhatItStatesIsNoLine.Why why) -> switch (why) {
+                    case MORE_READINGS_THAN_ARE_MADE -> 16;
+                    case MORE_TOTAL_READINGS_THAN_ARE_MADE -> 17;
+                    case MORE_PARTS_THAN_ARE_CONCLUDED -> 18;
+                    case MORE_ELEMENTS_THAN_ARE_WRITTEN_OUT -> 19;
+                    case A_PART_NOT_READ -> 20;
+                    case A_NUMBER_NO_POSITION_HOLDS -> 21;
+                    case NO_RELATION_OF_NUMBERS -> 22;
+                };
+                case RelationNotShownToReachEveryValue _ -> 23;
+                case WhereALineDecidesNotWorkedOut _ -> 24;
+            };
+        }
+
+        /**
+         * Two of one kind, by what that kind holds.
+         *
+         * <p>Asked only where the ranks agree, so {@code other} is of the kind {@code one} is.
+         */
+        private static int byWhatItHolds(RuleReadingStopped one, RuleReadingStopped other) {
+            return switch (one) {
+                case NonAffineArithmetic(NonAffineOperation operation) ->
+                        operation.compareTo(((NonAffineArithmetic) other).operation());
+                case LineSideNotWorkedOut(UnheldNumber why) ->
+                        why.compareTo(((LineSideNotWorkedOut) other).why());
+                case PatternTooCostly(List<Figure> stoppedAt) ->
+                        Figure.compare(stoppedAt, ((PatternTooCostly) other).stoppedAt());
+                case OrderedExtentTooCostly(Meter.Stopped stopped) ->
+                        stopped.compareTo(((OrderedExtentTooCostly) other).stopped());
+                case WhereALineDecidesNotWorkedOut(List<Figure> stoppedAt) -> Figure.compare(
+                        stoppedAt, ((WhereALineDecidesNotWorkedOut) other).stoppedAt());
+                // The rank says which statement it is.
+                case WhatItStatesIsNoLine _ -> 0;
+                case UnreadComparisonForm _, UnreadComparisonDomain _, RuleAboutADerivedValue _,
+                     RuleAboutAnElementOfSeveralContainers _, UnreadValueRule _,
+                     ValueRuleRelatingTwoPositions _, ValueRuleRelatingElements _,
+                     EndLeftOpenByAChoice _,
+                     ValueRuleLeftOpenByAChoice _, LineAtANumberNoRatioHolds _,
+                     CasePairingNotDetermined _, SeveralLinesInOneRule _,
+                     RelationNotShownToReachEveryValue _ -> 0;
             };
         }
 
@@ -251,14 +354,22 @@ public sealed interface BlockReason {
                 // values were read. What the position admits is what the rules leave; the line
                 // through them is what nobody worked out.
                 case EndLeftOpenByAChoice _ -> false;
+                // And where one line of several decides was not worked out, which is a question
+                // about the line and asks nothing of the values the rules leave.
+                case WhereALineDecidesNotWorkedOut _ -> false;
                 // And the same operator read the other way does widen it, which is the whole
                 // difference between the two: what the alternatives admit was not read here, so
                 // the position holds whatever a value taking the unread branch may hold.
                 case PatternTooCostly _, OrderedExtentTooCostly _,
                      UnreadComparisonForm _, UnreadComparisonDomain _, RuleAboutADerivedValue _,
-                     RuleAboutAnElementOfSeveralSequences _, UnreadValueRule _,
-                     ValueRuleLeftOpenByAChoice _,
-                     ValueRuleRelatingTwoPositions _, CasePairingNotDetermined _ -> true;
+                     RuleAboutAnElementOfSeveralContainers _, UnreadValueRule _,
+                     NonAffineArithmetic _,
+                     ValueRuleLeftOpenByAChoice _, LineAtANumberNoRatioHolds _,
+                     LineSideNotWorkedOut _,
+                     ValueRuleRelatingTwoPositions _, ValueRuleRelatingElements _,
+                     CasePairingNotDetermined _,
+                     SeveralLinesInOneRule _, WhatItStatesIsNoLine _,
+                     RelationNotShownToReachEveryValue _ -> true;
             };
         }
 
@@ -273,17 +384,60 @@ public sealed interface BlockReason {
                 // into, and the machines that say where the strings it admits stop. A run allowed
                 // more of either need not stop at the same rule.
                 case PatternTooCostly _, OrderedExtentTooCostly _ -> RunSensitivity.MAY_CHANGE;
-                // And eight where nothing was compared against anything. A form nothing takes
-                // apart, values no line can be drawn on, a rule about a value made from this one, a
-                // rule about an element of one of several sequences, a relation between two
-                // positions and a pairing nothing worked out are all met again by a run allowed
-                // more of everything. So is an end a choice left open: what the reading of ends
-                // stops on is a form it does not enter, and there is no figure it stopped at.
+                // And the cases where one line of several decides, taken apart and asked one at a
+                // time as far as a figure lets them be.
+                case WhereALineDecidesNotWorkedOut _ -> RunSensitivity.MAY_CHANGE;
+                // And the readings of what a statement means, which stop at a figure only where
+                // the part they declined stopped at one.
+                case WhatItStatesIsNoLine(var why) -> why.figure().isPresent()
+                        ? RunSensitivity.MAY_CHANGE : RunSensitivity.UNAFFECTED;
+                // And every other, where nothing was compared against anything. A form nothing
+                // takes apart, values no line can be drawn on, a rule about a value made from this
+                // one, a rule about an element of one of several containers, a relation between two
+                // positions or between the elements of one, a pairing nothing worked out and a rule
+                // of several lines are all met again by a run allowed more of everything. So is an
+                // end a choice left open: what the reading of ends stops on is a form it does not
+                // enter, and there is no figure it stopped at.
                 case UnreadComparisonForm _, UnreadComparisonDomain _, RuleAboutADerivedValue _,
-                     RuleAboutAnElementOfSeveralSequences _, UnreadValueRule _,
-                     ValueRuleRelatingTwoPositions _, EndLeftOpenByAChoice _,
-                     ValueRuleLeftOpenByAChoice _,
-                     CasePairingNotDetermined _ -> RunSensitivity.UNAFFECTED;
+                     RuleAboutAnElementOfSeveralContainers _, UnreadValueRule _,
+                     NonAffineArithmetic _,
+                     ValueRuleRelatingTwoPositions _, ValueRuleRelatingElements _,
+                     EndLeftOpenByAChoice _,
+                     ValueRuleLeftOpenByAChoice _, LineAtANumberNoRatioHolds _,
+                     LineSideNotWorkedOut _,
+                     CasePairingNotDetermined _, SeveralLinesInOneRule _,
+                     RelationNotShownToReachEveryValue _ ->
+                        RunSensitivity.UNAFFECTED;
+            };
+        }
+
+        /**
+         * The same switch, saying which figure.
+         *
+         * <p>Where a member carries its figure, that is the one: an allowance a run was handed is
+         * carried from where the machine was refused. Where the figure is fixed where it is
+         * declared and the member can be no other one, it is said here.
+         */
+        @Override
+        default List<Figure> figures() {
+            return switch (this) {
+                case PatternTooCostly it -> it.stoppedAt();
+                // The machines that say where a rule's strings stop are built under one allowance
+                // and nothing hands it another ({@code TextExtents}), so which limit refused is
+                // the whole of what varies.
+                case OrderedExtentTooCostly it -> List.of(TextExtents.refusedAt(it.stopped()));
+                case WhereALineDecidesNotWorkedOut it -> it.stoppedAt();
+                // The figure the part it declined stopped at, which that part's reason says.
+                case WhatItStatesIsNoLine(var why) -> why.figure().map(List::of).orElseGet(List::of);
+                case UnreadComparisonForm _, UnreadComparisonDomain _, RuleAboutADerivedValue _,
+                     RuleAboutAnElementOfSeveralContainers _, UnreadValueRule _,
+                     NonAffineArithmetic _,
+                     ValueRuleRelatingTwoPositions _, ValueRuleRelatingElements _,
+                     EndLeftOpenByAChoice _,
+                     ValueRuleLeftOpenByAChoice _, LineAtANumberNoRatioHolds _,
+                     LineSideNotWorkedOut _,
+                     CasePairingNotDetermined _, SeveralLinesInOneRule _,
+                     RelationNotShownToReachEveryValue _ -> List.of();
             };
         }
     }
@@ -335,20 +489,101 @@ public sealed interface BlockReason {
      */
     sealed interface AboutThePosition extends ReadingStopReason {
 
-        /** The same switch over the five ways a reading never got to a position's rules. */
+        /** The same switch over the four ways a reading never got to a position's rules. */
         @Override
         default RunSensitivity runSensitivity() {
             return switch (this) {
                 // A type nothing could interpret, a path returning to a declaration it has been
-                // through, and a place this does not reach into. None of them is a figure anything
-                // was compared against.
-                case TypeUnresolved _, RecursiveExpansion _, UnsupportedTraversal _,
+                // through, and rules nothing reached. None of them is a figure anything was
+                // compared against.
+                case TypeUnresolved _, RecursiveExpansion _,
                      ValueRulesNotReached _ -> RunSensitivity.UNAFFECTED;
                 // And the one figure among them: a reading that stopped at the depth it could
                 // afford, which a run allowed to read further need not stop at.
                 case ValueRulesNotReachedPastDepthLimit _ -> RunSensitivity.MAY_CHANGE;
             };
         }
+
+        /**
+         * The same switch, saying which figure: the one depth a walk stops at for want of
+         * affording more, which is declared where the walk is and handed to it nowhere else.
+         */
+        @Override
+        default List<Figure> figures() {
+            return switch (this) {
+                case TypeUnresolved _, RecursiveExpansion _, ValueRulesNotReached _ -> List.of();
+                case ValueRulesNotReachedPastDepthLimit _ -> List.of(
+                        WorkFigure.FIELDS_A_RULE_IS_FOLLOWED_DOWN.at(GuaranteeWalk.FIELDS_SEEDED));
+            };
+        }
+    }
+
+    /**
+     * A reason that carries the figures it was met at beside what it is.
+     *
+     * <p>Each of these is an allowance a run was handed running out, and an allowance is refused at
+     * one of its limits and at the number the run held it to. Which one is what happened on the
+     * way and not what the reason is: one rule refused at one limit by one reading and at the other
+     * by another is one rule too costly, met at two figures, and a reader is owed one entry naming
+     * both. So the figures are evidence of the reason and never part of telling two reasons apart
+     * ({@link #factOf}), and two accounts of one reason are put together by taking every figure
+     * either was met at ({@link #together}).
+     */
+    sealed interface MetAtFigures extends BlockReason
+            permits PatternTooCostly, ExactValuesTooCostly, BehaviorDistinctionsTooCostly,
+                    RulesNotHandedOnAsSets, WhereALineDecidesNotWorkedOut {
+
+        /** Every figure it was met at, each once and in {@link Figure#inOrder}. */
+        List<Figure> stoppedAt();
+    }
+
+    /**
+     * What tells {@code reason} from another reason: the reason itself, with the figures it was met
+     * at left out.
+     *
+     * <p>Asked by everything that holds these by what they are — a set, a key, a check that two
+     * accounts agree. Compared as values, two accounts of one reason met at different figures are
+     * two reasons, and what they come to is a rule said twice, or one reading refused for
+     * disagreeing with another about which limit a position ran into first.
+     */
+    static Object factOf(BlockReason reason) {
+        return reason instanceof MetAtFigures ? reason.getClass() : reason;
+    }
+
+    /**
+     * Two accounts of one reason, as one: the same reason, met at every figure either was.
+     *
+     * <p>Refused for two reasons that are not one, which is the caller's to have asked
+     * ({@link #factOf}).
+     */
+    @SuppressWarnings("unchecked")
+    static <R extends BlockReason> R together(R one, R other) {
+        if (!factOf(one).equals(factOf(other))) {
+            throw new IllegalArgumentException(
+                    "two accounts put together are of one reason: " + one + " and " + other);
+        }
+        // Each arm builds its own kind, and other is that kind because the two are one fact.
+        BlockReason out = switch (one) {
+            case PatternTooCostly it -> new PatternTooCostly(
+                    Figure.inOrder(both(it, (MetAtFigures) other)));
+            case ExactValuesTooCostly it -> new ExactValuesTooCostly(
+                    Figure.inOrder(both(it, (MetAtFigures) other)));
+            case BehaviorDistinctionsTooCostly it -> new BehaviorDistinctionsTooCostly(
+                    Figure.inOrder(both(it, (MetAtFigures) other)));
+            case RulesNotHandedOnAsSets it -> new RulesNotHandedOnAsSets(
+                    Figure.inOrder(both(it, (MetAtFigures) other)),
+                    it.alsoAtNoFigure() || ((RulesNotHandedOnAsSets) other).alsoAtNoFigure());
+            case WhereALineDecidesNotWorkedOut it -> new WhereALineDecidesNotWorkedOut(
+                    both(it, (MetAtFigures) other));
+            default -> one;
+        };
+        return (R) out;
+    }
+
+    private static List<Figure> both(MetAtFigures one, MetAtFigures other) {
+        List<Figure> out = new ArrayList<>(one.stoppedAt());
+        out.addAll(other.stoppedAt());
+        return out;
     }
 
     /**
@@ -361,7 +596,7 @@ public sealed interface BlockReason {
      * compiler fell short, whichever rule shape it fell short on.
      *
      * <p>Which is why a relation between two positions is {@link ValueRuleRelatingTwoPositions}
-     * here and {@link ComparisonBetweenPositions} where a line is drawn. One rule, two readings,
+     * here and {@link ComparisonRelatingTwoValues} where a line is drawn. One rule, two readings,
      * two answers, and both are true: the reading of ends took {@code a < b} in completely and
      * placed no line, and the reading of values could not turn it into a set of one position's
      * values at all. Written as one reason, the second was reported in the words of the first —
@@ -374,22 +609,24 @@ public sealed interface BlockReason {
      * about, so a caller here would be naming one it does not have — which is the whole of what
      * {@link AboutThePosition} is beside this for.
      */
-    static RuleReadingStopped ofARuleTheValueReadingLeft(souther.compiler.values.UnreadReason why) {
+    static RuleReadingStopped ofARuleTheValueReadingLeft(StoppedReading stopped) {
+        UnreadReason why = stopped.why();
         // Whether there is a rule to name is the reason's own answer and not a list kept here.
         // Kept here, this was a third place saying which reasons are about a rule, and three
         // answers to one question are three chances for two of them to disagree.
-        if (why.about() != souther.compiler.values.UnreadReason.About.A_RULE) {
+        if (why.about() != UnreadReason.About.A_RULE) {
             throw new IllegalArgumentException(
                     "a reason about " + why.about() + " holds no rule to say this of: " + why);
         }
         return switch (why) {
             case RELATES_TWO_POSITIONS -> new ValueRuleRelatingTwoPositions();
+            case RELATES_ELEMENTS_OF_A_CONTAINER -> new ValueRuleRelatingElements();
             case FORM_NOT_READ -> new UnreadValueRule();
             // Its own, and not the one above. Both leave what may stand at the position open and
             // an author does different work about them: one is a clause to rewrite and one is a
             // branch beside a clause that reads.
             case ALTERNATIVE_NOT_READ -> new ValueRuleLeftOpenByAChoice();
-            case PATTERN_TOO_COSTLY -> new PatternTooCostly();
+            case PATTERN_TOO_COSTLY -> new PatternTooCostly(stopped.stoppedAt());
             // Refused above, each of them, and named here so that a reason added to the vocabulary
             // stops this rather than arriving as whichever arm is nearest.
             case EXACT_VALUES_TOO_COSTLY, NOT_REACHED, NOT_REACHED_PAST_DEPTH_LIMIT ->
@@ -409,16 +646,17 @@ public sealed interface BlockReason {
      * leaving a rule without a line — that is the reading of ends' answer to give — so nothing this
      * returns may reach a caller as a rule read from end to end.
      */
-    static ReadingStopReason of(souther.compiler.values.UnreadReason why) {
-        return switch (why) {
-            case NOT_REACHED -> new ValueRulesNotReached();
+    static ReadingStopReason of(StoppedReading stopped) {
+        return switch (stopped.why()) {
+            case NOT_REACHED -> ofANamedRule(stopped);
             case NOT_REACHED_PAST_DEPTH_LIMIT -> new ValueRulesNotReachedPastDepthLimit();
             // And every other way this reading is short by the one below, since all of them leave a
             // question of a rule standing. Written out rather than defaulted to: a reason added to
             // the vocabulary is a decision about which of the two halves it is, and a default takes
             // that decision by arriving at whichever arm was written last.
-            case EXACT_VALUES_TOO_COSTLY, RELATES_TWO_POSITIONS, FORM_NOT_READ,
-                 ALTERNATIVE_NOT_READ, PATTERN_TOO_COSTLY -> ofAQuestionStandingOn(why);
+            case EXACT_VALUES_TOO_COSTLY, RELATES_TWO_POSITIONS, RELATES_ELEMENTS_OF_A_CONTAINER,
+                 FORM_NOT_READ,
+                 ALTERNATIVE_NOT_READ, PATTERN_TOO_COSTLY -> ofAQuestionStandingOn(stopped);
         };
     }
 
@@ -435,11 +673,12 @@ public sealed interface BlockReason {
      * deciding it twice — and a reason added to the vocabulary would be classified by whichever arm
      * it happened to land in instead of stopping the compile here.
      */
-    static QuestionStandingReason ofAQuestionStandingOn(souther.compiler.values.UnreadReason why) {
+    static QuestionStandingReason ofAQuestionStandingOn(StoppedReading stopped) {
+        UnreadReason why = stopped.why();
         return switch (why) {
-            case EXACT_VALUES_TOO_COSTLY -> new ExactValuesTooCostly();
-            case RELATES_TWO_POSITIONS, FORM_NOT_READ, ALTERNATIVE_NOT_READ, PATTERN_TOO_COSTLY ->
-                    ofARuleTheValueReadingLeft(why);
+            case EXACT_VALUES_TOO_COSTLY -> new ExactValuesTooCostly(stopped.stoppedAt());
+            case RELATES_TWO_POSITIONS, RELATES_ELEMENTS_OF_A_CONTAINER, FORM_NOT_READ,
+                 ALTERNATIVE_NOT_READ, PATTERN_TOO_COSTLY -> ofARuleTheValueReadingLeft(stopped);
             case NOT_REACHED, NOT_REACHED_PAST_DEPTH_LIMIT -> throw new IllegalArgumentException(
                     "a reason about " + why.about() + " leaves no question of a rule standing: "
                             + why);
@@ -454,18 +693,44 @@ public sealed interface BlockReason {
      * arrived. What is left is a fact about what the rules of a position come to between them, which
      * names no rule and sends a reader to no clause.
      */
-    static AnswerRealizationStopped ofTheAnswerTheReadingCouldNotBuild(UnreadReason why) {
+    static AnswerRealizationStopped ofTheAnswerTheReadingCouldNotBuild(StoppedReading stopped) {
+        UnreadReason why = stopped.why();
         if (why.about() != UnreadReason.About.THE_ANSWER) {
             throw new IllegalArgumentException(
                     "a reason about " + why.about() + " is not one the answer was short of: " + why);
         }
         return switch (why) {
-            case EXACT_VALUES_TOO_COSTLY -> new ExactValuesTooCostly();
+            case EXACT_VALUES_TOO_COSTLY -> new ExactValuesTooCostly(stopped.stoppedAt());
             // Refused above, each of them, and named here so that a reason added to the vocabulary
             // stops this rather than arriving as whichever arm is nearest.
-            case RELATES_TWO_POSITIONS, FORM_NOT_READ, ALTERNATIVE_NOT_READ, PATTERN_TOO_COSTLY,
+            case RELATES_TWO_POSITIONS, RELATES_ELEMENTS_OF_A_CONTAINER, FORM_NOT_READ,
+                 ALTERNATIVE_NOT_READ, PATTERN_TOO_COSTLY,
                  NOT_REACHED, NOT_REACHED_PAST_DEPTH_LIMIT ->
                     throw new IllegalStateException("refused above: " + why);
+        };
+    }
+
+    /**
+     * The same, for a caller holding the rule the reason is said beside.
+     *
+     * <p>A rule a reading gave up on is filed as that rule, and a rule nothing reached as rules no
+     * reading reached — which is what {@link #of(StoppedReading)} files it as too, by asking this.
+     * So a caller that names the rule, an offer of values that got nothing from it among them,
+     * says it in the word the position's own account has for the same clause.
+     *
+     * <p>Refused for the rest. A depth a run could afford is no fact about the rule it stopped
+     * above, and an answer nothing built names no rule at all.
+     */
+    static RuleOfferShortfallReason ofANamedRule(StoppedReading stopped) {
+        UnreadReason why = stopped.why();
+        return switch (why) {
+            case NOT_REACHED -> new ValueRulesNotReached();
+            case RELATES_TWO_POSITIONS, RELATES_ELEMENTS_OF_A_CONTAINER, FORM_NOT_READ,
+                 ALTERNATIVE_NOT_READ, PATTERN_TOO_COSTLY -> ofARuleTheValueReadingLeft(stopped);
+            case NOT_REACHED_PAST_DEPTH_LIMIT, EXACT_VALUES_TOO_COSTLY ->
+                    throw new IllegalArgumentException(
+                            "a reason about " + why.about() + " is said of no rule an offer holds: "
+                                    + why);
         };
     }
 
@@ -501,17 +766,6 @@ public sealed interface BlockReason {
     }
 
     /**
-     * The shape at the position holds values this cannot reach into, and which reaching is missing
-     * is which of {@link Traversal} it is.
-     *
-     * <p>Held apart rather than made one word, because what would lift each is a different piece of
-     * work: choosing among however many elements a sequence holds, choosing whether an optional
-     * holds one, and deciding what part of a mapping a rule is even about. Reporting them alike
-     * would let one of them being implemented read as all three.
-     */
-    record UnsupportedTraversal(Traversal traversal) implements AboutThePosition {}
-
-    /**
      * A comparison naming the position is written in a form no reader here takes apart: the
      * position inside an expression the terms do not name, or a threshold written as something
      * other than a constant.
@@ -525,6 +779,41 @@ public sealed interface BlockReason {
     /** A comparison naming the position is against values no line is drawn on here — the carrier,
      *  asked of the carrier. */
     record UnreadComparisonDomain() implements RuleReadingStopped {}
+
+    /**
+     * A comparison naming the position was read to the end, and a number its line is read through
+     * has no representation here: a coefficient over what the coefficients share, or the place the
+     * line falls at in the quantity's own units, stands past the far end of the exponents an exact
+     * ratio holds.
+     *
+     * <p>Its own case and not {@link UnreadComparisonDomain}. The values carry an order and a line
+     * on them would be drawn; what is missing is a number to say where it falls, which is a fact
+     * about how the rule was written and about nothing the carrier holds. An author told the first
+     * would go looking at the type of the position, and it is the constants the rule is written
+     * with that reach the end of the range.
+     */
+    record LineAtANumberNoRatioHolds() implements RuleReadingStopped {}
+
+    /**
+     * A comparison naming the position was read to the end, its line is placed, and a value beside
+     * the line — or whether the quantity takes the value the line names — was not worked out.
+     *
+     * <p>Its own case beside {@link LineAtANumberNoRatioHolds}. That one says the line has no place
+     * here; this one says the line does and what the order has beside it could not be written down,
+     * because the exact arithmetic had no room for the number or the number has no representation
+     * on the position's carrier. Told the first, an author looks for a constant at the end of the
+     * range, and the line is fine.
+     *
+     * @param why which of the two ways the number was not held
+     */
+    record LineSideNotWorkedOut(UnheldNumber why) implements RuleReadingStopped {
+
+        public LineSideNotWorkedOut {
+            if (why == null) {
+                throw new IllegalArgumentException("a side not worked out says why");
+            }
+        }
+    }
 
     /**
      * A rule is written about a value that came from the position rather than about the position.
@@ -542,10 +831,28 @@ public sealed interface BlockReason {
     record RuleAboutADerivedValue() implements RuleReadingStopped {}
 
     /**
-     * A rule is written about an element of a sequence, in a block handed to more than one walk.
+     * A rule's comparison is over arithmetic no form over the input's numbers says: a product of
+     * two values neither of which is a constant, or a quotient by one.
+     *
+     * <p>Its own case beside {@link RuleAboutADerivedValue}. Nothing was made of a position and no
+     * operation is left to follow back; the arithmetic met a shape it has no term for, and which
+     * shape it was is what an author can act on. The arithmetic says it where it composes the
+     * operation, and this carries it as it was said.
+     *
+     * @param operation which arithmetic it was
+     */
+    record NonAffineArithmetic(NonAffineOperation operation) implements RuleReadingStopped {
+
+        public NonAffineArithmetic {
+            Objects.requireNonNull(operation, "arithmetic that is not affine says which");
+        }
+    }
+
+    /**
+     * A rule is written about an element of a container, in a block handed to more than one walk.
      *
      * <p>One block written once and given to two operations: the name it reads the element under
-     * holds an element of a different sequence on each run, so a rule inside it is about one of
+     * holds an element of a different container on each run, so a rule inside it is about one of
      * them and nothing here says which. It is filed at every one of them, because that is what is
      * known — the rule is about one of these places and each is a place a reader can be sent to.
      *
@@ -559,7 +866,7 @@ public sealed interface BlockReason {
      * computation that is not there. What lifts this is telling the two walks apart, and what an
      * author can do about it today is write the block twice.
      */
-    record RuleAboutAnElementOfSeveralSequences() implements RuleReadingStopped {}
+    record RuleAboutAnElementOfSeveralContainers() implements RuleReadingStopped {}
 
     /**
      * A rule naming which values the position may hold is written in a form no reader here takes
@@ -634,23 +941,21 @@ public sealed interface BlockReason {
      *
      * <p>A rule all the same, which is why it is here and not beside the one below. Somebody wrote
      * this pattern and could write it differently.
+     *
+     * @param stoppedAt the figures the machine was refused at, carried from where each was refused:
+     *                  one machine for the values a position admits, or everything built for them,
+     *                  at the number the run was handed
      */
-    record PatternTooCostly() implements RuleReadingStopped {}
+    record PatternTooCostly(List<Figure> stoppedAt) implements RuleReadingStopped, MetAtFigures {
 
-    /**
-     * What a pattern nothing read is, in the words a rule left unread is said in.
-     *
-     * <p>Only in a module the checker refuses. A pattern that is no pattern of the language, and one
-     * nested more deeply than the compiler reads, are compile errors where the call is checked; a
-     * reading of the rules goes on over a module with errors in it, and what it says of such a
-     * pattern is that the rule was not read, whichever of the two it was. The error beside it says
-     * which.
-     *
-     * <p>Here because three readings ask it — a declaration's clauses, a behavior's body and what a
-     * behavior's rules divide — and all of them meet the same patterns.
-     */
-    static RuleReadingStopped forAPatternNotRead() {
-        return new UnreadValueRule();
+        public PatternTooCostly {
+            stoppedAt = metAtSome(stoppedAt, "a pattern too costly was refused at some figure");
+        }
+
+        /** Refused at one figure, which is how a reading meets it. */
+        public PatternTooCostly(Figure figure) {
+            this(List.of(figure));
+        }
     }
 
     /**
@@ -668,7 +973,7 @@ public sealed interface BlockReason {
      * somebody wrote and could write smaller; an answer that had already spent what it was allowed
      * is not, and the same rule asked first would have been read.
      */
-    record OrderedExtentTooCostly(souther.compiler.regex.Meter.Stopped stopped)
+    record OrderedExtentTooCostly(Meter.Stopped stopped)
             implements RuleReadingStopped {
 
         public OrderedExtentTooCostly {
@@ -692,8 +997,22 @@ public sealed interface BlockReason {
      * <p>So it carries no rule and is not among the reasons that do ({@link
      * AnswerRealizationStopped}). A reader here has nothing to send an author to, and that is the
      * answer rather than something missing from it.
+     *
+     * @param stoppedAt the figures the answer was refused at, carried from where each was refused:
+     *                  one machine for the values a position admits, or everything built for them
      */
-    record ExactValuesTooCostly() implements AnswerRealizationStopped {}
+    record ExactValuesTooCostly(List<Figure> stoppedAt)
+            implements AnswerRealizationStopped, MetAtFigures {
+
+        public ExactValuesTooCostly {
+            stoppedAt = metAtSome(stoppedAt, "an answer too costly was refused at some figure");
+        }
+
+        /** Refused at one figure, which is how a reading meets it. */
+        public ExactValuesTooCostly(Figure figure) {
+            this(List.of(figure));
+        }
+    }
 
     /**
      * A behavior's rules about the strings at this position were read, and building what they tell
@@ -716,9 +1035,23 @@ public sealed interface BlockReason {
      * are written at the position — so a reader of the position is owed the sentence about each of
      * them, and what it says is that the position's distinctions were not built rather than that
      * this one rule was the expensive one.
+     *
+     * @param stoppedAt the figures the group was refused at, carried from where each was refused:
+     *                  one machine for the strings a behavior tells apart, or everything built for
+     *                  them
      */
-    record BehaviorDistinctionsTooCostly()
-            implements AnswerRealizationStopped, StoppedWithoutALine {}
+    record BehaviorDistinctionsTooCostly(List<Figure> stoppedAt)
+            implements AnswerRealizationStopped, StoppedWithoutALine, MetAtFigures {
+
+        public BehaviorDistinctionsTooCostly {
+            stoppedAt = metAtSome(stoppedAt, "distinctions too costly were refused at some figure");
+        }
+
+        /** Refused at one figure, which is how a reading meets it. */
+        public BehaviorDistinctionsTooCostly(Figure figure) {
+            this(List.of(figure));
+        }
+    }
 
     /**
      * The rules about the strings at this position were read, what the position admits was worked
@@ -740,8 +1073,40 @@ public sealed interface BlockReason {
      * <p>Beside {@link ExactValuesTooCostly} rather than the same thing said twice: that one is the
      * position's own answer coming out wider than the rules leave it, and here that answer is what
      * the rules leave and a reader is short of something else.
+     *
+     * <p><b>Or the position's own answer stopped first, and nothing was handed on at all.</b> A
+     * position whose values were not answered for publishes no sets of its rules, and what stopped
+     * them is what stopped it — so the figures here are those: the one the sets were refused at
+     * where they were asked for, and where they were not, the ones the position's answer stopped
+     * at. That answer may have stopped at a form nobody reads as well, or only there, and then a
+     * run allowed more leaves this standing whatever figures it reached.
+     *
+     * @param stoppedAt      the figures what was handed on stopped at, carried from where each was
+     *                       compared; empty where no figure is why
+     * @param alsoAtNoFigure whether something no figure decides stopped it as well, which is what
+     *                       a run allowed more does not get past
      */
-    record RulesNotHandedOnAsSets() implements AnswerRealizationStopped, StoppedWithoutALine {}
+    record RulesNotHandedOnAsSets(List<Figure> stoppedAt, boolean alsoAtNoFigure)
+            implements AnswerRealizationStopped, StoppedWithoutALine, MetAtFigures {
+
+        public RulesNotHandedOnAsSets {
+            stoppedAt = Figure.inOrder(stoppedAt);
+            if (stoppedAt.isEmpty() && !alsoAtNoFigure) {
+                throw new IllegalArgumentException(
+                        "sets not handed on were stopped by a figure or by something else");
+            }
+        }
+    }
+
+    /** Some figures, each once and in {@link Figure#inOrder}: a reason met at none is no allowance
+     *  running out. */
+    private static List<Figure> metAtSome(List<Figure> stoppedAt, String refused) {
+        List<Figure> out = Figure.inOrder(stoppedAt);
+        if (out.isEmpty()) {
+            throw new IllegalArgumentException(refused);
+        }
+        return out;
+    }
 
     /**
      * A rule about the position says how it stands against another position, and what is held here
@@ -752,7 +1117,7 @@ public sealed interface BlockReason {
      * one no rule admits. That is a stop, and every arm of
      * {@link souther.compiler.values.UnreadReason} is one for the same reason.
      *
-     * <p><b>Its own case and not {@link ComparisonBetweenPositions}, which is the other reading's
+     * <p><b>Its own case and not {@link ComparisonRelatingTwoValues}, which is the other reading's
      * answer for the same rule.</b> Nothing about {@code a < b} was beyond the reading of ends: it
      * took the rule in whole and placed no line, and no measure is short of anything on its
      * account. The reading of values met the same rule and got nothing it could hold. One reason
@@ -760,6 +1125,18 @@ public sealed interface BlockReason {
      * missing — over a position whose values this compiler cannot state.
      */
     record ValueRuleRelatingTwoPositions() implements RuleReadingStopped {}
+
+    /**
+     * A rule about a container says how its elements stand to each other, and what is held here is
+     * a set of the container's own values.
+     *
+     * <p>A stop of the reading of values, as the one above is, and for the same reason: what it
+     * arrived at is an upper bound — a container saying one element twice is among the values it
+     * holds and no row can take it. The rule was recognised, and the values built for the position
+     * keep it, so it is not {@link UnreadValueRule}; and the values it leaves were not worked out,
+     * so it is no rule read to the end either.
+     */
+    record ValueRuleRelatingElements() implements RuleReadingStopped {}
 
     /**
      * The reading of what the position may hold never reached the rules about it.
@@ -772,8 +1149,13 @@ public sealed interface BlockReason {
      *
      * <p>And none of them is a figure this compiler stopped at, which is what
      * {@link ValueRulesNotReachedPastDepthLimit} is beside this for.
+     *
+     * <p>A {@link RuleOfferShortfallReason} as well. A clause nothing could type is one an offer
+     * holds as a part the author wrote, so the offer can say which rule gave it nothing; it says so
+     * in this reason, which is the one the reading of the position writes for that clause, and not
+     * in one of its own.
      */
-    record ValueRulesNotReached() implements AboutThePosition {}
+    record ValueRulesNotReached() implements AboutThePosition, RuleOfferShortfallReason {}
 
     /**
      * The same, where what stopped the reading was how far down it could afford to read.
@@ -805,6 +1187,153 @@ public sealed interface BlockReason {
      * another way to write a comparison it reads perfectly well.
      */
     record CasePairingNotDetermined() implements RuleReadingStopped {}
+
+    /**
+     * What the rule states was read in full, and it is several lines held together whose lines are
+     * not drawn.
+     *
+     * <p>A statement of several relations is drawn as one rule with a line for each, and each line
+     * holds where the statement turns on it. Where that cannot be held, no line is: a relation over
+     * what a dependency answered is no line on the input, and the others
+     * drawn alone would be drawn as though the statement were only them; and a clause has nowhere
+     * to hold where each of its lines decides, so a row against one of them would be counted at
+     * the line where the clause comes out the same on both sides.
+     *
+     * <p>Not a rule whose meaning went unread. Nothing about what it states is unknown, and said as
+     * a form nothing took apart, an author would go looking for another way to write a rule whose
+     * meaning was read perfectly well.
+     */
+    record SeveralLinesInOneRule() implements RuleReadingStopped {}
+
+    /**
+     * What the rule states was read in full, and it is several lines held together, and for one of
+     * them whether the statement turns on it in some of its cases was not worked out: those cases
+     * were said as one, and asking each case they stand for whether a row stands on both sides of
+     * the line stopped at {@code stoppedAt}.
+     *
+     * <p>Not cases the line turns in, and not cases it turns nothing in. Held as the first, the
+     * line is owed rows in cases it may turn nothing in, which no row an author writes discharges;
+     * held as the second, they are dropped for a proof that was never finished. What other cases of
+     * the line showed is the line's all the same, and this is said beside it: the line may divide
+     * the position further in the cases nobody worked out, so the position's classes are not
+     * settled by the ones that were. What the rules leave the position is read as it was.
+     *
+     * <p>Met at every figure the asking stopped at, which may be more than one: one case nobody
+     * took apart and another that ran out of questions are one line not worked out, at two figures.
+     * The figures are what happened on the way and not what the reason is
+     * ({@link MetAtFigures}), so which of them was met first decides nothing.
+     *
+     * @param stoppedAt every figure the asking stopped at, each once and in {@link Figure#inOrder}
+     */
+    record WhereALineDecidesNotWorkedOut(List<Figure> stoppedAt)
+            implements RuleReadingStopped, MetAtFigures {
+
+        public WhereALineDecidesNotWorkedOut {
+            stoppedAt = metAtSome(stoppedAt, "a line not worked out stopped at some figure");
+        }
+
+        /** Stopped at one figure. */
+        public WhereALineDecidesNotWorkedOut(Figure figure) {
+            this(List.of(figure));
+        }
+    }
+
+    /**
+     * What the rule states was read in full, and it relates the value here to another value that is
+     * not shown to reach every value here ({@link WhatARelationLeavesUndivided}).
+     *
+     * <p>{@code n == String.length(s)} is false wherever {@code n} is below nought, and
+     * {@code d == String.lowercase(s)} wherever {@code d} holds a capital: the other side never
+     * reaches those values, so some values here settle the rule whatever the other side holds. Which
+     * values those are is what an operation answers, or a rule the other position carries, and
+     * nothing here works it out.
+     *
+     * <p>Not a relation that divides nothing, which is the word for a value whose other side reaches
+     * all of it: said that way, a reader would take the values here as all alike under the rule. And
+     * not a rule whose meaning went unread, since what it states is known.
+     */
+    record RelationNotShownToReachEveryValue() implements RuleReadingStopped {}
+
+    /**
+     * A rule whose statement is no line on the input's numbers, for the reason {@code why} gives:
+     * read off what the rule states, and never off how it is written.
+     *
+     * <p>The reasons are owed different things. A part of the statement nothing read is lifted by a
+     * rule of the reading, or by a run allowed more readings where that is what declined it. A
+     * number no position holds — a value the body works out, or what a run of values comes to —
+     * and a statement of which case, truth or value a position holds are read to the end, and a
+     * line is the wrong word for them: they are divided by the position's cases, or by nothing a
+     * row writes.
+     *
+     * <p>A part left unread that is a form nothing takes apart, what an operation answered or a
+     * value the terms name no position for is not one of these: each place the rule is filed at
+     * words it, as {@link UnreadComparisonForm}, {@link UnreadComparisonDomain} or
+     * {@link RuleAboutADerivedValue}.
+     */
+    record WhatItStatesIsNoLine(Why why) implements RuleReadingStopped {
+
+        public WhatItStatesIsNoLine {
+            Objects.requireNonNull(why, "a statement is no line for some reason");
+        }
+
+        /** Why what a rule states is no line on the input's numbers. */
+        public enum Why {
+
+            /** A part read once for each application or case more times than the reading makes:
+             *  a figure of this compiler's work was reached. */
+            MORE_READINGS_THAN_ARE_MADE(WhyUnread.PAST_THE_READINGS),
+
+            /** A part read once more where the reading had made as many readings in all, along
+             *  every way, as it makes: a figure of this compiler's work was reached, and not the
+             *  one above. */
+            MORE_TOTAL_READINGS_THAN_ARE_MADE(WhyUnread.PAST_THE_TOTAL_READINGS),
+
+            /** A part whose statement, written out, comes to more parts than a step of the reading
+             *  is concluded with: a figure of this compiler's work was reached, and not either of
+             *  the ones above. */
+            MORE_PARTS_THAN_ARE_CONCLUDED(WhyUnread.PAST_THE_PARTS),
+
+            /** A part about a container holding more than a walk writes out: a figure of this
+             *  compiler's work was reached, and none of the ones above. */
+            MORE_ELEMENTS_THAN_ARE_WRITTEN_OUT(WhyUnread.PAST_THE_ELEMENTS),
+
+            /** Some other part of what it states was not read. */
+            A_PART_NOT_READ(null),
+
+            /** It relates a number no position of the input holds: a value the body works out,
+             *  or what a run of values comes to. */
+            A_NUMBER_NO_POSITION_HOLDS(null),
+
+            /** It states which case, which truth or whether a value something other than the
+             *  input's own positions holds, or what some element of a container meets — no
+             *  relation of numbers at all. Said only of the input's positions, it is no reading
+             *  that stopped ({@code Cutting.Read.StatesNoRelation}). */
+            NO_RELATION_OF_NUMBERS(null);
+
+            private final WhyUnread says;
+
+            /**
+             * A word, saying the reason {@code says} where it says one.
+             *
+             * @param says the reason that stopped at a figure this word says, or null where it says
+             *             none. The figure is the reason's ({@link WhyUnread#figure}) and not this
+             *             word's, so the two cannot name two figures.
+             */
+            Why(WhyUnread says) {
+                this.says = says;
+            }
+
+            /** The reason that stopped at a figure this word says, or null where it says none. */
+            public WhyUnread says() {
+                return says;
+            }
+
+            /** The figure the part was declined at, or none. */
+            public Optional<Figure> figure() {
+                return says == null ? Optional.empty() : says.figure();
+            }
+        }
+    }
 
     /**
      * The comparison was read to the end and cuts no quantity at all.
@@ -850,22 +1379,40 @@ public sealed interface BlockReason {
     record ComparisonNothingArrivesAtItsLine() implements ReadToEndWithoutLine {}
 
     /**
-     * The comparison relates two positions rather than dividing one.
+     * The comparison was read to the end and states several relations held together, and this is a
+     * line of one of them that rows arrive at — and wherever they do, the statement comes out the
+     * same on both sides of it.
+     *
+     * <p>{@code Int.max(a, a + 1) > 5} turns where {@code a} passes four. Its line where {@code a}
+     * passes five is one rows reach, and every one of them already has the other part holding, so
+     * nothing a row there does to {@code a} changes what the rule says. Not
+     * {@link ComparisonNothingArrivesAtItsLine}: nothing on the way rules the line out, and an
+     * author sent to the guards above it would find nothing there.
+     *
+     * <p>Said only on a proof: the line, with what has to hold beside it for the statement to turn
+     * on it, shown to hold no row.
+     */
+    record ComparisonLineTurningNothing() implements ReadToEndWithoutLine {}
+
+    /**
+     * The comparison relates the value at a position to another value rather than dividing the
+     * position's values: to another position's, or to a value no position holds — what an
+     * operation looked up, an element a walk was handed, the index it is at.
      *
      * <p>Nothing is missing from the carrier: both sides are ordered, and a line drawn on either
-     * against a number would be read. What is missing is a class about two positions, which a
-     * partition of one is not — so a line like this is settled beside the partition rather than in
-     * it, and the position it names is left with no class of its own from this rule.
+     * against a number would be read. What is missing is a class about two values, which a
+     * partition of one position is not — so a line like this is settled beside the partition rather
+     * than in it, and the position it names is left with no class of its own from this rule.
      */
-    record ComparisonBetweenPositions() implements ReadToEndWithoutLine {}
+    record ComparisonRelatingTwoValues() implements ReadToEndWithoutLine {}
 
     /**
      * The comparison draws its line on a number taken over a run of values, which divides no
      * position.
      *
-     * <p>Its own word and not {@link ComparisonBetweenPositions}. Nothing here is between two
+     * <p>Its own word and not {@link ComparisonRelatingTwoValues}. Nothing here is between two
      * positions: there is one number and one line, and the values it is read from stand at a place
-     * inside a sequence. Two lines of sixty and forty are on the boundary of a hundred as surely as
+     * inside a container. Two lines of sixty and forty are on the boundary of a hundred as surely as
      * one of a hundred is, so there is no class of that place for the rule to have drawn — and a
      * reader told the rule relates two positions would go looking for the pair.
      *
@@ -873,6 +1420,18 @@ public sealed interface BlockReason {
      * what is absent is a partition, because the model divides no position by it.
      */
     record ComparisonOverARun() implements ReadToEndWithoutLine {}
+
+    /**
+     * The comparison draws its line on what a division by a written number leaves of a number made
+     * of the input's, which divides none of the positions it is made of.
+     *
+     * <p>Its own word beside {@link ComparisonRelatingTwoValues} and {@link ComparisonOverARun}.
+     * Nothing relates two values and nothing is read over a run: the rule is read to the end, and
+     * what it is about is a remainder, which runs from nought to one below the divisor whatever the
+     * values it is taken of come to. Its border is drawn there, so what is absent is a class of any
+     * position and not a limit of this compiler's.
+     */
+    record ComparisonOnARemainder() implements ReadToEndWithoutLine {}
 
     /**
      * The rule holds this position to the values it admits, and places no end on them.
@@ -936,24 +1495,5 @@ public sealed interface BlockReason {
      * the classes.
      */
     record ClassesNotComposed() implements ReadToEndWithoutLine {}
-
-    /**
-     * What a derivation would have to be able to reach into.
-     *
-     * <p>What it can reach into is not here. The elements of a {@code List} or a {@code Set} were,
-     * and are positions of the input now; so was the value an {@code Option} holds, which is a
-     * branch of the position under the narrowing that it holds one. A word for a reaching that is
-     * made says a reader can still meet it, and the next one to read this would take its presence
-     * for evidence that a sequence, or an optional, is where the walk stops.
-     */
-    enum Traversal {
-
-        /**
-         * What a {@code Map} holds. One case and not two, because which of a key and a value a rule
-         * would be about has not been decided — and a distinction invented here would be a promise
-         * about a semantics nobody has written.
-         */
-        MAPPING_CONTENT
-    }
 
 }

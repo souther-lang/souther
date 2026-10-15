@@ -1873,10 +1873,17 @@ public interface Hir {
      * call the source settles, and a reader that took the second from the first would be reading an
      * identity out of a value that says how the compiler ran. The two answer about one call and are
      * not the same answer to give.
+     *
+     * <p>{@code handover} is the call a block was handed to, where the callee is that block: what
+     * the block answers is held here to what that call's parameter declared, and a block answering
+     * something else is reported in those terms. Null for every other callee, a block bound by a
+     * {@code let} among them: that one is handed over by name, and what its binding says it is
+     * is read against the parameter at the call ({@link Given#arrivesAs}).
      */
-    record Expansion(ValueName callee, BindingOwner application, ExpansionSite at,
-                     List<Bound> bound, List<Given> given, RetType declaredReturn, Expr body,
-                     SourcePos pos, Region region) implements Expr {
+    record Expansion(ValueName callee, FunctionHandover handover, BindingOwner application,
+                     ExpansionSite at, List<Bound> bound, List<Given> given,
+                     RetType declaredReturn, Expr body, SourcePos pos, Region region)
+            implements Expr {
 
         /**
          * The same expansion as the nested bindings it writes — for a reader whose question is only
@@ -1940,14 +1947,28 @@ public interface Hir {
      * them. Which arguments are functions and which are values is the callee's to say, so what the
      * call wrote, and in what order, is read off this and {@link Bound#argument} together.
      */
-    record Given(RetType declaredType, Expr value, boolean applied, RetType arrivesAs,
-                 int argument) {
+    record Given(FunctionHandover handover, RetType declaredType, Expr value, boolean applied,
+                 RetType arrivesAs, int argument) {
 
         /** The same argument, holding {@code rewritten}. */
         public Given with(Expr rewritten) {
-            return new Given(declaredType, rewritten, applied, arrivesAs, argument);
+            return new Given(handover, declaredType, rewritten, applied, arrivesAs, argument);
         }
     }
+
+    /**
+     * A function handed to a parameter of a call, as a report about it names the two: the
+     * parameter the callee declared, and the call as the source spells it.
+     *
+     * <p>Typing the function is the elaboration's, wherever the callee reads it, and that place is
+     * past the call: inside the callee's body, or at a boundary the body never applies. What the
+     * author would recognise is the call they wrote, and nothing at either place says it any more,
+     * so it is carried there from where the call was read.
+     *
+     * <p>The spelling and not the occurrence. A report about a function handed over points at the
+     * function, which the author wrote; the call is only quoted.
+     */
+    record FunctionHandover(String parameter, String call) {}
 
     /** A list literal {@code [e1, e2, ...]} (one or more elements of the same type).
      *
@@ -2627,12 +2648,27 @@ public interface Hir {
      * <p>{@code at} is never null. An application stands somewhere — where a source wrote it, or
      * where the pass composing it put it — and a report about what it applies points there. There
      * is no application with nowhere to point at what it applies.
+     *
+     * <p>{@code shadowing} is what the applied name would have reached had no binding of that name
+     * been in force, which is something only the reading that chose the binding knows: by the time
+     * a report says the binding is not a function, the name means the binding and nothing else.
+     * Kept as the reference and never as where it points — what was hidden is settled when the name
+     * is read, and where a report can point at it depends on what text the reporting compilation
+     * holds.
      */
-    record AppliedCallee(WrittenName name, Region at) {
+    record AppliedCallee(WrittenName name, Region at, Shadowing shadowing) {
 
         public AppliedCallee {
             Objects.requireNonNull(at, "an application is applied somewhere, and a report about"
                     + " what it applies points there");
+            Objects.requireNonNull(shadowing, "an applied name hides something or hides nothing,"
+                    + " and which is the reading's answer");
+            // What is hidden is what the applied name would have reached, so an application of
+            // something that is not a name hides nothing.
+            if (name == null && shadowing instanceof Shadowing.Hides) {
+                throw new IllegalArgumentException("an application of something that is not a name"
+                        + " hides nothing a name would have reached: " + shadowing);
+            }
         }
 
         /** Whether what the author applied is a name — which is not whether a name is what stands
@@ -2667,12 +2703,38 @@ public interface Hir {
          * <p>What the author applied travels with the copy; where they wrote it does not. A body
          * spliced in from a source this compile cannot show carries no coordinate of that source, so
          * the occurrence goes and the places are the ones the copy stands at — the same answer a
-         * field read taken off a copied value gives, and for the same reason.
+         * field read taken off a copied value gives, and for the same reason. What the name hid
+         * travels with it: it is a reference to a declaration or a library name, which is the same
+         * one from any file.
          */
         public AppliedCallee restamped(SourcePos at, Region over) {
             return new AppliedCallee(name == null ? null
                     : WrittenName.synthetic(name.canonical(), at),
-                    over != null ? over : Region.point(at));
+                    over != null ? over : Region.point(at), shadowing);
+        }
+    }
+
+    /**
+     * What a binding in force hid from the name an application applies: what the same spelling
+     * reaches where no binding of it is in force, or nothing.
+     *
+     * <p>A name and not a declaration. The spelling may reach a module's helper or behavior, a
+     * library operation the library declares, or one the library rewrites into another call — and
+     * which of those is behind a library name is the library's to say, not the reading's.
+     */
+    sealed interface Shadowing {
+
+        /** A name that hid nothing: no binding won it, or nothing else was there to win. */
+        Shadowing NOTHING = new HidesNothing();
+
+        record HidesNothing() implements Shadowing {}
+
+        /** The binding in force hid {@code reached}, which the spelling reaches outside it. */
+        record Hides(ReachName.Declaration reached) implements Shadowing {
+
+            public Hides {
+                Objects.requireNonNull(reached, "what is hidden is something a name reaches");
+            }
         }
     }
 
@@ -2757,11 +2819,12 @@ public interface Hir {
         }
 
         /** What {@code function} answers as the applied callee, anchored at {@code where} it stands
-         *  when the callee is written nowhere at all. */
+         *  when the callee is written nowhere at all. It hid nothing: whether a binding hid what a
+         *  name reaches is the source reading's answer, and a composed application was not read. */
         private static AppliedCallee appliedCallee(Expr function, SourcePos where) {
             Region at = function.reportedAt();
             return new AppliedCallee(function instanceof Var v ? v.written() : null,
-                    at != null ? at : Region.point(where));
+                    at != null ? at : Region.point(where), Shadowing.NOTHING);
         }
 
         /**
@@ -3031,8 +3094,9 @@ public interface Hir {
                 });
                 Expr body = atExpr.apply(ex.body());
                 yield bound == ex.bound() && body == ex.body() ? ex
-                        : new Expansion(ex.callee(), ex.application(), ex.at(), bound, ex.given(),
-                                ex.declaredReturn(), body, ex.pos(), ex.region());
+                        : new Expansion(ex.callee(), ex.handover(), ex.application(), ex.at(),
+                                bound, ex.given(), ex.declaredReturn(), body, ex.pos(),
+                                ex.region());
             }
             case Materialised m -> {
                 Expr body = atExpr.apply(m.body());

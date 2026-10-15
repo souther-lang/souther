@@ -1,17 +1,22 @@
 package souther.compiler.check;
 
+import souther.compiler.cst.CstLexer;
 import souther.compiler.hash.SaysWhatStandsForIt;
 import souther.compiler.types.BinOp;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
 import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * What the invariant-discharge check names a value by — the identity two writings of one value
@@ -48,7 +53,7 @@ final class Term {
         /** A parameter of a closure, named by where it is bound rather than by which binding it is. */
         BOUND(Payload.of(At.class)),
         /** Fields read off a term that is not a place. */
-        ON(Payload.listOf(Payload.of(String.class))),
+        ON(Payload.of(FieldPath.class)),
         INT(Payload.of(Long.class)),
         DECIMAL(Payload.of(BigDecimal.class)),
         STRING(Payload.of(String.class)),
@@ -224,6 +229,21 @@ final class Term {
     private final List<Term> parts;
     private final int hash;
 
+    /**
+     * What stands for {@link #of} in the one order ({@link #textOf}), written the first time an
+     * ordering compares this term by it and read from here after.
+     *
+     * <p>Held by the term because the term is what is compared again: a walk sorts its terms one pair
+     * at a time, each pair in an ordering of its own, so one term is compared with many others and
+     * what it carries would be written out again for every one of them. Written when first asked
+     * rather than when the term is made, since most terms are never put in an order. Two threads
+     * that both find it unwritten write the same text, so either one's is the term's.
+     *
+     * <p>Outside the term's identity, as an answer worked out later and kept beside it is: it is
+     * written from {@link #of}, which the identity reads.
+     */
+    private volatile String carriedText;
+
 
     /**
      * How a term's hash is mixed with the hashes of its parts.
@@ -261,6 +281,14 @@ final class Term {
         ITS_ELEMENT_IF_ANY,
         /** The value it says stands for it ({@link SaysWhatStandsForIt}). */
         THE_PARTS_IT_NAMES,
+        /**
+         * The number it keeps, which it worked out from the number of the chain before it and the
+         * name read last ({@link FieldPath}). A chain is as long as a chain of declarations, so
+         * walking it at each term made one name longer would make naming every name of it cost the
+         * square of the chain; and what the kept number is taken from is a chain and a name, which
+         * are values, so it is a function of the names and of nothing else, as a walked number is.
+         */
+        ITS_NAMES,
         /** Nothing here takes a value of this class. */
         NONE_HERE
     }
@@ -298,6 +326,9 @@ final class Term {
         }
         if (type == Optional.class) {
             return Rule.ITS_ELEMENT_IF_ANY;
+        }
+        if (type == FieldPath.class) {
+            return Rule.ITS_NAMES;
         }
         // Asked before the question about records, because a value that keeps the number it is
         // asked for is a class here and may hold its parts in a record all the same: what it says
@@ -417,6 +448,7 @@ final class Term {
             case ITS_ELEMENTS -> elementsOf((List<?>) value);
             case ITS_UNORDERED_ELEMENTS -> unorderedOf((java.util.Set<?>) value);
             case ITS_ELEMENT_IF_ANY -> optionalOf((Optional<?>) value);
+            case ITS_NAMES -> value.hashCode();
             case NONE_HERE -> throw new IllegalStateException(
                     "nothing says what a term hashed from a " + type.getName() + " is hashed from");
         };
@@ -480,7 +512,7 @@ final class Term {
             if (by != 0) {
                 return by;
             }
-            by = textOf(one.of).compareTo(textOf(other.of));
+            by = one.carriedText().compareTo(other.carriedText());
             if (by != 0) {
                 return by;
             }
@@ -508,6 +540,16 @@ final class Term {
         }
     }
 
+    /** {@link #carriedText}, written now if no ordering has asked for it before. */
+    private String carriedText() {
+        String text = carriedText;
+        if (text == null) {
+            text = textOf(of);
+            carriedText = text;
+        }
+        return text;
+    }
+
     /** What stands for a value a shape carries, taken the way {@link #hashOf} takes it. */
     private static String textOf(Object value) {
         if (value == null) {
@@ -521,6 +563,7 @@ final class Term {
             case ITS_ELEMENTS -> elementTextOf((List<?>) value);
             case ITS_UNORDERED_ELEMENTS -> unorderedTextOf((java.util.Set<?>) value);
             case ITS_ELEMENT_IF_ANY -> optionalTextOf((Optional<?>) value);
+            case ITS_NAMES -> elementTextOf(((FieldPath) value).names());
             case NONE_HERE -> throw new IllegalStateException(
                     "nothing says what a term carrying a " + type.getName() + " is walked by");
         };
@@ -628,6 +671,52 @@ final class Term {
         return shape;
     }
 
+    /** The operation this term is a call of, or null where it is no call. */
+    ValueName calledOperation() {
+        return shape == Shape.CALLED ? (ValueName) of : null;
+    }
+
+    /**
+     * The whole number this term comes to where it is written whole numbers added, subtracted,
+     * multiplied or negated — or null where it is anything else, or the number is out of what an
+     * {@code Int} holds.
+     *
+     * <p>What it comes to and not how it is spelled: {@code 1000} and {@code 100 * 10} are one
+     * number, and a reader asking which divisor a remainder is by is asking the first. Read off the
+     * term and never built into it, since a term that was made one thing when it was written and
+     * another when it was read would be two derivations of one value.
+     */
+    Long foldedWholeNumber() {
+        BigInteger folded = foldedWhole();
+        return folded == null || folded.bitLength() >= Long.SIZE ? null : folded.longValueExact();
+    }
+
+    /** The same, in a number wide enough to hold every step, which is out of range only at the
+     *  end. */
+    private BigInteger foldedWhole() {
+        return switch (shape) {
+            case INT -> BigInteger.valueOf((Long) of);
+            case NEG -> {
+                BigInteger operand = parts.getFirst().foldedWhole();
+                yield operand == null ? null : operand.negate();
+            }
+            case OP -> {
+                BigInteger left = parts.get(0).foldedWhole();
+                BigInteger right = parts.get(1).foldedWhole();
+                if (left == null || right == null) {
+                    yield null;
+                }
+                yield switch ((BinOp) of) {
+                    case ADD -> left.add(right);
+                    case SUB -> left.subtract(right);
+                    case MUL -> left.multiply(right);
+                    default -> null;
+                };
+            }
+            default -> null;
+        };
+    }
+
     @Override
     public int hashCode() {
         return hash;
@@ -697,7 +786,7 @@ final class Term {
             case EVALUATION -> sb.append(of);
             case ON -> sb.append(parts.get(0).rendered()).append(path());
             case INT, DECIMAL, BOOL -> sb.append(of);
-            case STRING -> sb.append('"').append(of).append('"');
+            case STRING -> sb.append(CstLexer.literalOf((String) of));
             case UNIT -> sb.append(of);
             case NEG -> sb.append('-').append(parts.get(0).rendered());
             case NOT -> sb.append('!').append(parts.get(0).rendered());
@@ -743,7 +832,7 @@ final class Term {
 
     private String path() {
         StringBuilder sb = new StringBuilder();
-        for (String field : fields()) {
+        for (String field : fields().names()) {
             sb.append('.').append(field);
         }
         return sb.toString();
@@ -779,9 +868,8 @@ final class Term {
         }
     }
 
-    @SuppressWarnings("unchecked")
-    private List<String> fields() {
-        return (List<String>) of;
+    private FieldPath fields() {
+        return (FieldPath) of;
     }
 
     // --- how terms are built -------------------------------------------------------------------
@@ -829,22 +917,23 @@ final class Term {
          * chain from the root's own identity and a reader that builds it from the location answer
          * differently about one value, which is the identity question given two authorities.
          */
-        Term on(Term base, List<String> fields) {
+        Term on(Term base, FieldPath fields) {
             if (fields.isEmpty()) {
                 return base;
             }
             if (base.shape == Shape.AT) {
                 Location where = (Location) base.of;
-                List<String> whole = new ArrayList<>(where.path());
-                whole.addAll(fields);
-                return at(new Location(where.root(), whole));
+                return at(new Location(where.root(), where.fields().then(fields)));
             }
             if (base.shape == Shape.ON) {
-                List<String> whole = new ArrayList<>(base.fields());
-                whole.addAll(fields);
-                return of(Shape.ON, List.copyOf(whole), base.parts);
+                return of(Shape.ON, base.fields().then(fields), base.parts);
             }
-            return of(Shape.ON, List.copyOf(fields), List.of(base));
+            return of(Shape.ON, fields, List.of(base));
+        }
+
+        /** {@link #on(Term, FieldPath)}, the fields written out. */
+        Term on(Term base, List<String> fields) {
+            return on(base, FieldPath.of(fields));
         }
 
         Term written(long value) {
@@ -1042,6 +1131,28 @@ final class Term {
          * reads. */
         int size() {
             return shared.size();
+        }
+    }
+
+    /**
+     * Terms a reading names its positions by, asked which of the chains of names read off a value
+     * is one of them ({@link Terms#longestHeld}).
+     *
+     * <p>Told apart by which table it is, and not by what it holds: what {@link Terms} keeps of the
+     * answers it gave about one of these is kept for this one, so two tables holding alike are two
+     * tables to it.
+     */
+    static final class Chains {
+
+        private final Set<Term> held = new HashSet<>();
+
+        Chains(Collection<Term> terms) {
+            held.addAll(terms);
+        }
+
+        /** Whether {@code term} is one held here. */
+        boolean holds(Term term) {
+            return held.contains(term);
         }
     }
 

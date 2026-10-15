@@ -2,16 +2,18 @@ package souther.compiler.check;
 
 import souther.compiler.types.ReachName;
 
+import java.util.AbstractList;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Deque;
-import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.RandomAccess;
 import java.util.Set;
 
 /**
@@ -46,12 +48,19 @@ import java.util.Set;
  * narrows what a call reaches and changes nothing here: a graph taken over the narrowed table would
  * find the very helper being expanded non-recursive.
  *
- * <p>{@link #recurses} is membership over the same list — a linear scan — because a module's
- * recursive helpers are few; this reads a positional answer, it does not maintain a second index of
- * one.
+ * <p>{@link #recurses} is asked for each call while bodies are expanded and lowered, and a module has
+ * as many recursions as it was written with, together with every one in the prelude and its imports.
+ * So {@code recursive} is a list that answers membership by hash: the order is still the list's and
+ * is all its {@code equals} compares, and the index is part of how the list is held, not a second
+ * component that would have to agree with it. Every graph holds one, however it was built, because
+ * the constructor makes it.
  */
 public record HelperGraph(Map<ReachName.Declaration, Set<ReachName.Declaration>> callsOf,
                           List<ReachName.Declaration> recursive) {
+
+    public HelperGraph {
+        recursive = Recursions.of(recursive);
+    }
 
     /** The graph of {@code table}: what each declaration in it calls, and which of them recurse. */
     public static HelperGraph of(HelperTable table) {
@@ -60,13 +69,14 @@ public record HelperGraph(Map<ReachName.Declaration, Set<ReachName.Declaration>>
             callsOf.put(e.getKey(), HelperEdges.in(table.library(),
                     e.getValue().definition().writtenBody(), table.reachable()).calls());
         }
+        Map<ReachName.Declaration, Set<ReachName.Declaration>> onACycle = Cycles.groups(callsOf);
         List<ReachName.Declaration> recursive = new ArrayList<>();
         for (ReachName.Declaration reference : table.reachable().keySet()) {
-            if (reaches(callsOf, reference, reference, new HashSet<>())) {
+            if (onACycle.containsKey(reference)) {
                 recursive.add(reference);
             }
         }
-        return new HelperGraph(fixed(callsOf), List.copyOf(recursive));
+        return new HelperGraph(fixed(callsOf), recursive);
     }
 
     /**
@@ -91,30 +101,42 @@ public record HelperGraph(Map<ReachName.Declaration, Set<ReachName.Declaration>>
     }
 
     /**
-     * The declarations on a call cycle with {@code reference}: those it reaches through calls that
-     * reach it back, itself among them. Empty where it does not recurse.
+     * Each declaration on a call cycle, mapped to the declarations on it: those it reaches through
+     * calls that reach it back, itself among them. A declaration that does not recurse is not a key.
      *
-     * <p>Membership is asked with the predicate {@link #of} decides {@code recursive} with, and
-     * {@code reference} is a member exactly when it reaches itself — which is that predicate asked
-     * of it. So a declaration {@link #recurses} holds is on the cycle this answers for it, and one it
-     * does not hold has no cycle, by the one computation and not by two that happen to agree. A
-     * reader that relies on this — a group proven total is a group of no graphs where it is empty —
-     * still holds it to that ({@link TotalityChecker}).
+     * <p>The groups are the ones {@link #of} decides {@code recursive} with. So a declaration
+     * {@link #recurses} holds has a cycle here, and one it does not hold has none, by the one
+     * computation and not by two that happen to agree. A reader that relies on this — a group proven
+     * total is a group of no graphs where it is empty — still holds it to that
+     * ({@link TotalityChecker}).
      *
-     * <p>In the order the table holds them, which is the order they were declared. Worked out of the
-     * edges when asked rather than kept beside them: a graph's {@code equals} is what an answer built
-     * on it is compared by, and a second statement of the same edges would be a component that could
-     * only agree with them or be wrong.
+     * <p>Each cycle in the order the table holds its members, which is the order they were declared,
+     * and one list shared by every member of it. All of them at once, because a reader asking for
+     * one declaration's cycle asks for the next one's after it, and each answer is a walk of the
+     * whole graph. Worked out of the edges when asked rather than kept beside them: a graph's
+     * {@code equals} is what an answer built on it is compared by, and a second statement of the same
+     * edges would be a component that could only agree with them or be wrong.
      */
-    public List<ReachName.Declaration> callCycleOf(ReachName.Declaration reference) {
-        List<ReachName.Declaration> cycle = new ArrayList<>();
+    public Map<ReachName.Declaration, List<ReachName.Declaration>> callCycles() {
+        Map<ReachName.Declaration, Set<ReachName.Declaration>> groups = Cycles.groups(callsOf);
+        // By identity: every member of a group maps to the one set, and a set's own equals would
+        // read the whole group for each member.
+        Map<Set<ReachName.Declaration>, List<ReachName.Declaration>> declared = new IdentityHashMap<>();
         for (ReachName.Declaration member : callsOf.keySet()) {
-            if (reaches(callsOf, reference, member, new HashSet<>())
-                    && reaches(callsOf, member, reference, new HashSet<>())) {
-                cycle.add(member);
+            Set<ReachName.Declaration> group = groups.get(member);
+            if (group != null) {
+                declared.computeIfAbsent(group, _ -> new ArrayList<>()).add(member);
             }
         }
-        return List.copyOf(cycle);
+        declared.replaceAll((_, members) -> List.copyOf(members));
+        Map<ReachName.Declaration, List<ReachName.Declaration>> cycles = new LinkedHashMap<>();
+        for (ReachName.Declaration member : callsOf.keySet()) {
+            Set<ReachName.Declaration> group = groups.get(member);
+            if (group != null) {
+                cycles.put(member, declared.get(group));
+            }
+        }
+        return Collections.unmodifiableMap(cycles);
     }
 
     /** What {@code reference}'s body calls directly, or an empty set where it calls nothing this
@@ -137,23 +159,46 @@ public record HelperGraph(Map<ReachName.Declaration, Set<ReachName.Declaration>>
         return reached;
     }
 
-    /** Whether {@code target} is reachable from {@code from}. The library's helpers never call a module's
-     * own helpers, so a cycle stays within the module's own helpers. */
-    private static boolean reaches(Map<ReachName.Declaration, Set<ReachName.Declaration>> callsOf,
-                                   ReachName.Declaration from, ReachName.Declaration target,
-                                   Set<ReachName.Declaration> seen) {
-        Set<ReachName.Declaration> called = callsOf.get(from);
-        if (called == null) {
-            return false;
+    /**
+     * The recursions in order, with their membership answered by hash.
+     *
+     * <p>A {@link List} in everything a reader can tell: it iterates, compares and hashes as the
+     * sequence it holds, so it equals any list of the same declarations in the same order and no
+     * other. Only {@link #contains} reads the set, which holds the same declarations and so cannot
+     * answer differently from a scan of them.
+     */
+    private static final class Recursions extends AbstractList<ReachName.Declaration>
+            implements RandomAccess {
+
+        private final List<ReachName.Declaration> ordered;
+        private final Set<ReachName.Declaration> members;
+
+        private Recursions(List<ReachName.Declaration> ordered) {
+            this.ordered = ordered;
+            this.members = Set.copyOf(ordered);
         }
-        for (ReachName.Declaration c : called) {
-            if (c.equals(target)) {
-                return true;
+
+        static List<ReachName.Declaration> of(List<ReachName.Declaration> recursive) {
+            if (recursive instanceof Recursions already) {
+                return already;
             }
-            if (seen.add(c) && reaches(callsOf, c, target, seen)) {
-                return true;
-            }
+            List<ReachName.Declaration> ordered = List.copyOf(recursive);
+            return ordered.isEmpty() ? ordered : new Recursions(ordered);
         }
-        return false;
+
+        @Override
+        public ReachName.Declaration get(int index) {
+            return ordered.get(index);
+        }
+
+        @Override
+        public int size() {
+            return ordered.size();
+        }
+
+        @Override
+        public boolean contains(Object o) {
+            return members.contains(o);
+        }
     }
 }

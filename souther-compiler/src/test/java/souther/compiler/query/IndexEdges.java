@@ -417,6 +417,7 @@ final class IndexEdges {
     static Map<Part, WhatAComponentHolds> whatEachComponentHolds() {
         Map<Part, WhatAComponentHolds> out = new LinkedHashMap<>();
         holds(out, Bodies.Expanding.class, "policy", WhatAComponentHolds.HOW_TO_READ_IT);
+        holds(out, Bodies.ImportedDefinitions.class, "policy", WhatAComponentHolds.HOW_TO_READ_IT);
         holds(out, Bodies.RecursiveCallSigs.class, "policy", WhatAComponentHolds.HOW_TO_READ_IT);
         holds(out, Bodies.WrittenIntoBody.class, "policy", WhatAComponentHolds.HOW_TO_READ_IT);
         holds(out, Bodies.StandingRecursionsOfBody.class, "policy",
@@ -439,6 +440,7 @@ final class IndexEdges {
         names(out, Bodies.LoweredBody.class, "fn");
         names(out, Bodies.Assumptions.class, "behavior");
         names(out, Adequacy.InputsOf.class, "behavior");
+        names(out, Adequacy.ReadsOf.class, "behavior");
         names(out, Bodies.BehaviorAritiesForBody.class, "fn");
         names(out, Bodies.BehaviorsReached.class, "behavior");
         names(out, Bodies.BodyForInvariantDischarge.class, "fn");
@@ -455,6 +457,7 @@ final class IndexEdges {
         names(out, Bodies.Stated.class, "behavior");
         names(out, Bodies.WrittenIntoBody.class, "fn");
         names(out, Machines.OfDeclaration.class, "named");
+        names(out, Names.CasesListedBy.class, "named");
         names(out, Names.CompilationDeclares.class, "named");
         names(out, Names.Declaration.class, "named");
         names(out, Names.DeclarationIsNewtype.class, "named");
@@ -467,11 +470,15 @@ final class IndexEdges {
         names(out, Shapes.ClausesExpandedFor.class, "named");
         names(out, Shapes.DerivedDef.class, "named");
         names(out, Shapes.EffectiveFieldTypesOf.class, "named");
+        names(out, Shapes.EnumerationsListing.class, "named");
         names(out, Shapes.FieldBindingsOf.class, "named");
         names(out, Shapes.FieldLayoutOf.class, "named");
         names(out, Shapes.MeaningOf.class, "named");
         names(out, Shapes.NewtypeInnerOf.class, "named");
+        names(out, Shapes.NewtypeTerminalOf.class, "named");
+        names(out, Shapes.ReadingOwnerOf.class, "named");
         names(out, Shapes.NormalizedDef.class, "named");
+        names(out, Shapes.SumCasesOf.class, "sum");
         return out;
     }
 

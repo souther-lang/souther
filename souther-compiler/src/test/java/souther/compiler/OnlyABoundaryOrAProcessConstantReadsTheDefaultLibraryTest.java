@@ -38,11 +38,19 @@ class OnlyABoundaryOrAProcessConstantReadsTheDefaultLibraryTest {
             // A compile: read once as it starts, and handed to everything it reaches.
             "query/Compilation.java",
             // `souther api`, which lists the library and is downstream of no compile.
-            "doc/ApiCommand.java");
+            "doc/ApiCommand.java",
+            // The build proving the library it ships, which is downstream of no compile.
+            "check/LibraryProofsAsBuilt.java");
 
     /** Rule tables derived from the shipped library and from nothing else. */
     private static final Set<String> PROCESS_CONSTANTS = Set.of(
+            // Which library operations hold each element of a list under its key, read off their
+            // bodies.
+            "check/AnIndexedMap.java",
             "check/Combinators.java",
+            // Which library operations file one value under one key, read off their bodies.
+            "check/KeyedAccumulation.java",
+            "check/LibraryReadThrough.java",
             "check/Preserved.java",
             "check/Reductions.java",
             // The facts about the language's operations, held to the shipped library once.
@@ -50,7 +58,8 @@ class OnlyABoundaryOrAProcessConstantReadsTheDefaultLibraryTest {
 
     /** What building a library must not need, because it is what building one produces. */
     private static final List<String> WHAT_THE_LOADER_MAY_NOT_READ = List.of(
-            "DefaultStdlib", "Combinators", "Preserved", "Accumulations", "Reductions",
+            "DefaultStdlib", "Combinators", "LibraryReadThrough", "Preserved", "Accumulations",
+            "Reductions", "KeyedAccumulation", "AnIndexedMap",
             "DischargeRules", "DefaultBoundOperationFacts", "OperationFactBinder");
 
     @Test

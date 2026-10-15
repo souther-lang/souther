@@ -35,5 +35,9 @@ public enum AdequacyOpeningWord {
 
     /** And the same point again, where nothing was stopped and nothing arrived: no showing was
      *  made, so there is no limit to raise and nothing to name. */
-    NOTHING_SHOWED_IT
+    NOTHING_SHOWED_IT,
+
+    /** An obligation every row of which reaches an {@code unreachable} the body states, which
+     *  nothing here proves: no row there can be written, and the obligation is not met either. */
+    EVERY_ROW_REACHES_AN_UNREACHABLE
 }

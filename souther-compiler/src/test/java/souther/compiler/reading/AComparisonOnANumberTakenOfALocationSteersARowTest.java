@@ -158,8 +158,9 @@ class AComparisonOnANumberTakenOfALocationSteersARowTest {
         // A leaf is a case that covers itself, which is what the checker's resolution of the arm
         // says, so selecting it narrows the position to that one distinction.
         TermPath underNamed = TermPath.of("slot").refine(
-                souther.compiler.inputs.Refinement.of(souther.compiler.types.ResolvedCase.of(
-                        souther.compiler.types.CaseSelector.direct(named), List.of(named))))
+                souther.compiler.inputs.Refinement.allOf(souther.compiler.types.ResolvedCase.of(
+                        souther.compiler.types.CaseSelector.direct(named), List.of(named)))
+                        .getFirst())
                 .then("c");
 
         assertEquals(List.of(read.lengthAt(underNamed)),
@@ -342,7 +343,7 @@ class AComparisonOnANumberTakenOfALocationSteersARowTest {
         }
 
         NumericTerm lengthAt(TermPath at) {
-            NumericTerm.TakenOf taken = NumericTerm.TakenOf.of(
+            NumericTerm.TakenOf taken = NumericTerm.TakenOf.asItStands(
                     NumericMeasures.takenOf(Type.STRING, souther.compiler.check.ScopedDeclarations.wrapsOf(symbols)),
                 at, Type.STRING, souther.compiler.check.ScopedDeclarations.wrapsOf(symbols),
                 symbols);
@@ -361,9 +362,9 @@ class AComparisonOnANumberTakenOfALocationSteersARowTest {
         assertNotNull(body, "the behavior under test has a body");
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         InputDomain inputs = compilation.db().ask(new Adequacy.Inputs(module)).value().get("gate");
-        return new Read(CoverageRead.of("gate", body,
-                checked.plan(),
-                inputs, rules), rules.symbols());
+        return new Read(CoverageRead.of("gate",
+                checked.run("gate"),
+                inputs.reading(rules)), rules.symbols());
     }
 
     /** What a row for such an arm is written as, which is the value the class asks for. */

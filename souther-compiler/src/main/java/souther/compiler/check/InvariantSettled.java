@@ -78,7 +78,7 @@ public final class InvariantSettled {
      */
     public static InvariantSettled settle(Expandable expandable, Symbols scope,
                                           DeclarationKinds kinds,
-                                          Map<String, Hir.FnDef> published) {
+                                          ClosedImports published) {
         return new InvariantSettled(
                 ClauseHelpers.withSettledInvariants(expandable.module(), scope, kinds, published));
     }

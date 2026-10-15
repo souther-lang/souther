@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.OrderedInterval;
+import souther.compiler.numeric.ValueTransformation;
 import souther.compiler.semantics.TakenArguments;
 import souther.compiler.types.ValueName;
 
@@ -36,9 +37,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class WhatAChoiceOfTwoBoundaryReadingsLeavesIsTheSameEitherWayRoundTest {
 
     private static final DerivedNumber LENGTH = new DerivedNumber(RuleKey.of("s"),
-            ValueName.Stdlib.operation("String", "length"), TakenArguments.NONE);
+            ValueName.Stdlib.operation("String", "length"), TakenArguments.NONE,
+            ValueTransformation.NONE);
     private static final DerivedNumber SIZE = new DerivedNumber(RuleKey.of("t"),
-            ValueName.Stdlib.operation("Set", "size"), TakenArguments.NONE);
+            ValueName.Stdlib.operation("Set", "size"), TakenArguments.NONE,
+            ValueTransformation.NONE);
 
     /** Two lines an author wrote, told apart by being the ones they are. */
     private static final OpenEnd ONE_LINE = new OpenEnd(LENGTH);

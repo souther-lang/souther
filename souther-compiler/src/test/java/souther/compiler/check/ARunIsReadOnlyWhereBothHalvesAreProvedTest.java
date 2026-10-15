@@ -207,7 +207,7 @@ class ARunIsReadOnlyWhereBothHalvesAreProvedTest {
         BindingId parameter = elements.provenance().projectedFrom().keySet().iterator().next();
         BindingId source = elements.provenance().projectedFrom(parameter);
         BindingId element = elements.projected().keySet().iterator().next();
-        Core container = elements.containersOf(element).get(0);
+        Core container = elements.containersOf(element).get(0).container();
 
         assertTrue(ElementBindings.readsWhatIsHeldBy(container, source, elements.held()),
                 "the element the projection was hung on is an element of the container the licence"

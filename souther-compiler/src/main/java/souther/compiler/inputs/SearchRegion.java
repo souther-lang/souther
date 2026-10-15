@@ -1,11 +1,14 @@
 package souther.compiler.inputs;
 
+import souther.compiler.numeric.Congruences;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.PlacesApart;
 import souther.compiler.numeric.Rel;
+import souther.compiler.values.ValueSet;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -204,10 +207,92 @@ public interface SearchRegion {
      */
     NumericDomain.FormProjection projectionOf(LinearForm<NumericTerm> form);
 
+    /**
+     * The class of whole numbers the remainders already fixed leave the value at {@code place} in
+     * together, or null where none is fixed or no number leaves them all.
+     *
+     * <p>{@link #projectionOf} says where the value runs and not which numbers of the run it may be:
+     * a search that chooses it is held to this as well. A region that fixes no remainder says
+     * nothing of one, which is what the default is.
+     */
+    default Congruences valueClassAt(NumericTerm.ValueOf place) {
+        return null;
+    }
+
+    /**
+     * The values the declarations of the position {@code term} is read of admit it, as far as they
+     * were read.
+     *
+     * <p>Beside {@link #valueClassAt} and for the same reason: a range says where a value runs and
+     * not which values of the run the position may hold, and a position held to {@code "a"} or
+     * {@code "b"} holds none of the strings between them. Read and not proved: what the rules that
+     * were read admit, so a value outside it is refused and a value inside it is not shown to be one
+     * a row can hold. A region that reads no position says nothing of one, which is what the default
+     * is.
+     *
+     * <p>Values of the position whatever {@code term} takes of it: the strings of a string, and not
+     * its lengths. What those come to as the number {@code term} is, is {@link #heldAt}.
+     */
+    default ValueSet admittedAt(NumericTerm.FromOnePosition term) {
+        return ValueSet.ANY;
+    }
+
+    /**
+     * The values the declarations hold the number {@code term} to, on the order it is answered on.
+     *
+     * <p>The position's own values where {@code term} is its value, and the numbers they come to
+     * where {@code term} is a number taken of it: a string held to {@code "a"} or {@code "bbb"} is
+     * held to a length of one or three. The one answer every reader of such a number takes — a
+     * border refusing a point, a class standing for a run, a search walking the numbers — so that
+     * none of them puts the strings to the lengths, which admits no length at all, or reads the
+     * strings through the term again on its own.
+     *
+     * <p>Only ever as wide as {@link #admittedAt}: every value where the numbers were not worked
+     * out.
+     */
+    default ValueSet heldAt(NumericTerm.FromOnePosition term) {
+        return ValueSet.ANY;
+    }
+
+    /**
+     * Every value the declarations admit the position {@code terms} are taken of, each with what
+     * every one of them reads of it — or null where that is not worked out.
+     *
+     * <p>What a reader asking several numbers of one position together asks, and never the sets
+     * {@link #heldAt} answers for each of them met with one another. Which value comes to which
+     * numbers is what those sets leave out, so a combination each set holds a number of may be one
+     * no value comes to.
+     *
+     * <p>Null where the terms are not all of one position, where the position admits no finite set
+     * of values, or where a value of it is read as no number of one of the terms: a reader then
+     * knows nothing of the values together, as a region that reads no position does not, which is
+     * what the default is.
+     */
+    default ReadingsOfEachValue readingsOfEach(List<NumericTerm.FromOnePosition> terms) {
+        return null;
+    }
+
     /** The same, of one term — the one-term case of the question above and not a second answer to
      *  it. */
     default NumericDomain.FormProjection projectionOf(NumericTerm term) {
         return projectionOf(LinearForm.atom(term));
+    }
+
+    /**
+     * A run of {@code term} every value of which some row in this region takes, at the term's own
+     * spacing — or null where that is not shown.
+     *
+     * <p>Not {@link #projectionOf}, which is where the values lie: a run can be known without being
+     * filled, its ends can be rounded past the rules', and a value can be taken out of it
+     * ({@link #apartAt}) or the values held to a class of whole numbers ({@link #valueClassAt}).
+     * This is shown of all of that at once and answered as the run itself, so a reader is never
+     * left to put a range from one answer together with a proof from another.
+     *
+     * <p>Null where nothing showed it, which is not that the run has gaps — and so for a region
+     * that has no proof to give, which is what the default is.
+     */
+    default NumericDomain.Bounds wholeRunOf(NumericTerm.FromOnePosition term) {
+        return null;
     }
 
     /**

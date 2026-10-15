@@ -93,6 +93,15 @@ class PartitionReadsAPositionRatherThanReinterpretingItTest {
             new Authority("which binding each field of a declaration introduces inside its own"
                             + " invariant",
                     "souther.compiler.check.TypeOps#fieldBindings", Traversal.OPAQUE),
+            new Authority("what each rule a declaration publishes says about strings, as the"
+                            + " checker typed it",
+                    "souther.compiler.check.StringPredicates#statedOn", Traversal.OPAQUE),
+            new Authority("what the rules written on a name keep the elements of its value apart"
+                            + " at",
+                    "souther.compiler.check.ElementsApart#writtenOn", Traversal.OPAQUE),
+            new Authority("which clauses building a value checks, in the order it checks them,"
+                            + " and what each states of the value built",
+                    "souther.compiler.check.ClausesInOrder#at", Traversal.OPAQUE),
             new Authority("how a type is written where an author reads it",
                     "souther.compiler.types.Type#show", Traversal.OPAQUE),
 

@@ -9,7 +9,6 @@ import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
 import souther.compiler.core.Core;
-import souther.compiler.coverage.CoverageSites;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.reading.Interaction;
 import souther.compiler.reading.CoverageRead;
@@ -135,7 +134,7 @@ class AGroupTooWideToWalkSaysSoTest {
     void aGroupPastTheLimitIsHeldBackAndSaidSo() {
         Model model = Model.of(THIRTEEN);
         InteractionCells.Offered offered =
-                InteractionCells.of(model.groups(), model.subject().axes().axes(), Budgets.generation().cellsPerGroup());
+                InteractionCells.of(model.groups(), model.subject().axes(), Budgets.generation().cellsPerGroup());
 
         assertEquals(List.of(), offered.groups(),
                 "the group is not offered, which is what the limit is for");
@@ -150,7 +149,7 @@ class AGroupTooWideToWalkSaysSoTest {
     void andUnderTheLimitTheGroupIsOffered() {
         Model model = Model.of(TWELVE);
         InteractionCells.Offered offered =
-                InteractionCells.of(model.groups(), model.subject().axes().axes(), Budgets.generation().cellsPerGroup());
+                InteractionCells.of(model.groups(), model.subject().axes(), Budgets.generation().cellsPerGroup());
 
         assertEquals(List.of(), offered.notOffered(),
                 "nothing is held back");
@@ -176,14 +175,14 @@ class AGroupTooWideToWalkSaysSoTest {
     @Test
     void aGroupOfExactlyTheBudgetIsOffered() {
         Model model = Model.of(TWO);
-        assertEquals(4, InteractionCells.of(model.groups(), model.subject().axes().axes(),
+        assertEquals(4, InteractionCells.of(model.groups(), model.subject().axes(),
                         atMost(4).cellsPerGroup()).groups().get(0).size(),
                 "two decisions of two outcomes are four choices");
 
-        assertEquals(List.of(), InteractionCells.of(model.groups(), model.subject().axes().axes(),
+        assertEquals(List.of(), InteractionCells.of(model.groups(), model.subject().axes(),
                         atMost(4).cellsPerGroup()).notOffered(),
                 "a group of exactly the budget is offered");
-        assertEquals(1, InteractionCells.of(model.groups(), model.subject().axes().axes(),
+        assertEquals(1, InteractionCells.of(model.groups(), model.subject().axes(),
                         atMost(3).cellsPerGroup()).notOffered().size(),
                 "and one choice past it is not");
     }
@@ -383,7 +382,7 @@ class AGroupTooWideToWalkSaysSoTest {
         AdequacyPolicy.OfTheGeneration budget = atMost(8);
 
         InteractionCells.Offered offered =
-                InteractionCells.of(model.groups(), model.subject().axes().axes(), budget.cellsPerGroup());
+                InteractionCells.of(model.groups(), model.subject().axes(), budget.cellsPerGroup());
         assertEquals(1, offered.notOffered().size(), "the outer group is past the budget");
         assertEquals(3, offered.groups().size(), "and the three inner ones are offered");
 
@@ -442,14 +441,13 @@ class AGroupTooWideToWalkSaysSoTest {
             InputDomain inputs = compilation.db()
                     .ask(new souther.compiler.query.Adequacy.Inputs(module)).value().get("total");
             assertNotNull(inputs, "the behavior's inputs were read");
-            Partitions.Partitioning partitioning = Partitions.of(spec.name(), inputs, rules,
+            Partitions.Partitioning partitioning = Partitions.of(spec.name(), inputs.reading(rules),
                     souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
             Core body = checked.behaviorBodies().get("total");
             assertNotNull(body, "the behavior under test has a body");
-            CoverageSites.Plan plan = checked.plan();
             return new Model(MeasuredInput.of(spec.name(), inputs.reading(rules),
                     partitioning),
-                    CoverageRead.of("total", body, plan, inputs, rules));
+                    CoverageRead.of("total", checked.run("total"), inputs.reading(rules)));
         }
     }
 }

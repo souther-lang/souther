@@ -4,10 +4,12 @@ import org.junit.jupiter.api.Test;
 
 import souther.test.RepositoryLayout;
 
+import souther.compiler.carrier.Membership;
 import souther.compiler.check.DeclaredBounds;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
+import souther.compiler.check.TypeCardinality;
 import souther.compiler.check.DeclaredSig;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.Position;
@@ -64,8 +66,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class AConstructionPositionIsNotAnInputPositionTest {
 
     /** The rules counting nothing, which is what every model here leaves them saying. */
-    private static final ConstructionPlan.HowManyItHolds ANY =
-            (_, _) -> new DeclaredBounds.CountRange(0, Integer.MAX_VALUE);
+    private static final ConstructionPlan.WhatItMayHold ANY = (_, _) ->
+            ConstructionPlan.ItMayHold.counting(new DeclaredBounds.CountRange(0, Integer.MAX_VALUE));
 
 
     /** Read once: what this asks of it does not change between its checks. */
@@ -91,8 +93,10 @@ class AConstructionPositionIsNotAnInputPositionTest {
     }
 
     private static InputDomain reading(Read read) {
-        return InputDomain.of(read.sig(),
-                RuleReadingContext.unshared(read.rules(), ReadAs.THE_COMPILATION_DOES));
+        RuleReadingContext context =
+                RuleReadingContext.unshared(read.rules(), ReadAs.THE_COMPILATION_DOES);
+        return InputDomain.of(read.sig(), context, TypeCardinality.Counts.workedOutIn(context),
+                Membership.none());
     }
 
     /** The plan for the behavior's one parameter, with nothing decided and the given
@@ -100,8 +104,8 @@ class AConstructionPositionIsNotAnInputPositionTest {
     private static ConstructionPlan plan(Read read, Requirements required) {
         ConstructionPlan.Result planned = ConstructionPlan.of(read.only().type(),
                 TermPath.of(read.only().name()), read.rules().inners(), read.rules().symbols(),
-                read.rules().published(), Set.of(),
-                required,
+                read.rules().kinds(), read.rules().sums(), Set.of(),
+                required, ConstructionPlan.ContentsComposed.NONE,
                 ANY);
         return assertInstanceOf(ConstructionPlan.Result.Planned.class, planned,
                 "nothing here asks one position to be two things").plan();
@@ -256,8 +260,8 @@ class AConstructionPositionIsNotAnInputPositionTest {
     /** The narrowing to one leaf, spelled the way the checker's resolution of an arm spells it: a
      *  leaf is a case that covers itself, so selecting it narrows to that one distinction. */
     private static Refinement toLeaf(TypeSymbol leaf) {
-        return Refinement.of(souther.compiler.types.ResolvedCase.of(
-                CaseSelector.direct(leaf), java.util.List.of(leaf)));
+        return Refinement.allOf(souther.compiler.types.ResolvedCase.of(
+                CaseSelector.direct(leaf), java.util.List.of(leaf))).getFirst();
     }
 
     /** The name of the case to build through, taken off a behavior that is declared to take one. */

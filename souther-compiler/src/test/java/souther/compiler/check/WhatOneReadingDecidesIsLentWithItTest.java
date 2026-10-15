@@ -9,7 +9,8 @@ import souther.compiler.query.ReadAs;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeSymbols;
-import souther.compiler.values.KnownExtents;
+import souther.compiler.revision.RevisionKnowledge;
+import souther.compiler.revision.StoreWork;
 import souther.compiler.values.StringMachineAnswers;
 
 import java.util.List;
@@ -113,6 +114,7 @@ class WhatOneReadingDecidesIsLentWithItTest {
         long few = readingsMadeCompiling(MODULE);
         long many = readingsMadeCompiling(MORE_QUESTIONS);
 
+        assertTrue(few > 0, "the model made no reading, so this measures nothing");
         assertEquals(few, many,
                 () -> "a model with more questions over the same declarations read them " + many
                         + " times against " + few + ", so a question reaching a declaration is"
@@ -153,10 +155,12 @@ class WhatOneReadingDecidesIsLentWithItTest {
         FieldDomains canonical = asTheCompilationReads(compilation, "Held");
         TypeSymbol.AtModule held = declared("Held");
         RuleReadingSource source = RuleReadings.of(compilation, "demo");
-        FieldDomains granting = FieldDomains.granting(held,
-                RuleReadingContext.of(source, ReadAs.THE_COMPILATION_DOES,
-                        compilation.db().readings()),
-                Set.of(declared("Common")));
+        RuleReadingContext reading = RuleReadingContext.of(source, ReadAs.THE_COMPILATION_DOES,
+                compilation.db().readings());
+        Supposing supposing = Supposing.of(Set.of(declared("Common")),
+                new Supposing.Across(source));
+        FieldDomains granting = FieldDomains.of(supposing.readingOf(held, reading), reading,
+                supposing.reach());
 
         assertNotSame(canonical, granting,
                 "a reading that supposes a declaration has values is not the declaration's own");
@@ -256,8 +260,8 @@ class WhatOneReadingDecidesIsLentWithItTest {
             }
 
             @Override
-            public KnownExtents extents() {
-                return store.extents();
+            public RevisionKnowledge revision() {
+                return store.revision();
             }
         };
     }

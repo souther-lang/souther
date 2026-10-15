@@ -119,7 +119,12 @@ public final class SourceLayout implements LaidOutText {
 
     /** The layout of a file this compile holds, or of no named file when {@code sourceId} is null. */
     public static SourceLayout of(String text, SourceId sourceId) {
-        return of(text, sourceId == null ? Placement.aTextWithNoIdentity()
+        return of(CstParser.parse(text).root(), text, sourceId);
+    }
+
+    /** The same, for a caller that has already parsed the text and holds the tree. */
+    public static SourceLayout of(SyntaxNode root, String text, SourceId sourceId) {
+        return of(root, text, sourceId == null ? Placement.aTextWithNoIdentity()
                 : Placement.aFileOfThisCompile(sourceId));
     }
 

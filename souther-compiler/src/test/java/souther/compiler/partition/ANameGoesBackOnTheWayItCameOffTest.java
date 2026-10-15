@@ -54,7 +54,10 @@ class ANameGoesBackOnTheWayItCameOffTest {
             data DecisionNN = DecisionN
 
             behavior run : (x: DecisionN) -> Ok
-            let run (x) = Ok
+            let run (x) =
+                match x.value with
+                    | Approved -> Ok
+                    | Rejected -> Ok
             """;
 
     private final RuleReadingSource rules = RuleReadings.ofSource(MODULE);
@@ -80,7 +83,8 @@ class ANameGoesBackOnTheWayItCameOffTest {
     @Test
     void theNamesAreReadOffOutermostFirst() {
         assertEquals(List.of("DecisionNN", "DecisionN"),
-                TypeView.asWritten(Type.ref(named("DecisionNN")), rules.symbols(), rules.published())
+                TypeView.asWritten(Type.ref(named("DecisionNN")), rules.symbols(), rules.kinds(),
+                                rules.sums())
                         .wrappers().stream()
                         .map(TypeSymbol::name).toList());
     }
@@ -197,7 +201,8 @@ class ANameGoesBackOnTheWayItCameOffTest {
 
     private List<String> written(PartitionClass each) {
         return Partitions.standingFor(each.representatives(), RuleReadingContext.unshared(rules,
-                souther.compiler.query.ReadAs.THE_COMPILATION_DOES), java.util.Set.of()).stream()
+                souther.compiler.query.ReadAs.THE_COMPILATION_DOES), java.util.Set.of())
+                .values().stream()
                 .map(FixtureTemplate::text).toList();
     }
 }

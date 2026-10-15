@@ -3,12 +3,17 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.Citation;
+import souther.compiler.meaning.WhyNotTaken;
+import souther.compiler.meaning.WhyUnread;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Sites;
+import souther.compiler.semantics.OperationLaw;
+import souther.compiler.semantics.Unsayable;
 import souther.compiler.sites.WrittenCondition;
 import souther.compiler.types.SourceConstructOrigin;
+import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -39,25 +44,32 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class AConditionOnTheWayIsNamedHereAndPlacedByWhoeverWroteItTest {
 
+    /** Why a fork on {@code String.startsWith} is declined: what it answers is one string standing
+     *  inside another, which nothing here has words for. */
+    private static final WhyNotTaken STARTS_WITH_HAS_NO_WORDS = new WhyNotTaken.MeaningUnread(
+            new WhyUnread.NoWordsFor(new ValueName.Stdlib.Operation("String", "startsWith"),
+                    OperationLaw.Observed.TRUTH, Unsayable.A_STRING_INSIDE_ANOTHER));
+
     /**
      * Two forks on a truth this reading has no words for, one inside the other.
      *
-     * <p>A {@code Bool} that is not a comparison is where {@link Condition} stops, so each of these
-     * is declined for the one reason — which is what makes the pair the thing under test. Innermost
-     * is a fork on a comparison, so the account of what stands on the way to the arm under it holds
-     * one of each: two conditions this reading has no words for, and one it took in.
+     * <p>What a string operation answers is a truth no position holds and no comparison means, so
+     * each of these is declined for the one reason — which is what makes the pair the thing under
+     * test. Innermost is a fork on a comparison, so the account of what stands on the way to the
+     * arm under it holds one of each: two conditions this reading has no words for, and one it took
+     * in.
      */
     private static String model(String beforeTheBody) {
         return """
                 module example.way
 
-                behavior twoUnread : (a: Bool, b: Bool, n: Int) -> Bool
+                behavior twoUnread : (a: String, b: String, n: Int) -> Bool
                 """
                 + beforeTheBody
                 + """
                 let twoUnread (a, b, n) =
-                    if a then
-                        if b then
+                    if String.startsWith("w-", a) then
+                        if String.startsWith("w-", b) then
                             if n > 3 then n > 0 else n < 0
                         else
                             n < 0
@@ -82,9 +94,8 @@ class AConditionOnTheWayIsNamedHereAndPlacedByWhoeverWroteItTest {
             }
         }
         assertEquals(2, declined.size(), () -> "both forks are on the way: " + declined);
-        assertEquals(List.of(new OnTheWay.Why.NoWordsForTheShape(),
-                        new OnTheWay.Why.NoWordsForTheShape()),
-                declined.stream().map(OnTheWay.Declined::why).toList(),
+        assertEquals(List.of(List.of(STARTS_WITH_HAS_NO_WORDS), List.of(STARTS_WITH_HAS_NO_WORDS)),
+                declined.stream().map(OnTheWay.Declined::whys).toList(),
                 "and for the one reason, which is what leaves the name doing the telling apart");
         assertNotEquals(declined.get(0), declined.get(1),
                 () -> "two conditions this compiler tells apart: " + declined);
@@ -155,16 +166,16 @@ class AConditionOnTheWayIsNamedHereAndPlacedByWhoeverWroteItTest {
         String source = """
                 module example.twice
 
-                behavior oneCondition : (a: Bool, n: Int) -> Bool
+                behavior oneCondition : (a: String, n: Int) -> Bool
                 let oneCondition (a, n) =
-                    if a && n > 3 then n > 0 else n < 0
+                    if String.startsWith("w-", a) && n > 3 then n > 0 else n < 0
                 """;
         Compilation compilation = compiledFrom(source);
         List<OnTheWay.Declined> named = new ArrayList<>();
         for (List<OnTheWay> way : waysIn(compilation, "oneCondition")) {
             for (OnTheWay each : way) {
                 if (each instanceof OnTheWay.Declined left
-                        && left.why() instanceof OnTheWay.Why.NoWordsForTheShape) {
+                        && left.whys().equals(List.of(STARTS_WITH_HAS_NO_WORDS))) {
                     named.add(left);
                 }
             }
@@ -219,12 +230,11 @@ class AConditionOnTheWayIsNamedHereAndPlacedByWhoeverWroteItTest {
                     else
                         n > 5
                 """;
-        List<OnTheWay.Declined> declined = new ArrayList<>();
+        List<OnTheWay.OneOf> declined = new ArrayList<>();
         for (List<OnTheWay> way : waysIn(compiledFrom(source), "calledTwice")) {
             for (OnTheWay each : way) {
-                if (each instanceof OnTheWay.Declined left
-                        && left.why() instanceof OnTheWay.Why.OneOfTwoThings) {
-                    declined.add(left);
+                if (each instanceof OnTheWay.OneOf several) {
+                    declined.add(several);
                 }
             }
         }
@@ -252,11 +262,13 @@ class AConditionOnTheWayIsNamedHereAndPlacedByWhoeverWroteItTest {
      */
     @Test
     void aValueThatNamesOneConditionAndReportsAnotherIsRefused() {
-        ConditionOccurrence declined = new ConditionOccurrence("b", 0);
-        ConditionOccurrence reported = new ConditionOccurrence("b", 1);
+        ConditionOccurrence declined =
+                new ConditionOccurrence("b", ConditionOccurrence.Reading.DIVIDING, 0);
+        ConditionOccurrence reported =
+                new ConditionOccurrence("b", ConditionOccurrence.Reading.DIVIDING, 1);
         assertThrows(IllegalArgumentException.class, () -> new OnTheWay.Declined(declined,
                 new ConditionReportAnchor.WhereTheReadingMetIt("m", reported),
-                new OnTheWay.Why.NoWordsForTheShape()));
+                new WhyNotTaken.OutsideDomain(WhyNotTaken.DomainLimit.A_QUANTITY_ON_NO_ORDER)));
     }
 
     /**

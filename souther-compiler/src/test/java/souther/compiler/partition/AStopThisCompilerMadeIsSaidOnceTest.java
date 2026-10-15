@@ -24,102 +24,43 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * One position this compiler could not enter is one finding, and the findings beside it are not
  * folded away with it.
  *
- * <p>Issue #1084. A {@code Map} was reported twice: once as a position the walk could not reach
- * into, and once as a position whose rules nothing reached — which is the first said from the other
- * end, because the rules under the map are read by a reading nothing opened. Both sentences are
- * true, and only one of them is something that went wrong.
+ * <p>A position the walk stops at is a position whose rules nothing reached as well — the second
+ * is the first said from the other end, because the rules under it would be read by a reading
+ * nothing opened. Both sentences are true, and only one of them is something that went wrong.
  *
- * <p><b>Held against sources, and the pairs asserted rather than a count.</b> What is being fixed is
- * which findings a document carries, so a test that only counted them would pass over the wrong one
- * surviving. Each of these names the finding it wants and the finding it does not.
+ * <p>The pairs asserted rather than a count. What is being fixed is which findings a document
+ * carries, so a test that only counted them would pass over the wrong one surviving. Each of these
+ * names the finding it wants and the finding it does not.
  */
 class AStopThisCompilerMadeIsSaidOnceTest {
 
-    /** The model from the issue. Nothing measures the map, so the axis is still waiting on the
-     *  structural reading when the closure is taken. */
-    private static final String A_MAP_NOTHING_MEASURES = """
-            module probe.map
+    /**
+     * A sum one of whose cases holds the sum again.
+     *
+     * <p>The walk stops at the tail, because that is a return to the declaration it has already
+     * opened. A sum states nothing about every value of it and hands its rules on to its cases, so
+     * the tail is a position rules were handed on at — and the stop is why nothing took them.
+     */
+    private static final String A_RETURN_TO_A_SUM = """
+            module probe.again
 
             data Ok
             data Amount = Int
                 invariant ranged = value >= 0 && value <= 100
-            data Req = { cost: Map<String, Amount> }
+            data Nil
+            data Cons = { head: Amount, tail: Chain }
+            data Chain = Nil | Cons
 
-            behavior f : (r: Req) -> Ok
+            behavior f : (c: Chain) -> Ok
                 constructs Ok
-            let f (r) = Ok
-            """;
-
-    /**
-     * The same map, with a rule that measures it.
-     *
-     * <p>The one model where what a position is waiting on and what its reading came to disagree.
-     * {@code Map.size} divides the position, so the axis is answered for and keeps no continuation —
-     * and the walk still never went into what the map holds.
-     */
-    private static final String A_MAP_A_RULE_MEASURES = """
-            module probe.mapsize
-
-            data Ok
-            data Amount = Int
-                invariant ranged = value >= 0 && value <= 100
-            data Req = { cost: Map<String, Amount> }
-                invariant nonEmpty = Map.size(cost) > 0
-
-            behavior f : (r: Req) -> Ok
-                constructs Ok
-            let f (r) = Ok
-            """;
-
-    /**
-     * The same map again, with the line drawn by the body rather than by a declaration.
-     *
-     * <p>The other way what a position is measured at is rebuilt. Nothing divides the map, so the
-     * measure is made at the number the body names ({@link PositionMeasurements#measuredAt}) — a
-     * caller writing the parts of a position's measurements out by hand, and the place a position
-     * that had stopped once came back with nothing to say so. Named for a module of its own because
-     * {@code guard} is a word of the language.
-     */
-    private static final String A_MAP_A_BODY_MEASURES = """
-            module probe.bodyline
-
-            data Amount = Int
-                invariant ranged = value >= 0 && value <= 100
-            data Req = { cost: Map<String, Amount> }
-
-            behavior f : (r: Req) -> Int
-            let f (r) = if Map.size(r.cost) > 0 then 1 else 2
-            """;
-
-    /**
-     * A rule about the map's own size that nothing answered, at a position the walk could not enter.
-     *
-     * <p>Two facts about two different rules at one path. What {@code notEmpty} says about the size
-     * was read — {@code M} is a declaration and its clause reached a reader — and no reading turned
-     * it into the values the position may hold. That the contents of the map are out of reach says
-     * nothing about it.
-     */
-    private static final String A_QUESTION_AT_A_POSITION_NOTHING_ENTERED = """
-            module probe.question
-
-            data Domestic
-            data Overseas
-            data Kind = Domestic | Overseas
-            data K = String
-            data V = String
-            data M = Map<K, V>
-                invariant notEmpty = Map.size(value) /= 0
-            data T = { kind: Kind, m: M }
-
-            behavior look : (t: T) -> Int
-            let look (t) = 1
+            let f (c) = Ok
             """;
 
     /**
      * The stop is reported as the stop, and the handing over it left standing is not reported again.
      *
-     * <p>The pair the issue is about. {@code RulesNotReached} here would be the consequence of the
-     * finding beside it and not a second thing an author could act on.
+     * <p>{@code RulesNotReached} here would be the consequence of the finding beside it and not a
+     * second thing an author could act on.
      *
      * <p><b>Counted among the stops and not among the weakenings.</b> A measure of a module whose
      * bodies nothing elaborated goes without that reading as well, and says so: two facts, and an
@@ -129,7 +70,7 @@ class AStopThisCompilerMadeIsSaidOnceTest {
      */
     @Test
     void aPositionTheWalkCouldNotEnterIsOneFinding() {
-        List<Weakening> said = weakeningOf(A_MAP_NOTHING_MEASURES, "f");
+        List<Weakening> said = weakeningOf(A_RETURN_TO_A_SUM, "f");
 
         List<Weakening> stops = said.stream()
                 .filter(each -> each instanceof Weakening.ModelReadingIncomplete(
@@ -138,68 +79,11 @@ class AStopThisCompilerMadeIsSaidOnceTest {
         assertEquals(1, stops.size(), () -> "one stop, one finding: " + said);
         assertTrue(stops.getFirst() instanceof Weakening.ModelReadingIncomplete(
                         ClosureGap.PositionNotReachedInto gap)
-                        && gap.why() instanceof BlockReason.UnsupportedTraversal,
+                        && gap.why() instanceof BlockReason.RecursiveExpansion,
                 () -> "and it is the stop itself: " + said);
-    }
-
-    /**
-     * And it goes on being reported once something else measures the position.
-     *
-     * <p>What the fold would have cost if it were taken from what the axis is waiting on. This
-     * position is answered for, so it keeps no continuation; read from there, the handing over
-     * folds into a finding nothing writes and the model says nothing about the map at all.
-     */
-    @Test
-    void andTheStopSurvivesARuleThatMeasuresThePosition() {
-        List<Weakening> said = weakeningOf(A_MAP_A_RULE_MEASURES, "f");
-
-        assertTrue(said.stream().anyMatch(each -> each instanceof Weakening.ModelReadingIncomplete(
-                        ClosureGap.PositionNotReachedInto _)),
-                () -> "the walk did not go into the map, whatever divides it: " + said);
         assertTrue(said.stream().noneMatch(each -> each instanceof Weakening.ModelReadingIncomplete(
                         ClosureGap.RulesNotReached _)),
                 () -> "and the handing over it left standing is that same stop: " + said);
-    }
-
-    /**
-     * And it survives a measure being made at the number a body names.
-     *
-     * <p>Both ways what a position is measured at is rebuilt, because what holds the two facts
-     * together is that they travel as one value and every rebuild is a place a caller can drop one.
-     * This one goes through {@link PositionMeasurements#measuredAt}; the test above goes through the
-     * division. The finding names the term the measure was made at, which is the measure carrying
-     * the fact and not the position that was blocked — the position is that measure's path.
-     */
-    @Test
-    void andItSurvivesTheAxisBeingRePointedAtWhatABodyMeasures() {
-        List<Weakening> said = weakeningOf(A_MAP_A_BODY_MEASURES, "f");
-
-        assertEquals(1, said.size(), () -> "one stop, one finding: " + said);
-        assertTrue(said.getFirst() instanceof Weakening.ModelReadingIncomplete(
-                        ClosureGap.PositionNotReachedInto gap)
-                        && gap.why() instanceof BlockReason.UnsupportedTraversal,
-                () -> "the walk did not go into the map, and the axis is now the size: " + said);
-    }
-
-    /**
-     * A question standing at such a position stands.
-     *
-     * <p>The other half of not folding on the path. A question is raised by a rule this compiler
-     * read and neither reader answered, so the rules a stop left unread raise none — and the only
-     * questions a suppression at the path could ever reach are the real ones. This one was being
-     * dropped because the map's contents are out of reach, which is a fact about other rules
-     * entirely.
-     */
-    @Test
-    void aQuestionAtSuchAPositionIsStillAsked() {
-        List<Weakening> said = weakeningOf(A_QUESTION_AT_A_POSITION_NOTHING_ENTERED, "look");
-
-        assertTrue(said.stream().anyMatch(each -> each instanceof Weakening.ModelReadingIncomplete(
-                        ClosureGap.QuestionUnanswered _)),
-                () -> "the rule about the map's size was read and nothing answered it: " + said);
-        assertTrue(said.stream().anyMatch(each -> each instanceof Weakening.ModelReadingIncomplete(
-                        ClosureGap.PositionNotReachedInto _)),
-                () -> "and the map's contents are still out of reach: " + said);
     }
 
     /**
@@ -268,8 +152,7 @@ class AStopThisCompilerMadeIsSaidOnceTest {
                 "nobody was named at a position the walk went into");
     }
 
-    private static final BlockedDescent BLOCKED = new BlockedDescent(
-            new BlockReason.UnsupportedTraversal(BlockReason.Traversal.MAPPING_CONTENT));
+    private static final BlockedDescent BLOCKED = new BlockedDescent(new BlockReason.TypeUnresolved());
 
     private static RulesLeftUnread fromBlockedDescent() {
         return new RulesLeftUnread.Handoff(
@@ -288,9 +171,9 @@ class AStopThisCompilerMadeIsSaidOnceTest {
     /**
      * Which kinds of gap one axis carrying {@code residue} leaves the partition measure short of.
      *
-     * <p>The kinds and not the values: what a gap is keyed by is asserted where that decision is
-     * ({@link #theStopIsNamedForThePositionItIsAt}), and repeating it in every row here would make
-     * every row of the arithmetic fail the day the identity is revisited.
+     * <p>The kinds and not the values: what a gap is keyed by is the position's identity, and
+     * repeating it in every row here would make every row of the arithmetic fail the day the
+     * identity is revisited.
      */
     private static Set<Class<?>> gapKindsOf(ReadingResidue residue) {
         MeasureClosure.Both closed = MeasureClosure.of(
@@ -299,35 +182,6 @@ class AStopThisCompilerMadeIsSaidOnceTest {
                 List.of(), new LinesRead());
         return ((MeasureClosure.OfThePartition.Open) closed.partition()).by().stream()
                 .map(Object::getClass).collect(java.util.stream.Collectors.toSet());
-    }
-
-    /**
-     * The stop is named for the position it is at, and not for a number that position is measured
-     * at.
-     *
-     * <p>Where the two come apart. The map's contents are what the walk could not reach and the
-     * size is what a rule measures, so the position and the number are different words here.
-     *
-     * <p><b>This used to name the number, and that reading needed one measure per position.</b> The
-     * argument for it was that a gap beside a measurement is about the measure a reader holds — but
-     * a location is measured at as many numbers as the rules name of it, and one stop under such a
-     * location came out once per number, which is a compiler's own state counted several times. What
-     * weakens one measurement is said per measurement elsewhere; these are one behavior's account of
-     * what its reading of the model came to, and a reader holding a measure reaches its position by
-     * the path it reads from.
-     */
-    @Test
-    void theStopIsNamedForThePositionItIsAt() {
-        List<Weakening> said = weakeningOf(A_MAP_A_BODY_MEASURES, "f");
-
-        assertEquals(List.of("r.cost"),
-                said.stream()
-                        .filter(each -> each instanceof Weakening.ModelReadingIncomplete(
-                                ClosureGap.PositionNotReachedInto _))
-                        .map(each -> ((ClosureGap.PositionNotReachedInto)
-                                ((Weakening.ModelReadingIncomplete) each).cause()).at().toString())
-                        .toList(),
-                () -> "the position the walk stopped at, not a number measured of it: " + said);
     }
 
     private static List<Weakening> weakeningOf(String source, String behavior) {

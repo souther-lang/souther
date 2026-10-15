@@ -4,6 +4,7 @@ import souther.compiler.numeric.EndSide;
 import souther.compiler.numeric.Towards;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -26,13 +27,20 @@ import java.util.Map;
  *
  * @param partings where the values part and which lines the model wrote there, in the order the
  *                 values are in
- * @param runs     the runs between them, one more than there are partings
+ * @param runs     the runs between them the rules leave something in. With {@code empty}, one more
+ *                 than there are partings
+ * @param empty    the runs between them the rules leave nothing in, with what stops each at either
+ *                 end. No row is owed in one, and what says so is what stopped it: a point beside a
+ *                 line whose run is empty is left out by that line and by whatever ends the run on
+ *                 the far side, which is the same answer a run with values in it gives about whom a
+ *                 row there is owed to
  */
-public record QuantityArrangement(List<Parting> partings, List<Run> runs) {
+public record QuantityArrangement(List<Parting> partings, List<Run> runs, List<Run> empty) {
 
     public QuantityArrangement {
         partings = List.copyOf(partings);
         runs = List.copyOf(runs);
+        empty = List.copyOf(empty);
     }
 
     /**
@@ -211,13 +219,14 @@ public record QuantityArrangement(List<Parting> partings, List<Run> runs) {
         ordered.sort(QuantityArrangement::inOrderOfTheValues);
 
         List<Run> runs = new ArrayList<>();
+        List<Run> empty = new ArrayList<>();
         Parting under = null;
         for (Parting parting : ordered) {
-            keep(space, runs, runBetween(under, parting, ends));
+            keep(space, runs, empty, runBetween(under, parting, ends));
             under = parting;
         }
-        keep(space, runs, runBetween(under, null, ends));
-        return new QuantityArrangement(ordered, runs);
+        keep(space, runs, empty, runBetween(under, null, ends));
+        return new QuantityArrangement(ordered, runs, empty);
     }
 
     /** The run between two of the places the values part, held to what the rules leave either
@@ -282,12 +291,53 @@ public record QuantityArrangement(List<Parting> partings, List<Run> runs) {
      *
      * @param parted every place this line parts the values, in any order
      */
-    public Run beside(java.util.Collection<Parting> parted, Towards side) {
-        // The run this side of every place the line parts them, which is the one this line does not
-        // also bound at its far end. A rule that names a value leaves the value itself between its
-        // two places, and that run is on neither side of the line: it is the line.
+    public Run beside(Collection<Parting> parted, Towards side) {
+        return besideIn(runs, parted, side);
+    }
+
+    /**
+     * The run at one end of what the rules leave: the one nothing parts below it, or nothing parts
+     * above it.
+     *
+     * <p>What a bound bounds. A bound's line is where what it leaves stops, so the run it bounds is
+     * the one against that end — and it is found by being the endmost rather than by holding the
+     * line's own value, which a bound that stops short of that value does not leave in any run at
+     * all. Null where the rules leave no run there, which is a point nobody is owed a row at.
+     */
+    public Run endmost(Towards inward) {
+        return endmostIn(runs, inward);
+    }
+
+    /**
+     * The same of the runs the rules leave nothing in: the empty run on one side of a line, or null
+     * where the run there has values or there is none.
+     *
+     * <p>Asked where {@link #beside} found nothing, by a reader that has to say why no row is owed
+     * there: what stops this run is what left the side empty. Found by the one rule {@link #beside}
+     * finds by, over the other runs, so the run a rule naming a value leaves between its own two
+     * places is the line here as well and never the side of it.
+     */
+    public Run emptyBeside(Collection<Parting> parted, Towards side) {
+        return besideIn(empty, parted, side);
+    }
+
+    /** The same of the empty run at one end of what the rules leave ({@link #endmost}). */
+    public Run emptyEndmost(Towards inward) {
+        return endmostIn(empty, inward);
+    }
+
+    /**
+     * The run among {@code among} on one side of a line, given every place the line parts the
+     * values: the one this side of a place the line parts them that this line does not also bound
+     * at its far end. A rule that names a value leaves the value itself between its two places, and
+     * that run is on neither side of the line: it is the line.
+     */
+    private static Run besideIn(List<Run> among, Collection<Parting> parted, Towards side) {
         for (Parting each : parted) {
-            Run run = side == Towards.ABOVE ? above(each) : below(each);
+            Run run = among.stream().filter(candidate -> is(side == Towards.ABOVE
+                            ? candidate.values().lower().seam()
+                            : candidate.values().upper().seam(), each))
+                    .findFirst().orElse(null);
             if (run == null) {
                 continue;
             }
@@ -301,17 +351,9 @@ public record QuantityArrangement(List<Parting> partings, List<Run> runs) {
         return null;
     }
 
-    /**
-     * The run at one end of what the rules leave: the one nothing parts below it, or nothing parts
-     * above it.
-     *
-     * <p>What a bound bounds. A bound's line is where what it leaves stops, so the run it bounds is
-     * the one against that end — and it is found by being the endmost rather than by holding the
-     * line's own value, which a bound that stops short of that value does not leave in any run at
-     * all. Null where the rules leave no run there, which is a point nobody is owed a row at.
-     */
-    public Run endmost(Towards inward) {
-        return runs.stream()
+    /** The run among {@code among} nothing parts on the side facing away from {@code inward}. */
+    private static Run endmostIn(List<Run> among, Towards inward) {
+        return among.stream()
                 .filter(each -> (inward == Towards.ABOVE
                         ? each.values().lower() : each.values().upper()).seam() == null)
                 .findFirst().orElse(null);
@@ -321,11 +363,12 @@ public record QuantityArrangement(List<Parting> partings, List<Run> runs) {
         return one != null && other != null && one.key().equals(other.key());
     }
 
-    /** A run, unless what the rules leave has nothing in it. */
-    private static void keep(LevelSpace space, List<Run> runs, Run run) {
+    /** A run among the runs, or among the empty ones where what the rules leave has nothing in it. */
+    private static void keep(LevelSpace space, List<Run> runs, List<Run> empty, Run run) {
         Level first = run.values().first();
         Level last = run.values().last();
         if (first != null && last != null && space.compare(first, last) > 0) {
+            empty.add(run);
             return;
         }
         runs.add(run);
@@ -334,13 +377,43 @@ public record QuantityArrangement(List<Parting> partings, List<Run> runs) {
     /**
      * Whether the rules leave nothing at the place this seam parts the values.
      *
-     * <p>Asked of the place and not of the values either side of it. A line at the very edge of what
-     * the rules leave has one of its two values outside them and parts what is left all the same —
-     * read off that value, a bound's own line was dropped from the arrangement and the run it starts
-     * belonged to no seam at all.
+     * <p>Asked of the value on the side that faces what the rules leave, and not of the other. A
+     * line at the very edge of what the rules leave has one of its two values outside them and parts
+     * what is left all the same — read off that value, a bound's own line was dropped from the
+     * arrangement and the run it starts belonged to no seam at all.
+     *
+     * <p>And not of the number the rule wrote. {@code > 10} and {@code >= 11} part the whole numbers
+     * between ten and eleven, so over values from eleven up both are lines at the edge; read off the
+     * number written, the first was outside and the second was not, and one division came out as two
+     * arrangements. Where the order names no value on that side the line itself is what there is to
+     * ask about ({@link Seam#leaving}).
      */
     private static boolean outside(Seam seam, Bound from, Bound to) {
-        return (from != null && seam.at().compareTo(from.at()) < 0)
-                || (to != null && seam.at().compareTo(to.at()) > 0);
+        return (from != null && facing(seam, Towards.ABOVE).compareTo(from.at()) < 0)
+                || (to != null && facing(seam, Towards.BELOW).compareTo(to.at()) > 0);
+    }
+
+    /**
+     * Whether the rules leave no value on {@code side} of {@code seam}: the first value the seam
+     * leaves that way is already past where {@code ends} leave off.
+     *
+     * <p>Asked of the ends and not of the runs. A run the order holds nothing in is not kept, and
+     * neither is a place outside the ends, so an arrangement with no run beside a line has not said
+     * there is nothing further out. The ends are one range with nothing missing from its middle,
+     * so a first value past them is every value that way past them.
+     */
+    static boolean nothingLeftBeyond(Seam seam, Towards side, DomainEnds ends) {
+        if (side == Towards.ABOVE) {
+            Bound to = ends.boundAt(EndSide.UPPER);
+            return to != null && facing(seam, Towards.ABOVE).compareTo(to.at()) > 0;
+        }
+        Bound from = ends.boundAt(EndSide.LOWER);
+        return from != null && facing(seam, Towards.BELOW).compareTo(from.at()) < 0;
+    }
+
+    /** Where {@code seam} leaves off on {@code side}, as a place to hold against an end. */
+    private static CutPosition facing(Seam seam, Towards side) {
+        Level leaves = seam.leaving(side);
+        return leaves == null ? seam.at() : CutPosition.at(leaves);
     }
 }

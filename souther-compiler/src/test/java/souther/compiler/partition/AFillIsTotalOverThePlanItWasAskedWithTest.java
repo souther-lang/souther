@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.carrier.Membership;
 import souther.compiler.coverage.ArmProbe;
 import souther.compiler.coverage.Numberings;
 
@@ -10,12 +11,14 @@ import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Symbols;
+import souther.compiler.check.TypeCardinality;
 import souther.compiler.query.ReadAs;
 import souther.compiler.types.Type;
 
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -187,7 +190,7 @@ class AFillIsTotalOverThePlanItWasAskedWithTest {
     /** And the rows the answers point at, for the same reason: an id under nothing is not a row. */
     @Test
     void aRowIdWithNothingUnderItIsNotARow() {
-        LinkedHashMap<RowId, ComposedRow> nothing = new LinkedHashMap<>();
+        LinkedHashMap<RowId, FilledRow> nothing = new LinkedHashMap<>();
         nothing.put(new RowId(0), null);
         GenerationPlan plan = planOver(List.of(), List.of());
 
@@ -209,8 +212,9 @@ class AFillIsTotalOverThePlanItWasAskedWithTest {
 
     @Test
     void aRowNothingPointsAtIsRefused() {
-        LinkedHashMap<RowId, ComposedRow> composed = new LinkedHashMap<>();
-        composed.put(new RowId(0), new ComposedRow(List.of(FixtureTemplate.integer(1)), List.of()));
+        LinkedHashMap<RowId, FilledRow> composed = new LinkedHashMap<>();
+        composed.put(new RowId(0), new FilledRow(
+                new ComposedRow(List.of(FixtureTemplate.integer(1)), List.of()), null));
         GenerationPlan plan = planOver(List.of(A_CLASS), List.of());
 
         assertThrows(IllegalStateException.class,
@@ -224,8 +228,9 @@ class AFillIsTotalOverThePlanItWasAskedWithTest {
      *  like. */
     @Test
     void aRunThatAnsweredForEverythingItWasAskedIsBuilt() {
-        LinkedHashMap<RowId, ComposedRow> composed = new LinkedHashMap<>();
-        composed.put(new RowId(0), new ComposedRow(List.of(FixtureTemplate.integer(1)), List.of()));
+        LinkedHashMap<RowId, FilledRow> composed = new LinkedHashMap<>();
+        composed.put(new RowId(0), new FilledRow(
+                new ComposedRow(List.of(FixtureTemplate.integer(1)), List.of()), null));
         GenerationPlan plan = planOver(List.of(A_CLASS), List.of(AN_ARM));
 
         FillResult filled = new FillResult(composed, List.of(), List.of(),
@@ -250,9 +255,11 @@ class AFillIsTotalOverThePlanItWasAskedWithTest {
     @Test
     void whatEachPlaceCameToIsOneAnswerPerWord() {
         CameToNothing stoppedAtOne = new CameToNothing(NOTHING_CAME_OF_IT.why(),
-                CompositionShortfall.of(List.of(CompositionBudget.NUMBERS_OF_A_SET_TRIED)));
+                CompositionShortfall.of(List.of(CompositionBudget.NUMBERS_OF_A_SET_TRIED)),
+                Set.of());
         CameToNothing stoppedAtAnother = new CameToNothing(NOTHING_CAME_OF_IT.why(),
-                CompositionShortfall.of(List.of(CompositionBudget.STEPS_A_SEARCH_MAY_TAKE)));
+                CompositionShortfall.of(List.of(CompositionBudget.STEPS_A_SEARCH_MAY_TAKE)),
+                Set.of());
         GenerationPlan plan = planOver(List.of(A_CLASS), List.of());
 
         FillResult filled = new FillResult(new LinkedHashMap<>(),
@@ -263,7 +270,7 @@ class AFillIsTotalOverThePlanItWasAskedWithTest {
 
         assertEquals(List.of(new CameToNothing(NOTHING_CAME_OF_IT.why(),
                         CompositionShortfall.of(List.of(CompositionBudget.NUMBERS_OF_A_SET_TRIED,
-                                CompositionBudget.STEPS_A_SEARCH_MAY_TAKE)))),
+                                CompositionBudget.STEPS_A_SEARCH_MAY_TAKE)), Set.of())),
                 filled.unresolved(),
                 "one word, with what both searches met under it");
     }
@@ -277,11 +284,14 @@ class AFillIsTotalOverThePlanItWasAskedWithTest {
                 List.of(divided("days/low", 1).ofTheNumber(atDays),
                         divided("days/high", 9).ofTheNumber(atDays)),
                 List.of());
+        RuleReadingContext context =
+                RuleReadingContext.unshared(SYMBOLS, ReadAs.THE_COMPILATION_DOES);
         MeasuredInput subject = MeasuredInput.of("fee",
                 souther.compiler.inputs.InputDomain.of(
                         List.of(new souther.compiler.inputs.InputDomain.Parameter("days", null,
                                 Type.INT)),
-                        RuleReadingContext.unshared(SYMBOLS, ReadAs.THE_COMPILATION_DOES))
+                        context, TypeCardinality.Counts.workedOutIn(context),
+                        Membership.none())
                         .reading(SYMBOLS),
                 AxesATestWrote.asAMeasurement("fee", List.of(days)));
         return GenerationPlan.of(subject, classes, arms, List.of(), List.of());

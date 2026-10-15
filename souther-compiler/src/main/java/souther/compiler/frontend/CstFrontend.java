@@ -141,13 +141,16 @@ public final class CstFrontend {
         Map<String, String> defs = new LinkedHashMap<>();
         Map<String, String> behaviors = new LinkedHashMap<>();
         Map<String, String> fns = new LinkedHashMap<>();
+        // What is taken off either end is the trivia the scan read as space, which is ASCII; `trim`
+        // takes off no more than that and asks no Unicode table, so the published text does not
+        // turn on which JDK the compile ran on.
         for (SyntaxNode n : result.root().childNodes()) {
             switch (n.kind()) {
-                case MODULE_HEADER -> header = n.text().strip();
-                case IMPORT_DECL -> imports.add(n.text().strip());
-                case DATA_DEF -> defs.put(AstBuilder.firstIdentText(n), n.text().strip());
-                case BEHAVIOR_DEF -> behaviors.put(AstBuilder.firstIdentText(n), n.text().strip());
-                case FN_DEF -> fns.put(AstBuilder.firstIdentText(n), n.text().strip());
+                case MODULE_HEADER -> header = n.text().trim();
+                case IMPORT_DECL -> imports.add(n.text().trim());
+                case DATA_DEF -> defs.put(AstBuilder.firstIdentText(n), n.text().trim());
+                case BEHAVIOR_DEF -> behaviors.put(AstBuilder.firstIdentText(n), n.text().trim());
+                case FN_DEF -> fns.put(AstBuilder.firstIdentText(n), n.text().trim());
                 default -> { /* examples and fakes are not declarations to publish */ }
             }
         }

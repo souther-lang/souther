@@ -145,7 +145,7 @@ class AConditionOverASharedNameIsOneTheComposerCanPlaceTest {
     /** Which question a report about the condition under test would put. */
     private static final ConditionReportAnchor WHERE =
             new ConditionReportAnchor.WhereTheReadingMetIt("m",
-                    new ConditionOccurrence("b", 0));
+                    new ConditionOccurrence("b", ConditionOccurrence.Reading.DIVIDING, 0));
 
     /** A row composed with the plain position fixed at {@code at}, and {@code taken} over the
      *  shared name on the way to it. */
@@ -156,8 +156,9 @@ class AConditionOverASharedNameIsOneTheComposerCanPlaceTest {
                 NumbersAskedFor.of(LevelRegion.point(new Level.OnACarrier(
                         domain().quantities(rules()).ordersOf(fixed.term()).answered(), at))),
                 new Reachability.Reaching(domain().quantities(rules()).region(),
-                        Requirements.NONE,
-                        List.of(new OnTheWay.TakenIn(WHERE, taken))),
+                        Requirements.NONE, TruthsAsked.NONE,
+                        List.of(new OnTheWay.TakenIn(WHERE, new RowDemand.Relational(taken))),
+                        Reachability.Ways.ONE, List.of()),
                 Generator.CandidateCheck.ANY);
     }
 

@@ -1,19 +1,38 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.Carrier;
+import souther.compiler.inputs.BlockReason;
+import souther.compiler.inputs.FilingCoordinate;
+import souther.compiler.inputs.Quantities;
+import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.NumericTerms;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.Proposition;
+import souther.compiler.meaning.Quantity;
+import souther.compiler.meaning.Relation;
+import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
+import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.observe.ObservedValue;
 
+import java.math.BigDecimal;
+import java.math.BigInteger;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -38,7 +57,8 @@ import java.util.Set;
  * what a variant costs is the answers this interface asks for below, and nothing downstream gains
  * an arm.
  */
-public sealed interface BorderQuantity {
+public sealed interface BorderQuantity
+        permits LinearQuantity, BorderQuantity.HowMany, BorderQuantity.RemainderOfAForm {
 
     /**
      * The number one position holds, which is the position's own values.
@@ -48,7 +68,7 @@ public sealed interface BorderQuantity {
      * the others do not.
      */
     record OfACoordinate(String behavior, NumericTerm.FromOnePosition term, TermOrders of)
-            implements BorderQuantity {
+            implements LinearQuantity {
 
         public OfACoordinate {
             if (behavior == null || behavior.isEmpty() || term == null || of == null) {
@@ -87,7 +107,7 @@ public sealed interface BorderQuantity {
          *  is is one position's own values, so a move that leaves it without one leaves it
          *  something else. */
         @Override
-        public BorderQuantity movedTo(NumericTerm from, TermOrders to) {
+        public LinearQuantity movedTo(NumericTerm from, TermOrders to) {
             NumericTerm.FromOnePosition landed = to.term().atOnePosition();
             return term.equals(from) && landed != null
                     ? new OfACoordinate(behavior, landed, to)
@@ -192,7 +212,7 @@ public sealed interface BorderQuantity {
      * arithmetic form over both positions and is read as {@link OverAForm}, whose coefficients are
      * where a conversion between two orders is written.
      */
-    record Apart(String behavior, TermOrders on, TermOrders against) implements BorderQuantity {
+    record Apart(String behavior, TermOrders on, TermOrders against) implements LinearQuantity {
 
         /** The position at one end. */
         public NumericTerm.FromOnePosition onTerm() {
@@ -210,7 +230,7 @@ public sealed interface BorderQuantity {
         }
 
         @Override
-        public BorderQuantity movedTo(NumericTerm from, TermOrders to) {
+        public LinearQuantity movedTo(NumericTerm from, TermOrders to) {
             if (!on.term().equals(from) && !against.term().equals(from)) {
                 return null;
             }
@@ -307,7 +327,36 @@ public sealed interface BorderQuantity {
         /** Their difference, which is what standing apart is. */
         @Override
         public LinearForm<NumericTerm> direction() {
-            return LinearForm.<NumericTerm>atom(on.term()).minus(LinearForm.atom(against.term()));
+            return LinearForm.difference(on.term(), against.term());
+        }
+
+        /**
+         * Where the two have no numbers under them, which one stands above the other as places:
+         * only standing level is a distance two strings come to, so any other {@code constant} is
+         * one no row of them can be read at.
+         */
+        @Override
+        public ExactAnswer<Integer> signAt(Map<NumericTerm, Place> values, ExactRatio constant) {
+            if (counts()) {
+                return LinearQuantity.super.signAt(values, constant);
+            }
+            if (constant.signum() != 0) {
+                return ExactAnswer.unheld(UnheldNumber.NO_REPRESENTATION_EXISTS);
+            }
+            return ExactAnswer.held(Integer.signum(
+                    values.get(on.term()).compareTo(values.get(against.term()))));
+        }
+
+        /** The other end, where the two have no numbers under them and stand level. */
+        @Override
+        public Place levelWith(NumericTerm term, ExactRatio constant,
+                               Map<NumericTerm, Place> beside) {
+            if (counts() || constant.signum() != 0) {
+                return null;
+            }
+            NumericTerm other = on.term().equals(term) ? against.term()
+                    : against.term().equals(term) ? on.term() : null;
+            return other == null ? null : beside.get(other);
         }
 
         /**
@@ -412,7 +461,7 @@ public sealed interface BorderQuantity {
                 return new Standing.OfTwoOnOneCarrier(onTerm(), againstTerm(), onCarrier(), where);
             }
             return new Standing.OfAForm(
-                    LinearForm.<NumericTerm>atom(on.term()).minus(LinearForm.atom(against.term())),
+                    LinearForm.difference(on.term(), against.term()),
                     Map.of(on.term(), on.answered(), against.term(), against.answered()),
                     levels(), where);
         }
@@ -470,23 +519,28 @@ public sealed interface BorderQuantity {
      * shifted by nine under another.
      */
     record OverAForm(String behavior, LinearForm<NumericTerm> form, Map<NumericTerm, TermOrders> on)
-            implements BorderQuantity {
+            implements LinearQuantity {
 
-        /** Walked by what each term is called, which is what a form's own equality cannot see. */
+        /** Walked by what each term is called, which is what a form's own equality cannot see, and
+         *  which the form is held in. */
         @Override
         public List<NumericTerm> terms() {
-            return NumericTerms.inOrder(form.coefs().keySet());
+            return List.copyOf(form.coefs().keySet());
         }
 
         @Override
-        public BorderQuantity movedTo(NumericTerm from, TermOrders to) {
+        public LinearQuantity movedTo(NumericTerm from, TermOrders to) {
             NumericTerm landed = to.term();
-            if (!form.coefs().containsKey(from) || form.coefs().containsKey(landed)) {
+            // A sum adds what is under each order, so a term landing on an order with nothing
+            // under it leaves no sum; that is said by answering none, and not by refusing to make
+            // the one this would be.
+            if (!form.coefs().containsKey(from) || form.coefs().containsKey(landed)
+                    || !to.answered().counts()) {
                 return null;
             }
-            Map<NumericTerm, ExactRatio> coefs = new java.util.LinkedHashMap<>();
+            Map<NumericTerm, ExactRatio> coefs = new LinkedHashMap<>();
             form.coefs().forEach((term, coef) -> coefs.put(term.equals(from) ? landed : term, coef));
-            Map<NumericTerm, TermOrders> moved = new java.util.LinkedHashMap<>();
+            Map<NumericTerm, TermOrders> moved = new LinkedHashMap<>();
             on.forEach((term, its) -> moved.put(term.equals(from) ? landed : term,
                     term.equals(from) ? to : its));
             return new OverAForm(behavior,
@@ -501,7 +555,6 @@ public sealed interface BorderQuantity {
                 throw new IllegalArgumentException(
                         "a quantity carries no constant; it belongs to the threshold: " + form);
             }
-            on = Map.copyOf(on);
             // An order per position of the form, held here so no reader has to answer for a
             // position with none. A map beside a form is two structures, and two structures are
             // what come apart: written this way the pair that disagrees does not exist.
@@ -511,6 +564,16 @@ public sealed interface BorderQuantity {
                         + NumericTerms.inOrder(form.coefs().keySet())
                         + " against " + NumericTerms.inOrder(on.keySet()));
             }
+            // Both held in the order the terms are walked in, worked out once. Every row a reader
+            // asks of this walks the terms, and the order is the form's and not the row's.
+            Map<NumericTerm, ExactRatio> coefs = new LinkedHashMap<>();
+            Map<NumericTerm, TermOrders> readOn = new LinkedHashMap<>();
+            for (NumericTerm term : NumericTerms.inOrder(form.coefs().keySet())) {
+                coefs.put(term, form.coefs().get(term));
+                readOn.put(term, on.get(term));
+            }
+            form = new LinearForm<>(form.constant(), Collections.unmodifiableMap(coefs));
+            on = Collections.unmodifiableMap(readOn);
             // And each entry's orders are that position's own. The key set agreeing says the map
             // is about the right positions and says nothing about which of them each answer came
             // from: a table with the two ends swapped has exactly the same keys.
@@ -560,8 +623,7 @@ public sealed interface BorderQuantity {
          * apiece they were free to disagree about a pair of orders that step differently.
          */
         souther.compiler.numeric.Granularity spacing() {
-            return LevelSpace.addedUpOver(NumericTerms.inOrder(on.keySet()).stream()
-                    .map(term -> on.get(term).answered()).toList());
+            return LevelSpace.addedUpOver(on.values().stream().map(TermOrders::answered).toList());
         }
 
         /** The order that position is read and written on, and null for a position not in the
@@ -590,8 +652,7 @@ public sealed interface BorderQuantity {
             Set<ReadingGap> stopped = new java.util.LinkedHashSet<>();
             boolean noNumber = false;
             boolean wroteNothing = false;
-            for (Map.Entry<NumericTerm, ExactRatio> each
-                    : NumericTerms.entriesInOrder(form.coefs())) {
+            for (Map.Entry<NumericTerm, ExactRatio> each : form.coefs().entrySet()) {
                 // Taken by the orders this form reads that term on. What the term read is the
                 // reading's to say and what it is worth to the number is the form's, and a
                 // coefficient put against a value read on another order weighs a position by a
@@ -605,7 +666,7 @@ public sealed interface BorderQuantity {
                         // summed, can put the exact sum out of this arithmetic's reach — the same way
                         // a distance of two row values can (see the try/catch above). Held here as
                         // one more reason nothing could be said, rather than let it end the compile.
-                        switch (at.plus(Count.number(value).exactly().times(each.getValue()))) {
+                        switch (Count.number(value).exactly().times(each.getValue()).flatMap(at::plus)) {
                             case ExactAnswer.Held<ExactRatio> held -> at = held.value();
                             case ExactAnswer.Unheld<ExactRatio> unheld ->
                                     stopped.add(ReadingGap.of(unheld.why()));
@@ -637,7 +698,7 @@ public sealed interface BorderQuantity {
 
         @Override
         public Standing standingAt(Criterion where) {
-            return new Standing.OfAForm(form, answeredOn(on), levels(), where);
+            return new Standing.OfAForm(form, LinearQuantity.answeredOn(on), levels(), where);
         }
 
         @Override
@@ -673,6 +734,467 @@ public sealed interface BorderQuantity {
 
     }
 
+    /**
+     * How many elements of a container meet a statement: a whole number from none to as many as
+     * the container holds.
+     *
+     * <p>No form over a row's numbers. It turns on every element and on whatever else the
+     * statement names — {@code x > limit} reads {@code limit} beside each element — so a row is
+     * read at it whole, element by element, and a line on it divides no position.
+     *
+     * <p>One quantity wherever it is written: the same container and the same statement are the
+     * same count, however the statement's element was named ({@link Quantity.HowManyMeet}).
+     */
+    final class HowMany implements BorderQuantity {
+
+        private final CountedElements counted;
+        private final String behavior;
+        private final TermPath container;
+        private final Proposition meeting;
+        private final AStatementAtARow perElement;
+        private final LinearForm<NumericTerm> against;
+        private final Map<NumericTerm, TermOrders> on;
+        private final Optional<Count> most;
+
+        /**
+         * The count of what {@code counted} counts.
+         *
+         * @param counted what is counted, which is the whole of which count this is
+         * @param most    the most the count comes to, where something says ({@link HowManyCanMeet})
+         */
+        HowMany(CountedElements counted, Optional<Count> most) {
+            this(counted, new LinearForm<>(ExactRatio.ZERO, Map.of()), Map.of(), most);
+        }
+
+        /**
+         * The count of what {@code counted} counts, with what a form of the input's numbers comes to
+         * added: the quantity a rule cuts where it holds the count against a number of the input.
+         *
+         * <p>Two things and kept as two. How many elements meet the statement is a whole number
+         * from none, whatever it is held against; the quantity is that count plus the form, which
+         * takes negative values and, over numbers that fill, fractions. The count is weighed once,
+         * so {@code count >= n} and {@code 2 * count >= 2 * n} are one quantity, and what a rule
+         * holds it against is the level, which is where the form's constant went.
+         *
+         * <p>A most is the count's alone. With a form added, the form runs wherever its numbers do
+         * and the sum is left unbounded whatever the count comes to ({@link #runs}), so a most
+         * handed beside a form would be an end nothing reads.
+         *
+         * @param counted what is counted, which is the whole of which count this is
+         * @param against the form of the input's numbers added to the count, with no constant
+         * @param on      the orders each of its numbers is read and written on
+         * @param most    the most the count comes to, where something says and nothing is added
+         *                to it ({@link HowManyCanMeet})
+         */
+        HowMany(CountedElements counted, LinearForm<NumericTerm> against,
+                Map<NumericTerm, TermOrders> on, Optional<Count> most) {
+            if (most.isPresent() && !against.coefs().isEmpty()) {
+                throw new IllegalArgumentException("a most is of the count alone, and this one has"
+                        + " a form added to it: " + against);
+            }
+            if (against.constant().signum() != 0) {
+                throw new IllegalArgumentException(
+                        "a quantity carries no constant; it belongs to the level: " + against);
+            }
+            if (!on.keySet().equals(against.coefs().keySet())) {
+                throw new IllegalArgumentException("a form is over the positions it names, and each"
+                        + " of them is read on one order: " + against + " against " + on.keySet());
+            }
+            on.forEach((term, orders) -> {
+                orders.areOf(term);
+                if (!orders.answered().counts()) {
+                    throw new IllegalArgumentException("a count is added to numbers, and this order"
+                            + " has no number under it: " + orders.answered());
+                }
+            });
+            this.counted = counted;
+            this.behavior = counted.behavior();
+            this.container = counted.container();
+            this.meeting = counted.meeting();
+            this.perElement = counted.perElement();
+            this.against = against;
+            this.on = Map.copyOf(on);
+            this.most = most;
+        }
+
+        /**
+         * What the rules leave the quantity: the count from none to the most it comes to, where
+         * nothing is added to it. With a form added, the sum runs wherever the form's numbers do,
+         * and is left unbounded.
+         *
+         * <p>The most is not part of which quantity this is, as the orders of the form's numbers
+         * are not: both are what the reading has of the count, and a reading works out one most
+         * for each count it reads ({@link HowManyCanMeet#of}).
+         */
+        NumericDomain.Bounds runs() {
+            if (!against.coefs().isEmpty()) {
+                return NumericDomain.Bounds.OPEN;
+            }
+            return most.map(end -> new NumericDomain.Bounds(Endpoint.inclusive(Count.of(0)),
+                    Endpoint.inclusive(end))).orElse(NONE_OR_MORE);
+        }
+
+        /** What is added to the count, with no constant; no coefficient where the quantity is the
+         *  count alone. */
+        LinearForm<NumericTerm> against() {
+            return against;
+        }
+
+        /** The orders each number added to the count is read and written on. */
+        Map<NumericTerm, TermOrders> on() {
+            return on;
+        }
+
+        /** Every number of a row the quantity is read from: what the statement reads, and what is
+         *  added to the count. */
+        List<NumericTerm> allNumbers() {
+            List<NumericTerm> out = new ArrayList<>(perElement.numbers());
+            NumericTerms.inOrder(against.coefs().keySet()).forEach(term -> {
+                if (!out.contains(term)) {
+                    out.add(term);
+                }
+            });
+            return List.copyOf(out);
+        }
+
+        /** The numbers added to the count, as a quantity read off a row; null where there are
+         *  none. */
+        private OverAForm addedForm() {
+            return against.coefs().isEmpty() ? null : new OverAForm(behavior, against, on);
+        }
+
+        /** What is counted, for a reader asking that and not which quantity a border is on. */
+        CountedElements counted() {
+            return counted;
+        }
+
+        /** The container the elements are counted in. */
+        public TermPath container() {
+            return container;
+        }
+
+        /** What an element is counted for meeting. */
+        public Proposition meeting() {
+            return meeting;
+        }
+
+        @Override
+        public String behavior() {
+            return behavior;
+        }
+
+        /** Every whole number; that none is the least is what the rules leave it
+         *  ({@link #runsWithin}). */
+        @Override
+        public LevelSpace levels() {
+            if (against.coefs().isEmpty()) {
+                return counted.levels();
+            }
+            // The count steps by one and the form by what its coefficients generate, so the sum
+            // takes what both together do — over positions that step, every multiple of their
+            // common divisor.
+            List<ExactRatio> weights = new ArrayList<>(against.coefs().values());
+            weights.add(ExactRatio.ONE);
+            ExactRatio step = LevelSpace.stepOf(weights);
+            List<Carrier> orders = new ArrayList<>();
+            on.values().forEach(each -> orders.add(each.answered()));
+            orders.add(Carrier.WHOLE);
+            return LevelSpace.addedUpOver(orders) == Granularity.DISCRETE
+                    ? LevelSpace.steppingBy(step)
+                    : LevelSpace.overFiniteDecimals(LevelSpace.generatorOverFiniteDecimals(step));
+        }
+
+        /**
+         * Where the count stands at a row, read off every element of the container.
+         *
+         * <p>An element the statement could not be read at is neither counted nor left out: the
+         * count is somewhere between the elements that meet it and those together with every
+         * element nothing could say of. The row stands at the item only where every number in
+         * that run does, and stands away from it only where none does; between the two it could
+         * not be told, and an unread element is never counted as one that fails.
+         */
+        @Override
+        public Stands standsAt(Criterion where, Observation row) {
+            OverAForm added = addedForm();
+            ExactAnswer<ExactRatio> rest = ExactAnswer.held(ExactRatio.ZERO);
+            if (added != null) {
+                switch (added.valuesOf(added.read(row))) {
+                    case ValuesAtARow.NoneHere _ -> {
+                        return Stands.NO;
+                    }
+                    case ValuesAtARow.CouldNotTell(Set<ReadingGap> why) -> {
+                        return Stands.couldNotTell(why);
+                    }
+                    case ValuesAtARow.Read(Map<NumericTerm, Place> values) ->
+                            rest = OrderedAffineBoundary.at(against, values);
+                }
+            }
+            AStatementAtARow.HowManyAtARow counted = perElement.howManyMeetIn(container, row);
+            if (counted == null) {
+                return Stands.couldNotTell(ReadingGap.COULD_NOT_WALK);
+            }
+            ExactAnswer<ExactRatio> addedUp = rest;
+            return switch (counted.whether(count -> addedUp.flatMap(sum -> ExactRatio.of(count)
+                    .plus(sum)).map(at -> where.holds(new Level.OfTheQuantity(at))))) {
+                case AStatementAtARow.Answer.Holds _ -> Stands.YES;
+                case AStatementAtARow.Answer.Fails _ -> Stands.NO;
+                case AStatementAtARow.Answer.CouldNotTell(var why) -> Stands.couldNotTell(why);
+            };
+        }
+
+        /**
+         * The container, and every number the statement reads beside an element.
+         *
+         * <p>Not the elements one at a time: they are read together for the count, and a walk
+         * finding containers would otherwise take the counted container for one whose elements
+         * are each a reading of the row.
+         */
+        @Override
+        public void lookAt(Observation row) {
+            row.eachElementOf(container);
+            perElement.lookAt(row, Set.of(container));
+            OverAForm added = addedForm();
+            if (added != null) {
+                added.lookAt(row);
+            }
+        }
+
+        @Override
+        public Standing standingAt(Criterion where) {
+            return against.coefs().isEmpty()
+                    ? new Standing.OfACount(counted, numbers(), where)
+                    : new Standing.OfACountAndAForm(counted, against,
+                            LinearQuantity.answeredOn(on), levels(), where);
+        }
+
+        @Override
+        public String named() {
+            return new AxisId(behavior, left()).toString();
+        }
+
+        /** The count as an author would read it: the container, and what its elements meet. */
+        @Override
+        public String left() {
+            String count = "#" + container + " [" + said(meeting) + "]";
+            if (against.coefs().isEmpty()) {
+                return count;
+            }
+            String added = OrderedAffineBoundary.spelled(against.coefs());
+            return added.startsWith("-") ? count + " - " + added.substring(1)
+                    : count + " + " + added;
+        }
+
+        /** A statement over the input's own numbers, written the way a comparison is. */
+        private static String said(Proposition stated) {
+            return switch (stated) {
+                case Proposition.Always(boolean holds) -> String.valueOf(holds);
+                case Proposition.All all -> all.parts().stream().map(HowMany::grouped)
+                        .collect(java.util.stream.Collectors.joining(" && "));
+                case Proposition.Any any -> any.parts().stream().map(HowMany::grouped)
+                        .collect(java.util.stream.Collectors.joining(" || "));
+                case Proposition.Some some -> (some.holds() ? "some " : "no ") + some.container()
+                        + " [" + said(some.ofTheElement()) + "]";
+                case Proposition.Compared compared -> switch (compared.relation()) {
+                    case Relation.Affine affine -> {
+                        LinearForm<NumericTerm> form =
+                                WhatTheDeclarationsLeave.ofTheInput(affine.form());
+                        Rel rel = compared.holds() ? affine.proposition()
+                                : affine.proposition().denied();
+                        Quantity.HowManyMeet count = AStatementAtARow.countIn(affine);
+                        // The count's weight is above nought, a relation facing the one way.
+                        if (form == null && count != null) {
+                            ExactRatio weight = affine.form().coefs().get(count);
+                            yield "#" + count.container() + " [" + said(count.ofTheElement())
+                                    + "] " + written(rel) + " "
+                                    + affine.form().constant().negated().dividedBy(weight)
+                                            .map(ExactRatio::spelled).orNull();
+                        }
+                        yield form == null ? stated.key()
+                                : OrderedAffineBoundary.spelled(form.coefs()) + " " + written(rel)
+                                        + " " + form.constant().negated().spelled();
+                    }
+                    case Relation.Ordered ordered -> ordered.term().spelled() + " "
+                            + written(compared.holds() ? ordered.proposition()
+                                    : ordered.proposition().denied())
+                            + " " + ordered.at().spelled();
+                };
+                default -> stated.key();
+            };
+        }
+
+        /** A part of a joined statement, bracketed where it is a join itself. */
+        private static String grouped(Proposition part) {
+            return part instanceof Proposition.All || part instanceof Proposition.Any
+                    ? "(" + said(part) + ")" : said(part);
+        }
+
+        private static String written(Rel rel) {
+            return switch (rel) {
+                case EQ -> "==";
+                case NE -> "/=";
+                case LT -> "<";
+                case LE -> "<=";
+                case GT -> ">";
+                case GE -> ">=";
+            };
+        }
+
+        @Override
+        public String writtenAt(Level level) {
+            if (!(level instanceof Level.OfTheQuantity counted)) {
+                throw new IllegalStateException(
+                        "a count was asked to write a level that is not a number: " + level);
+            }
+            return counted.at().spelled();
+        }
+
+        @Override
+        public BoundaryTarget.Shape shape() {
+            return BoundaryTarget.Shape.COUNT_OF_ELEMENTS;
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof HowMany that && counted.equals(that.counted)
+                    && against.equals(that.against);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(counted, against);
+        }
+
+        @Override
+        public String toString() {
+            return "HowMany[" + behavior + ": " + left() + "]";
+        }
+    }
+
+    /**
+     * What a division by a written number leaves of a form of a row's numbers: a whole number from
+     * nought to one below the divisor.
+     *
+     * <p>No form over the row's numbers and no line on one. Which rows stand at a value of it is
+     * which values of the form come round to it, every divisor along, so a border on it divides
+     * the remainders and says nothing of where on the form a row stands. The form is what a row is
+     * read at; the quantity is what the form leaves.
+     *
+     * <p>The dividend's constant is the quantity's own and not the level's: a level is a remainder,
+     * and moving the dividend by one moves every remainder by one. So it is held beside the form,
+     * which carries none.
+     *
+     * @param dividend the form the division is of, with no constant
+     * @param shift what is added to the form before it is divided, as a whole number
+     * @param divisor the number it is divided by, above nought
+     */
+    record RemainderOfAForm(String behavior, OverAForm dividend, BigInteger shift,
+                            BigInteger divisor) implements BorderQuantity {
+
+        public RemainderOfAForm {
+            if (behavior == null || dividend == null || shift == null || divisor == null
+                    || divisor.signum() <= 0) {
+                throw new IllegalArgumentException("a remainder is of a form, by a divisor above"
+                        + " nought: " + dividend + " by " + divisor);
+            }
+            ExactRatio weights = dividend.form().coefs().values().stream()
+                    .filter(each -> !each.isWhole()).findFirst().orElse(null);
+            if (weights != null) {
+                throw new IllegalArgumentException("a remainder is of whole numbers, and this form"
+                        + " weighs a position by " + weights);
+            }
+        }
+
+        /** What the remainder runs between whatever the form comes to. */
+        NumericDomain.Bounds runs() {
+            return new NumericDomain.Bounds(Endpoint.inclusive(Count.of(0)),
+                    Endpoint.inclusive(new Count(new BigDecimal(divisor.subtract(BigInteger.ONE)))));
+        }
+
+        /** The dividend with its constant, which is the form a rule wrote. */
+        LinearForm<NumericTerm> wholeDividend() {
+            return new LinearForm<>(ExactRatio.of(shift), dividend.form().coefs());
+        }
+
+        /** Every remainder a divisor leaves: nought to one below it, one apart. */
+        @Override
+        public LevelSpace levels() {
+            return LevelSpace.steppingBy(ExactRatio.ONE);
+        }
+
+        /**
+         * What the remainder comes to at a row: the dividend there, less every whole turn of the
+         * divisor.
+         *
+         * <p>The dividend as mathematics has it, read off the form. Whether the run computed it
+         * without leaving what an {@code Int} holds is not a question about the form: a form keeps
+         * what an expression comes to and not the order its steps were taken in, so {@code a - d}
+         * at {@code -1} and the least {@code Int} is held there as a product that is out of range
+         * and is a difference that is not. What says a row ran is the run, and a row is certified
+         * from it ({@code Generator}); this says where the numbers the row holds stand.
+         */
+        @Override
+        public Stands standsAt(Criterion where, Observation row) {
+            return switch (dividend.valuesOf(dividend.read(row))) {
+                case ValuesAtARow.NoneHere _ -> Stands.NO;
+                case ValuesAtARow.CouldNotTell(Set<ReadingGap> why) -> Stands.couldNotTell(why);
+                case ValuesAtARow.Read(Map<NumericTerm, Place> values) ->
+                        switch (OrderedAffineBoundary.remainderAt(wholeDividend(), divisor,
+                                values)) {
+                            case ExactAnswer.Unheld<Optional<ExactRatio>> unheld ->
+                                    Stands.couldNotTell(Set.of(ReadingGap.of(unheld.why())));
+                            case ExactAnswer.Held<Optional<ExactRatio>>(var left) ->
+                                    left.isPresent()
+                                            && where.holds(new Level.OfTheQuantity(left.get()))
+                                            ? Stands.YES : Stands.NO;
+                        };
+            };
+        }
+
+        @Override
+        public void lookAt(Observation row) {
+            dividend.lookAt(row);
+        }
+
+        @Override
+        public Standing standingAt(Criterion where) {
+            return new Standing.OfARemainder(wholeDividend(),
+                    LinearQuantity.answeredOn(dividend.on()), levels(), divisor, where);
+        }
+
+        @Override
+        public String behavior() {
+            return behavior;
+        }
+
+        @Override
+        public String named() {
+            return new AxisId(behavior, left()).toString();
+        }
+
+        /** The call as an author would write it. */
+        @Override
+        public String left() {
+            String form = OrderedAffineBoundary.spelled(dividend.form().coefs());
+            String moved = shift.signum() == 0 ? form
+                    : shift.signum() > 0 ? form + " + " + shift : form + " - " + shift.negate();
+            return "Int.floorMod(" + moved + ", " + divisor + ")";
+        }
+
+        @Override
+        public String writtenAt(Level level) {
+            if (!(level instanceof Level.OfTheQuantity remainder)) {
+                throw new IllegalStateException(
+                        "a remainder was asked to write a level that is not a number: " + level);
+            }
+            return remainder.at().spelled();
+        }
+
+        @Override
+        public BoundaryTarget.Shape shape() {
+            return BoundaryTarget.Shape.REMAINDER_OF_A_FORM;
+        }
+    }
+
     /** How this quantity's own values are ordered, and which of them it can take. */
     LevelSpace levels();
 
@@ -690,7 +1212,12 @@ public sealed interface BorderQuantity {
     default boolean aBoundOnItEndsItsRange() {
         return switch (this) {
             case OfACoordinate _ -> true;
-            case Apart _, OverAForm _ -> false;
+            // What a count runs between is none to as many as the container holds, whatever any
+            // rule about the count says.
+            case Apart _, OverAForm _, HowMany _ -> false;
+            // What a remainder runs between is nought to one below its divisor, whatever any rule
+            // about it says.
+            case RemainderOfAForm _ -> false;
         };
     }
 
@@ -715,185 +1242,203 @@ public sealed interface BorderQuantity {
     default NumbersAskedFor asksOfEachTerm(Criterion where) {
         return switch (this) {
             case OfACoordinate _ -> NumbersAskedFor.of(where.region());
-            case Apart _, OverAForm _ ->
+            case Apart _, OverAForm _, HowMany _, RemainderOfAForm _ ->
                     NumbersAskedFor.onlyTogether(new QuantityInRegion(this, where.region()));
         };
     }
 
-    /**
-     * Every term this quantity is taken of.
-     *
-     * <p>What a caller moving a quantity to another position has to know it is moving. Read off the
-     * arm rather than off the direction the quantity runs in, which is the same list said twice as
-     * long as the two agree and one reader's answer the day they do not.
-     */
-    List<NumericTerm> terms();
-
-    /**
-     * The same quantity, with {@code from} taken at {@code to} instead — or null where it is not
-     * this quantity's term, or where the move leaves something a quantity cannot be.
-     *
-     * <p><b>For one name standing at more than one position.</b> A field every case of a sum spreads
-     * is one field, so a quantity taken of it is one quantity and it is taken under each case; what
-     * moves is where the number is taken, and the comparison that named it is read once and stays
-     * one comparison.
-     *
-     * <p>Answered here rather than assembled by whoever resolved the name, because what has to hold
-     * of a quantity is this type's: a distance runs between two positions on orders a value can be
-     * counted from one to the other, and a caller building the pair itself would be the second place
-     * that has to know it.
-     *
-     * <p>Where it lands is read off the orders rather than named beside them. What the term is read
-     * on and answers at its new position is a fact about that position — it cannot be carried over
-     * from where it was — and the reading's answer says which position it is about, so a second
-     * argument saying it is a second thing to get right and one this could not refuse: it does not
-     * use the name it is given.
-     *
-     * @param to what the term is read on and answers at its new position, and which position that is
-     */
-    BorderQuantity movedTo(NumericTerm from, TermOrders to);
-
-    /**
-     * The order one position under this quantity is read and written back on, or null where the
-     * quantity is not over that position.
-     *
-     * <p>Asked per position rather than once. A quantity used to answer with the one order every
-     * position under it was on, which a coordinate and a line between two positions can do because
-     * they have one — and a form was then held to the same, so a form over positions written back
-     * differently was no quantity at all.
-     *
-     * <p>Nothing is asked of the orders beyond each having counts under it. Which positions a form
-     * weighs, and with what, is settled by the arithmetic or the operation semantics that produced
-     * the form; this layer does not decide that again.
-     */
-    TermOrders ordersOf(NumericTerm term);
-
-    /** The order that position's values are counted on, which is what its orders answer. Null on
-     *  the same reading: a quantity not over the position is over nothing of it. */
-    default Carrier carrierOf(NumericTerm term) {
-        TermOrders orders = ordersOf(term);
-        return orders == null ? null : orders.answered();
-    }
-
-    /**
-     * What this quantity weighs each of its positions by, as a form over them.
-     *
-     * <p>The one shape all three are read as, and the reason a reader of a line never asks which of
-     * them it is holding. One position's own values are that position weighed once; how far two
-     * positions stand apart is their difference; a form is itself. Which way the form runs is part
-     * of it — {@code a - b} and {@code b - a} order the rows opposite ways — and how much of the
-     * quantity was written is not, so a caller after the quantity itself takes
-     * {@link QuantityKey#of}.
-     */
-    LinearForm<NumericTerm> direction();
-
-    /**
-     * What each of this quantity's terms reads as at one row.
-     *
-     * <p>Every term, whatever came of any of them, and nothing concluded from any of them. Asking
-     * them all is how how many elements each position holds is found out, which is what says how
-     * many readings of the row there are to try, so a walk that left off as soon as it knew an
-     * answer would be choosing the readings — and the answer it knew is not the only one asked of a
-     * row, so it is not this walk's to know.
-     *
-     * <p>Each term on its own order, which is {@link #ordersOf}'s answer and not one order for the
-     * quantity: a position written back differently from its neighbour would be read as a value it
-     * does not hold, and a date read as a whole number is no number at all.
-     *
-     * <p>And each asked for what its own number is of — one value where a place answers the term,
-     * every value where the term is taken over a run of them. Asked for one either way, a total
-     * would be read off whichever element the row's reading happened to pick.
-     *
-     * <p>Written once for all three, because reading a position is the position's business and not
-     * the quantity's shape. What is made of the numbers afterwards is the quantity's, and what is
-     * asked of them is the caller's: {@link #valuesOf} hands back the numbers for a caller holding
-     * the row against a line the model did not draw, and {@link #standsAt} answers about the line it
-     * did.
-     */
-    default QuantityReading read(Observation observation) {
-        Map<TermOrders, WhatATermRead> answers = new java.util.LinkedHashMap<>();
-        for (NumericTerm term : terms()) {
-            TermOrders orders = ordersOf(term);
-            WhatATermRead read = switch (term) {
-                case NumericTerm.FromOnePosition one ->
-                        WhatATermRead.at(orders, observation.at(one.position()));
-                case NumericTerm.TakenOver over ->
-                        WhatATermRead.over(orders, observation.everyValueAt(over.subjectPath()));
-            };
-            // One entry per term, which the orders say they are of, so two could only meet where a
-            // quantity is taken of one term twice. Refused rather than let the second stand: a
-            // reading that kept one of them would answer for a term with what another one read.
-            if (answers.put(orders, read) != null) {
-                throw new IllegalStateException(
-                        "a quantity is taken of each of its terms once, and this names " + orders
-                                + " among " + terms());
-            }
-        }
-        return new QuantityReading(answers);
-    }
-
-    /**
-     * What this quantity's positions hold at the row {@code reading} was made of, or why the row
-     * leaves it no value.
-     *
-     * <p>What stopped a reading is collected over the whole quantity rather than taken from
-     * whichever position the walk began with. A row that wrote nothing at one of them leaves this
-     * quantity no value there, which is the row's own answer and outranks whatever else was met.
-     *
-     * <p>The same for all three, because what the numbers are is not the quantity's shape. What they
-     * come to under the line the model drew is, and that is {@link #standsAt}.
-     *
-     * <p>Over this quantity's own terms, and never over the entries the reading happens to hold.
-     * What a reading holds is what some quantity read; which of it is this one's to fold is this
-     * one's to say, and a fold that took what it was given would answer for one quantity with
-     * another's numbers.
-     */
-    default ValuesAtARow valuesOf(QuantityReading reading) {
-        Map<NumericTerm, Place> read = new java.util.LinkedHashMap<>();
-        Set<ReadingGap> stopped = new java.util.LinkedHashSet<>();
-        boolean noValue = false;
-        for (NumericTerm term : terms()) {
-            switch (reading.of(ordersOf(term))) {
-                case WhatATermRead.CameToNothing(ReadingGap why) -> stopped.add(why);
-                case WhatATermRead.NoNumberOfTheValue _,
-                     WhatATermRead.NothingWrittenThere _ -> noValue = true;
-                case WhatATermRead.Number(Place value) -> read.put(term, value);
-            }
-        }
-        if (noValue) {
-            return ValuesAtARow.NONE_HERE;
-        }
-        return stopped.isEmpty() ? new ValuesAtARow.Read(read)
-                : new ValuesAtARow.CouldNotTell(stopped);
-    }
-
-    /** What each of a form's terms is measured on, for a reader of a line rather than of a row. */
-    static Map<NumericTerm, Carrier> answeredOn(Map<NumericTerm, TermOrders> orders) {
-        Map<NumericTerm, Carrier> out = new java.util.LinkedHashMap<>();
-        orders.forEach((term, on) -> {
-            // Each entry's orders are that position's own. A table whose keys are the right numbers
-            // says nothing about which of them each answer came from, and what comes out of here is
-            // a number filed under an order, with the term gone.
-            on.areOf(term);
-            out.put(term, on.answered());
-        });
-        return Map.copyOf(out);
-    }
-
-    /**
-     * Whether the row {@code reading} was made of stands at one item of a border on this quantity,
-     * or whether it could not be read.
-     *
-     * <p>Asked of a reading and not of a row, so that a row read once can be asked this and
-     * {@link #valuesOf} both, and asked about a second criterion without being read again. What the
-     * numbers come to is each quantity's own — a position's value stands on its carrier, a distance
-     * is the difference of its ends, a form is its terms added up under their coefficients — and
-     * what they were read as is not.
-     */
-    Stands standsAt(Criterion where, QuantityReading reading);
-
     /** What a search has to solve to put a row at one item. */
     Standing standingAt(Criterion where);
+
+    /**
+     * Whether the row {@code row} is a reading of stands at one item of a border on this quantity,
+     * or whether it could not be read.
+     *
+     * <p>What the row is read for is each quantity's own: a form reads one number per term, and a
+     * count of the elements meeting something reads each element of its container.
+     */
+    Stands standsAt(Criterion where, Observation row);
+
+    /**
+     * Reads {@code row} the way {@link #standsAt} does and asks nothing of what it read, for the
+     * walk that finds which containers this quantity's numbers stand inside.
+     *
+     * <p>What it reads is not this walk's to know: which containers there are says how many
+     * readings of the row to try, and a quantity that left off early would be choosing them.
+     */
+    void lookAt(Observation row);
+
+    /**
+     * What makes two quantities one quantity, as a name a map can hold — or null where nothing
+     * does: a form whose coefficients over what they share no ratio holds has no smallest form to
+     * be named by, and a line on it is refused where lines are drawn.
+     *
+     * <p>A form is named by its smallest multiple ({@link QuantityKey}), since a form and its
+     * multiples order the rows the same way.
+     */
+    default String identity() {
+        return switch (this) {
+            case LinearQuantity form -> {
+                QuantityKey key = QuantityKey.tryOf(form.direction());
+                yield key == null ? null : key.key();
+            }
+            case HowMany count -> count.left();
+            case RemainderOfAForm remainder -> remainder.left();
+        };
+    }
+
+    /**
+     * How much of the quantity a level written in a rule's own terms is, which is what such a
+     * level divides by to be one of the quantity's own values ({@link QuantityKey#per}).
+     */
+    default ExactRatio per() {
+        return switch (this) {
+            case LinearQuantity form -> QuantityKey.per(form.direction());
+            case HowMany _, RemainderOfAForm _ -> ExactRatio.ONE;
+        };
+    }
+
+    /**
+     * Every number of a row this quantity is read from.
+     *
+     * <p>A form's terms, which are what it weighs. A quantity that is no form is still read from
+     * numbers of the row, and a reader asking which numbers a row has to settle together to stand
+     * at an item asks this and not which terms there are.
+     */
+    default List<NumericTerm> numbers() {
+        return switch (this) {
+            case LinearQuantity form -> form.terms();
+            case HowMany count -> count.allNumbers();
+            case RemainderOfAForm remainder -> remainder.dividend().terms();
+        };
+    }
+
+    /** What the rules leave this quantity: the least and most it comes to over the rows they
+     *  admit. */
+    default NumericDomain.Bounds runsWithin(Quantities quantities) {
+        return switch (this) {
+            case LinearQuantity form -> quantities.runsBetween(form.direction());
+            case HowMany count -> count.runs();
+            case RemainderOfAForm remainder -> remainder.runs();
+        };
+    }
+
+    /** What a count of elements runs between: none at the least, and no most it is told. */
+    NumericDomain.Bounds NONE_OR_MORE = new NumericDomain.Bounds(Endpoint.inclusive(Count.of(0)),
+            null);
+
+    /** What {@code region} leaves this quantity, or that it leaves it nothing. */
+    default NumericDomain.FormProjection projectedIn(SearchRegion region) {
+        return switch (this) {
+            case LinearQuantity form -> region.projectionOf(form.direction());
+            // A region holds relations over a row's numbers, and no relation it holds is about a
+            // count of elements: it leaves the count what a count runs between.
+            case HowMany count -> new NumericDomain.FormProjection.Within(count.runs());
+            // Whatever the rules leave the form, a remainder stays below its divisor.
+            case RemainderOfAForm remainder ->
+                    new NumericDomain.FormProjection.Within(remainder.runs());
+        };
+    }
+
+    /**
+     * What the declarations {@code region} reads hold this quantity to besides where it runs: a
+     * number of one position is held to what the position's values come to, and a form, a
+     * distance or a remainder of a form over numbers of one position to what each of its values
+     * comes to of the whole — worked out of the value as a row holding it is read
+     * ({@link OrderedAffineBoundary#at}, {@link OrderedAffineBoundary#remainderAt}).
+     *
+     * <p>Nothing of a distance between values that do not count, whose one level is where they
+     * meet, nor of a count of elements, which no one position's values say: neither refuses
+     * anything.
+     */
+    default HeldValues heldIn(SearchRegion region) {
+        return switch (this) {
+            case OfACoordinate coordinate -> HeldValues.of(region, coordinate.of());
+            case OverAForm over -> HeldValues.OfAForm.of(region, over.terms(),
+                    values -> OrderedAffineBoundary.at(over.form(), values).map(Optional::of));
+            case Apart apart -> apart.counts()
+                    ? HeldValues.OfAForm.of(region, apart.terms(), values -> OrderedAffineBoundary
+                            .at(apart.direction(), values).map(Optional::of))
+                    : HeldValues.NONE;
+            case RemainderOfAForm remainder -> HeldValues.OfAForm.of(region,
+                    remainder.dividend().terms(), values -> OrderedAffineBoundary.remainderAt(
+                            remainder.wholeDividend(), remainder.divisor(), values));
+            case HowMany _ -> HeldValues.NONE;
+        };
+    }
+
+    /**
+     * Where a rule about this quantity is filed, as a reader is sent to it: the numbers it is
+     * taken of, in the order a document names them ({@link AffineReading#filedAt}).
+     */
+    default List<FilingCoordinate> filedAt() {
+        return switch (this) {
+            case LinearQuantity form -> AffineReading.filedAt(form.direction().coefs().keySet());
+            case HowMany _, RemainderOfAForm _ -> AffineReading.filedAt(numbers());
+        };
+    }
+
+    /**
+     * Whether a value a rule singles out on this quantity, where no position is divided to hold it
+     * as a class, still has values beside it a row can be owed at.
+     *
+     * <p>Where the quantity counts to a number. A count, a remainder and a form over several
+     * positions do, and so does how far two counting positions stand apart: the numbers either
+     * side of the one named are values the quantity comes to, so the rows there are rows the rule
+     * tells apart from it — the nearest ones where the order steps, and the runs either way where
+     * it is dense and names no nearest one. Two strings stand no number apart, and the only value
+     * their distance takes is where they meet ({@link LevelSpace#onlyWhereTheyMeet}), so a rule
+     * holding them equal names that one value and no order, and a row where one sorts below the
+     * other is beside nothing the rule wrote.
+     */
+    default boolean singlesWithSides() {
+        return switch (this) {
+            case Apart apart -> apart.counts();
+            case OfACoordinate coordinate -> coordinate.of().answered().counts();
+            case OverAForm _, HowMany _, RemainderOfAForm _ -> true;
+        };
+    }
+
+    /**
+     * Why a rule drawn on this quantity divides none of the positions it is made of, in the word
+     * that is true of what the quantity is.
+     *
+     * <p>Which of three things a reader who found no partition is told: that the rule relates
+     * positions, that it is about what a run of values comes to, or that it is about what a
+     * division leaves of them. Asked of the quantity because only it knows which it is.
+     */
+    default BlockReason.ReadToEndWithoutLine whyItDividesNoPosition() {
+        return switch (this) {
+            case RemainderOfAForm _ -> new BlockReason.ComparisonOnARemainder();
+            case LinearQuantity _, HowMany _ -> readOverARun()
+                    ? new BlockReason.ComparisonOverARun()
+                    : new BlockReason.ComparisonRelatingTwoValues();
+        };
+    }
+
+    /** Whether this is a number read over a run of values rather than a form over positions,
+     *  which is a different thing to tell a reader who found no partition. */
+    private boolean readOverARun() {
+        return switch (this) {
+            case LinearQuantity form -> form.direction().coefs().keySet().stream()
+                    .anyMatch(term -> term.atOnePosition() == null);
+            case HowMany _ -> true;
+            case RemainderOfAForm remainder -> remainder.dividend().direction().coefs().keySet()
+                    .stream().anyMatch(term -> term.atOnePosition() == null);
+        };
+    }
+
+    /**
+     * The order this quantity's values are written back on, where it is one term's — a position's
+     * own values, or a number taken of one — and null where it is not.
+     */
+    default Carrier writtenBackOn() {
+        return switch (this) {
+            case LinearQuantity form -> form.direction().coefs().size() == 1
+                    ? form.carrierOf(form.direction().coefs().keySet().iterator().next()) : null;
+            case HowMany _, RemainderOfAForm _ -> null;
+        };
+    }
 
     /**
      * Which behavior's input this quantity is of.
@@ -923,7 +1468,12 @@ public sealed interface BorderQuantity {
      */
     default String left(ExactRatio times) {
         if (this instanceof OverAForm form && !times.equals(ExactRatio.ONE)) {
-            return new OverAForm(form.behavior(), form.form().times(times), form.on()).left();
+            LinearForm<NumericTerm> scaled = form.form().times(times).orNull();
+            // A form whose numbers no ratio holds once scaled has no coefficients to write out, and
+            // is named the way any other quantity is: by how many of it.
+            if (scaled != null) {
+                return new OverAForm(form.behavior(), scaled, form.on()).left();
+            }
         }
         return times(times, left());
     }
@@ -976,6 +1526,10 @@ public sealed interface BorderQuantity {
             // A declaration has no name for it: the rule relates two positions and places no end,
             // so nothing about the pair is kept in the declaration's own terms (ADR-0090).
             case Apart _ -> false;
+            // How many, which is the count's and not a position's.
+            case HowMany _ -> true;
+            // What a division leaves, which is the call's and not a position's.
+            case RemainderOfAForm _ -> true;
         };
     }
 
@@ -1062,7 +1616,7 @@ public sealed interface BorderQuantity {
          * Every value standing at {@code path}, for a number taken over a run of them.
          *
          * <p>Beside {@link #at} and not instead of it. What a row holds at a place inside a
-         * sequence is as many values as it wrote, and which question is being asked decides what to
+         * container is as many values as it wrote, and which question is being asked decides what to
          * do with them: a rule relating two positions is about one element and picks, and a rule
          * about what they add up to is about all of them and does not. Answered by one method, the
          * caller that wanted one would be handed a list to choose from and the choosing would move
@@ -1073,5 +1627,116 @@ public sealed interface BorderQuantity {
          * there is nothing here for a row that wrote an empty container to be told apart as.
          */
         WalkResult<java.util.List<ObservedValue>> everyValueAt(TermPath path);
+
+        /**
+         * One observation per element of the container at {@code container}, each the row with
+         * that element chosen and whatever this one chose of the other containers.
+         *
+         * <p>For a number taken of the elements together, each read as one element. Beside
+         * {@link #everyValueAt}, which hands back the values at one path: a statement about an
+         * element reads several of its paths, and read path by path, the values of one element
+         * would be paired with another's.
+         *
+         * <p>Under the same walk as {@link #at}. A container the row wrote empty, or wrote nothing
+         * at, has no elements to read.
+         */
+        WalkResult<java.util.List<Observation>> eachElementOf(TermPath container);
+
+        /**
+         * Whether the element of the container at {@code container} this row is read with chosen
+         * is the last of those the row wrote that hold, at {@code position}, the value it holds
+         * there.
+         *
+         * <p>Of the reading and not of the row: it says something only where an element of the
+         * container was chosen, and a walk that chose none could not walk to an answer. A walk
+         * that holds one element at a time, with the others left out, answers the same.
+         */
+        default Lastness lastToHold(TermPath container, TermPath position) {
+            return new Lastness.CouldNotTell(ReadingGap.COULD_NOT_WALK);
+        }
+
+        /**
+         * Which occurrence of the container at {@code container} this row is read in, and which
+         * of its elements this reading chose.
+         *
+         * <p>Of the reading and not of the row, as {@link #lastToHold} is; a walk that cannot
+         * tell the elements of the container apart could not walk to an answer. Nothing is read
+         * of the elements here: every reading of a row asks this, and a reader keeps what the
+         * elements of one occurrence came to by what this answers ({@link #elementsOf}).
+         */
+        default WalkResult<Among> among(TermPath container) {
+            return WalkResult.couldNotWalk();
+        }
+
+        /**
+         * The elements of the occurrence of the container at {@code container} this row is read
+         * in, in the order it wrote them, each read as this reading with that element chosen.
+         */
+        default WalkResult<List<AnElement>> elementsOf(TermPath container) {
+            return WalkResult.couldNotWalk();
+        }
+
+        /**
+         * Whether this reading chose an element of some container. A walk that cannot say is taken
+         * to have: what turns on which element is then not known of it, rather than taken to be
+         * about none.
+         */
+        default boolean choseAnElement() {
+            return true;
+        }
+    }
+
+    /**
+     * Which occurrence of one container a reading of a row is read in, and which element of it the
+     * reading chose.
+     *
+     * @param walk   what every reading of the row shares, by identity: what tells two readings of
+     *               one row from readings of two rows that wrote the same values, which a reader
+     *               keeping what it worked out of a row's elements keys on
+     * @param beside what the reading chose of every other container, which says which occurrence
+     *               of the container this is — the items of the second order and not of the first
+     * @param chosen the element the reading chose, or null where it chose none
+     */
+    record Among(Object walk, Map<TermPath, Integer> beside, Integer chosen) {
+
+        public Among {
+            beside = Map.copyOf(beside);
+            if (walk == null) {
+                throw new IllegalArgumentException("an occurrence is of some row's walk");
+            }
+        }
+    }
+
+    /**
+     * One element of a container a row wrote, and the row read with it chosen.
+     *
+     * @param element where it stands among the container's elements
+     * @param reading the row, read with it chosen
+     */
+    record AnElement(int element, Observation reading) {}
+
+    /**
+     * Whether an element is the last of those holding the value it holds at a place.
+     *
+     * <p>Three answers and not a truth. That an element is the last is shown by every element after
+     * it holding something else, and that it is not by one of them holding the same; a value that
+     * could not be read, in this element or in one after it, shows neither, and is said as that
+     * rather than taken for a value no other has.
+     */
+    sealed interface Lastness {
+
+        /** Every element after it holds another value. */
+        record Last() implements Lastness {}
+
+        /** An element after it holds the same value. */
+        record NotLast() implements Lastness {}
+
+        /** Whether one does could not be told, for this reason. */
+        record CouldNotTell(ReadingGap why) implements Lastness {
+
+            public CouldNotTell {
+                Objects.requireNonNull(why, "what could not be told says what stopped it");
+            }
+        }
     }
 }

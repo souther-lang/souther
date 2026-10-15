@@ -391,7 +391,7 @@ class ARecordedRowIsRunAgainstABoundImplementationTest {
         return ExampleVerifier.check(
                 c.db().ask(new Shapes.Prepared(name)).value().forExamples(),
                 Scopes.derived(c.db(), name).value(),
-                Shapes.publishedDeclarations(c.db()),
+                Shapes.sumCases(c.db()),
                 Shapes.declarationKinds(c.db()),
                 souther.compiler.query.ExampleExecutions.of(c.db(), name).fieldTypes(),
                 c.db().ask(new Bodies.Reachable(name)).value(),

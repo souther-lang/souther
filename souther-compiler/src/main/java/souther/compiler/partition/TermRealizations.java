@@ -1,15 +1,23 @@
 package souther.compiler.partition;
 
+import net.unit8.notation199x.pattern.CodePoints;
+
+import souther.compiler.ast.Hir;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.TypeView;
+import souther.compiler.evaluate.BoundUnderEvaluation;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Quantities;
+import souther.compiler.inputs.ReadingsOfEachValue;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermOrders;
+import souther.compiler.inputs.TermPath;
+import souther.compiler.numeric.Congruences;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.CountDomain;
+import souther.compiler.numeric.DateTranslation;
 import souther.compiler.numeric.Dates;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactAnswer;
@@ -17,26 +25,37 @@ import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.Place;
+import souther.compiler.numeric.PlacesApart;
 import souther.compiler.numeric.Towards;
+import souther.compiler.numeric.ValueTransformation;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.semantics.Arithmetic;
+import souther.compiler.semantics.CodePointClass;
 import souther.compiler.semantics.TakenArguments;
 import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.Type;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.OptionalLong;
 import java.util.SequencedMap;
 import java.util.Set;
+import java.util.SortedSet;
+import java.util.TreeSet;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
+import java.util.stream.Stream;
 
 /**
  * The values that put a term at a number, which is the other direction of reading a
@@ -78,14 +97,14 @@ final class TermRealizations {
                 case Built built -> built.rest();
                 case Stopped stopped -> stopped.met();
                 case Unexhausted some -> some.met();
-                case NoNumberTheRulesAdmit _, None _ -> CompositionShortfall.NONE;
+                case NoNumberTheDeclarationsAdmit _, None _ -> CompositionShortfall.NONE;
             };
         }
 
         /**
          * Values that answer it, and what was not built.
          *
-         * <p>Two halves of one answer, as {@link Witnesses.Sized} keeps them. A caller reading only
+         * <p>Two halves of one answer, as {@link Proposals} keeps them. A caller reading only
          * the first says every value was refused where some were never built, which is a different
          * thing to tell an author.
          *
@@ -176,8 +195,8 @@ final class TermRealizations {
          * The rules admit no number of what was asked about, which is walked and not guessed.
          *
          * <p><b>About the numbers and not about the values.</b> Nothing was built because there was
-         * nothing to build for: the walk went over every number the question holds and the rules
-         * left none of them standing. A walk that had numbers and built at none of them is not
+         * nothing to build for: the walk went over every number the question holds and the
+         * declarations — the types and the rules written on them — left none of them standing. A walk that had numbers and built at none of them is not
          * this — what that shows is about this compiler, and what this shows is about the model.
          *
          * <p><b>And about the question this attempt was for.</b> A location asked for a class and
@@ -188,10 +207,10 @@ final class TermRealizations {
          * <p>Not a word a reader may print. What somebody is owed a row at is an obligation and a
          * search runs at a combination, so one of these settles the combination it came from and
          * the obligation is settled by what every combination of it came to. Published from here,
-         * a class one combination of leaves nothing would be a class the rules leave nothing in,
-         * while another combination of it goes on admitting values.
+         * a class one combination of leaves nothing would be a class the declarations leave
+         * nothing in, while another combination of it goes on admitting values.
          */
-        record NoNumberTheRulesAdmit() implements Realization {}
+        record NoNumberTheDeclarationsAdmit() implements Realization {}
 
         /**
          * Nothing here writes a value answering it, and no budget of this compiler's is why.
@@ -207,11 +226,12 @@ final class TermRealizations {
          * try. Nothing here can tell them apart, so a walk that ran to the end of what it was
          * handed may have run to the end of one candidate — and this word is the one that says so
          * rather than the one that settles the class. What licenses a sentence about the model is
-         * {@link Generator.UnresolvedCombination.Reason#THE_RULES_LEAVE_NOTHING_THERE}, and
+         * {@link Generator.UnresolvedCombination.Reason#NO_VALUE_CAN_STAND_THERE}, and
          * nothing reaches it by counting what a walk refused.
          *
          * <p>The word is how a reader downstream treats it and {@code detail} is what happened in
-         * this attempt, which is the arrangement {@link Generator.UnresolvedCombination} has. A
+         * this attempt, which is the arrangement {@link Generator.UnresolvedCombination} has between
+         * its reason and what it said ({@link Generator.UnresolvedCombination#said()}). A
          * word read for the shape of the question outlives whatever made it true, so what a reader
          * is owed beyond it is evidence rather than another word.
          *
@@ -278,27 +298,63 @@ final class TermRealizations {
         // solving for either: said as that, a caller that asked for nothing is told about this
         // compiler's repertoire.
         assert !targets.isEmpty() : "a group is the numbers of one location and has one of them";
-        if (targets.size() == 1) {
-            return new JointRealization.Supported(new JointBuilder.OneNumberOnItsOwn());
+        // How many elements meet a statement, which is answered by choosing elements and not by a
+        // number standing anywhere. Every count of one container is one question about which
+        // elements it holds, so they are composed together, with how many it holds beside them —
+        // and so is a statement its elements meet together, which is answered the same way.
+        List<RealizationTarget.ACount> counts = new ArrayList<>();
+        List<RealizationTarget.ElementsMeetingTogether> together = new ArrayList<>();
+        List<RealizationTarget.OfANumber> numbers = new ArrayList<>();
+        for (RealizationTarget target : targets) {
+            switch (target) {
+                case RealizationTarget.ACount count -> counts.add(count);
+                case RealizationTarget.ElementsMeetingTogether stated -> together.add(stated);
+                case RealizationTarget.OfANumber number -> numbers.add(number);
+            }
         }
-        SequencedMap<RealizationTarget, TakenAs.TimePart> times = new LinkedHashMap<>();
-        SequencedMap<RealizationTarget, TakenAs.DatePart> dates = new LinkedHashMap<>();
-        SequencedMap<RealizationTarget, BigDecimal> quotients = new LinkedHashMap<>();
+        if (!counts.isEmpty() || !together.isEmpty()) {
+            return countsOf(targets, counts, together, numbers);
+        }
+        if (numbers.stream().anyMatch(each -> each.term() instanceof NumericTerm.Multiplicity)) {
+            return amongTheElements(targets, numbers);
+        }
+        if (targets.size() == 1) {
+            return new JointRealization.Supported(
+                    new JointBuilder.OneNumberOnItsOwn(numbers.getFirst()));
+        }
+        SequencedMap<RealizationTarget.OfANumber, TakenAs.TimePart> times = new LinkedHashMap<>();
+        SequencedMap<RealizationTarget.OfANumber, TakenAs.DatePart> dates = new LinkedHashMap<>();
+        // What each part of a date was taken of, which is the date as it stands unless it was
+        // moved first.
+        SequencedMap<RealizationTarget.OfANumber, DateTranslation> moved = new LinkedHashMap<>();
+        SequencedMap<RealizationTarget.OfANumber, BigDecimal> quotients = new LinkedHashMap<>();
+        SequencedMap<RealizationTarget.OfANumber, BigDecimal> remainders = new LinkedHashMap<>();
         // What stands at the place, where the group asks for it as well as for numbers taken of
         // it. One group has at most one of these: what a number of a place is taken of is the
         // place, so a second value asked for is a second place and is another group's.
-        RealizationTarget itself = null;
-        List<RealizationTarget> takenOfIt = new ArrayList<>();
+        RealizationTarget.OfANumber itself = null;
+        List<RealizationTarget.OfANumber> takenOfIt = new ArrayList<>();
         // How many the container holds and what it comes to, which are the two numbers a container
         // is composed out of rather than read for.
-        RealizationTarget manyItHolds = null;
-        RealizationTarget whatItComesTo = null;
+        RealizationTarget.OfANumber manyItHolds = null;
+        RealizationTarget.OfANumber whatItComesTo = null;
+        // How many of a string's code points are in a class, which are numbers of one string to be
+        // written together with how long it is.
+        List<RealizationTarget.OfANumber> classCounts = new ArrayList<>();
         // Every target read before any of them is answered, because what the group is turns on all
         // of them. Decided as they come, a value asked for beside a length would be the group the
         // length is in or the group the value is in depending on which of them was read first.
-        for (RealizationTarget target : targets) {
+        for (RealizationTarget.OfANumber target : numbers) {
             switch (target.term()) {
+                // Composed with the elements around it, which the arm above has already taken.
+                case NumericTerm.Multiplicity _ -> {
+                    return nothingSolvesAGroup();
+                }
                 case NumericTerm.ValueOf _ -> itself = target;
+                case NumericTerm.CodePointClassCount _ -> {
+                    takenOfIt.add(target);
+                    classCounts.add(target);
+                }
                 // A number taken over the values a walk came to is a number of a run, and a value
                 // standing at one place is not a run — so there is nothing here to read it off.
                 // What is added up over a run is still a number the container it runs through is
@@ -313,7 +369,10 @@ final class TermRealizations {
                     takenOfIt.add(target);
                     switch (taken.takenAs()) {
                         case TakenAs.PartOfTime part -> times.put(target, part.part());
-                        case TakenAs.PartOfDate part -> dates.put(target, part.part());
+                        case TakenAs.PartOfDate part -> {
+                            dates.put(target, part.part());
+                            moved.put(target, taken.transformation().translation());
+                        }
                         // A quotient is not a place in the spelling of anything, and putting two of
                         // them side by side writes no value: which value has both is solved for out
                         // of them. Which is what the arm below does, and it is the account's
@@ -325,6 +384,16 @@ final class TermRealizations {
                                 return nothingSolvesAGroup();
                             }
                             quotients.put(target, divisor);
+                        }
+                        // A remainder is no place in the spelling of a number either. Asked for
+                        // beside the place's own value it is read off each value offered; asked for
+                        // alone, or beside remainders by other divisors, it is solved for below.
+                        case TakenAs.TheFloorRemainder by -> {
+                            BigDecimal divisor = by.read(taken.arguments());
+                            if (divisor == null || divisor.signum() == 0) {
+                                return nothingSolvesAGroup();
+                            }
+                            remainders.put(target, divisor);
                         }
                         // How much a container holds, which is what a container is composed out of
                         // rather than a place in the spelling of one: what answers a length and a
@@ -341,26 +410,59 @@ final class TermRealizations {
         // those values is what reading that value comes to — so the candidates are that demand's
         // and the rest of the group is read off each of them.
         if (itself != null) {
-            RealizationTarget stands = itself;
+            RealizationTarget.OfANumber stands = itself;
             List<RealizationTarget> owned = new ArrayList<>(takenOfIt);
             owned.add(stands);
             return wholly(targets, owned,
                     () -> new JointBuilder.ItsOwnValueAndWhatIsTakenOfIt(stands, takenOfIt));
         }
+        // Counts of a string's code points, beside how long it is where that is asked: one string
+        // written for all of them. Beside anything else of the place there is nothing here that
+        // writes one, which is a capability this compiler lacks and not a string no numbers have.
+        if (!classCounts.isEmpty()) {
+            RealizationTarget.OfANumber length = manyItHolds;
+            return wholly(targets, length == null ? classCounts
+                            : Stream.concat(classCounts.stream(), Stream.of(length)).toList(),
+                    () -> new JointBuilder.StringsHoldingTheirCounts(classCounts, length));
+        }
         // How many a container holds beside what it comes to, which is one container to compose:
         // the sizes it may be are the ones the first number leaves, and filling one of those to
         // the second is what a total is composed by anyway.
         if (manyItHolds != null && whatItComesTo != null) {
-            RealizationTarget many = manyItHolds;
-            RealizationTarget total = whatItComesTo;
+            RealizationTarget.OfANumber many = manyItHolds;
+            RealizationTarget.OfANumber total = whatItComesTo;
             return wholly(targets, List.of(many, total),
                     () -> new JointBuilder.HoldingThatManyAndAddingUpToThat(many, total));
+        }
+        // The remainders of one place by their divisors, with nothing else asked of it. A value
+        // that is none of them is nothing these write, so a quotient or a part beside them is a
+        // group nothing here solves.
+        if (!remainders.isEmpty()) {
+            if (!quotients.isEmpty() || !times.isEmpty() || !dates.isEmpty()
+                    || manyItHolds != null || whatItComesTo != null) {
+                return nothingSolvesAGroup();
+            }
+            return wholly(targets, remainders.keySet(),
+                    () -> new JointBuilder.SolvingForTheirRemainders(remainders));
         }
         // A quotient of a place beside a part of it is a value that is both a number and a moment,
         // and what would write one is neither arm here.
         if (!quotients.isEmpty()) {
             return wholly(targets, quotients.keySet(),
                     () -> new JointBuilder.SolvingForTheirQuotients(quotients));
+        }
+        // A date moved before a part of it is taken is not a value spelled in parts: two years of
+        // one date are two numbers, and what writes a date answering them is a search over the
+        // days. Every part asked of the date, moved or not, is a condition on the days it comes
+        // from, so the group is one search. What bounds it is a year asked of it; a number of a
+        // moved date is only ever a year ({@link NumericTerm.TakenOf#of}), so a group holding one
+        // has that.
+        if (moved.values().stream().anyMatch(each -> !each.isNone())) {
+            return times.isEmpty() && dates.size() == numbers.size()
+                    && dates.containsValue(TakenAs.DatePart.YEAR)
+                    ? wholly(targets, dates.keySet(),
+                            () -> new JointBuilder.OnThoseMovedDateParts(dates, moved))
+                    : nothingSolvesAGroup();
         }
         // A value spelled in parts is written at the parts it is spelled in. Two asks at one part
         // are two asks for one number and are the same target, so a group holding a part twice is a
@@ -384,6 +486,107 @@ final class TermRealizations {
     }
 
     /**
+     * How often the value of an element occurs among the elements of one container, with how many
+     * the container holds where the group asks that too.
+     *
+     * <p>One container and one number of it. How often is asked of one place inside the element, so
+     * two places are two questions about which elements are alike, and counts of the same
+     * container beside them are a container composed for what the elements answer and for which of
+     * them are alike together, which nothing here writes.
+     */
+    private static JointRealization amongTheElements(Collection<RealizationTarget> group,
+                                                     List<RealizationTarget.OfANumber> numbers) {
+        List<RealizationTarget.OfANumber> alike = new ArrayList<>();
+        RealizationTarget.OfANumber many = null;
+        for (RealizationTarget.OfANumber each : numbers) {
+            switch (each.term()) {
+                case NumericTerm.Multiplicity _ -> alike.add(each);
+                case NumericTerm.TakenOf taken
+                        when taken.takenAs() instanceof TakenAs.HowManyItHolds -> {
+                    if (many != null) {
+                        return nothingSolvesAGroup();
+                    }
+                    many = each;
+                }
+                default -> {
+                    return nothingSolvesAGroup();
+                }
+            }
+        }
+        NumericTerm.Multiplicity first = (NumericTerm.Multiplicity) alike.getFirst().term();
+        for (RealizationTarget.OfANumber each : alike) {
+            if (!each.term().equals(first)) {
+                return nothingSolvesAGroup();
+            }
+        }
+        if (many != null && !((NumericTerm.TakenOf) many.term()).position()
+                .equals(first.container())) {
+            return nothingSolvesAGroup();
+        }
+        RealizationTarget.OfANumber holding = many;
+        return wholly(group, Stream.concat(alike.stream(),
+                        holding == null ? Stream.<RealizationTarget.OfANumber>empty()
+                                : Stream.of(holding)).toList(),
+                () -> new JointBuilder.ElementsAlikeAsOftenAsAsked(alike.getFirst(), holding));
+    }
+
+    /**
+     * How many elements of one container meet each of some statements, with how many it holds
+     * where the group asks that too.
+     *
+     * <p>One container. A count is of the elements of the container it names, and counts of two
+     * containers written at one location are a value composed out of two collections at once,
+     * which nothing here writes. Beside them, a value asked at the element itself is some element
+     * standing there, which is one more thing the elements are chosen for; anything else asked
+     * inside an element is not, and the group is one nothing here writes. A statement the
+     * elements meet together is about the same container or the group is one nothing writes.
+     */
+    private static JointRealization countsOf(Collection<RealizationTarget> group,
+                                             List<RealizationTarget.ACount> counts,
+                                             List<RealizationTarget.ElementsMeetingTogether>
+                                                     together,
+                                             List<RealizationTarget.OfANumber> numbers) {
+        TermPath container = counts.isEmpty() ? together.getFirst().container()
+                : counts.getFirst().count().container();
+        for (RealizationTarget.ACount each : counts) {
+            if (!each.count().container().equals(container)) {
+                return nothingSolvesAGroup();
+            }
+        }
+        for (RealizationTarget.ElementsMeetingTogether each : together) {
+            if (!each.container().equals(container)) {
+                return nothingSolvesAGroup();
+            }
+        }
+        List<RealizationTarget.OfANumber> holding = new ArrayList<>();
+        List<RealizationTarget.OfANumber> elements = new ArrayList<>();
+        for (RealizationTarget.OfANumber each : numbers) {
+            switch (each.term()) {
+                case NumericTerm.TakenOf taken
+                        when taken.takenAs() instanceof TakenAs.HowManyItHolds
+                        && taken.position().equals(container) -> holding.add(each);
+                // The element itself, or a number inside it: some element standing there.
+                case NumericTerm.ValueOf value
+                        when value.position().isAtOrUnder(container.element()) ->
+                        elements.add(each);
+                default -> {
+                    return nothingSolvesAGroup();
+                }
+            }
+        }
+        // How many it holds is one number of one container, so a second is a second target.
+        if (holding.size() > 1) {
+            return nothingSolvesAGroup();
+        }
+        RealizationTarget.OfANumber many = holding.isEmpty() ? null : holding.getFirst();
+        List<RealizationTarget> answered = new ArrayList<>(counts);
+        answered.addAll(together);
+        answered.addAll(numbers);
+        return wholly(group, answered,
+                () -> new JointBuilder.SoManyMeetingEach(counts, together, many, elements));
+    }
+
+    /**
      * That way of writing one value, where the numbers it is a way for are the whole group.
      *
      * <p><b>One place asks it, because it is one contract.</b> What comes back of a group is a way
@@ -400,7 +603,7 @@ final class TermRealizations {
      * to write.
      */
     private static JointRealization wholly(Collection<RealizationTarget> group,
-                                           Collection<RealizationTarget> owned,
+                                           Collection<? extends RealizationTarget> owned,
                                            Supplier<JointBuilder> way) {
         return Set.copyOf(owned).equals(Set.copyOf(group))
                 ? new JointRealization.Supported(way.get()) : nothingSolvesAGroup();
@@ -455,8 +658,21 @@ final class TermRealizations {
      */
     sealed interface JointBuilder {
 
-        Realization from(Type sourceType, SequencedMap<RealizationTarget, AskedAt> demands,
-                         Quantities measuring, SearchRegion within, RuleReadingContext reading);
+        /**
+         * The values to write at the group's location, answering every number it asks.
+         *
+         * @param keptApart what the rules of the value holding the location keep the elements of a
+         *                  container written there apart at ({@link ElementsKeptApart#heldUnder}),
+         *                  which a way writing a container element by element keeps beside what
+         *                  the container's own names keep
+         * @param inside what the value is asked to hold at positions inside it, which only a way
+         *               that composes a value element by element can take
+         *               ({@link #composesWhatIsInside})
+         */
+        Realization from(Type sourceType, List<List<String>> keptApart,
+                         SequencedMap<RealizationTarget, AskedAt> demands,
+                         Quantities measuring, SearchRegion within, RuleReadingContext reading,
+                         DemandsInside inside);
 
         /**
          * One number, whose value is what every other reader of this file asks for.
@@ -466,21 +682,58 @@ final class TermRealizations {
          * RuleReadingContext)} does — it is that way, reached by the one road a caller takes to any
          * group.
          */
-        record OneNumberOnItsOwn() implements JointBuilder {
+        record OneNumberOnItsOwn(RealizationTarget.OfANumber number) implements JointBuilder {
 
             @Override
-            public Realization from(Type sourceType,
+            public Realization from(Type sourceType, List<List<String>> keptApart,
                                     SequencedMap<RealizationTarget, AskedAt> demands,
                                     Quantities measuring, SearchRegion within,
-                                    RuleReadingContext reading) {
-                Map.Entry<RealizationTarget, AskedAt> one = demands.firstEntry();
-                return satisfying(sourceType, measuring.ordersOf(one.getKey().term()),
-                        one.getValue(), within, reading);
+                                    RuleReadingContext reading, DemandsInside inside) {
+                return satisfying(sourceType, keptApart, measuring.ordersOf(number.term()),
+                        demands.get(number), within, reading, inside);
+            }
+        }
+
+        /**
+         * One string holding the numbers of code points asked of it in each class, and that many
+         * in all where the length is asked too.
+         *
+         * <p><b>One string and not one for each number.</b> The counts of one string are tied: two
+         * classes that share code points count those in both, and none counts more than the
+         * string is long. A string written for each number alone and put side by side would answer
+         * none of them, so the numbers are chosen together and the string is written out of them.
+         */
+        record StringsHoldingTheirCounts(List<RealizationTarget.OfANumber> classes,
+                                         RealizationTarget.OfANumber length)
+                implements JointBuilder {
+
+            public StringsHoldingTheirCounts {
+                if (classes.isEmpty()) {
+                    throw new IllegalArgumentException(
+                            "a string holding counts of code points says which classes");
+                }
+                classes = List.copyOf(classes);
+            }
+
+            @Override
+            public Realization from(Type sourceType, List<List<String>> keptApart,
+                                    SequencedMap<RealizationTarget, AskedAt> demands,
+                                    Quantities measuring, SearchRegion within,
+                                    RuleReadingContext reading, DemandsInside inside) {
+                nothingInside(inside);
+                Map<RealizationTarget.OfANumber, Carrier> answeredOn = new LinkedHashMap<>();
+                for (RealizationTarget.OfANumber each : classes) {
+                    answeredOn.put(each, measuring.ordersOf(each.term()).answered());
+                }
+                if (length != null) {
+                    answeredOn.put(length, measuring.ordersOf(length.term()).answered());
+                }
+                return stringsHoldingTheirCounts(answeredOn, sourceType, demands, within, reading);
             }
         }
 
         /** The parts of a time, each standing at what its own set admits. */
-        record AtThoseTimeParts(SequencedMap<RealizationTarget, TakenAs.TimePart> parts)
+        record AtThoseTimeParts(SequencedMap<RealizationTarget.OfANumber, TakenAs.TimePart> parts)
                 implements JointBuilder {
 
             public AtThoseTimeParts {
@@ -492,12 +745,14 @@ final class TermRealizations {
             }
 
             @Override
-            public Realization from(Type sourceType,
+            public Realization from(Type sourceType, List<List<String>> keptApart,
                                     SequencedMap<RealizationTarget, AskedAt> demands,
                                     Quantities measuring, SearchRegion within,
-                                    RuleReadingContext reading) {
+                                    RuleReadingContext reading, DemandsInside inside) {
+                nothingInside(inside);
                 Map<TakenAs.TimePart, NumericSet> asked = new LinkedHashMap<>();
-                for (Map.Entry<RealizationTarget, TakenAs.TimePart> each : parts.entrySet()) {
+                for (Map.Entry<RealizationTarget.OfANumber, TakenAs.TimePart> each
+                        : parts.entrySet()) {
                     asked.put(each.getValue(), demands.get(each.getKey()).walking());
                 }
                 return atThoseParts(asked, sourceType, rootOf(parts.keySet(), measuring),
@@ -506,7 +761,7 @@ final class TermRealizations {
         }
 
         /** The parts of a date, solved over the calendar. */
-        record OnThoseDateParts(SequencedMap<RealizationTarget, TakenAs.DatePart> parts)
+        record OnThoseDateParts(SequencedMap<RealizationTarget.OfANumber, TakenAs.DatePart> parts)
                 implements JointBuilder {
 
             public OnThoseDateParts {
@@ -518,15 +773,58 @@ final class TermRealizations {
             }
 
             @Override
-            public Realization from(Type sourceType,
+            public Realization from(Type sourceType, List<List<String>> keptApart,
                                     SequencedMap<RealizationTarget, AskedAt> demands,
                                     Quantities measuring, SearchRegion within,
-                                    RuleReadingContext reading) {
+                                    RuleReadingContext reading, DemandsInside inside) {
+                nothingInside(inside);
                 Map<TakenAs.DatePart, NumericSet> asked = new LinkedHashMap<>();
-                for (Map.Entry<RealizationTarget, TakenAs.DatePart> each : parts.entrySet()) {
+                for (Map.Entry<RealizationTarget.OfANumber, TakenAs.DatePart> each
+                        : parts.entrySet()) {
                     asked.put(each.getValue(), demands.get(each.getKey()).walking());
                 }
                 return onThoseParts(asked, sourceType, rootOf(parts.keySet(), measuring),
+                        reading.source());
+            }
+        }
+
+        /**
+         * The parts of one date, each taken after the date was moved as its own number says.
+         *
+         * <p>The year of {@code b} and the year of {@code b} a day on are two numbers of one date,
+         * and a value spelled in parts has one year to write. So a date answering them is looked
+         * for among the days, where every number asked is a condition on the date itself
+         * ({@link #onMovedDates}) — which holds for the parts of a date that is not moved as well,
+         * so the two kinds are asked together and neither leaves the group unsolved.
+         */
+        record OnThoseMovedDateParts(
+                SequencedMap<RealizationTarget.OfANumber, TakenAs.DatePart> parts,
+                SequencedMap<RealizationTarget.OfANumber, DateTranslation> moved)
+                implements JointBuilder {
+
+            public OnThoseMovedDateParts {
+                if (parts.isEmpty() || !parts.keySet().equals(moved.keySet())
+                        || !parts.containsValue(TakenAs.DatePart.YEAR)) {
+                    throw new IllegalArgumentException("a way of writing a moved date says how"
+                            + " each part was moved, and is walked by the year asked of it");
+                }
+                parts = Collections.unmodifiableSequencedMap(new LinkedHashMap<>(parts));
+                moved = Collections.unmodifiableSequencedMap(new LinkedHashMap<>(moved));
+            }
+
+            @Override
+            public Realization from(Type sourceType, List<List<String>> keptApart,
+                                    SequencedMap<RealizationTarget, AskedAt> demands,
+                                    Quantities measuring, SearchRegion within,
+                                    RuleReadingContext reading, DemandsInside inside) {
+                nothingInside(inside);
+                List<DatePartAsk> asks = new ArrayList<>();
+                for (Map.Entry<RealizationTarget.OfANumber, TakenAs.DatePart> each
+                        : parts.entrySet()) {
+                    asks.add(new DatePartAsk(each.getValue(), moved.get(each.getKey()),
+                            demands.get(each.getKey()).walking()));
+                }
+                return onMovedDates(asks, sourceType, rootOf(parts.keySet(), measuring),
                         reading.source());
             }
         }
@@ -549,7 +847,7 @@ final class TermRealizations {
          * carrier names one place instead and what comes back says which population that was one
          * of.
          */
-        record SolvingForTheirQuotients(SequencedMap<RealizationTarget, BigDecimal> by)
+        record SolvingForTheirQuotients(SequencedMap<RealizationTarget.OfANumber, BigDecimal> by)
                 implements JointBuilder {
 
             public SolvingForTheirQuotients {
@@ -561,19 +859,24 @@ final class TermRealizations {
             }
 
             @Override
-            public Realization from(Type sourceType,
+            public Realization from(Type sourceType, List<List<String>> keptApart,
                                     SequencedMap<RealizationTarget, AskedAt> demands,
                                     Quantities measuring, SearchRegion within,
-                                    RuleReadingContext reading) {
+                                    RuleReadingContext reading, DemandsInside inside) {
+                nothingInside(inside);
                 Carrier observed = rootOf(by.keySet(), measuring);
                 if (observed == null) {
                     return new Realization.None(
                             Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
                 }
                 NumericDomain.Bounds lies = NumericDomain.Bounds.OPEN;
-                for (Map.Entry<RealizationTarget, BigDecimal> each : by.entrySet()) {
+                for (Map.Entry<RealizationTarget.OfANumber, BigDecimal> each : by.entrySet()) {
+                    // The quotients as ends that hold nothing else. The walk below counts the
+                    // numbers it admits, and a hole in the quotients is as many numbers of the
+                    // place as the divisor is wide — so a set with one is a population nothing here
+                    // solves a value out of, and not a set with nothing in it.
                     NumericDomain.Bounds quotients =
-                            quotientsAsked(demands.get(each.getKey()).walking());
+                            demands.get(each.getKey()).walking().asOneRun();
                     if (quotients == null) {
                         return new Realization.Unexhausted(CompositionShortfall.writing(Set.of(
                                 CompositionRepertoire.VALUES_THAT_ANSWER_SEVERAL_OF_THEIR_NUMBERS)),
@@ -604,6 +907,72 @@ final class TermRealizations {
         }
 
         /**
+         * One number of the place whose remainders by those divisors are the numbers asked for,
+         * solved for ({@link RemainderSolutions}).
+         *
+         * <p><b>Solved and not walked.</b> What several remainders of one number ask is a class of
+         * whole numbers, or nothing where they disagree, and the number is the class's member nearest
+         * the end of the run the rules leave the place. How far apart the members are is the product
+         * of the divisors, which is why no walk through them is a way to find one.
+         *
+         * <p>What is read of each demand is the remainders it admits, as many as a figure allows, so
+         * a solving that did not try every one of them says it stopped and is never read as the rules
+         * leaving no number.
+         */
+        record SolvingForTheirRemainders(SequencedMap<RealizationTarget.OfANumber, BigDecimal> by)
+                implements JointBuilder {
+
+            public SolvingForTheirRemainders {
+                if (by.isEmpty()) {
+                    throw new IllegalArgumentException(
+                            "a solving for some remainders says which divisors they are by");
+                }
+                by = Collections.unmodifiableSequencedMap(new LinkedHashMap<>(by));
+            }
+
+            @Override
+            public Realization from(Type sourceType, List<List<String>> keptApart,
+                                    SequencedMap<RealizationTarget, AskedAt> demands,
+                                    Quantities measuring, SearchRegion within,
+                                    RuleReadingContext reading, DemandsInside inside) {
+                nothingInside(inside);
+                Carrier observed = rootOf(by.keySet(), measuring);
+                if (observed == null) {
+                    return new Realization.None(
+                            Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+                }
+                // Every remainder is of one place, so the run the rules leave its value is the one
+                // run every demand is solved in.
+                NumericDomain.Bounds run = NumericDomain.Bounds.OPEN;
+                switch (valueOfThePlace(by.firstEntry().getKey().term(), within)) {
+                    case NumericDomain.FormProjection.Within(NumericDomain.Bounds held) ->
+                            run = held;
+                    case NumericDomain.FormProjection.NothingIsLeft _ -> {
+                        return new Realization.None(
+                                Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+                    }
+                    case null -> { }
+                }
+                List<RemainderSolutions.Demand> asked = new ArrayList<>();
+                for (Map.Entry<RealizationTarget.OfANumber, BigDecimal> each : by.entrySet()) {
+                    AskedAt of = demands.get(each.getKey());
+                    if (of == null) {
+                        return new Realization.None(
+                                Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+                    }
+                    asked.add(new RemainderSolutions.Demand(each.getValue(), of.walking(),
+                            of.named()));
+                }
+                RuleReadingSource ruleSource = reading.source();
+                return firstThatBuilds(walkIsOfTheWholeQuestion(demands.values()),
+                        offeredBy(RemainderSolutions.solve(asked,
+                                valueOfThePlaceHeldTo(by.firstEntry().getKey().term(), run, within),
+                                observed)),
+                        at -> writtenAt(at, sourceType, observed, ruleSource));
+            }
+        }
+
+        /**
          * The value the place is asked to stand at, with the numbers taken of it read off it.
          *
          * <p><b>Offered and read back, not solved for.</b> A group asking what stands at a place
@@ -620,8 +989,8 @@ final class TermRealizations {
          * ({@link Realization.None}), so a value refused by a number taken of it is not read back
          * as a class the rules leave nothing at.
          */
-        record ItsOwnValueAndWhatIsTakenOfIt(RealizationTarget itself,
-                                            List<RealizationTarget> takenOfIt)
+        record ItsOwnValueAndWhatIsTakenOfIt(RealizationTarget.OfANumber itself,
+                                            List<RealizationTarget.OfANumber> takenOfIt)
                 implements JointBuilder {
 
             public ItsOwnValueAndWhatIsTakenOfIt {
@@ -634,10 +1003,11 @@ final class TermRealizations {
             }
 
             @Override
-            public Realization from(Type sourceType,
+            public Realization from(Type sourceType, List<List<String>> keptApart,
                                     SequencedMap<RealizationTarget, AskedAt> demands,
                                     Quantities measuring, SearchRegion within,
-                                    RuleReadingContext reading) {
+                                    RuleReadingContext reading, DemandsInside inside) {
+                nothingInside(inside);
                 TermOrders orders = measuring.ordersOf(itself.term());
                 AskedAt standsAt = demands.get(itself);
                 NumericSet stands = standsAt == null ? null : standsAt.walking();
@@ -651,7 +1021,7 @@ final class TermRealizations {
                 // worked it out per candidate would ask the same questions again at every value
                 // and answer them the same way.
                 List<Asked> readOfEach = new ArrayList<>();
-                for (RealizationTarget each : takenOfIt) {
+                for (RealizationTarget.OfANumber each : takenOfIt) {
                     TermOrders of = measuring.ordersOf(each.term());
                     AskedAt at = demands.get(each);
                     NumericSet wanted = at == null ? null : at.walking();
@@ -702,15 +1072,15 @@ final class TermRealizations {
          * demand refuses is no candidate, and a walk that filled one would spend a figure of this
          * compiler's on a container nobody asked for.
          */
-        record HoldingThatManyAndAddingUpToThat(RealizationTarget manyItHolds,
-                                                RealizationTarget whatItComesTo)
+        record HoldingThatManyAndAddingUpToThat(RealizationTarget.OfANumber manyItHolds,
+                                                RealizationTarget.OfANumber whatItComesTo)
                 implements JointBuilder {
 
             @Override
-            public Realization from(Type sourceType,
+            public Realization from(Type sourceType, List<List<String>> keptApart,
                                     SequencedMap<RealizationTarget, AskedAt> demands,
                                     Quantities measuring, SearchRegion within,
-                                    RuleReadingContext reading) {
+                                    RuleReadingContext reading, DemandsInside inside) {
                 TermOrders counted = measuring.ordersOf(manyItHolds.term());
                 TermOrders adds = measuring.ordersOf(whatItComesTo.term());
                 AskedAt holdsAt = demands.get(manyItHolds);
@@ -734,8 +1104,74 @@ final class TermRealizations {
                         new ContainersAddingUp.HowManyIsAskedFor(many, counted.answered());
                 return firstThatBuilds(walkIsOfTheWholeQuestion(demands.values()),
                         onTheOrder(total, adds, comesToAt.named(), within),
-                        at -> ContainersAddingUp.to(at, sourceType, adds, within, reading,
-                                holding));
+                        at -> ContainersAddingUp.to(at, sourceType, keptApart, adds, within,
+                                reading, holding, inside));
+            }
+        }
+
+        /**
+         * A container with so many of its elements meeting each statement, and holding as many
+         * elements as {@code manyItHolds} asks where it asks.
+         *
+         * <p>Composed out of the counts and read for none of them. Which elements a container holds
+         * is what every count of it turns on together, so they are one question and the container
+         * is written once ({@link CardinalityComposer}).
+         *
+         * @param together    statements the elements are to meet together, each one of several ways
+         * @param manyItHolds how many elements the container holds, or null where nothing asks
+         * @param standingAt  the element itself, each asked to stand in a set — which some element
+         *                    of the container does
+         */
+        record SoManyMeetingEach(List<RealizationTarget.ACount> counts,
+                                 List<RealizationTarget.ElementsMeetingTogether> together,
+                                 RealizationTarget.OfANumber manyItHolds,
+                                 List<RealizationTarget.OfANumber> standingAt)
+                implements JointBuilder {
+
+            public SoManyMeetingEach {
+                if (counts.isEmpty() && together.isEmpty()) {
+                    throw new IllegalArgumentException("a container composed for its counts is"
+                            + " asked for at least one, or for a statement its elements meet");
+                }
+                counts = List.copyOf(counts);
+                together = List.copyOf(together);
+                standingAt = List.copyOf(standingAt);
+            }
+
+            @Override
+            public Realization from(Type sourceType, List<List<String>> keptApart,
+                                    SequencedMap<RealizationTarget, AskedAt> demands,
+                                    Quantities measuring, SearchRegion within,
+                                    RuleReadingContext reading, DemandsInside inside) {
+                nothingInside(inside);
+                return CardinalityComposer.compose(sourceType, keptApart, counts, together,
+                        demands, manyItHolds, standingAt, measuring, within, reading);
+            }
+        }
+
+        /**
+         * A container holding some element as often as asked, and as many elements as
+         * {@code manyItHolds} asks where it asks.
+         *
+         * <p>Composed out of how often and read for nothing: which values the elements hold and how
+         * many hold each is what the number turns on, so the container is written once
+         * ({@link CardinalityComposer#composeAlike}).
+         *
+         * @param alike       how often some element's value occurs
+         * @param manyItHolds how many elements the container holds, or null where nothing asks
+         */
+        record ElementsAlikeAsOftenAsAsked(RealizationTarget.OfANumber alike,
+                                           RealizationTarget.OfANumber manyItHolds)
+                implements JointBuilder {
+
+            @Override
+            public Realization from(Type sourceType, List<List<String>> keptApart,
+                                    SequencedMap<RealizationTarget, AskedAt> demands,
+                                    Quantities measuring, SearchRegion within,
+                                    RuleReadingContext reading, DemandsInside inside) {
+                nothingInside(inside);
+                return CardinalityComposer.composeAlike(sourceType, keptApart, alike, manyItHolds,
+                        demands, measuring, within, reading);
             }
         }
 
@@ -747,9 +1183,10 @@ final class TermRealizations {
          * because a term measured somewhere else is a term whose value would be written on a
          * carrier a caller found elsewhere.
          */
-        private static Carrier rootOf(Collection<RealizationTarget> group, Quantities measuring) {
+        private static Carrier rootOf(Collection<RealizationTarget.OfANumber> group,
+                                      Quantities measuring) {
             Carrier observed = null;
-            for (RealizationTarget target : group) {
+            for (RealizationTarget.OfANumber target : group) {
                 TermOrders orders = measuring.ordersOf(target.term());
                 if (orders == null) {
                     return null;
@@ -787,19 +1224,124 @@ final class TermRealizations {
                                      Quantities measuring,
                                      SearchRegion within,
                                      RuleReadingContext reading) {
+        return allSatisfying(sourceType, List.of(), demands, measuring, within, reading,
+                DemandsInside.NOTHING);
+    }
+
+    /**
+     * The same, with the value asked to hold {@code inside} at positions inside it as well, and
+     * held by a value whose rules keep the elements of a container written there apart at
+     * {@code keptApart} ({@link JointBuilder#from}).
+     *
+     * <p>Only for a group whose value is composed rather than read ({@link #composesWhatIsInside}).
+     * A value written as one number — a literal, a moment spelled in parts — has no positions
+     * inside it to hold anything, and a caller handing demands to one has asked for a value nothing
+     * here writes.
+     */
+    static Realization allSatisfying(Type sourceType, List<List<String>> keptApart,
+                                     SequencedMap<RealizationTarget, AskedAt> demands,
+                                     Quantities measuring,
+                                     SearchRegion within,
+                                     RuleReadingContext reading,
+                                     DemandsInside inside) {
         // What type the value is written at is the caller's answer and is settled before this is
         // asked. Read here as one more thing that could be missing, a location whose write path
         // this reading has no type for would come back as a group nothing solves — which is a
         // sentence about what this compiler cannot compose, said of a question nobody asked.
         assert sourceType != null : "a group is realized at the type its caller settled";
+        // Numbers of one location, some of them taken of its value: chosen among the values its
+        // rules name, where they name finitely many. Nothing inside such a value is composed, so a
+        // group asking for that is left to the way that composes it.
+        if (inside.isEmpty()) {
+            SequencedMap<TermOrders, AskedAt> numbers = numbersOf(demands, measuring);
+            if (numbers != null) {
+                Realization named = amongTheValuesNamed(sourceType, numbers, within, reading);
+                if (named != null) {
+                    return named;
+                }
+            }
+        }
         return switch (jointRealizationOf(demands.keySet())) {
             // Which population, and no detail beside it: nothing was walked here, so there is
             // nothing this found to tell a reader.
             case JointRealization.Missing(CompositionRepertoire notAllOf) ->
                     new Realization.Unexhausted(CompositionShortfall.writing(Set.of(notAllOf)), null);
             case JointRealization.Supported(JointBuilder builder) ->
-                    builder.from(sourceType, demands, measuring, within, reading);
+                    builder.from(sourceType, keptApart, demands, measuring, within, reading,
+                            inside);
         };
+    }
+
+    /**
+     * Each number of {@code demands} by the orders it is read on and the set asked of it, where
+     * every demand is a number read of one place and one of them is taken of its value — or null
+     * where that is not so.
+     *
+     * <p>A group of nothing but the value itself is chosen out of the region already, as one
+     * number of it is ({@link #standing}).
+     */
+    private static SequencedMap<TermOrders, AskedAt> numbersOf(
+            SequencedMap<RealizationTarget, AskedAt> demands, Quantities measuring) {
+        SequencedMap<TermOrders, AskedAt> out = new LinkedHashMap<>();
+        boolean takenOfIt = false;
+        for (Map.Entry<RealizationTarget, AskedAt> each : demands.entrySet()) {
+            if (!(each.getKey() instanceof RealizationTarget.OfANumber number)
+                    || number.term().atOnePosition() == null) {
+                return null;
+            }
+            takenOfIt |= !(number.term() instanceof NumericTerm.ValueOf);
+            out.put(measuring.ordersOf(number.term()), each.getValue());
+        }
+        return takenOfIt ? out : null;
+    }
+
+    /**
+     * Whether the value answering {@code group} is composed element by element, so that what its
+     * elements hold at positions inside them can be asked of it beside the numbers.
+     *
+     * <p>A container filled to a total is: each element is planned and built, and a position the
+     * caller fixed is one more thing the plan is made against. Every other way of writing a value
+     * for a group writes it as one number or reads it off a value it was handed, and nothing inside
+     * such a value is chosen for anything to be asked of.
+     */
+    static boolean composesWhatIsInside(Collection<RealizationTarget> group) {
+        if (!(jointRealizationOf(group) instanceof JointRealization.Supported(JointBuilder builder))) {
+            return false;
+        }
+        return switch (builder) {
+            case JointBuilder.HoldingThatManyAndAddingUpToThat _ -> true;
+            case JointBuilder.OneNumberOnItsOwn only -> switch (only.number().term()) {
+                case NumericTerm.TakenOver over ->
+                        over.takenAs() instanceof TakenAs.TheSumOfWhatItHolds;
+                case NumericTerm.TakenOf taken ->
+                        taken.takenAs() instanceof TakenAs.TheSumOfWhatItHolds;
+                case NumericTerm.ValueOf _, NumericTerm.CodePointClassCount _,
+                     NumericTerm.Multiplicity _ -> false;
+            };
+            // Each element is chosen for what it answers of the statements, out of values of the
+            // element's own number; nothing else inside it is planned.
+            case JointBuilder.SoManyMeetingEach _, JointBuilder.ElementsAlikeAsOftenAsAsked _ ->
+                    false;
+            case JointBuilder.StringsHoldingTheirCounts _,
+                 JointBuilder.AtThoseTimeParts _, JointBuilder.OnThoseDateParts _,
+                 JointBuilder.OnThoseMovedDateParts _, JointBuilder.SolvingForTheirQuotients _,
+                 JointBuilder.SolvingForTheirRemainders _,
+                 JointBuilder.ItsOwnValueAndWhatIsTakenOfIt _ -> false;
+        };
+    }
+
+    /**
+     * Refuses demands inside a value a way of writing one has no positions inside of to hold.
+     *
+     * <p>Asked of {@link #composesWhatIsInside} before anything here is reached, so a caller that
+     * gets this far with demands has handed them to the wrong builder — which is this compiler's
+     * mistake, and said loudly rather than by a value composed as though they were not there.
+     */
+    private static void nothingInside(DemandsInside inside) {
+        if (!inside.isEmpty()) {
+            throw new IllegalArgumentException("a value written as one number holds nothing inside"
+                    + " it to be asked for: " + inside);
+        }
     }
 
     /**
@@ -852,6 +1394,106 @@ final class TermRealizations {
     static Realization satisfying(Type sourceType, TermOrders orders, AskedAt asked,
                                   SearchRegion within,
                                   RuleReadingContext reading) {
+        // A value of the position itself is chosen out of the region already ({@link #standing}).
+        if (!(orders.term() instanceof NumericTerm.ValueOf)) {
+            SequencedMap<TermOrders, AskedAt> one = new LinkedHashMap<>();
+            one.put(orders, asked);
+            Realization named = amongTheValuesNamed(sourceType, one, within, reading);
+            if (named != null) {
+                return named;
+            }
+        }
+        return satisfying(sourceType, List.of(), orders, asked, within, reading,
+                DemandsInside.NOTHING);
+    }
+
+    /**
+     * The values the location's rules name that answer every number asked of it, or null where
+     * there are none to choose among.
+     *
+     * <p>Where the reading admits finitely many values at the location, those are every value a
+     * row can write there, whichever rules narrowed them — the location's own type, a record
+     * holding it, the element of a container. So a number taken of the location is written by
+     * choosing among them, each read through its term as a row holding it would be
+     * ({@link TermOrders#readOf}); a value written for the number alone is one those rules refuse.
+     * The set is the one a border on the number is refused by ({@code HeldValues}), so a number a
+     * border owes a row at is one some value of it comes to.
+     *
+     * <p>Every value of the set is tried, each read through every number at once
+     * ({@link ReadingsOfEachValue}), and the set holds every value the location can hold.
+     * So where every number is walked as the whole of what it is asked about, none answering is an
+     * answer about the model and is said as one; where a caller picked a number to try, it is an
+     * answer about that number, which is no answer about the ones beside it.
+     *
+     * <p>Null where the numbers are not all of one location, where the location admits no finite
+     * set, or where a value of it is read as no number of a term asked: the accounts write values
+     * there as they would anywhere.
+     *
+     * @param asked each number asked of the location, by the orders it is read on
+     */
+    private static Realization amongTheValuesNamed(Type sourceType,
+                                                   SequencedMap<TermOrders, AskedAt> asked,
+                                                   SearchRegion within,
+                                                   RuleReadingContext reading) {
+        if (sourceType == null || within == null || asked.isEmpty()) {
+            return null;
+        }
+        TermOrders first = asked.firstEntry().getKey();
+        Carrier observed = first.observed();
+        if (observed == null || first.term().atOnePosition() == null) {
+            return null;
+        }
+        // Read through the orders this was handed, which are the ones each number was asked on.
+        ReadingsOfEachValue named = ReadingsOfEachValue.of(
+                within.admittedAt(first.term().atOnePosition()), List.copyOf(asked.keySet()));
+        if (named == null) {
+            return null;
+        }
+        List<Place> answering = new ArrayList<>();
+        for (ReadingsOfEachValue.Read each : named.each()) {
+            boolean answers = true;
+            for (Map.Entry<TermOrders, AskedAt> one : asked.entrySet()) {
+                answers &= one.getValue().walking().holds(
+                        each.numbers().get(one.getKey().term()), one.getKey().answered());
+            }
+            if (answers) {
+                answering.add(observed.placeOf(each.value()));
+            }
+        }
+        RuleReadingSource ruleSource = reading.source();
+        WornNames wears = namesOf(sourceType, ruleSource);
+        if (!(wears instanceof WornNames.Spelled worn)) {
+            return new Realization.None(
+                    Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
+                    ((WornNames.Unwritable) wears).why());
+        }
+        List<FixtureTemplate> out = new ArrayList<>();
+        for (Place each : answering) {
+            FixtureTemplate bare = FixtureTemplate.on(observed, each,
+                    ruleSource.symbols().scope()::reach);
+            // A value this writes no literal for is one the set holds and this cannot offer, so
+            // none answering would no longer be an answer about the model.
+            if (bare == null) {
+                return null;
+            }
+            out.add(RepresentativeSource.under(worn.names(), bare));
+        }
+        if (!out.isEmpty()) {
+            return Realization.Built.whole(out);
+        }
+        boolean theWholeQuestion = asked.values().stream()
+                .allMatch(AskedAt::walkIsOfTheWholeQuestion);
+        return new Realization.None(theWholeQuestion
+                ? Generator.UnresolvedCombination.Reason.NO_VALUE_CAN_STAND_THERE
+                : Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+    }
+
+    /** The same, with the value asked to hold {@code inside} at positions inside it as well, and
+     *  held by a value whose rules keep its elements apart at {@code keptApart}. */
+    private static Realization satisfying(Type sourceType, List<List<String>> keptApart,
+                                          TermOrders orders, AskedAt asked,
+                                          SearchRegion within,
+                                          RuleReadingContext reading, DemandsInside inside) {
         if (sourceType == null) {
             return new Realization.None(
                     Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
@@ -859,18 +1501,33 @@ final class TermRealizations {
         // Which number is being written for, read off the answer that says which number it is of.
         // Handed in beside it, it was a second name for the same thing and a caller could give two
         // — and this would then write a value for one number on the order of another.
-        RealizationTarget target = RealizationTarget.of(orders.term());
+        RealizationTarget.OfANumber target = RealizationTarget.of(orders.term());
         return switch (target.term()) {
             // Written by the carrier the line was drawn on, and wearing every name the position
             // declares. Read off the boundary's own shape instead, a count on one carrier could be
             // written as a literal of another — which is how a date-time's second count reached a
             // row as an `Int`, and the decoder refused it with the report saying only that every
             // value tried had been refused.
-            case NumericTerm.ValueOf _ -> standing(sourceType, orders, asked, within, reading);
-            case NumericTerm.TakenOf taken -> taken(taken.takenAs(), taken.arguments(), sourceType,
-                    orders, asked, within, reading);
-            case NumericTerm.TakenOver over -> overARun(over.takenAs(), sourceType, orders,
-                    asked, within, reading);
+            case NumericTerm.ValueOf _ -> {
+                nothingInside(inside);
+                yield standing(sourceType, orders, asked, within, reading);
+            }
+            case NumericTerm.TakenOf taken -> taken(taken.takenAs(), taken.arguments(),
+                    taken.transformation(), sourceType, keptApart, orders, asked, within,
+                    reading, inside);
+            case NumericTerm.CodePointClassCount counted -> {
+                nothingInside(inside);
+                yield holdingThatManyOfAClass(counted.counted(), sourceType, asked, orders,
+                        reading);
+            }
+            case NumericTerm.TakenOver over -> overARun(over.takenAs(), sourceType, keptApart,
+                    orders, asked, within, reading, inside);
+            // Written by composing the container its elements stand in, which a value of one
+            // element's type is not: a group holding it is never answered by one number alone
+            // ({@link #jointRealizationOf}).
+            case NumericTerm.Multiplicity among -> throw new IllegalStateException(
+                    among + " is written by composing its container, and no value of one element"
+                            + " is asked for it");
         };
     }
 
@@ -925,34 +1582,48 @@ final class TermRealizations {
      * agree, an operation would have gained a boundary nobody could write a row for, and the report
      * would have said only that every value tried was refused.
      */
-    private static Realization taken(TakenAs how, TakenArguments arguments, Type sourceType,
+    private static Realization taken(TakenAs how, TakenArguments arguments,
+                                     ValueTransformation from, Type sourceType,
+                                     List<List<String>> keptApart,
                                      TermOrders orders, AskedAt asked,
                                      SearchRegion within,
-                                     RuleReadingContext reading) {
+                                     RuleReadingContext reading, DemandsInside inside) {
         RuleReadingSource ruleSource = reading.source();
         NumericSet wanted = asked.walking();
+        // Only a total is composed element by element, so only it has anything inside to hold.
+        if (!(how instanceof TakenAs.TheSumOfWhatItHolds)) {
+            nothingInside(inside);
+        }
         return switch (how) {
             // A container has no order of its own and is built out of what it holds, so this arm
             // takes none. That is the arm's own answer and not an order standing in for nothing.
-            case TakenAs.HowManyItHolds _ -> holding(sourceType, asked, orders, reading);
+            case TakenAs.HowManyItHolds _ ->
+                    holding(sourceType, keptApart, asked, orders, reading);
             // A container whose elements come to the total, which is what a row has to hold for
             // this number to be there. What that takes is choosing how many elements and what each
             // of them holds — one question whether the number is added up out of the container
             // itself or out of a path inside its elements, and answered for both in one place.
-            case TakenAs.TheSumOfWhatItHolds _ -> addingUp(asked, sourceType, orders,
-                    within, reading);
+            case TakenAs.TheSumOfWhatItHolds _ -> addingUp(asked, sourceType, keptApart, orders,
+                    within, reading, inside);
             // And this one writes on the order the value is written on. Written on the order the
             // answer is measured on, the thirteenth hour would be offered as the thirteenth second —
             // the same mistake the reading makes in the other direction, which is why the pair
             // travels this far and the arm takes the end (#1027).
             case TakenAs.PartOfTime taken -> atThoseParts(Map.of(taken.part(), wanted), sourceType,
                     orders.observed(), ruleSource);
-            case TakenAs.PartOfDate taken -> onThoseParts(Map.of(taken.part(), wanted), sourceType,
-                    orders.observed(), ruleSource);
+            case TakenAs.PartOfDate taken -> from instanceof ValueTransformation.DateShift moved
+                    ? onMovedDates(List.of(new DatePartAsk(taken.part(), moved.translation(),
+                            wanted)), sourceType, orders.observed(), ruleSource)
+                    : onThoseParts(Map.of(taken.part(), wanted), sourceType, orders.observed(),
+                            ruleSource);
             // And this one multiplies back. What a quotient is taken of is a whole number and what
             // it answers is one, so both ends are the order the value is written on.
             case TakenAs.TheTruncatingQuotient taken ->
                     atThatQuotient(taken.read(arguments), sourceType, orders, asked,
+                            within, ruleSource);
+            // And this one writes the residue itself, which is its own remainder.
+            case TakenAs.TheFloorRemainder taken ->
+                    atThatRemainder(taken.read(arguments), sourceType, orders, asked,
                             within, ruleSource);
         };
     }
@@ -1032,7 +1703,7 @@ final class TermRealizations {
         // could be built at a number this walked past: this is about the numbers, not the values.
         if (tried.numbers().isEmpty() && tried.rest() instanceof Remainder.Exhausted
                 && walkedTheWholeQuestion) {
-            return new Realization.NoNumberTheRulesAdmit();
+            return new Realization.NoNumberTheDeclarationsAdmit();
         }
         return last instanceof Realization.None none ? none
                 : new Realization.None(
@@ -1040,10 +1711,12 @@ final class TermRealizations {
     }
 
     /** A container whose elements come to one of those numbers, which is what a row has to hold for
-     *  this number to be there. */
-    private static Realization addingUp(AskedAt asked, Type sourceType, TermOrders orders,
+     *  this number to be there, held by a value whose rules keep its elements apart at
+     *  {@code keptApart}. */
+    private static Realization addingUp(AskedAt asked, Type sourceType,
+                                        List<List<String>> keptApart, TermOrders orders,
                                         SearchRegion within,
-                                        RuleReadingContext reading) {
+                                        RuleReadingContext reading, DemandsInside inside) {
         if (orders.answered() == null) {
             return new Realization.None(
                     Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
@@ -1057,7 +1730,8 @@ final class TermRealizations {
         // taken over a run would be asked about a carrier the run has and the number does not.
         return firstThatBuilds(asked.walkIsOfTheWholeQuestion(),
                 onTheOrder(asked.walking(), orders, asked.named(), within),
-                total -> ContainersAddingUp.to(total, sourceType, orders, within, reading));
+                total -> ContainersAddingUp.to(total, sourceType, keptApart, orders, within,
+                        reading, inside));
     }
 
     /**
@@ -1092,6 +1766,79 @@ final class TermRealizations {
         return firstThatBuilds(asked.walkIsOfTheWholeQuestion(),
                 onTheOrder(asked.walking(), orders, asked.named(), within),
                 quotient -> multipliedBack(by, sourceType, observed, quotient, ruleSource));
+    }
+
+    /**
+     * A value whose remainder by that divisor is one of the numbers asked for, found by solving for
+     * it ({@link RemainderSolutions}).
+     *
+     * <p><b>A right inverse, as the product is for a quotient.</b> Every value of a residue class
+     * answers the residue; which of them to write is the one the rules leave the place, and that is
+     * the member of the class nearest the end of the run, and the residue itself where the run is
+     * open. What it owes is that what it writes reads back as the number it was asked for.
+     */
+    private static Realization atThatRemainder(BigDecimal by, Type sourceType, TermOrders orders,
+                                               AskedAt asked, SearchRegion within,
+                                               RuleReadingSource ruleSource) {
+        Carrier observed = orders.observed();
+        // A divisor that is not there, or is nought, is a term nothing built.
+        if (observed == null || by == null || by.signum() == 0) {
+            return new Realization.None(
+                    Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+        }
+        NumericDomain.Bounds run = NumericDomain.Bounds.OPEN;
+        switch (valueOfThePlace(orders.term(), within)) {
+            case NumericDomain.FormProjection.Within(NumericDomain.Bounds held) -> run = held;
+            case NumericDomain.FormProjection.NothingIsLeft _ -> {
+                return new Realization.None(
+                        Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+            }
+            case null -> { }
+        }
+        return firstThatBuilds(asked.walkIsOfTheWholeQuestion(),
+                offeredBy(RemainderSolutions.solve(
+                        List.of(new RemainderSolutions.Demand(by, asked.walking(), asked.named())),
+                        valueOfThePlaceHeldTo(orders.term(), run, within), observed)),
+                at -> writtenAt(at, sourceType, observed, ruleSource));
+    }
+
+    /** The value standing at the place {@code taking} is a number of, as far as the rules leave it:
+     *  where it runs, the class the remainders fixed beside it hold it to, and whether the rules
+     *  leave nothing where it stands at a number — which is how a hole is read, whatever rule made
+     *  it. */
+    private static RemainderSolutions.Value valueOfThePlaceHeldTo(
+            NumericTerm taking, NumericDomain.Bounds run, SearchRegion within) {
+        if (within == null || !(taking instanceof NumericTerm.TakenOf taken)) {
+            return new RemainderSolutions.Value(run, null, at -> false);
+        }
+        NumericTerm.ValueOf value = new NumericTerm.ValueOf(taken.position());
+        return new RemainderSolutions.Value(run, within.valueClassAt(value),
+                at -> within.given(value, at).emptiness().isPresent());
+    }
+
+    /** What the rules leave of the value standing at the place {@code taking} is a number of, or
+     *  null where they say nothing of it. */
+    private static NumericDomain.FormProjection valueOfThePlace(NumericTerm taking,
+                                                                SearchRegion within) {
+        return within == null || !(taking instanceof NumericTerm.TakenOf taken) ? null
+                : within.projectionOf(new NumericTerm.ValueOf(taken.position()));
+    }
+
+    /**
+     * The number a solving found as the numbers to try, or none and why there are none.
+     *
+     * <p>A search that stopped at a figure hands over nothing and says which, which is a different
+     * thing from the numbers there are being none: the first is what a reader may raise a figure for
+     * and the second is a proof about the rules.
+     */
+    private static Tried offeredBy(RemainderSolutions.Answer answer) {
+        return switch (answer) {
+            case RemainderSolutions.Answer.Found(BigInteger value) ->
+                    Tried.theOne(new Count(new BigDecimal(value)));
+            case RemainderSolutions.Answer.NoneThere _ -> Tried.allOf(List.of());
+            case RemainderSolutions.Answer.Undecided(CompositionBudget figure) ->
+                    new Tried(List.of(), new Remainder.StoppedAt(figure));
+        };
     }
 
     /**
@@ -1251,19 +1998,24 @@ final class TermRealizations {
      */
     private static Tried onTheOrder(NumericSet wanted, TermOrders orders, Place named,
                                     SearchRegion within) {
-        if (wanted instanceof NumericSet.At one) {
-            // A set of one number is that number, and there is nothing else it could have been.
-            return Tried.theOne(one.value());
-        }
         Set<CompositionRepertoire> ofTheRun =
                 Set.of(CompositionRepertoire.PLACES_IN_A_RUN_THAT_ARE_NAMED);
-        if (!(wanted instanceof NumericSet.InARun run)) {
+        switch (wanted) {
+            // A set of one number is that number, and there is nothing else it could have been.
+            case NumericSet.At one -> {
+                return Tried.theOne(one.value());
+            }
             // Anything but the values a rule singled out. Which place beside them to try is a
             // witness somebody pays for, and what a witness may cost is named where witnesses are
             // paid for — so a caller that paid names one and this tries it. Nothing built at it is
             // an answer about that number: the set holds every other one, and none was looked at.
-            return new Tried(named == null ? List.of() : List.of(named),
-                    new Remainder.SomeOf(ofTheRun));
+            case NumericSet.AwayFrom _ -> {
+                return new Tried(named == null ? List.of() : List.of(named),
+                        new Remainder.SomeOf(ofTheRun));
+            }
+            // A run, with or without values taken out of it, is looked in below — in the runs the
+            // set makes up, so a place a run holds is never offered for one that has it taken out.
+            case NumericSet.InARun _, NumericSet.InARunExcept _ -> { }
         }
         // Where the rules leave the number room, which narrows the run this looks in. Exhaustive
         // over what the region answers, because one of its answers is not a range: a region that
@@ -1280,27 +2032,50 @@ final class TermRealizations {
             }
             case null -> leaves = null;
         }
-        Place found = new Criterion.Within(run.run(), null, Towards.ABOVE).somewhereInside(
-                orders.answered(),
+        // A value held to a class is a value of the class, so what is offered are its members: the
+        // end of a run is one only by luck, and a place the class refuses is no candidate whatever
+        // else is asked of it afterwards.
+        Congruences members = orders.term() instanceof NumericTerm.ValueOf value && within != null
+                ? within.valueClassAt(value) : null;
+        if (members != null) {
+            return membersOnTheOrder(wanted, orders, members, leaves, ofTheRun);
+        }
+        Place found = Criterion.Within.somewhereIn(wanted.region(orders.answered()),
+                Towards.ABOVE, orders.answered(),
                 leaves == null ? null : leaves.min(), leaves == null ? null : leaves.max());
         return new Tried(found == null ? List.of() : List.of(found),
                 new Remainder.SomeOf(ofTheRun));
     }
 
     /**
-     * The quotients a set asks for, as ends, or null where the set is not a run of them.
+     * The members of {@code members} that the runs of {@code wanted} hold inside what the rules
+     * leave the number, nearest the end the search starts from, run by run.
      *
-     * <p>Every number but the ones a rule singled out is an order with holes in it, and no pair of
-     * ends is that. Which is a population nothing here solves a value out of rather than a set
-     * with nothing in it, so a caller says that and does not read these ends as open.
+     * <p>More than one, so that what is refused of the first is not the end of the search: the next
+     * member is the one a caller reads back and tries. A run holding more than are offered says so,
+     * for the figure it was cut at.
      */
-    private static NumericDomain.Bounds quotientsAsked(NumericSet wanted) {
-        return switch (wanted) {
-            case NumericSet.At one -> new NumericDomain.Bounds(
-                    Endpoint.inclusive(one.value()), Endpoint.inclusive(one.value()));
-            case NumericSet.InARun _ -> wanted.extent();
-            case NumericSet.AwayFrom _ -> null;
-        };
+    private static Tried membersOnTheOrder(NumericSet wanted, TermOrders orders,
+                                           Congruences members, NumericDomain.Bounds leaves,
+                                           Set<CompositionRepertoire> ofTheRun) {
+        Carrier carrier = orders.answered();
+        List<Place> offered = new ArrayList<>();
+        boolean more = false;
+        for (LevelInterval look : Criterion.Within.runsInside(wanted.region(carrier), carrier,
+                leaves == null ? null : leaves.min(), leaves == null ? null : leaves.max())) {
+            OrderedInterval run = LevelRealizer.runOf(look, carrier);
+            if (run == null) {
+                continue;
+            }
+            ClassMembers inside = ClassMembers.within(members,
+                    new NumericDomain.Bounds(run.low(), run.high()), Towards.ABOVE,
+                    CompositionBudget.VALUES_OF_AN_UNBOUNDED_PROGRESSION_TRIED.maximum());
+            offered.addAll(inside.notApart(PlacesApart.NONE));
+            more |= inside.stoppedShort();
+        }
+        return new Tried(offered, more
+                ? new Remainder.StoppedAt(CompositionBudget.VALUES_OF_AN_UNBOUNDED_PROGRESSION_TRIED)
+                : new Remainder.SomeOf(ofTheRun));
     }
 
     /**
@@ -1392,13 +2167,14 @@ final class TermRealizations {
      * reads back as something else.
      */
     private static boolean readsBackIntoEveryOne(Place at,
-                                                 SequencedMap<RealizationTarget, BigDecimal> by,
+                                                 SequencedMap<RealizationTarget.OfANumber,
+                                                         BigDecimal> by,
                                                  SequencedMap<RealizationTarget, AskedAt> asked,
                                                  Carrier observed) {
         if (!(at instanceof Count count)) {
             return false;
         }
-        for (Map.Entry<RealizationTarget, BigDecimal> each : by.entrySet()) {
+        for (Map.Entry<RealizationTarget.OfANumber, BigDecimal> each : by.entrySet()) {
             AskedAt of = asked.get(each.getKey());
             NumericSet wanted = of == null ? null : of.walking();
             // A candidate whose quotient the exact arithmetic could not hold is one this cannot say
@@ -1512,14 +2288,13 @@ final class TermRealizations {
         ExactRatio s = ExactRatio.of(size);
         ExactAnswer<ExactRatio> at;
         if (quotient.signum() < 0) {
-            at = ExactRatio.of(quotient).times(s).minus(s);
-            if (at instanceof ExactAnswer.Held<ExactRatio> held) {
-                at = held.value().plus(ExactRatio.ONE);
-            }
+            at = ExactRatio.of(quotient).times(s)
+                    .flatMap(scaled -> scaled.minus(s))
+                    .flatMap(below -> below.plus(ExactRatio.ONE));
         } else if (quotient.signum() == 0) {
             at = s.negated().plus(ExactRatio.ONE);
         } else {
-            at = ExactAnswer.held(ExactRatio.of(quotient).times(s));
+            at = ExactRatio.of(quotient).times(s);
         }
         return placeAt(at);
     }
@@ -1535,14 +2310,13 @@ final class TermRealizations {
         ExactRatio s = ExactRatio.of(size);
         ExactAnswer<ExactRatio> at;
         if (quotient.signum() > 0) {
-            at = ExactRatio.of(quotient).times(s).plus(s);
-            if (at instanceof ExactAnswer.Held<ExactRatio> held) {
-                at = held.value().minus(ExactRatio.ONE);
-            }
+            at = ExactRatio.of(quotient).times(s)
+                    .flatMap(scaled -> scaled.plus(s))
+                    .flatMap(above -> above.minus(ExactRatio.ONE));
         } else if (quotient.signum() == 0) {
             at = s.minus(ExactRatio.ONE);
         } else {
-            at = ExactAnswer.held(ExactRatio.of(quotient).times(s));
+            at = ExactRatio.of(quotient).times(s);
         }
         return placeAt(at);
     }
@@ -1556,8 +2330,13 @@ final class TermRealizations {
         if (!(at instanceof ExactAnswer.Held<ExactRatio> held)) {
             return null;
         }
-        BigDecimal written = held.value().asWrittenDecimal();
-        return written == null ? null : new Count(written);
+        // And no more composed where the host has no room to write the number out: an end too far
+        // out for the truth is the same work nobody asked for.
+        return switch (held.value().writtenDecimal()) {
+            case ExactAnswer.Held<Optional<BigDecimal>> written ->
+                    written.value().map(Count::new).orElse(null);
+            case ExactAnswer.Unheld<Optional<BigDecimal>> _ -> null;
+        };
     }
 
     /** The one value whose quotient by that divisor is exactly that number, or nothing composed
@@ -1568,7 +2347,13 @@ final class TermRealizations {
             return new Realization.None(
                     Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
         }
-        BigDecimal at = wanted.exactly().times(ExactRatio.of(by)).asWrittenDecimal();
+        // Nothing composed where the product is one the host has no room to write out, as where the
+        // arithmetic could not hold it or no decimal is it.
+        BigDecimal at = switch (wanted.exactly().times(ExactRatio.of(by))
+                .flatMap(ExactRatio::writtenDecimal)) {
+            case ExactAnswer.Held<Optional<BigDecimal>> written -> written.value().orElse(null);
+            case ExactAnswer.Unheld<Optional<BigDecimal>> _ -> null;
+        };
         if (at == null) {
             return new Realization.None(
                     Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
@@ -1610,15 +2395,23 @@ final class TermRealizations {
      * number nothing reads.
      */
     private static Realization overARun(TakenAs how, Type sourceType,
+                                        List<List<String>> keptApart,
                                         TermOrders orders, AskedAt asked,
                                         SearchRegion within,
-                                        RuleReadingContext reading) {
+                                        RuleReadingContext reading, DemandsInside inside) {
         return switch (how) {
-            case TakenAs.TheSumOfWhatItHolds _ -> addingUp(asked, sourceType, orders,
-                    within, reading);
-            case TakenAs.HowManyItHolds _, TakenAs.PartOfTime _, TakenAs.PartOfDate _,
-                    TakenAs.TheTruncatingQuotient _ -> new Realization.None(
-                            Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+            case TakenAs.TheSumOfWhatItHolds _ -> addingUp(asked, sourceType, keptApart, orders,
+                    within, reading, inside);
+            // How many a run holds is the size the walk's law says, which no term over a run is
+            // made for ({@code NumericTerm.TakenOver.of}).
+            case TakenAs.HowManyItHolds _ -> throw new IllegalStateException(
+                    "a count of a run is sized by the law of what made it, not taken over it");
+            case TakenAs.PartOfTime _, TakenAs.PartOfDate _,
+                    TakenAs.TheTruncatingQuotient _, TakenAs.TheFloorRemainder _ -> {
+                nothingInside(inside);
+                yield new Realization.None(
+                        Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+            }
         };
     }
 
@@ -1631,7 +2424,8 @@ final class TermRealizations {
      * the next count of the set is asked after it — so a set holding a count the type has no value
      * for is not a set nothing writes a value in.
      */
-    private static Realization holding(Type sourceType, AskedAt asked, TermOrders orders,
+    private static Realization holding(Type sourceType, List<List<String>> keptApart,
+                                       AskedAt asked, TermOrders orders,
                                        RuleReadingContext reading) {
         // From none upward, which is as far as a count runs and as many of them as the figure
         // allows. A count is the one account whose numbers are whole and whose window is the whole
@@ -1639,19 +2433,573 @@ final class TermRealizations {
         return firstThatBuilds(asked.walkIsOfTheWholeQuestion(),
                 wholeNumbers(asked.walking(), orders.answered(), 0, Integer.MAX_VALUE,
                         CompositionBudget.NUMBERS_OF_A_SET_TRIED.maximum()),
-                count -> holdingExactly(sourceType, count, reading));
+                count -> holdingExactly(sourceType, keptApart, count, reading));
     }
 
-    /** Values of the position holding exactly that many, which is {@link Witnesses}' answer. */
-    private static Realization holdingExactly(Type sourceType, Place answer,
-                                              RuleReadingContext reading) {
+    /**
+     * Strings holding that many code points of a class, for each number of the set asked for.
+     *
+     * <p>From none upward, as every count is offered. A string holds as many of the class as it is
+     * written to, so there is a string for every number and what limits the walk is the figure the
+     * counts are walked under.
+     */
+    private static Realization holdingThatManyOfAClass(CodePointClass counted, Type sourceType,
+                                                       AskedAt asked, TermOrders orders,
+                                                       RuleReadingContext reading) {
+        return firstThatBuilds(asked.walkIsOfTheWholeQuestion(),
+                wholeNumbers(asked.walking(), orders.answered(), 0, Integer.MAX_VALUE,
+                        CompositionBudget.NUMBERS_OF_A_SET_TRIED.maximum()),
+                count -> stringsHoldingThatManyOf(counted, sourceType, count, reading));
+    }
+
+    /**
+     * Strings of the position holding exactly {@code answer} code points of {@code counted}, each
+     * of them read back before it is offered.
+     *
+     * <p>What the type admits first and what is plainly written after, as a string of a length is
+     * offered ({@link Witnesses}). What is offered is what reads back as the number asked for and
+     * nothing else: a string the type admits that holds another number is a string for another
+     * number, and is left out rather than offered at this one.
+     */
+    private static Realization stringsHoldingThatManyOf(CodePointClass counted, Type sourceType,
+                                                        Place answer, RuleReadingContext reading) {
         int many = CountDomain.asCount(answer);
         if (many < 0) {
             return new Realization.None(
                     Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
         }
         RuleReadingSource ruleSource = reading.source();
-        TypeView holder = TypeView.of(sourceType, ruleSource.inners(), ruleSource.symbols(), ruleSource.published());
+        WornNames wears = namesOf(sourceType, ruleSource);
+        if (!(wears instanceof WornNames.Spelled worn)) {
+            return new Realization.None(
+                    Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
+                    ((WornNames.Unwritable) wears).why());
+        }
+        TypeView holder = TypeView.of(sourceType, ruleSource.inners(), ruleSource.symbols(),
+                ruleSource.kinds(), ruleSource.sums());
+        Set<String> candidates = new LinkedHashSet<>(
+                admittedStrings(holder, reading, lengthsFrom(many)));
+        candidates.addAll(plainStringsHolding(counted, many));
+        Set<String> held = new LinkedHashSet<>();
+        for (String each : candidates) {
+            String text = asTheLanguageHoldsIt(each);
+            if (text != null && countIn(counted, text) == many) {
+                held.add(text);
+            }
+        }
+        List<FixtureTemplate> out = new ArrayList<>();
+        for (String each : held) {
+            out.add(RepresentativeSource.under(worn.names(), FixtureTemplate.string(each)));
+        }
+        if (out.isEmpty()) {
+            return new Realization.None(
+                    Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+        }
+        return Realization.Built.whole(out);
+    }
+
+    /**
+     * The lengths a string the type admits is looked for at, for a string holding {@code least}
+     * code points of a class: that many, which is as short as it can be, and a few more, for the
+     * whitespace and separators that stand beside them.
+     */
+    private static List<Integer> lengthsFrom(int least) {
+        int longest = least
+                + CompositionBudget.CODE_POINTS_BEYOND_A_COUNT_A_STRING_IS_LOOKED_FOR.maximum();
+        List<Integer> out = new ArrayList<>();
+        for (int length = least; length <= longest; length++) {
+            out.add(length);
+        }
+        return out;
+    }
+
+    /**
+     * The strings of those lengths that the rules on the position admit, as text, in the order the
+     * lengths are given.
+     *
+     * <p>The one place a string the type admits is asked for, whichever number of a string is being
+     * written: a string answering a count or several of them is first of all a string of its type,
+     * and a writer that chose its strings apart from this would offer ones the type refuses where
+     * another would have offered ones it accepts.
+     */
+    private static List<String> admittedStrings(TypeView holder, RuleReadingContext reading,
+                                                Collection<Integer> lengths) {
+        List<String> out = new ArrayList<>();
+        for (FixtureTemplate each : Partitions.admittedStringsOfSizes(holder, reading, lengths)) {
+            if (each.value() instanceof Hir.StringLit written) {
+                out.add(written.value());
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Strings written for the number alone: {@code many} code points of the class, and the ones
+     * that stand beside them where nothing is written — whitespace where the class does not count
+     * it, and the separator the class leaves out. Each is a string some value holds, and none is
+     * claimed to be the only one.
+     */
+    private static List<String> plainStringsHolding(CodePointClass counted, int many) {
+        boolean spaceCounted = counted.contains(' ');
+        List<String> out = new ArrayList<>();
+        // A string of none is offered as whitespace before it is offered as nothing: a row at
+        // nothing is a row that passes with whatever trimming did to it.
+        if (many == 0 && !spaceCounted) {
+            out.add(" ");
+        }
+        for (int member : writtenFor(counted.held())) {
+            String held = new String(Character.toChars(member)).repeat(many);
+            out.add(held);
+            if (!spaceCounted) {
+                out.add(held + " ");
+            }
+            if (counted instanceof CodePointClass.NotWhitespaceNorEqualTo(int separator)) {
+                out.add(held + new String(Character.toChars(separator)));
+                out.add(held + new String(Character.toChars(separator)) + " ");
+            }
+        }
+        return out;
+    }
+
+    /**
+     * The code points of {@code held} a string is written with, the first preferred: the space
+     * where it is one of them; and otherwise the first plain letter there is in the set and the
+     * first ideograph of the block that has no gaps — or, where it holds neither, the least of it.
+     *
+     * <p>Chosen from inside the set rather than from a list written for the purpose, so that no
+     * set — however many separators a model writes for one string — leaves nothing to choose. The
+     * letter is first since a row is read by a person. The ideograph is there for the string the
+     * letter cannot be written into: a letter beside a combining separator is one code point once
+     * the text is let in, and no primary composite is made of an ideograph and a mark, so a string
+     * written with it keeps its code points.
+     */
+    private static List<Integer> writtenFor(CodePoints held) {
+        if (held.has(' ')) {
+            return List.of((int) ' ');
+        }
+        List<Integer> out = new ArrayList<>();
+        PLAIN_LETTERS_FIRST.codePoints().filter(held::has).findFirst().ifPresent(out::add);
+        for (char each = FIRST_IDEOGRAPH; each <= LAST_IDEOGRAPH; each++) {
+            if (held.has(each)) {
+                out.add((int) each);
+                break;
+            }
+        }
+        if (out.isEmpty() && !held.isEmpty()) {
+            out.add(held.least());
+        }
+        return List.copyOf(out);
+    }
+
+    /**
+     * One kind of code point a string is written with: the code points standing in exactly the
+     * same classes, and the ones of them it is written with, the first preferred.
+     */
+    private record KindOfCodePoint(CodePoints held, List<Integer> writtenWith) {}
+
+    /**
+     * The kinds of code point a string holding the numbers {@code wanted} asks of it is written
+     * with: the code points told apart by every class counted and by being whitespace, which
+     * stands apart even where no class counts it. In the order a string is written in — what most
+     * classes count first, whitespace last, and the rest by the first class, in the order they
+     * were asked for, that leaves it out.
+     */
+    private static List<KindOfCodePoint> kindsOfCodePoint(List<OfAString> wanted) {
+        List<CodePoints> by = new ArrayList<>();
+        by.add(new CodePointClass.NotWhitespace().held());
+        for (OfAString each : wanted) {
+            if (each.counted() != null && !by.contains(each.counted().held())) {
+                by.add(each.counted().held());
+            }
+        }
+        List<CodePoints> ordered = new ArrayList<>(CodePointClass.toldApart(by));
+        ordered.sort(Comparator.comparing((CodePoints cell) -> !by.getFirst().has(cell.least()))
+                .thenComparingInt(cell -> firstLeavingOut(by, cell)));
+        List<KindOfCodePoint> out = new ArrayList<>();
+        for (CodePoints cell : ordered) {
+            out.add(new KindOfCodePoint(cell, writtenFor(cell)));
+        }
+        return out;
+    }
+
+    /** Where in {@code by} the first set leaving out the code points of {@code cell} stands, or
+     *  -1 where every one of them holds them. */
+    private static int firstLeavingOut(List<CodePoints> by, CodePoints cell) {
+        for (int at = 0; at < by.size(); at++) {
+            if (!by.get(at).has(cell.least())) {
+                return at;
+            }
+        }
+        return -1;
+    }
+
+    /**
+     * {@code text} as the language holds it, which is the text a row written from it reads as, or
+     * null where no {@code String} is that text.
+     *
+     * <p>The one place a string this composes becomes the string it offers. Text is canonicalized
+     * when it is let in, so a string made of code points laid side by side — a letter and the
+     * combining mark after it — is not the string the row spelled with them reads back as: it is
+     * the composite, one code point where two were laid. Every count, every length and every
+     * string offered is of the text as held, so a number read here is the number the row has.
+     */
+    private static String asTheLanguageHoldsIt(String text) {
+        return BoundUnderEvaluation.heldAs(text);
+    }
+
+    /** The letters a row is written with, in the order they are preferred. */
+    private static final String PLAIN_LETTERS_FIRST =
+            "xyzabcdefghijklmnopqrstuvwXYZABCDEFGHIJKLMNOPQRSTUVW";
+
+    /** The block of unified ideographs, which every code point of is assigned and none is
+     *  whitespace. */
+    private static final char FIRST_IDEOGRAPH = '一';
+
+    private static final char LAST_IDEOGRAPH = '鿿';
+
+    /** How many code points of {@code text} are in the class: the number a reading of the string
+     *  comes to, which is what a string offered for a count is held to. */
+    private static long countIn(CodePointClass counted, String text) {
+        return text.codePoints().filter(counted::contains).count();
+    }
+
+    /** One number of a string asked for, with where it may be: what the demand admits and what the
+     *  rules leave of it on the way. */
+    private record OfAString(CodePointClass counted, Predicate<Place> holds, Tried tried) {}
+
+    /**
+     * A string holding the numbers asked of it of each class's code points, and as many in all as
+     * the length asks.
+     *
+     * <p>Written out of how many there are of each kind of code point: the code points standing in
+     * the same classes, with whitespace a kind apart ({@link #kindsOfCodePoint}). Every number asked
+     * for is a sum of those, so a string is chosen by choosing them, and what is offered is read
+     * back through the one reader before it is — a string that does not answer every demand is not
+     * offered however the sums said it would.
+     *
+     * <p><b>None where the demands cannot all be met, and not-walked where this did not look.</b>
+     * Every number a demand admits is tried when the sets are small and every kind of code point
+     * is tried up to the largest of them, which is the whole of the question, so a search that
+     * found nothing there is a group no string answers. Where a set is larger than that the search
+     * is over some numbers, and what it did not find is a string this compiler did not write.
+     */
+    static Realization stringsHoldingTheirCounts(
+            Map<RealizationTarget.OfANumber, Carrier> answeredOn, Type sourceType,
+            SequencedMap<RealizationTarget, AskedAt> demands, SearchRegion within,
+            RuleReadingContext reading) {
+        List<OfAString> wanted = new ArrayList<>();
+        for (Map.Entry<RealizationTarget.OfANumber, Carrier> entry : answeredOn.entrySet()) {
+            RealizationTarget.OfANumber each = entry.getKey();
+            Carrier on = entry.getValue();
+            AskedAt demand = demands.get(each);
+            if (on == null || demand == null) {
+                return new Realization.None(
+                        Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+            }
+            NumericDomain.Bounds held = NumericDomain.Bounds.OPEN;
+            switch (within == null ? null : within.projectionOf(each.term())) {
+                case NumericDomain.FormProjection.Within(NumericDomain.Bounds bounds) ->
+                        held = bounds;
+                case NumericDomain.FormProjection.NothingIsLeft _ -> {
+                    return new Realization.None(
+                            Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+                }
+                case null -> { }
+            }
+            NumericSet set = demand.walking();
+            NumericDomain.Bounds leaves = held;
+            Predicate<Place> holds = at -> set.holds(at, on) && leaves.admits(at);
+            Tried tried = wholeNumbers(set.extent(), holds, BigInteger.ZERO,
+                    BigInteger.valueOf(Integer.MAX_VALUE),
+                    CompositionBudget.NUMBERS_OF_A_SET_TRIED.maximum());
+            wanted.add(new OfAString(each.term() instanceof NumericTerm.CodePointClassCount count
+                    ? count.counted() : null, holds, tried));
+        }
+        boolean wholeQuestion = walkIsOfTheWholeQuestion(demands.values());
+        boolean everyNumberTried = true;
+        List<Integer> numbers = new ArrayList<>();
+        for (OfAString each : wanted) {
+            everyNumberTried &= each.tried().rest() instanceof Remainder.Exhausted;
+            if (each.tried().numbers().isEmpty() && each.tried().rest()
+                    instanceof Remainder.Exhausted) {
+                return new Realization.None(
+                        Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+            }
+            for (Place each2 : each.tried().numbers()) {
+                int count = CountDomain.asCount(each2);
+                if (count >= 0) {
+                    numbers.add(count);
+                }
+            }
+        }
+        int largest = numbers.stream().mapToInt(Integer::intValue).max().orElse(0);
+        boolean pastWhatIsSearchedInFull =
+                largest > CompositionBudget.CODE_POINTS_A_STRING_IS_SEARCHED_IN_FULL.maximum();
+        boolean inFull = everyNumberTried && wholeQuestion && !pastWhatIsSearchedInFull;
+
+        // The code points told apart by what each class counts: how many of each kind a string
+        // holds.
+        List<KindOfCodePoint> written = kindsOfCodePoint(wanted);
+        int kindsOfCodePoint = written.size();
+        int steps = CompositionBudget.STEPS_A_SEARCH_MAY_TAKE.maximum();
+        List<Integer> kinds = codePointsOfEachKind(numbers, inFull ? largest : -1,
+                (int) Math.floor(Math.pow(steps, 1.0 / kindsOfCodePoint)));
+
+        RuleReadingSource ruleSource = reading.source();
+        WornNames wears = namesOf(sourceType, ruleSource);
+        if (!(wears instanceof WornNames.Spelled worn)) {
+            return new Realization.None(
+                    Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
+                    ((WornNames.Unwritable) wears).why());
+        }
+        StringSearch search = new StringSearch(written, wanted,
+                CompositionBudget.NUMBERS_OF_A_SET_TRIED.maximum(), steps);
+        // The strings the type admits come first and are the only ones offered where any of them
+        // answers every demand. Written ones stand in only where the type admits none that
+        // answers, and are proposals like the rest: whether the type's construction takes them is
+        // its answer to give afterwards, and a refusal there is said as that.
+        TypeView holder = TypeView.of(sourceType, ruleSource.inners(), ruleSource.symbols(),
+                ruleSource.kinds(), ruleSource.sums());
+        TreeSet<Integer> lengths = new TreeSet<>(lengthsFrom(0));
+        for (int each : numbers) {
+            lengths.addAll(lengthsFrom(each));
+        }
+        for (String each : admittedStrings(holder, reading, lengths)) {
+            search.adopt(each);
+        }
+        if (search.found().isEmpty()) {
+            search.over(0, new int[kindsOfCodePoint], kinds);
+        }
+        if (!search.found().isEmpty()) {
+            List<FixtureTemplate> out = new ArrayList<>();
+            for (String each : search.found()) {
+                out.add(RepresentativeSource.under(worn.names(), FixtureTemplate.string(each)));
+            }
+            return Realization.Built.whole(out);
+        }
+        // A search that looked at every way of writing a string there is, for every number the
+        // demands admit, found no string: the one answer here that is about the demands and not
+        // about this compiler.
+        boolean everyWayLookedAt = inFull && kinds.size() == largest + 1
+                && search.looked() < steps && !search.leftUnwritten();
+        if (everyWayLookedAt) {
+            return new Realization.None(
+                    Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+        }
+        // Otherwise what was not looked at is said as what stopped the looking: the numbers of a
+        // demand that were not all tried, the counts past what is searched in full, the steps the
+        // search was allowed.
+        CompositionShortfall met = CompositionShortfall.NONE;
+        for (OfAString each : wanted) {
+            met = met.and(shortfallOf(each.tried().rest()));
+        }
+        if (pastWhatIsSearchedInFull) {
+            met = met.and(CompositionShortfall.of(
+                    Set.of(CompositionBudget.CODE_POINTS_A_STRING_IS_SEARCHED_IN_FULL)));
+        }
+        if (search.looked() >= steps || (inFull && kinds.size() < largest + 1)) {
+            met = met.and(CompositionShortfall.of(
+                    Set.of(CompositionBudget.STEPS_A_SEARCH_MAY_TAKE)));
+        }
+        if (!met.figures().isEmpty()) {
+            return new Realization.Stopped(met);
+        }
+        return new Realization.Unexhausted(met.nothing() ? CompositionShortfall.writing(Set.of(
+                CompositionRepertoire.VALUES_THAT_ANSWER_SEVERAL_OF_THEIR_NUMBERS)) : met, null);
+    }
+
+    /** What a walk over numbers that ended short of the set says it was stopped by. */
+    private static CompositionShortfall shortfallOf(Remainder rest) {
+        return switch (rest) {
+            case Remainder.Exhausted _ -> CompositionShortfall.NONE;
+            case Remainder.StoppedAt(CompositionBudget figure) ->
+                    CompositionShortfall.of(Set.of(figure));
+            case Remainder.SomeOf(Set<CompositionRepertoire> written) ->
+                    CompositionShortfall.writing(written);
+        };
+    }
+
+    /**
+     * How many code points of one kind a string may be written with: nought, the numbers asked
+     * for and the differences between them — and every whole number up to {@code upTo} where that
+     * is not negative, which is every number a string of those counts can be written with.
+     */
+    private static List<Integer> codePointsOfEachKind(List<Integer> asked, int upTo, int most) {
+        TreeSet<Integer> kinds = new TreeSet<>(List.of(0, 1, 2));
+        if (upTo >= 0) {
+            for (int each = 0; each <= upTo && kinds.size() < Math.max(most, 3); each++) {
+                kinds.add(each);
+            }
+            return List.copyOf(kinds);
+        }
+        kinds.addAll(asked);
+        for (int one : asked) {
+            for (int other : asked) {
+                if (one > other) {
+                    kinds.add(one - other);
+                }
+            }
+        }
+        List<Integer> out = new ArrayList<>(kinds);
+        return out.size() > most ? List.copyOf(out.subList(0, most)) : List.copyOf(out);
+    }
+
+    /**
+     * The strings found for a group of numbers asked of one string, and how far the looking went.
+     *
+     * <p>Every string comes in through {@link #adopt}, whether the type offered it or this wrote it
+     * out of counts: it is let in as text is, and it is kept where the text as held reads back as
+     * a number every demand admits. A string kept is therefore the one a row spells, and not the
+     * code points it was made of laid side by side.
+     */
+    private static final class StringSearch {
+
+        private final List<KindOfCodePoint> written;
+        private final List<OfAString> wanted;
+        /** Whether each number wanted counts each kind of code point, asked once. */
+        private final boolean[][] countedBy;
+        /** How many ways of writing a kind the kind with the most of them has. */
+        private final int ways;
+        private final int most;
+        private final int steps;
+        private final Set<String> found = new LinkedHashSet<>();
+        private int looked;
+        private boolean leftUnwritten;
+
+        StringSearch(List<KindOfCodePoint> written, List<OfAString> wanted, int most,
+                     int steps) {
+            this.written = written;
+            this.wanted = wanted;
+            this.countedBy = new boolean[wanted.size()][written.size()];
+            for (int number = 0; number < wanted.size(); number++) {
+                CodePointClass counted = wanted.get(number).counted();
+                for (int kind = 0; kind < written.size(); kind++) {
+                    countedBy[number][kind] = counted == null
+                            || counted.contains(written.get(kind).held().least());
+                }
+            }
+            this.ways = written.stream().mapToInt(each -> each.writtenWith().size()).max()
+                    .orElse(0);
+            this.most = most;
+            this.steps = steps;
+        }
+
+        Set<String> found() {
+            return found;
+        }
+
+        /** How many ways of writing a string were looked at. */
+        int looked() {
+            return looked;
+        }
+
+        /**
+         * Whether some way of writing a string was said by its counts to answer every demand and
+         * no string written that way did, which is a way of writing this did not find a string
+         * for, and not a way there is none.
+         */
+        boolean leftUnwritten() {
+            return leftUnwritten;
+        }
+
+        /** Keeps {@code candidate}, as the language holds it, where it answers every demand. */
+        boolean adopt(String candidate) {
+            String text = asTheLanguageHoldsIt(candidate);
+            if (text == null || !answersEvery(text, wanted)) {
+                return false;
+            }
+            if (found.size() < most) {
+                found.add(text);
+            }
+            return true;
+        }
+
+        /**
+         * Every way of writing how many code points of each kind a string holds, in the order the
+         * smaller counts come first, where the string they write answers every demand.
+         *
+         * <p>The kinds are the code points the classes tell apart ({@link #kindsOfCodePoint}). The
+         * numbers are sums of the counts chosen, so most assignments are refused without a string
+         * being written; one that is not is written with each code point of a kind in turn, since
+         * which of them the others stand beside decides whether the text keeps the code points it
+         * was written with, and is read back as the language holds it.
+         */
+        void over(int kind, int[] counts, List<Integer> kinds) {
+            if (looked >= steps || found.size() >= most) {
+                return;
+            }
+            if (kind == counts.length) {
+                looked++;
+                if (sumsAreAdmitted(counts)) {
+                    boolean adopted = false;
+                    for (int way = 0; way < ways && !adopted; way++) {
+                        adopted = adopt(writtenWith(counts, written, way));
+                    }
+                    leftUnwritten |= !adopted;
+                }
+                return;
+            }
+            for (int each : kinds) {
+                counts[kind] = each;
+                over(kind + 1, counts, kinds);
+            }
+        }
+
+        /**
+         * Whether every demand admits the number the counts chosen come to: the length is all of
+         * them, and a class holds the kinds of code point it counts.
+         */
+        private boolean sumsAreAdmitted(int[] counts) {
+            for (int number = 0; number < wanted.size(); number++) {
+                long sum = 0;
+                for (int kind = 0; kind < counts.length; kind++) {
+                    if (countedBy[number][kind]) {
+                        sum += counts[kind];
+                    }
+                }
+                if (!wanted.get(number).holds().test(Count.of(sum))) {
+                    return false;
+                }
+            }
+            return true;
+        }
+    }
+
+    /** The string with {@code counts[i]} code points of each kind in turn, each written with the
+     *  {@code way}-th code point of its kind, or its last where it has fewer. */
+    private static String writtenWith(int[] counts, List<KindOfCodePoint> written, int way) {
+        StringBuilder out = new StringBuilder();
+        for (int at = 0; at < written.size(); at++) {
+            List<Integer> with = written.get(at).writtenWith();
+            int codePoint = with.get(Math.min(way, with.size() - 1));
+            out.append(new String(Character.toChars(codePoint)).repeat(counts[at]));
+        }
+        return out.toString();
+    }
+
+    /** Whether the string reads back as a number every demand admits. */
+    private static boolean answersEvery(String written, List<OfAString> wanted) {
+        for (OfAString each : wanted) {
+            long read = each.counted() == null ? written.codePointCount(0, written.length())
+                    : countIn(each.counted(), written);
+            if (!each.holds().test(Count.of(read))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** Values of the position holding exactly that many, which is {@link Witnesses}' answer. */
+    private static Realization holdingExactly(Type sourceType, List<List<String>> keptApart,
+                                              Place answer, RuleReadingContext reading) {
+        int many = CountDomain.asCount(answer);
+        if (many < 0) {
+            return new Realization.None(
+                    Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+        }
+        RuleReadingSource ruleSource = reading.source();
+        TypeView holder = TypeView.of(sourceType, ruleSource.inners(), ruleSource.symbols(),
+                ruleSource.kinds(), ruleSource.sums());
         // A name this module cannot write leaves no value to write, which is a position nothing
         // composes one for rather than a value written without the name. Said with the name that
         // stopped it, and asked of the position rather than of the count, since it is the same
@@ -1662,22 +3010,25 @@ final class TermRealizations {
                     Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
                     ((WornNames.Unwritable) wears).why());
         }
-        Witnesses.Sized built = Witnesses.ofSize(holder, many, reading, Set.of());
-        if (built.values().isEmpty()) {
+        Proposals built = Witnesses.ofSize(holder, many, keptApart, reading, Set.of());
+        if (built.isEmpty()) {
             // Read off the build that was already done. `Witnesses` keeps what it made and why it
-            // stopped as two halves of one answer for exactly this, and asking it again would be
-            // the same decision taken twice — the two could not disagree today and there is no
-            // reason to leave a second taking of it here.
-            return built.heldBack().isEmpty()
+            // stopped as two halves of one answer for exactly this — what stopped it includes what
+            // stopped the values its elements were built from — and asking it again would be the
+            // same decision taken twice.
+            if (!built.met().figures().isEmpty()) {
+                return new Realization.Stopped(built.met());
+            }
+            return built.met().nothing()
                     ? new Realization.None(
                             Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE)
-                    : new Realization.Stopped(CompositionShortfall.of(built.heldBack()));
+                    : new Realization.Unexhausted(built.met(), null);
         }
         List<FixtureTemplate> out = new ArrayList<>();
         for (FixtureTemplate each : built.values()) {
             out.add(RepresentativeSource.under(worn.names(), each));
         }
-        return new Realization.Built(out, CompositionShortfall.of(built.heldBack()));
+        return new Realization.Built(out, built.met());
     }
 
     /**
@@ -1735,7 +3086,8 @@ final class TermRealizations {
                     .multiply(BigDecimal.valueOf(each.getKey().seconds())));
         }
         FixtureTemplate standing = WornNames.under(
-                TypeView.of(sourceType, ruleSource.inners(), ruleSource.symbols(), ruleSource.published()).wrappers(),
+                TypeView.of(sourceType, ruleSource.inners(), ruleSource.symbols(),
+                        ruleSource.kinds(), ruleSource.sums()).wrappers(),
                 FixtureTemplate.on(observed, Count.of(seconds), ruleSource.symbols().scope()::reach),
                 ruleSource);
         return standing == null
@@ -1785,7 +3137,8 @@ final class TermRealizations {
                             Set.of(CompositionBudget.NUMBERS_OF_A_SET_TRIED)));
         }
         FixtureTemplate standing = WornNames.under(
-                TypeView.of(sourceType, ruleSource.inners(), ruleSource.symbols(), ruleSource.published()).wrappers(),
+                TypeView.of(sourceType, ruleSource.inners(), ruleSource.symbols(),
+                        ruleSource.kinds(), ruleSource.sums()).wrappers(),
                 FixtureTemplate.on(observed, Dates.dayOf(found.on()),
                         ruleSource.symbols().scope()::reach),
                 ruleSource);
@@ -1866,7 +3219,180 @@ final class TermRealizations {
      *  @param on       the date, or null where the walk below found none
      *  @param everyOne whether the walk went over every combination the parts admit, which is what
      *                  tells a calendar that has no such date from a search that stopped short */
-    private record Search(java.time.LocalDate on, boolean everyOne) {}
+    record Search(java.time.LocalDate on, boolean everyOne) {}
+
+    /**
+     * One part of a date asked of it, after the date was moved.
+     *
+     * @param part   which part is taken
+     * @param moved  what the date was made into before the part was taken
+     * @param wanted the numbers the rules leave that part
+     */
+    record DatePartAsk(TakenAs.DatePart part, DateTranslation moved, NumericSet wanted) {
+
+        /** Whether the date {@code day} counts to is one this admits: one the move is defined at,
+         *  whose moved date has a part the rules leave. */
+        boolean admits(long day, Carrier observed) {
+            return moved.definedAt(day)
+                    && wanted.holds(Count.of(partOf(part, day + moved.offsetDays())), observed);
+        }
+
+        /** The days, among those after {@code from} up to {@code to}, at which this ask is
+         *  answered otherwise than on the day before: where the move stops being defined, and where
+         *  the part of the moved date starts a new run. */
+        void cutsInto(SortedSet<Long> cuts, long from, long to) {
+            for (long edge : new long[] {moved.first(), moved.last() + 1}) {
+                addIfBetween(cuts, edge, from, to);
+            }
+            long high = clamped(to + moved.offsetDays());
+            for (OptionalLong start = nextStartAfter(part, clamped(from + moved.offsetDays()));
+                    start.isPresent() && start.getAsLong() <= high;
+                    start = nextStartAfter(part, start.getAsLong())) {
+                addIfBetween(cuts, start.getAsLong() - moved.offsetDays(), from, to);
+            }
+        }
+
+        private static void addIfBetween(SortedSet<Long> cuts, long day, long from, long to) {
+            if (from < day && day <= to) {
+                cuts.add(day);
+            }
+        }
+
+        private static long clamped(long day) {
+            return Math.max(LocalDate.MIN.toEpochDay(), Math.min(LocalDate.MAX.toEpochDay(), day));
+        }
+    }
+
+    /**
+     * The first day after {@code day} at which {@code part} starts a new run — the first of a
+     * year, the first of a month, any day for the day of the month — or nothing where the calendar
+     * has no such day.
+     *
+     * <p>Total over the calendar. A walk that makes the next year or month and then asks whether it
+     * is still inside is one that makes a date the calendar does not have in the last month there
+     * is; this answers nothing there, and no caller makes the successor.
+     */
+    private static OptionalLong nextStartAfter(TakenAs.DatePart part, long day) {
+        if (day >= LocalDate.MAX.toEpochDay()) {
+            return OptionalLong.empty();
+        }
+        LocalDate date = LocalDate.ofEpochDay(day);
+        return switch (part) {
+            case YEAR -> date.getYear() == LocalDate.MAX.getYear() ? OptionalLong.empty()
+                    : OptionalLong.of(LocalDate.of(date.getYear() + 1, 1, 1).toEpochDay());
+            case MONTH -> date.getYear() == LocalDate.MAX.getYear() && date.getMonthValue() == 12
+                    ? OptionalLong.empty()
+                    : OptionalLong.of(date.withDayOfMonth(1).plusMonths(1).toEpochDay());
+            // Every day starts a new day of its month.
+            case DAY -> OptionalLong.of(day + 1);
+        };
+    }
+
+    /** The part of the date that {@code day} counts to, with a day the calendar does not have read
+     *  as its first or last. */
+    private static int partOf(TakenAs.DatePart part, long day) {
+        LocalDate date = LocalDate.ofEpochDay(Math.max(LocalDate.MIN.toEpochDay(),
+                Math.min(LocalDate.MAX.toEpochDay(), day)));
+        return switch (part) {
+            case YEAR -> date.getYear();
+            case MONTH -> date.getMonthValue();
+            case DAY -> date.getDayOfMonth();
+        };
+    }
+
+    /**
+     * A date whose parts, each after the date was moved as its own ask says, are ones the rules
+     * leave.
+     *
+     * <p>Solved over the days and not over the parts. Every ask is a condition on the date the
+     * program was given: the move is defined there, and the part of the moved date is one the rules
+     * leave. What a group asks of one date is the meeting of those conditions, so a year after one
+     * move, a year after another and a month with no move are one question and not three.
+     *
+     * <p>The years of the first year asked for are walked, and the days of the run each of them is
+     * are cut where any ask is answered otherwise than on the day before: between two cuts nothing
+     * the group asks changes, so the first day of each is every day of it. What this walks is
+     * therefore every combination there is, and an answer of nothing is a statement about the
+     * calendar, as it is for the parts of a date.
+     */
+    private static Realization onMovedDates(List<DatePartAsk> asks, Type sourceType,
+                                            Carrier observed, RuleReadingSource ruleSource) {
+        if (observed == null) {
+            return new Realization.None(
+                    Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+        }
+        Search found = dateAnsweringMovedParts(asks, observed);
+        if (found.on() == null) {
+            return found.everyOne()
+                    ? new Realization.None(
+                            Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE)
+                    : new Realization.Stopped(CompositionShortfall.of(
+                            Set.of(CompositionBudget.NUMBERS_OF_A_SET_TRIED)));
+        }
+        FixtureTemplate standing = WornNames.under(
+                TypeView.of(sourceType, ruleSource.inners(), ruleSource.symbols(),
+                        ruleSource.kinds(), ruleSource.sums()).wrappers(),
+                FixtureTemplate.on(observed, Dates.dayOf(found.on()),
+                        ruleSource.symbols().scope()::reach),
+                ruleSource);
+        return standing == null
+                ? new Realization.None(
+                        Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE)
+                : Realization.Built.whole(List.of(standing));
+    }
+
+    /**
+     * The first date every one of {@code asks} admits, walking the years of the first year asked
+     * for.
+     *
+     * <p>At least one of the asks is for a year, since that is what bounds the walk: the dates of
+     * a year are a run, and the parts of a date are not.
+     */
+    static Search dateAnsweringMovedParts(List<DatePartAsk> asks, Carrier observed) {
+        DatePartAsk lead = asks.stream().filter(each -> each.part() == TakenAs.DatePart.YEAR)
+                .findFirst().orElseThrow(() -> new IllegalArgumentException(
+                        "a date answering moved parts is walked by the years asked of it"));
+        Tried years = wholeNumbers(lead.wanted(), observed,
+                LocalDate.MIN.getYear(), LocalDate.MAX.getYear(),
+                CompositionBudget.NUMBERS_OF_A_SET_TRIED.maximum());
+        boolean everyOne = years.rest() instanceof Remainder.Exhausted;
+        for (Place year : years.numbers()) {
+            LocalDate on = dateInTheRunOf(lead, whole(year), asks, observed);
+            if (on != null) {
+                return new Search(on, everyOne);
+            }
+        }
+        return new Search(null, everyOne);
+    }
+
+    /**
+     * The first date the lead ask's moved date is in {@code year} at, and every other ask admits,
+     * or null where there is none.
+     */
+    private static LocalDate dateInTheRunOf(DatePartAsk lead, int year, List<DatePartAsk> asks,
+                                            Carrier observed) {
+        DateTranslation moved = lead.moved();
+        long from = Math.max(moved.first(),
+                LocalDate.of(year, 1, 1).toEpochDay() - moved.offsetDays());
+        long to = Math.min(moved.last(),
+                LocalDate.of(year, 12, 31).toEpochDay() - moved.offsetDays());
+        if (from > to) {
+            return null;
+        }
+        // The run is at most a year of days, and each ask is answered the same way between two of
+        // the days it changes at, so the first day of each stretch is every day of it.
+        TreeSet<Long> cuts = new TreeSet<>();
+        cuts.add(from);
+        for (DatePartAsk each : asks) {
+            each.cutsInto(cuts, from, to);
+        }
+        for (long day : cuts) {
+            if (asks.stream().allMatch(each -> each.admits(day, observed))) {
+                return LocalDate.ofEpochDay(day);
+            }
+        }
+        return null;
+    }
 
     /**
      * The numbers a part may stand at, in the order they are to be tried.
@@ -1942,7 +3468,7 @@ final class TermRealizations {
         }
         return Realization.Built.whole(List.of(WornNames.under(
                 TypeView.of(sourceType, ruleSource.inners(), ruleSource.symbols(),
-                        ruleSource.published()).wrappers(), bare, ruleSource)));
+                        ruleSource.kinds(), ruleSource.sums()).wrappers(), bare, ruleSource)));
     }
 
     /**
@@ -1960,7 +3486,7 @@ final class TermRealizations {
      */
     private static WornNames namesOf(Type sourceType, RuleReadingSource ruleSource) {
         return WornNames.of(TypeView.of(sourceType, ruleSource.inners(), ruleSource.symbols(),
-                ruleSource.published()).wrappers(), ruleSource);
+                ruleSource.kinds(), ruleSource.sums()).wrappers(), ruleSource);
     }
 
     private TermRealizations() {}

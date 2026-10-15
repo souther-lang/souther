@@ -1,11 +1,14 @@
 package souther.compiler.partition;
 
+import souther.compiler.check.TypeView;
 import souther.compiler.inputs.Membership;
 import souther.compiler.observe.Classification;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.ObservedValue;
+import souther.compiler.types.Type;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -67,9 +70,11 @@ public final class InputClassifications {
     public static List<Classification> placedAt(List<ObservedValue> inputs,
                                                 MeasuredInput.MeasuredAxes axes) {
         BehaviorInputs where = axes.subject().inputs();
+        // One row walked to every position, through the same few types each time.
+        Map<Type, TypeView> views = new HashMap<>();
         List<Classification> out = new ArrayList<>(axes.size());
         for (Axis axis : axes.axes()) {
-            out.add(axis.derivable() ? classify(inputs, where, axis) : null);
+            out.add(axis.derivable() ? classify(inputs, where, axis, views) : null);
         }
         return java.util.Collections.unmodifiableList(out);
     }
@@ -87,12 +92,13 @@ public final class InputClassifications {
      * had to guess.
      */
     private static Classification classify(List<ObservedValue> inputs, BehaviorInputs where,
-                                           Axis axis) {
+                                           Axis axis, Map<Type, TypeView> views) {
         // Over the arms, so a walk that comes to answer a third way is one this is taught about
         // rather than one folded into the word for a walk that could not be made.
-        return switch (where.occurrencesAt(inputs, axis.path())) {
+        return switch (where.occurrencesAt(inputs, axis.path(), views)) {
             case WalkResult.CouldNotWalk<List<BehaviorInputs.Occurrence>> _ ->
-                    Classification.unreadable(Incompleteness.Code.VALUE_UNREADABLE,
+                    Classification.unreadable(
+                            Incompleteness.Cause.of(Incompleteness.Code.VALUE_UNREADABLE),
                             axis.id().behavior(), axis.id().term());
             case WalkResult.Reached(List<BehaviorInputs.Occurrence> values) ->
                     among(axis, values);
@@ -102,7 +108,7 @@ public final class InputClassifications {
     /** Where each value the walk arrived at falls, and what stopped any that nothing could read. */
     private static Classification among(Axis axis, List<BehaviorInputs.Occurrence> values) {
         // Every value here, the class it is in, and the element it came from. One value at most
-        // positions; as many as were written at a position inside a sequence, where they need not
+        // positions; as many as were written at a position inside a container, where they need not
         // fall together — and where one of them being unreadable leaves the classes the others
         // reached standing, since each is a value of its own.
         List<Classification.At> in = new ArrayList<>();
@@ -161,10 +167,10 @@ public final class InputClassifications {
             throw new IllegalArgumentException(
                     "one answer per class: " + ids.size() + " classes, " + answers.size());
         }
-        Incompleteness.Code incomplete = null;
+        Incompleteness.Cause incomplete = null;
         boolean disagreed = false;
         for (int i = 0; i < answers.size(); i++) {
-            Incompleteness.Code code;
+            Incompleteness.Cause code;
             switch (answers.get(i)) {
                 case Membership.Match _ -> {
                     // A class that holds the value settles it, whatever the ones beside it could not
@@ -172,23 +178,25 @@ public final class InputClassifications {
                     // something else could not read it is what is left when there is no answer.
                     return Classification.in(ids.get(i));
                 }
-                case Membership.Incomplete why -> code = why.code();
+                case Membership.Incomplete why -> code = why.cause();
                 case Membership.NoMatch _ -> code = null;
                 // A count's own sum meeting a number the exact arithmetic could not hold is a
                 // different gap from an observation's, but it is the same fact for this measure:
                 // the class could not be settled. Read through the two codes built for exactly
                 // this, which of the two travelling with UnheldNumber.
-                case Membership.NotWorkedOut why -> code = switch (why.why()) {
-                    case NO_REPRESENTATION_EXISTS -> Incompleteness.Code.VALUE_NOT_WORKED_OUT;
-                    case MORE_ROOM_COULD_ANSWER -> Incompleteness.Code.VALUE_ROOM_EXCEEDED;
-                };
+                case Membership.NotWorkedOut why -> code = Incompleteness.Cause.of(
+                        switch (why.why()) {
+                            case NO_REPRESENTATION_EXISTS ->
+                                    Incompleteness.Code.VALUE_NOT_WORKED_OUT;
+                            case MORE_ROOM_COULD_ANSWER -> Incompleteness.Code.VALUE_ROOM_EXCEEDED;
+                        });
             }
             if (code == null) {
                 continue;
             }
             if (incomplete == null) {
                 incomplete = code;
-            } else if (incomplete != code) {
+            } else if (!incomplete.equals(code)) {
                 disagreed = true;
             }
         }

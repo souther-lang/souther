@@ -1,6 +1,9 @@
 package souther.compiler.reading;
 
+import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.SequencedSet;
 
 /**
  * What the walk carries down: how the place it is at is reached, and what it can say about that.
@@ -31,16 +34,26 @@ sealed interface Reach {
     }
 
     /**
-     * Ways that hold a run to something and steer no row: a fork this reading could not value,
-     * standing on the way here.
+     * Ways that hold a run to something and steer no row: a fork this reading could not value, or
+     * whose ways what a run is seen doing does not tell apart, standing on the way here.
      *
-     * @param why what left the reading with these rather than the ways themselves
+     * @param ways  what the walk goes on under, each decision on which is witnessed by its claim:
+     *              the arm itself where the fork stands, which a run is seen taking whichever way
+     *              it came
+     * @param why   what left the reading with these rather than the ways themselves
+     * @param known what a run here is known to have decided, one conjunction per way it may have
+     *              come: the ways themselves where the fork's ways were written down and only
+     *              could not be told apart, and {@code ways} otherwise. Read for what a run reads
+     *              and never for what it is seen doing, since a claim on one of these may be passed
+     *              by a run on another
      */
-    record Coarse(List<WayIn> ways, PathAccess.Unsupported.Why why) implements Reach {
+    record Coarse(List<WayIn> ways, PathAccess.Unsupported.Why why, List<WayIn> known)
+            implements Reach {
 
         public Coarse {
             ways = List.copyOf(ways);
-            if (ways.isEmpty()) {
+            known = List.copyOf(known);
+            if (ways.isEmpty() || known.isEmpty()) {
                 throw new IllegalArgumentException("a place reached no way is Nothing");
             }
         }
@@ -65,8 +78,43 @@ sealed interface Reach {
         }
     }
 
-    /** Nothing here can be said in the terms a way in is written in. */
-    record Unnameable(PathAccess.Unsupported.Why why) implements Reach {
+    /**
+     * Nothing here can be said in the terms a way in is written in.
+     *
+     * @param whys  every step nothing states on the way here, by what left it so, the one a place
+     *              here is told first. Every one and not the first: what {@code known} leaves out
+     *              is all of them, and a reader asking whether it leaves out anything but a
+     *              function value being called is asking about each
+     * @param known what is known to hold here as far as it was named: the decisions the ways above
+     *              the step nothing states had settled, and whatever is settled under it since. A
+     *              step nothing states is taken to rule out nothing, so these are no ways in — a
+     *              row composed along one may not get here — and are what a run here is known to
+     *              have decided. One way with nothing in it where nothing is known
+     */
+    record Unnameable(SequencedSet<PathAccess.Unsupported.Why> whys, List<WayIn> known)
+            implements Reach {
+
+        public Unnameable {
+            whys = Collections.unmodifiableSequencedSet(new LinkedHashSet<>(whys));
+            known = List.copyOf(known);
+            if (whys.isEmpty()) {
+                throw new IllegalArgumentException("a step nothing states is left so for a reason");
+            }
+            if (known.isEmpty()) {
+                throw new IllegalArgumentException("a place runs reach is known by some way, even"
+                        + " one nothing is known on; none is Nothing");
+            }
+        }
+
+        /** A step nothing states, with nothing known about what holds there. */
+        Unnameable(PathAccess.Unsupported.Why why) {
+            this(new LinkedHashSet<>(List.of(why)), List.of(new WayIn(List.of())));
+        }
+
+        /** What a place here is told is missing: the first step nothing states. */
+        PathAccess.Unsupported.Why why() {
+            return whys.getFirst();
+        }
 
         @Override
         public List<WayIn> ways() {
@@ -75,12 +123,43 @@ sealed interface Reach {
 
         @Override
         public PathAccess told(souther.compiler.coverage.ControlClaim arrivesAt) {
-            return new PathAccess.Unsupported(why);
+            return new PathAccess.Unsupported(why());
         }
     }
 
     /** The ways to go on under, which the last two have none of. */
     List<WayIn> ways();
+
+    /**
+     * What a run here is known to have decided, one conjunction per way it may have come.
+     *
+     * <p>The ways themselves where they are named. Under a step nothing states, what was named above
+     * it and since — which steers no row and is still what holds wherever a run is. Nothing where
+     * no run comes.
+     */
+    default List<WayIn> known() {
+        return switch (this) {
+            case Ways it -> it.ways();
+            case Coarse it -> it.known();
+            case Unnameable it -> it.known();
+            case Nothing _ -> List.of();
+        };
+    }
+
+    /**
+     * Whether some run gets here.
+     *
+     * <p>Not whether the ways here are named. A place under a way in nothing states is one runs
+     * reach and this reading cannot say how; a place nothing reaches is one no run gets to, which
+     * is a proof about the body. A reader asking what the body does there asks this, and an empty
+     * list of ways answers it for neither.
+     */
+    default boolean someRunArrives() {
+        return switch (this) {
+            case Ways _, Coarse _, Unnameable _ -> true;
+            case Nothing _ -> false;
+        };
+    }
 
     /**
      * What a place reached this way is told, which is never the coarse ways themselves.

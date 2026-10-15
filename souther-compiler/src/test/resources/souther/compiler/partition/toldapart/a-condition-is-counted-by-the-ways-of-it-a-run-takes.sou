@@ -1,0 +1,33 @@
+// A condition is counted by the ways of it a run takes, and not by every way it has.
+//
+// Inside the arm for C or D the inner condition is true for C and false for D; its ways through A
+// and B are ruled out by the arm. Counted whole, they would tell A from B, which the body treats
+// alike.
+//
+// told apart at k: 3 groups of 4
+// told apart at n: 2 groups of 2
+module example.someways
+
+data A
+data B
+data C
+data D
+data Kind = A | B | C | D
+
+data Ok = { n: Int }
+
+behavior judge : (k: Kind, n: Int) -> Ok
+    constructs Ok
+
+let judge (k, n) = {
+    guard n > 10 else Ok { n = 0 }
+    match k with
+        | A | B -> Ok { n = 1 }
+        | C | D ->
+            if (match k with
+                    | A -> true
+                    | C -> true
+                    | B -> false
+                    | D -> false)
+            then Ok { n = 2 } else Ok { n = 3 }
+}

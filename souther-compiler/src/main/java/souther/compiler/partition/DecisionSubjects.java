@@ -1,25 +1,33 @@
 package souther.compiler.partition;
 
-import souther.compiler.carrier.Membership;
 import souther.compiler.check.AffineForms;
-import souther.compiler.check.Location;
-import souther.compiler.check.DeclarationKinds;
+import souther.compiler.cst.CstLexer;
+import souther.compiler.check.ValueStanding;
+import souther.compiler.check.DeclarationAccess;
 import souther.compiler.check.DeclarationNewtypes;
-import souther.compiler.check.NewtypeInners;
-import souther.compiler.check.PublishedDeclarations;
+import souther.compiler.check.NumericMeasures;
 import souther.compiler.check.Symbols;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.core.Core;
+import souther.compiler.inputs.Denotation;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReads;
+import souther.compiler.inputs.InputTruth;
 import souther.compiler.inputs.PathResolution;
 import souther.compiler.inputs.ReadMeaning;
 import souther.compiler.inputs.TermPath;
-import souther.compiler.types.ValueName;
+import souther.compiler.meaning.DecisionArgument;
+import souther.compiler.meaning.DecisionAtom;
+import souther.compiler.meaning.DecisionSubject;
+import souther.compiler.meaning.InjectedAnswer;
+import souther.compiler.types.BindingId;
+import souther.compiler.types.Type;
 
 import java.util.ArrayList;
-import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * What a body's expressions name that a row can control.
@@ -31,18 +39,15 @@ import java.util.List;
  *
  * <p><b>Only what a row can control.</b> A position of the input is written at and an answer of a
  * dependency this behavior declares is stood in for. A call to anything else is a value the model
- * computes, and a row cannot be composed to make it come out one way rather than another.
- *
- * @param dependencies the behaviors this one declares it depends on, which are the ones a row
- *                     stands in for
+ * computes, and a row cannot be composed to make it come out one way rather than another. Which
+ * calls are stood in for is the environment's to say ({@link InputReads#standsIn}), since it is a
+ * fact about the body being read: a rule a declaration states is read where nothing is.
  */
-record DecisionSubjects(InputDomain inputs, Symbols symbols, PublishedDeclarations published,
-                        DeclarationKinds kinds, DeclarationNewtypes newtypes,
-                        NewtypeInners inners,
-                        Membership<ValueName.Behavior> dependencies) {
+record DecisionSubjects(InputDomain inputs, Symbols symbols, DeclarationAccess declarations,
+                        DeclarationNewtypes newtypes, ReadMeaning.WhereKept kept) {
 
     DecisionSubjects {
-        if (published == null || kinds == null || newtypes == null || inners == null) {
+        if (declarations == null || newtypes == null) {
             throw new IllegalArgumentException("reading what a row controls asks the declarations"
                     + " what they say, which form each of them is, which of them wrap one value"
                     + " and what each of those wraps, so it is handed somewhere to read every one"
@@ -54,79 +59,109 @@ record DecisionSubjects(InputDomain inputs, Symbols symbols, PublishedDeclaratio
      * What {@code e} names, or null where it is nothing a row controls.
      *
      * <p>The input is asked first, because a name that is a position is that position however it
-     * was given its value. What is left is read as an answer: the fields taken off it, and under
-     * them a call this behavior stands a dependency in for.
+     * was given its value. So is a name the cases of a sum share, which is no position and stands
+     * at one under whichever case the row is: what the body decides on is the value at the name,
+     * and a row controls it by what it writes under its case. What is left is read as an answer:
+     * the fields taken off it, and under them a call this behavior stands a dependency in for.
      */
     DecisionSubject of(Core e, InputReads at) {
-        if (at.pathOf(e, newtypes) instanceof PathResolution.At(TermPath stands)
-                && inputs.at(stands) != null) {
-            return new DecisionSubject.AnInput(stands);
-        }
-        List<TermPath.Step> steps = new ArrayList<>();
-        Core under = e;
-        InputReads reads = at;
-        while (true) {
-            // Which answer a value is does not turn on the type it stands as.
-            under = Core.withoutStanding(under);
-            // A newtype's value is the value it wraps, which is one subject and not a step inside
-            // one. Read as a step, `riskScore(c).value` and `riskScore(c)` would be two columns
-            // over one answer.
-            if (under instanceof Core.FieldAccess field) {
-                if (Location.isStep(field.target().type(), field.field(), newtypes)) {
-                    steps.add(new TermPath.Step.Field(field.field()));
-                }
-                under = field.target();
-                continue;
+        if (at.pathOf(e, newtypes) instanceof PathResolution.At(TermPath stands)) {
+            if (inputs.at(stands) != null) {
+                return new DecisionSubject.AnInput(stands);
             }
-            if (under instanceof Core.Read name
-                    && reads.meaningOf(name, symbols, newtypes)
-                            instanceof ReadMeaning.Through through) {
-                under = through.denotes().value();
-                reads = through.denotes().at();
-                continue;
+            // Read at the sum, as a name on a value left several cases is.
+            if (WhereANameIsWritten.ofAName(inputs, stands) != null) {
+                return new DecisionSubject.AnInput(stands.position());
             }
-            break;
         }
-        InjectedAnswer answered = answerOf(under, reads);
-        if (answered == null) {
-            return null;
-        }
-        Collections.reverse(steps);
-        return new DecisionSubject.AnAnswer(answered, steps);
+        return anAnswer(e, at);
     }
 
     /**
-     * The answer {@code e} is, or null where it is not a call to a dependency of this behavior.
+     * What a dependency answered, or a place inside it, that {@code e} is — or null where it is no
+     * such thing.
      *
-     * <p>An argument this reading cannot say leaves the answer unnamed: two askings it cannot tell
-     * apart may be two questions, and one column for them would say a body that asks about two
-     * things asks about one.
+     * <p>The second half of {@link #of}, for a reader asking only this: what a position is takes
+     * resolving where {@code e} stands, and which evaluation an answer is is
+     * {@link InputReads#answerAt}'s. A newtype's value is the value it wraps, one subject and not a
+     * step inside one: read as a step, {@code riskScore(c).value} and {@code riskScore(c)} would be
+     * two columns over one answer.
      */
-    private InjectedAnswer answerOf(Core e, InputReads at) {
-        if (!(Core.withoutStanding(e) instanceof Core.Call call
-                && call.fn() instanceof Core.Reached reached
-                && reached.denotes() instanceof ValueName.Behavior dependency
-                && dependencies.contains(dependency))) {
+    DecisionSubject.AnAnswer anAnswer(Core e, InputReads at) {
+        InputReads.AnAnswerAt found = at.answerAt(e, symbols, newtypes);
+        if (found == null) {
             return null;
         }
+        // What a report names the answer by is what it was asked about.
         List<DecisionArgument> arguments = new ArrayList<>();
-        for (Core argument : call.args()) {
-            DecisionArgument asked = argumentOf(argument, at);
-            if (asked == null) {
-                return null;
-            }
-            arguments.add(asked);
+        for (Core argument : found.arguments()) {
+            arguments.add(argumentOf(argument, found.at()));
         }
-        return new InjectedAnswer(dependency, arguments);
+        return new DecisionSubject.AnAnswer(new InjectedAnswer(found.evaluation(), arguments),
+                found.steps());
     }
 
     /**
-     * What {@code e} asks the dependency about, or null where this reading cannot say.
+     * The number an operation takes of what a dependency answered that {@code e} is, or null where
+     * it is no such number.
+     *
+     * <p>Which calls take a number of a value is {@link NumericMeasures#takenIn}'s answer, the one
+     * the input's numbers are read by, so a count of a list is one wherever the list stands. What
+     * this adds is only whose value it is taken of.
+     */
+    DecisionAtom.TakenOfAnAnswer takenOfAnAnswer(Core e, InputReads at) {
+        // Asked of every number a comparison names, so a body with no answer in it is not asked
+        // what an operation takes of one.
+        if (!at.mayHoldAnAnswer()) {
+            return null;
+        }
+        NumericMeasures.Measured measured = NumericMeasures.takenIn(e, symbols);
+        if (measured == null || !(anAnswer(measured.of(), at) instanceof DecisionSubject.AnAnswer
+                answer)) {
+            return null;
+        }
+        return new DecisionAtom.TakenOfAnAnswer(measured.operation(), measured.arguments(),
+                answer, Core.withoutStanding(measured.of()).type());
+    }
+
+    /**
+     * {@code truth} coming out {@code holding} as the truth of a subject a row controls, or null
+     * where it is the truth of none.
+     *
+     * <p>Through what {@link InputTruth#asked} reads through — a {@code let}, a name, a denial — and
+     * so the one way through them for a truth here as for a truth of a position. Read without it,
+     * {@code Bool.not(known(name))} was no column, while the reading of the input, which looks
+     * through the denial, found {@code known(name)} under it and handed it over: a condition both
+     * readings let go.
+     */
+    DecidedCondition.Stood truthOf(Core truth, boolean holding, InputReads reads) {
+        InputTruth.Asked asked = InputTruth.asked(truth, holding, reads, symbols, newtypes);
+        DecisionSubject subject = of(asked.value(), asked.reads());
+        return subject == null ? null : new DecidedCondition.Stood(
+                new DecisionCondition.ATruth(subject), asked.holding());
+    }
+
+    /**
+     * Whether {@code e} is a {@code Bool} whose truth, read as {@link #truthOf} reads it, is that of
+     * what a dependency answered.
+     *
+     * <p>Only a truth. An answer that is a value inside a condition — compared, or handed to an
+     * operation — is not what the condition decides.
+     */
+    boolean isTheTruthOfAnAnswer(Core e, InputReads reads) {
+        DecidedCondition.Stood truth = Core.withoutStanding(e).type() == Type.Prim.BOOL
+                ? truthOf(e, true, reads) : null;
+        return truth != null && truth.condition().of() instanceof DecisionSubject.AnAnswer;
+    }
+
+    /**
+     * What {@code e} asks the dependency about.
      *
      * <p>Something a row controls, or a number the model settles. The second is asked of the same
      * walk the arithmetic folds a call with, so an expression this compiler works out to a number
      * is the number it works out to — the question a body asks by writing it is the question it
-     * asks by writing the answer.
+     * asks by writing the answer. Anything else is a value the model works out, named by how
+     * ({@link DecisionArgument.WorkedOut}).
      */
     private DecisionArgument argumentOf(Core e, InputReads at) {
         DecisionSubject stands = of(e, at);
@@ -136,7 +171,76 @@ record DecisionSubjects(InputDomain inputs, Symbols symbols, PublishedDeclaratio
         return AffineForms.outcome(e, at, aNumberAndNothingElse())
                 instanceof AffineForms.Outcome.Composed<Void, InputReads>(LinearForm<Void> form)
                 && form.coefs().isEmpty()
-                ? new DecisionArgument.OfANumber(form.constant()) : null;
+                ? new DecisionArgument.OfANumber(form.constant())
+                : new DecisionArgument.WorkedOut(workedOut(e, at, new HashSet<>()));
+    }
+
+    /**
+     * How {@code e}, read in {@code at}, is worked out: the expression, each name in it written as
+     * what it stands for there — a subject a row controls as that subject, a name read through as
+     * what it was given, one of several values as all of them, and one that stands for none of these
+     * as itself.
+     *
+     * @param met the bindings already read through on the way here, so a name that came round to
+     *            itself is written as itself
+     */
+    private String workedOut(Core standing, InputReads at, Set<BindingId> met) {
+        Core e = Core.withoutStanding(standing);
+        DecisionSubject subject = of(e, at);
+        if (subject != null) {
+            return subject.spelled();
+        }
+        Denotation taken = at.taken(e);
+        if (taken != null) {
+            return workedOut(taken.value(), taken.at(), met);
+        }
+        return switch (e) {
+            case Core.Read name when met.add(name.binding()) ->
+                    switch (at.meaningOf(name, symbols, newtypes)) {
+                        case ReadMeaning.Through(Denotation denotes) ->
+                                workedOut(denotes.value(), denotes.at(), met);
+                        case ReadMeaning.OneOf one -> {
+                            List<String> each = new ArrayList<>();
+                            one.valuesWhere(kept).forEach(value -> each.add(
+                                    workedOut(value.value(), value.at(), new HashSet<>(met))));
+                            yield "one of " + each;
+                        }
+                        case ReadMeaning.Position _, ReadMeaning.Element _,
+                             ReadMeaning.NoneHeld _, ReadMeaning.MoreThanAreWrittenOut _,
+                             ReadMeaning.Unknown _ -> name.name();
+                    };
+            case Core.Read name -> name.name();
+            case Core.LetIn let -> workedOut(let.body(), at.and(let.binder(), let.value()), met);
+            // A newtype made of one value is that value wearing a name.
+            case Core.Construct construct when newtypes.of(construct.typeName().key())
+                    && construct.values().size() == 1 ->
+                    workedOut(construct.values().getFirst().value(), at, met);
+            case Core.Int written -> Long.toString(written.value());
+            case Core.Decimal written -> ExactRatio.spelledBounded(written.value());
+            case Core.Str written -> CstLexer.literalOf(written.value());
+            case Core.Bool written -> Boolean.toString(written.value());
+            case Core.Temporal written -> written.text();
+            // The names read off a value, written as the accesses they stand for.
+            case Core.FieldProjection projection ->
+                    workedOut(projection.lastAccess(), at, met);
+            default -> {
+                List<String> parts = new ArrayList<>();
+                Core.forEachChild(e, child -> parts.add(workedOut(child, at, met)));
+                yield what(e) + parts;
+            }
+        };
+    }
+
+    /** What kind of expression {@code e} is, or which operation it applies, as a word. */
+    private static String what(Core e) {
+        Core it = Core.withoutStanding(e);
+        return switch (it) {
+            case Core.Call call -> call.fn().rendered();
+            case Core.PreservedCall call -> call.declared().operation().toString();
+            case Core.Binary binary -> binary.op().toString();
+            case Core.FieldAccess access -> "." + access.field();
+            default -> it.getClass().getSimpleName();
+        };
     }
 
     /**
@@ -155,18 +259,8 @@ record DecisionSubjects(InputDomain inputs, Symbols symbols, PublishedDeclaratio
             }
 
             @Override
-            public PublishedDeclarations published() {
-                return published;
-            }
-
-            @Override
-            public DeclarationKinds kinds() {
-                return kinds;
-            }
-
-            @Override
-            public NewtypeInners inners() {
-                return inners;
+            public DeclarationAccess declarations() {
+                return declarations;
             }
 
             @Override
@@ -180,14 +274,24 @@ record DecisionSubjects(InputDomain inputs, Symbols symbols, PublishedDeclaratio
             }
 
             @Override
-            public AffineForms.ReadThrough<InputReads> readThrough(Core.Read read, InputReads at) {
+            public ValueStanding.ReadThrough<InputReads> readThrough(Core.Read read, InputReads at) {
                 return NameAnswers.denoting(read, at, symbols, newtypes);
             }
 
             @Override
-            public List<AffineForms.ReadThrough<InputReads>> alternativesOf(Core.Read read,
+            public List<ValueStanding.ReadThrough<InputReads>> alternativesOf(Core.Read read,
                                                                            InputReads at) {
-                return NameAnswers.alternativesOf(read, at, symbols, newtypes);
+                return NameAnswers.alternativesOf(read, at, symbols, newtypes, kept);
+            }
+
+            @Override
+            public ValueStanding.ReadThrough<InputReads> taken(Core node, InputReads at) {
+                return NameAnswers.taken(node, at);
+            }
+
+            @Override
+            public LinearForm<Core> takenAsAForm(Core node, InputReads at) {
+                return NameAnswers.takenAsAForm(node, at);
             }
 
             @Override

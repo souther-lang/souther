@@ -2,10 +2,12 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.carrier.Membership;
 import souther.compiler.check.DeclaredBounds;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
+import souther.compiler.check.TypeCardinality;
 import souther.compiler.check.DeclaredSig;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.TermPath;
@@ -39,8 +41,8 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 class ANameTakenOffByOneNarrowingGoesBackOnAfterTheNextTest {
 
     /** The rules asking a collection to hold one and capping it in no way. */
-    private static final ConstructionPlan.HowManyItHolds ONE_AT_LEAST =
-            (_, _) -> new DeclaredBounds.CountRange(1, Integer.MAX_VALUE);
+    private static final ConstructionPlan.WhatItMayHold ONE_AT_LEAST = (_, _) ->
+            ConstructionPlan.ItMayHold.counting(new DeclaredBounds.CountRange(1, Integer.MAX_VALUE));
 
 
     /** A case of a sum that is a newtype over an optional: the name is uncovered by the case and
@@ -104,7 +106,7 @@ class ANameTakenOffByOneNarrowingGoesBackOnAfterTheNextTest {
     private static List<String> wornAt(String source, String path, String classId) {
         Read read = read(source);
         Partitions.Partitioning partitioning =
-                Partitions.of("look", read.domain(), read.rules(), ReadAs.THE_COMPILATION_DOES);
+                Partitions.of("look", read.domain().reading(read.rules()), ReadAs.THE_COMPILATION_DOES);
         Axis axis = partitioning.axes().stream()
                 .filter(each -> each.path().toString().equals(path)).findFirst()
                 .orElseThrow(() -> new AssertionError("no axis at " + path + ": "
@@ -117,8 +119,9 @@ class ANameTakenOffByOneNarrowingGoesBackOnAfterTheNextTest {
                 ConstructionPlan.of(read.sig().inputs().get(0).type(),
                         TermPath.of(read.parameter()), read.rules().inners(),
                         read.rules().symbols(),
-                        read.rules().published(), Set.of(),
-                        axis.requiring(cls), ONE_AT_LEAST),
+                        read.rules().kinds(), read.rules().sums(), Set.of(),
+                        axis.requiring(cls), ConstructionPlan.ContentsComposed.NONE,
+                        ONE_AT_LEAST),
                 "nothing here asks one position to be two things").plan();
 
         return names(under(plan.root(), axis.path().refine(cls.selects())));
@@ -129,7 +132,8 @@ class ANameTakenOffByOneNarrowingGoesBackOnAfterTheNextTest {
         return switch (node) {
             case ConstructionPlan.Slot slot -> slot.at().equals(at) ? slot : null;
             case ConstructionPlan.Exact exact -> exact.at().equals(at) ? exact : null;
-            case ConstructionPlan.Held held -> under(held.under(), at);
+            case ConstructionPlan.Held held -> held.under().map(each -> under(each, at))
+                    .orElse(null);
             case ConstructionPlan.Built built -> built.under().values().stream()
                     .map(each -> under(each, at)).filter(each -> each != null).findFirst()
                     .orElse(null);
@@ -157,8 +161,10 @@ class ANameTakenOffByOneNarrowingGoesBackOnAfterTheNextTest {
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         DeclaredSig declared = sigs.get("look");
+        RuleReadingContext context =
+                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES);
         return new Read(declared.inputs().get(0).name(), declared, rules,
-                InputDomain.of(declared,
-                        RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES)));
+                InputDomain.of(declared, context, TypeCardinality.Counts.workedOutIn(context),
+                        Membership.none()));
     }
 }

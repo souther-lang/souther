@@ -1,5 +1,6 @@
 package souther.compiler.report;
 
+import souther.compiler.check.PathReachability;
 import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.WeakeningSet;
@@ -18,6 +19,7 @@ import souther.compiler.coverage.DecidedBy;
 import souther.compiler.coverage.Numberings;
 import souther.compiler.coverage.SourceOutcome;
 import souther.compiler.query.Adequacy;
+import souther.compiler.query.RowWitnesses;
 import souther.compiler.types.SourceConstruct;
 import souther.compiler.types.SourceConstructOrigin;
 
@@ -65,9 +67,11 @@ class WhatWasObservedDecidesWhatAReportMayNameTest {
         return new AdequacyReport.BehaviorReport("b", BehaviorImplementation.IMPLEMENTED,
                 new souther.compiler.query.BehaviorEvidence(
                         souther.compiler.query.Adequacy.RowReading.NONE,
-                        null, null, null, null, read(), null, null),
+                        null, null, null, null, read(), null, null, null),
                 new souther.compiler.query.RowSummary(List.of()),
-                null, List.of(), shown(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of());
+                null, List.of(), shown(), AdequacyReport.ConditionsShown.NONE, Map.of(), Map.of(),
+                Map.of(), Map.of(), PathReachability.Answers.Contradictions.NONE, Map.of(),
+                Map.of());
     }
 
     /** Where this report shows each of the two forks. A place per fork and not per arm: the arms of
@@ -90,8 +94,9 @@ class WhatWasObservedDecidesWhatAReportMayNameTest {
                         arm(SETTLED, 1, DecidedBy.THE_DECLARATION),
                         arm(UNSETTLED, 2, DecidedBy.NOT_SAID),
                         arm(UNSETTLED, 3, DecidedBy.NOT_SAID)),
-                Set.of(PLACES.get(0)), Set.of(), souther.compiler.query.Adequacy.NOTHING_PROVEN,
-                WeakeningSet.none());
+                Map.of(PLACES.get(0), RowWitnesses.ANOTHER_ROW), Set.of(),
+                Adequacy.NOTHING_PROVEN,
+                WeakeningSet.none(), _ -> List.of());
     }
 
     /** The arm no row goes through is named, though the numbers are not a whole measure. */
@@ -116,7 +121,9 @@ class WhatWasObservedDecidesWhatAReportMayNameTest {
     void andNothingSaysARowWasNotRead() {
         StringBuilder out = new StringBuilder();
         new AdequacyReport(AdequacyReport.SCHEMA_VERSION, "x", WeakeningSet.none(),
-                List.of()).branch(out, reported(), null, SourceRendering.namedByIdentity(SourceLayouts.NONE));
+                List.of()).branch(out, reported(), null,
+                SourceRendering.namedByIdentity(SourceLayouts.NONE),
+                reported().coveredOnlyByRowsThatDoNotHold(), new AdequacyReport.MarksWritten());
 
         // Two arms and not four. What the count holds is what a row can be owed for, and a fork
         // standing for however many rules nobody could work out is not that — it is said under the

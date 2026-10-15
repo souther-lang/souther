@@ -1,6 +1,8 @@
 package souther.compiler.report;
 
+import souther.compiler.observe.Figure;
 import souther.compiler.observe.RunSensitivity;
+import souther.compiler.partition.BodyDistinction;
 import souther.compiler.query.NotMeasuredReason;
 import souther.compiler.query.PartitionEvidence;
 import souther.compiler.publish.WeakeningVocabulary;
@@ -34,13 +36,38 @@ import java.util.List;
 public sealed interface ReaderDisposition {
 
     /**
-     * A run of this compiler allowing more would answer it.
+     * A figure of this compiler's stopped it, and these are the figures.
      *
      * <p>Asked first, and of the entry rather than of what it is about. The one thing a reader of an
      * undetermined verdict wants to know is whether measuring again reaches any of it, and a space
      * too large to walk is a number away while a rule this compiler has no reading for is not.
+     *
+     * <p>Decided by the figures the entry carries and by its {@link RunSensitivity}, both. That a
+     * wider run need not stop at the same place is one fact; that a figure is here to name is
+     * another, and an entry that has the first without the second sent its reader to a figure no
+     * line named. One that has the second without the first reached a figure and is held by
+     * something beside it, and that something is where a reader goes: told the figure alone, they
+     * would raise it and find the entry standing.
+     *
+     * <p><b>Not an instruction to measure again.</b> No option of this compiler sets the figures it
+     * stops at, so a reader told to allow more has nothing to allow it with. What a reader can do is
+     * in the model, and there is something to say of it only where the entry is a point: a row
+     * written at it settles it, and so does a rule leaving no value there.
+     *
+     * @param figures            what stopped it, as it carried them, never empty
+     * @param aRowThereSettlesIt whether the entry is about one point, which a row written at it or
+     *                           a rule refusing it answers whatever stopped the search
      */
-    record WidenTheRun(Subject subject) implements ReaderDisposition {}
+    record StoppedAtAFigure(Subject subject, List<Figure> figures, boolean aRowThereSettlesIt)
+            implements ReaderDisposition {
+
+        public StoppedAtAFigure {
+            figures = List.copyOf(figures);
+            if (figures.isEmpty()) {
+                throw new IllegalArgumentException("a figure stopped it, so there is one to name");
+            }
+        }
+    }
 
     /** The rule that could not be read, and what stopped the reading of it. */
     record LookAtTheRule(Subject subject) implements ReaderDisposition {}
@@ -85,10 +112,12 @@ public sealed interface ReaderDisposition {
      * Whether this behavior needs the distinction a position of its input carries.
      *
      * <p>A decision and not an operation. What the compiler has is that the position holds more
-     * classes than this behavior's rules composed, and that combinations those classes take part in
-     * are unknown because no row reaches a combination the behavior never tells apart. What that is
-     * worth is the author's: a value passed through untouched is as ordinary as an input wider than
-     * it needs to be.
+     * classes than this behavior's body tells apart, and that combinations those classes take part
+     * in are unknown because no row reaches a combination the behavior never tells apart. What that
+     * is worth is the author's: a value passed through untouched is as ordinary as an input wider
+     * than it needs to be. A position nothing the behavior states reads is weighed on the same
+     * terms as one the body reads and sends every class of one way, since the body tells neither
+     * apart; what differs is that no row is owed at its classes, which is said beside it.
      */
     record ReconsiderWhatThisBehaviorNeedsToDistinguish(Subject subject)
             implements ReaderDisposition {}
@@ -110,9 +139,9 @@ public sealed interface ReaderDisposition {
      * place either way — which is why this is asked of the assessment rather than of what a
      * verdict is willing to show ({@link AdequacyAssessment}).
      *
-     * <p>The sensitivity first, then the entry, then what it is about. A wider run reaching it is an
-     * operation this compiler knows is appropriate, and it is the same answer whatever the entry is
-     * about — so it is asked once, above, rather than repeated below it.
+     * <p>The figures first, then the entry, then what it is about. A figure of this compiler's
+     * having stopped it is the same answer whatever the entry is about — so it is asked once,
+     * above, rather than repeated below it.
      *
      * <p>Then the entry, because what went unanswered about a place is the entry's answer and not
      * the place's: one point is named both by a measurement nobody made and by a showing that came to
@@ -123,14 +152,29 @@ public sealed interface ReaderDisposition {
      */
     static ReaderDisposition of(AdequacyUncertainty unanswered) {
         Subject subject = unanswered.subject();
-        if (unanswered.runSensitivity() == RunSensitivity.MAY_CHANGE) {
-            return new WidenTheRun(subject);
+        List<Figure> figures = unanswered.figures();
+        // Only where the figures are what holds it. One stopped at a figure and at something a run
+        // allowed more meets again is sent to that something, which is what is left once the
+        // figure is raised; the figures it reached are said beside it by whoever writes the line.
+        if (!figures.isEmpty() && unanswered.runSensitivity() == RunSensitivity.MAY_CHANGE) {
+            return new StoppedAtAFigure(subject, figures, switch (subject) {
+                case Subject.AtAPoint _ -> true;
+                case Subject.OfAModule _, Subject.OfABehavior _, Subject.OfASource _,
+                     Subject.OfARow _, Subject.AtASpelledPosition _, Subject.AtAPosition _,
+                     Subject.AtAnInput _, Subject.AtABorder _, Subject.OfAMeasure _,
+                     Subject.OfAnAxisMeasure _, Subject.AtARule _, Subject.AtAFork _,
+                     Subject.AtAnArm _ -> false;
+            });
         }
         return switch (unanswered) {
             case AdequacyUncertainty.NotMeasured it ->
                     new LookAtWhyNothingWasMeasured(subject, it.why());
             case AdequacyUncertainty.ShowingStopped _,
                  AdequacyUncertainty.NothingShowedARowCanBeWritten _ ->
+                    new LookAtWhatShowedNoRow(subject);
+            // What shows no row is the body itself: the premise it states is what to prove or
+            // answer, and it is at the behavior that states it.
+            case AdequacyUncertainty.EveryRowReachesAnUnreachable _ ->
                     new LookAtWhatShowedNoRow(subject);
             case AdequacyUncertainty.ByWeakening it -> switch (subject) {
                 case Subject.AtARule _ -> new LookAtTheRule(subject);
@@ -153,31 +197,40 @@ public sealed interface ReaderDisposition {
      * Where the combinations a behavior's rows do not reach leave a reader.
      *
      * <p>Nobody is owed a row at one, so the question is whether there is anything to look at. There
-     * is where a position the relations run between holds more classes than this behavior's rules
-     * composed: the combinations those classes take part in are ones no row can reach, and what to
-     * do about that is a judgement about the model rather than a row.
+     * is where a position the relations run between holds more classes than this behavior's body
+     * tells apart: the combinations those classes take part in are ones no row can reach, and what
+     * to do about that is a judgement about the model rather than a row.
      *
-     * <p>Where every position is divided as far as its rules divide it, the combinations left are
-     * ones the rows happen not to sit in, and there is nothing further here — which is what
-     * {@link Settled} says and is not the same as saying nothing is owed.
+     * <p>Where the body tells every position's classes apart, the combinations left are ones the
+     * rows happen not to sit in, and there is nothing further here — which is what {@link Settled}
+     * says and is not the same as saying nothing is owed.
      *
-     * <p>Read from the axes and not from the count. How many are unknown says how much of the
-     * product the rows reach; whether any of it is out of their reach is the positions' answer.
+     * <p>Read from the axes and not from the count. How many are unknown says how much of what is
+     * owed the rows reach; whether any of it is out of their reach is the positions' answer.
      */
     static ReaderDisposition of(PartitionEvidence.PairSpace pairs,
                                 List<PartitionEvidence.AxisCoverage> axes) {
-        return widerThanTheyAreSeparated(pairs, axes).isEmpty()
+        List<Wider> wider = widerThanTheyAreSeparated(pairs, axes);
+        return wider.isEmpty()
                 ? new Settled()
                 : new ReconsiderWhatThisBehaviorNeedsToDistinguish(new Subject.OfABehavior(
-                        widerThanTheyAreSeparated(pairs, axes).getFirst().at().behavior()));
+                        wider.getFirst().axis().at().behavior()));
     }
 
     /**
-     * The positions a behavior takes wider than its own rules separate, and whose classes take part
-     * in a relation no row reaches.
+     * A position the body tells apart into fewer groups than it holds classes.
+     *
+     * @param groups how many groups the body leaves the classes in, which is one where it tells
+     *               none of them apart
+     */
+    record Wider(PartitionEvidence.AxisCoverage axis, int groups) {}
+
+    /**
+     * The positions a behavior takes wider than its body tells apart, and whose classes take part in
+     * a relation no row reaches.
      *
      * <p>Both halves, and the second of them per relation. A position with more classes than the
-     * rules composed is nothing to weigh where every relation it is in was reached: what makes it
+     * body tells apart is nothing to weigh where every relation it is in was reached: what makes it
      * worth a reader's time is that some of what it carries is out of every row's reach, and that
      * is a fact about one relation and not about the space. Asked of the space, a position whose
      * own relations are all covered would be raised because another two positions left something
@@ -187,14 +240,25 @@ public sealed interface ReaderDisposition {
      * combinations and the decision this leaves a reader are one answer, and worked out twice they
      * are two that can differ.
      */
-    static List<PartitionEvidence.AxisCoverage> widerThanTheyAreSeparated(
+    static List<Wider> widerThanTheyAreSeparated(
             PartitionEvidence.PairSpace pairs, List<PartitionEvidence.AxisCoverage> axes) {
         if (pairs.counted().made().isEmpty()) {
             return List.of();
         }
-        List<PartitionEvidence.AxisCoverage> out = new ArrayList<>();
+        List<Wider> out = new ArrayList<>();
         for (PartitionEvidence.AxisCoverage axis : axes) {
-            if (axis.cutOrParted() || axis.divides().size() >= axis.classes().size()) {
+            // How many groups the body leaves the classes in, where that was read. A body that says
+            // something here this compiler does not read into classes, or no body at all, leaves
+            // nothing to say the position is taken wider than it is told apart.
+            int groups;
+            switch (axis.toldApart()) {
+                case BodyDistinction.Untouched _ -> groups = 1;
+                case BodyDistinction.Drawn it -> groups = it.groups().size();
+                case BodyDistinction.Unread _, BodyDistinction.NoBody _ -> {
+                    continue;
+                }
+            }
+            if (groups >= axis.classes().size()) {
                 continue;
             }
             // A position the space has no relation for, where the behavior has others. The space
@@ -214,13 +278,13 @@ public sealed interface ReaderDisposition {
                 if (here) {
                     inARelation = true;
                     if (pairs.unknown(pair) > 0) {
-                        out.add(axis);
+                        out.add(new Wider(axis, groups));
                         break;
                     }
                 }
             }
             if (!inARelation && axes.size() > 1) {
-                out.add(axis);
+                out.add(new Wider(axis, groups));
             }
         }
         return List.copyOf(out);

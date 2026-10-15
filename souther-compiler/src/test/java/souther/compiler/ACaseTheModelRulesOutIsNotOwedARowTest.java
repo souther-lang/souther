@@ -10,7 +10,10 @@ import souther.compiler.query.InputCaseEvidence;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Db;
+import souther.compiler.partition.WhereNothingIsAnswered;
+import souther.compiler.query.About;
 import souther.compiler.query.PartitionEvidence;
+import souther.compiler.report.AdequacyReport;
 import souther.compiler.report.GeneratedRows;
 
 import java.util.ArrayList;
@@ -599,6 +602,36 @@ class ACaseTheModelRulesOutIsNotOwedARowTest {
         assertTrue(report.contains("`Off` is declared unreachable: the probe never passes Off,"
                         + " and nothing here proves it: a rule about this position went unread"),
                 () -> report);
+    }
+
+    /**
+     * And the case it leaves owed is undecided, not a gap: every row at it reaches the
+     * {@code unreachable} and is refused.
+     *
+     * <p>Beside a case that is a gap. {@code Pending} answers, so a row there can be written and no
+     * row being there is what a build refuses over; {@code Off} is owed exactly as much and no row
+     * there is one the compiler takes, so it holds the verdict open on what the body states.
+     */
+    @Test
+    void aCaseEveryRowOfWhichAbortsIsUndecidedBesideOneThatIsAGap() {
+        List<Adequacy.Finding> classes = AdequacyReport.of(measured(UNPROVEN)).findings().stream()
+                .filter(each -> each.about() instanceof About.AClassNoRowIsIn)
+                .toList();
+
+        Adequacy.Finding off = classAt(classes, "Off");
+        assertEquals(Adequacy.Finding.Disposition.UNDECIDED, off.disposition());
+        assertEquals(List.of(List.of("the probe never passes Off")),
+                off.premises().stream().map(WhereNothingIsAnswered.Premise::reasons).toList(),
+                off::toString);
+        assertEquals(Adequacy.Finding.Disposition.REFUSED,
+                classAt(classes, "Pending").disposition());
+    }
+
+    private static Adequacy.Finding classAt(List<Adequacy.Finding> classes, String name) {
+        return classes.stream()
+                .filter(each -> ((About.AClassNoRowIsIn) each.about()).axisClass().name()
+                        .equals(name))
+                .findFirst().orElseThrow(() -> new AssertionError("no finding at " + name));
     }
 
     /**

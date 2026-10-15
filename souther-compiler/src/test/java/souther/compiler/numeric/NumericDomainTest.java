@@ -37,7 +37,7 @@ class NumericDomainTest {
 
     /** {@code coefficient · atom}, which is how a bound with a divisor is written. */
     private static LinearForm<String> times(long coefficient, String a) {
-        return atom(a).times(ExactRatio.of(coefficient));
+        return LinearForm.weighing(a, ExactRatio.of(coefficient));
     }
 
     private static Map<String, Granularity> spaced(Granularity g, String... atoms) {
@@ -58,12 +58,12 @@ class NumericDomainTest {
 
     /** Whether the domain proves {@code a <= n}. */
     private static boolean provesAtMost(NumericDomain<String> d, String a, long n) {
-        return d.entails(atom(a).minus(num(n)), Rel.LE);
+        return d.entails(LinearForm.atomMinusConstant(a, ExactRatio.of(n)), Rel.LE);
     }
 
     /** Whether the domain proves {@code a >= n}. */
     private static boolean provesAtLeast(NumericDomain<String> d, String a, long n) {
-        return d.entails(atom(a).minus(num(n)), Rel.GE);
+        return d.entails(LinearForm.atomMinusConstant(a, ExactRatio.of(n)), Rel.GE);
     }
 
     // --- one atom, a divisor, and the direction the rounding has to go ----------------------------
@@ -250,8 +250,9 @@ class NumericDomainTest {
                 .assume(atom(B).minus(num(1440)), Rel.LE, whole(B))
                 .assume(atom(A).negate(), Rel.LE, whole(A));
 
-        assertTrue(d.provenByTheBoxAndItsDifferences(atom(A).minus(atom(B)), Rel.LT));
-        assertTrue(d.provenByTheBoxAndItsDifferences(atom(B).minus(num(1440)), Rel.LE));
+        assertTrue(d.provenByTheBoxAndItsDifferences(LinearForm.difference(A, B), Rel.LT));
+        assertTrue(d.provenByTheBoxAndItsDifferences(
+                LinearForm.atomMinusConstant(B, ExactRatio.of(1440)), Rel.LE));
     }
 
     /** A strict bound over decimals is an end the range stops at without reaching, which is the
@@ -262,7 +263,8 @@ class NumericDomainTest {
                 .assume(atom(A).minus(num(3)), Rel.LT, dense(A));
 
         assertEquals(Endpoint.exclusive(Count.of(3)), interval.boundsOf(A).max());
-        assertTrue(interval.provenByTheBoxAndItsDifferences(atom(A).minus(num(3)), Rel.LT));
+        assertTrue(interval.provenByTheBoxAndItsDifferences(
+                LinearForm.atomMinusConstant(A, ExactRatio.of(3)), Rel.LT));
     }
 
     /** The same over whole numbers states it too: there the strictness became a step, and the value
@@ -273,7 +275,8 @@ class NumericDomainTest {
                 .assume(atom(A).minus(num(3)), Rel.LT, whole(A));
 
         assertEquals(Endpoint.inclusive(Count.of(2)), d.boundsOf(A).max());
-        assertTrue(d.provenByTheBoxAndItsDifferences(atom(A).minus(num(3)), Rel.LT));
+        assertTrue(d.provenByTheBoxAndItsDifferences(
+                LinearForm.atomMinusConstant(A, ExactRatio.of(3)), Rel.LT));
     }
 
     /**
@@ -305,12 +308,12 @@ class NumericDomainTest {
         NumericDomain<String> d = NumericDomain.top(CanonicalOrder.asTheyAreSpelled())
                 .assume(atom(A).negate(), Rel.LE, whole(A, B))
                 .assume(atom(B).negate(), Rel.LE, whole(A, B))
-                .assume(atom(A).plus(atom(B)).minus(num(10)), Rel.LE, whole(A, B));
+                .assume(SmallForm.small(atom(A)).plus(atom(B)).minus(num(10)).form(), Rel.LE, whole(A, B));
 
         assertEquals(Endpoint.inclusive(Count.of(10)), d.boundsOf(A).max());
-        assertTrue(d.entails(atom(A).plus(atom(B)).minus(num(10)), Rel.LE),
+        assertTrue(d.entails(SmallForm.small(atom(A)).plus(atom(B)).minus(num(10)).form(), Rel.LE),
                 "the rules prove it, since one of them is it");
-        assertFalse(d.provenByTheBoxAndItsDifferences(atom(A).plus(atom(B)).minus(num(10)), Rel.LE),
+        assertFalse(d.provenByTheBoxAndItsDifferences(SmallForm.small(atom(A)).plus(atom(B)).minus(num(10)).form(), Rel.LE),
                 "and the two ranges do not, since they hold a = 10 beside b = 10");
     }
 
@@ -322,9 +325,9 @@ class NumericDomainTest {
                 .assume(atom(B).negate(), Rel.LE, whole(A, B))
                 .assume(atom(A).minus(num(3)), Rel.LE, whole(A, B))
                 .assume(atom(B).minus(num(3)), Rel.LE, whole(A, B))
-                .assume(atom(A).plus(atom(B)).minus(num(10)), Rel.LE, whole(A, B));
+                .assume(SmallForm.small(atom(A)).plus(atom(B)).minus(num(10)).form(), Rel.LE, whole(A, B));
 
-        assertTrue(d.provenByTheBoxAndItsDifferences(atom(A).plus(atom(B)).minus(num(10)), Rel.LE),
+        assertTrue(d.provenByTheBoxAndItsDifferences(SmallForm.small(atom(A)).plus(atom(B)).minus(num(10)).form(), Rel.LE),
                 "a and b are each at most three, so their sum is at most six whatever is picked");
     }
 
@@ -341,7 +344,7 @@ class NumericDomainTest {
     @Test
     void anEndAtAValueNoDecimalWritesIsRoundedPast() {
         NumericDomain<String> d = NumericDomain.top(CanonicalOrder.asTheyAreSpelled())
-                .assume(atom(A).times(ExactRatio.of(3)).minus(num(1)),
+                .assume(SmallForm.small(atom(A)).times(ExactRatio.of(3)).minus(num(1)).form(),
                         Rel.LE, dense(A));
         assertFalse(d.endsAreWrittenExactly(A));
         assertTrue(d.boundsOf(A).max().at() instanceof Count at

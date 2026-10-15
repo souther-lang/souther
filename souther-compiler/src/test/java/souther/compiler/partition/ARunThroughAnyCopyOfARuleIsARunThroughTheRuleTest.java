@@ -3,10 +3,10 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.coverage.AlignedObservation;
-import souther.compiler.coverage.ComparisonEmissionSite;
+import souther.compiler.coverage.ConditionOutcomeSite;
 import souther.compiler.coverage.Numberings;
 import souther.compiler.coverage.Runs;
-import souther.compiler.coverage.SeenComparison;
+import souther.compiler.coverage.SeenConditionOutcome;
 import souther.compiler.coverage.SiteNumbering;
 
 import java.util.List;
@@ -33,14 +33,14 @@ class ARunThroughAnyCopyOfARuleIsARunThroughTheRuleTest {
 
     private static final SiteNumbering NUMBERING = Numberings.ofComparisons(2);
 
-    private static final ComparisonEmissionSite ONE = NUMBERING.comparison(0);
+    private static final ConditionOutcomeSite ONE = NUMBERING.outcome(0);
 
-    private static final ComparisonEmissionSite ANOTHER = NUMBERING.comparison(1);
+    private static final ConditionOutcomeSite ANOTHER = NUMBERING.outcome(1);
 
     @Test
     void aRunRecordedAtOneOfThemGotAnAnswerOutOfTheRule() {
         AlignedObservation ran = Runs.of(NUMBERING, Set.of(),
-                Set.of(new SeenComparison(ANOTHER, true)));
+                Set.of(new SeenConditionOutcome(ANOTHER, true)));
 
         assertTrue(StandingAtAPoint.gotAnAnswerOutOfTheRule(List.of(ONE, ANOTHER), ran),
                 "the row ran through one copy of the comparison, which is the comparison");

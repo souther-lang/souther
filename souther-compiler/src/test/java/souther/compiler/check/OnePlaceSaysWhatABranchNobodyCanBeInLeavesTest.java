@@ -55,8 +55,8 @@ class OnePlaceSaysWhatABranchNobodyCanBeInLeavesTest {
      * because a part is what holds both of them and the rule is the same for either.
      */
     private static final List<Licence> DEADENING_AN_ADOPTION = List.of(
-            new Licence("souther.compiler.check.StatedByClauses.Part.inADeadBranch", 2,
-                    "the part, telling each of the two languages it was read in the one rule"));
+            new Licence("souther.compiler.check.StatedByClauses.Part.inADeadBranch", 3,
+                    "the part, telling each of the three languages it was read in the one rule"));
 
     /**
      * Who says it of a written part, and who of the whole of a subtree.

@@ -93,7 +93,8 @@ class EveryPartOfAReadingIsAValueTest {
         // What a rule left standing, which holds its own entries and hands none of them out. There
         // is nothing here for a caller to write into afterwards, and no way to ask it for one.
         if (type == Standing.class) {
-            return new Sample(Standing.of(Set.of("a"), UnreadReason.FORM_NOT_READ), List.of());
+            return new Sample(Standing.of(Set.of("a"), StoppedReading.of(UnreadReason.FORM_NOT_READ)),
+                    List.of());
         }
         // A block, which is what an answer of a reading is about. Its own members are a set this
         // holds, and it makes its own copy of them, so there is nothing here for a caller to write

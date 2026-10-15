@@ -1,10 +1,23 @@
 package souther.compiler.partition;
 
+import souther.compiler.inputs.EmptyInput;
+import souther.compiler.inputs.NameReach;
+import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Requirements;
 import souther.compiler.inputs.SearchRegion;
+import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.Quantity;
+import souther.compiler.numeric.ExactRatio;
+import souther.compiler.partition.OneOfEach.Step;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import java.util.function.BooleanSupplier;
 
 /**
  * How a row for one border came to be looked for where it is: every condition on the way, in the
@@ -22,9 +35,10 @@ import java.util.List;
  * out to be, and neither says the other: a region has no word for a case, and a narrowing orders
  * nothing. The comparisons divide again, because the values a carrier holds are not always numbers:
  * an inequality over a form of them is the arithmetic's, and a position held against a written value
- * on an order that counts nothing is a bound on that order ({@link TakenConstraint}). So a search
- * composing a row against this reads them all, and what it still does not represent is
- * {@link #declined()}.
+ * on an order that counts nothing is a bound on that order ({@link TakenConstraint}). And a truth
+ * of a {@code Bool} position is neither: it is a value, which a region has no order for and a
+ * narrowing has no case for ({@link #truths()}). So a search composing a row against this reads
+ * them all, and what it still does not represent is {@link #declined()}.
  *
  * <p><b>This is what an answer keeps.</b> A region is a way of asking rather than something that
  * says what it is, and one kept in an answer carries the whole reading of a module's rules — down to
@@ -51,40 +65,164 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
     }
 
     /**
-     * {@code base} with exactly the {@link OnTheWay.TakenIn} entries taken in, in the order they are
-     * written.
+     * Whether a row reaches the border whatever it holds: nothing on the way asks anything of it,
+     * and nothing on the way went unread.
+     *
+     * <p>Which is what makes a value the declarations admit a row at the border. Where something on
+     * the way does ask — a comparison taken in, a narrowing, a condition this reading declined — a
+     * value the declarations admit may be one no row arriving at the border holds, and what the
+     * declarations prove about it is about the position and not about the border.
+     */
+    public boolean asksNothingOfARow() {
+        return onTheWay.stream().allMatch(each ->
+                each instanceof OnTheWay.Settled settled && settled.thisWay());
+    }
+
+    /**
+     * {@code base} narrowed by what of the {@link OnTheWay.TakenIn} entries a region can say, in
+     * the order they are written.
      *
      * <p>Three things hold of what comes back, and the first two are {@link SearchRegion}'s own:
      *
      * <pre>what reaches the border ⊆ this ⊆ what the declarations leave</pre>
      *
      * <p>A {@link OnTheWay.Declined} entry never narrows it — it is the record that something on the
-     * way is not represented in what comes back.
+     * way is not represented in what comes back. Nor does a {@link OnTheWay.Settled} one, which asks
+     * nothing of a row or is a way none takes ({@link #neverComesOut}).
      *
-     * <p>And a {@link OnTheWay.TakenIn} entry is one the region represents, which is settled where
-     * the entry is made rather than hoped for here. It does not follow that the region is narrower
-     * for each of them: a constraint the rules already hold is taken in again and leaves the region
-     * where it was. What holds is the one thing a reader of an account acts on — that what is
-     * written down as taken in is in the region a search runs over.
+     * <p>And what a {@link OnTheWay.TakenIn} entry asks is what a composer builds a row to meet;
+     * the region carries the part of it a region can say, which is settled where the entry is made
+     * rather than hoped for here. A relation is that whole; that some element meets something is
+     * the container holding one; that every element does is nothing a region says, since a
+     * container holding none meets it and a region reads a term inside the elements as one that is
+     * there. Nor is the region narrower for each relation: a constraint the rules already hold is
+     * taken in again and leaves it where it was. What holds is the one thing a reader of an account
+     * acts on — that the region a search runs over admits every row that meets what was taken in.
      */
     public SearchRegion narrowing(SearchRegion base) {
         SearchRegion region = base;
         for (OnTheWay each : onTheWay) {
-            if (each instanceof OnTheWay.TakenIn taken) {
-                region = switch (taken.taken()) {
-                    // Taken in, and the region is asked to take it in: an entry here is one the
-                    // region said it could carry when the walk recorded it, so a refusal now is
-                    // this compiler holding two readings of one constraint that disagree. Loud,
-                    // because the quiet answer is the region a search would then run over — wider
-                    // than what every reader of this account was told it had been narrowed to.
-                    case TakenConstraint.Affine affine ->
-                            region.assuming(affine.form(), affine.rel()).taken();
-                    case TakenConstraint.Ordered ordered ->
-                            region.assuming(ordered.term(), ordered.at(), ordered.rel());
-                    case TakenConstraint.AwayFrom away ->
-                            region.apartFrom(away.term(), away.at());
+            region = narrowedBy(region, each);
+        }
+        return region;
+    }
+
+    /**
+     * Whether no input takes this way, proved: the walk a composer reads ({@link #along}), with the
+     * numbers each condition states taken into {@code declarations} as it goes, so that a way of
+     * several is closed where the numbers chosen along it leave nothing, and not only where two
+     * conditions ask for two cases.
+     *
+     * <p>Only a proof: what the region cannot take in leaves it as it was, a walk stopped by a
+     * figure proves nothing, and neither does a group of choices closing beside a group that was
+     * not looked at. Numbers inside a container are not taken in, since a region reads such a term
+     * as the one element there and the way may be about two.
+     *
+     * <p>{@code takesIn} is asked before each condition is taken into the region, and a condition
+     * it refuses is taken in as nothing: the region stays as it was, which proves nothing past it.
+     */
+    Optional<NoInputTakesIt> takenByNoInput(SearchRegion declarations, BooleanSupplier takesIn) {
+        return OneOfEach.walk(onTheWay, numbered(declarations, takesIn),
+                CompositionBudget.CHOICES_ON_A_WAY_LOOKED_AT,
+                CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG)
+                instanceof OneOfEach.Walked.Closed<OnTheWay, NoInputTakesIt>(var _, var why)
+                ? Optional.of(why) : Optional.empty();
+    }
+
+    /** What a way holds together so far, beside what its numbers leave of the input. */
+    private record Numbered(HeldTogether held, SearchRegion region) {}
+
+    /** {@link #ASKED_OF_A_ROW}, with what the numbers of each entry leave of {@code declarations}
+     *  taken in as well, wherever {@code takesIn} lets one more be. */
+    private static OneOfEach.Vocabulary<OnTheWay, Numbered, NoInputTakesIt> numbered(
+            SearchRegion declarations, BooleanSupplier takesIn) {
+        return new OneOfEach.Vocabulary<>() {
+
+            @Override
+            public List<List<OnTheWay>> alternatives(OnTheWay entry) {
+                return ASKED_OF_A_ROW.alternatives(entry);
+            }
+
+            @Override
+            public Set<TermPath> positions(OnTheWay entry) {
+                return ASKED_OF_A_ROW.positions(entry);
+            }
+
+            @Override
+            public Numbered nothing() {
+                return new Numbered(ASKED_OF_A_ROW.nothing(), declarations);
+            }
+
+            @Override
+            public Step<Numbered, NoInputTakesIt> with(Numbered so, OnTheWay entry) {
+                return switch (takenIn(so.held(), entry)) {
+                    case Step.Closed<HeldTogether, Reachability>(var why) ->
+                            new Step.Closed<>(new NoInputTakesIt.TheConditionsClash(switch (why) {
+                                case Reachability.NothingReaches(var what) ->
+                                        new NoInputTakesIt.Clash.TwoAtOnce(what);
+                                case Reachability.NothingComesOutThatWay(var condition) ->
+                                        new NoInputTakesIt.Clash.NeverComesOutSo(condition);
+                                case Reachability.Reaching _ -> throw new IllegalStateException(
+                                        "a way taken in closes on why nothing reaches it");
+                            }));
+                    case Step.Held<HeldTogether, Reachability>(var held) -> {
+                        SearchRegion region = ofOnePosition(entry) && takesIn.getAsBoolean()
+                                ? narrowedBy(so.region(), entry) : so.region();
+                        Optional<EmptyInput> empty = region == so.region() ? Optional.empty()
+                                : region.emptiness();
+                        yield empty.isPresent()
+                                ? new Step.Closed<>(new NoInputTakesIt.TheNumbersLeaveNone(
+                                        empty.get()))
+                                : new Step.Held<>(new Numbered(held, region));
+                    }
                 };
             }
+        };
+    }
+
+    /** Whether every position {@code entry} asks about is one value of a run's own, outside every
+     *  container. */
+    private static boolean ofOnePosition(OnTheWay entry) {
+        return ASKED_OF_A_ROW.positions(entry).stream().noneMatch(TermPath::insideAContainer);
+    }
+
+    /** {@code region} with what the one entry {@code each} says of a row taken in
+     *  ({@link #narrowing}). */
+    private static SearchRegion narrowedBy(SearchRegion region, OnTheWay each) {
+        // What a narrowing says on the position's own order, which a region can carry: the
+        // cases it leaves out are values no row past it holds.
+        if (each instanceof OnTheWay.Narrowed narrowed) {
+            for (TakenConstraint.AwayFrom hole : narrowed.onItsOrder()) {
+                region = hole.narrowing(region);
+            }
+        }
+        if (each instanceof OnTheWay.TakenIn taken) {
+            region = switch (taken.demand()) {
+                // Taken in, and the region is asked to take it in: an entry here is one the
+                // region said it could carry when the walk recorded it.
+                case RowDemand.Relational(var relation) -> relation.narrowing(region);
+                // That some element meets these says nothing every row past it holds of each
+                // element, so the region is narrowed only by the container holding one. What
+                // the element meets is composed where the row is.
+                case RowDemand.Exists(var _, var _, var holdingOne, var _) ->
+                        holdingOne.constraint().narrowing(region);
+                // That every element meets these, which a container holding none does. A
+                // region reads a term inside the elements as the value of one that is there,
+                // so narrowed on, it would leave nothing where the rules leave the element
+                // nothing — and the way past an empty container would be proved closed. And
+                // the container is not held to holding none either, since elements meeting
+                // these are a way past it too.
+                case RowDemand.ForAll _ -> region;
+                // How many elements meet a statement, which is no number a region holds.
+                case RowDemand.SoMany _ -> region;
+                // A statement no composer writes toward, which a region holds nothing of.
+                case RowDemand.ForTheRun _ -> region;
+                // Which of two values stands at a position no region measures. The row is
+                // written with it where the row is composed, and the region says nothing of it.
+                case RowDemand.ATruth _ -> region;
+                // Two values being one on no order, which no region measures either.
+                case RowDemand.OneValueAtBoth _ -> region;
+            };
         }
         return region;
     }
@@ -105,7 +243,7 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
         Requirements out = Requirements.NONE;
         for (OnTheWay each : onTheWay) {
             if (each instanceof OnTheWay.Narrowed narrowed) {
-                Requirements.Merge both = out.merge(narrowed.position().requirements());
+                Requirements.Merge both = out.merge(narrowed.requirements());
                 if (!(both instanceof Requirements.Merge.Merged merged)) {
                     return both;
                 }
@@ -115,7 +253,28 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
         return new Requirements.Merge.Merged(out);
     }
 
-    /** The ones that narrow a region built from this. */
+    /**
+     * Which value each {@code Bool} position the way read is asked to hold, off the truths it took
+     * in — the third of what a row has to be, beside {@link #narrowing} and {@link #requirements}.
+     *
+     * <p>Or the position asked for both, which is a way no row takes for the reason two narrowings
+     * no position holds together are: whichever condition said which, no value is both.
+     */
+    public TruthsAsked.Merge truths() {
+        List<RowDemand.ATruth> asked = new ArrayList<>();
+        for (OnTheWay each : onTheWay) {
+            if (each instanceof OnTheWay.TakenIn(var _, RowDemand.ATruth truth)) {
+                asked.add(truth);
+            }
+        }
+        return TruthsAsked.of(asked);
+    }
+
+    /**
+     * What the way asks of a row, each where it was taken in. Only some of them narrow a region
+     * built from this: what every element meets leaves it as it is, since a container holding none
+     * meets it.
+     */
     public List<OnTheWay.TakenIn> takenIn() {
         List<OnTheWay.TakenIn> out = new ArrayList<>();
         for (OnTheWay each : onTheWay) {
@@ -126,15 +285,211 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
         return List.copyOf(out);
     }
 
+    /**
+     * The first condition on the way that no row brings out the way the walk went, or empty where
+     * every one of them can be.
+     *
+     * <p>A fact about the model, as two narrowings no position can hold together are
+     * ({@link #requirements()}): a border down such a way is one nothing reaches, and a row
+     * composed for it would be one for a way no input takes.
+     */
+    public Optional<OnTheWay.Settled> neverComesOut() {
+        for (OnTheWay each : onTheWay) {
+            if (each instanceof OnTheWay.Settled settled && !settled.thisWay()) {
+                return Optional.of(settled);
+            }
+        }
+        return Optional.empty();
+    }
+
     /** The ones this reading could state in neither vocabulary, which is what a search composing
-     *  against both of them still does not represent. */
+     *  against both of them still does not represent — inside an alternative as much as beside
+     *  one. */
     public List<OnTheWay.Declined> declined() {
         List<OnTheWay.Declined> out = new ArrayList<>();
-        for (OnTheWay each : onTheWay) {
+        for (OnTheWay each : stated()) {
             if (each instanceof OnTheWay.Declined left) {
                 out.add(left);
             }
         }
         return List.copyOf(out);
+    }
+
+    /**
+     * Every condition the way states, in the order it states them: a condition of several ways,
+     * and after it what each of its alternatives states, in the order they are kept.
+     *
+     * <p>The one walk of the way's conditions that goes inside an alternative, so that a reader
+     * placing something on the way and a reader asking what it declined go inside it alike. Placed
+     * by the conditions on top alone, two conditions inside one alternative and inside another
+     * would be at no place of the way, and what came of them in whatever order it was put
+     * together in.
+     */
+    public List<OnTheWay> stated() {
+        List<OnTheWay> out = new ArrayList<>();
+        stated(onTheWay, out);
+        return List.copyOf(out);
+    }
+
+    private static void stated(List<OnTheWay> entries, List<OnTheWay> into) {
+        for (OnTheWay each : entries) {
+            into.add(each);
+            switch (each) {
+                case OnTheWay.OneOf several ->
+                        several.alternatives().forEach(one -> stated(one, into));
+                // A narrowing's alternatives are the cases it leaves, each made afresh as a
+                // narrowing to that case; they state nothing the narrowing did not.
+                case OnTheWay.Narrowed _, OnTheWay.Declined _, OnTheWay.TakenIn _,
+                     OnTheWay.Settled _ -> { }
+            }
+        }
+    }
+
+    /** The conditions on this way a row is past one of several ways of
+     *  ({@link OnTheWay#alternatives}), in the order the walk met them. */
+    public List<OnTheWay> severalWays() {
+        return onTheWay.stream().filter(OnTheWay::ofSeveralWays).toList();
+    }
+
+    /**
+     * The ways a row past this one may take, each with one alternative of conditions of several
+     * ways taken in where it stands ({@link OnTheWay#alternatives}) — or why no row takes any of
+     * them, for the cases, the truths or the counts it asks.
+     *
+     * <p>A narrowing leaving several cases is one of them. The way whole states the cases it
+     * leaves, and a row along it is one of those cases, so it is composed along each.
+     *
+     * <p>Every row past this way is past one alternative of each such condition. Conditions that
+     * turn on no position in common are chosen apart ({@link OneOfEach}); the ways handed on are
+     * every combination of their open alternatives where the figure lets them all be, and
+     * otherwise some of them with the figure that left the rest. A way with no such condition on
+     * it is judged by the same walk, as the one way it is.
+     */
+    OneOfEach.Walked<OnTheWay, Reachability> along() {
+        return OneOfEach.walk(onTheWay, ASKED_OF_A_ROW, CompositionBudget.CHOICES_ON_A_WAY_LOOKED_AT,
+                CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG);
+    }
+
+    /**
+     * What a way asks of a row as far as whether its conditions hold together: the cases it
+     * requires and the truths it asks, which are what two conditions on one way contradict each
+     * other in ({@link Reachability#of}), a condition no row brings out the way taken — and how
+     * many elements meet each statement it counts, which two conditions asking for counts that
+     * leave none in common contradict each other in as well.
+     *
+     * @param counts what is left of each count asked, by its spelling
+     */
+    private record HeldTogether(Requirements requirements, List<RowDemand.ATruth> truths,
+                                Map<String, LevelRegion> counts) {
+
+        /** These with the count {@code counted} asked to be in {@code region}, or why no row is
+         *  where that leaves it none. */
+        Step<HeldTogether, Reachability> counting(Quantity.HowManyMeet counted,
+                                                  LevelRegion region) {
+            LevelRegion left = counts.containsKey(counted.spelled())
+                    ? counts.get(counted.spelled()).meet(region) : region;
+            if (left.parts().isEmpty()) {
+                return new Step.Closed<>(new Reachability.NothingReaches(
+                        new Reachability.TwoAtOnce.Counts(counted.container().inputPosition())));
+            }
+            Map<String, LevelRegion> out = new LinkedHashMap<>(counts);
+            out.put(counted.spelled(), left);
+            return new Step.Held<>(new HeldTogether(requirements, truths, out));
+        }
+    }
+
+    /** One or more elements, which some element meeting a statement is the count of. */
+    private static final LevelRegion ONE_OR_MORE = LevelRegion.of(new LevelInterval(
+            Bound.at(new Level.OfTheQuantity(ExactRatio.ONE), true), null));
+
+    /** No element, which every element meeting the denial of a statement is the count of. */
+    private static final LevelRegion NONE = LevelRegion.point(new Level.OfTheQuantity(
+            ExactRatio.ZERO));
+
+    private static final OneOfEach.Vocabulary<OnTheWay, HeldTogether, Reachability> ASKED_OF_A_ROW =
+            new OneOfEach.Vocabulary<>() {
+
+                @Override
+                public List<List<OnTheWay>> alternatives(OnTheWay entry) {
+                    return entry.ofSeveralWays() ? entry.alternatives() : null;
+                }
+
+                @Override
+                public Set<TermPath> positions(OnTheWay entry) {
+                    return switch (entry) {
+                        case OnTheWay.TakenIn taken -> taken.demand().positions();
+                        case OnTheWay.Narrowed narrowed -> {
+                            Requirements required = narrowed.requirements();
+                            Set<TermPath> out = new LinkedHashSet<>(
+                                    required.refinements().keySet());
+                            for (NameReach.Crossing each : required.crossings()) {
+                                out.add(each.at());
+                                out.add(each.to());
+                            }
+                            yield out;
+                        }
+                        case OnTheWay.Settled _, OnTheWay.Declined _, OnTheWay.OneOf _ ->
+                                Set.of();
+                    };
+                }
+
+                @Override
+                public HeldTogether nothing() {
+                    return new HeldTogether(Requirements.NONE, List.of(), Map.of());
+                }
+
+                /** {@code so} with {@code entry} taken in, or why no row takes them together. */
+                @Override
+                public Step<HeldTogether, Reachability> with(HeldTogether so, OnTheWay entry) {
+                    return takenIn(so, entry);
+                }
+            };
+
+    private static Step<HeldTogether, Reachability> takenIn(HeldTogether so, OnTheWay entry) {
+        return switch (entry) {
+            case OnTheWay.Settled settled -> settled.thisWay() ? new Step.Held<>(so)
+                    : new Step.Closed<>(new Reachability.NothingComesOutThatWay(settled));
+            case OnTheWay.Narrowed narrowed -> switch (so.requirements()
+                    .merge(narrowed.requirements())) {
+                case Requirements.Merge.Merged(Requirements both) ->
+                        new Step.Held<>(new HeldTogether(both, so.truths(), so.counts()));
+                case Requirements.Merge.Conflict conflict -> new Step.Closed<>(
+                        new Reachability.NothingReaches(new Reachability.TwoAtOnce.Cases(conflict)));
+            };
+            case OnTheWay.TakenIn(var _, RowDemand.ATruth truth) -> {
+                List<RowDemand.ATruth> truths = new ArrayList<>(so.truths());
+                truths.add(truth);
+                yield switch (TruthsAsked.of(truths)) {
+                    case TruthsAsked.Merge.Merged _ -> new Step.Held<>(
+                            new HeldTogether(so.requirements(), truths, so.counts()));
+                    case TruthsAsked.Merge.Conflict(var at) -> new Step.Closed<>(
+                            new Reachability.NothingReaches(new Reachability.TwoAtOnce.Truths(at)));
+                };
+            }
+            case OnTheWay.TakenIn(var _, RowDemand.Exists exists)
+                    when exists.counted().isPresent() ->
+                    so.counting(exists.counted().get(), ONE_OR_MORE);
+            case OnTheWay.TakenIn(var _, RowDemand.ForAll every)
+                    when every.counted().isPresent() ->
+                    so.counting(every.counted().get(), NONE);
+            case OnTheWay.TakenIn(var _, RowDemand.SoMany many) when !many.againstNumbers() ->
+                    so.counting(many.count(), many.counts().values());
+            // A relation over a number written under a case is a relation of a value that is
+            // that case: the number is nowhere else.
+            case OnTheWay.TakenIn(var _, RowDemand.Relational relation) -> {
+                Requirements required = so.requirements();
+                for (NumericTerm term : relation.terms()) {
+                    switch (required.merge(term.subjectPath().requirements())) {
+                        case Requirements.Merge.Merged(Requirements both) -> required = both;
+                        case Requirements.Merge.Conflict conflict -> {
+                            yield new Step.Closed<>(new Reachability.NothingReaches(
+                                    new Reachability.TwoAtOnce.Cases(conflict)));
+                        }
+                    }
+                }
+                yield new Step.Held<>(new HeldTogether(required, so.truths(), so.counts()));
+            }
+            case OnTheWay.TakenIn _, OnTheWay.Declined _, OnTheWay.OneOf _ -> new Step.Held<>(so);
+        };
     }
 }

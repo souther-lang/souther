@@ -4,9 +4,11 @@ import souther.compiler.check.Suggest;
 
 import java.io.PrintStream;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Supplier;
 
 /**
  * {@code souther doc}: the language specification and every doc set a bundled dependency ships,
@@ -113,14 +115,14 @@ public final class DocCommand {
                 out.print(shippedText);
                 return 0;
             }
-            List<String> lines = hits(spec, shipped, List.of(term), Match.ANYWHERE);
+            List<Found> lines = hits(spec, shipped, List.of(term), Match.ANYWHERE);
             List<String> asked = DocName.words(term);
             if (lines.isEmpty() && asked.size() > 1) {
                 // Nobody's name and nobody's phrase, so what is left to answer from is the words.
                 // Every section is scored against the whole query at once: taking the words one at
                 // a time and laying the answers end to end would fill the page from the first of
                 // them, and a reader who wrote eight words would be answered for one.
-                List<String> byWord = hits(spec, shipped, asked, Match.WORD);
+                List<Found> byWord = hits(spec, shipped, asked, Match.WORD);
                 if (!byWord.isEmpty()) {
                     // Said only where it happened. A term whose words are nowhere either is answered
                     // that nothing says it, and being told twice, in two ways, is being told less.
@@ -135,7 +137,7 @@ public final class DocCommand {
                 return 0;
             }
             int shown = limit <= 0 ? lines.size() : Math.min(limit, lines.size());
-            lines.subList(0, shown).forEach(out::println);
+            lines.subList(0, shown).forEach(found -> out.println(found.rendered()));
             if (shown < lines.size()) {
                 out.println("… " + (lines.size() - shown) + " more; " + caller.everyHit());
             }
@@ -260,31 +262,34 @@ public final class DocCommand {
      * <p>The two are scored the same way and sorted once. Ranking each on its own and printing one
      * after the other would put the best answer out of reach whenever the other side has enough
      * weak matches to fill the page, and the shipped topics — being few — are what would vanish.
+     *
+     * <p>The line a hit was found on is looked for when the hit is written out, so only the hits a
+     * limit leaves in are looked through for it.
      */
-    private record Found(String name, String title, String snippet, boolean titled, int matched,
+    private record Found(String name, String title, Supplier<String> snippet, boolean titled, int matched,
             int occurrences) {
 
         String rendered() {
-            return name + "\t" + title + (snippet.isBlank() ? "" : "\n    " + snippet);
+            String line = snippet.get();
+            return name + "\t" + title + (line.isBlank() ? "" : "\n    " + line);
         }
     }
 
-    private static List<String> hits(SpecDocument spec, LibraryDocs shipped, List<String> terms,
+    private static List<Found> hits(SpecDocument spec, LibraryDocs shipped, List<String> terms,
             Match how) {
         List<Found> found = new ArrayList<>();
-        for (SpecDocument.Hit hit : spec.rank(terms, how)) {
-            found.add(new Found(hit.section().anchor(), hit.section().title(), hit.snippet(),
-                    hit.titled(), hit.matched(), hit.occurrences()));
+        for (SpecDocument.Scored hit : spec.scored(terms, how)) {
+            found.add(new Found(hit.section().anchor(), hit.section().title(),
+                    () -> spec.snippet(hit, terms, how), hit.titled(), hit.matched(), hit.occurrences()));
         }
-        for (LibraryDocs.Hit hit : shipped.rank(terms, how)) {
-            found.add(new Found(hit.topic().name(), hit.topic().title(), hit.snippet(),
-                    hit.titled(), hit.matched(), hit.occurrences()));
+        for (LibraryDocs.Scored hit : shipped.scored(terms, how)) {
+            found.add(new Found(hit.topic().name(), hit.topic().title(),
+                    () -> shipped.snippet(hit, terms, how), hit.titled(), hit.matched(), hit.occurrences()));
         }
         return found.stream()
-                .sorted(java.util.Comparator.comparingInt(Found::matched).reversed()
-                        .thenComparing(java.util.Comparator.comparing(Found::titled).reversed())
-                        .thenComparing(java.util.Comparator.comparingInt(Found::occurrences).reversed()))
-                .map(Found::rendered)
+                .sorted(Comparator.comparingInt(Found::matched).reversed()
+                        .thenComparing(Comparator.comparing(Found::titled).reversed())
+                        .thenComparing(Comparator.comparingInt(Found::occurrences).reversed()))
                 .toList();
     }
 }

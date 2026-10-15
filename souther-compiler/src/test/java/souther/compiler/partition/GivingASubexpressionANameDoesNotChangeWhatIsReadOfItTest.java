@@ -36,7 +36,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
  * the reasons, and an expectation repeated twice would go on holding if both fell silent together.
  *
  * <p>The last pair is the one that must not agree by reading through. An operation's answer holding
- * what a closure made of an element is not the element's position, so a name standing for one of
+ * what a closure made of an element, and no one answer per element, is not the element's position,
+ * so a name standing for one of
  * those values is not the expression the closure wrote — put where the name stands, it would draw a
  * line at a position whose values are not the ones the rule is about, which an author cannot tell
  * from a line their model states.
@@ -148,8 +149,13 @@ class GivingASubexpressionANameDoesNotChangeWhatIsReadOfItTest {
      *  must not. */
     private static List<String> reasonsOf(PartitionEvidence evidence) {
         return evidence.notRead().stream()
-                .map(found -> found instanceof PartitionEvidence.NotRead.ARule rule
-                        ? rule.finding().at() + " " + rule.finding().why() : found.toString())
+                .map(found -> switch (found) {
+                    case PartitionEvidence.NotRead.ARule rule ->
+                            rule.finding().at() + " " + rule.finding().why();
+                    case PartitionEvidence.NotRead.AnUnclassifiedRule _ ->
+                            found.at() + " " + found.reason();
+                    default -> found.toString();
+                })
                 .sorted()
                 .toList();
     }
@@ -173,9 +179,10 @@ class GivingASubexpressionANameDoesNotChangeWhatIsReadOfItTest {
     /**
      * And arithmetic over two positions, where what has to agree is the reason as much as the line.
      *
-     * <p>A rule relating two positions draws a line and divides neither of them, and the report says
-     * so at each position. The bound spelling said nothing at all — which reads as a model with no
-     * rule there rather than a rule this could not turn into a class.
+     * <p>A rule relating two positions draws a line, and the report says at each position what it
+     * left there — here that the other position, held to its declared run, is not shown to reach
+     * every value at this one. The bound spelling said nothing at all — which reads as a model with
+     * no rule there rather than a rule this could not turn into a class.
      */
     @Test
     void aNameGivenArithmeticOverTwoPositionsIsThatArithmetic() {
@@ -242,6 +249,8 @@ class GivingASubexpressionANameDoesNotChangeWhatIsReadOfItTest {
             case BorderQuantity.Apart apart ->
                     apart.onTerm() + " vs " + apart.againstTerm()
                             + " on " + apart.on() + ", " + apart.against();
+            case BorderQuantity.HowMany count -> count.left();
+            case BorderQuantity.RemainderOfAForm remainder -> remainder.left();
         };
     }
 
@@ -254,12 +263,13 @@ class GivingASubexpressionANameDoesNotChangeWhatIsReadOfItTest {
             behavior counted : (people: List<Person>) -> Count
                 constructs Count
             let counted (people) =
-                Count(List.length(List.filter(n -> n >= 18, List.map(p -> p.age, people))))
+                Count(List.length(List.filter(n -> n >= 18,
+                        List.filterMap(p -> List.get(0, [p.age]), people))))
 
             behavior countedNamed : (people: List<Person>) -> Count
                 constructs Count
             let countedNamed (people) = {
-                let ages = List.map(p -> p.age, people)
+                let ages = List.filterMap(p -> List.get(0, [p.age]), people)
                 Count(List.length(List.filter(n -> n >= 18, ages)))
             }
             """;

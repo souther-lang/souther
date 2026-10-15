@@ -67,7 +67,7 @@ class AComparisonIsLitWhereverItIsWrittenTest {
     void oneRunPassesTheComparisonInsideAFunctionValueOncePerElement() {
         Compilation compilation = compiled();
         CoverageSites.Plan plan = checkedPlanOf(compilation);
-        ComparisonEmissionSite perElement = comparisonAt(plan, "fee", 9);
+        ConditionOutcomeSite perElement = comparisonAt(plan, "fee", 9);
         Map<String, ClassFileImage> classes = probed(compilation);
 
         AlignedObservation mixed =
@@ -92,7 +92,7 @@ class AComparisonIsLitWhereverItIsWrittenTest {
     void aComparisonGivenANameIsRecordedWhereItIsWritten() {
         Compilation compilation = compiled();
         CoverageSites.Plan plan = checkedPlanOf(compilation);
-        ComparisonEmissionSite named = comparisonAt(plan, "fee", 7);
+        ConditionOutcomeSite named = comparisonAt(plan, "fee", 7);
         Map<String, ClassFileImage> classes = probed(compilation);
 
         assertEquals(List.of(true),
@@ -106,7 +106,7 @@ class AComparisonIsLitWhereverItIsWrittenTest {
     void aComparisonABehaviorAnswersWithIsRecordedToo() {
         Compilation compilation = compiled();
         CoverageSites.Plan plan = checkedPlanOf(compilation);
-        ComparisonEmissionSite answered = comparisonAt(plan, "positive", 12);
+        ConditionOutcomeSite answered = comparisonAt(plan, "positive", 12);
         Map<String, ClassFileImage> classes = probed(compilation);
 
         assertEquals(List.of(true),
@@ -117,7 +117,7 @@ class AComparisonIsLitWhereverItIsWrittenTest {
 
     /** The ways {@code seen} records out of {@code comparison}, held true first. */
     private static List<Boolean> waysOut(AlignedObservation seen,
-                                         ComparisonEmissionSite comparison) {
+                                         ConditionOutcomeSite comparison) {
         List<Boolean> out = new ArrayList<>();
         for (boolean held : new boolean[] {true, false}) {
             if (seen.saw(comparison, held)) {
@@ -128,7 +128,7 @@ class AComparisonIsLitWhereverItIsWrittenTest {
     }
 
     /** The comparison {@code behavior} writes on {@code line}, which is what a run is asked about. */
-    private static ComparisonEmissionSite comparisonAt(CoverageSites.Plan plan, String behavior,
+    private static ConditionOutcomeSite comparisonAt(CoverageSites.Plan plan, String behavior,
                                                      int line) {
         List<CoverageSites.ComparisonSite> found = plan.sites().stream()
                 .filter(site -> site.body().equals(behavior))

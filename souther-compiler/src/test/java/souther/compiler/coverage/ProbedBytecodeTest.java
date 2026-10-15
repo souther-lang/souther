@@ -307,11 +307,11 @@ class ProbedBytecodeTest {
         }
 
         /** The ways out of the comparisons this run evaluated. */
-        Set<ComparisonOutcome> comparisonsFor(long cost) {
+        Set<RecordedConditionOutcome> comparisonsFor(long cost) {
             Probe.begin(under);
             try {
                 apply(cost);
-                return Probe.snapshot().comparisons();
+                return Probe.snapshot().outcomes();
             } finally {
                 Probe.end();
             }

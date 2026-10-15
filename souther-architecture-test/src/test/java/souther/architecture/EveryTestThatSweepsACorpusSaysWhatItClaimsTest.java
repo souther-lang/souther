@@ -90,6 +90,7 @@ class EveryTestThatSweepsACorpusSaysWhatItClaimsTest {
     private static final Set<String> CORPORA = Set.of(
             "souther/compiler/conformance/ConformanceCorpus",
             "souther/compiler/conformance/RepositoryModels",
+            "souther/compiler/partition/ToldApartCorpus",
             "souther/compiler/fmt/FormatterCorpus",
             "souther/compiler/fmt/WhatGoesBetweenTwoTokensOnALineTest",
             "souther/bench/Corpus",

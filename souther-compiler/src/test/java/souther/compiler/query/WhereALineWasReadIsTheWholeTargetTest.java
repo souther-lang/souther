@@ -86,7 +86,7 @@ class WhereALineWasReadIsTheWholeTargetTest {
         for (BorderObligationPointAssessment point : pointsOf(TWO_CASES)) {
             point.met().forEach((reading, assessment) -> assertEquals(
                     BoundaryLine.of(assessment.border()),
-                    new BoundaryLine(reading.target(), point.id().line()),
+                    new BoundaryLine(reading.target(), point.id().line(), reading.placement()),
                     () -> "the point holds the authored line and the reading holds where it was"
                             + " read: " + point.point() + " at " + reading));
         }

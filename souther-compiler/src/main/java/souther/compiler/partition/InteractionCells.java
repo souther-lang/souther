@@ -2,8 +2,12 @@ package souther.compiler.partition;
 
 import souther.compiler.check.ComparisonClaim;
 import souther.compiler.types.ModelOccurrence;
+import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Towards;
+import souther.compiler.observe.Figure;
+import souther.compiler.observe.WorkFigure;
 import souther.compiler.reading.Factor;
 import souther.compiler.reading.Interaction;
 import souther.compiler.reading.Outcome;
@@ -11,6 +15,8 @@ import souther.compiler.reading.Outcome;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Objects;
+import java.util.Set;
 
 /**
  * The combinations a group of decisions has, as the classes a row filling one may sit in.
@@ -255,13 +261,19 @@ public final class InteractionCells {
      * can ask whether this group could have stated it — and a requirement none of whose conditions
      * this group has is one it certainly could not, whatever went unwalked. Without that, a group
      * held back leaves every requirement of every other group as one it might have stated.
+     *
+     * <p>And the limit it was held back by, as it stood where the group was compared against it:
+     * how many combinations of one group are measured is handed to a run, so a reader is owed the
+     * number this run used.
      */
     public record NotOffered(List<souther.compiler.coverage.ControlClaim> claims,
-                             java.util.Set<souther.compiler.reading.Condition> settles) {
+                             java.util.Set<souther.compiler.reading.Condition> settles,
+                             Figure limit) {
 
         public NotOffered {
             claims = List.copyOf(claims);
             settles = java.util.Set.copyOf(settles);
+            Objects.requireNonNull(limit, "a group held back was held back by a limit");
         }
 
         /**
@@ -284,11 +296,39 @@ public final class InteractionCells {
      * recorded. A group dropped for its width claims arms, and what was not walked at those arms is
      * something a caller says rather than something a reader has to notice going missing.
      */
-    public record Offered(List<Group> groups, List<NotOffered> notOffered) {
+    public record Offered(List<Group> groups, List<NotOffered> notOffered,
+                          List<NotPlaced> notPlaced) {
 
         public Offered {
             groups = List.copyOf(groups);
             notOffered = List.copyOf(notOffered);
+            notPlaced = List.copyOf(notPlaced);
+        }
+    }
+
+    /**
+     * A group the classes of the input do not place, which is why it was not offered.
+     *
+     * <p>Apart from {@link NotOffered}, which is a group the limit kept back and a wider run walks.
+     * Here a way of settling a factor, or the way to the meeting, narrows no position — the arm
+     * itself, where the ways into it are not ones a run is seen taking one of — or two ways of
+     * settling one factor leave the same classes; so no cell steers a row into one combination
+     * rather than another, and no run allows more of it. Said, because a group dropped without a
+     * word reads as combinations nobody owes.
+     *
+     * @param settles every condition a combination of this group could settle a value by, as
+     *                {@link NotOffered#settles} is
+     */
+    public record NotPlaced(Set<souther.compiler.reading.Condition> settles) {
+
+        public NotPlaced {
+            settles = Set.copyOf(settles);
+        }
+
+        /** Whether this group could have stated {@code settled}, as {@link NotOffered#mightState}
+         *  answers it. */
+        public boolean mightState(Set<souther.compiler.reading.Condition> settled) {
+            return settles.containsAll(settled);
         }
     }
 
@@ -307,7 +347,7 @@ public final class InteractionCells {
      */
     public static CellSelection at(souther.compiler.reading.WayIn way,
                                    souther.compiler.coverage.ControlClaim arrivesAt,
-                                   List<Axis> axes) {
+                                   MeasuredInput.MeasuredAxes axes) {
         if (way.decisions().isEmpty()) {
             // Nothing has to hold to get here, so there is nothing to steer a row by. The body
             // itself is reached this way.
@@ -330,24 +370,127 @@ public final class InteractionCells {
         return new CellSelection(placed.cell(), claims);
     }
 
-    /** The groups worth offering, over the ordered {@code axes}, and the ones held back. */
-    public static Offered of(List<Interaction> groups, List<Axis> axes, int mostCellsPerGroup) {
-        List<Group> out = new ArrayList<>();
-        List<NotOffered> held = new ArrayList<>();
-        for (Interaction group : groups) {
-            Placed reach = placedBy(group.reach(), axes);
-            if (reach == null) {
+    /**
+     * The classes a row arriving by one of {@code ways} sits in, one cell per way this can place.
+     * Each way is the conditions that hold on it together.
+     *
+     * <p>The reading a cell is made by and nothing beside it. A condition places at the classes it
+     * leaves whole — a case at the class that is that case, a comparison at every class on its side
+     * of a line the axis is cut at — so a row in a cell placed here is a row that comes that way,
+     * and not only one that may.
+     *
+     * <p>A way with a condition placed at no class is left out rather than read wider. What it
+     * leaves is a set of rows this cannot name, and a cell drawn without it would take in rows that
+     * go the other way round that fork.
+     */
+    public static List<Cell> whereEach(List<List<souther.compiler.reading.Condition>> ways,
+                                       MeasuredInput.MeasuredAxes axes) {
+        List<Cell> out = new ArrayList<>();
+        for (List<souther.compiler.reading.Condition> way : ways) {
+            Cell placed = narrowedBy(way, axes);
+            if (placed != null) {
+                out.add(placed);
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Every row that arrives by one of {@code ways}, and maybe more: the rows something asks for,
+     * drawn wide.
+     *
+     * <p>The other direction from {@link #whereEach}. A condition placed at no class is left out of
+     * its way rather than the way out of the region, which can only take in rows that do not come
+     * that way — so a row that does is in here whatever this could not place. A way whose placed
+     * conditions leave a position nothing is one no row comes, and adds no row.
+     */
+    public static RowRegion holdingEvery(List<List<souther.compiler.reading.Condition>> ways,
+                                         MeasuredInput.MeasuredAxes axes) {
+        List<RowRegion.Cell> out = new ArrayList<>();
+        for (List<souther.compiler.reading.Condition> way : ways) {
+            Cell cell = Cell.anything(axes.axes());
+            for (souther.compiler.reading.Condition each : way) {
+                Cell said = admittedBy(each, axes);
+                if (said != null) {
+                    cell = cell.and(said);
+                    if (cell == null) {
+                        break;
+                    }
+                }
+            }
+            if (cell != null) {
+                out.add(RowRegion.Cell.of(cell, axes.axes()));
+            }
+        }
+        return RowRegion.of(out);
+    }
+
+    /**
+     * Every row that reaches what {@code way} leads to, and maybe more.
+     *
+     * <p>Drawn wide, for the reason {@link #holdingEvery} is: what a rule or a point of a line asks
+     * for is in here whatever this could not place. A condition no row brings out the way the walk
+     * went is a way no row takes, and that is said as no row rather than left out. A narrowing of a
+     * position an axis measures keeps the classes it does not tell apart from the cases it leaves,
+     * and leaves out only a class that selects another case: a value is one case. Everything else on
+     * the way — what the arithmetic took in, and what was declined — narrows nothing here.
+     */
+    public static RowRegion holdingEveryRowOf(WayToTheBorder way, MeasuredInput.MeasuredAxes axes) {
+        if (way.neverComesOut().isPresent()) {
+            return RowRegion.NONE;
+        }
+        List<Axis> measured = axes.axes();
+        Cell cell = Cell.anything(measured);
+        for (OnTheWay each : way.onTheWay()) {
+            if (!(each instanceof OnTheWay.Narrowed narrowed) || !narrowed.crossings().isEmpty()) {
                 continue;
             }
-            List<List<Placed>> placed = factorsOf(group, axes);
+            TermPath at = narrowed.position().narrowedFrom().position();
+            List<Refinement> left = narrowed.position().narrowing().atoms();
+            for (int axis = 0; axis < measured.size(); axis++) {
+                if (!(measured.get(axis).term() instanceof NumericTerm.ValueOf)
+                        || !measured.get(axis).path().equals(at)) {
+                    continue;
+                }
+                Cell said = Cell.anything(measured);
+                List<PartitionClass> classes = measured.get(axis).classes();
+                for (int c = 0; c < classes.size(); c++) {
+                    Refinement selects = classes.get(c).selects();
+                    said.allowed()[axis][c] = selects == null || left.contains(selects);
+                }
+                cell = cell.and(said);
+                if (cell == null) {
+                    return RowRegion.NONE;
+                }
+            }
+        }
+        return RowRegion.of(List.of(RowRegion.Cell.of(cell, measured)));
+    }
+
+    /** The groups worth offering, over the ordered {@code axes}, and the ones held back. */
+    public static Offered of(List<Interaction> groups, MeasuredInput.MeasuredAxes axes,
+                             int mostCellsPerGroup) {
+        List<Group> out = new ArrayList<>();
+        List<NotOffered> held = new ArrayList<>();
+        List<NotPlaced> unplaced = new ArrayList<>();
+        for (Interaction group : groups) {
+            // A group with no cell is one of two things: one whose decisions leave no row
+            // anywhere, which is no path and nothing owed, and one the classes cannot put a row
+            // in, which is said.
+            Placed reach = placedBy(group.reach(), axes);
+            List<List<Placed>> placed = reach == null ? null : factorsOf(group, axes);
             if (placed == null) {
+                if (classesDoNotPlace(group, axes)) {
+                    unplaced.add(new NotPlaced(conditionsOf(group)));
+                }
                 continue;
             }
             // Past the limit, and said so rather than dropped. What this costs is the combinations
             // of one group going untried; what saying nothing cost is an arm among them reading as
             // one the body never reaches.
             if (productOf(placed, mostCellsPerGroup) > mostCellsPerGroup) {
-                held.add(new NotOffered(claimsOf(reach, placed), settlesOf(reach, placed)));
+                held.add(new NotOffered(claimsOf(reach, placed), settlesOf(reach, placed),
+                        WorkFigure.COMBINATIONS_OF_A_GROUP_MEASURED.at(mostCellsPerGroup)));
                 continue;
             }
             Group built = new Group(reach, placed);
@@ -355,7 +498,58 @@ public final class InteractionCells {
                 out.add(built);
             }
         }
-        return new Offered(out, held);
+        return new Offered(out, held, unplaced);
+    }
+
+    /**
+     * Whether {@code group} has no cell because the classes do not place it: a decision on the way
+     * to it, or on a way of settling one of its factors, narrows no position; or two ways of
+     * settling one factor leave the same classes. Not where the decisions narrow every row away,
+     * which is a group no run makes.
+     */
+    private static boolean classesDoNotPlace(Interaction group, MeasuredInput.MeasuredAxes axes) {
+        if (narrowsNothing(group.reach(), axes)) {
+            return true;
+        }
+        for (Factor factor : group.factors()) {
+            List<Placed> outcomes = new ArrayList<>();
+            for (Outcome outcome : factor.outcomes()) {
+                if (narrowsNothing(outcome.holds(), axes)) {
+                    return true;
+                }
+                Placed at = placedBy(outcome.holds(), axes);
+                if (at != null && alreadyThere(outcomes, at)) {
+                    return true;
+                }
+                if (at != null) {
+                    outcomes.add(at);
+                }
+            }
+        }
+        return false;
+    }
+
+    /** Whether some decision of {@code made} narrows no position at all. */
+    private static boolean narrowsNothing(List<souther.compiler.reading.Decision> made,
+                                          MeasuredInput.MeasuredAxes axes) {
+        for (souther.compiler.reading.Decision each : made) {
+            if (admittedBy(each.constrains(), axes) == null) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Every condition on the way to {@code group} and on every way of settling its factors. */
+    private static Set<souther.compiler.reading.Condition> conditionsOf(Interaction group) {
+        Set<souther.compiler.reading.Condition> out = new java.util.LinkedHashSet<>();
+        group.reach().forEach(each -> out.add(each.constrains()));
+        for (Factor factor : group.factors()) {
+            for (Outcome outcome : factor.outcomes()) {
+                outcome.holds().forEach(each -> out.add(each.constrains()));
+            }
+        }
+        return out;
     }
 
     /**
@@ -414,7 +608,8 @@ public final class InteractionCells {
     }
 
     /** What each outcome of each factor leaves open, or null where the group is not one to offer. */
-    private static List<List<Placed>> factorsOf(Interaction group, List<Axis> axes) {
+    private static List<List<Placed>> factorsOf(Interaction group,
+                                                MeasuredInput.MeasuredAxes axes) {
         List<List<Placed>> out = new ArrayList<>();
         for (Factor factor : group.factors()) {
             List<Placed> outcomes = new ArrayList<>();
@@ -440,7 +635,7 @@ public final class InteractionCells {
      * being of a different set of them than the classes are.
      */
     private static Placed placedBy(List<souther.compiler.reading.Decision> made,
-                                   List<Axis> axes) {
+                                   MeasuredInput.MeasuredAxes axes) {
         Cell cell = narrowedBy(
                 made.stream().map(souther.compiler.reading.Decision::constrains).toList(), axes);
         return cell == null ? null
@@ -450,8 +645,9 @@ public final class InteractionCells {
     }
 
     /** What {@code holds} leaves open, or null where any of it narrows nothing or narrows it away. */
-    private static Cell narrowedBy(List<souther.compiler.reading.Condition> holds, List<Axis> axes) {
-        Cell cell = Cell.anything(axes);
+    private static Cell narrowedBy(List<souther.compiler.reading.Condition> holds,
+                                   MeasuredInput.MeasuredAxes axes) {
+        Cell cell = Cell.anything(axes.axes());
         for (souther.compiler.reading.Condition each : holds) {
             Cell said = admittedBy(each, axes);
             if (said == null) {
@@ -474,34 +670,84 @@ public final class InteractionCells {
         return false;
     }
 
-    /** Which classes {@code condition} leaves its position, or null where it names none. */
-    private static Cell admittedBy(souther.compiler.reading.Condition condition, List<Axis> axes) {
+    /**
+     * Which classes {@code condition} leaves its position, or null where it names none.
+     *
+     * <p>Where the condition stands is {@link ConditionPlacement}'s answer, which is the one a
+     * body's distinctions are read from as well ({@link BodyDistinction}); what it leaves there is
+     * {@link #admittedAt}'s. So a cell and that answer cannot read one condition two ways.
+     *
+     * <p>A condition under the cases is no cell. A cell leaves each position a set of its classes
+     * and a row stands at every position it narrows; a condition about a name the cases share
+     * leaves one position a set under one case and another under the next, which is a choice
+     * between cells and no one of them. Declined here, as a condition that narrows nothing is,
+     * rather than read as one of the cases.
+     */
+    static Cell admittedBy(souther.compiler.reading.Condition condition,
+                           MeasuredInput.MeasuredAxes axes) {
+        return switch (ConditionPlacement.of(condition, axes)) {
+            case ConditionPlacement.AtAPosition(int axis) ->
+                    admittedAt(condition, axes.axes(), axis, standingOf(condition));
+            case ConditionPlacement.UnderTheCases _, ConditionPlacement.AtNoPosition _,
+                 ConditionPlacement.Unnamed _ -> null;
+        };
+    }
+
+    /** Where {@code condition} is written, for a case of the value there; null for anything
+     *  else. */
+    static TermPath standingOf(souther.compiler.reading.Condition condition) {
+        return condition instanceof souther.compiler.reading.Condition.Case one ? one.at() : null;
+    }
+
+    /**
+     * Which classes {@code condition} leaves the position {@code axis} measures, or null where it
+     * names none of them.
+     *
+     * <p>The one reading of a condition into classes, once where it stands is known.
+     *
+     * @param standing where a case of a value is asked, which is the position the axis measures or
+     *                 one it is a name worn over; nothing for a comparison, whose number says which
+     *                 axis it is
+     */
+    static Cell admittedAt(souther.compiler.reading.Condition condition, List<Axis> axes,
+                           int axis, TermPath standing) {
         switch (condition) {
             case souther.compiler.reading.Condition.Case one -> {
-                int axis = axisAt(axes, one.at());
-                if (axis < 0) {
-                    return null;
-                }
+                // Every case the arm answers for. Where the axis is the union itself, its classes
+                // are the cases a value there can be, so a case the arm names and the axis has no
+                // class of is one the rules refuse there: no value is it, and it admits nothing.
+                // Anywhere else a case with no class is something about the position no class of
+                // this axis reads, and the condition places at none of them.
                 List<PartitionClass> classes = axes.get(axis).classes();
-                for (int c = 0; c < classes.size(); c++) {
-                    if (classes.get(c).label().equals(one.name())) {
-                        return only(axes, axis, c, c);
+                boolean ofTheUnion = axes.get(axis).path().equals(standing) && !classes.isEmpty()
+                        && classes.stream()
+                                .allMatch(each -> each.selects() instanceof Refinement.SumCase);
+                Cell cell = Cell.anything(axes);
+                Arrays.fill(cell.allowed()[axis], false);
+                for (String name : one.names()) {
+                    int at = -1;
+                    for (int c = 0; c < classes.size(); c++) {
+                        if (classes.get(c).label().equals(name)) {
+                            at = c;
+                            break;
+                        }
+                    }
+                    if (at >= 0) {
+                        cell.allowed()[axis][at] = true;
+                    } else if (!ofTheUnion) {
+                        return null;
                     }
                 }
-                return null;
+                return cell;
             }
             case souther.compiler.reading.Condition.Side one -> {
-                int axis = axisOf(axes, one.at());
-                if (axis < 0) {
-                    return null;
-                }
                 // Which construct of the model the decision was about, since a rule is stated at
                 // one and the decision was recorded at whichever materialisation of it ran. Empty
                 // where the model states nothing there — a comparison inside one of the language's
                 // own operations — and no rule draws a line on such a place, so there is no cut of
                 // this axis it could be the reading of.
                 ModelOccurrence states =
-                        ModelOccurrence.statedAt(one.comparison()).orElse(null);
+                        ModelOccurrence.statedAt(one.statedAt()).orElse(null);
                 if (states == null) {
                     return null;
                 }
@@ -514,15 +760,26 @@ public final class InteractionCells {
                 if (home < 0) {
                     return null;
                 }
+                // A rule that names one value has no side its values are true on: what it
+                // distinguishes is that value from every other. So the cell is the value's own
+                // class, or every class but that one — the value where the rule is wanted to hold
+                // at it, which an equality held and an inequality broken both are.
+                //
+                // Only where the class says it is that one value and nothing else. A class holding
+                // it among others is one the rule cuts through, and no set of classes is what the
+                // rule admits.
+                if (guard.facts().claim() instanceof ComparisonClaim.Singled named) {
+                    if (!axes.get(axis).classes().get(home).holdsOnlyTheNumberAt(line.at())) {
+                        return null;
+                    }
+                    return named.holdsAtTheValue() == one.held()
+                            ? only(axes, axis, home, home) : allBut(axes, axis, home);
+                }
                 // Which side the comparison is true on, from the two facts the order carries: which
                 // side of it the cut value itself sits on, and whether the comparison holds there.
                 // The whole side and not its nearest class: the comparison admits every value out
                 // that way, and a reading that answered with one of them would have said more than
                 // the rule does — which is what makes two of them impossible to take together.
-                //
-                // Asked of a rule that ordered the values, and of no other. A rule that names one
-                // has no side its values are true on — what it distinguishes is that value from
-                // every other — so there is no cell either way of it to take.
                 if (!(guard.facts().claim() instanceof ComparisonClaim.Cut order)) {
                     return null;
                 }
@@ -545,6 +802,13 @@ public final class InteractionCells {
         }
     }
 
+    /** Everything open, and {@code axis} every class but {@code but}. */
+    private static Cell allBut(List<Axis> axes, int axis, int but) {
+        Cell cell = Cell.anything(axes);
+        cell.allowed()[axis][but] = false;
+        return cell;
+    }
+
     /** Everything open but {@code axis}, which is left the classes from {@code from} to {@code to}. */
     private static Cell only(List<Axis> axes, int axis, int from, int to) {
         Cell cell = Cell.anything(axes);
@@ -556,7 +820,8 @@ public final class InteractionCells {
     }
 
     /**
-     * Which position one decision is about, or -1 where this run measures none.
+     * Which position one decision is about, or -1 where this run measures none — for a condition
+     * that stands at one position ({@link ConditionPlacement}).
      *
      * <p>The one lookup, so that what a condition narrows and what it is about are the same
      * question asked once. A second walk written beside it would answer for a position the
@@ -631,10 +896,18 @@ public final class InteractionCells {
         return null;
     }
 
-    /** Which rule of the cut the one stated at {@code states} is. */
+    /**
+     * Which rule of the cut the one stated at {@code states} is, where which way it comes out is
+     * which side of the cut a value is.
+     *
+     * <p>Not a line of a statement of several. Which way {@code Int.max(a, b) > 5} came out says
+     * nothing about which side of {@code a = 5} the row was on, since {@code b} may have settled
+     * it — so such a line names no class, and the condition narrows nothing here.
+     */
     private static LineOrigin.ComparisonOrigin guardOf(Cut cut, ModelOccurrence states) {
         for (LineOrigin origin : cut.origins()) {
             if (origin instanceof LineOrigin.ComparisonOrigin guard
+                    && guard.comesOutBySides()
                     && guard.read().states().equals(states)) {
                 return guard;
             }

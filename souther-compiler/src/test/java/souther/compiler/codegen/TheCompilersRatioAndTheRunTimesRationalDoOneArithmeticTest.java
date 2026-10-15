@@ -2,6 +2,7 @@ package souther.compiler.codegen;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
+import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.runtime.ConstraintViolation;
 import souther.runtime.OutOfRoom;
@@ -71,11 +72,9 @@ class TheCompilersRatioAndTheRunTimesRationalDoOneArithmeticTest {
         return out;
     }
 
-    private static Came ofRatio(Supplier<ExactRatio> operation) {
+    private static Came ofRatio(Supplier<ExactAnswer<ExactRatio>> operation) {
         try {
-            ExactRatio r = operation.get();
-            return new Came(List.of(r.numeratorWithoutUnits(), r.denominatorWithoutUnits(),
-                    r.twos(), r.fives()));
+            return ofRatio(operation.get().orNull());
         } catch (ArithmeticException _) {
             return Came.failed();
         }

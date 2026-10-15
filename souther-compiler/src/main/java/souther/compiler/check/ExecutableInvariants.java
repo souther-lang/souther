@@ -57,10 +57,9 @@ public final class ExecutableInvariants {
      * @throws CompileException where a clause is not a condition
      */
     public static ValueShape of(Hir.Data data, List<GoverningInvariant> governing,
-                                DerivedSymbols symbols,
-                                PublishedDeclarations published, DeclarationKinds kinds,
-                                NewtypeInners inners, EffectiveFieldTypes fieldTypes,
-                                Map<String, Type> helpers, ExpandedClauseLookup form,
+                                DerivedSymbols symbols, DeclarationAccess declarations,
+                                ReachedValueLocations reachedLocations,
+                                Map<String, StandingSignature> helpers, ExpandedClauseLookup form,
                                 InvariantStatements statements) {
         Map<String, Type> types = TypeOps.fieldTypes(data, symbols);
         Map<String, BindingId> bindings =
@@ -77,15 +76,14 @@ public final class ExecutableInvariants {
         Scope reading = DataChecker.fieldScope(data.declares(), types,
                 FieldBindings.asWritten(symbols)).reaching(helpers);
         CheckContext ctx =
-                CheckContext.executableInvariant(symbols, new DeclarationAccess(published, kinds,
-                        inners, fieldTypes, FieldLayout.asWritten(symbols)), data);
+                CheckContext.executableInvariant(symbols, declarations, reachedLocations, data);
         // A constraint is about the value of a data made of one field, whichever form it was
         // declared in: a newtype and a product of one field hold the same clauses of that field. A
         // data of more fields has no one field for a constraint to be about, and each of its clauses
         // is none.
         Optional<BoundaryConstraints.Projections> projected = fields.size() == 1
-                ? Optional.of(BoundaryConstraints.of(symbols, data.declares(), fields.get(0), form,
-                        statements))
+                ? Optional.of(BoundaryConstraints.of(symbols, declarations.inners(), data.declares(),
+                        fields.get(0), form, statements))
                 : Optional.empty();
         List<ValueShape.Invariant> invariants = new ArrayList<>();
         for (GoverningInvariant governed : governing) {

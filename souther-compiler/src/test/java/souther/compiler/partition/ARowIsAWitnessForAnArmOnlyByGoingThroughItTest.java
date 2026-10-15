@@ -14,8 +14,10 @@ import souther.compiler.coverage.ControlPlace;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.coverage.SiteNumbering;
 import souther.compiler.coverage.Runs;
-import souther.compiler.coverage.SeenComparison;
+import souther.compiler.coverage.SeenConditionOutcome;
 import souther.compiler.inputs.InputDomain;
+import souther.compiler.observe.AnswerObservation;
+import souther.compiler.observe.ObservedValue;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
@@ -46,6 +48,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * comparison, where it certifies a row that was never seen taking the arm.
  */
 class ARowIsAWitnessForAnArmOnlyByGoingThroughItTest {
+
+    /** What a run that went to the end came back with. Which value is no part of what is asked
+     *  here; that there was one is, since a run that stopped without one is no witness. */
+    private static final AnswerObservation ANSWERED =
+            new AnswerObservation.Answered(new ObservedValue.Integer(0));
 
     /** One fork on one comparison, so a way into an arm is a comparison coming out a way and the
      *  arm is somewhere else. */
@@ -96,7 +103,8 @@ class ARowIsAWitnessForAnArmOnlyByGoingThroughItTest {
         FillResult filled = GenerationFixtures.fill(model.subject(), List.of(),
                 Generator.CandidateCheck.ANY, model.read(),
                 // Seen doing everything the ways in name, and seen at no arm at all.
-                _ -> new Generator.Watched.Ran(waysWithoutTheArms(model)),
+                _ -> new Generator.ObservedRun(new Generator.Watched.Ran(waysWithoutTheArms(model)),
+                        ANSWERED),
                 List.of(), List.of(), List.copyOf(everyArm), Budgets.generation());
 
         for (ArmProbe probe : everyArm) {
@@ -116,7 +124,8 @@ class ARowIsAWitnessForAnArmOnlyByGoingThroughItTest {
 
         FillResult filled = GenerationFixtures.fill(model.subject(), List.of(),
                 Generator.CandidateCheck.ANY, model.read(),
-                _ -> new Generator.Watched.Ran(everywhere(model, everyArm)),
+                _ -> new Generator.ObservedRun(new Generator.Watched.Ran(everywhere(model, everyArm)),
+                        ANSWERED),
                 List.of(), List.of(), List.copyOf(everyArm), Budgets.generation());
 
         assertTrue(GenerationFixtures.arms(filled.discharge()).values().stream().allMatch(ArmDisposition.Built.class::isInstance),
@@ -126,7 +135,7 @@ class ARowIsAWitnessForAnArmOnlyByGoingThroughItTest {
     /** Everything the ways in name, and nothing at any arm. */
     private static AlignedObservation waysWithoutTheArms(Model model) {
         Set<ArmProbe> taken = new LinkedHashSet<>();
-        Set<SeenComparison> ways = new LinkedHashSet<>();
+        Set<SeenConditionOutcome> ways = new LinkedHashSet<>();
         collect(model.read(), taken, ways);
         taken.removeAll(model.read().arms().keySet());
         return Runs.of(model.numbering(), taken, ways);
@@ -135,13 +144,13 @@ class ARowIsAWitnessForAnArmOnlyByGoingThroughItTest {
     /** The same, and the arms as well. */
     private static AlignedObservation everywhere(Model model, Set<ArmProbe> arms) {
         Set<ArmProbe> taken = new LinkedHashSet<>(arms);
-        Set<SeenComparison> ways = new LinkedHashSet<>();
+        Set<SeenConditionOutcome> ways = new LinkedHashSet<>();
         collect(model.read(), taken, ways);
         return Runs.of(model.numbering(), taken, ways);
     }
 
     private static void collect(CoverageRead.Read read, Set<ArmProbe> taken,
-                                Set<SeenComparison> ways) {
+                                Set<SeenConditionOutcome> ways) {
         for (PathAccess access : read.arms().values()) {
             if (!(access instanceof PathAccess.Ways found)) {
                 continue;
@@ -151,7 +160,7 @@ class ARowIsAWitnessForAnArmOnlyByGoingThroughItTest {
                     switch (claim.at()) {
                         case ControlPlace.Arm arm -> taken.add(arm.probe().get());
                         case ControlPlace.Outcome point ->
-                                ways.add(new SeenComparison(point.at(), point.held()));
+                                ways.add(new SeenConditionOutcome(point.at(), point.held()));
                     }
                 }
             }
@@ -188,7 +197,8 @@ class ARowIsAWitnessForAnArmOnlyByGoingThroughItTest {
                     "and divides it into classes a row can be composed at");
             return new Model(MeasuredInput.of(spec.name(), inputs.reading(rules),
                     partitioning),
-                    CoverageRead.of("fee", body, plan, inputs, rules), plan.numbering());
+                    CoverageRead.of("fee", checked.run("fee"), inputs.reading(rules)),
+                    plan.numbering());
         }
     }
 }

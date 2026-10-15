@@ -26,6 +26,11 @@ public final class Plans {
     private Plans() {
     }
 
+    /** {@code run}, read against its plan answering that a run may come back to anywhere. */
+    public static RunBodies whereEverythingRepeats(RunBodies run) {
+        return run.under(whereEverythingRepeats(run.plan()));
+    }
+
     /**
      * {@code plan}, answering that a run may come back to anywhere.
      *
@@ -51,9 +56,10 @@ public final class Plans {
             }
         };
         return new CoverageSites.Plan(plan.sites(), plan.guards(), plan.byNode(),
-                plan.byComparison(), plan.armsByNode(), everywhere,
+                plan.byComparison(), plan.armsByNode(), plan.answered(), everywhere,
                 plan.whereEachArmsForkIsWritten(), plan.comparisons(), plan.numbering(),
-                plan.methods());
+                plan.methods(), plan.carried(), plan.replacements(), plan.oneValue(),
+                plan.armsAsWritten());
     }
 
     /**
@@ -77,9 +83,10 @@ public final class Plans {
             arms.put(node, out);
         });
         return new CoverageSites.Plan(plan.sites(), plan.guards(), plan.byNode(),
-                plan.byComparison(), arms, plan.mayRepeat(),
+                plan.byComparison(), arms, plan.answered(), plan.mayRepeat(),
                 plan.whereEachArmsForkIsWritten(), plan.comparisons(), plan.numbering(),
-                plan.methods());
+                plan.methods(), plan.carried(), plan.replacements(), plan.oneValue(),
+                plan.armsAsWritten());
     }
 
     /** The nodes this plan numbered arms for, which is what a test counting forks walks. */

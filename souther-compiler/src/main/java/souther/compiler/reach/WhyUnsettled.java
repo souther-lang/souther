@@ -2,6 +2,9 @@ package souther.compiler.reach;
 
 import souther.compiler.diag.SourcePos;
 import souther.compiler.inputs.Unsettlement;
+import souther.compiler.meaning.WhyNotTaken;
+
+import java.util.List;
 
 /**
  * Why a reading could not say whether anything arrives.
@@ -40,9 +43,11 @@ public sealed interface WhyUnsettled
          * <p>Left out rather than guessed at, which is what keeps the proofs sound: a reading that
          * took nothing in ruled nothing out. What it costs is this answer.
          *
-         * @param at where the condition is written
+         * @param at  where the condition is written
+         * @param why why each part of what it states that was not taken in was not, where what it
+         *            states was read; empty where it was read as it stands
          */
-        T aConditionWasNotRead(SourcePos at);
+        T aConditionWasNotRead(SourcePos at, List<WhyNotTaken> why);
 
         /**
          * The rules of the position an arm matches on did not settle whether its cases can stand
@@ -69,8 +74,8 @@ public sealed interface WhyUnsettled
 
     /** A condition on the way was of a shape no rule here reads; see
      *  {@link Words#aConditionWasNotRead}. */
-    static WhyUnsettled aConditionWasNotRead(SourcePos at) {
-        return new AConditionWasNotRead(at);
+    static WhyUnsettled aConditionWasNotRead(SourcePos at, List<WhyNotTaken> why) {
+        return new AConditionWasNotRead(at, why);
     }
 
     /** What is known of the position leaves it open; see
@@ -93,17 +98,18 @@ record NoWitness() implements WhyUnsettled {
     }
 }
 
-record AConditionWasNotRead(SourcePos at) implements WhyUnsettled {
+record AConditionWasNotRead(SourcePos at, List<WhyNotTaken> why) implements WhyUnsettled {
 
     AConditionWasNotRead {
         if (at == null) {
             throw new IllegalArgumentException("a condition written nowhere was not one");
         }
+        why = List.copyOf(why);
     }
 
     @Override
     public <T> T said(Words<T> words) {
-        return words.aConditionWasNotRead(at);
+        return words.aConditionWasNotRead(at, why);
     }
 }
 

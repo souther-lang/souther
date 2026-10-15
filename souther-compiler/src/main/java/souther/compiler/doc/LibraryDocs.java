@@ -72,7 +72,6 @@ public final class LibraryDocs {
     /** A run of a file, from one position up to another. */
     public record Slice(int from, int to) {}
 
-    private final ClassLoader loader;
     /** Keyed by {@link DocName#canonical}, so a topic is found in whatever case it is asked for.
      *  The topic keeps its own spelling: the name is also the path its text is read from. */
     private final Map<String, Topic> byName;
@@ -87,16 +86,40 @@ public final class LibraryDocs {
      * answered by something.
      */
     private final List<Topic> ranked;
-    /** Who the text is spelled for, wherever it sends its reader somewhere. */
-    private final Caller caller;
+    /**
+     * What each of {@link #ranked} is searched over, and the same folded to lower case, in the same
+     * order. A search asks every topic, so what it reads of one is worked out once, when the set
+     * is read, and not again for each question.
+     */
+    private final List<String> ownTexts;
+    private final List<String> ownFolded;
+    /** Each topic's title and name together, folded, which is what a search asks it is called. */
+    private final List<String> calledFolded;
+    /**
+     * Every file the index names, by resource, spelled for the caller this set was read for. A file
+     * the jar does not carry is absent: it is a broken doc set rather than a topic with nothing in
+     * it, and reading it answers nothing.
+     */
+    private final Map<String, String> texts;
 
-    private LibraryDocs(ClassLoader loader, Map<String, Topic> byName, Map<String, Topic> byWords,
-            List<Topic> ranked, Caller caller) {
-        this.loader = loader;
+    private LibraryDocs(Map<String, Topic> byName, Map<String, Topic> byWords, List<Topic> ranked,
+            Map<String, String> texts) {
         this.byName = byName;
         this.byWords = byWords;
         this.ranked = ranked;
-        this.caller = caller;
+        this.texts = Map.copyOf(texts);
+        List<String> own = new ArrayList<>();
+        List<String> folded = new ArrayList<>();
+        List<String> called = new ArrayList<>();
+        for (Topic topic : ranked) {
+            String text = own(topic, texts.getOrDefault(topic.resource(), ""));
+            own.add(text);
+            folded.add(text.toLowerCase(Locale.ROOT));
+            called.add((topic.title() + " " + topic.name()).toLowerCase(Locale.ROOT));
+        }
+        this.ownTexts = List.copyOf(own);
+        this.ownFolded = List.copyOf(folded);
+        this.calledFolded = List.copyOf(called);
     }
 
     /** The doc sets reachable through {@code loader} — for the CLI, everything bundled with it. */
@@ -108,6 +131,7 @@ public final class LibraryDocs {
     static LibraryDocs on(ClassLoader loader, Caller caller) {
         Names named = new Names();
         List<Topic> ranked = new ArrayList<>();
+        Map<String, String> texts = new LinkedHashMap<>();
         try {
             Enumeration<URL> registries = loader.getResources(ROOT + "sets");
             while (registries.hasMoreElements()) {
@@ -121,7 +145,16 @@ public final class LibraryDocs {
                         String file = entry.strip();
                         String topic = set + "/" + file.replaceFirst("\\.md$", "");
                         String resource = ROOT + set + "/" + file;
-                        String text = Affordance.materialize(text(loader, resource), caller);
+                        // Spelled here rather than where it is printed, because a search ranks and
+                        // cuts snippets from the same text. A term that named the other caller's
+                        // spelling would otherwise match, and the snippet it matched in would hand
+                        // back the operation this reader cannot carry out. A part's extent is
+                        // measured against the same spelling, so it is taken after it.
+                        String carried = carried(loader, resource);
+                        String text = Affordance.materialize(carried == null ? "" : carried, caller);
+                        if (carried != null) {
+                            texts.put(resource, text);
+                        }
                         List<Named> parts = named(topic, text);
                         // The file, and then each part it names. What is searched of each is its
                         // extent with the parts named inside it taken out, so the file and its parts
@@ -143,7 +176,7 @@ public final class LibraryDocs {
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
-        return new LibraryDocs(loader, named.byName, named.byWords, List.copyOf(ranked), caller);
+        return new LibraryDocs(named.byName, named.byWords, List.copyOf(ranked), texts);
     }
 
     /**
@@ -292,10 +325,12 @@ public final class LibraryDocs {
      */
     public String read(String name) {
         Topic topic = byName.get(DocName.canonical(name));
-        if (topic == null || loader.getResource(topic.resource()) == null) {
+        String text = topic == null ? null : texts.get(topic.resource());
+        if (text == null) {
             return null;
         }
-        return text(topic);
+        return topic.from() == 0 && topic.to() >= text.length()
+                ? text : text.substring(topic.from(), Math.min(topic.to(), text.length()));
     }
 
     /**
@@ -335,23 +370,35 @@ public final class LibraryDocs {
      * numbers beside it would be placed against sections it was never compared with.
      */
     List<Hit> rank(List<String> asked, Match how) {
+        return scored(asked, how).stream()
+                .map(s -> new Hit(s.topic(), s.titled(), s.matched(), s.occurrences(),
+                        snippet(s, asked, how)))
+                .toList();
+    }
+
+    /**
+     * A topic the query was found in, before the line it was found on is looked for. Only a hit
+     * that is shown needs that line, and a common word is found in most of the topics there are.
+     */
+    record Scored(Topic topic, boolean titled, int matched, int occurrences, int at) {}
+
+    /** The topics that say any of {@code asked}, scored as {@link #rank(List, Match)} scores them. */
+    List<Scored> scored(List<String> asked, Match how) {
         List<String> terms = asked.stream().map(DocName::canonical).toList();
-        List<Hit> hits = new ArrayList<>();
-        for (Topic topic : ranked) {
-            Match.Held held = how.held(
-                    (topic.title() + " " + topic.name()).toLowerCase(Locale.ROOT),
-                    own(topic).toLowerCase(Locale.ROOT), terms);
+        List<Scored> hits = new ArrayList<>();
+        for (int i = 0; i < ranked.size(); i++) {
+            Match.Held held = how.held(calledFolded.get(i), ownFolded.get(i), terms);
             if (held.matched() > 0) {
-                hits.add(new Hit(topic, held.named(), held.matched(), held.occurrences(),
-                        snippet(topic, terms, how)));
+                hits.add(new Scored(ranked.get(i), held.named(), held.matched(), held.occurrences(), i));
             }
         }
         return hits;
     }
 
-    /** The line of {@code topic} that says one of {@code terms}, cut to a readable width. */
-    private String snippet(Topic topic, List<String> terms, Match how) {
-        String line = own(topic).lines()
+    /** The line of {@code hit} that says one of {@code asked}, cut to a readable width. */
+    String snippet(Scored hit, List<String> asked, Match how) {
+        List<String> terms = asked.stream().map(DocName::canonical).toList();
+        String line = ownTexts.get(hit.at()).lines()
                 .map(String::strip)
                 .filter(l -> !l.isEmpty() && !l.startsWith("#") && !l.startsWith("|"))
                 .filter(l -> terms.stream()
@@ -370,22 +417,10 @@ public final class LibraryDocs {
     }
 
     /**
-     * The text of {@code topic} as this reader is to be shown it.
-     *
-     * <p>Spelled here rather than where it is printed, because a search ranks and cuts snippets
-     * from the same text. A term that named the other caller's spelling would otherwise match, and
-     * the snippet it matched in would hand back the operation this reader cannot carry out. The
-     * extent is measured against the same spelling, so it is taken after it and not before.
+     * The text {@code topic} is searched over, out of the whole of its file {@code text}: its own,
+     * with what it names inside it left to that.
      */
-    private String text(Topic topic) {
-        String text = whole(topic);
-        return topic.from() == 0 && topic.to() >= text.length()
-                ? text : text.substring(topic.from(), Math.min(topic.to(), text.length()));
-    }
-
-    /** The text this topic is searched over: its own, with what it names inside it left to that. */
-    private String own(Topic topic) {
-        String text = whole(topic);
+    private static String own(Topic topic, String text) {
         StringBuilder held = new StringBuilder();
         for (Slice slice : topic.own()) {
             held.append(text, Math.min(slice.from(), text.length()),
@@ -394,14 +429,11 @@ public final class LibraryDocs {
         return held.toString();
     }
 
-    private String whole(Topic topic) {
-        return Affordance.materialize(text(loader, topic.resource()), caller);
-    }
-
-    private static String text(ClassLoader loader, String resource) {
+    /** What the jar carries at {@code resource}, or null when it carries nothing there. */
+    private static String carried(ClassLoader loader, String resource) {
         try (InputStream in = loader.getResourceAsStream(resource)) {
             if (in == null) {
-                return "";
+                return null;
             }
             return new String(in.readAllBytes(), StandardCharsets.UTF_8);
         } catch (IOException e) {

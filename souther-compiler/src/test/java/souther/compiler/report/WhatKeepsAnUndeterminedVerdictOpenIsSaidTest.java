@@ -9,12 +9,14 @@ import tools.jackson.databind.json.JsonMapper;
 
 import souther.compiler.check.RuleCitation;
 import souther.compiler.check.RuleReportAnchor;
+import souther.compiler.types.ModelOccurrences;
 import souther.compiler.types.WrittenOwner;
 import souther.compiler.check.RuleRef;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.FilingCoordinate;
 import souther.compiler.inputs.StandingQuestion;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.observe.WorkFigure;
 import souther.compiler.partition.ClosureGap;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -37,11 +39,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * A verdict of {@code undetermined} says whether measuring again with more would answer any of it.
  *
- * <p>The model here is issue #1196's: a behavior that forks on a list computed from its input.
- * Every class of the position is derived and every one of them is covered, both arms are reached,
- * both outputs are specified — and the measure stays partial, because the comparison inside
- * {@code List.isEmpty} is about a value made from the position and nothing works out what it says
- * about the values there.
+ * <p>The model here forks on whether a string computed from its input is empty, where the library
+ * has no words for what that emptiness turns on: {@code String.replace} answers the string with a
+ * text replaced in it, and it is empty exactly where the string was made up of copies of what was
+ * replaced, which is no statement this compiler reads. Both arms are reached and both outputs are specified
+ * — and the measure stays partial, because the fork is about a value made from the position and
+ * nothing works out what it says about the values there.
  *
  * <p>Nothing anybody writes closes that, and nothing any allowance changes either. Before this, the
  * report said {@code undetermined} and stopped, which is the same word it says over a row that did
@@ -55,27 +58,18 @@ class WhatKeepsAnUndeterminedVerdictOpenIsSaidTest {
     private static final String MODEL = """
             module probe.empty
 
-            data 一般
-            data 管理職
-            data 役職 = 一般 | 管理職
-
-            data 申請 = { 役職: 役職 }
+            data 申請 = { 理由: String }
 
             data 理由あり
             data 理由なし
 
-            let 理由 (申請: 申請): List<役職> =
-                match 申請.役職 with
-                    | 一般   -> [ 一般 ]
-                    | 管理職 -> []
-
             behavior 判定する : (申請: 申請) -> 理由あり | 理由なし
             let 判定する (申請) =
-                if List.isEmpty(理由(申請)) then 理由なし else 理由あり
+                if String.isEmpty(String.replace("a", "b", 申請.理由)) then 理由なし else 理由あり
 
             example 判定する
-                | "一般社員には理由がある" : (申請 { 役職 = 一般 })   -> 理由あり
-                | "管理職には理由がない"   : (申請 { 役職 = 管理職 }) -> 理由なし
+                | "空なら理由がない" : (申請 { 理由 = "" })    -> 理由なし
+                | "書いてあれば理由がある" : (申請 { 理由 = "出張" }) -> 理由あり
             """;
 
     private static AdequacyReport measured() {
@@ -105,20 +99,21 @@ class WhatKeepsAnUndeterminedVerdictOpenIsSaidTest {
     /**
      * And what holds it open is what no allowance of this compiler's reaches.
      *
-     * <p>Two things, of one cause: the rule nothing could classify, and the decision measure that
-     * could not be made because no run through any of its rules can be recognised. Allowing more
-     * makes neither of them.
+     * <p>One thing: the rule nothing could classify. Allowing more does not make it. The decision
+     * measure is not among what holds it open — the fork's condition is the application of
+     * {@code List.isEmpty}, and a run is seen at where that application answers — so a reader
+     * told what keeps the verdict open is told only what is still out of reach.
      */
     @Test
-    void whatKeepsItOpenIsWhatAWiderRunDoesNotReach() {
+    void whatKeepsItOpenIsWhatNoFigureStopped() {
         AdequacyReport report = measured();
 
-        assertEquals(new AdequacyReport.UnderAWiderRun(0, 2), report.underAWiderRun(),
+        assertEquals(new AdequacyReport.HeldOpen(0, 1), report.heldOpen(),
                 () -> "what keeps it open: " + report.whatKeepsTheVerdictOpen());
     }
 
     /**
-     * And it is the rule inside {@code List.isEmpty}, named as such.
+     * And it is the fork on the emptiness of the trimmed string, named as such.
      *
      * <p>The count alone would pass over a model whose verdict was held open by something else
      * entirely, so the one fact is read as well: this is a reproduction and it is meant to keep
@@ -136,8 +131,7 @@ class WhatKeepsAnUndeterminedVerdictOpenIsSaidTest {
                                 && asked.question() instanceof StandingQuestion
                                         .NothingClassifiesIt rule
                                 && rule.why() instanceof BlockReason.RuleAboutADerivedValue),
-                () -> "the comparison in `List.isEmpty` is about a value made from the position: "
-                        + open);
+                () -> "the fork is about a value made from the position: " + open);
     }
 
     /** And a person reading the report is told so, under the verdict. */
@@ -148,8 +142,8 @@ class WhatKeepsAnUndeterminedVerdictOpenIsSaidTest {
         assertTrue(human.contains("""
                 adequacy: undetermined
                   what keeps it open
-                    may change in a wider run     0
-                    unaffected by a wider run     2
+                    stopped at a figure of this compiler     0
+                    stopped at no figure                     1
                 """), human);
     }
 
@@ -159,7 +153,7 @@ class WhatKeepsAnUndeterminedVerdictOpenIsSaidTest {
         JsonNode root = JSON.readTree(measured().json(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
 
         assertEquals("undetermined", root.get("adequacy").asString());
-        assertEquals(2, root.get("keptOpenBy").size(), root.get("keptOpenBy").toString());
+        assertEquals(1, root.get("keptOpenBy").size(), root.get("keptOpenBy").toString());
         assertEquals("rule_unread", root.get("keptOpenBy").get(0).get("kind").asString());
         for (JsonNode each : root.get("keptOpenBy")) {
             assertEquals("unaffected", each.get("runSensitivity").asString(), each.toString());
@@ -232,7 +226,7 @@ class WhatKeepsAnUndeterminedVerdictOpenIsSaidTest {
 
         assertEquals(AdequacyReport.AdequacyStatus.NOT_SATISFIED, report.adequacy(),
                 () -> report.human(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
-        assertEquals(new AdequacyReport.UnderAWiderRun(0, 0), report.underAWiderRun());
+        assertEquals(new AdequacyReport.HeldOpen(0, 0), report.heldOpen());
         assertFalse(report.human(SourceRendering.namedByIdentity(SourceLayouts.NONE)).contains("what keeps it open"),
                 report.human(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
         assertTrue(root.get("keptOpenBy").isEmpty(), root.get("keptOpenBy").toString());
@@ -246,7 +240,7 @@ class WhatKeepsAnUndeterminedVerdictOpenIsSaidTest {
      * about how much was measured.
      */
     private static AdequacyReport refused() {
-        return reportOf(MODEL.substring(0, MODEL.lastIndexOf("    | \"管理職には理由がない\"")));
+        return reportOf(MODEL.substring(0, MODEL.lastIndexOf("    | \"書いてあれば理由がある\"")));
     }
 
     /**
@@ -339,7 +333,8 @@ class WhatKeepsAnUndeterminedVerdictOpenIsSaidTest {
                 "two rules nothing could read are two things to tell a person");
         assertEquals(Map.of("rule_unread/may_change", 1L, "rule_unread/unaffected", 1L),
                 howManyOfEach(keptOpenBy(WeakeningSet.of(
-                        ruleUnread(new BlockReason.PatternTooCostly(), "a"),
+                        ruleUnread(new BlockReason.PatternTooCostly(
+                                WorkFigure.ADMITTED_VALUES_ONE_MACHINE.at(50_000)), "a"),
                         ruleUnread(new BlockReason.RuleAboutADerivedValue(), "b")))),
                 "and one word over two answers is two entries, not one of either");
     }
@@ -384,6 +379,7 @@ class WhatKeepsAnUndeterminedVerdictOpenIsSaidTest {
                                                 new WrittenOwner.Body("m", "b"), 0, 0,
                                                 SourceConstruct.IF)),
                                 new RuleReportAnchor.ByTheModuleThatWroteIt()),
-                        new FilingCoordinate.AtPosition(TermPath.of(term)), why)));
+                        ModelOccurrences.NONE, new FilingCoordinate.AtPosition(TermPath.of(term)),
+                        why)));
     }
 }

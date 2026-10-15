@@ -62,7 +62,7 @@ public sealed interface ComparisonClaim
      * class the value it names is in is worked out where a cut's two facts are already paired
      * rather than restated here.
      */
-    static ComparisonClaim stating(Rel rel) {
+    public static ComparisonClaim stating(Rel rel) {
         return switch (rel) {
             case EQ -> new Singled(true);
             case NE -> new Singled(false);

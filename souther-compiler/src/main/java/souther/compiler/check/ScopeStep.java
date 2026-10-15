@@ -76,7 +76,8 @@ public sealed interface ScopeStep {
             }
             case Core.Int _, Core.Decimal _, Core.Str _, Core.Bool _, Core.Temporal _, Core.Read _,
                  Core.UnitValue _, Core.MaterialisedValue _, Core.OptionNone _, Core.Unreachable _,
-                 Core.Widen _, Core.Neg _, Core.FieldAccess _, Core.Binary _, Core.Call _,
+                 Core.Widen _, Core.Neg _, Core.FieldAccess _, Core.FieldProjection _,
+                 Core.Binary _, Core.Call _,
                  Core.PreservedCall _, Core.Apply _, Core.ListLit _, Core.OptionSome _, Core.Tuple _,
                  Core.TupleGet _, Core.Construct _ ->
                     Core.forEachChild(e, child -> each.accept(child, SAME));

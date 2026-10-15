@@ -4,6 +4,7 @@ import souther.exact.ExactDecimals;
 import souther.exact.ExactFailure;
 
 import java.math.BigDecimal;
+import java.util.Optional;
 
 /**
  * The number a value counts to on its carrier's order, and never a number a model writes.
@@ -63,50 +64,23 @@ public record Count(BigDecimal at) implements Place {
     }
 
     /**
-     * The count an exact number is, or null where no count is it.
+     * The count an exact number is, with a number no count is and a number the host had no room to
+     * write out told apart.
      *
-     * <p><b>The edge exact reasoning becomes a value on a carrier at, for a reader asking whether
-     * it does.</b> Every carrier's order is counted in decimals and the algebra above it is not: a
-     * form weighed by a third puts a level a third along, and no count is a third. Null says that
-     * and never that this could not work it out — {@link ExactRatio#asWrittenDecimal} is exact, so a
-     * caller is told which of the two it has rather than handed a number that cannot be asked.
+     * <p><b>The one edge exact reasoning becomes a value on a carrier at.</b> Every carrier's order
+     * is counted in decimals and the algebra above it is not: a form weighed by a third puts a level
+     * a third along, and no count is a third. That is a held empty answer and says something about
+     * the number. A count the host has no room to write out is an unheld one, and says something
+     * about the run and nothing about which values the order has; the reader chooses what it means
+     * for its own question, and none can take it for the first by not asking.
      *
      * <p>Whether the carrier holds the count it is a separate question and the carrier's own
      * ({@link Granularity}): a third is no count anywhere, and a half is a count no whole-numbered
      * order stands at.
-     *
-     * <p>For a caller that has established there is one, {@link #number(ExactRatio)}. The two are
-     * the same edge asked by two kinds of reader, and which of them a caller is decides what a
-     * missing count means — so it is said in the signature rather than worked out again at each
-     * call.
      */
-    public static Count at(ExactRatio number) {
-        BigDecimal written = number.asWrittenDecimal();
-        return written == null ? null : new Count(written);
-    }
-
-    /**
-     * The count an exact number is, where the caller has established that one is.
-     *
-     * <p>The same narrowing {@link #number(Place)} is, asked of the other side of the edge: there,
-     * a caller holding a place has established which carrier it is on; here, a caller holding an
-     * exact number has established that a carrier's order counts to it. A level the written form
-     * attains is a whole multiple of what that form wrote, so reading it back in the quantity's own
-     * units lands on a number the order has — and a reader that has that in hand has no use for an
-     * absence.
-     *
-     * <p>Refused rather than answered with a level of the exact side. The two are values of
-     * different spaces, and one handed over where the other was asked for travels until something
-     * far from here asks it for a place. What reaches this is this compiler having broken the
-     * premise the caller stands on, so it is said where the premise is.
-     */
-    public static Count number(ExactRatio at) {
-        Count count = at(at);
-        if (count == null) {
-            throw new IllegalStateException(
-                    "no count on any carrier's order is this number: " + at);
-        }
-        return count;
+    public static ExactAnswer<Optional<Count>> written(ExactRatio number) {
+        return number.writtenDecimal().flatMap(decimal ->
+                ExactAnswer.held(decimal.map(Count::new)));
     }
 
     /** This count as the exact number it is, which never loses anything: every finite decimal is a
@@ -128,9 +102,10 @@ public record Count(BigDecimal at) implements Place {
      * decimals, the one step would first be written to the count's two billion places, which no
      * host holds — the decimal refusing a number that has an answer.
      *
-     * <p>Null is the one way a sum of two numbers has no answer: no whole number the host holds is
-     * it, so no count is it and no carrier's order has it — the same null {@link #at(ExactRatio)}
-     * answers, and never that this could not work it out.
+     * <p>Null is no count to hold the sum, for either of the two reasons that has: no whole number
+     * is it, or this host has no room to write the digits of the one that is. A count is a number
+     * this host holds, so the second leaves no count to be the answer, and a stepping reader claims
+     * no place there as it claims none past the end of the order.
      */
     public Count plus(long steps) {
         return along(ExactRatio.of(steps));
@@ -143,7 +118,10 @@ public record Count(BigDecimal at) implements Place {
 
     private Count along(ExactRatio steps) {
         return switch (exactly().plus(steps)) {
-            case ExactAnswer.Held<ExactRatio> held -> at(held.value());
+            case ExactAnswer.Held<ExactRatio> held -> switch (written(held.value())) {
+                case ExactAnswer.Held<Optional<Count>> count -> count.value().orElse(null);
+                case ExactAnswer.Unheld<Optional<Count>> _ -> null;
+            };
             case ExactAnswer.Unheld<ExactRatio> unheld -> switch (unheld.why()) {
                 case NO_REPRESENTATION_EXISTS -> null;
                 // An exact sum builds the answer's own digits and nothing more, so it is refused

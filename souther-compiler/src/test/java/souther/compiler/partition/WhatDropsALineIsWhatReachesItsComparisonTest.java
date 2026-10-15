@@ -7,7 +7,16 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -19,10 +28,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * and a comparison the declarations settle one way is arrived at by every row there is and takes the
  * other way out. Each has exactly one outcome nothing takes.
  *
- * <p>Only a proof drops a line. Everything the walk publishes about what arrives over-approximates
- * it, so a line the approximation does not reach is a line no arriving row reaches; the other
- * direction is not claimed, and a comparison nothing could be projected for keeps its line and its
- * rows.
+ * <p>Only a proof drops a line. What the declarations leave, what the way states and what the walk
+ * publishes about what arrives each over-approximate the rows that arrive, so a line the region
+ * holding all three holds no row at is a line no arriving row reaches; the other direction is not
+ * claimed.
  */
 class WhatDropsALineIsWhatReachesItsComparisonTest {
 
@@ -37,10 +46,23 @@ class WhatDropsALineIsWhatReachesItsComparisonTest {
         return AdequacyReport.of(compilation).human(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
-    /** How many lines this report dropped for nothing arriving at them. */
+    /**
+     * How many lines this report dropped for nothing arriving at them.
+     *
+     * <p>Counted by the comparison and not by the sentence. A line over two positions is said at
+     * each of them, and it is one line.
+     */
     private static long droppedForNothingArriving(String source) {
-        return reportOf(source).lines().filter(each -> each.contains(NOTHING_ARRIVES)).count();
+        return reportOf(source).lines().filter(each -> each.contains(NOTHING_ARRIVES))
+                .map(each -> {
+                    Matcher at = COMPARISON.matcher(each);
+                    return at.find() ? at.group() : each;
+                })
+                .distinct().count();
     }
+
+    /** Where a sentence about a comparison says the comparison is. */
+    private static final Pattern COMPARISON = Pattern.compile("comparison@\\d+:\\d+");
 
     private static final String AMOUNT = """
             module d
@@ -158,16 +180,161 @@ class WhatDropsALineIsWhatReachesItsComparisonTest {
     }
 
     /**
-     * A line on a multiple of the position keeps its line, arrival or none.
+     * A hole the way leaves is a line nothing arrives at, as an end is.
      *
-     * <p>What arrives is an interval of the position's own values, and this rule's quantity is twice
-     * them — a level of one order is not a level of the other, so there is nothing here to meet and
-     * the line stands. Which is the fail-open direction and costs precision rather than truth: this
-     * particular line is one nothing arriving reaches, and the measure asks for its rows anyway.
+     * <p>Every row reaching the inner equality holds {@code n /= 5}, so the value it singles out is
+     * one none of them holds. The ends of what arrives run from one end of the order to the other
+     * and say nothing about five; what the way states does. The outer comparison's line is reached
+     * from both sides and stands.
      */
     @Test
-    void aLineOnAMultipleOfThePositionIsKeptBecauseItIsOnAnotherOrder() {
-        assertEquals(0, droppedForNothingArriving(AMOUNT + """
+    void aHoleTheWayLeavesAtTheLineIsALineNothingArrivesAt() {
+        assertEquals(1, droppedForNothingArriving("""
+                module d
+
+                behavior below : (n: Int) -> String
+                let below (n) =
+                    if n /= 5 then (if n == 5 then "never" else "other") else "five"
+                """));
+    }
+
+    /**
+     * A line naming a value is asked whether a row stands at it, whatever the value is a value of.
+     *
+     * <p>The question is one equation against everything that holds of a row there, so the same
+     * hole answers it on a multiple of the position, on a position whose order fills — where values
+     * come as near five as anyone likes and none is five — and on a sum of two positions the way
+     * held apart from the value. Asked of how far the quantity runs, each of them runs straight
+     * through the hole.
+     */
+    @Test
+    void aLineNamingAValueIsAskedWhetherARowStandsAtItWhateverItIsAValueOf() {
+        assertEquals(1, droppedForNothingArriving("""
+                module d
+
+                behavior below : (n: Int) -> String
+                let below (n) =
+                    if n /= 5 then (if 2 * n == 10 then "never" else "other") else "five"
+                """), "on a multiple of the position");
+        assertEquals(1, droppedForNothingArriving("""
+                module d
+
+                behavior below : (x: Decimal) -> String
+                let below (x) =
+                    if x /= 5m then (if x == 5m then "never" else "other") else "five"
+                """), "on an order that fills");
+        assertEquals(1, droppedForNothingArriving("""
+                module d
+
+                behavior below : (a: Int, b: Int) -> String
+                let below (a, b) =
+                    if a + b /= 10 then (if a + b == 10 then "never" else "other") else "ten"
+                """), "on a sum of two positions");
+    }
+
+    /**
+     * And a hole takes no line away from a rule that orders the values around it.
+     *
+     * <p>Under {@code n /= 5}, {@code n >= 5} still parts four from six: rows on both sides arrive
+     * and go different ways. The control for the hole above, which takes away the line of a rule
+     * naming the value and nothing else.
+     */
+    @Test
+    void aHoleAtTheLineOfAnOrderingLeavesItDividing() {
+        assertEquals(0, droppedForNothingArriving("""
+                module d
+
+                behavior below : (n: Int) -> String
+                let below (n) =
+                    if n /= 5 then (if n >= 5 then "above" else "below") else "five"
+                """));
+    }
+
+    /**
+     * The declarations are asked the same question, so a value they hold a position apart from is
+     * a value no line naming it is drawn at.
+     *
+     * <p>Where the comparison is read and nothing is on the way, the region is what the
+     * declarations leave, and a {@code Level} is never five. Asked how far the values run, the line
+     * at five was inside them.
+     */
+    @Test
+    void aValueTheDeclarationsHoldAPositionApartFromIsNoLine() {
+        String report = reportOf("""
+                module d
+
+                data Level = Int invariant value /= 5
+                behavior f : (x: Level) -> String
+                let f (x) = if x.value == 5 then "never" else "other"
+                """);
+
+        assertTrue(report.contains("draws its line outside"),
+                () -> "no Level is five, so the equality draws no line: " + report);
+    }
+
+    private static final String LEVELS = """
+            module d
+
+            data Low
+            data Mid
+            data High
+            data Lowish = Low | Mid
+            data Level = Lowish | High
+            data R = { level: Level }
+
+            behavior f : (r: R) -> String
+            """;
+
+    /**
+     * A case held equal to the value asks which case it is and draws no line on the order, so there
+     * is no line for nothing to arrive at. The way the arm rules out is one no input takes, for its
+     * conditions clash: the arm leaves the value one case and the comparison asks it to be the case
+     * the arm leaves out — narrowed to one case or to a sum of several.
+     */
+    @Test
+    void aCaseHeldEqualToTheValueIsNoLineToDrop() {
+        Map<String, List<String>> wayOf = new LinkedHashMap<>();
+        wayOf.put("""
+                let f (r) =
+                    match r.level with
+                        | Low -> (if r.level == Mid then "never" else "low")
+                        | Mid -> "mid"
+                        | High -> "high"
+                """, List.of("              · it goes through `case Low` (12:5)",
+                "              · the comparison at 13:30 holds"));
+        wayOf.put("""
+                let f (r) =
+                    match r.level with
+                        | Lowish -> (if r.level == High then "never" else "low")
+                        | High -> "high"
+                """, List.of("              · it goes through `case Lowish` (12:5)",
+                "              · the comparison at 13:33 holds"));
+        wayOf.forEach((body, conditions) -> {
+            String report = reportOf(LEVELS + body);
+            assertEquals(0, droppedForNothingArriving(LEVELS + body), report);
+            assertTrue(report.contains("border      not applicable"), report);
+            List<String> said = new ArrayList<>(List.of(
+                    "      · no input takes 1 way through this body, and no row is owed at a rule"
+                            + " past it",
+                    "          · the conditions on the way ask for what no input is at once:"));
+            said.addAll(conditions);
+            assertTrue(Collections.indexOfSubList(report.lines().toList(), said) >= 0,
+                    () -> "the way the arm rules out is one no input takes: " + report);
+        });
+    }
+
+    /**
+     * A line on a multiple of the position is asked the same question, and nothing arriving reaches
+     * it.
+     *
+     * <p>Every row past the first guard holds {@code a.value < 2500}, so twice it stops short of six
+     * thousand. The quantity is not the position's own value, and what the way states is about the
+     * row and not about a projection onto one position — so the line on the multiple is answered
+     * the way a line on the position is.
+     */
+    @Test
+    void aLineOnAMultipleOfThePositionIsAskedTheSameQuestion() {
+        assertEquals(1, droppedForNothingArriving(AMOUNT + """
                 behavior charge : (a: Amount) -> Free | Charged
                     constructs Charged
 
@@ -180,15 +347,85 @@ class WhatDropsALineIsWhatReachesItsComparisonTest {
     }
 
     /**
-     * A comparison over more than one position keeps its line, whatever arrives.
+     * Where a rule on a multiple leaves off is asked on the order the rule wrote, the one its range
+     * is on.
      *
-     * <p>What is published is an interval of one position's values, and the quantity here is the sum
-     * of two — so there is nothing to meet it into, and not being able to read a fact is no proof of
-     * anything. The line stands, which is the direction that leaves an author with work rather than
-     * with a report about a model of theirs that is fine.
+     * <p>{@code 2 * a.value < 6000} leaves off at {@code a = 2999}, which the form it wrote calls
+     * 5998. Every row arriving at it is there or below and takes it the true way, so the line is
+     * the same line {@code a.value < 3000} draws and stands as that one does — asked whether the
+     * form runs as far as 2999, the rows past the way at five thousand and up would say no.
      */
     @Test
-    void aLineOverSeveralPositionsIsKeptBecauseNothingCanBeProjectedOntoIt() {
+    void whereARuleOnAMultipleLeavesOffIsOnTheOrderItWrote() {
+        assertEquals(0, droppedForNothingArriving(AMOUNT + """
+                behavior charge : (a: Amount) -> Free | Charged
+                    constructs Charged
+
+                let charge (a) = {
+                    guard a.value >= 2500 && a.value < 3000 else Free
+                    guard 2 * a.value < 6000 else Free
+                    Charged { yen = 500 }
+                }
+                """));
+    }
+
+    /**
+     * And the same holds where nothing on the way narrows anything and the declarations stop at
+     * where the rule leaves off.
+     *
+     * <p>A {@code Window} runs to 2999 and the rule keeps every one of them, so its line is a line
+     * the quantity reaches, on its kept side. Asked at 2999 of a form running from four thousand,
+     * it was reported as a line drawn outside what the quantity ever holds.
+     */
+    @Test
+    void aRuleOnAMultipleTheDeclarationsReachIsALine() {
+        String report = reportOf("""
+                module d
+
+                data Window = Int invariant value >= 2000 && value <= 2999
+                behavior f : (x: Window) -> String
+                let f (x) = if 2 * x.value < 6000 then "a" else "b"
+                """);
+
+        assertFalse(report.contains("draws its line outside"),
+                () -> "the form reaches 5998, where the rule leaves off: " + report);
+        assertTrue(report.contains("comparison@"),
+                () -> "the line is one the measure asks rows of: " + report);
+    }
+
+    /**
+     * A line stands or falls the same however the rule is spelled.
+     *
+     * <p>{@code a.value >= 1001} and {@code a.value > 1000} draw one line between 1000 and 1001.
+     * Every row past the first guard is at 1000 or below, so a row at 1000 arrives at the line and
+     * takes the second guard the false way — whichever side of the line the number the rule wrote
+     * is on.
+     */
+    @Test
+    void aLineStandsTheSameHoweverTheRuleIsSpelled() {
+        for (String second : List.of("a.value >= 1001", "a.value > 1000")) {
+            assertEquals(0, droppedForNothingArriving(AMOUNT + """
+                    behavior charge : (a: Amount) -> Free | Charged
+                        constructs Charged
+
+                    let charge (a) = {
+                        guard a.value <= 1000 else Free
+                        guard %s else Free
+                        Charged { yen = 500 }
+                    }
+                    """.formatted(second)), second);
+        }
+    }
+
+    /**
+     * A line over several positions that a row past the way reaches stands.
+     *
+     * <p>{@code a.value} stops below five thousand and {@code b.value} does not, so the sum reaches
+     * six thousand at {@code a = 0, b = 6000}. The control for the multiple above: the same way, a
+     * quantity it does not keep from the line.
+     */
+    @Test
+    void aLineOverSeveralPositionsThatTheWayLeavesRoomForStands() {
         assertEquals(0, droppedForNothingArriving("""
                 module d
 
@@ -233,12 +470,16 @@ class WhatDropsALineIsWhatReachesItsComparisonTest {
      *
      * <p>A helper's comparison is a site per call, and what has been established on the way to each
      * call is the caller's own. Keyed on the comparison a person wrote, the guard above one call
-     * would take the line away from the other — so the answer here is exactly one dropped line and
-     * not none or two.
+     * would take the line away from the other — so the helper's line is dropped where it is reached
+     * through {@code a} and still drawn where it is reached through {@code b}.
+     *
+     * <p>The guard over the helper's answer for {@code a} states {@code a < 6000}, read through
+     * what the helper answers in each case, and nothing arrives at that line either: it is the
+     * other line dropped here, and it is the guard's own.
      */
     @Test
     void oneComparisonReachedTwiceIsTwoArrivals() {
-        assertEquals(1, droppedForNothingArriving("""
+        String report = reportOf("""
                 module d
 
                 data Amount = Int invariant value >= 0 && value <= 1000000
@@ -256,6 +497,18 @@ class WhatDropsALineIsWhatReachesItsComparisonTest {
                     guard over(b.value) == 0 else Free
                     Charged { yen = 500 }
                 }
-                """));
+                """);
+        List<String> dropped = report.lines().filter(each -> each.contains(NOTHING_ARRIVES))
+                .toList();
+        // About `a`, and at the call that hands the helper `a`: the helper's comparison is one
+        // place for both calls, and the call is what says which of them dropped it.
+        assertTrue(dropped.stream().anyMatch(each -> each.contains("comparison@7:31")
+                        && each.endsWith("about `a` in over@14:11")),
+                () -> "the helper's line, reached through a, is dropped: " + report);
+        assertTrue(report.contains("ON point (comparison@7:31)"),
+                () -> "and reached through b it is still drawn: " + report);
+        assertTrue(dropped.stream().anyMatch(each -> each.contains("comparison@14:25")),
+                () -> "the guard over what the helper answers for a states a < 6000: " + report);
+        assertEquals(2, dropped.size(), () -> "and nothing else is dropped: " + dropped);
     }
 }

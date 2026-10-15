@@ -22,7 +22,16 @@ import java.util.Objects;
  */
 public sealed interface GenerationObligation
         permits GenerationObligation.Class, GenerationObligation.Arm, GenerationObligation.Pair,
-                GenerationObligation.Meeting {
+                GenerationObligation.Meeting, GenerationObligation.Replacement {
+
+    /** A rewrite of the body no row tells from it, where an input the rewrite answers
+     *  differently on is what is looked for. */
+    record Replacement(ReplacementOwed target) implements GenerationObligation {
+
+        public Replacement {
+            Objects.requireNonNull(target, "a rewrite a plan asks about is some rewrite");
+        }
+    }
 
     /** A class of a position no row sits in, in the search's own words. */
     record Class(ClassOfAPosition target) implements GenerationObligation {

@@ -1,7 +1,7 @@
 package souther.compiler.query;
 
-import souther.compiler.check.StoreWork;
 import souther.compiler.meta.ModulePath;
+import souther.compiler.revision.StoreWork;
 import souther.compiler.source.SourceId;
 
 import org.junit.jupiter.api.Test;

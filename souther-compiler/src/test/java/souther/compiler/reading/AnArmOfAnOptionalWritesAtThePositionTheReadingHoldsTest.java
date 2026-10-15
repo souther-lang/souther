@@ -125,7 +125,7 @@ class AnArmOfAnOptionalWritesAtThePositionTheReadingHoldsTest {
 
         /** The number a string's length is, built here rather than matched by how it is written. */
         NumericTerm lengthAt(TermPath at) {
-            NumericTerm.TakenOf taken = NumericTerm.TakenOf.of(
+            NumericTerm.TakenOf taken = NumericTerm.TakenOf.asItStands(
                     NumericMeasures.takenOf(Type.STRING, souther.compiler.check.ScopedDeclarations.wrapsOf(symbols)),
                 at, Type.STRING, souther.compiler.check.ScopedDeclarations.wrapsOf(symbols),
                 symbols);
@@ -145,8 +145,8 @@ class AnArmOfAnOptionalWritesAtThePositionTheReadingHoldsTest {
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         InputDomain inputs = compilation.db().ask(new Adequacy.Inputs(module)).value().get("gate");
         assertNotNull(inputs, "the behavior's input is read");
-        return new Read(CoverageRead.of("gate", body,
-                checked.plan(),
-                inputs, rules), inputs, rules.symbols());
+        return new Read(CoverageRead.of("gate",
+                checked.run("gate"),
+                inputs.reading(rules)), inputs, rules.symbols());
     }
 }

@@ -62,8 +62,8 @@ class WhereABehaviorGetsItsBodyIsPartOfWhatAnAssemblyAnswersTest {
         }
         return CheckSurface.assemble(surface.settling(), normalized, desugared,
                 DeclarationNewtypes.NONE, Map.of(), FakeTables.classify(surface.settling().module()),
-                bodies, Map.of(), Set.of(), DefaultStdlib.get(),
+                bodies, ClosedImports.none(InliningPolicy.DISCHARGE), Set.of(), DefaultStdlib.get(),
                 ResolvedSymbols.none(DefaultStdlib.get()),
-                PublishedDeclarations.NONE, DeclarationKinds.NONE, NewtypeInners.NONE);
+                SumCases.NONE, DeclarationKinds.NONE, NewtypeInners.NONE);
     }
 }

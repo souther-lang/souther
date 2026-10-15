@@ -3,12 +3,10 @@ package souther.runtime;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import java.lang.management.ManagementFactory;
-import java.lang.management.ThreadMXBean;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
+import souther.test.Allocated;
 
 /**
  * An allocation budget for bulk construction of a {@link PersistentHashMap}, the path every decoded
@@ -45,7 +43,6 @@ class PersistentHashMapAllocationTest {
 
     @Test
     void bulkConstructionStaysWithinItsAllocationBudget() {
-        com.sun.management.ThreadMXBean bean = allocationCountingBean();
         Map<Object, Object> source = new LinkedHashMap<>();
         for (int i = 0; i < ENTRIES; i++) {
             source.put("k" + i, i);
@@ -55,26 +52,9 @@ class PersistentHashMapAllocationTest {
             PersistentHashMap.from(source);
         }
 
-        long before = bean.getCurrentThreadAllocatedBytes();
-        PersistentHashMap<Object, Object> built = PersistentHashMap.from(source);
-        long after = bean.getCurrentThreadAllocatedBytes();
-
-        long perEntry = (after - before) / ENTRIES;
-        assertTrue(perEntry > 0, "allocation accounting reported nothing; measurement is broken");
+        long perEntry = Allocated.by(
+                () -> assertEquals(ENTRIES, PersistentHashMap.from(source).size())) / ENTRIES;
         assertTrue(perEntry < MAX_BYTES_PER_ENTRY,
                 "from allocated " + perEntry + " bytes/entry, budget is " + MAX_BYTES_PER_ENTRY);
-        assertEquals(ENTRIES, built.size());
-    }
-
-    /** The allocation counter, or a skipped test where the JVM does not offer one. */
-    private static com.sun.management.ThreadMXBean allocationCountingBean() {
-        ThreadMXBean threads = ManagementFactory.getThreadMXBean();
-        Assumptions.assumeTrue(threads instanceof com.sun.management.ThreadMXBean,
-                "this JVM has no com.sun.management.ThreadMXBean");
-        com.sun.management.ThreadMXBean bean = (com.sun.management.ThreadMXBean) threads;
-        Assumptions.assumeTrue(bean.isThreadAllocatedMemorySupported(),
-                "this JVM does not support per-thread allocation counting");
-        bean.setThreadAllocatedMemoryEnabled(true);
-        return bean;
     }
 }

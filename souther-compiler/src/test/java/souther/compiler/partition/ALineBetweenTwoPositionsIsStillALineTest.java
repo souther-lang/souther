@@ -280,7 +280,9 @@ class ALineBetweenTwoPositionsIsStillALineTest {
         String report = report(TWO_NEWTYPES);
 
         assertTrue(report.contains("read as benefitOf/charge: = ceiling"), report);
-        assertTrue(report.contains("border      borders 3   obligations 2/4"), report);
+        // The comparison is the body's one line; the two types' own bounds are the declarations'.
+        assertTrue(report.contains("border      borders 1   obligations 2/4"), report);
+        assertTrue(report.contains("declarations   borders 2 "), report);
     }
 
     /**
@@ -297,7 +299,7 @@ class ALineBetweenTwoPositionsIsStillALineTest {
     void aRowOnTheLineMeetsIt() {
         String report = report(ON_THE_LINE);
 
-        assertTrue(report.contains("border      borders 3   obligations 3/4"), report);
+        assertTrue(report.contains("border      borders 1   obligations 3/4"), report);
         assertFalse(report.contains("read as benefitOf/charge: = ceiling\n"),
                 report);
         assertTrue(report.contains("read as benefitOf/charge: = ceiling + 1"),
@@ -403,10 +405,10 @@ class ALineBetweenTwoPositionsIsStillALineTest {
      * equal. That is not a border whose row nobody could find — it is not a border, and the
      * comparison says so.
      *
-     * <p>Apart from {@link #aRuleTheRangesCouldNotTakeInIsNotAProofEither}, where the ranges do
-     * meet and the pair on the line is what the rules refuse. There the line is real and the row for
-     * it is unproven; here the quantity stops short of the line. Held alike, a rule stating
-     * something no row satisfies was reported as one this compiler could not find a witness for.
+     * <p>Apart from {@link #aHoleOnePositionHoldsEmptiesTheDiagonalTheRangesBothReach}, where the
+     * ranges do meet and the pair on the line is what the rules refuse. There the line is real and
+     * the region proves no row stands at it; here the quantity stops short of the line, and the
+     * line is not drawn at all.
      */
     @Test
     void aLineNoCountSatisfiesIsSaidAndNotCounted() {
@@ -419,25 +421,28 @@ class ALineBetweenTwoPositionsIsStillALineTest {
     }
 
     /**
-     * The partition is unchanged and says so where it is.
+     * What the relation leaves the partition is said where the partition is.
      *
-     * <p>A rule relating two positions divides neither of them, which is what the classes measure has
-     * always answered here and still answers. The two are separate answers about one comparison, and
-     * the note about the first of them belongs under the first of them — printed under the boundary
-     * count it sat two rows beneath the line that same comparison had drawn.
+     * <p>The rule relates two positions, and what that leaves the classes of one of them is an
+     * answer about the classes: here that the ceiling, held to a thousand and above, is not shown to
+     * reach every charge — a charge at a thousand or below is never above it. The two are separate
+     * answers about one comparison, and the note about the first of them belongs under the first of
+     * them — printed under the boundary count it sat two rows beneath the line that same comparison
+     * had drawn.
      */
     @Test
     void thePositionIsStillOneNothingDividesAndTheNoteIsUnderThePartition() {
         String report = report(TWO_NEWTYPES);
 
+        String said = "it relates the value here to another value not shown to reach every value"
+                + " here, so which values here settle it on their own is not worked out, about"
+                + " `charge`";
         int partition = report.indexOf("    partition ");
-        int note = report.indexOf("dividing one, about `charge`");
+        int note = report.indexOf(said);
         int boundary = report.indexOf("    border ");
 
         assertTrue(note > partition && note < boundary,
                 "the note about the classes sits under the classes measure:\n" + report);
-        assertTrue(report.contains(
-                "it relates two positions rather than dividing one, about `charge`"), report);
     }
 
     /**
@@ -483,23 +488,25 @@ class ALineBetweenTwoPositionsIsStillALineTest {
     }
 
     /**
-     * A rule the ranges could not take in is not a range that says nothing is missing.
+     * A hole in one position is not a range, and the ranges overlapping is not what proves the
+     * diagonal empty.
      *
      * <p>{@code /= 0} leaves a hole and {@code == 0} leaves one value, and the two positions are
-     * under different parameters, so nothing relates them and their ranges overlap at zero. Read as a
-     * proof, that asks for a diagonal row at a value one of the two refuses outright.
+     * under different parameters, so nothing relates them and their ranges overlap at zero. A
+     * diagonal row would stand at that zero, which the first position refuses outright — and that is
+     * a proof, made by the region holding the hole against the line and not by the ranges, which
+     * meet.
      *
-     * <p>Nor does "every rule was read" answer it. The checker understands a disequality perfectly
-     * well and it reaches no range, so a position with a hole in it looks unbounded from there.
+     * <p>It is said as what it is: no row can stand there, the rules leave no value, and not a row
+     * nothing here managed to find.
      */
     @Test
-    void aRuleTheRangesCouldNotTakeInIsNotAProofEither() {
+    void aHoleOnePositionHoldsEmptiesTheDiagonalTheRangesBothReach() {
         String report = report(A_HOLE_AND_A_POINT);
 
-        assertFalse(report.contains("no row is at the OFF point ("),
-                "zero is the only place both ranges hold and one position refuses it:\n" + report);
-        assertTrue(report.contains(
+        assertFalse(report.contains(
                 "nothing could show a row can be written at the OFF point ("), report);
+        assertTrue(report.contains("no row can stand at the OFF point ("), report);
         assertTrue(report.contains("read as cmp/a: = b"), report);
     }
 
@@ -515,7 +522,7 @@ class ALineBetweenTwoPositionsIsStillALineTest {
      */
     @Test
     void aRuleRelatingTheTwoPositionsIsNotAnsweredByTheirRangesOverlapping() {
-        assertEquals(List.of("p.a: UNSUPPORTED_PARTITION_SHAPE", "p.b: UNSUPPORTED_PARTITION_SHAPE",
+        assertEquals(List.of("p.a: RULE_RELATING_TWO_VALUES", "p.b: RULE_RELATING_TWO_VALUES",
                         "p.a: RULE_CUTS_OUTSIDE_WHAT_THE_QUANTITY_HOLDS",
                         "p.b: RULE_CUTS_OUTSIDE_WHAT_THE_QUANTITY_HOLDS"),
                 notRead(RULED_OUT_BY_THE_RECORD),
@@ -543,7 +550,10 @@ class ALineBetweenTwoPositionsIsStillALineTest {
         String report = report(ALLOWED_BY_THE_RECORD);
 
         assertTrue(report.contains("read as cmp/p.a: = p.b"), report);
-        assertTrue(report.contains("border      borders 2   obligations 1/2"), report);
+        // The guard's line is the body's and the clause's is the declaration's, so each is counted
+        // where it is owed.
+        assertTrue(report.contains("border      borders 1   obligations 1/2"), report);
+        assertTrue(report.contains("declarations   borders 1   obligations 1/2"), report);
     }
 
     private static String report(String model) {

@@ -186,13 +186,16 @@ class ABorderIsALineOnWhateverTheRuleCutsTest {
 
         assertTrue(report.contains("read as f/3 * a + 6 * b: = 48"), report);
         assertTrue(report.contains("read as f/3 * a + 6 * b: = 51"), report);
-        // And what it leaves the positions is said in the same words as well. A rule over a quantity
-        // that is not one position's own values divides none of them, whoever wrote it.
-        assertTrue(report.contains(
-                "it relates two positions rather than dividing one, about `a`"), report);
+        // And what it leaves the positions is said in the same words as well, whoever wrote it. The
+        // positions are held to their declared runs, so neither reaches every value of the other:
+        // which values of a settle the rule on their own is not worked out.
+        String relating = "it relates the value here to another value not shown to reach every"
+                + " value here, so which values here settle it on their own is not worked out,"
+                + " about `a`";
+        assertTrue(report.contains(relating), report);
         assertTrue(report(guarded(
                         "Int.add(Int.multiply(3, a.value), Int.multiply(6, b.value)) <= 48"))
-                        .contains("it relates two positions rather than dividing one, about `a`"),
+                        .contains(relating),
                 "a body's conditions say it the same way");
     }
 
@@ -283,8 +286,8 @@ class ABorderIsALineOnWhateverTheRuleCutsTest {
 
         assertTrue(report.contains("the ON point (comparison@14:71)"), report);
         assertTrue(report.contains("read as f/3 * a + 5 * b: = 7"
-                        + " — the rules leave no value at 3 * a + 5 * b = 7"), report);
-        assertFalse(report.contains("nothing composed one: the rules leave no value"),
+                        + " — no value can stand at 3 * a + 5 * b = 7"), report);
+        assertFalse(report.contains("nothing composed one: no value can stand"),
                 "a proof does not arrive under the opening a failed search gets:\n" + report);
     }
 
@@ -373,7 +376,7 @@ class ABorderIsALineOnWhateverTheRuleCutsTest {
         String report = report(dense("a.value * 2m + b.value * 4m <= 9m"));
 
         assertTrue(report.contains("read as f/2 * a + 4 * b: = 9"), report);
-        assertFalse(report.contains("the rules leave no value at 2 * a + 4 * b"),
+        assertFalse(report.contains("no value can stand at 2 * a + 4 * b"),
                 "nothing walked the whole of this box, so nothing was proved about it:\n" + report);
     }
 
@@ -695,14 +698,18 @@ class ABorderIsALineOnWhateverTheRuleCutsTest {
      * threshold was a border whose points a search was sent looking for and never found. It is the
      * same answer a bound outside what a position's own type leaves already gets: there is no border
      * there, and there never was one for a point to be owed at.
+     *
+     * <p>Away from where the form starts, by more than one of its steps. A line between minus three
+     * and nought has the form's first value on its far side, and a row there is one the line is
+     * drawn against ({@link WhatAComparisonIsARuleAboutTest}).
      */
     @Test
     void aThresholdOutsideWhatTheFormTakesDrawsNoLine() {
         String report = report(guarded(
-                "Int.add(Int.multiply(3, a.value), Int.multiply(6, b.value)) <= -3"));
+                "Int.add(Int.multiply(3, a.value), Int.multiply(6, b.value)) <= -6"));
 
         assertFalse(report.contains("3 * a + 6 * b"),
-                "the form runs from nought upward, so nothing is cut at minus three:\n" + report);
+                "the form runs from nought upward, so nothing is cut at minus six:\n" + report);
         // And the question the comparison raises is answered by what came of reading it. Answered by
         // which reading was tried, a rule that drew nothing reported a line as read, and the
         // positions it names went unaccounted for.
@@ -749,7 +756,7 @@ class ABorderIsALineOnWhateverTheRuleCutsTest {
                 """);
 
         assertTrue(report.contains("read as f/a + b: = 10000000000000001"), report);
-        assertFalse(report.contains("the rules leave no value at a + b = 10000000000000001"),
+        assertFalse(report.contains("no value can stand at a + b = 10000000000000001"),
                 "the box holds exactly one pair at this line, so nothing proves it holds none:\n"
                         + report);
     }

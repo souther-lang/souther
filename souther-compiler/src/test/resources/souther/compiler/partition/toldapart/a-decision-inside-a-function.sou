@@ -1,0 +1,30 @@
+// A decision inside a function value is made of the values the way to the function let through.
+//
+// No way in to the `match` inside the predicate is named, since the predicate runs wherever
+// `List.filter` calls it. What the outer arm let through is known there all the same — `k` is an
+// input and only C or D arrives — so the inner arms for A and B are taken by no run and the body
+// tells A from B nowhere. Read without what the outer arm settled, they would split the two.
+//
+// told apart at k: 3 groups of 4
+module example.insidefunction
+
+data A
+data B
+data C
+data D
+data Kind = A | B | C | D
+
+data Ok = { n: Int }
+
+behavior judge : (k: Kind, xs: List<Int>) -> Ok
+    constructs Ok
+
+let judge (k, xs) =
+    match k with
+        | A | B -> Ok { n = 1 }
+        | C | D -> Ok { n = List.length(List.filter(x ->
+                        match k with
+                            | A -> true
+                            | B -> false
+                            | C -> true
+                            | D -> false, xs)) }

@@ -62,10 +62,11 @@ public final class ClauseHelpers {
      */
     static SettledClauses withSettledInvariants(Hir.Module m, Symbols symbols,
                                                 DeclarationKinds kinds,
-                                                Map<String, Hir.FnDef> published) {
+                                                ClosedImports published) {
         // Settling runs while what these declarations say is still being worked out, so what is read
-        // here is which form each one is — settled when the module was indexed — and asking what one
-        // says is refused rather than answered with nothing.
+        // here is which form each one is — settled when the module was indexed — and which cases a
+        // sum lists, settled where its names resolved. Asking what one says is refused rather than
+        // answered with nothing.
         Hir.Module settled = settled(m, symbols, PublishedDeclarations.THE_ONE_THAT_MAKES_THEM,
                 kinds);
         HelperInliner inliner = HelperInliner.forModule(settled, published, symbols.library(),
@@ -127,7 +128,7 @@ public final class ClauseHelpers {
     public static Map<TypeKey, ExpandedClauses> expandedClausesOf(
             Expandable expandable, Symbols symbols, PublishedDeclarations declarations,
             DeclarationKinds kinds, DeclarationNewtypes newtypes,
-            Map<String, Hir.FnDef> published) {
+            ClosedImports published) {
         Hir.Module m = expandable.module();
         Hir.Module settled = settled(m, symbols, declarations, kinds);
         HelperInliner inliner = HelperInliner.forHelpers(m.name(), HelperInliner.helpersOf(settled),
@@ -192,8 +193,11 @@ public final class ClauseHelpers {
      * would key differently. */
     static Hir.Module settled(Hir.Module m, Symbols symbols, PublishedDeclarations published,
                               DeclarationKinds kinds) {
-        return HelperNames.withQualifiedInvariants(
-                HelperParams.settle(m, symbols, published, kinds, Map.of()));
+        // Read off the scope and what it was handed, never off the compilation's answers: this is
+        // what a declaration's clauses are settled from on the way to what the declaration says,
+        // and those answers are read off what the declarations say.
+        return HelperNames.withQualifiedInvariants(HelperParams.settle(m, symbols,
+                DeclarationAccess.asWritten(symbols, published, kinds), Map.of()));
     }
 
     /**

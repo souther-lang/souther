@@ -1,6 +1,6 @@
 package souther.compiler.reach;
 
-import souther.compiler.coverage.ArmProbe;
+import souther.compiler.coverage.RunSite;
 
 /**
  * What shows that something arrives.
@@ -17,9 +17,10 @@ import souther.compiler.coverage.ArmProbe;
  */
 public sealed interface Witness permits ARunWentThrough, EveryRuleReadAndNothingAbove {
 
-    /** A run this compiler generated went through the point; see {@link ARunWentThrough}. */
-    static Witness aRunWentThrough(ArmProbe probe) {
-        return new ARunWentThrough(probe);
+    /** A run this compiler generated went through the point — an arm, or a condition coming out
+     *  one way; see {@link ARunWentThrough}. */
+    static Witness aRunWentThrough(RunSite at) {
+        return new ARunWentThrough(at);
     }
 
     /** Every rule reaching the position was read and nothing stands above it; see
@@ -36,7 +37,7 @@ public sealed interface Witness permits ARunWentThrough, EveryRuleReadAndNothing
  * settles a proof that said otherwise: what a row did happened, so a reading that ruled it out was
  * wrong about the model rather than the row being wrong about the rules.
  */
-record ARunWentThrough(ArmProbe probe) implements Witness {}
+record ARunWentThrough(RunSite at) implements Witness {}
 
 /**
  * The rules leave the case standing, every rule reaching the position was read, and nothing stands

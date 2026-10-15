@@ -2,11 +2,13 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.carrier.Membership;
 import souther.compiler.check.DeclaredSig;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
+import souther.compiler.check.TypeCardinality;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.query.Adequacy;
@@ -70,9 +72,11 @@ class AnArmsBinderNamesTheNarrowedPositionTest {
                 checked.analysisBodies().get("read"), body,
                 checked.plan(),
                 inputs, rules);
-        InputDomain read = InputDomain.of(sigs.get("read"),
-                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES));
-        Partitions.Partitioning base = Partitions.of("read", read, rules,
+        RuleReadingContext reading =
+                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES);
+        InputDomain read = InputDomain.of(sigs.get("read"), reading,
+                TypeCardinality.Counts.workedOutIn(reading), Membership.none());
+        Partitions.Partitioning base = Partitions.of("read", read.reading(rules),
                 ReadAs.THE_COMPILATION_DOES);
         return ThresholdFixtures.withThresholds(base, read.quantities(rules), guards.thresholds(),
                 RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES),

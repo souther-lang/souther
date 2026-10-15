@@ -1,10 +1,12 @@
 package souther.compiler.query;
 
 import souther.compiler.coverage.CoverageSites;
-import souther.compiler.inputs.Requirements;
 import souther.compiler.partition.Generator;
+import souther.compiler.partition.OnTheWay;
+import souther.compiler.partition.Reachability;
 import souther.compiler.partition.RowToRun;
 import souther.compiler.partition.RulesTaken;
+import souther.compiler.types.ModelOccurrence;
 
 /**
  * What settles whether a rule of a body's decision is owed a row.
@@ -57,10 +59,10 @@ public sealed interface RuleRequirement {
         /**
          * The way asks one position to be two things at once.
          *
-         * <p>{@link souther.compiler.partition.Reachability.NothingReaches} is where that is
-         * established and this carries what it established.
+         * <p>{@link Reachability.NothingReaches} is where that is established and this carries what
+         * it established.
          */
-        record OnePositionCannotBeBoth(Requirements.Merge.Conflict why) implements Excluded {
+        record OnePositionCannotBeBoth(Reachability.TwoAtOnce why) implements Excluded {
 
             public OnePositionCannotBeBoth {
                 if (why == null) {
@@ -85,9 +87,11 @@ public sealed interface RuleRequirement {
          * one another may. So what shows the way out of reach is every obligation the author's arm
          * names being out of the count, settled over all of them at once.
          *
-         * <p>Arms and not every construct on the way. What a comparison's outcome was proven to be
-         * is the other half of the same reading and the sites have no place for it to be asked at,
-         * so a rule turning on one is settled the way it was before.
+         * <p>Arms and not every construct on the way. A rule seen at a comparison coming out one
+         * way is out of reach by that outcome and not by an arm ({@link
+         * AComparisonOutcomeNothingReaches}): under {@code a && b} the arm taken when the condition
+         * fails is reached by a {@code b} that came out false and by a {@code b} never run, so the
+         * one is not the other.
          */
         record AnArmNothingReaches(CoverageSites.AsWritten arm) implements Excluded {
 
@@ -99,8 +103,54 @@ public sealed interface RuleRequirement {
         }
 
         /**
-         * The rules of the way to the rule leave no value that takes it, and the composings are
-         * what proved it.
+         * The way needs a comparison to come out one way, and nothing reaches it coming out so.
+         *
+         * <p>The same reading the arms are left out of the count by, asked of the place a
+         * comparison comes out one way ({@link souther.compiler.coverage.ControlPlace.Outcome}):
+         * the conditions on the way to the comparison and what the declarations leave its values
+         * hold nothing that brings it out that way. Not a comparison that always comes out the
+         * other way ({@link AConditionNeverComesOutThatWay}) — this one may well come out either
+         * way somewhere; nothing that comes out this way arrives.
+         *
+         * <p>Out only where every copy of it the tree that runs holds is: a helper's comparison is
+         * one construct the author wrote and one copy per call, and a copy one call cannot reach
+         * coming out this way is one another may.
+         *
+         * @param comparison which comparison of the model
+         * @param held       the way the rule needs it to come out
+         */
+        record AComparisonOutcomeNothingReaches(ModelOccurrence comparison, boolean held)
+                implements Excluded {
+
+            public AComparisonOutcomeNothingReaches {
+                if (comparison == null) {
+                    throw new IllegalArgumentException(
+                            "an outcome nothing reaches is some comparison's");
+                }
+            }
+        }
+
+        /**
+         * The way goes past a condition no row brings out the way it goes.
+         *
+         * <p>{@link souther.compiler.partition.Reachability.NothingComesOutThatWay} is where that
+         * is established — a predicate that always holds, sides whose difference is the same on
+         * every row — and this carries which condition it was.
+         */
+        record AConditionNeverComesOutThatWay(OnTheWay.Settled condition) implements Excluded {
+
+            public AConditionNeverComesOutThatWay {
+                if (condition == null || condition.thisWay()) {
+                    throw new IllegalArgumentException(
+                            "a way out of reach this way is past a condition no row brings out"
+                                    + " that way: " + condition);
+                }
+            }
+        }
+
+        /**
+         * No value takes the way to the rule, and the composings are what proved it — whether a
+         * rule on the way or a type with too few values is what leaves none.
          *
          * <p>Beside the two above rather than under them, and it is the one of the three a search
          * establishes ({@link Generator.UnresolvedCombination.Reason#provesInfeasible} is what
@@ -113,7 +163,7 @@ public sealed interface RuleRequirement {
          * answer is every way of standing the dependencies in having proved it, and a value holding
          * one proof says nothing about the ways it does not hold.
          */
-        record TheRulesLeaveNoValueForIt() implements Excluded {}
+        record NoValueCanTakeIt() implements Excluded {}
     }
 
     /**
@@ -194,7 +244,7 @@ public sealed interface RuleRequirement {
          * The synthesis produced no candidate, so there was nothing to try the rule with.
          *
          * <p>A fact about the inquiry and not about the rule. What the synthesis fell short on
-         * travels on its own axis ({@link RuleSettlement#synthesisShortfall()}) and is carried
+         * travels on its own axis ({@link RuleSettlement#synthesisShortfalls()}) and is carried
          * nowhere here: a generator's failure is not a requirement answer, and a reason from its
          * vocabulary sitting inside this one would make it one — a reader of the requirement would
          * be told a way is unsettled *because* a table is what this compiler does not write, which

@@ -56,8 +56,11 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  */
 class WhoAsksAReadingAboutAPlaceSaysWhichPlanItIsOfTest {
 
-    private static final String A_READING =
-            "souther/compiler/check/PathReachability$Answers";
+    /** The two halves of a reading: what arrives at the places, and what arrives at the
+     *  constructs lines are drawn at. Either is asked about something of a plan. */
+    private static final Set<String> A_READING = Set.of(
+            "souther/compiler/check/PathReachability$Answers",
+            "souther/compiler/check/PathReachability$Arrivals");
 
     /** The two ways a reading is asked about a place of a plan. Both answer an absence as an
      *  ordinary fact, so neither can tell a caller it was handed the wrong reading. */
@@ -71,22 +74,46 @@ class WhoAsksAReadingAboutAPlaceSaysWhichPlanItIsOfTest {
                     "the claims name arms of one plan and say which, and this holds the reading to"
                             + " being that plan's before it looks any of them up. Both halves are"
                             + " handed in, so a caller is what could put two modules' together"),
+            new Licence("souther.compiler.query.Adequacy.unreachedIn -> at", 1,
+                    "whether a way through an arm is one nothing arrives at, asked of places of the"
+                            + " module's own plan for the measure of rewrites and for the rows"
+                            + " composed alike; the reading is held to that plan's numbering"
+                            + " before any place is looked up, since an answer from another plan"
+                            + " would prove a rewrite the same where nothing was proven"),
             new Licence("souther.compiler.partition.ProducedCases.produce -> at", 1,
                     "a private step of a walk whose way in takes the plan and the reading together"
                             + " and holds them to each other there — before the shortcut for a"
                             + " reading that proves nothing unreached, which a foreign reading"
                             + " would otherwise leave by"),
-            new Licence("souther.compiler.partition.GuardThresholds.of -> arrivalAt", 1,
+            new Licence("souther.compiler.partition.GuardThresholds.watchedAt -> arrivalAt", 2,
                     "a step of the walk over one behavior's guards, whose way in takes the plan and"
-                            + " the reading together and holds them to each other there. What an"
-                            + " absence means here is that nothing is known about the comparison,"
-                            + " which restricts nothing — the widest answer there is, and the one a"
-                            + " reading of another module would give about every comparison"),
+                            + " the reading together and holds them to each other there, asked once"
+                            + " for a comparison and once for an application. What an absence"
+                            + " means here is that nothing is known about the construct, which"
+                            + " restricts nothing — the widest answer there is, and the one a"
+                            + " reading of another module would give about every construct"),
+            new Licence("souther.compiler.partition.WhatABodyTellsApart.take -> at", 1,
+                    "whether a way some run of the body takes passes a place nothing arrives at,"
+                            + " asked of the places on that way; the reading is held to the plan"
+                            + " those places are of where the two are put together and handed in"
+                            + " (Adequacy.Coverage). What is concluded is about that way and the"
+                            + " copy of each construct on it, never about a construct's other"
+                            + " copies"),
             new Licence("souther.compiler.query.Adequacy.BranchEvidence.owed -> at", 1,
                     "the arms and the reading both come out of the store under one module name,"
                             + " inside the one method that asks for either. Nothing hands this pair"
                             + " over, so there is no pair for a caller to get wrong and nothing"
-                            + " here for a check to be asked about"));
+                            + " here for a check to be asked about"),
+            new Licence("souther.compiler.query.Adequacy.DecisionSearch.NothingReaches"
+                    + ".unreachableIn -> at", 1,
+                    "whether an arm or a copy of a comparison coming out a way is one nothing"
+                            + " arrives at, asked of places of the plan the arms and the copies"
+                            + " were found in — as the rows corrected it, and with the proofs they"
+                            + " took back put back for what a rule no longer rests on. The arms, the"
+                            + " copies and the reading come out of the store under one module name"
+                            + " in the one method that asks for them, as the branch count's do, and"
+                            + " the reading is held to the plan's numbering where the pair is put"
+                            + " together"));
 
     @Test
     void everyReaderThatAsksAReadingAboutAPlaceIsWrittenDownWithWhatMakesItSafe() {
@@ -132,7 +159,7 @@ class WhoAsksAReadingAboutAPlaceSaysWhichPlanItIsOfTest {
             for (MethodModel method : model.methods()) {
                 method.code().ifPresent(code -> code.forEach(element -> {
                     if (element instanceof InvokeInstruction call
-                            && call.owner().asInternalName().equals(A_READING)
+                            && A_READING.contains(call.owner().asInternalName())
                             && ASKS_ABOUT_A_PLACE.contains(call.name().stringValue())) {
                         calls.merge(from + "." + wroteIt(method.methodName().stringValue())
                                 + " -> " + call.name().stringValue(), 1, Integer::sum);

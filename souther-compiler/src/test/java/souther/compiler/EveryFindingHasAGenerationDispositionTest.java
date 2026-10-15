@@ -4,15 +4,19 @@ import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.carrier.Membership;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
+import souther.compiler.check.TypeCardinality;
+import souther.compiler.inputs.InputDomain;
 import souther.compiler.partition.GenerationOutcome;
 import souther.compiler.partition.PointRole;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderObligationPointAssessment;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.PointResolution;
+import souther.compiler.query.ReadAs;
 import souther.compiler.query.BorderAccount;
 import souther.compiler.query.GenerationScope;
 import souther.compiler.query.SearchCoverage;
@@ -653,7 +657,10 @@ class EveryFindingHasAGenerationDispositionTest {
                 "the reading says the ways into this arm are not enumerable: " + arms);
     }
 
-    /** A fork inside a block, whose body runs where something applies it. */
+    /**
+     * A fork inside a block run over a list, inside another block run over the same list: an arm
+     * of the inner one past the outer `On` asks an `On` and an `Off` of the list.
+     */
     private static final String IN_A_BLOCK = """
             module example.block
 
@@ -663,7 +670,10 @@ class EveryFindingHasAGenerationDispositionTest {
 
             let mark (flags) = List.map(f ->
                 match f with
-                    | On -> 1
+                    | On -> List.length(List.map(g ->
+                        match g with
+                            | On -> 1
+                            | Off -> 0, flags))
                     | Off -> 0, flags)
 
             example mark
@@ -673,9 +683,9 @@ class EveryFindingHasAGenerationDispositionTest {
     /**
      * An arm no strategy reaches is {@link GenerationOutcome.NotSupported} rather than unanswered.
      *
-     * <p>What steers a row into this one is what the thing applying the block applies it to, which
-     * is not a class of this behavior's inputs — so there is nothing for a search to work from, and
-     * that is a fact about what this compiler can state rather than about the body.
+     * <p>What steers a row into this one is two applications over one list, which may be handed one
+     * element or two — which is not read, so there is nothing for a search to work from, and that
+     * is a fact about what this compiler can state rather than about the body.
      */
     @Test
     void anArmNoStrategyReachesIsNotSupportedRatherThanUnanswered() {
@@ -685,9 +695,13 @@ class EveryFindingHasAGenerationDispositionTest {
                         .filter(d -> d.finding().kind() == Adequacy.Kind.ARM_UNREACHED).toList();
 
         assertFalse(arms.isEmpty(), "the arm the row does not take is found");
-        assertTrue(arms.stream().allMatch(
-                        d -> d.outcome() instanceof GenerationOutcome.NotSupported),
-                "no strategy composes an input to reach an arm inside a block: " + arms);
+        // The outer `Off` is one application, and a list holding an `Off` is where to look. The
+        // inner `Off` is the arm nothing composes for.
+        List<Adequacy.GenerationDisposition> none = arms.stream()
+                .filter(d -> !(d.outcome() instanceof GenerationOutcome.Generated)).toList();
+        assertEquals(1, none.size(), () -> "one arm no strategy reaches: " + arms);
+        assertTrue(none.getFirst().outcome() instanceof GenerationOutcome.NotSupported,
+                () -> "and it is not supported rather than unanswered: " + none);
     }
 
     // --- a case of an input, which is the one gap the three answers all reach ---------------------
@@ -752,11 +766,18 @@ class EveryFindingHasAGenerationDispositionTest {
         StringBuilder names = new StringBuilder();
         StringBuilder declared = new StringBuilder();
         StringBuilder written = new StringBuilder();
+        // Every position read, by one arm for both cases: a case of a position nothing reads is
+        // owed no row, and one arm tells nothing apart, so no combination joins what is offered.
+        StringBuilder body = new StringBuilder();
         for (int at = 1; at <= positions; at++) {
             names.append(at == 1 ? "" : ", ").append("k").append(at);
             declared.append(at == 1 ? "" : ", ").append("k").append(at).append(": Kind");
             written.append(at == 1 ? "" : ", ").append("Domestic");
+            String indent = "    ".repeat(2 * at - 1);
+            body.append(indent).append("match k").append(at).append(" with\n")
+                    .append(indent).append("    | Domestic | Overseas ->\n");
         }
+        body.append("    ".repeat(2 * positions + 1)).append("Fine\n");
         return """
                 module example.wide
 
@@ -770,11 +791,11 @@ class EveryFindingHasAGenerationDispositionTest {
 
                 behavior pick : (%s) -> Verdict
 
-                let pick (%s) = Fine
-
+                let pick (%s) =
+                %s
                 example pick
                     | "all home" : (%s) -> Fine
-                """.formatted(declared, names, written);
+                """.formatted(declared, names, body, written);
     }
 
     /** The answer for the case named {@code missing} of the input at {@code at}, one-based. */
@@ -800,24 +821,24 @@ class EveryFindingHasAGenerationDispositionTest {
     }
 
     /**
-     * A case an axis divides and nothing composed a value for is answered by the attempt.
+     * A case whose own rule refuses the end of a range is composed under that rule.
      *
-     * <p>Not {@code NotSupported}: the strategy took this class and came back with a reason, which is
-     * news of a different kind. Reading it as "no strategy for this" would say the generator will
-     * never offer a row at a class it took and searched.
-     *
-     * <p>A card has values — any amount above none is one — and the search proposes the end of the
-     * range, which is the one amount the rule refuses. So this is what the search could not reach and
-     * not what has no value: a type with none is refused before any of this, and a fixture that had
-     * none would be asking the generator about a model that does not compile. Should the search learn
-     * to step off an end it was refused at, this becomes a row, which is the answer changing for the
-     * reason it should.
+     * <p>A card has values — any amount above none is one — and the end of the range the amount's
+     * type leaves, none, is the one the card's rule refuses. The rule is the case's, so the value is
+     * composed under the case's rules and the row offered holds an amount the card admits: a
+     * composer reading the sum's rules alone proposes the end and has every row refused.
      */
     @Test
-    void aCaseNothingComposedAValueForIsAnsweredByTheAttempt() {
+    void aCaseWhoseOwnRuleRefusesAnEndIsComposedUnderThatRule() {
         GenerationOutcome answer = forCase(compiled(CARRIED), "example.pay", "feeFor", "Card", 1);
 
-        assertInstanceOf(GenerationOutcome.CannotGenerate.class, answer);
+        assertInstanceOf(GenerationOutcome.Generated.class, answer);
+        List<String> offered = ((GenerationOutcome.Generated) answer).candidates().stream()
+                .map(row -> row.inputs().get(0).text()).toList();
+        assertFalse(offered.isEmpty(), "a row is offered for the card");
+        assertTrue(offered.stream().allMatch(each -> each.startsWith("Card")
+                        && !each.contains("Amount(0.0m)") && !each.contains("Amount(0m)")),
+                "every card offered holds an amount the card admits: " + offered);
     }
 
     /**
@@ -863,8 +884,11 @@ class EveryFindingHasAGenerationDispositionTest {
                         + " so the reading stopped short of it rather than saying what steers a row"
                         + " there",
                 GenerationOutcome.NotSupported.Reason.MORE_WAYS_IN_THAN_THE_READING_HOLDS.said());
-        assertEquals("rows here are composed from what the input positions divide into, and nothing"
-                        + " searches for one by the case it would answer with",
+        // Nothing about the rows composed: one of them may answer with the case once it runs, so
+        // what is missing is a search aimed at the case and not a row that reaches it.
+        assertEquals("rows here are composed for what the input positions divide into and not for"
+                        + " the case they answer with, so which of them answers with it is what"
+                        + " their runs say",
                 GenerationOutcome.NotSupported.Reason.NO_STRATEGY_FOR_AN_OUTPUT_CASE.said());
         // A case whose parameter no axis was derived at has its cases in the declaration and in no
         // partition, so what is missing is a derivation and not the classes. Said as there being
@@ -927,9 +951,12 @@ class EveryFindingHasAGenerationDispositionTest {
     private static souther.compiler.partition.MeasuredInput nothingIsDivided() {
         RuleReadingSource rules = RuleReadings.ofNoClauseFiled(
                 souther.compiler.check.Symbols.none(DefaultStdlib.get()));
+        RuleReadingContext reading = RuleReadingContext.unshared(rules,
+                ReadAs.THE_COMPILATION_DOES);
         return souther.compiler.partition.MeasuredInput.of("pick",
-                souther.compiler.inputs.InputDomain.of(List.of(), RuleReadingContext.unshared(rules,
-                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES)).reading(rules),
+                InputDomain.of(List.of(), reading,
+                        TypeCardinality.Counts.workedOutIn(reading),
+                        Membership.none()).reading(rules),
                 souther.compiler.partition.AxesATestWrote.asAMeasurement("pick", List.of()));
     }
 

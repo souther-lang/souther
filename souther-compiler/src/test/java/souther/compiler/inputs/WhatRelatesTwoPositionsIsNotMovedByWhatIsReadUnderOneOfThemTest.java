@@ -6,6 +6,7 @@ import souther.compiler.check.DeclaredSig;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
+import souther.compiler.check.TypeCardinality;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
@@ -126,7 +127,7 @@ class WhatRelatesTwoPositionsIsNotMovedByWhatIsReadUnderOneOfThemTest {
     private static NumericTerm size(Read read, String field) {
         TermPath at = TermPath.of("p").then(field);
         souther.compiler.types.Type type = read.inputs().at(at).type();
-        NumericTerm.TakenOf made = NumericTerm.TakenOf.of(
+        NumericTerm.TakenOf made = NumericTerm.TakenOf.asItStands(
                 souther.compiler.check.NumericMeasures.takenOf(type, read.rules().inners()),
                 at, type, read.rules().inners(), read.rules().symbols());
         assertNotNull(made, at + " is counted by what its type is counted by");
@@ -155,7 +156,10 @@ class WhatRelatesTwoPositionsIsNotMovedByWhatIsReadUnderOneOfThemTest {
         Map<String, DeclaredSig> sigs =
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
         RuleReadingSource rules = RuleReadings.of(compilation, module);
-        return new Read(InputDomain.of(sigs.get("take"),
-                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES)), rules);
+        RuleReadingContext reading =
+                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES);
+        return new Read(InputDomain.of(sigs.get("take"), reading,
+                TypeCardinality.Counts.workedOutIn(reading),
+                souther.compiler.carrier.Membership.none()), rules);
     }
 }

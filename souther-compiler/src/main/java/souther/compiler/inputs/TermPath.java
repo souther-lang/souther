@@ -26,29 +26,29 @@ import java.util.Objects;
  * {@code guard} are about one location or they are not, and if the two spellings disagree the same
  * position becomes two axes, one of which no row ever covers.
  *
- * <p><b>Two kinds of step, and they are not the same kind of thing.</b> A field and an element go
- * somewhere: what is at the end of one is inside what is at the start of it. A
+ * <p><b>Two kinds of step, and they are not the same kind of thing.</b> A field, an element and a
+ * map's key go somewhere: what is at the end of one is inside what is at the start of it. A
  * {@link Step.Refine} goes nowhere — it narrows which values may stand at the position it is taken
  * at, and the value at the end of it is the value at the start of it. So a refinement takes no
  * level of the structure, reaches no field of a record it is under, and states a requirement about
  * the value rather than a place in it ({@link #requirements}).
  *
  * <p><b>A location, and nothing about how many values stand at one.</b> A {@link Step.Element}
- * says the position is inside the sequence above it; it does not say some element, or every element,
+ * says the position is inside the container above it; it does not say some element, or every element,
  * or one in particular. How many elements of a list a class has to hold is a property of what is
  * owed there and of the row that answers it, and putting it here would make two paths out of one
  * location — after which a rule written about the location and a row walked to it would no longer
  * meet, which is the whole of what one spelling is for.
  *
- * <p>Steps are fields, elements and refinements, and nothing else. That a newtype contributes no
- * step is not this type's rule and nothing here enforces it — whoever reads a structure takes its
+ * <p>Steps are fields, elements, keys and refinements, and nothing else. That a newtype contributes
+ * no step is not this type's rule and nothing here enforces it — whoever reads a structure takes its
  * steps from whichever question about a shape it is asking, off a shape {@code TypeView} has already
  * taken the worn names off. So {@code data Amount = Int} is one location whether it is written
  * {@code request.cost} or {@code request.cost.value}, and a path ends at the newtype itself.
  */
 public record TermPath(String head, List<Step> steps) {
 
-    /** One step of a path: two that go somewhere, and one that stays and narrows. */
+    /** One step of a path: three that go somewhere, and one that stays and narrows. */
     public sealed interface Step {
 
         /**
@@ -73,18 +73,39 @@ public record TermPath(String head, List<Step> steps) {
         }
 
         /**
-         * Inside the sequence the path has reached so far.
+         * Inside the container the path has reached so far: what a list or a set holds, or a map's
+         * values.
          *
          * <p>Which element is not something a path can say, and not something it is short of
          * saying: a list holds as many as it holds, and they are one position because one rule is
          * written about them. What a class here means, and how many elements a row has to put in
          * one, are settled where the class and the row are and not here.
+         *
+         * <p>A map's values and not its keys. The values are what a walk over a map hands on as
+         * the element, and a key is a value of another type standing beside each of them, so the
+         * two are not one position ({@link Key}).
          */
         record Element() implements Step {
 
             @Override
             public String toString() {
                 return "[*]";
+            }
+        }
+
+        /**
+         * Inside the map the path has reached so far, at its keys.
+         *
+         * <p>Its own step and not an {@link Element} written another way. A key and the value filed
+         * under it are values of two types, each with rules of its own, so they are two positions;
+         * at one path, what is written about one would be read at the other. What they share is the
+         * entry, and that is said where a row is read ({@code ElementsTaken}), not here.
+         */
+        record Key() implements Step {
+
+            @Override
+            public String toString() {
+                return "[key]";
             }
         }
 
@@ -96,17 +117,22 @@ public record TermPath(String head, List<Step> steps) {
          * that case at the same remove from the parameter as a field of a record parameter is. What
          * it adds is a requirement, and a row whose value does not meet it stands nowhere below it
          * rather than being a row nothing could read.
+         *
+         * <p>To the cases a value is left, which may be several. An arm naming a case that is a sum
+         * leaves {@code kind@{Hospital|Station}}, and what an arm inside it names is
+         * {@code kind@Station} — one narrowing of the same position, stronger, and not a second
+         * one stacked on the first.
          */
-        record Refine(Refinement refinement) implements Step {
+        record Refine(CasesLeft cases) implements Step {
 
             @Override
             public String toString() {
-                return "@" + refinement.spelled();
+                return "@" + cases.spelled();
             }
 
             @Override
             public String discriminated() {
-                return "@" + refinement.discriminated();
+                return "@" + cases.discriminated();
             }
         }
     }
@@ -156,9 +182,9 @@ public record TermPath(String head, List<Step> steps) {
         }
         return switch (one) {
             case Step.Field field -> field.name().compareTo(((Step.Field) other).name());
-            case Step.Element _ -> 0;
-            case Step.Refine refine -> compareNarrowings(refine.refinement(),
-                    ((Step.Refine) other).refinement());
+            case Step.Element _, Step.Key _ -> 0;
+            case Step.Refine refine -> CasesLeft.compare(refine.cases(),
+                    ((Step.Refine) other).cases());
         };
     }
 
@@ -166,16 +192,8 @@ public record TermPath(String head, List<Step> steps) {
         return switch (step) {
             case Step.Field _ -> 0;
             case Step.Element _ -> 1;
-            case Step.Refine _ -> 2;
-        };
-    }
-
-    private static int compareNarrowings(Refinement one, Refinement other) {
-        return switch (one) {
-            case Refinement.SumCase sum -> other instanceof Refinement.SumCase that
-                    ? sum.leaf().compareTo(that.leaf()) : -1;
-            case Refinement.Presence presence -> other instanceof Refinement.Presence that
-                    ? Boolean.compare(presence.present(), that.present()) : 1;
+            case Step.Key _ -> 2;
+            case Step.Refine _ -> 3;
         };
     }
 
@@ -184,14 +202,40 @@ public record TermPath(String head, List<Step> steps) {
         return append(new Step.Field(field));
     }
 
-    /** The same path, inside the sequence it has reached. */
+    /**
+     * The same way in, taken into what stands at {@code root} instead of into what {@link #head}
+     * names: a way into a behavior's parameter, as the same way into what a call handed it.
+     */
+    public TermPath under(TermPath root) {
+        List<Step> moved = new ArrayList<>(root.steps);
+        moved.addAll(steps);
+        return new TermPath(root.head, moved);
+    }
+
+    /** The same path, inside the container it has reached. */
     public TermPath element() {
         return append(new Step.Element());
     }
 
+    /** The same path, inside the map it has reached, at its keys. */
+    public TermPath key() {
+        return append(new Step.Key());
+    }
+
+    /** The map this position is the keys of, or null where it is not at a map's keys. */
+    public TermPath mapOfTheKeys() {
+        return !steps.isEmpty() && steps.getLast() instanceof Step.Key
+                ? new TermPath(head, steps.subList(0, steps.size() - 1)) : null;
+    }
+
     /** The same position, narrowed to the values {@code refinement} leaves. */
     public TermPath refine(Refinement refinement) {
-        return append(new Step.Refine(refinement));
+        return refine(CasesLeft.of(refinement));
+    }
+
+    /** The same position, narrowed to the values {@code cases} leaves. */
+    public TermPath refine(CasesLeft cases) {
+        return append(new Step.Refine(cases));
     }
 
     private TermPath append(Step step) {
@@ -210,15 +254,17 @@ public record TermPath(String head, List<Step> steps) {
      * keeps an account of its own.
      */
     public Requirements requirements() {
-        Map<TermPath, Refinement> out = new LinkedHashMap<>();
+        Map<TermPath, CasesLeft> out = new LinkedHashMap<>();
         TermPath at = TermPath.of(head);
         for (Step step : steps) {
             if (step instanceof Step.Refine refine) {
-                out.put(at, refine.refinement());
+                // Keyed by where the value stands: under a narrowing to several cases, a name is
+                // the name read at the sum, and what is required of it is required there.
+                out.put(at.position(), refine.cases());
             }
             at = at.append(step);
         }
-        return new Requirements(out);
+        return new Requirements(out, List.of());
     }
 
     /**
@@ -247,8 +293,30 @@ public record TermPath(String head, List<Step> steps) {
     }
 
     /** Which values the last step leaves, which is what the arm that took it came out as. */
-    public Refinement narrowing() {
-        return ((Step.Refine) requireNarrowing().get(steps.size() - 1)).refinement();
+    public CasesLeft narrowing() {
+        return ((Step.Refine) requireNarrowing().get(steps.size() - 1)).cases();
+    }
+
+    /**
+     * Where the value this path reads stands: this path with every narrowing to several cases taken
+     * out.
+     *
+     * <p>A position is held at each case of a sum and at the sum, and at no set of its cases: a
+     * value left {@code Station} or {@code Hospital} is the value at the sum's position, narrowed,
+     * and its {@code code} is the name {@code code} read at the sum — the name the cases holding it
+     * stand at, one under each ({@link NameReach#standingOf}). That the value was left those cases
+     * is what the way to it says, and no part of which value it is. So a reader asking where a
+     * value stands, or which position a fork on it is about, asks it of this; a narrowing to one
+     * case is kept, since the case's position is a position of its own.
+     */
+    public TermPath position() {
+        List<Step> kept = new ArrayList<>();
+        for (Step step : steps) {
+            if (!(step instanceof Step.Refine refine && refine.cases().only() == null)) {
+                kept.add(step);
+            }
+        }
+        return kept.size() == steps.size() ? this : new TermPath(head, kept);
     }
 
     private List<Step> requireNarrowing() {
@@ -259,10 +327,10 @@ public record TermPath(String head, List<Step> steps) {
         return steps;
     }
 
-    /** Whether any step of this reaches inside a sequence. */
-    public boolean insideASequence() {
+    /** Whether any step of this reaches inside a container. */
+    public boolean insideAContainer() {
         for (Step step : steps) {
-            if (reachesInsideASequence(step)) {
+            if (reachesInsideAContainer(step)) {
                 return true;
             }
         }
@@ -270,16 +338,18 @@ public record TermPath(String head, List<Step> steps) {
     }
 
     /**
-     * Whether {@code step} goes inside a collection.
+     * Whether {@code step} goes inside a container.
      *
      * <p>Exhaustive over {@link Step}, with no {@code default}, and the one place the question is
      * decided. Three readers ask it — whether this position is inside one at all, which one a clause
      * can name, and which ones have to hold a value for it to exist — and a step added later would
      * have joined whichever side each reader's condition happened to leave it on.
      */
-    private static boolean reachesInsideASequence(Step step) {
+    private static boolean reachesInsideAContainer(Step step) {
         return switch (step) {
-            case Step.Element _ -> true;
+            // What a container holds, and the keys a map files it under: either is there only where
+            // the container holds something.
+            case Step.Element _, Step.Key _ -> true;
             // A field goes into the value and a narrowing stays at it. Neither is a container's
             // contents, so neither puts the position inside one.
             case Step.Field _, Step.Refine _ -> false;
@@ -310,7 +380,7 @@ public record TermPath(String head, List<Step> steps) {
      * are being read, and putting it in {@link #ruleKey} would make this path know that too.
      *
      * <p>The one way a position becomes a name. Which of the steps below the root are names is
-     * decided here and nowhere else — a step into a sequence and a narrowing to a case are places
+     * decided here and nowhere else — a step into a container and a narrowing to a case are places
      * a value can be and are not names any rule writes — so a name is never assembled out of the
      * steps by anybody who would have to remember that.
      *
@@ -320,19 +390,39 @@ public record TermPath(String head, List<Step> steps) {
      */
     public RuleKey ruleKeyUnder(TermPath root) {
         List<Step> below = below(root);
-        if (below == null) {
-            return null;
-        }
+        return below == null ? null : ruleKeyOf(below);
+    }
+
+    /**
+     * The name the rules of a value call what {@code steps} reach below it, or null where none of
+     * them can name it: {@link #ruleKeyUnder} asked of steps that stand below a value no path is
+     * rooted at, such as one a body bound to a name.
+     */
+    public static RuleKey ruleKeyOf(List<Step> steps) {
         List<String> named = new ArrayList<>();
-        for (Step step : below) {
+        for (Step step : steps) {
             switch (step) {
                 case Step.Field field -> named.add(field.name());
-                case Step.Element _, Step.Refine _ -> {
+                case Step.Element _, Step.Key _, Step.Refine _ -> {
                     return null;
                 }
             }
         }
         return new RuleKey(named);
+    }
+
+    /**
+     * The position as far under {@code to} as this is under {@code from}, or null where this is
+     * not under {@code from}: the same place inside another value of the same shape.
+     */
+    public TermPath movedFrom(TermPath from, TermPath to) {
+        List<Step> below = below(from);
+        if (below == null) {
+            return null;
+        }
+        List<Step> moved = new ArrayList<>(to.steps);
+        moved.addAll(below);
+        return new TermPath(to.head, moved);
     }
 
     /** The steps of this below {@code root}, or null where this is not under it. */
@@ -341,15 +431,15 @@ public record TermPath(String head, List<Step> steps) {
     }
 
     /**
-     * The sequence this position is inside, or this path where it is inside none.
+     * The outermost container this position is inside, or this path where it is inside none.
      *
-     * <p>Up to the first element step, which is the container a clause of the value can name — what
-     * is written about what a list holds is written about the list. A position two sequences deep
-     * answers with the outer one, since that is where the naming stops either way.
+     * <p>Up to the first step inside a container, which is the container a clause of the value can
+     * name — what is written about what a list holds is written about the list. A position two
+     * containers deep answers with the outer one, since that is where the naming stops either way.
      */
-    public TermPath containingSequence() {
+    public TermPath outermostContainer() {
         for (int i = 0; i < steps.size(); i++) {
-            if (reachesInsideASequence(steps.get(i))) {
+            if (reachesInsideAContainer(steps.get(i))) {
                 return new TermPath(head, steps.subList(0, i));
             }
         }
@@ -357,17 +447,18 @@ public record TermPath(String head, List<Step> steps) {
     }
 
     /**
-     * Every sequence this position stands inside, outermost first.
+     * Every container this position stands inside, outermost first.
      *
-     * <p>One per element step. A position two sequences deep stands inside both, and a value stands
-     * at it only where each of them holds something — so a reader asking what has to hold a value
-     * for this one to exist is owed all of them. {@link #containingSequence} answers with the first
-     * and is asked the other question: which container a clause of the value can name.
+     * <p>One per step inside a container. A position two containers deep stands inside both, and a
+     * value stands at it only where each of them holds something — so a reader asking what has to
+     * hold a value for this one to exist is owed all of them. {@link #outermostContainer} answers
+     * with the first and is asked the other question: which container a clause of the value can
+     * name.
      */
-    public List<TermPath> sequencesContainingIt() {
+    public List<TermPath> containersHoldingIt() {
         List<TermPath> out = new ArrayList<>();
         for (int i = 0; i < steps.size(); i++) {
-            if (reachesInsideASequence(steps.get(i))) {
+            if (reachesInsideAContainer(steps.get(i))) {
                 out.add(new TermPath(head, steps.subList(0, i)));
             }
         }
@@ -379,7 +470,7 @@ public record TermPath(String head, List<Step> steps) {
      * this is rooted at can name it.
      *
      * <p>Null for two unlike reasons, and both of them are the same shape of answer. The clauses of
-     * a record relate the fields of that record, and a position inside a sequence is not one of
+     * a record relate the fields of that record, and a position inside a container is not one of
      * them — {@code items.charge} is a field of what a list holds, and no clause of the record
      * holding the list is written at that name. And a clause is not written across a refinement
      * either: what a {@code GlobalQuery} says about its {@code tag} is written in
@@ -429,9 +520,10 @@ public record TermPath(String head, List<Step> steps) {
                 }
                 out.append(field);
             }
-            // Neither wears a separator: what a list holds follows the list, and a narrowing of a
-            // position follows the position, and a dot before either would read as a field of it.
-            case Step.Element _, Step.Refine _ ->
+            // None wears a separator: what a container holds and the keys a map files it under
+            // follow the container, a narrowing of a position follows the position, and a dot
+            // before any of them would read as a field of it.
+            case Step.Element _, Step.Key _, Step.Refine _ ->
                     out.append(discriminating ? step.discriminated() : step.toString());
         }
     }

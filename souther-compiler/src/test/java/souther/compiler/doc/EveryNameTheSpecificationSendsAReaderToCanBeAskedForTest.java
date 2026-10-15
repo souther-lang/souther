@@ -182,6 +182,16 @@ class EveryNameTheSpecificationSendsAReaderToCanBeAskedForTest {
         assertEquals(2, spec.sections().size(), "and it is not a section of its own");
     }
 
+    /**
+     * A paragraph anchor borrows the extent of the section around it, so a reader asking for imports
+     * as a paragraph would be handed the rules about the exposed surface first. The import rules are
+     * a section of their own, and that is what a reader asking for them gets.
+     */
+    @Test
+    void importsIsASectionOfItsOwn() {
+        assertEquals("imports", SpecDocument.bundled().section("imports").anchor());
+    }
+
     @Test
     void theBodyOfASectionStopsBeforeTheAttributesOfTheNextOne() {
         SpecDocument spec = SpecDocument.of("""

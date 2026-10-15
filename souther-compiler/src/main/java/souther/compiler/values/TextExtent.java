@@ -1,7 +1,7 @@
 package souther.compiler.values;
 
 import souther.compiler.numeric.Text;
-import souther.compiler.regex.Meter;
+import net.unit8.notation199x.pattern.Meter;
 
 /**
  * Where the strings one rule admits begin and end on the order they are measured on, or why that

@@ -16,6 +16,7 @@ final class HandBuiltBodies {
 
     /** {@code bodies} as the behaviors of the module {@code module}, calling no method. */
     static ModuleBodies ofBehaviors(String module, Map<String, Core> bodies) {
-        return new ModuleBodies(module, new LinkedHashMap<>(bodies), new LinkedHashMap<>());
+        return new ModuleBodies(module, new LinkedHashMap<>(bodies), new LinkedHashMap<>(),
+                new LinkedHashMap<>());
     }
 }

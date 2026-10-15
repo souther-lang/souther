@@ -61,9 +61,14 @@ public record ReadingReasons(CanonicalSelection<ReadingGap> eachKindOnce,
      * out is the written order with what was met kept, and a second caller reaches the same value
      * as the first. No caller puts anything in order, so there is no second place for the order to
      * be decided in.
+     *
+     * <p>An observation's code met at two figures is one reason met at both, and is made one
+     * before it is placed: the order has one place per code, and the figures are what the one
+     * reason says a wider run would widen.
      */
     public static ReadingReasons of(Collection<ReadingGap> met,
                                     StandingAtAPoint.ReadingsTried tried) {
-        return new ReadingReasons(PublicationOrders.READING_GAPS.keep(met), tried);
+        return new ReadingReasons(
+                PublicationOrders.READING_GAPS.keep(ReadingGap.eachObservationOnce(met)), tried);
     }
 }

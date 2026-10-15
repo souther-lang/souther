@@ -5,6 +5,9 @@ import java.util.BitSet;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import net.unit8.notation199x.pattern.Automaton;
+import net.unit8.notation199x.pattern.CodePoints;
+import net.unit8.notation199x.pattern.Meter;
 
 /**
  * The strings' own order, asked of a language.
@@ -75,7 +78,7 @@ final class RuntimeOrder {
         steps.add(new ArrayList<>(List.of(new Automaton.Step(CodePoints.EVERYTHING, 0))));
         BitSet accepting = new BitSet();
         accepting.set(0);
-        Automaton one = Automaton.madeOf(steps, accepting).canonical(new Meter(16, 64));
+        Automaton one = Automaton.madeOf(steps, accepting).canonical(new Meter(16, 64, 1024));
         if (one == null) {
             throw new IllegalStateException("the machine for every string is one state");
         }

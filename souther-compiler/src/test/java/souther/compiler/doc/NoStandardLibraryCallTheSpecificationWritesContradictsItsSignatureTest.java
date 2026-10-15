@@ -3,6 +3,7 @@ package souther.compiler.doc;
 import org.junit.jupiter.api.Test;
 import souther.compiler.DefaultStdlib;
 import souther.compiler.Reserved;
+import souther.compiler.stdlib.Stdlib.PublishedSignature;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
@@ -296,12 +297,12 @@ class NoStandardLibraryCallTheSpecificationWritesContradictsItsSignatureTest {
     private static List<Finding> findings(String adoc) {
         NavigableMap<Integer, Declared> declared = declarationsByRegion(adoc);
         NavigableMap<Integer, String> anchors = anchorsByOffset(adoc);
-        Map<String, ApiCommand.Signature> surface = ApiCommand.surface(DefaultStdlib.get());
+        Map<String, PublishedSignature> surface = DefaultStdlib.get().publishedSurface();
         List<Finding> found = new ArrayList<>();
         for (Call call : callsIn(adoc)) {
             String anchor = anchors.floorEntry(call.at()) == null ? ""
                     : anchors.floorEntry(call.at()).getValue();
-            ApiCommand.Signature signature = surface.get(call.name());
+            PublishedSignature signature = surface.get(call.name());
             if (signature == null) {
                 found.add(call.saying(anchor, "names nothing the standard library publishes"));
                 continue;
@@ -350,7 +351,7 @@ class NoStandardLibraryCallTheSpecificationWritesContradictsItsSignatureTest {
      * a list literal, a construction and a library name declaring no parameter list are not. A name
      * nothing here declares — or one a binding of the same region has also taken — settles nothing.
      */
-    private static Kind kindOf(String argument, Declared here, Map<String, ApiCommand.Signature> surface) {
+    private static Kind kindOf(String argument, Declared here, Map<String, PublishedSignature> surface) {
         String written = argument.strip();
         if (arrowAt(written) >= 0 || GETTER.matcher(written).matches()) {
             return Kind.FUNCTION;
@@ -362,7 +363,7 @@ class NoStandardLibraryCallTheSpecificationWritesContradictsItsSignatureTest {
             if (here.functions().contains(written)) {
                 return here.bindings().contains(written) ? Kind.UNDECIDED : Kind.FUNCTION;
             }
-            ApiCommand.Signature published = surface.get(written);
+            PublishedSignature published = surface.get(written);
             if (published != null) {
                 return published.paramNames().isEmpty() ? Kind.NOT_A_FUNCTION : Kind.FUNCTION;
             }

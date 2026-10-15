@@ -54,7 +54,8 @@ class AConditionOnTheWayNobodyPlacedSaysWhetherAFigureStoppedItTest {
 
         assertEquals(Set.of(CompositionBudget.VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT),
                 assertInstanceOf(NumericWitness.Standing.NotFound.class, standing,
-                        "the second position has no order, so no pair stands anywhere").stoppedBy(),
+                        "the second position has no order, so no pair stands anywhere")
+                        .met().figures(),
                 "and the walk stopped at how many values a position on the way is tried at");
     }
 
@@ -89,7 +90,7 @@ class AConditionOnTheWayNobodyPlacedSaysWhetherAFigureStoppedItTest {
                 NumericWitness.of(new ARunOfThisMany(many), List.of(WIDE, NOWHERE),
                         term -> term == NOWHERE ? null : Carrier.WHOLE,
                         NothingTheDeclarationsNarrow.LOOKING),
-                "every value of the run leads nowhere, so no pair stands").stoppedBy();
+                "every value of the run leads nowhere, so no pair stands").met().figures();
     }
 
     /**
@@ -105,7 +106,7 @@ class AConditionOnTheWayNobodyPlacedSaysWhetherAFigureStoppedItTest {
 
         assertEquals(Set.of(),
                 assertInstanceOf(NumericWitness.Standing.NotFound.class, standing,
-                        "there is nothing for the position to stand on").stoppedBy(),
+                        "there is nothing for the position to stand on").met().figures(),
                 "and nothing was stopped, which is not the same as having been stopped by nothing");
     }
 
@@ -127,7 +128,8 @@ class AConditionOnTheWayNobodyPlacedSaysWhetherAFigureStoppedItTest {
     @Test
     void whatItHandsOverIsAConditionAndNeverAPointNothingWasComposedFor() {
         ReachabilityGap.Why why = ReachabilityGap.Why.TheWalkForItsPositionsWasStopped.by(
-                Set.of(CompositionBudget.VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT), Set.of());
+                CompositionShortfall.of(
+                        Set.of(CompositionBudget.VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT)));
 
         assertEquals(List.of(CompositionBudget.VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT),
                 ((ReachabilityGap.Why.TheWalkForItsPositionsWasStopped) why).by().written(),

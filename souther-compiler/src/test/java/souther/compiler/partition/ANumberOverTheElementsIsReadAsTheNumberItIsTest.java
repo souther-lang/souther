@@ -1,0 +1,188 @@
+package souther.compiler.partition;
+
+import org.junit.jupiter.api.Test;
+
+import souther.compiler.check.AnalysisBody;
+import souther.compiler.check.ElementBindings;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
+import souther.compiler.inputs.InputDomain;
+import souther.compiler.inputs.InputReading;
+import souther.compiler.inputs.InputReads;
+import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.DecisionAtom;
+import souther.compiler.meaning.DecisionSubject;
+import souther.compiler.meaning.Proposition;
+import souther.compiler.meaning.Quantity;
+import souther.compiler.meaning.Relation;
+import souther.compiler.numeric.LinearForm;
+import souther.compiler.query.Adequacy;
+import souther.compiler.query.Bodies;
+import souther.compiler.query.Compilation;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+
+/**
+ * How many an operation answers, where its law says that is a number taken over the elements of
+ * what it was handed, is read as that number: how many different values they come to, or what a
+ * number of each adds up to — over the position the container stands at — and not as some other
+ * number, or as nothing.
+ *
+ * <p>What a row is asked is then that number against the other side, which no composer writes a
+ * container toward, so the run decides it; the statement is the one the law says.
+ */
+class ANumberOverTheElementsIsReadAsTheNumberItIsTest {
+
+    private static final String MODEL = """
+            module probe.overElements
+
+            data Shelf = { codes: List<Int>, bins: List<List<Int>> }
+
+            behavior varied : (s: Shelf) -> Bool
+            let varied (s) = List.length(List.distinct(s.codes)) >= 2
+
+            behavior stocked : (s: Shelf) -> Bool
+            let stocked (s) = List.length(List.concat(s.bins)) >= 3
+
+            data Item = { code: Int, bins: List<Int> }
+
+            behavior variedItems : (items: List<Item>) -> Bool
+            let variedItems (items) = List.length(List.distinct(List.map(.code, items))) >= 2
+
+            behavior stockedItems : (items: List<Item>) -> Bool
+            let stockedItems (items) =
+                List.length(List.concat(List.map(.bins, items))) >= 3
+
+            behavior variedOfSome : (items: List<Item>) -> Bool
+            let variedOfSome (items) = List.length(List.distinct(
+                List.map(.code, List.filter(i -> i.code > 0, items)))) >= 2
+
+            behavior variedWorkedOut : (items: List<Item>) -> Bool
+            let variedWorkedOut (items) =
+                List.length(List.distinct(List.map(i -> i.code + 1, items))) >= 2
+
+            """;
+
+    private static final TermPath CODES = TermPath.of("s").then("codes");
+    private static final TermPath BINS = TermPath.of("s").then("bins");
+    private static final TermPath ITEMS = TermPath.of("items");
+
+    @Test
+    void howManyADistinctListHoldsIsHowManyDifferentValuesTheListHolds() {
+        Quantity read = theOnlyNumber("varied");
+        assertEquals(new Quantity.HowManyDifferent(new DecisionSubject.AnInput(CODES),
+                new DecisionSubject.AnInput(CODES.element())), read);
+    }
+
+    @Test
+    void howManyListsPutEndToEndHoldIsWhatTheirSizesAddUpTo() {
+        Quantity.SumOver read = assertInstanceOf(Quantity.SumOver.class, theOnlyNumber("stocked"));
+        assertEquals(new DecisionSubject.AnInput(BINS), read.container());
+        NumericTerm.TakenOf size = assertInstanceOf(NumericTerm.TakenOf.class,
+                assertInstanceOf(DecisionAtom.OfTheInput.class, read.ofTheElement()).term());
+        assertEquals(BINS.element(), size.subjectPath(), () -> "the size of each list: " + read);
+    }
+
+    @Test
+    void howManyDifferentValuesAMappedListHoldsIsHowManyDifferentValuesOfWhatIsTakenOfEach() {
+        assertEquals(new Quantity.HowManyDifferent(new DecisionSubject.AnInput(ITEMS),
+                new DecisionSubject.AnInput(ITEMS.element().then("code"))),
+                theOnlyNumber("variedItems"));
+    }
+
+    @Test
+    void whatTheListsOfAMappedListAddUpToIsWhatTheirSizesInTheSourceAddUpTo() {
+        Quantity.SumOver read = assertInstanceOf(Quantity.SumOver.class,
+                theOnlyNumber("stockedItems"));
+        assertEquals(new DecisionSubject.AnInput(ITEMS), read.container());
+        NumericTerm.TakenOf size = assertInstanceOf(NumericTerm.TakenOf.class,
+                assertInstanceOf(DecisionAtom.OfTheInput.class, read.ofTheElement()).term());
+        assertEquals(ITEMS.element().then("bins"), size.subjectPath(),
+                () -> "the size of each list: " + read);
+    }
+
+    /**
+     * Which of the elements a filter kept is a number of those, which no quantity of the
+     * container says; and what a closure worked out of an element is no place of the input.
+     */
+    @Test
+    void aNumberOfSomeOfTheElementsOrOfAValueWorkedOutOfThemIsNoNumberOfTheContainer() {
+        assertEquals(List.of(), numbersAsked("variedOfSome"));
+        assertEquals(List.of(), numbersAsked("variedWorkedOut"));
+    }
+
+    /** Every number the conditions {@code behavior} writes are compared over, as the run is asked
+     *  them. */
+    private static List<Quantity> numbersAsked(String behavior) {
+        List<Quantity> out = new ArrayList<>();
+        for (OnTheWay each : statedAll(behavior)) {
+            if (each instanceof OnTheWay.TakenIn taken
+                    && taken.demand() instanceof RowDemand.ForTheRun run
+                    && run.statement() instanceof Proposition.Compared compared
+                    && compared.relation() instanceof Relation.Affine affine) {
+                out.addAll(affine.form().coefs().keySet());
+            }
+        }
+        return out;
+    }
+
+    /** The one number besides constants the condition {@code behavior} writes is compared over,
+     *  as the run is asked it. */
+    private static Quantity theOnlyNumber(String behavior) {
+        List<OnTheWay> stated = statedAll(behavior);
+        assertEquals(1, stated.size(), () -> "one statement: " + stated);
+        RowDemand.ForTheRun run = assertInstanceOf(RowDemand.ForTheRun.class,
+                assertInstanceOf(OnTheWay.TakenIn.class, stated.getFirst()).demand(),
+                () -> "the run decides it: " + stated);
+        assertEquals(RowDemand.NoComposer.A_NUMBER_OVER_ELEMENTS, run.why());
+        Proposition.Compared compared = assertInstanceOf(Proposition.Compared.class,
+                run.statement());
+        LinearForm<Quantity> form = assertInstanceOf(Relation.Affine.class,
+                compared.relation()).form();
+        assertEquals(1, form.coefs().size(), () -> "one number: " + form);
+        return form.coefs().keySet().iterator().next();
+    }
+
+    private static List<OnTheWay> statedAll(String behavior) {
+        Bodies.Elaborated checked =
+                COMPILATION.db().ask(new Bodies.Checked(module())).value();
+        assertNotNull(checked, () -> "the model under test compiles: "
+                + COMPILATION.diagnostics().values().stream().flatMap(List::stream)
+                .map(each -> each.diagnostic().code() + " " + each.diagnostic().said())
+                .toList());
+        AnalysisBody analysis = checked.analysisBodies().get(behavior);
+        InputDomain inputs = COMPILATION.db().ask(new Adequacy.Inputs(module())).value()
+                .get(behavior);
+        InputReading reading = inputs.reading(rules());
+        InputReads reads = InputReads.ofParametersWhereCallsStand(inputs.parameterReads(),
+                reading.declared(), ElementBindings.of(analysis, rules().newtypes()),
+                inputs.dependencies());
+        return ReachingCuts.stating(Condition.of(analysis.core(), reads, rules().symbols(),
+                        rules().newtypes(), new ConditionNumbering(module(), behavior,
+                                ConditionOccurrence.Reading.DIVIDING)),
+                reading, true, WhatConditionsState.of(reading)).entries();
+    }
+
+    private static final Compilation COMPILATION = compiled();
+
+    private static Compilation compiled() {
+        Compilation made = Compilation.ofSource(MODEL, "Main");
+        made.measure(Adequacy.Asked.fullReport());
+        made.answerEverything();
+        return made;
+    }
+
+    private static String module() {
+        return COMPILATION.modules().getFirst();
+    }
+
+    private static RuleReadingSource rules() {
+        return RuleReadings.of(COMPILATION, module());
+    }
+}

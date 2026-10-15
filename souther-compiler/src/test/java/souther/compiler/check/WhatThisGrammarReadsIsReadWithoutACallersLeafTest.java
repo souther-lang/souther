@@ -111,18 +111,8 @@ class WhatThisGrammarReadsIsReadWithoutACallersLeafTest {
             }
 
             @Override
-            public PublishedDeclarations published() {
-                return PublishedDeclarations.NONE;
-            }
-
-            @Override
-            public DeclarationKinds kinds() {
-                return DeclarationKinds.NONE;
-            }
-
-            @Override
-            public NewtypeInners inners() {
-                return NewtypeInners.NONE;
+            public DeclarationAccess declarations() {
+                return DeclarationAccess.NONE;
             }
 
             @Override
@@ -137,14 +127,14 @@ class WhatThisGrammarReadsIsReadWithoutACallersLeafTest {
             }
 
             @Override
-            public AffineForms.ReadThrough<String> readThrough(Core.Read read, String at) {
+            public ValueStanding.ReadThrough<String> readThrough(Core.Read read, String at) {
                 return null;
             }
 
             /** No name here stands for several values either: what is being shown is that the
              *  grammar reads these shapes with an environment that answers nothing. */
             @Override
-            public java.util.List<AffineForms.ReadThrough<String>> alternativesOf(Core.Read read,
+            public java.util.List<ValueStanding.ReadThrough<String>> alternativesOf(Core.Read read,
                                                                                   String at) {
                 return null;
             }

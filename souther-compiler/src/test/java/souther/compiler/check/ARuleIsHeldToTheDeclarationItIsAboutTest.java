@@ -2,11 +2,17 @@ package souther.compiler.check;
 
 import souther.compiler.DefaultStdlib;
 import souther.compiler.core.CompleteSignature;
+import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.Rel;
 import souther.compiler.semantics.AnswerAspect;
 import souther.compiler.semantics.ArgumentRef;
 import souther.compiler.semantics.BuiltFrom;
 import souther.compiler.semantics.ElementLineage;
-import souther.compiler.semantics.OperationFact;
+import souther.compiler.semantics.LawNumber;
+import souther.compiler.semantics.LawProposition;
+import souther.compiler.semantics.LawSubject;
+import souther.compiler.semantics.OperationLaw;
+import souther.compiler.semantics.SideAnswered;
 import souther.compiler.semantics.SizeAgainstItsSource;
 import souther.compiler.types.ValueName;
 
@@ -55,76 +61,156 @@ class ARuleIsHeldToTheDeclarationItIsAboutTest {
                 "the container something is built from");
     }
 
-    /** A rule saying a side of the answer turns on whether an argument holds, bound to the
-     *  declaration it is about. */
-    private static void bindTurnsOn(String operation,
-                                    AnswerAspect aspect,
-                                    ArgumentRef argument) {
-        CompleteSignature declaration = declared(operation);
-        OperationFactBinder.holdTurnsOn(declaration, declaration.declaring(),
-                new OperationFact.TurnsOnWhetherAnArgumentHolds(
-                        aspect, argument));
+    /**
+     * A key decides how many {@code List.distinctBy} answers and never whether it answers any, and
+     * it answers whichever value it projects rather than a truth — so no element is a witness of
+     * its answer by its key holding, and a law saying so is refused where it meets the signature.
+     * Read as one, a rule inside the key would be credited with deciding whether the answer is
+     * empty, and a model nothing read would come back read.
+     */
+    @Test
+    void aKeyIsNoWitness() {
+        IllegalStateException key = assertThrows(IllegalStateException.class,
+                () -> bindWitness("List.distinctBy", AnswerAspect.EMPTINESS,
+                        new SideAnswered(AnswerAspect.TRUTH, true)));
+        assertTrue(key.getMessage().contains("has no TRUTH"), key.getMessage());
     }
 
     /**
-     * A closure that answers something other than a truth decides no "whether it holds".
-     *
-     * <p>The two the library has are the ones this compiler must not credit. {@code List.distinctBy}
-     * answers fewer where its key sends two elements to one, so the key does decide a count — and a
-     * key answers whichever value it projects rather than holding or not. {@code List.filterMap}
-     * answers fewer where its closure answered nothing, and what decides that is whether a value is
-     * there, which is not a truth either.
-     *
-     * <p>Written as this fact, both would be followed as one: a rule inside such a closure would be
-     * credited with deciding whether the answer is empty, and a model nothing read would come back
-     * read. So they are refused where the fact meets the signature.
+     * A count of whole units is read by the order the two values are counted on: how far apart two
+     * of them can be is that order's first value and its last, and a threshold past it is settled
+     * by that. A fact declared over values that are not counted, or are not of one order, is a
+     * claim the reading cannot stand on, and it is refused where it meets the signature.
      */
     @Test
-    void aClosureAnsweringSomethingOtherThanATruthIsRefused() {
-        IllegalStateException key = assertThrows(IllegalStateException.class,
-                () -> bindTurnsOn("List.distinctBy",
-                        AnswerAspect.EMPTINESS,
-                        new ArgumentRef.TheClosure()));
-        assertTrue(key.getMessage().contains("whether it holds is not something to read"),
-                key.getMessage());
-
-        IllegalStateException optional = assertThrows(IllegalStateException.class,
-                () -> bindTurnsOn("List.filterMap",
-                        AnswerAspect.EMPTINESS,
-                        new ArgumentRef.TheClosure()));
-        assertTrue(optional.getMessage().contains("whether it holds is not something to read"),
-                optional.getMessage());
+    void aCountOfUnitsBetweenValuesThatAreNotOfOneCountedOrderIsRefused() {
+        CompleteSignature declaration = declared("Decimal.toInt");
+        assertThrows(IllegalStateException.class, () -> OperationFactBinder.holdCountOfWholeUnits(
+                declaration, new souther.compiler.semantics.OperationFact.CountsWholeUnitsBetween(
+                        new ArgumentRef.At(0), new ArgumentRef.At(1), 60)));
     }
 
-    /** And a side of the answer the answer does not have. */
+    private static final ArgumentRef CONTAINER = new ArgumentRef.TheContainer();
+    private static final ArgumentRef CLOSURE = new ArgumentRef.TheClosure();
+
+    /** A law that the answer comes out on {@code result} where some element's answer comes out
+     *  as {@code ofTheClosure}, bound to the declaration it is about. */
+    private static void bindWitness(String operation, AnswerAspect result,
+                                    SideAnswered ofTheClosure) {
+        bindLaw(operation, result, new LawProposition.SomeElement<>(CONTAINER,
+                new LawProposition.Observed<>(new LawSubject.WhatTheClosureAnswers<>(CLOSURE),
+                        ofTheClosure), true));
+    }
+
+    private static void bindLaw(String operation, AnswerAspect result,
+                                LawProposition<ArgumentRef> equivalentTo) {
+        CompleteSignature declaration = declared(operation);
+        OperationFactBinder.holdLaw(declaration, declaration.declaring(),
+                new OperationLaw.Observation<>(result, equivalentTo));
+    }
+
+    /** An operation walking no container with a closure has no element to witness anything. */
     @Test
-    void aSideTheAnswerDoesNotHaveIsRefused() {
+    void aWitnessOfAnOperationThatWalksNothingIsRefused() {
+        IllegalStateException e = assertThrows(IllegalStateException.class,
+                () -> bindWitness("List.reverse", AnswerAspect.EMPTINESS,
+                        new SideAnswered(AnswerAspect.TRUTH, true)));
+        assertTrue(e.getMessage().contains("List.reverse"), e.getMessage());
+    }
+
+    /**
+     * A side the result does not have, or a side the closure's answer does not have, is a law about
+     * something that is not there — read anyway, it would carry a statement back to one the model
+     * never made.
+     */
+    @Test
+    void aWitnessOnASideThatIsNotThereIsRefused() {
+        IllegalStateException result = assertThrows(IllegalStateException.class,
+                () -> bindWitness("List.filter", AnswerAspect.TRUTH,
+                        new SideAnswered(AnswerAspect.TRUTH, true)));
+        assertTrue(result.getMessage().contains("what List.filter answers is"),
+                result.getMessage());
+
+        IllegalStateException present = assertThrows(IllegalStateException.class,
+                () -> bindWitness("List.filter", AnswerAspect.EMPTINESS,
+                        new SideAnswered(AnswerAspect.PRESENCE, true)));
+        assertTrue(present.getMessage().contains("has no PRESENCE"), present.getMessage());
+
         IllegalStateException truth = assertThrows(IllegalStateException.class,
-                () -> bindTurnsOn("List.filter",
-                        AnswerAspect.TRUTH,
-                        new ArgumentRef.TheClosure()));
-        assertTrue(truth.getMessage().contains("no truth for an argument to decide"),
-                truth.getMessage());
-
-        IllegalStateException empty = assertThrows(IllegalStateException.class,
-                () -> bindTurnsOn("List.any",
-                        AnswerAspect.EMPTINESS,
-                        new ArgumentRef.TheClosure()));
-        assertTrue(empty.getMessage().contains("holds nothing for an argument to decide"),
-                empty.getMessage());
+                () -> bindWitness("List.filterMap", AnswerAspect.EMPTINESS,
+                        new SideAnswered(AnswerAspect.TRUTH, true)));
+        assertTrue(truth.getMessage().contains("has no TRUTH"), truth.getMessage());
     }
 
-    /** And the ones the library really does state, which bind. */
+    /** And the laws of the shapes the library states, which bind. */
     @Test
-    void theOnesTheLibraryStatesBind() {
-        assertDoesNotThrow(() -> bindTurnsOn("List.filter",
-                AnswerAspect.EMPTINESS,
-                new ArgumentRef.TheClosure()));
-        assertDoesNotThrow(() -> bindTurnsOn("List.any",
-                AnswerAspect.TRUTH,
-                new ArgumentRef.TheClosure()));
-        assertDoesNotThrow(() -> bindTurnsOn("Bool.not",
-                AnswerAspect.TRUTH, new ArgumentRef.At(0)));
+    void theWitnessesTheLibraryStatesBind() {
+        assertDoesNotThrow(() -> bindWitness("List.filterMap", AnswerAspect.EMPTINESS,
+                new SideAnswered(AnswerAspect.PRESENCE, true)));
+        assertDoesNotThrow(() -> bindWitness("List.flatMap", AnswerAspect.EMPTINESS,
+                new SideAnswered(AnswerAspect.EMPTINESS, true)));
+        assertDoesNotThrow(() -> bindWitness("Map.filterEntries", AnswerAspect.EMPTINESS,
+                new SideAnswered(AnswerAspect.TRUTH, true)));
+        assertDoesNotThrow(() -> bindWitness("List.all", AnswerAspect.TRUTH,
+                new SideAnswered(AnswerAspect.TRUTH, false)));
+    }
+
+    /**
+     * Whether an answer holds anything is asked of the answer and of what the law observes, so an
+     * operation answering nothing that holds anything, or an argument observed on a side it does
+     * not have, is refused — and a string has the side as much as a container does.
+     */
+    @Test
+    void whatHoldsSomethingIsAContainerOrAString() {
+        IllegalStateException answer = assertThrows(IllegalStateException.class,
+                () -> bindLaw("List.length", AnswerAspect.EMPTINESS, holdsSomething(at(0))));
+        assertTrue(answer.getMessage().contains("what List.length answers is"),
+                answer.getMessage());
+        IllegalStateException source = assertThrows(IllegalStateException.class,
+                () -> bindLaw("List.take", AnswerAspect.EMPTINESS, holdsSomething(at(0))));
+        assertTrue(source.getMessage().contains("has no EMPTINESS"), source.getMessage());
+        assertDoesNotThrow(() -> bindLaw("Set.fromList", AnswerAspect.EMPTINESS,
+                holdsSomething(at(0))));
+        assertDoesNotThrow(() -> bindLaw("String.lowercase", AnswerAspect.EMPTINESS,
+                holdsSomething(at(0))));
+    }
+
+    /**
+     * An element is named only inside a statement about some element of its container, and a
+     * container is not quantified inside itself: the element would be two elements under one name.
+     */
+    @Test
+    void anElementIsNamedOnlyWhereSomeElementOfItsContainerIs() {
+        IllegalStateException outside = assertThrows(IllegalStateException.class,
+                () -> bindLaw("List.concat", AnswerAspect.EMPTINESS,
+                        new LawProposition.Observed<>(new LawSubject.ElementOf<>(at(0)),
+                                new SideAnswered(AnswerAspect.EMPTINESS, true))));
+        assertTrue(outside.getMessage().contains("outside a statement about some element"),
+                outside.getMessage());
+        IllegalStateException twice = assertThrows(IllegalStateException.class,
+                () -> bindLaw("Set.union", AnswerAspect.EMPTINESS,
+                        new LawProposition.SomeElement<>(at(0), new LawProposition.SomeElement<>(
+                                at(0), holdsSomething(at(1)), true), true)));
+        assertTrue(twice.getMessage().contains("inside a statement about one of them"),
+                twice.getMessage());
+    }
+
+    /** A number a law compares is a number. */
+    @Test
+    void aNumberALawComparesIsANumber() {
+        IllegalStateException e = assertThrows(IllegalStateException.class,
+                () -> bindLaw("List.take", AnswerAspect.EMPTINESS, new LawProposition.Compared<>(
+                        LinearForm.atom(new LawNumber.AnArgument<>(at(1))), Rel.GE)));
+        assertTrue(e.getMessage().contains("not a number"), e.getMessage());
+    }
+
+    private static ArgumentRef at(int position) {
+        return new ArgumentRef.At(position);
+    }
+
+    private static LawProposition<ArgumentRef> holdsSomething(ArgumentRef argument) {
+        return new LawProposition.Observed<>(new LawSubject.Argument<>(argument),
+                new SideAnswered(AnswerAspect.EMPTINESS, true));
     }
 
     @Test
@@ -150,7 +236,7 @@ class ARuleIsHeldToTheDeclarationItIsAboutTest {
         // `List.contains(value, xs)` applies no closure, so there is no container it hands one.
         IllegalStateException e = assertThrows(IllegalStateException.class,
                 () -> bindCarried("List.contains", new ArgumentRef.TheContainer()));
-        assertTrue(e.getMessage().contains("hands one nothing a container holds"), e.getMessage());
+        assertTrue(e.getMessage().contains("puts no closure beside a container"), e.getMessage());
     }
 
     @Test

@@ -92,7 +92,8 @@ class AClauseOnePartOfWhichCannotBeReadIsStoppedWholeTest {
                 "what the position admits where no rule was written");
         assertEquals(
                 "AdmissibleSet[approximation=Cofinite[excluded=[]],"
-                        + " completeness=Wider[why=[RuleUnread[why=NOT_REACHED]]]]",
+                        + " completeness=Wider[why=[RuleUnread[stopped=StoppedReading["
+                        + "why=NOT_REACHED, stoppedAt=[]]]]]]",
                 String.valueOf(read(STANDING, "value >= 1 && step(value) >= 0")
                         .admits(RuleKey.THE_VALUE)),
                 "and where a clause one part of which could not be read stopped");

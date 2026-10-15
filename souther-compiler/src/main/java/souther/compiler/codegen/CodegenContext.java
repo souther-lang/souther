@@ -1,15 +1,24 @@
 package souther.compiler.codegen;
 
 import souther.compiler.check.AtomSpace;
+import souther.compiler.core.Core;
 import souther.compiler.core.EnsuresEnforcement;
+import souther.compiler.coverage.ConditionOutcomeSite;
+import souther.compiler.coverage.CoverageSites;
+import souther.compiler.coverage.RunSite;
 import souther.compiler.core.Kernel;
 import souther.compiler.core.KernelSignature;
 import souther.compiler.core.KernelSignatures;
 import souther.compiler.core.ValueShape;
+import souther.compiler.Reserved;
 import souther.compiler.check.DerivedSymbols;
 import souther.compiler.check.DeclarationKinds;
+import souther.compiler.check.DeclarationNewtypes;
+import souther.compiler.check.ListedCases;
 import souther.compiler.check.NewtypeInners;
+import souther.compiler.check.StandingSignature;
 import souther.compiler.check.PublishedDeclarations;
+import souther.compiler.check.SumCases;
 import souther.compiler.ast.Hir;
 import souther.compiler.diag.PhysicalPos;
 import souther.compiler.diag.QuotedFrom;
@@ -27,14 +36,20 @@ import souther.compiler.types.ValueName;
 import java.lang.classfile.ClassFile;
 import java.lang.classfile.CodeBuilder;
 import java.lang.constant.ClassDesc;
+import java.lang.constant.DirectMethodHandleDesc;
+import java.lang.constant.MethodHandleDesc;
 import java.lang.constant.MethodTypeDesc;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.SequencedMap;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 
 import static souther.compiler.codegen.Descriptors.*;
@@ -57,6 +72,14 @@ final class CodegenContext {
     /** Which form each declaration was written in, for the emissions that only have to tell a sum
      *  from anything else. */
     final DeclarationKinds kinds;
+
+    /** Which cases each sum an emitted class names lists, read off {@link #symbols} and so through
+     *  the door its reads are recorded at: what a class is built against is what its reads
+     *  record. */
+    final ListedCases listed;
+
+    /** What a value of each sum an emitted class names can be, descended from {@link #listed}. */
+    final SumCases sums;
 
     /** What each declaration that wears one value wraps, for the readings that go through the
      *  name. */
@@ -90,7 +113,7 @@ final class CodegenContext {
      * here out of what this module happens to emit would answer for the methods written rather than
      * for the names a call can hold, which is a narrower question and not the one being asked.
      */
-    final Map<String, Type> standingCalls;
+    final Map<String, StandingSignature> standingCalls;
 
     /**
      * The texts this module's code was read from, for the debug table.
@@ -126,6 +149,9 @@ final class CodegenContext {
     private final Map<GeneratedClass, byte[]> synthClasses = new LinkedHashMap<>();
     private int lambdaCounter = 0;
 
+    /** The constants the patterns this module's classes run are loaded from. */
+    final PatternConstants patterns = new PatternConstants();
+
     /**
      * Where what a behavior, a declared type or a published value offers on the JVM is read, and
      * where reading another module's is recorded.
@@ -146,6 +172,18 @@ final class CodegenContext {
     /** What the declared type at {@code key} offers: its form, its class, what a read finds. */
     LinkageProjection.Data declaredType(TypeKey key) {
         return linkage.data(key);
+    }
+
+    /**
+     * Which declarations are newtypes, as their projections say, so asking it of one is reading
+     * that one projection and nothing under it.
+     *
+     * <p>The language declares no newtype, and nothing provides a projection of what it declares,
+     * so a declaration of its own is answered without one.
+     */
+    DeclarationNewtypes newtypes() {
+        return key -> !Reserved.isNamespace(key.module())
+                && declaredType(key).form() == LinkageProjection.Form.NEWTYPE;
     }
 
     /**
@@ -233,6 +271,31 @@ final class CodegenContext {
         this.coverage = plan;
     }
 
+    /**
+     * The forks whose arms are written without their siblings: the ones a method they stood in could
+     * not hold with them. Asked by identity, for the reason the plan is.
+     */
+    private Set<Core> notCarrying =
+            Collections.newSetFromMap(new IdentityHashMap<>());
+
+    /** Every fork this emission wrote a sibling into, in the order it did. */
+    private final List<Core> carriedSoFar = new ArrayList<>();
+
+    void setNotCarrying(Set<Core> forks) {
+        this.notCarrying = forks;
+    }
+
+    /** How many forks this emission has written a sibling into, which is where a definition about
+     *  to be written starts counting its own. */
+    int carriedCount() {
+        return carriedSoFar.size();
+    }
+
+    /** The forks written with a sibling since {@code from}. */
+    List<Core> carriedSince(int from) {
+        return List.copyOf(carriedSoFar.subList(from, carriedSoFar.size()));
+    }
+
     boolean measuring() {
         return !coverage.hasNoProbes();
     }
@@ -275,6 +338,62 @@ final class CodegenContext {
     }
 
     /**
+     * A call to the runtime static {@code owner.method}, its arguments on the stack in the order
+     * {@code shipped} takes them.
+     *
+     * <p>Where this generation counts and the call's work grows with what it is handed, the
+     * evaluation's checkpoint goes on the stack after them and the entry called is the one that
+     * takes it last; everywhere else the call is {@code shipped} as it stands. Every call into the
+     * runtime goes through here, so whether an evaluated class hands one in is decided once, by the
+     * {@link Work} each call states, and a class that ships names neither the checkpoint nor this
+     * compiler.
+     */
+    void callRuntime(CodeBuilder code, ClassDesc owner, String method, MethodTypeDesc shipped, Work work) {
+        callRuntime(code, owner, method, shipped, work, false);
+    }
+
+    /** {@link #callRuntime(CodeBuilder, ClassDesc, String, MethodTypeDesc, Work)} for a static
+     *  declared on an interface. */
+    void callRuntime(CodeBuilder code, ClassDesc owner, String method, MethodTypeDesc shipped, Work work,
+                     boolean onAnInterface) {
+        if (work == Work.CHECKPOINTED && counting) {
+            pushCheckpoint(code);
+            code.invokestatic(owner, method, counted(shipped), onAnInterface);
+        } else {
+            code.invokestatic(owner, method, shipped, onAnInterface);
+        }
+    }
+
+    /**
+     * The runtime static {@code owner.method} as the handle a call site binds into a function.
+     *
+     * <p>A function made from a handle may be kept and applied by a later evaluation, so it cannot
+     * hold a checkpoint. Where this generation counts and the operation's work grows with what it is
+     * handed, the handle is the operation of the same name and type on
+     * {@code BoundUnderEvaluation}, which asks for the evaluation's checkpoint each time it is
+     * applied.
+     */
+    DirectMethodHandleDesc boundRuntime(ClassDesc owner, String method, MethodTypeDesc desc, Work work) {
+        ClassDesc bound = work == Work.CHECKPOINTED && counting ? Descriptors.CD_BoundUnderEvaluation : owner;
+        return MethodHandleDesc.ofMethod(DirectMethodHandleDesc.Kind.STATIC, bound, method, desc);
+    }
+
+    /** The evaluation's checkpoint, on the stack: only ever emitted where this generation counts. */
+    void pushCheckpoint(CodeBuilder code) {
+        if (!counting) {
+            throw new IllegalStateException("a class that ships asked for the evaluation's checkpoint");
+        }
+        code.invokestatic(Descriptors.CD_EvaluationContext, "checkpoint",
+                Descriptors.MTD_EvaluationContext_checkpoint);
+    }
+
+    /** The entry an evaluated class calls in place of one {@code shipped}: the same, with the
+     *  checkpoint taken last. */
+    static MethodTypeDesc counted(MethodTypeDesc shipped) {
+        return shipped.insertParameterTypes(shipped.parameterCount(), Descriptors.CD_WorkCheckpoint);
+    }
+
+    /**
      * The arm numbers of one node, in the order the emitter emits them.
      *
      * <p>Throws where a measuring generation meets a node the plan does not know. Only bodies the plan
@@ -282,7 +401,7 @@ final class CodegenContext {
      * and going on would leave an arm that ran reported as one no row reaches, which reads as a gap in
      * the model rather than as a fault in the measurement.
      */
-    int[] probesOf(souther.compiler.core.Core node) {
+    int[] probesOf(Core node) {
         int[] arms = coverage.probesOf(node);
         if (arms == null) {
             throw new IllegalStateException("no probe was planned for a "
@@ -292,6 +411,20 @@ final class CodegenContext {
         return arms;
     }
 
+    /** The parts of the siblings the measuring classes carry in arm {@code part} of {@code node}:
+     *  none at a fork a method could not hold them in, and the plan's everywhere else. */
+    int[] carriedAt(Core node, int part) {
+        if (notCarrying.contains(node)) {
+            return new int[0];
+        }
+        int[] carried = coverage.carriedAt(node, part);
+        if (carried.length > 0
+                && (carriedSoFar.isEmpty() || carriedSoFar.getLast() != node)) {
+            carriedSoFar.add(node);
+        }
+        return carried;
+    }
+
     /**
      * Where this comparison's value is recorded, or empty where it is not one of a guard's condition.
      *
@@ -299,13 +432,20 @@ final class CodegenContext {
      * other nodes; a comparison it does not hold is any comparison written outside a condition, which
      * is most of them.
      */
-    java.util.Optional<souther.compiler.coverage.ComparisonEmissionSite> comparisonSiteOf(
-            souther.compiler.core.Core comparison) {
+    Optional<ConditionOutcomeSite> comparisonSiteOf(Core comparison) {
         // Which comparison the node is, then where a run through it is written down: the catalog
         // answers the first for every comparison the bodies hold, and the plan the second for the
         // ones it instruments. The emitter is walking the tree, so the node is how it gets in.
         return coverage.comparisons().occurrenceAt(comparison)
                 .flatMap(coverage::emissionSiteOf);
+    }
+
+    /**
+     * Where the answer this node works out is recorded, or empty where it is not where an
+     * application the model states answers. Absent is ordinary, as for a comparison.
+     */
+    Optional<ConditionOutcomeSite> answerSiteOf(Core node) {
+        return coverage.answerSiteOf(node);
     }
 
     /** Records that one planned arm was emitted. */
@@ -323,13 +463,22 @@ final class CodegenContext {
      * silently, and every one of them is then reported as an arm no row goes through.
      */
     List<Integer> plannedButNotEmitted() {
+        // Every place the plan named: its sites, and where the applications it records answer. An
+        // answer at a comparison's node is at the comparison's place, so the places are a set.
+        Set<RunSite> planned = new LinkedHashSet<>();
+        for (CoverageSites.Site site : coverage.sites()) {
+            planned.add(site.index());
+        }
+        for (CoverageSites.AnswerSite answer : coverage.answers()) {
+            planned.add(answer.index());
+        }
         List<Integer> missing = new java.util.ArrayList<>();
-        for (souther.compiler.coverage.CoverageSites.Site site : coverage.sites()) {
+        for (RunSite place : planned) {
             // By the number, because what was emitted is what was written into the code: this is
             // the side of the boundary where a place is a constant in a call, and both families
             // are written the same way there.
-            if (!emittedSites.contains(site.index().raw())) {
-                missing.add(site.index().raw());
+            if (!emittedSites.contains(place.raw())) {
+                missing.add(place.raw());
             }
         }
         return missing;
@@ -400,7 +549,8 @@ final class CodegenContext {
                    KernelSignatures kernels,
                    Map<String, List<GeneratedClass>> caseToSums,
                    Map<String, String> typePackage, Set<String> exposed,
-                   Map<String, Type> standingCalls, SourceLayouts layouts, QuotedFrom home,
+                   Map<String, StandingSignature> standingCalls, SourceLayouts layouts,
+                   QuotedFrom home,
                    LinkageReader linkage) {
         this.linkage = Objects.requireNonNull(linkage,
                 "what a module's classes are built against is read through one place");
@@ -410,6 +560,8 @@ final class CodegenContext {
         this.symbols = symbols;
         this.published = published;
         this.kinds = kinds;
+        this.listed = ListedCases.asWritten(symbols);
+        this.sums = SumCases.asWrittenOnceEach(kinds, listed);
         this.inners = inners;
         this.kernels = kernels;
         this.caseToSums = caseToSums;
@@ -537,7 +689,7 @@ final class CodegenContext {
             return List.of();
         }
         List<TypeSymbol> bridged = new ArrayList<>();
-        for (TypeSymbol member : AtomSpace.subjectAtoms(out, published)) {
+        for (TypeSymbol member : AtomSpace.subjectAtoms(out, kinds, sums)) {
             if (member.isDeclaredByLanguage()
                     || !(member instanceof TypeSymbol.AtModule at)
                     || !at.module().equals(module)) {

@@ -82,7 +82,14 @@ class EveryFigureTheComposingStageStopsAtIsABudgetOrIsSaidNotToBeTest {
             Map.entry("souther.compiler.partition.Generator.MOST_RUNS_PER_INTERPRETATION",
                     "how many runs one reading of a row's values is given"),
             Map.entry("souther.compiler.partition.StandingAtAPoint.MOST_READINGS",
-                    "how many element-wise readings of one row a point is tried against")));
+                    "how many element-wise readings of one row a point is tried against"),
+
+            // A choice among rows that all stand at the item, which ends with one taken whatever
+            // it comes to, so nothing is left owed for reaching it.
+            Map.entry("souther.compiler.partition.Generator.MOST_ROWS_OFFERED_FOR_THE_ARMS",
+                    "how many rows meeting one requirement are looked through for one its arms"
+                            + " answer differently on; reaching it stops no search, since a row"
+                            + " is taken either way")));
 
     /**
      * A number written into a composing class is a budget's, or is one of the above.

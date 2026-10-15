@@ -1,0 +1,27 @@
+// An arm for a case the rules refuse at the position admits no value there.
+//
+// Off is no class of `f`, since nothing that reaches the behavior is one; the `match` still has to
+// name it. What the arm for it says is that no value takes it, which is a fact about the position
+// and not something this compiler could not read — and the arm for the other two sends both one way.
+//
+// told apart at f: 1 group of 2
+// told apart at n: 2 groups of 2
+module example.refused
+
+data On
+data Off
+data Pending
+data Flag = On | Off | Pending
+data Active = Flag invariant value /= Off
+
+data Ok = { n: Int }
+
+behavior judge : (f: Active, n: Int) -> Ok
+    constructs Ok
+
+let judge (f, n) = {
+    guard n > 10 else Ok { n = 0 }
+    match f.value with
+        | On | Pending -> Ok { n = 1 }
+        | Off -> Ok { n = 2 }
+}

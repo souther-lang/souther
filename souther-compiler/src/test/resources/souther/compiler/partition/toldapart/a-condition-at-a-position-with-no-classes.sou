@@ -1,0 +1,27 @@
+// A condition at a position with no classes says nothing about which values take its way.
+//
+// `s` is bounded and divided into nothing, so the comparison on it has no class to admit or refuse,
+// and it is no position a row is placed at. The `match` on `r` on the same way is read as it is
+// anywhere else; read as though no value took the way, it would be lost with the comparison.
+//
+// told apart at r: 2 groups of 2
+module example.noclasses
+
+data Score = Int
+    invariant value >= 0
+
+data Draft
+data Submitted
+data Request = Draft | Submitted
+
+data Ok = { n: Int }
+
+behavior judge : (s: Score, r: Request) -> Ok
+    constructs Ok
+
+let judge (s, r) =
+    if s.value > -5 then
+        match r with
+            | Draft -> Ok { n = 1 }
+            | Submitted -> Ok { n = 2 }
+    else Ok { n = 0 }

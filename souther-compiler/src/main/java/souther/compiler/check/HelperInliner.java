@@ -1,8 +1,9 @@
 package souther.compiler.check;
 
 import souther.compiler.stdlib.Stdlib;
+import souther.compiler.core.TheWalk;
 import souther.compiler.semantics.BuiltFrom;
-import souther.compiler.semantics.Combinator;
+import souther.compiler.semantics.ClosurePositions;
 import souther.compiler.ast.DefinitionName;
 import souther.compiler.ast.Hir;
 import souther.compiler.ast.StructuralCost;
@@ -288,17 +289,17 @@ public final class HelperInliner {
         }
     }
 
-    /** Where a lambda given to a function parameter was written: the parameter it fills, the helper
-     * that declares that parameter, and the lambda's own position. Asked by the binding and not by
-     * the spelling: two combinators nested one inside the other give their function parameters the
-     * same name as often as not, and a report that found the outer one's lambda would point at
-     * another author's line.
+    /** Where a lambda given to a function parameter was written: what it was handed to, and the
+     * lambda's own position. Asked by the
+     * binding and not by the spelling: two combinators nested one inside the other give their
+     * function parameters the same name as often as not, and a report that found the outer one's
+     * lambda would point at another author's line.
      *
      * <p>What a report needs, and nothing else. Where the block crossed into an operation is a
      * separate fact and is kept where identity is settled ({@code Writing#suppliedFrom}): held here
      * as well it was a second answer to one question, and the two came apart the moment one
      * operation handed a block on to another. */
-    private record LambdaOrigin(String param, String owner, SourcePos pos) {}
+    private record LambdaOrigin(Hir.FunctionHandover handover, SourcePos pos) {}
 
     private HelperInliner(HelperTable table, HelperGraph graph, ValueAtAReference reading) {
         if (reading == ValueAtAReference.SETTLED_REFERENCE) {
@@ -327,7 +328,7 @@ public final class HelperInliner {
      * never stand for one key, and how a call came to name one of them was settled before this. */
     public static HelperInliner forModule(Hir.Module module, Stdlib stdlib,
                                           ValueAtAReference reading) {
-        return forModule(module, Map.of(), stdlib, reading);
+        return forModule(module, ClosedImports.none(InliningPolicy.FULL), stdlib, reading);
     }
 
     /**
@@ -339,7 +340,7 @@ public final class HelperInliner {
      * no part of this — it follows from what expanding this module's trees leaves standing, and is
      * answered where that is collected.
      */
-    public static HelperInliner forModule(Hir.Module module, Map<String, Hir.FnDef> imported,
+    public static HelperInliner forModule(Hir.Module module, ClosedImports imported,
                                           Stdlib stdlib, ValueAtAReference reading) {
         HelperTable table = HelperTable.of(module, imported, InliningPolicy.FULL, stdlib);
         return new HelperInliner(table, HelperGraph.of(table), reading);
@@ -369,17 +370,18 @@ public final class HelperInliner {
     public static HelperInliner forHelpers(String module, Map<String, Hir.FnDef> own,
                                            InliningPolicy policy, Stdlib stdlib,
                                            ValueAtAReference reading) {
-        return forHelpers(module, own, Map.of(), policy, stdlib, reading);
+        return forHelpers(module, own, ClosedImports.none(policy), policy, stdlib, reading);
     }
 
     /**
      * The same, with the definitions other modules publish to this one joining the table.
      *
      * <p>They are in the table and not in {@code own}, as they are for {@link #forModule}: an imported
-     * definition is one this module expands and not one it declares.
+     * definition is one this module expands and not one it declares. They were closed under a policy
+     * of their own, and it has to be {@code policy} ({@link HelperTable#of}).
      */
     public static HelperInliner forHelpers(String module, Map<String, Hir.FnDef> declared,
-                                           Map<String, Hir.FnDef> imported, InliningPolicy policy,
+                                           ClosedImports imported, InliningPolicy policy,
                                            Stdlib stdlib, ValueAtAReference reading) {
         HelperTable table = HelperTable.of(module, declared, Map.of(), imported, policy, stdlib);
         return over(table, HelperGraph.of(table), reading);
@@ -613,10 +615,10 @@ public final class HelperInliner {
         return List.copyOf(result);
     }
 
-    /** The call cycle {@code reference} is on, as the graph that answers {@link #recursiveHelpers}
-     *  has it ({@link HelperGraph#callCycleOf}). */
-    public List<ReachName.Declaration> callCycleOf(ReachName.Declaration reference) {
-        return graph.callCycleOf(reference);
+    /** The call cycle each recursion is on, as the graph that answers {@link #recursiveHelpers} has
+     *  it ({@link HelperGraph#callCycles}). */
+    public Map<ReachName.Declaration, List<ReachName.Declaration>> callCycles() {
+        return graph.callCycles();
     }
 
     /** The declaration {@code call} applies as the call graph reads it — what a sugar is written out
@@ -715,18 +717,30 @@ public final class HelperInliner {
      * two bindings hold are the same values and a rule about one is a rule about the other; where it
      * answers what a closure made of them, the values came from there and are not those values, and
      * only the first may be walked through.
+     *
+     * <p>And which keys a map it answers is keyed by, where it keeps a map's keys. That is the
+     * operation's own fact beside the other two, and is written whatever they say: a rewrite of a
+     * map's values keeps every key while making new values.
      */
     private void elementsCameFrom(Hir.Binder binding, Hir.Expr argument) {
         if (!(argument instanceof Hir.Expansion expansion)) {
             return;
         }
+        DeclaredArgument keptKeys =
+                DefaultBoundOperationFacts.get().keepsTheKeysOf(expansion.callee());
+        BindingId keyedBy = keptKeys == null ? null : boundFor(expansion, keptKeys);
+        if (keyedBy != null) {
+            provenance.keepsTheKeysOf(binding.id(), keyedBy);
+        }
         BuiltFrom<DeclaredArgument> built =
                 DefaultBoundOperationFacts.get().buildsItsResultFrom(expansion.callee());
-        if (built == null) {
+        DeclaredArgument holds = built == null ? null : built.holdsTheElementsOf();
+        DeclaredArgument made = holds != null ? null
+                : built != null ? built.derivesItsElementsFrom()
+                : DefaultBoundOperationFacts.get().elementsMadeFromAlone(expansion.callee());
+        if (holds == null && made == null) {
             return;
         }
-        DeclaredArgument holds = built.holdsTheElementsOf();
-        DeclaredArgument made = holds != null ? null : built.derivesItsElementsFrom();
         BindingId container = boundFor(expansion, holds != null ? holds : made);
         if (container == null) {
             return;
@@ -753,7 +767,7 @@ public final class HelperInliner {
             return null;
         }
         int parameter = CallArguments.positionOf(which, expansion.callee());
-        Combinator handed = Combinators.of(expansion.callee());
+        ClosurePositions handed = Combinators.positionsOf(expansion.callee());
         int at = parameter - (handed != null && handed.closureArg() < parameter ? 1 : 0);
         return at < 0 || at >= expansion.bound().size() ? null
                 : expansion.bound().get(at).binder().id();
@@ -888,20 +902,6 @@ public final class HelperInliner {
     public Hir.FnDef applied(Hir.Apply call) {
         return appliedHelper(call);
     }
-
-    /**
-     * Which argument of the walk holds its block.
-     *
-     * <p>The walk is the one privileged loop primitive that takes a block (spec §stdlib-list); its
-     * block is the first argument and has two parameters (`(acc, x)`, spec §pipe). A bare name
-     * passed in its place is sugar for a block that wraps a call. The other combinators
-     * (map/filter/all/any) are ordinary prelude helpers derived from the walk (ADR-0028), so they
-     * need no such desugaring — a name reaches their function parameter directly.
-     *
-     * <p>Which argument, and not which operation: what the walk is, the library says
-     * ({@link Stdlib#theWalk}).
-     */
-    private static final int BLOCK_ARG_OF_THE_WALK = 0;
 
     /**
      * The rewrite {@code call} takes, or null where it takes none.
@@ -1222,6 +1222,18 @@ public final class HelperInliner {
      */
     public static String suppliedAs(String parameter) {
         return SUPPLIED + parameter;
+    }
+
+    /**
+     * {@code bound} as whoever wrote the call wrote it: the parameter a supplied function was given
+     * to, without the mark {@link #suppliedAs} puts on it, and any other name as it is.
+     *
+     * <p>The mark is this pass's own and says nothing to an author, so a message naming the binding
+     * shows the parameter. Read here, beside where the mark is written, so that a second spelling of
+     * it is never what a message strips.
+     */
+    public static String asWritten(String bound) {
+        return bound.startsWith(SUPPLIED) ? bound.substring(SUPPLIED.length()) : bound;
     }
 
     /** The one spelling for a rule written at a call site. */
@@ -1563,8 +1575,9 @@ public final class HelperInliner {
                 }
                 // Walked with this expansion as the copy being written: a call the body still holds
                 // is one this expansion made, not one the body around it made.
-                yield new Hir.Expansion(ex.callee(), ex.application(), ex.at(), bound, given,
-                        ex.declaredReturn(), insideThisExpansion(ex, () -> inline(ex.body())),
+                yield new Hir.Expansion(ex.callee(), ex.handover(), ex.application(), ex.at(),
+                        bound, given, ex.declaredReturn(),
+                        insideThisExpansion(ex, () -> inline(ex.body())),
                         ex.pos(), ex.region());
             }
             // A build by reference holds no body, so there is nothing in it to walk.
@@ -1825,8 +1838,11 @@ public final class HelperInliner {
             }
         });
         arguments.unreduced().keySet().forEach(writing.scopedLambdas()::remove);
-        return new Hir.Expansion(callee.denotes(), mine, site, bound, arguments.given(),
-                instantiated(helper.declaredReturn(), applied), body, call.pos(), call.region());
+        LambdaOrigin handedOver = handedOver(callee);
+        return new Hir.Expansion(callee.denotes(),
+                handedOver == null ? null : handedOver.handover(), mine, site, bound,
+                arguments.given(), instantiated(helper.declaredReturn(), applied), body,
+                call.pos(), call.region());
     }
 
     /**
@@ -1987,24 +2003,34 @@ public final class HelperInliner {
      *
      * <p>A lambda given to a function parameter is inlined under a synthetic name, so a report that
      * quoted the callee would quote a name nowhere in the source. Where the callee is one of those,
-     * the parameter count is reported against the lambda instead.
+     * the parameter count is reported against the lambda instead. Otherwise the callee is named as
+     * the call spells it, and not by its declaration, whose name is the library's own where the
+     * call reached it through a module.
      */
     private CompileException wrongArity(Hir.Apply call, Hir.FnDef helper, int given) {
-        ScopedLambda applied = call.answered() != null
-                && call.answered().denotes() instanceof ValueName.Local local
-                ? writing.scopedLambdas().get(local.id()) : null;
-        LambdaOrigin origin = applied == null ? null : applied.origin();
+        LambdaOrigin origin = handedOver(call.answered());
         if (origin != null) {
             return CompileException.of(Diagnostic.at(origin.pos())
-                    .say(new HelperMessage.TheBlockTakesAnotherNumberOfArguments(origin.param(),
-                            origin.owner(), String.valueOf(given),
+                    .say(new HelperMessage.TheBlockTakesAnotherNumberOfArguments(
+                            origin.handover().parameter(), origin.handover().call(),
+                            String.valueOf(given),
                             String.valueOf(helper.params().size())))
                     .build());
         }
         return CompileException.of(Diagnostic.at(call.appliedAt())
-                .say(new HelperMessage.CalledWithAnotherNumberOfArguments(helper.name(),
+                .say(new HelperMessage.CalledWithAnotherNumberOfArguments(call.written(),
                         String.valueOf(helper.params().size()), String.valueOf(given)))
                 .build());
+    }
+
+    /** Where the block {@code applied} names was handed over, or null where it names no block a
+     *  call was handed — a block a {@code let} bound among them, which was written where it is
+     *  bound. */
+    private LambdaOrigin handedOver(Hir.Var.Denoting applied) {
+        ScopedLambda lambda = applied != null
+                && applied.denotes() instanceof ValueName.Local local
+                ? writing.scopedLambdas().get(local.id()) : null;
+        return lambda == null ? null : lambda.origin();
     }
 
     /**
@@ -2091,7 +2117,9 @@ public final class HelperInliner {
                 // Asked of the callee as written, not of what it expanded to: applying a
                 // function parameter is what removes it, because the application β-reduces
                 // to the lambda's body, so the expansion holds no reference either way.
-                given.add(new Hir.Given(instantiated(p.type(), applied), arg,
+                Hir.FunctionHandover handover =
+                        new Hir.FunctionHandover(p.name(), rawCall.written());
+                given.add(new Hir.Given(handover, instantiated(p.type(), applied), arg,
                         references(helper.writtenBody(), p.binder().id()), arrivesAs(arg), i));
                 Hir.FnType declares = declaredFn(p.type(), applied);
                 // Which rule this call handed to this parameter, said where the call site is
@@ -2151,7 +2179,7 @@ public final class HelperInliner {
                             Hir.FnDef.lambda(f.name(), lparams,
                                     declares == null ? null : declares.result(),
                                     new Hir.FnBody.Written(lambda.body()), lambda.pos()),
-                            new LambdaOrigin(p.name(), helper.name(), lambda.pos())));
+                            new LambdaOrigin(handover, lambda.pos())));
                     // A block written at this call was written by whoever wrote the call, so what it
                     // crosses into is this copy whatever stood before it. Recorded in the one place
                     // a crossing is, so that handing it on from inside reads the same as handing on
@@ -2488,8 +2516,8 @@ public final class HelperInliner {
         Hir.Expr body = insideThisCopy(mine,
                 writing.lineage().copiedInto(applied, site), Map.of(),
                 () -> substituted(value.reached().rendered(), rename(written, renaming)));
-        return new Hir.Expansion(applied, mine, site, List.of(), List.of(), null, body, call.pos(),
-                call.region());
+        return new Hir.Expansion(applied, null, mine, site, List.of(), List.of(), null, body,
+                call.pos(), call.region());
     }
 
     /** A value applying which applies its own body: the declaration, and the definition that
@@ -3166,8 +3194,9 @@ public final class HelperInliner {
                 for (Hir.Given g : ex.given()) {
                     given.add(g.with(read(g.value())));
                 }
-                yield new Hir.Expansion(ex.callee(), ex.application(), ex.at(), bound, given,
-                        ex.declaredReturn(), insideThisExpansion(ex, () -> read(ex.body())),
+                yield new Hir.Expansion(ex.callee(), ex.handover(), ex.application(), ex.at(),
+                        bound, given, ex.declaredReturn(),
+                        insideThisExpansion(ex, () -> read(ex.body())),
                         ex.pos(), ex.region());
             }
             case Hir.ValueBuild build -> build;
@@ -3301,9 +3330,10 @@ public final class HelperInliner {
         if (call.answered() == null) {
             return call;   // it reaches nothing, so it is no named block to desugar
         }
-        // Only the walk takes a block, and which operation that is, the library says.
-        Integer idx = table.library().theWalk().equals(call.answered().denotes())
-                ? BLOCK_ARG_OF_THE_WALK : null;
+        // Only the walk takes a block, and which operation that is and which of its arguments the
+        // block is, the library says.
+        TheWalk walk = table.library().walk();
+        Integer idx = walk.operation().equals(call.answered().denotes()) ? walk.step() : null;
         if (idx == null || idx >= call.args().size()
                 || !(call.args().get(idx) instanceof Hir.Var.Denoting named)) {
             return call;
@@ -3654,7 +3684,7 @@ public final class HelperInliner {
                 // What this copy of the expansion wrote, from the one place an owner is moved. Kept
                 // as it was, the two copies of one already-expanded body would say they wrote into
                 // the same place while their bindings had gone to two.
-                yield new Hir.Expansion(ex.callee(),
+                yield new Hir.Expansion(ex.callee(), ex.handover(),
                         renaming.copy().ownerOf(ex.application()), ex.at(), bound, given,
                         ex.declaredReturn(), rename(ex.body(), renaming),
                         renaming.at(ex.pos()), renaming.over(ex.region()));

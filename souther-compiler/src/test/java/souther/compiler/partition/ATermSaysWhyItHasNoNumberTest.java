@@ -7,6 +7,7 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
 import souther.compiler.observe.Incompleteness;
+import souther.compiler.observe.Limits;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
@@ -35,7 +36,7 @@ class ATermSaysWhyItHasNoNumberTest {
 
     private static final NumericTerm.FromOnePosition VALUE =
             new NumericTerm.ValueOf(TermPath.of("x"));
-    private static final NumericTerm.FromOnePosition LENGTH = NumericTerm.TakenOf.of(
+    private static final NumericTerm.FromOnePosition LENGTH = NumericTerm.TakenOf.asItStands(
             ValueName.Stdlib.operation("String", "length"), TermPath.of("x"),
             souther.compiler.types.Type.STRING,
             souther.compiler.check.NewtypeInners.NONE,
@@ -53,9 +54,9 @@ class ATermSaysWhyItHasNoNumberTest {
     @Test
     void anObservationThatDidNotArriveIsMissing() {
         assertEquals(Incompleteness.Code.VALUE_TRUNCATED,
-                ((NumericTerm.Reading.Missing) AS_A_NUMBER.read(new ObservedValue.Truncated())).code());
+                ((NumericTerm.Reading.Missing) AS_A_NUMBER.read(new ObservedValue.Truncated(Limits.DEFAULT.nodesFigure()))).code());
         assertInstanceOf(NumericTerm.Reading.Missing.class,
-                AS_A_LENGTH.read(new ObservedValue.Truncated()));
+                AS_A_LENGTH.read(new ObservedValue.Truncated(Limits.DEFAULT.nodesFigure())));
         assertInstanceOf(NumericTerm.Reading.Missing.class,
                 AS_A_NUMBER.read(new ObservedValue.Unknown("gone")));
     }
@@ -66,7 +67,7 @@ class ATermSaysWhyItHasNoNumberTest {
     @Test
     void anObservationCutShortInsideANewtypeIsMissingToo() {
         ObservedValue wrapped = new ObservedValue.Constructed(WRAPPER,
-                Map.of("value", new ObservedValue.Truncated()));
+                Map.of("value", new ObservedValue.Truncated(Limits.DEFAULT.nodesFigure())));
         assertInstanceOf(NumericTerm.Reading.Missing.class, AS_A_NUMBER.read(wrapped));
         assertInstanceOf(NumericTerm.Reading.Missing.class, AS_A_LENGTH.read(wrapped));
     }

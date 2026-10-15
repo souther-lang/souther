@@ -92,14 +92,30 @@ class ANameStandsForEveryValueItsContainerWasWrittenWithTest {
     }
 
     /**
-     * A list written empty names no value, which is not a set of none.
+     * An arm on a case that is itself a sum admits the members that are cases under it.
      *
-     * <p>A statement about every member of nothing holds whatever it says, so an empty set would be
-     * the strongest answer this could give and the one least entitled to be believed.
+     * <p>{@code AtMost} is a {@code Bounded}, so the arm written {@code Bounded | Whatever} keeps
+     * it, and the arm under it that takes {@code AtMost} is left with that member alone.
      */
     @Test
-    void aListWrittenEmptyNamesNoValueRatherThanNoneOfThem() {
-        assertEquals("Element", standingOn("""
+    void anArmOnASumOfCasesAdmitsTheMembersUnderIt() {
+        assertEquals("OneOf[g.AtMost]", standingOn("""
+                {
+                        let ks: List<Wide> = [ AtMost { threshold = 100000 }, Whatever ]
+                        if List.any((k) -> reachesWide(n, k), ks) then Yes else No
+                    }"""));
+    }
+
+    /**
+     * A list written empty holds no element, which is an answer of its own.
+     *
+     * <p>Not a set of none, which a statement about every member would hold of whatever it says;
+     * and not an element whose values are not in hand, which would have the closure read once as
+     * though some run applied it. No run hands the name a value.
+     */
+    @Test
+    void aListWrittenEmptyHoldsNoElement() {
+        assertEquals("NoneHeld", standingOn("""
                 {
                         let ks: List<Big> = []
                         if List.any((k) -> n >= k.threshold, ks) then Yes else No
@@ -133,6 +149,18 @@ class ANameStandsForEveryValueItsContainerWasWrittenWithTest {
                         | AtMost { threshold } -> n >= threshold
                         | Whatever             -> false
 
+                data Below = { threshold: Int }
+                data Bounded = AtMost | Below
+                data Wide = Bounded | Whatever
+
+                let reachesWide (n: Int, wide: Wide): Bool =
+                    match wide with
+                        | Bounded | Whatever as w ->
+                            match w with
+                                | AtMost { threshold } -> n >= threshold
+                                | Below -> false
+                                | Whatever -> false
+
                 behavior classify : (n: Int) -> Yes | No
                 let classify (n) = %s
 
@@ -144,7 +172,7 @@ class ANameStandsForEveryValueItsContainerWasWrittenWithTest {
         ComparisonReadings.Reading only = read.only();
         Symbols symbols = read.rules().symbols();
 
-        Core side = only.comparison().right();
+        Core side = ((ComparisonReadings.Stated.AComparison) only.statement()).comparison().right();
         InputReads at = only.reads();
         while (true) {
             if (side instanceof Core.FieldAccess field) {
@@ -163,10 +191,11 @@ class ANameStandsForEveryValueItsContainerWasWrittenWithTest {
         }
     }
 
-    /** The answer, by which of the five it is and which values a plurality holds. */
+    /** The answer, by which of the seven it is and which values a plurality holds. */
     private static String said(ReadMeaning meaning) {
         return switch (meaning) {
-            case ReadMeaning.OneOf one -> "OneOf" + one.alternatives().stream()
+            case ReadMeaning.OneOf one -> "OneOf" + one.valuesWhere(
+                            ReadMeaning.WhereKept.NOTHING_DECIDED).stream()
                     .map(each -> switch (each.value()) {
                         case Core.Construct made -> made.typeName().toString();
                         case Core.UnitValue unit -> unit.data().toString();
@@ -175,6 +204,8 @@ class ANameStandsForEveryValueItsContainerWasWrittenWithTest {
                     .toList();
             case ReadMeaning.Position position -> "Position[" + position.path() + "]";
             case ReadMeaning.Element _ -> "Element";
+            case ReadMeaning.NoneHeld _ -> "NoneHeld";
+            case ReadMeaning.MoreThanAreWrittenOut _ -> "MoreThanAreWrittenOut";
             case ReadMeaning.Unknown _ -> "Unknown";
             case ReadMeaning.Through _ -> throw new IllegalStateException("followed already");
         };
@@ -183,12 +214,13 @@ class ANameStandsForEveryValueItsContainerWasWrittenWithTest {
     /** Every answer this test can get, so a case added to the reading arrives here rather than
      *  under a word one of these tests already expects. */
     @Test
-    void theFiveAnswersAreTheOnesThisTestKnows() {
+    void theSevenAnswersAreTheOnesThisTestKnows() {
         Map<String, String> byName = new LinkedHashMap<>();
         for (Class<?> each : ReadMeaning.class.getPermittedSubclasses()) {
             byName.put(each.getSimpleName(), each.getSimpleName());
         }
         assertEquals(Map.of("Position", "Position", "Through", "Through", "OneOf", "OneOf",
+                "NoneHeld", "NoneHeld", "MoreThanAreWrittenOut", "MoreThanAreWrittenOut",
                 "Element", "Element", "Unknown", "Unknown"), byName);
     }
 }

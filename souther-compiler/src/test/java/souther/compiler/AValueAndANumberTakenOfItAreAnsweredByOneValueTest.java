@@ -107,7 +107,7 @@ class AValueAndANumberTakenOfItAreAnsweredByOneValueTest {
         // the place one value, so every value that reaches this point is that one — and its length
         // is not the one the point asks for. Nothing was walked past to get here.
         assertTrue(offered.contains("no row for `String.length(box.s) = 4` in `f`:"
-                        + " the rules leave no value here"),
+                        + " no value can stand here"),
                 () -> "and no value of the place is offered for a length it does not have: "
                         + offered);
         assertFalse(offered.contains(THE_POPULATION),
@@ -134,7 +134,7 @@ class AValueAndANumberTakenOfItAreAnsweredByOneValueTest {
                         .count(),
                 () -> "what the model settles is not said as what this compiler managed: " + page);
         assertTrue(page.lines().anyMatch(line -> line.contains("String.length(box.s) = 4")
-                        && line.contains("the rules leave no value")),
+                        && line.contains("no value can stand")),
                 () -> "the point no value of the place reaches is answered about: " + page);
     }
 

@@ -1,10 +1,11 @@
 package souther.compiler.partition;
 
+import souther.compiler.check.DeclarationKinds;
 import souther.compiler.check.NewtypeInners;
-import souther.compiler.check.PublishedDeclarations;
 import souther.compiler.check.ReadableFields;
 import souther.compiler.check.Shape;
 import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.SumCases;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeView;
 import souther.compiler.inputs.Refinement;
@@ -14,8 +15,11 @@ import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.Type;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.function.Function;
 
 /**
  * What a behavior takes: what its inputs are called, what they are declared to be, and what those
@@ -52,9 +56,9 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
         return rules.symbols();
     }
 
-    /** What the declarations the reading was made against say. */
-    public PublishedDeclarations published() {
-        return rules.published();
+    /** What a value of each sum the reading was made against can be. */
+    public SumCases sums() {
+        return rules.sums();
     }
 
     /**
@@ -82,7 +86,7 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
 
     /**
      * The values read at {@code path} off what a row wrote, which is one value at most positions and
-     * however many were written at a position inside a sequence.
+     * however many were written at a position inside a container.
      *
      * <p>Read at the path and not written at it. Where a row puts a value and where a reading names
      * one part at a sum every case of which spreads a declaration: the name is readable at the sum
@@ -127,7 +131,7 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
 
     /**
      * One value a row put at {@code path}, and which element was taken to reach it at each step
-     * inside a sequence.
+     * inside a container.
      *
      * <p>The element and not only the value, because a relation between two positions is about one
      * element and not about the two sets. A row holding one person under a line and another over it
@@ -136,8 +140,8 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
      * off the sets, the pairs one row covers are every combination of them, and a row is counted as
      * evidence for a combination none of its elements is in.
      *
-     * @param at which element was taken at each step inside a sequence, outermost first. Empty
-     *           where the path enters no sequence, which is one occurrence and stands with every
+     * @param at which element was taken at each step inside a container, outermost first. Empty
+     *           where the path enters no container, which is one occurrence and stands with every
      *           other
      */
     public record Occurrence(ElementsTaken at, ObservedValue value) {
@@ -159,17 +163,76 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
      * the way a written row is or the classes they land in are two readings rather than one.
      */
     WalkResult<List<Occurrence>> occurrencesAt(List<ObservedValue> inputs, TermPath path) {
+        return occurrencesAt(inputs, path, new HashMap<>());
+    }
+
+    /**
+     * The same, reading what each type is out of {@code views} and adding to it.
+     *
+     * <p>For a caller walking one row to many positions. Every walk starts at a parameter's type
+     * and passes the same few types on the way down, and what a type is — its names and the fields
+     * it lays out — is a fact about the declarations this was read against and not about the walk.
+     * Worked out again at every step of every walk, it is most of what reading a row costs.
+     */
+    WalkResult<List<Occurrence>> occurrencesAt(List<ObservedValue> inputs, TermPath path,
+                                               Map<Type, TypeView> views) {
         int at = indexOf(path);
         if (at < 0 || at >= inputs.size()) {
             return WalkResult.couldNotWalk();
         }
-        List<Standing> standing = List.of(new Standing(inputs.get(at), types.get(at),
+        return switch (standingAt(inputs.get(at), at, path, views)) {
+            case WalkResult.Reached(List<Standing> found) -> WalkResult.reached(found.stream()
+                    .map(each -> new Occurrence(each.at(), each.value())).toList());
+            case WalkResult.CouldNotWalk<List<Standing>> _ -> WalkResult.couldNotWalk();
+        };
+    }
+
+    /**
+     * One value the walk arrived at, with the type the reading exposes at its position.
+     *
+     * <p>For a reader that writes the value somewhere else. The value says which case it is and
+     * what it holds, and only the position says what it is written as: a {@code Sequence} is a list
+     * or a set by the type declared for it, and a whole number at a {@code Decimal} is a decimal.
+     * Carried out of the one walk rather than asked of the path again, since a second walk for the
+     * type is a second reading of where a name every case of a sum spreads is.
+     *
+     * @param value the value as the position wears it, names and all
+     * @param type  what the reading exposes at the position
+     * @param at    which element was taken at each container on the way to it, so that two values
+     *              read off one parameter are known to stand in one element or in two
+     */
+    record ObservedAt(ObservedValue value, Type type, ElementsTaken at) {}
+
+    /**
+     * The values at {@code path} in {@code value}, the value of the parameter the path starts at,
+     * each with the type the reading exposes where it stands.
+     *
+     * <p>The walk {@link #occurrencesAt} takes, for one parameter's value and not a row's: a value
+     * the boundary built for one parameter is read before the others are composed.
+     */
+    WalkResult<List<ObservedAt>> observedAt(ObservedValue value, TermPath path) {
+        int at = indexOf(path);
+        if (at < 0) {
+            return WalkResult.couldNotWalk();
+        }
+        return switch (standingAt(value, at, path, new HashMap<>())) {
+            case WalkResult.Reached(List<Standing> found) -> WalkResult.reached(found.stream()
+                    .map(each -> new ObservedAt(each.value(), each.type(), each.at())).toList());
+            case WalkResult.CouldNotWalk<List<Standing>> _ -> WalkResult.couldNotWalk();
+        };
+    }
+
+    /** What stands at {@code path}, walked down from {@code value} at the {@code at}-th input. */
+    private WalkResult<List<Standing>> standingAt(ObservedValue value, int at, TermPath path,
+                                                  Map<Type, TypeView> views) {
+        Function<Type, TypeView> viewOf = type -> views.computeIfAbsent(type, this::view);
+        List<Standing> standing = List.of(new Standing(value, types.get(at),
                 TermPath.of(path.head()), ElementsTaken.NONE));
         for (TermPath.Step step : path.steps()) {
             List<Standing> next = new ArrayList<>();
             int took = 0;
             for (Standing each : standing) {
-                if (each.step(step, rules.inners(), symbols(), published(), next)) {
+                if (each.step(step, viewOf, next)) {
                     took++;
                 }
             }
@@ -187,8 +250,12 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
         // Nothing here is a row that wrote no element, which is a reading that arrived: a step that
         // could not be taken has already said so above. Answered alike, a row writing the empty
         // list would be reported as one nothing could be read from.
-        return WalkResult.reached(
-                standing.stream().map(each -> new Occurrence(each.at(), each.value())).toList());
+        return WalkResult.reached(standing);
+    }
+
+    /** What a value of {@code type} is under the declarations this was read against. */
+    private TypeView view(Type type) {
+        return TypeView.of(type, rules.inners(), symbols(), rules.kinds(), sums());
     }
 
     /**
@@ -221,7 +288,8 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
         }
         Type here = types.get(at);
         for (TermPath.Step step : path.steps()) {
-            here = stepWrittenValue(step, here, rules.inners(), symbols(), published());
+            here = stepWrittenValue(step, here, rules.inners(), symbols(), rules.kinds(),
+                    sums());
             if (here == null) {
                 return null;
             }
@@ -251,30 +319,40 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
      * {@link #typeAtWrittenPath}, and it is watched.
      */
     static Type stepWrittenValue(TermPath.Step step, Type from, NewtypeInners inners,
-                                 Symbols symbols, PublishedDeclarations published) {
-        TypeView view = TypeView.of(from, inners, symbols, published);
+                                 Symbols symbols, DeclarationKinds kinds,
+                                 SumCases sums) {
+        Shape shape = TypeView.shapeOf(from, inners, symbols, kinds, sums);
         return switch (step) {
-            case TermPath.Step.Field named -> view.shape() instanceof Shape.Product product
+            case TermPath.Step.Field named -> shape instanceof Shape.Product product
                     ? product.fields().get(named.name()) : null;
-            case TermPath.Step.Element _ -> view.shape() instanceof Shape.Sequence sequence
-                    ? sequence.element() : null;
+            case TermPath.Step.Element _ -> shape instanceof Shape.Container container
+                    ? container.element() : null;
+            case TermPath.Step.Key _ -> shape instanceof Shape.Mapping map ? map.key() : null;
             // What a sum's case holds is the value the sum held, and what an optional holds is at
             // no name of its own — so both narrow the type at this position and nothing is
-            // descended into.
-            case TermPath.Step.Refine refine -> switch (refine.refinement()) {
-                case Refinement.SumCase one -> view.shape() instanceof Shape.Sum
-                        ? Type.ref(one.leaf()) : null;
-                case Refinement.Presence presence ->
-                        !(view.shape() instanceof Shape.Optional optional) ? null
-                                : presence.present() ? optional.element() : view.declared();
-            };
+            // descended into. A value is written as one case, so a position left several of them
+            // is no place one is written at.
+            case TermPath.Step.Refine refine -> refine.cases().only() == null ? null
+                    : narrowedType(refine.cases().only(), shape, from);
+        };
+    }
+
+    /** The type {@code one} narrows a position of {@code shape}, declared {@code declared}, to, or
+     *  null where it is no narrowing of such a position. */
+    private static Type narrowedType(Refinement one, Shape shape, Type declared) {
+        return switch (one) {
+            case Refinement.SumCase sum -> shape instanceof Shape.Sum
+                    ? Type.ref(sum.leaf()) : null;
+            case Refinement.Presence presence ->
+                    !(shape instanceof Shape.Optional optional) ? null
+                            : presence.present() ? optional.element() : declared;
         };
     }
 
     /**
      * One observed value on the way down a path, with the type the reading exposes at that position.
      *
-     * <p>A list of these and not one, because a step into what a sequence holds turns one value
+     * <p>A list of these and not one, because a step into what a container holds turns one value
      * into as many as it holds. Everything else keeps the count it had.
      *
      * <p><b>How an observed value is read, which is not where a written one has its parts.</b> The
@@ -303,13 +381,12 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
          * at under a refinement. A caller reads the first as a walk it could not make and the
          * second as a row that is somewhere else.
          */
-        boolean step(TermPath.Step step, NewtypeInners inners, Symbols symbols,
-                     PublishedDeclarations published, List<Standing> out) {
+        boolean step(TermPath.Step step, Function<Type, TypeView> viewOf, List<Standing> out) {
             if (value.unread() != null) {
                 out.add(this);
                 return true;
             }
-            TypeView view = TypeView.of(type, inners, symbols, published);
+            TypeView view = viewOf.apply(type);
             ObservedValue here = Classifier.inside(view.wrappers(), value);
             if (here.unread() != null) {
                 out.add(new Standing(here, type, reached, at));
@@ -337,19 +414,37 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
                 // Every element the row wrote, and no choice among them. Which of them a rule is
                 // about is not something the coordinate says, so what stands here is all of them
                 // and what a class comes to over them is the caller's to decide. A list holding
-                // none is a step taken: the walk arrived and the row wrote nothing there.
+                // none is a step taken: the walk arrived and the row wrote nothing there. A map's
+                // element is its values, as it is wherever a walk is handed one.
                 case TermPath.Step.Element _ -> {
-                    Type element = view.shape() instanceof Shape.Sequence sequence
-                            ? sequence.element() : null;
-                    if (element == null || !(here instanceof ObservedValue.Sequence written)) {
+                    if (!(view.shape() instanceof Shape.Container container)) {
                         return false;
                     }
-                    // Keyed by the step, which is this path with the step taken. Two positions
-                    // that took it took the same one or they are not one reading of the row.
+                    List<ObservedValue> held = heldAsDeclared(container, here);
+                    if (held == null) {
+                        return false;
+                    }
+                    // Keyed by the container. Two positions that took an element of it took the
+                    // same one or they are not one reading of the row.
                     TermPath inside = reached.element();
-                    for (int i = 0; i < written.elements().size(); i++) {
-                        out.add(new Standing(written.elements().get(i), element, inside,
-                                at.and(inside, i)));
+                    for (int i = 0; i < held.size(); i++) {
+                        out.add(new Standing(held.get(i), container.element(), inside,
+                                at.and(reached, i)));
+                    }
+                }
+                // Every key the row wrote, each taken at the entry it keys — the same entry the
+                // value beside it is taken at, which is what keeps a key and a value of two
+                // different entries from being read as one reading of the row. Only a map has keys,
+                // and a value written as anything else is not one.
+                case TermPath.Step.Key _ -> {
+                    if (!(view.shape() instanceof Shape.Mapping map)
+                            || !(here instanceof ObservedValue.Mapping written)) {
+                        return false;
+                    }
+                    TermPath keyed = reached.key();
+                    for (int i = 0; i < written.entries().size(); i++) {
+                        out.add(new Standing(written.entries().get(i).key(), map.key(), keyed,
+                                at.and(reached, i)));
                     }
                 }
                 // The value stays where it is and what may stand there narrows. A row whose value
@@ -360,20 +455,21 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
                 // And the position it narrows to is where a case's own field becomes readable: a
                 // path that names the case may read what only that case declares, which is the
                 // model saying so rather than a row happening to be one.
+                // Left several cases, the value stands below the step where it is any of them, and
+                // as the one it is.
                 case TermPath.Step.Refine refine -> {
-                    Type narrowed = switch (refine.refinement()) {
-                        case Refinement.SumCase one -> view.shape() instanceof Shape.Sum
-                                ? Type.ref(one.leaf()) : null;
-                        case Refinement.Presence presence ->
-                                !(view.shape() instanceof Shape.Optional optional) ? null
-                                        : presence.present() ? optional.element() : view.declared();
-                    };
-                    if (narrowed == null) {
-                        return false;
+                    Type standsAs = null;
+                    for (Refinement each : refine.cases().atoms()) {
+                        Type narrowed = narrowedType(each, view.shape(), view.declared());
+                        if (narrowed == null) {
+                            return false;
+                        }
+                        if (standsAs == null && stands(each, here)) {
+                            standsAs = narrowed;
+                        }
                     }
-                    if (stands(refine.refinement(), here)) {
-                        out.add(new Standing(here, narrowed, reached.refine(refine.refinement()),
-                                at));
+                    if (standsAs != null) {
+                        out.add(new Standing(here, standsAs, reached.refine(refine.cases()), at));
                     }
                 }
             }
@@ -390,6 +486,27 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
                 };
                 case Refinement.Presence presence ->
                         presence.present() != (here instanceof ObservedValue.Absent);
+            };
+        }
+
+        /**
+         * What the value written here holds at its element, read as the container the position
+         * declares — or null where the value is not that container.
+         *
+         * <p>Exhaustive over the containers, each held to the one observation that is a value of
+         * it: a list's or a set's is a sequence and a map's is its entries, read at their values.
+         * A value of the other kind is the type and the row disagreeing about what stands here,
+         * which is a step this walk cannot take rather than elements it can read; and a container
+         * added later stops this compiling instead of being read off whichever observation it
+         * resembles.
+         */
+        private static List<ObservedValue> heldAsDeclared(Shape.Container declared,
+                                                          ObservedValue here) {
+            return switch (declared) {
+                case Shape.Sequence _ ->
+                        here instanceof ObservedValue.Sequence written ? written.elements() : null;
+                case Shape.Mapping _ ->
+                        here instanceof ObservedValue.Mapping written ? written.values() : null;
             };
         }
     }

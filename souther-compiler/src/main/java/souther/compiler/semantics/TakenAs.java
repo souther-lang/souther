@@ -1,5 +1,9 @@
 package souther.compiler.semantics;
 
+import souther.compiler.numeric.Count;
+import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.ValueTransformation;
 import souther.compiler.types.Type;
 
 import java.math.BigDecimal;
@@ -60,6 +64,33 @@ public sealed interface TakenAs {
      */
     default boolean settledBy(TakenArguments arguments) {
         return true;
+    }
+
+    /**
+     * Whether a number of this account can be taken of a value made from the one at a position
+     * by {@code from}, and still be read off a row and written into one.
+     *
+     * <p>Asked where a term is built, as {@link #settledBy} is. Every account takes a number of the
+     * value as it stands. Which of them take it of a value that was moved first is a second
+     * question: it needs the numbers the account answers to be a run of the values that were moved
+     * from, so that what a row is asked to hold is read back from the numbers asked for.
+     */
+    default boolean readsWhatItWasMadeFrom(ValueTransformation from) {
+        return from instanceof ValueTransformation.Identity;
+    }
+
+    /**
+     * Where the numbers of this account run when they are taken of a value made from the one at a
+     * position by {@code from}, as far as that alone says.
+     *
+     * <p>A transformation that is defined at some of the values and not others leaves the account
+     * fewer numbers than it has of every value: the year of a date moved a year's days back never
+     * reaches the last year there is, because no date moved that far back is the last date. What
+     * the operation declares of its answer is what it answers of any value, so this is met with
+     * it, and everything that asks how far a number runs is asked of one place.
+     */
+    default NumericDomain.Bounds reachedFrom(ValueTransformation from) {
+        return NumericDomain.Bounds.OPEN;
     }
 
     /**
@@ -213,6 +244,64 @@ public sealed interface TakenAs {
     }
 
     /**
+     * What the value leaves when it is divided by what the divisor argument reads as and the
+     * quotient is floored, so the answer takes the divisor's sign.
+     *
+     * <p><b>A number taken of one place, as the quotient is.</b> What it states of the position is a
+     * residue class, which is no line on the position's own order and no run of it, so it is not
+     * drawn there: the rule is over two numbers, the position's own and this one, and this one runs
+     * through the residues and is the number a border is drawn on. A comparison of it is an ordinary
+     * comparison of a number that stays between its ends, which is what the operation declares of
+     * its answer, and two rules over one position's remainder by one divisor are rules over one
+     * number.
+     *
+     * <p><b>Realizable by the residue itself.</b> Every value of a residue class answers the
+     * residue, and the residue is one of them: a number that is a remainder by the divisor is its own
+     * remainder. That is what a value is written at where nothing else is asked of the position,
+     * and a position asked for as well is offered the values its own demand leaves and read back
+     * ({@code partition.TermRealizations}).
+     *
+     * <p>Which argument the divisor is, is the arithmetic's own answer
+     * ({@link Arithmetic.AFloorRemainder#divisor}), carried here as a position as the quotient's is.
+     * A divisor the reading does not have as a number is no period, and one of nought is no number
+     * at all: the operation aborts there, and an account of one would be a line drawn where no row
+     * can stand.
+     */
+    record TheFloorRemainder(int divisor) implements TakenAs {
+
+        public TheFloorRemainder {
+            if (divisor < 1) {
+                throw new IllegalArgumentException(
+                        "a remainder is taken of the value at the first argument and divided by one"
+                                + " beside it, and argument " + (divisor + 1) + " is not beside it");
+            }
+        }
+
+        @Override
+        public boolean takenOf(Type source, Type answered) {
+            return source == Type.Prim.INT && answered == Type.Prim.INT;
+        }
+
+        @Override
+        public boolean settledBy(TakenArguments arguments) {
+            BigDecimal by = read(arguments);
+            return by != null && by.signum() != 0;
+        }
+
+        /** The divisor and nothing else: a residue class is the one its divisor says. */
+        @Override
+        public TakenArguments naming(TakenArguments gave) {
+            BigDecimal by = read(gave);
+            return by == null ? TakenArguments.NONE : TakenArguments.at(divisor, by);
+        }
+
+        /** What the divisor reads as, or null where these arguments do not say. */
+        public BigDecimal read(TakenArguments arguments) {
+            return arguments.at(divisor);
+        }
+    }
+
+    /**
      * Which part of a time of day it is: the hour it falls in, the minute within that hour, the
      * second within that minute.
      *
@@ -263,6 +352,40 @@ public sealed interface TakenAs {
         @Override
         public boolean takenOf(Type source, Type answered) {
             return source == Type.Prim.DATE && answered == Type.Prim.INT;
+        }
+
+        /**
+         * The year of a date moved by days, and no other part of it.
+         *
+         * <p>The dates of one year are a run of days, so the dates a moved date falls in a year at
+         * are a run of days as well, and a row is written by the run. A month or a day of the month
+         * comes round every year: the dates it falls on are no run.
+         */
+        @Override
+        public boolean readsWhatItWasMadeFrom(ValueTransformation from) {
+            return switch (from) {
+                case ValueTransformation.Identity _ -> true;
+                case ValueTransformation.DateShift _ -> part == DatePart.YEAR;
+            };
+        }
+
+        /**
+         * The years of the dates a chain of shifts is defined at, moved by it: the year of the
+         * first date it can answer and of the last. The dates are one run of days, so every year
+         * between is one of them as well.
+         */
+        @Override
+        public NumericDomain.Bounds reachedFrom(ValueTransformation from) {
+            return switch (from) {
+                case ValueTransformation.Identity _ -> NumericDomain.Bounds.OPEN;
+                case ValueTransformation.DateShift shift -> part != DatePart.YEAR
+                        ? NumericDomain.Bounds.OPEN
+                        : new NumericDomain.Bounds(
+                                Endpoint.inclusive(Count.of(shift.translation().firstMoved()
+                                        .getYear())),
+                                Endpoint.inclusive(Count.of(shift.translation().lastMoved()
+                                        .getYear())));
+            };
         }
     }
 

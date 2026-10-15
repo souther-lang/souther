@@ -1,10 +1,12 @@
 package souther.compiler.check;
 
 import souther.compiler.core.Core;
+import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.OrderedInterval;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * The clauses reaching a value, read for where the numbers its operations answer stop.
@@ -47,12 +49,17 @@ final class BoundaryReading {
     private final Map<DerivedNumber, Carrier> carriers;
     /** And what the clauses call each of them, for the same reason. */
     private final Map<DerivedNumber, FactSubject> subjects;
+    /** Every name the clauses give each position itself, which is what a leaf this reads whole
+     *  was about: a rule about how long the string at a place is is a rule about the place. */
+    private final Map<RuleKey, Set<FactSubject>> positions;
 
     private BoundaryReading(Terms terms, Map<FactSubject, DerivedNumber> byName,
-                            Map<DerivedNumber, Carrier> carriers) {
+                            Map<DerivedNumber, Carrier> carriers,
+                            Map<RuleKey, Set<FactSubject>> positions) {
         this.terms = terms;
         this.byName = byName;
         this.carriers = carriers;
+        this.positions = positions;
         Map<DerivedNumber, FactSubject> named = new LinkedHashMap<>();
         byName.forEach((subject, number) -> named.put(number, subject));
         this.subjects = named;
@@ -65,19 +72,26 @@ final class BoundaryReading {
      * clause of every one of them is read through this.
      */
     private static final BoundaryReading NOTHING =
-            new BoundaryReading(null, Map.of(), Map.of());
+            new BoundaryReading(null, Map.of(), Map.of(), Map.of());
 
     /**
-     * The reading of the numbers {@code numbers} names, whose orders {@code carriers} gives.
+     * The reading of the numbers {@code numbers} names, whose orders {@code carriers} gives, of the
+     * positions {@code positions} names.
      *
      * <p>No environment is held, as the readings beside it hold none: which environment a leaf is
      * read at is where the leaf stands, and the fold hands that down.
      */
     static BoundaryReading of(Terms terms, Map<FactSubject, DerivedNumber> numbers,
-                              Map<DerivedNumber, Carrier> carriers) {
+                              Map<DerivedNumber, Carrier> carriers,
+                              Map<RuleKey, Set<FactSubject>> positions) {
         return numbers.isEmpty() ? NOTHING
                 : new BoundaryReading(terms, new LinkedHashMap<>(numbers),
-                        new LinkedHashMap<>(carriers));
+                        new LinkedHashMap<>(carriers), new LinkedHashMap<>(positions));
+    }
+
+    /** Whether this value has no number an operation answers, so no leaf of it is one this reads. */
+    boolean holdsNoNumber() {
+        return byName.isEmpty();
     }
 
     /**
@@ -92,9 +106,36 @@ final class BoundaryReading {
         /** The leaf states a line on none of the numbers this reading holds. */
         record NoLineStated() implements Read {}
 
-        /** It stops {@code number} inside {@code range}. */
-        record Bounded(DerivedNumber number, FactSubject subject, OrderedInterval range)
-                implements Read {}
+        /**
+         * It stops {@code number} inside {@code range}.
+         *
+         * @param takenOf the position the number is answered of, by every name the clauses give
+         *                it. Empty where no name of this value stands for the position itself
+         */
+        record Bounded(DerivedNumber number, FactSubject subject, OrderedInterval range,
+                       Set<FactSubject> takenOf) implements Read {
+
+            public Bounded {
+                takenOf = Set.copyOf(takenOf);
+            }
+
+            /**
+             * The positions this leaf is read whole at, which is {@link #takenOf} where the range
+             * holds a value and none where it does not.
+             *
+             * <p>Three states, and this answers only the first. A rule this reading could not
+             * place is {@link LeftOpen}. A rule it read whose range holds a value is taken in. A
+             * rule it read whose range holds none is read and admits nothing — which is not the
+             * first state and is not taken in either: the question it raises about the position
+             * is a real one, as for a comparison whose positions cancel to something no row
+             * satisfies, and whether the input is empty is the one prover's to say. That it was
+             * read is said beside the question, by the finding that its line falls outside what
+             * its number ever holds.
+             */
+            Set<FactSubject> readWholeAt() {
+                return Endpoint.someValueLiesBetween(range.low(), range.high()) ? takenOf : Set.of();
+            }
+        }
 
         /**
          * It stops {@code number} somewhere nothing here worked out.
@@ -138,7 +179,8 @@ final class BoundaryReading {
         // alternative beside it, and the second leaves that alternative saying nothing about the
         // number at all. Told apart where they compose ({@link BoundaryState}), and collapsed here
         // they would arrive there as one.
-        return new Read.Bounded(it.number(), subject, it.stated());
+        return new Read.Bounded(it.number(), subject, it.stated(),
+                positions.getOrDefault(it.number().position(), Set.of()));
     }
 
     /** What the clauses call {@code number}, which is the name every other reader files it

@@ -1,0 +1,25 @@
+// An arm written for several cases leaves them in one group.
+//
+// Four cases and two arms, each for two of them, matched twice the same way: what is counted is
+// groups and not arms, and four arms over the position still leave its cases in two groups.
+//
+// told apart at k: 2 groups of 4
+// told apart at n: 2 groups of 2
+module example.grouped
+
+data K1
+data K2
+data K3
+data K4
+data Kind = K1 | K2 | K3 | K4
+
+data Ok = { n: Int }
+
+behavior judge : (k: Kind, n: Int) -> Ok
+    constructs Ok
+
+let judge (k, n) = {
+    guard n > 10 else Ok { n = 0 }
+    Ok { n = (match k with | K1 | K2 -> 1 | K3 | K4 -> 2)
+            + (match k with | K1 | K2 -> 10 | K3 | K4 -> 20) }
+}

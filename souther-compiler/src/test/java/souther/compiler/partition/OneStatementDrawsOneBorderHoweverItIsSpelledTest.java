@@ -89,20 +89,45 @@ class OneStatementDrawsOneBorderHoweverItIsSpelledTest {
     }
 
     /**
-     * An operation stating no such form is still what it was.
+     * A count of whole units draws the line of the steps it needs, and not of the units.
      *
-     * <p>{@code DateTime.minutesBetween} counts whole minutes over an order counting seconds and
-     * drops the remainder toward zero, so it is not the difference of two counts. The declaration
-     * says there is nothing to say of it, and the report says the rule is about a value made from
-     * the positions — which is what it is.
+     * <p>{@code DateTime.minutesBetween} counts whole minutes over an order counting seconds, so it
+     * is not the difference of two counts and states no form. What a comparison of it states is
+     * exact all the same: more than ten minutes is at least eleven minutes of seconds.
      */
     @Test
-    void anOperationDeclaredToStateNoSuchFormIsStillARuleAboutADerivedValue() {
-        assertEquals(List.of(), bordersOf("a: DateTime, b: DateTime",
+    void aCountOfWholeUnitsDrawsTheLineOfTheStepsItComesTo() {
+        assertEquals(List.of("b - 660"), bordersOf("a: DateTime, b: DateTime",
                 "DateTime.minutesBetween(a, b) > 10"));
-        assertEquals(List.of(UndividedPosition.Reason.RULE_ABOUT_A_DERIVED_VALUE,
-                        UndividedPosition.Reason.RULE_ABOUT_A_DERIVED_VALUE),
-                reasonsOf("a: DateTime, b: DateTime", "DateTime.minutesBetween(a, b) > 10"));
+        assertEquals(List.of("b - 600"), bordersOf("a: DateTime, b: DateTime",
+                "DateTime.minutesBetween(a, b) >= 10"));
+        assertEquals(reasonsOf("a: Int, b: Int", "Int.subtract(b, a) > 660"),
+                reasonsOf("a: DateTime, b: DateTime", "DateTime.minutesBetween(a, b) > 10"),
+                "a line between two positions divides neither, as the difference of two does not");
+    }
+
+    /**
+     * And a count drops what is left toward zero, so below nought the line is a unit less one step
+     * away.
+     *
+     * <p>A second before is no minute before, and the count of it is nought: {@code >= 0} holds
+     * from fifty-nine seconds before on, and {@code == 0} is the stretch of seconds either side.
+     */
+    @Test
+    void aCountBelowNoughtTruncatesTowardNought() {
+        assertEquals(List.of("b + 59"), bordersOf("a: DateTime, b: DateTime",
+                "DateTime.minutesBetween(a, b) >= 0"));
+        assertEquals(List.of("b + 59", "b - 60"), bordersOf("a: DateTime, b: DateTime",
+                "DateTime.minutesBetween(a, b) == 0"));
+        assertEquals(List.of("b + 119"), bordersOf("a: DateTime, b: DateTime",
+                "DateTime.minutesBetween(a, b) >= -1"));
+    }
+
+    /** Written the other way round, it is the same line. */
+    @Test
+    void aCountWrittenOnTheRightIsTheSameLine() {
+        assertEquals(bordersOf("a: DateTime, b: DateTime", "DateTime.minutesBetween(a, b) > 10"),
+                bordersOf("a: DateTime, b: DateTime", "10 < DateTime.minutesBetween(a, b)"));
     }
 
     /**

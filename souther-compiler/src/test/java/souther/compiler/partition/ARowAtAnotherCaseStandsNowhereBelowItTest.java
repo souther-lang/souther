@@ -2,9 +2,11 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.carrier.Membership;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
+import souther.compiler.check.TypeCardinality;
 import souther.compiler.check.DeclaredSig;
 import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.TermPath;
@@ -82,10 +84,13 @@ class ARowAtAnotherCaseStandsNowhereBelowItTest {
                 .ask(Output.Examples.asked(compilation.db(), module,
                         compilation.sourceIds().get(0))).value();
         assertNotNull(observed);
+        RuleReadingContext reading =
+                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES);
         souther.compiler.inputs.InputDomain domain = souther.compiler.inputs.InputDomain.of(
-                sigs.get("read"), RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES));
-        Partitions.Partitioning partitioning = Partitions.of("read", domain,
-                rules, ReadAs.THE_COMPILATION_DOES);
+                sigs.get("read"), reading, TypeCardinality.Counts.workedOutIn(reading),
+                Membership.none());
+        Partitions.Partitioning partitioning = Partitions.of("read", domain.reading(rules),
+                ReadAs.THE_COMPILATION_DOES);
         return new Read(MeasuredInput.of("read", domain.reading(rules), partitioning),
                 observed.rows());
     }
@@ -98,8 +103,8 @@ class ARowAtAnotherCaseStandsNowhereBelowItTest {
     /** The narrowing to one leaf, spelled the way the checker's resolution of an arm spells it: a
      *  leaf is a case that covers itself, so selecting it narrows to that one distinction. */
     private static Refinement toLeaf(souther.compiler.types.TypeSymbol leaf) {
-        return Refinement.of(souther.compiler.types.ResolvedCase.of(
-                CaseSelector.direct(leaf), java.util.List.of(leaf)));
+        return Refinement.allOf(souther.compiler.types.ResolvedCase.of(
+                CaseSelector.direct(leaf), java.util.List.of(leaf))).getFirst();
     }
 
     private static TermPath under(String module, String leaf, String field) {

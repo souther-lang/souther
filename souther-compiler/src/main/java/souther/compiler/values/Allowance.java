@@ -1,6 +1,6 @@
 package souther.compiler.values;
 
-import souther.compiler.regex.Meter;
+import net.unit8.notation199x.pattern.Meter;
 import souther.compiler.regex.PatternPlan;
 
 import java.util.ArrayList;
@@ -62,15 +62,17 @@ public final class Allowance<A> {
     private final PatternPlan.Budget budget;
     private final Map<Sameness.Block<A>, Meter> meters = new LinkedHashMap<>();
     private final Map<Sameness.Block<A>, Realizer> realizers = new LinkedHashMap<>();
-    /** The blocks whose exact answer this stopped building, in the order they were found. */
-    private final Set<Sameness.Block<A>> spent = new LinkedHashSet<>();
+    /** The blocks whose exact answer this stopped building, in the order they were found, and the
+     *  limit that stopped each: asked again, a block is refused at the limit it was refused at. */
+    private final Map<Sameness.Block<A>, PatternPlan.Refused> spent = new LinkedHashMap<>();
     /** What another question of the same blocks built, which this one may use and does not pay
      *  for — see {@link #besides}. */
     private final Known<A> borrowed;
     private Realizer nowhere;
     /** What {@link #elsewhere} draws on, kept so that what this has spent in all can be read. */
     private Meter nowhereMeter;
-    private boolean spentElsewhere;
+    /** The limit that stopped {@link #elsewhere}, or null where nothing has. */
+    private PatternPlan.Refused spentElsewhere;
 
     private Allowance(PatternPlan.Budget budget, Known<A> borrowed) {
         this.budget = budget;
@@ -150,18 +152,25 @@ public final class Allowance<A> {
     /**
      * A set, and whether it is the exact one.
      *
-     * <p>One value because the two are one fact. {@code gaveUp} does not describe the set — every
+     * <p>One value because the two are one fact. {@code refused} does not describe the set — every
      * set here is an upper bound of what the rules leave, and this one is wider than it had to be.
      *
      * @param set what the two sides come to, or every value where the exact answer was not built
-     * @param gaveUp whether building the exact answer was given up on for want of allowance
+     * @param refused which limit of this allowance refused the exact answer, or null where it was
+     *                built. The limit and not only that there was one: what a caller says about a
+     *                set left wide is which of this compiler's figures it was left wide at
      */
-    public record Composed(ValueSet set, boolean gaveUp) {
+    public record Composed(ValueSet set, PatternPlan.Refused refused) {
 
         public Composed {
             if (set == null) {
                 throw new IllegalArgumentException("a composition comes to some set");
             }
+        }
+
+        /** Whether building the exact answer was given up on for want of allowance. */
+        public boolean gaveUp() {
+            return refused != null;
         }
     }
 
@@ -250,7 +259,7 @@ public final class Allowance<A> {
     }
 
     private static Composed promised(Composed made) {
-        return made.gaveUp() ? new Composed(ValueSet.NONE, true) : made;
+        return made.gaveUp() ? new Composed(ValueSet.NONE, made.refused()) : made;
     }
 
     private static List<AdmittedPlan> both(ValueSet one, ValueSet other) {
@@ -271,10 +280,11 @@ public final class Allowance<A> {
      */
     private Composed put(Sameness.Block<A> block, AdmittedPlan plan) {
         if (isSpent(block)) {
-            return gaveUp(block);
+            return new Composed(ValueSet.ANY, spentAt(block));
         }
         Realization made = at(block).of(plan);
-        return made.isExact() ? new Composed(made.upperBound(), false) : gaveUp(block);
+        return made.isExact() ? new Composed(made.upperBound(), null)
+                : gaveUp(block, Realization.refusedIn(made));
     }
 
     /**
@@ -291,7 +301,7 @@ public final class Allowance<A> {
      */
     Realizer realizer(Sameness.Block<A> block) {
         return realizers.computeIfAbsent(block,
-                _ -> new Realizer(meter(block), plan -> borrowed.of(block, plan),
+                _ -> new Realizer(budget, meter(block), plan -> borrowed.of(block, plan),
                         (plan, made) -> borrowed.made(block, plan, made)));
     }
 
@@ -319,7 +329,7 @@ public final class Allowance<A> {
      */
     public Realizations realizeAll(Sameness.Block<A> block, Collection<AdmittedPlan> plans) {
         if (isSpent(block)) {
-            return new Realizations.NotBuilt();
+            return new Realizations.NotBuilt(spentAt(block));
         }
         // In the order the plans themselves settle and not the order a caller gathered them in
         // ({@link PlanOrder}). What is being built is the same whichever way round, and what it
@@ -335,8 +345,9 @@ public final class Allowance<A> {
             // block's group draws on.
             Realization made = at(block).of(each);
             if (!(made instanceof Realization.Exact it)) {
-                gaveUp(block);
-                return new Realizations.NotBuilt();
+                PatternPlan.Refused refused = Realization.refusedIn(made);
+                gaveUp(block, refused);
+                return new Realizations.NotBuilt(refused);
             }
             out.put(each, it.set());
         }
@@ -354,7 +365,7 @@ public final class Allowance<A> {
     public Realizer elsewhere() {
         if (nowhere == null) {
             nowhereMeter = budget.meter();
-            nowhere = new Realizer(nowhereMeter, plan -> borrowed.of(null, plan),
+            nowhere = new Realizer(budget, nowhereMeter, plan -> borrowed.of(null, plan),
                     (plan, made) -> borrowed.made(null, plan, made));
         }
         return nowhere;
@@ -391,7 +402,7 @@ public final class Allowance<A> {
      * allowance to what it is supposed to do.
      */
     public Set<Sameness.Block<A>> spent() {
-        return Set.copyOf(spent);
+        return Set.copyOf(spent.keySet());
     }
 
     /**
@@ -437,19 +448,24 @@ public final class Allowance<A> {
         return spent;
     }
 
-    /** Every value there is, and the fact that this is not what the rules leave. */
-    private Composed gaveUp(Sameness.Block<A> block) {
+    /** Every value there is, and the limit that made it not what the rules leave. */
+    private Composed gaveUp(Sameness.Block<A> block, PatternPlan.Refused refused) {
         if (block == null) {
-            spentElsewhere = true;
+            spentElsewhere = refused;
         } else {
-            spent.add(block);
+            spent.put(block, refused);
         }
-        return new Composed(ValueSet.ANY, true);
+        return new Composed(ValueSet.ANY, refused);
     }
 
     /** Whether the exact answer here was already given up on. */
     private boolean isSpent(Sameness.Block<A> block) {
-        return block == null ? spentElsewhere : spent.contains(block);
+        return spentAt(block) != null;
+    }
+
+    /** The limit the exact answer here was given up on at, or null where it was not. */
+    private PatternPlan.Refused spentAt(Sameness.Block<A> block) {
+        return block == null ? spentElsewhere : spent.get(block);
     }
 
     private Meter meter(Sameness.Block<A> block) {

@@ -15,6 +15,7 @@ import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -343,13 +344,14 @@ class AComparisonIsHeldWhereverItIsWrittenTest {
                 SourceConstructOrigin.written(new WrittenOwner.Body("nowhere", "fee"), 0,
                         SourceConstruct.BINARY));
         SiteNumbering numbering = Numberings.ofComparisons(1);
-        Map<ConstructOccurrence, ComparisonEmissionSite> numbered = new LinkedHashMap<>();
-        numbered.put(elsewhere, numbering.comparison(0));
+        Map<ConstructOccurrence, ConditionOutcomeSite> numbered = new LinkedHashMap<>();
+        numbered.put(elsewhere, numbering.outcome(0));
 
         IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
                 () -> new CoverageSites.Plan(List.of(), List.of(), new IdentityHashMap<>(),
-                        numbered, new IdentityHashMap<>(), java.util.Set.of(),
-                        new LinkedHashMap<>(), catalogOf(checked), numbering, Methods.NONE));
+                        numbered, new IdentityHashMap<>(), List.of(), Set.of(),
+                        new LinkedHashMap<>(), catalogOf(checked), numbering, Methods.NONE,
+                        new IdentityHashMap<>(), ArmReplacements.NONE, Map.of(), Map.of()));
         assertTrue(refused.getMessage().contains("one answer or they are two"),
                 refused.getMessage());
     }

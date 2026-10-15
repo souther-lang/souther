@@ -222,9 +222,9 @@ class WhatAValueCarriesBelongsToTheAtomTest {
         FactSubject one = AsPlaces.of(binding(0));
         FactSubject two = AsPlaces.of(binding(1));
         terms.carrying(one, List.of(new NumericConstraint(
-                LinearForm.atom(one).minus(LinearForm.atom(two)), Rel.LE)));
+                LinearForm.difference(one, two), Rel.LE)));
         terms.carrying(two, List.of(new NumericConstraint(
-                LinearForm.atom(two).minus(LinearForm.atom(one)), Rel.LE)));
+                LinearForm.difference(two, one), Rel.LE)));
 
         assertEquals(Set.of(one, two), terms.reached(LinearForm.atom(one)),
                 "the closure stops on repetition, which is what a visited set is for");
@@ -265,7 +265,7 @@ class WhatAValueCarriesBelongsToTheAtomTest {
         terms.computedBy(b, new AtomKnowledge.Computation.Derived(
                 new Derivation.Product(LinearForm.atom(a), LinearForm.atom(a))));
         terms.carrying(c, List.of(new NumericConstraint(
-                LinearForm.atom(c).minus(LinearForm.atom(b)), Rel.LE)));
+                LinearForm.difference(c, b), Rel.LE)));
 
         assertDoesNotThrow(() -> DerivedNumericFacts.refine(nothingKnown(), terms, Set.of(a)),
                 "no computation reaches itself here, and only the relation closes the ring");

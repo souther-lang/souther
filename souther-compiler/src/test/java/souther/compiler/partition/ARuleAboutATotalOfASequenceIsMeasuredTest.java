@@ -3,9 +3,11 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.query.Adequacy;
+import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.PartitionEvidence;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -81,6 +83,11 @@ class ARuleAboutATotalOfASequenceIsMeasuredTest {
                 if List.sum(List.map(line -> if line.free then 0 else line.amount.value, lines))
                         >= 100000 then Needed else NotNeeded
 
+            behavior overAProductOfFields : (lines: List<Item>) -> Verdict
+            let overAProductOfFields (lines) =
+                if List.sum(List.map(line -> line.amount.value * line.amount.value, lines))
+                        >= 100000 then Needed else NotNeeded
+
             behavior counting : (lines: List<Item>) -> Verdict
             let counting (lines) =
                 if List.length(lines) >= 3 then Needed else NotNeeded
@@ -90,6 +97,9 @@ class ARuleAboutATotalOfASequenceIsMeasuredTest {
                 if List.sum(ns) >= 100000 && List.length(ns) >= 3
                     then Needed else NotNeeded
             """;
+
+    /** The model measured once for every question here, none of which changes what it read. */
+    private static final Compilation MEASURED = measured();
 
     /** A total of a list a behavior takes is a number of that location, like a count of it. */
     @Test
@@ -154,11 +164,8 @@ class ARuleAboutATotalOfASequenceIsMeasuredTest {
 
     /** The points of the total's own line, in the order a border names them. */
     private static List<String> pointsOn(String behavior) {
-        Compilation compilation = measured();
-        List<String> out = new java.util.ArrayList<>();
-        for (souther.compiler.query.BorderAssessment border
-                : souther.compiler.query.Adequacy.readingsOf(compilation.db(), MODULE)
-                        .get(behavior)) {
+        List<String> out = new ArrayList<>();
+        for (BorderAssessment border : Adequacy.readingsOf(MEASURED.db(), MODULE).get(behavior)) {
             if (border.label().contains("List.sum")) {
                 border.items().forEach(
                         (role, _) -> out.add(border.label() + " " + border.border().named(role)));
@@ -175,14 +182,30 @@ class ARuleAboutATotalOfASequenceIsMeasuredTest {
      * this, because nothing about that shape has changed.
      */
     @Test
-    void aBranchingProjectionStaysUnread() {
-        assertTrue(reasonsOf("overABranchingProjection")
+    void aProductOfTwoFieldsStaysUnread() {
+        assertTrue(reasonsOf("overAProductOfFields")
                         .contains(UndividedPosition.Reason.RULE_ABOUT_A_DERIVED_VALUE),
-                "what the branch answers is not read out of the element, so the rule is one this"
-                        + " could not follow rather than one about a run");
-        assertTrue(axesOf("overABranchingProjection").stream()
+                "what the closure answers is a product of two fields, which is no form of them, so"
+                        + " the rule is one this could not follow rather than one about a run");
+        assertTrue(axesOf("overAProductOfFields").stream()
                         .noneMatch(each -> each.contains("List.sum")),
                 "and no total is measured");
+    }
+
+    /**
+     * A choice between two numbers of the element by a flag it holds is a number made of the
+     * element, and the total of those is measured as a total is.
+     */
+    @Test
+    void aChoiceByAFlagOfTheElementIsMeasuredAsATotal() {
+        assertTrue(reasonsOf("overABranchingProjection")
+                        .contains(UndividedPosition.Reason.RULE_ABOUT_A_RUN),
+                "the rule is about what the values come to");
+        assertTrue(axesOf("overABranchingProjection").stream()
+                        .noneMatch(each -> each.contains("amount")),
+                "and the place the numbers are made from keeps no class");
+        assertEquals(4, pointsOn("overABranchingProjection").size(),
+                "and a line on the total owes the four points every border owes");
     }
 
     /** A count of the same list is a number of it, and unaffected. */
@@ -217,8 +240,7 @@ class ARuleAboutATotalOfASequenceIsMeasuredTest {
     }
 
     private static Map<String, PartitionEvidence> evidence() {
-        Compilation compilation = measured();
-        return compilation.db().ask(new Adequacy.Coverage(MODULE)).value();
+        return MEASURED.db().ask(new Adequacy.Coverage(MODULE)).value();
     }
 
     private static Compilation measured() {

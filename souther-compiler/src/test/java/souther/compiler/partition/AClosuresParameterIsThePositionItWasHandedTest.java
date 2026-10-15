@@ -110,16 +110,16 @@ class AClosuresParameterIsThePositionItWasHandedTest {
      * What a combinator is handed out of another operation's answer is not one of these, and the
      * rule written about it is still named.
      *
-     * <p>The container is what a {@code map} answered, so an element of it is not a position of this
-     * behavior's input — it is a value made from one, and what a rule about it means for the input
-     * is a question nothing here answers. No line is drawn: reported as a position, it would be
-     * drawn where no row can reach it and the report would name a coordinate the model does not
-     * have.
+     * <p>The container is what a {@code filterMap} answered, so an element of it is not a position
+     * of this behavior's input — it is a value made from one and no closure's answer on any one
+     * element, and what a rule about it means for the input is a question nothing here answers. No
+     * line is drawn: reported as a position, it would be drawn where no row can reach it and the
+     * report would name a coordinate the model does not have.
      *
-     * <p>But the rule is not silent. An author who filters what a {@code map} answered wrote a
-     * comparison, and a reading that placed it nowhere said nothing at all — which reads as a model
-     * that states no rule there. What is said instead is where the values came from, and that what
-     * the rule says about them here is not worked out.
+     * <p>But the rule is not silent. An author who filters what a {@code filterMap} answered wrote
+     * a comparison, and a reading that placed it nowhere said nothing at all — which reads as a
+     * model that states no rule there. What is said instead is where the values came from, and that
+     * what the rule says about them here is not worked out.
      */
     @Test
     void anElementOfWhatAnotherOperationAnsweredNamesNoPosition() {
@@ -130,7 +130,7 @@ class AClosuresParameterIsThePositionItWasHandedTest {
             behavior scored : (people: List<Person>) -> List<Score>
             let scored (people) =
                 List.filter(s -> s.value >= 18,
-                    List.map(q -> Score(q.age.value + 100), people))
+                    List.filterMap(q -> List.get(0, [Score(q.age.value + 100)]), people))
             """;
         Compilation compilation = Compilation.ofSource(derived, "Main");
         compilation.measure(Adequacy.Asked.fullReport());

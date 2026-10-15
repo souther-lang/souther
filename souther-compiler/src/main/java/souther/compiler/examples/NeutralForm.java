@@ -1,13 +1,15 @@
 package souther.compiler.examples;
 
+import souther.compiler.cst.CstLexer;
 import souther.compiler.jvm.SoutherJvmAbi;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.Boundary;
 import souther.compiler.check.DeclarationFacts;
 import souther.compiler.check.DeclarationKinds;
 import souther.compiler.check.DeclarationNewtypes;
-import souther.compiler.check.PublishedDeclarations;
+import souther.compiler.check.SumCases;
 import souther.compiler.check.Symbols;
+import souther.compiler.evaluate.EvaluationContext;
 import souther.compiler.observe.FieldTypes;
 import souther.compiler.observe.Position;
 import souther.compiler.types.Type;
@@ -44,23 +46,23 @@ import java.util.Set;
 final class NeutralForm {
 
     private final Symbols symbols;
-    /** What the declarations a fixture is read against say, which is where how a value crosses is
-     *  settled. */
-    private final PublishedDeclarations published;
+    /** What a value of each sum a fixture is read against can be, which is where how a value
+     *  crosses is settled. */
+    private final SumCases sums;
     /** Which form each of those declarations was written in. */
     private final DeclarationKinds kinds;
     /** What a declaration's fields hold, as the check settled it. Read and never worked out here:
      *  the same answer decides what a comparison reads at a place inside a value. */
     private final FieldTypes fields;
 
-    NeutralForm(Symbols symbols, PublishedDeclarations published, DeclarationKinds kinds,
+    NeutralForm(Symbols symbols, SumCases sums, DeclarationKinds kinds,
                 FieldTypes fields) {
         if (fields == null) {
             throw new IllegalArgumentException("a value's parts are read against what its"
                     + " declaration was checked to hold");
         }
         this.symbols = symbols;
-        this.published = published;
+        this.sums = sums;
         this.kinds = kinds;
         this.fields = fields;
     }
@@ -90,6 +92,8 @@ final class NeutralForm {
      *             what an operand answered with, or an input the row handed over
      */
     Object of(Object live, Position position, String what) {
+        // One node of a value the evaluation built, one counted point (ObservedValues says why).
+        EvaluationContext.tick();
         if (live == null) {
             return live;
         }
@@ -171,7 +175,8 @@ final class NeutralForm {
             java.lang.reflect.Method accessor = live.getClass().getDeclaredMethod(name);
             accessor.setAccessible(true);
             return accessor.invoke(live);
-        } catch (ReflectiveOperationException _) {
+        } catch (ReflectiveOperationException e) {
+            EvaluationContext.rethrowIfOverspent(e);
             throw new FixtureException(what + " cannot be read back as a fixture: `"
                     + simpleName(live) + "` has no `" + name + "` to read");
         }
@@ -240,7 +245,7 @@ final class NeutralForm {
         // What the sum's own decoder reads, read from where that is settled rather than from a copy
         // of it kept on the declaration. A fixture that wrote a tag of its own would be a value the
         // generated decoder cannot read.
-        Boundary.Alternatives alternatives = Boundary.of(type, kinds, published);
+        Boundary.Alternatives alternatives = Boundary.of(type, kinds, sums);
         if (!(alternatives.representation() instanceof Boundary.Representation.Discriminated form)) {
             return null;
         }
@@ -338,7 +343,7 @@ final class NeutralForm {
      */
     boolean readsABareName(Position position) {
         return position.opened() instanceof Position.At(Type type)
-                && Boundary.of(type, kinds, published).representation()
+                && Boundary.of(type, kinds, sums).representation()
                         instanceof Boundary.Representation.Enumeration;
     }
 
@@ -455,7 +460,8 @@ final class NeutralForm {
     /** What a fixture that wrote text where a temporal stands is told, wherever it wrote it. */
     static FixtureException notWrittenAsATemporal(Type.Prim temporal, String text) {
         return new FixtureException("a `" + temporal.shown() + "` is written `" + temporal.shown()
-                + "(\"" + text + "\")`; a string is how one arrives from outside, not how a fixture"
+                + "(" + CstLexer.literalOf(text)
+                + ")`; a string is how one arrives from outside, not how a fixture"
                 + " writes it");
     }
 
@@ -474,7 +480,8 @@ final class NeutralForm {
             java.lang.reflect.Method accessor = live.getClass().getDeclaredMethod("value");
             accessor.setAccessible(true);
             return accessor.invoke(live);
-        } catch (ReflectiveOperationException _) {
+        } catch (ReflectiveOperationException e) {
+            EvaluationContext.rethrowIfOverspent(e);
             throw new FixtureException("an optional's value cannot be read back: `"
                     + simpleName(live) + "` has no `value` to read");
         }

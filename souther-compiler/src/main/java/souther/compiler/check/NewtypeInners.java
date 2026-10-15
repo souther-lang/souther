@@ -43,6 +43,18 @@ public interface NewtypeInners {
     }
 
     /**
+     * What is left of {@code type} once every name it wears is off: {@link TypeOps#newtypeSpine}'s
+     * terminal, and nothing about the layers above it.
+     *
+     * <p>Walked here from this capability's own answers, one name at a time. A capability that can
+     * answer for the whole chain at once says so by answering this itself; it has to be the walk's
+     * answer, including where the names come back round to one already worn.
+     */
+    default Type terminal(Type type) {
+        return TypeOps.newtypeSpine(type, this).terminal();
+    }
+
+    /**
      * The same question read off the declarations in {@code symbols}.
      *
      * <p>For the walks that have not been handed the compilation's answer and read the declaration

@@ -208,6 +208,32 @@ class CoverageSitesTest {
                 plan.probesOf(inner), "the emitter still finds it, and finds nothing to light");
     }
 
+    private static String flatMapOver(String list) {
+        return """
+                module p
+
+                behavior f : (rows: List<Int>) -> List<Int>
+                let f (rows) =
+                    List.flatMap(e -> List.filter(x -> x == e, rows), %s)
+                """.formatted(list);
+    }
+
+    /**
+     * A function the call never applies is not emitted, so the plan holds no site for what is in it.
+     * The list being empty only at run time is a different thing: that function is emitted, and what
+     * is in it is a place a row can go.
+     */
+    @Test
+    void whatIsInAFunctionNeverAppliedIsNotPlannedButWhatIsInOneThatMayBeIs() {
+        CoverageSites.Plan overNothing = planOf(flatMapOver("[ ]"));
+        CoverageSites.Plan overAnInput = planOf(flatMapOver("rows"));
+
+        assertEquals(0, overNothing.sites().size(),
+                "the element of an empty literal has no type to be, so the function is not emitted");
+        assertFalse(overAnInput.sites().isEmpty(),
+                "an input list may be empty and the function is emitted all the same");
+    }
+
     /**
      * An arm the condition never sends a run down is not an arm to cover.
      *

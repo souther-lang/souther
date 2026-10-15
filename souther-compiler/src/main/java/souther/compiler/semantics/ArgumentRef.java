@@ -1,5 +1,7 @@
 package souther.compiler.semantics;
 
+import java.util.List;
+
 /**
  * Which argument of an operation a fact about that operation names.
  *
@@ -25,4 +27,26 @@ public sealed interface ArgumentRef {
 
     /** The argument the operation applies to what a container holds. */
     record TheClosure() implements ArgumentRef {}
+
+    /**
+     * The part at {@code path} of what a walk in the operation's body carries — named only in what
+     * a lemma states the walk carries, and never in a law.
+     */
+    record Carried(List<Integer> path) implements ArgumentRef {
+
+        public Carried {
+            path = List.copyOf(path);
+        }
+    }
+
+    /** The part of the list a walk in the operation's body has walked so far — named only where
+     *  {@link Carried} may be. */
+    record Walked() implements ArgumentRef {}
+
+    /**
+     * Any value at all, the same wherever {@code which} names it in one statement: a statement
+     * naming it holds of every value — named only where {@link Carried} may be, and in what is
+     * stated of kernels beside one another.
+     */
+    record Every(int which) implements ArgumentRef {}
 }

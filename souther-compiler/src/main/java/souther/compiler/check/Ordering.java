@@ -22,9 +22,9 @@ import java.util.Objects;
  * the names are off and drops how it got there, and a reader that then asks the next question of the
  * type as written is the defect this closes — it is what {@code BinaryElaborator} and the
  * {@code ORDERING} row of the old capability table both did, on the line after they computed the
- * base. So this reads {@link TypeOps#newtypeSpine} once and keeps both halves of its answer: the
- * terminal says what the order is, and the layers say whether a name is worn over it. Nothing here
- * asks a second time whether something was a newtype.
+ * base. So this keeps both halves of the spine's answer: its terminal ({@link
+ * NewtypeInners#terminal}) says what the order is, and its first step ({@link TypeOps#outermost})
+ * says whether a name is worn over it. Neither is read off the type as written.
  *
  * <p><b>Sealed, so an order added is one every reader has to answer for.</b> The switches over these
  * are what makes one more a build failure rather than a comparison emitted as an equality test.
@@ -81,15 +81,15 @@ public sealed interface Ordering {
      * JVM holds it, and {@code inner} once it has been opened to the value it wraps. Use
      * {@link #asHeld()} and {@link #opened()} rather than reading this apart.
      *
-     * <p>Never nested. The spine walk goes to the terminal in one pass, so {@code Manager = Level =
-     * Int} is one {@code Wrapped(Longs)} and not two.
+     * <p>Never nested. The order inside is read off the spine's terminal, and reading a terminal
+     * takes no name off, so {@code Manager = Level = Int} is one {@code Wrapped(Longs)} and not two.
      */
     record Wrapped(Ordering inner) implements Ordering {
 
         public Wrapped {
             if (inner instanceof Wrapped) {
                 throw new IllegalArgumentException(
-                        "the spine walk reaches the terminal in one pass, so a wrapped order is never wrapped again");
+                        "a wrapped order is read off the spine's terminal, so it is never wrapped again");
             }
         }
     }
@@ -123,8 +123,9 @@ public sealed interface Ordering {
      * handed the wrapper and not the case.
      */
     static TypeSymbol enumerationOfHeld(Type subject, Core.OrderingBasis basis,
-                                        NewtypeInners inners) {
-        return held(subject, basis, inners) instanceof Places places ? places.enumeration() : null;
+                                        DeclarationNewtypes newtypes) {
+        return held(subject, basis, newtypes) instanceof Places places
+                ? places.enumeration() : null;
     }
 
     /**
@@ -137,11 +138,13 @@ public sealed interface Ordering {
      * so it is {@link Natural} whatever the basis is. Nothing here asks what orders a type; that was
      * the checker's, and is on the call.
      *
+     * <p>So it asks only whether the subject is a newtype, and nothing of what the newtype wraps: a
+     * reader holding what it wraps would be a reader built against it.
+     *
      * <p>Never {@link Wrapped}.
      */
-    static Ordering held(Type subject, Core.OrderingBasis basis, NewtypeInners inners) {
-        return TypeOps.newtypeSpine(subject, inners).layers().isEmpty()
-                ? ofBasis(basis) : new Natural(basis.type());
+    static Ordering held(Type subject, Core.OrderingBasis basis, DeclarationNewtypes newtypes) {
+        return newtypes.wraps(subject) ? new Natural(basis.type()) : ofBasis(basis);
     }
 
     /**
@@ -152,14 +155,23 @@ public sealed interface Ordering {
      * put on the tree, so admission takes this answer and keeps it: a reader that admits a value it
      * cannot emit a comparison for is what #856 was.
      */
-    static Ordering of(Type type, NewtypeInners inners, Symbols symbols, DeclarationKinds kinds,
-                       PublishedDeclarations published) {
-        TypeOps.NewtypeSpine spine = TypeOps.newtypeSpine(type, inners);
-        Ordering terminal = ofTerminal(spine.terminal(), symbols, kinds, published);
+    static Ordering of(Type type, DeclarationAccess declarations) {
+        return of(type, declarations.inners(), declarations.kinds(), declarations.sums(),
+                declarations.enumerations());
+    }
+
+    /**
+     * The same, asking each question of the declarations where it is handed — for a reader that
+     * holds its own answer to one of them.
+     */
+    static Ordering of(Type type, NewtypeInners inners, DeclarationKinds kinds, SumCases sums,
+                       EnumerationListings listings) {
+        Ordering terminal = ofBare(inners.terminal(type), kinds, sums, listings);
         if (terminal == null) {
             return null;
         }
-        return spine.layers().isEmpty() ? terminal : new Wrapped(terminal);
+        // The spine has a layer exactly where its first step takes a name off.
+        return TypeOps.outermost(type, inners) == null ? terminal : new Wrapped(terminal);
     }
 
     /**
@@ -212,18 +224,24 @@ public sealed interface Ordering {
         return this instanceof Wrapped w ? w.inner() : this;
     }
 
-    /** The order of a type with no newtype name left on it. Every constructor is answered, so a type
-     *  constructor added to {@link Type} stops compiling until it says whether it has an order. */
-    private static Ordering ofTerminal(Type terminal, Symbols symbols, DeclarationKinds kinds,
-                                       PublishedDeclarations published) {
+    /**
+     * The order of a type with no newtype name left on it, or null where it has none. Every
+     * constructor is answered, so a type constructor added to {@link Type} stops compiling until it
+     * says whether it has an order.
+     *
+     * <p>Reads no name off: handed a newtype, it answers null, as it does for a product, and says
+     * nothing about what the newtype wraps.
+     */
+    public static Ordering ofBare(Type terminal, DeclarationKinds kinds, SumCases sums,
+                                  EnumerationListings listings) {
         return switch (terminal) {
             case Type.Prim p -> ofPrimitive(p);
             // A sum every one of whose cases is a unit data, one of its cases, or a union of them.
             // Null where more than one enumeration lists the case: the order belongs to the sum, so
             // a value two sums place differently has none of its own, and that is refused rather
             // than guessed (ADR-0069).
-            case Type.Ref r -> placesIn(r, symbols, kinds, published);
-            case Type.Union u -> placesIn(u, symbols, kinds, published);
+            case Type.Ref r -> placesIn(r, kinds, sums, listings);
+            case Type.Union u -> placesIn(u, kinds, sums, listings);
             // A collection has no order of its own whatever it holds, a function and a tuple none at
             // all, and a type standing for a type has no values to order.
             case Type.ListOf _, Type.SetOf _, Type.OptionOf _, Type.MapOf _, Type.TupleOf _,
@@ -231,9 +249,9 @@ public sealed interface Ordering {
         };
     }
 
-    private static Ordering placesIn(Type t, Symbols symbols, DeclarationKinds kinds,
-                                     PublishedDeclarations published) {
-        TypeSymbol enumeration = TypeOps.orderingEnumeration(t, symbols, kinds, published);
+    private static Ordering placesIn(Type t, DeclarationKinds kinds, SumCases sums,
+                                     EnumerationListings listings) {
+        TypeSymbol enumeration = TypeOps.orderingEnumeration(t, kinds, sums, listings);
         return enumeration == null ? null : new Places(enumeration);
     }
 }

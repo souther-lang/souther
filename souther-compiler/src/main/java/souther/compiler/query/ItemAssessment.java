@@ -183,16 +183,34 @@ public sealed interface ItemAssessment {
          *  the model does. */
         UNPROVEN,
 
-        /** The question was not put. A line between two positions is the one this exists for: what a
+        /** The question was not put. A line between two positions is one this exists for: what a
          *  row on it takes is a place both positions admit, and reading each of them on its own does
-         *  not answer that. Told apart from {@link #UNPROVEN} so that implementing the reading later
-         *  moves a line off this state rather than off an answer somebody wrote for it. */
+         *  not answer that. A line behind a condition is the other: what a row at it takes is a
+         *  place the way to it leaves, and the position's rules read on their own do not answer that
+         *  either. Told apart from {@link #UNPROVEN} so that implementing the reading later moves a
+         *  line off this state rather than off an answer somebody wrote for it. */
         NOT_COMPUTED;
 
         /** Whether this is the state that puts a ground in the evidence. The other two are told apart
          *  for what they say about the reading, and neither is evidence of anything. */
         public boolean proves() {
             return this == PROVEN;
+        }
+
+        /**
+         * What two readings of one point establish together.
+         *
+         * <p>Whether a value at the point exists is a fact about the point and not about the reading
+         * that reached it: one reading proving it proves it. The other two states are what a
+         * reading says about itself, so the weaker of them stands only where nothing proved
+         * anything — and a reading that ran and got nowhere says more than one that did not put the
+         * question.
+         */
+        public WritabilityProjection and(WritabilityProjection other) {
+            if (proves() || other.proves()) {
+                return PROVEN;
+            }
+            return this == UNPROVEN || other == UNPROVEN ? UNPROVEN : NOT_COMPUTED;
         }
 
         /** The two answers a reading that ran can come to. For a caller holding the reading's own
@@ -231,10 +249,10 @@ public sealed interface ItemAssessment {
          */
         public enum Ground {
 
-            /** The rules reaching the value prove the point is inside what they admit. The one ground
-             *  that is about the model rather than about this run, so it stands whatever a search
-             *  afterwards makes of the point. */
-            THE_RULES_PROVE_IT,
+            /** The model proves the point is inside what it admits, whether a rule or the type alone
+             *  is what shows it. The one ground that is about the model rather than about this run,
+             *  so it stands whatever a search afterwards makes of the point. */
+            IT_IS_PROVED,
 
             /** A row this compilation read stands at the point, which is a value that went through
              *  the decoder. The only ground that costs nothing to find. */
@@ -262,7 +280,7 @@ public sealed interface ItemAssessment {
                                              boolean valueWasBuilt) {
             EnumSet<Ground> grounds = EnumSet.noneOf(Ground.class);
             if (projection.proves()) {
-                grounds.add(Ground.THE_RULES_PROVE_IT);
+                grounds.add(Ground.IT_IS_PROVED);
             }
             if (rowIsAtIt) {
                 grounds.add(Ground.A_ROW_IS_AT_IT);
@@ -296,8 +314,15 @@ public sealed interface ItemAssessment {
     sealed interface Coverage {
 
         /** A row is at the point, and — where a fork drew the line — went through the comparison.
-         * Found is found: a row settles this whatever else went unread. */
-        record Hit() implements Coverage {}
+         * Found is found: a row settles this whatever else went unread.
+         *
+         * @param by which rows are, as far as whether they are all rows that do not hold */
+        record Hit(RowWitnesses by) implements Coverage {
+
+            public Hit {
+                Objects.requireNonNull(by, "a row at the point is some row");
+            }
+        }
 
         /**
          * No row that could be read is at the point.
@@ -503,8 +528,8 @@ public sealed interface ItemAssessment {
                 for (souther.compiler.partition.ReachabilityGap gap : account.onTheWay()) {
                     if (gap instanceof souther.compiler.partition.ReachabilityGap
                             .ProvedImpossible) {
-                        throw new IllegalArgumentException("a row stands where the rules leave"
-                                + " nothing standing: " + gap.anchor());
+                        throw new IllegalArgumentException("a row stands where no value can"
+                                + " stand: " + gap.anchor());
                     }
                 }
                 return account;
@@ -937,6 +962,31 @@ public sealed interface ItemAssessment {
                     WeakeningSet.of(new Weakening.ItemsPlaceNotWorkedOut(border, not.why())));
             case Owed owed -> owed.coverage();
         };
+    }
+
+    /**
+     * What a reading of a point's line that could not be tied to the point measured there: nothing
+     * counted for the point or against it, and the point held undecided where nothing tied to it
+     * settles it.
+     *
+     * <p>Whatever the reading's own search came to is about a place this reading cannot show to be
+     * the point, so it is not that search's coverage.
+     */
+    static Measurement<Coverage> notTiedTo(souther.compiler.partition.Border border) {
+        return new Measurement.FailedToMeasure<>(
+                NotTiedToTheAuthorsLine.NOT_TIED_TO_THE_AUTHORS_LINE,
+                WeakeningSet.of(new Weakening.AReadingNotTiedToItsLine(border)));
+    }
+
+    /** Why a reading's measurement of a point could not be counted for it: the reading is of the
+     *  point's line and could not be tied to the point ({@link Weakening.AReadingNotTiedToItsLine}). */
+    enum NotTiedToTheAuthorsLine implements FailureReason {
+        NOT_TIED_TO_THE_AUTHORS_LINE;
+
+        @Override
+        public souther.compiler.observe.MeasureReason.About about() {
+            return souther.compiler.observe.MeasureReason.About.THE_BEHAVIOR;
+        }
     }
 
     /** Why a point's own measurement could not be finished: the exact arithmetic could not hold

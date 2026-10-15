@@ -1,6 +1,10 @@
 package souther.compiler.query;
 
+import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
+import souther.compiler.check.ARecursion;
+import souther.compiler.check.BehaviorAnswers;
+import souther.compiler.check.CalledBody;
 import souther.compiler.check.BehaviorBodies;
 import souther.compiler.check.Boundary;
 import souther.compiler.check.BoundaryConstraints;
@@ -14,9 +18,13 @@ import souther.compiler.check.DeclarationKinds;
 import souther.compiler.check.DeclarationLocations;
 import souther.compiler.check.DeclarationMeaning;
 import souther.compiler.check.DeclarationNewtypes;
+import souther.compiler.check.DeclarationReadings;
+import souther.compiler.check.DeclaredNames;
+import souther.compiler.check.EnumerationListings;
 import souther.compiler.check.NewtypeInners;
 import souther.compiler.check.Normalized;
 import souther.compiler.check.ProductSpreads;
+import souther.compiler.check.ListedCases;
 import souther.compiler.check.PublishedDeclarationResult;
 import souther.compiler.check.PublishedDeclarations;
 import souther.compiler.stdlib.Stdlib;
@@ -33,19 +41,24 @@ import souther.compiler.check.GoverningInvariant;
 import souther.compiler.check.InvariantSettled;
 import souther.compiler.check.InvariantStatements;
 import souther.compiler.check.SettledInvariant;
+import souther.compiler.check.SumCases;
 import souther.compiler.check.TypeOps;
 import souther.compiler.check.Cardinality;
 import souther.compiler.check.CardinalityPremise;
 import souther.compiler.check.TypeCardinality;
+import souther.compiler.check.Unwrapping;
 import souther.compiler.check.UninhabitableTypes;
+import souther.compiler.check.ReachedValueLocations;
 import souther.compiler.check.ClauseHelpers;
 import souther.compiler.check.ClausesForDischarge;
+import souther.compiler.check.ClosedImports;
 import souther.compiler.check.ExecutableInvariants;
 import souther.compiler.check.InliningPolicy;
 import souther.compiler.check.Unanswerable;
 import souther.compiler.check.InvariantChecker;
 import souther.compiler.check.DerivedSymbols;
 import souther.compiler.check.ResolvedSymbols;
+import souther.compiler.check.StandingSignature;
 import souther.compiler.core.ValueShape;
 import souther.compiler.diag.Citation;
 import souther.compiler.diag.CompileException;
@@ -65,10 +78,14 @@ import souther.compiler.types.WrittenOwner;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
+import java.util.function.Function;
 
 /**
  * What each declaration becomes before anything is checked against it, one achievement to a rung:
@@ -127,11 +144,13 @@ public final class Shapes {
             if (!scope.present()) {
                 return Answer.absent();
             }
-            Answer<Map<String, Hir.FnDef>> imported = db.ask(new Bodies.ImportedDefinitions(name));
+            Answer<ClosedImports> imported =
+                    db.ask(new Bodies.ImportedDefinitions(name, InliningPolicy.FULL));
             // A module whose imports form a cycle takes nothing from them. The cycle is reported where
             // it is found; an invariant naming an imported definition is left unsettled and reported
             // as the unknown name it then is, which is the same answer every other stage gives there.
-            Map<String, Hir.FnDef> published = imported.present() ? imported.value() : Map.of();
+            ClosedImports published = imported.present()
+                    ? imported.value() : ClosedImports.none(InliningPolicy.FULL);
             try {
                 return Answer.of(
                         InvariantSettled.settle(expandable.value(), scope.value(),
@@ -181,10 +200,12 @@ public final class Shapes {
             if (!resolved.present()) {
                 return Answer.absent();
             }
-            Answer<Map<String, Hir.FnDef>> imported = db.ask(new Bodies.ImportedDefinitions(name));
+            Answer<ClosedImports> imported =
+                    db.ask(new Bodies.ImportedDefinitions(name, InliningPolicy.FULL));
             try {
                 return Answer.of(souther.compiler.check.Expandable.check(resolved.value(),
-                        imported.present() ? imported.value() : Map.of(),
+                        imported.present()
+                                ? imported.value() : ClosedImports.none(InliningPolicy.FULL),
                         db.ask(new Front.Library()).value()));
             } catch (CompileException e) {
                 return Answer.absent(e);
@@ -240,7 +261,7 @@ public final class Shapes {
 
         @Override
         public Answer<Boundary.Alternatives> compute(Db db) {
-            return Answer.of(Boundary.of(type, declarationKinds(db), publishedDeclarations(db)));
+            return Answer.of(Boundary.of(type, declarationKinds(db), sumCases(db)));
         }
     }
 
@@ -366,10 +387,423 @@ public final class Shapes {
      * refuses to publish half of and what a test of this holds it to.
      */
     public static NewtypeInners newtypeInners(Db db) {
-        return declaration -> {
-            Answer<Type> inner = db.ask(new NewtypeInnerOf(declaration));
-            return inner.present() ? inner.value() : null;
+        return new NewtypeInners() {
+            @Override
+            public Type of(TypeKey declaration) {
+                Answer<Type> inner = db.ask(new NewtypeInnerOf(declaration));
+                return inner.present() ? inner.value() : null;
+            }
+
+            /**
+             * The compilation's answer for the name {@code type} wears, where it wears one. A name
+             * that wraps nothing is its own terminal, and is answered without asking what its
+             * module's chains end in.
+             */
+            @Override
+            public Type terminal(Type type) {
+                if (!(type instanceof Type.Ref ref && ref.name() instanceof TypeSymbol.AtModule worn)
+                        || of(worn.key()) == null) {
+                    return type;
+                }
+                Answer<Type> terminal = db.ask(new NewtypeTerminalOf(worn.key()));
+                // A name that wraps something has an answer whenever its module has declarations,
+                // and the module has them because the name was found wrapping something there. The
+                // walk is the same answer reached one name at a time.
+                return terminal.present() ? terminal.value() : NewtypeInners.super.terminal(type);
+            }
         };
+    }
+
+    /**
+     * What every newtype a module declares is left as once the names are off: the terminal of the
+     * spine each one starts.
+     *
+     * <p><b>One answer for the module, and one step out of it.</b> The chains inside a module are
+     * followed here, each name once, so a module of {@code n} names stacked on each other costs
+     * {@code n} steps rather than one walk per name. Where a chain leaves the module this asks
+     * {@link NewtypeTerminalOf} of the name it reaches and stops: what lies past that name is the
+     * other module's answer, and a module asks only the modules it names directly, as
+     * {@link Linkages.Provided} does.
+     *
+     * <p>Answered as the walk answers it, a cycle included. The walk stops on the first name it
+     * has already worn, so a name on a cycle is its own terminal and a name before one ends at the
+     * name it enters the cycle by.
+     */
+    public record NewtypeTerminals(String name) implements Key<Map<TypeKey, Type>> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Map<TypeKey, Type>> compute(Db db) {
+            Answer<DeclaredNames.Index<Ast.Def>> declared = db.ask(new Names.Declarations(name));
+            if (!declared.present()) {
+                return Answer.absent();
+            }
+            List<TypeKey> newtypes = new ArrayList<>();
+            declared.value().declarations().forEach((named, def) -> {
+                if (def instanceof Ast.Data data && data.newtype()) {
+                    newtypes.add(new TypeKey(name, named));
+                }
+            });
+            return Answer.of(Ordered.map(within(name, newtypes, newtypeInners(db), elsewhere -> {
+                Answer<Type> terminal = db.ask(new NewtypeTerminalOf(elsewhere));
+                return terminal.present() ? terminal.value() : null;
+            })));
+        }
+
+        /**
+         * The terminal of every name in {@code newtypes} that wraps something, reading what each
+         * name of {@code module} wraps once.
+         *
+         * <p>{@code elsewhere} answers for a name of another module the way this answers for one of
+         * this, or null where it wraps nothing.
+         */
+        static Map<TypeKey, Type> within(String module, List<TypeKey> newtypes, NewtypeInners inners,
+                                         Function<TypeKey, Type> elsewhere) {
+            Map<TypeKey, Type> terminals = new LinkedHashMap<>();
+            for (TypeKey start : newtypes) {
+                if (terminals.containsKey(start)) {
+                    continue;
+                }
+                // The names this walk has taken off and not yet answered for, each with what it
+                // wraps, and where on the walk each was taken off.
+                List<TypeKey> taken = new ArrayList<>();
+                List<Type> wraps = new ArrayList<>();
+                Map<TypeKey, Integer> takenAt = new HashMap<>();
+                TypeKey at = start;
+                // The name at `at` as the name before it wrapped it; nothing before the start.
+                Type reached = null;
+                Type terminal;
+                while (true) {
+                    Type answered = terminals.get(at);
+                    if (answered != null) {
+                        terminal = answered;
+                        break;
+                    }
+                    Integer worn = takenAt.get(at);
+                    if (worn != null) {
+                        // Back round to a name this walk wore. Each name on the cycle is its own
+                        // terminal, written as the name before it on the cycle wraps it; the names
+                        // before the cycle end where they entered it.
+                        int last = taken.size() - 1;
+                        for (int i = worn; i <= last; i++) {
+                            terminals.put(taken.get(i), wraps.get(i == worn ? last : i - 1));
+                        }
+                        taken.subList(worn, taken.size()).clear();
+                        terminal = reached;
+                        break;
+                    }
+                    Type inner = inners.of(at);
+                    if (inner == null) {
+                        terminal = reached;
+                        break;
+                    }
+                    takenAt.put(at, taken.size());
+                    taken.add(at);
+                    wraps.add(inner);
+                    if (!(inner instanceof Type.Ref ref
+                            && ref.name() instanceof TypeSymbol.AtModule next)) {
+                        terminal = inner;
+                        break;
+                    }
+                    if (!next.key().module().equals(module)) {
+                        Type there = elsewhere.apply(next.key());
+                        terminal = there != null ? there : inner;
+                        break;
+                    }
+                    at = next.key();
+                    reached = inner;
+                }
+                for (TypeKey name : taken) {
+                    terminals.put(name, terminal);
+                }
+            }
+            return terminals;
+        }
+    }
+
+    /**
+     * What one newtype is left as once the names are off, read off its module's
+     * {@link NewtypeTerminals}. A reader depends on this one name's answer, so another chain of the
+     * module moving reaches it only if this one moved too.
+     */
+    public record NewtypeTerminalOf(TypeKey named) implements Key<Type> {
+        @Override
+        public String module() {
+            return named.module();
+        }
+
+        @Override
+        public Answer<Type> compute(Db db) {
+            Answer<Map<TypeKey, Type>> terminals = db.ask(new NewtypeTerminals(named.module()));
+            if (!terminals.present()) {
+                return Answer.absent();
+            }
+            Type terminal = terminals.value().get(named);
+            return terminal == null ? Answer.absent() : Answer.of(terminal);
+        }
+    }
+
+    /**
+     * What a value of a sum can be, for a reader ordering it, counting its places or writing how it
+     * crosses — each answered once for the sum.
+     *
+     * <p>One of these for the whole compilation, for the reason {@link #expandedClauses} gives. A
+     * reader taking one depends on the sums it asks about and on nothing else: each is answered by
+     * {@link SumCasesOf}, and the cases under it are that answer's to read.
+     */
+    public static SumCases sumCases(Db db) {
+        return sum -> {
+            Answer<SumCases.Cases> cases = db.ask(new SumCasesOf(sum));
+            return cases.present() ? cases.value() : null;
+        };
+    }
+
+    /**
+     * The leaf cases a value of one sum can be, and whether every one of them is a unit.
+     *
+     * <p>The descent is made inside this one answer and not out of the answers for the sums under
+     * it. A sum may reach itself, which is refused where it is written and has to come back here;
+     * asked as one answer of another, it would be a cycle of the compilation's answers instead.
+     *
+     * <p>Absent where the name is not a sum, which is the one thing it can be asked of.
+     */
+    public record SumCasesOf(TypeSymbol.AtModule sum) implements Key<SumCases.Cases> {
+        @Override
+        public String module() {
+            return sum.module();
+        }
+
+        @Override
+        public Answer<SumCases.Cases> compute(Db db) {
+            SumCases.Cases cases = SumCases.asWritten(declarationKinds(db), listedCases(db))
+                    .of(sum);
+            return cases == null ? Answer.absent() : Answer.of(cases);
+        }
+    }
+
+    /**
+     * Which enumerations list a unit value among their cases, for a reader working out what orders
+     * it — each answered once for the value's module.
+     *
+     * <p>One of these for the whole compilation, for the reason {@link #expandedClauses} gives. A
+     * reader taking one depends on the values it asks about and on nothing else: each is answered
+     * by {@link EnumerationsListing}.
+     */
+    public static EnumerationListings enumerationListings(Db db) {
+        return value -> {
+            Answer<Set<TypeSymbol>> listing = db.ask(new EnumerationsListing(value.key()));
+            return listing.present() ? listing.value() : Set.of();
+        };
+    }
+
+    /**
+     * Every enumeration a module declares, by each value it lists.
+     *
+     * <p><b>One answer for the module, and one value read off it.</b> What lists a value is read
+     * off every sum of the value's module, so working it out is one walk of the module whichever
+     * value it is for. Walked here once, and a reader depends on {@link EnumerationsListing} of the
+     * value it asks about — so a sum of the module moving reaches a reader only where what lists
+     * that reader's value moved with it.
+     */
+    public record EnumerationsListingIn(String name)
+            implements Key<Map<TypeKey, Set<TypeSymbol>>> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Map<TypeKey, Set<TypeSymbol>>> compute(Db db) {
+            Answer<List<String>> declared = db.ask(new Names.NamesDeclaredIn(name));
+            if (!declared.present()) {
+                return Answer.absent();
+            }
+            return Answer.of(TypeOps.enumerationsListing(name, declared.value(),
+                    declarationKinds(db), sumCases(db)));
+        }
+    }
+
+    /**
+     * Which enumerations list one value, read off its module's {@link EnumerationsListingIn}. A
+     * value no enumeration lists is answered as none, which is an answer: absent is a module with
+     * no declarations to read.
+     */
+    public record EnumerationsListing(TypeKey named) implements Key<Set<TypeSymbol>> {
+        @Override
+        public String module() {
+            return named.module();
+        }
+
+        @Override
+        public Answer<Set<TypeSymbol>> compute(Db db) {
+            Answer<Map<TypeKey, Set<TypeSymbol>>> listing =
+                    db.ask(new EnumerationsListingIn(named.module()));
+            if (!listing.present()) {
+                return Answer.absent();
+            }
+            return Answer.of(listing.value().getOrDefault(named, Set.of()));
+        }
+    }
+
+    /**
+     * Whose canonical reading each newtype a module declares is read as
+     * ({@link DeclarationReadings#ownerOf}): its own, or the reading of the name beneath it where
+     * both write nothing.
+     *
+     * <p>One answer for the module and one step out of it, for the reason {@link NewtypeTerminals}
+     * is: the chains inside a module are followed here, each name once, and where one leaves the
+     * module this asks {@link ReadingOwnerOf} of the name it reaches and stops.
+     *
+     * <p>A name read as itself is answered as that and not as a name: the one it is read as is the
+     * name its reader already holds, so nothing here makes an identity out of an address. A name
+     * read as another is answered with the name a declaration was written wearing.
+     *
+     * <p>A walk that comes back round to a name it took leaves every name it took read as itself.
+     * Nothing on a ring is beneath the others, and a reading entered at one name of it stops at a
+     * different name from a reading entered at the next.
+     */
+    public record ReadingOwners(String name) implements Key<Map<TypeKey, ReadAs>> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Map<TypeKey, ReadAs>> compute(Db db) {
+            Answer<DeclaredNames.Index<Ast.Def>> declared = db.ask(new Names.Declarations(name));
+            if (!declared.present()) {
+                return Answer.absent();
+            }
+            List<TypeKey> newtypes = new ArrayList<>();
+            declared.value().declarations().forEach((named, def) -> {
+                if (def instanceof Ast.Data data && data.newtype()) {
+                    newtypes.add(new TypeKey(name, named));
+                }
+            });
+            return Answer.of(Ordered.map(within(name, newtypes, worn -> wornOver(db, worn),
+                    elsewhere -> {
+                        Answer<ReadAs> owner = db.ask(new ReadingOwnerOf(elsewhere.key()));
+                        return owner.present() && owner.value()
+                                instanceof ReadAs.TheNameBeneath(TypeSymbol.AtModule beneath)
+                                ? beneath : elsewhere;
+                    })));
+        }
+
+        /**
+         * What each name in {@code newtypes} is read as, reading what each name of {@code module} is
+         * worn over once.
+         *
+         * <p>{@code wornOver} answers the newtype that writes nothing a name is worn over, where the
+         * name writes nothing either, and null where that is not so. {@code elsewhere} answers for a
+         * name of another module what it is read as, itself included.
+         */
+        static Map<TypeKey, ReadAs> within(
+                String module, List<TypeKey> newtypes,
+                Function<TypeKey, TypeSymbol.AtModule> wornOver,
+                Function<TypeSymbol.AtModule, TypeSymbol.AtModule> elsewhere) {
+            Map<TypeKey, ReadAs> readAs = new LinkedHashMap<>();
+            // The names a walk left read as themselves because it went round a ring. A later walk
+            // reaching one of those is in the same place, and taking the name for an owner would
+            // share a reading with a ring depending on which walk came first.
+            Set<TypeKey> unshared = new HashSet<>();
+            for (TypeKey start : newtypes) {
+                if (readAs.containsKey(start)) {
+                    continue;
+                }
+                // The names this walk passed over, each read as the reading beneath it, and every
+                // name it stood at.
+                List<TypeKey> taken = new ArrayList<>();
+                Set<TypeKey> walked = new HashSet<>();
+                TypeKey at = start;
+                // The name `at` was reached wearing, from the name worn over it; none at the start.
+                TypeSymbol.AtModule reached = null;
+                TypeSymbol.AtModule owner = null;
+                boolean ring = false;
+                while (true) {
+                    if (unshared.contains(at) || !walked.add(at)) {
+                        ring = true;
+                        break;
+                    }
+                    ReadAs answered = readAs.get(at);
+                    if (answered instanceof ReadAs.TheNameBeneath(TypeSymbol.AtModule lentFrom)) {
+                        owner = lentFrom;
+                        break;
+                    }
+                    if (answered != null) {
+                        owner = reached;
+                        break;
+                    }
+                    TypeSymbol.AtModule beneath = wornOver.apply(at);
+                    if (beneath == null) {
+                        readAs.put(at, new ReadAs.Itself());
+                        owner = reached;
+                        break;
+                    }
+                    taken.add(at);
+                    if (!beneath.key().module().equals(module)) {
+                        owner = elsewhere.apply(beneath);
+                        break;
+                    }
+                    at = beneath.key();
+                    reached = beneath;
+                }
+                if (ring) {
+                    // Round a ring: no reading beneath is the same reading as any of these.
+                    walked.forEach(each -> readAs.put(each, new ReadAs.Itself()));
+                    unshared.addAll(walked);
+                } else if (owner != null) {
+                    for (TypeKey each : taken) {
+                        readAs.put(each, new ReadAs.TheNameBeneath(owner));
+                    }
+                }
+            }
+            return readAs;
+        }
+
+        /** {@link DeclarationReadings#wornOverWritingNothing}, asked of the store. */
+        private static TypeSymbol.AtModule wornOver(Db db, TypeKey named) {
+            return DeclarationReadings.wornOverWritingNothing(named,
+                    each -> db.ask(new MeaningOf(each)).value(),
+                    each -> {
+                        Answer<Type> inner = db.ask(new NewtypeInnerOf(each));
+                        return inner.present() ? inner.value() : null;
+                    });
+        }
+    }
+
+    /** What a newtype's canonical reading is read as ({@link ReadingOwners}). */
+    public sealed interface ReadAs {
+
+        /** Its own reading. */
+        record Itself() implements ReadAs {}
+
+        /** The reading of {@code name}, a newtype beneath it, every name between them writing
+         *  nothing. */
+        record TheNameBeneath(TypeSymbol.AtModule name) implements ReadAs {}
+    }
+
+    /**
+     * What one newtype is read as, read off its module's {@link ReadingOwners}. Absent for a
+     * declaration that is no newtype, which is read as itself.
+     */
+    public record ReadingOwnerOf(TypeKey named) implements Key<ReadAs> {
+        @Override
+        public String module() {
+            return named.module();
+        }
+
+        @Override
+        public Answer<ReadAs> compute(Db db) {
+            Answer<Map<TypeKey, ReadAs>> owners = db.ask(new ReadingOwners(named.module()));
+            if (!owners.present()) {
+                return Answer.absent();
+            }
+            ReadAs owner = owners.value().get(named);
+            return owner == null ? Answer.absent() : Answer.of(owner);
+        }
     }
 
     /**
@@ -654,7 +1088,7 @@ public final class Shapes {
                 // way.
                 souther.compiler.check.Derived.Def derived =
                         souther.compiler.check.Derived.Def.derive(def, scope.value(),
-                                declarationKinds(db), publishedDeclarations(db));
+                                declarationKinds(db), sumCases(db));
                 if (derived != null) {
                     out.put(declared, derived);
                 }
@@ -791,7 +1225,8 @@ public final class Shapes {
             // already refuses. publishedByQualifiedName reads each import directly off the module that
             // declares it instead, closed as deep as that module's own body reaches and never through
             // this assembly.
-            Map<String, Hir.FnDef> importedForEvidence = Bodies.publishedByQualifiedName(db, name);
+            ClosedImports importedForEvidence =
+                    Bodies.publishedByQualifiedName(db, name, InliningPolicy.DISCHARGE);
             // What a candidate offered from the imported half may actually be: the leaves this
             // module's own import lines admit, never a further definition importedForEvidence
             // carries only so a call past one can be read (Bodies.importedLeaves's own doc).
@@ -810,7 +1245,7 @@ public final class Shapes {
                                 signatures.present() ? signatures.value() : Map.of(),
                                 declared.value(), bodies.value(), importedForEvidence,
                                 importedLeaves, stdlib.value(), scope.value(),
-                                publishedDeclarations(db), declarationKinds(db), newtypeInners(db));
+                                sumCases(db), declarationKinds(db), newtypeInners(db));
                 // A definition that did not desugar is missing from what was handed in, and a
                 // surface without it would be this module read as one that does not write it.
                 return assembled == null ? Answer.absent() : Answer.of(assembled);
@@ -870,8 +1305,10 @@ public final class Shapes {
             if (!expandable.present() || !scope.present() || !reading.present()) {
                 return Answer.absent();
             }
-            Answer<Map<String, Hir.FnDef>> imported = db.ask(new Bodies.ImportedDefinitions(name));
-            Map<String, Hir.FnDef> published = imported.present() ? imported.value() : Map.of();
+            Answer<ClosedImports> imported =
+                    db.ask(new Bodies.ImportedDefinitions(name, InliningPolicy.DISCHARGE));
+            ClosedImports published = imported.present()
+                    ? imported.value() : ClosedImports.none(InliningPolicy.DISCHARGE);
             // What the clause says is what the check reads, so an imported bound is substituted here
             // as it is where the invariant is settled. A clause left naming it would be classified as
             // a rule this analysis cannot read, and a construction the bound rejects would compile.
@@ -994,10 +1431,10 @@ public final class Shapes {
             // Read off the module's, because which declarations are one answer is a fact about the
             // graph and not about any declaration in it: worked out here, every declaration of a
             // module would walk everything it reaches to be told what one walk tells all of them.
-            Answer<Map<TypeSymbol, List<TypeSymbol>>> module =
+            Answer<TypeCardinality.Components> module =
                     db.ask(new CardinalityComponentsOf(named.module()));
-            if (module.present() && module.value().containsKey(self)) {
-                return Answer.of(module.value().get(self));
+            if (module.present() && module.value().of(self) != null) {
+                return Answer.of(module.value().of(self));
             }
             // And worked out here for a declaration no module of this compilation indexes, which a
             // count reaches where it walks into a module nobody is editing.
@@ -1017,16 +1454,19 @@ public final class Shapes {
      * shapes, so an author changing what a rule allows leaves it where it was, and a declaration
      * written beside the others changes it without changing what it says about any of them — which
      * is what keeps the counts built on it where they are.
+     *
+     * <p>In the order the counts are taken in, which is the other half of what it answers: every
+     * group after the groups it reads.
      */
     public record CardinalityComponentsOf(String name)
-            implements Key<Map<TypeSymbol, List<TypeSymbol>>> {
+            implements Key<TypeCardinality.Components> {
         @Override
         public String module() {
             return name;
         }
 
         @Override
-        public Answer<Map<TypeSymbol, List<TypeSymbol>>> compute(Db db) {
+        public Answer<TypeCardinality.Components> compute(Db db) {
             Answer<List<TypeSymbol.AtModule>> written = db.ask(new Front.DeclaredTypes(name));
             Answer<RuleReadingSource> reading = ruleReading(db, name);
             if (!written.present() || !reading.present()) {
@@ -1035,8 +1475,50 @@ public final class Shapes {
             try {
                 return Answer.of(TypeCardinality.componentsOf(written.value(), reading.value()));
             } catch (CompileException e) {
-                return Answer.of(Map.of(), Report.of(e));
+                return Answer.of(TypeCardinality.componentsOf(List.of(), reading.value()),
+                        Report.of(e));
             }
+        }
+    }
+
+    /**
+     * How many values every declaration this module writes, and everything they reach, has at most.
+     *
+     * <p>The one place a count of a group is asked for, and asked in the order the groups read each
+     * other. A count of a group is handed what the groups it reads came to by asking for them, and
+     * asked here every one of those has been answered already — so the asking is a lookup, however
+     * long a chain of declarations each reading the next one is. Asked anywhere else, the first
+     * count would wait on the one it reads, that one on the next, and a module would compile or not
+     * by the stack of the thread compiling it.
+     *
+     * <p>What it answers is every count, and the counts are still kept one group at a time: an edit
+     * to one declaration takes its group's count again and the counts that read it, and every other
+     * group's answer stands.
+     */
+    public record CardinalitiesOf(String name) implements Key<Map<TypeSymbol, Cardinality>> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Map<TypeSymbol, Cardinality>> compute(Db db) {
+            Answer<TypeCardinality.Components> components =
+                    db.ask(new CardinalityComponentsOf(name));
+            if (!components.present()) {
+                return Answer.absent();
+            }
+            Map<TypeSymbol, Cardinality> every = new HashMap<>();
+            for (List<TypeSymbol> component : components.value().inOrder()) {
+                if (component.get(0) instanceof TypeSymbol.AtModule first) {
+                    Answer<TypeCardinality.Counted> counted =
+                            db.ask(new CardinalityOf(first.key()));
+                    if (counted.present()) {
+                        every.putAll(counted.value().counts());
+                    }
+                }
+            }
+            return Answer.of(Map.copyOf(every));
         }
     }
 
@@ -1053,15 +1535,19 @@ public final class Shapes {
      * <p>Under the declarations' own module. What a count of a component comes to is settled by the
      * component's rules and by what it reads, and asking it under the scope of whoever reached it
      * would make two readers of one component hold two answers.
+     *
+     * <p>Asked by {@link CardinalitiesOf} and by another count, and by nothing else. Whatever this
+     * reads outside its own component comes before it in the order that one asks in, so the count
+     * asking another one here is handed an answer already made.
      */
-    public record CardinalityOf(TypeKey named) implements Key<Map<TypeSymbol, Cardinality>> {
+    record CardinalityOf(TypeKey named) implements Key<TypeCardinality.Counted> {
         @Override
         public String module() {
             return named.module();
         }
 
         @Override
-        public Answer<Map<TypeSymbol, Cardinality>> compute(Db db) {
+        public Answer<TypeCardinality.Counted> compute(Db db) {
             Answer<List<TypeSymbol>> component = db.ask(new CardinalityComponentOf(named));
             Answer<RuleReadingSource> reading = ruleReading(db, named.module());
             Answer<souther.compiler.check.ReadingPolicy> policy = db.ask(new Front.Reading());
@@ -1070,7 +1556,7 @@ public final class Shapes {
             }
             List<TypeSymbol> members = component.value();
             if (members.isEmpty()) {
-                return Answer.of(Map.of());
+                return Answer.of(new TypeCardinality.Counted(Map.of(), Map.of()));
             }
             // Asked where the component is named and not wherever a member of it was reached, so
             // that the declarations are risen through once however many of them a reader asks about.
@@ -1082,7 +1568,7 @@ public final class Shapes {
                 RuleReadingContext world =
                         RuleReadingContext.of(reading.value(), policy.value(), db.readings());
                 return Answer.of(TypeCardinality.ofComponent(members, world,
-                        cardinalityPremises(db, world), name -> countOf(db, name)));
+                        cardinalityPremises(db, world), new CountedElsewhere(db)));
             } catch (CompileException e) {
                 return Answer.absent(Report.of(e));
             }
@@ -1090,13 +1576,35 @@ public final class Shapes {
     }
 
     /** What a count of one component is handed about a declaration outside it: the answer for the
-     *  component that one is a member of, which is a reading of its own. */
-    private static Cardinality countOf(Db db, TypeSymbol name) {
-        if (!(name instanceof TypeSymbol.AtModule at)) {
-            return null;
+     *  component that one is a member of, which is a reading of its own. And what a reading of a
+     *  behavior's input asks how many values a declaration has, for the same reason. */
+    static final class CountedElsewhere implements TypeCardinality.Counts {
+
+        private final Db db;
+
+        CountedElsewhere(Db db) {
+            this.db = db;
         }
-        Answer<Map<TypeSymbol, Cardinality>> counted = db.ask(new CardinalityOf(at.key()));
-        return counted.present() ? counted.value().get(name) : null;
+
+        @Override
+        public Cardinality of(TypeSymbol name) {
+            TypeCardinality.Counted counted = countedWith(name);
+            return counted == null ? null : counted.counts().get(name);
+        }
+
+        @Override
+        public Unwrapping unwrappingOf(TypeSymbol name) {
+            TypeCardinality.Counted counted = countedWith(name);
+            return counted == null ? null : counted.unwrapping().get(name);
+        }
+
+        private TypeCardinality.Counted countedWith(TypeSymbol name) {
+            if (!(name instanceof TypeSymbol.AtModule at)) {
+                return null;
+            }
+            Answer<TypeCardinality.Counted> counted = db.ask(new CardinalityOf(at.key()));
+            return counted.present() ? counted.value() : null;
+        }
     }
 
     /**
@@ -1191,6 +1699,8 @@ public final class Shapes {
                 return Answer.of(new UninhabitableTypes.WithNoValue.NotCounted());
             }
             List<TypeSymbol.AtModule> declarations = written.value();
+            Answer<Map<TypeSymbol, Cardinality>> every = db.ask(new CardinalitiesOf(name));
+            Map<TypeSymbol, Cardinality> counts = every.present() ? every.value() : Map.of();
             try {
                 // The counts are read from the answer each component has and not worked out here.
                 // What is left to do is what a count is beside the counts: which declarations had to
@@ -1199,8 +1709,7 @@ public final class Shapes {
                 RuleReadingContext world =
                         RuleReadingContext.of(reading.value(), policy.value(), db.readings());
                 TypeCardinality.Cardinalities counted = TypeCardinality.assembled(
-                        declarations, world, cardinalityPremises(db, world),
-                        name -> countOf(db, name));
+                        declarations, world, cardinalityPremises(db, world), counts::get);
                 // Not counted where a rule the count read could not be read at all. What makes a
                 // type have no value is what its rules leave, so a count short of one of them may
                 // have missed the rule that empties a type — and would report it as inhabited.
@@ -1283,8 +1792,10 @@ public final class Shapes {
             if (!expandable.present() || !scope.present()) {
                 return Answer.absent();
             }
-            Answer<Map<String, Hir.FnDef>> imported = db.ask(new Bodies.ImportedDefinitions(name));
-            Map<String, Hir.FnDef> published = imported.present() ? imported.value() : Map.of();
+            Answer<ClosedImports> imported =
+                    db.ask(new Bodies.ImportedDefinitions(name, InliningPolicy.DISCHARGE));
+            ClosedImports published = imported.present()
+                    ? imported.value() : ClosedImports.none(InliningPolicy.DISCHARGE);
             try {
                 return Answer.of(ClauseHelpers.expandedClausesOf(
                         expandable.value(), scope.value(), publishedDeclarations(db),
@@ -1549,6 +2060,24 @@ public final class Shapes {
     }
 
     /**
+     * Where a report points at what any value name reaches, for a reader that is about to point at
+     * one.
+     *
+     * <p>One of these for the whole compilation, for the reason {@link #expandedClauses} gives.
+     * Holding one asks nothing; a reader depends on where something is when a report it makes
+     * points there.
+     */
+    public static ReachedValueLocations reachedValueLocations(Db db) {
+        return new ReachedValueLocations.Held(reached -> {
+            Answer<DiagnosticPlace> at = db.ask(new Names.ReachedValueLocation(reached));
+            if (!at.present()) {
+                throw new ReachedValueLocations.NothingIsReached(reached);
+            }
+            return at.value();
+        });
+    }
+
+    /**
      * What any declaration says, for a reader in another module.
      *
      * <p>One of these for the whole compilation, for the reason {@link #expandedClauses} gives:
@@ -1580,6 +2109,22 @@ public final class Shapes {
     }
 
     /**
+     * The cases any sum lists, for a reader that works out what a value of one can be or which case
+     * an arm selects.
+     *
+     * <p>One of these for the whole compilation, for the reason {@link #expandedClauses} gives. A
+     * reader taking one depends on the cases the sums it asks about list and on nothing else those
+     * sums say, and on nothing any product says — which is what lets it be asked while a product's
+     * clauses are being settled.
+     */
+    public static ListedCases listedCases(Db db) {
+        return sum -> {
+            Answer<List<TypeSymbol>> listed = db.ask(new Names.CasesListedBy(sum));
+            return listed.present() ? listed.value() : null;
+        };
+    }
+
+    /**
      * What a check asks of a declaration it did not write, each question answered by the
      * compilation.
      *
@@ -1588,7 +2133,30 @@ public final class Shapes {
      */
     public static DeclarationAccess declarationAccess(Db db) {
         return new DeclarationAccess(publishedDeclarations(db), declarationKinds(db),
-                newtypeInners(db), effectiveFieldTypes(db), fieldLayout(db));
+                newtypeInners(db), effectiveFieldTypes(db), fieldLayout(db), sumCases(db),
+                listedCases(db), enumerationListings(db), behaviorAnswers(db));
+    }
+
+    /**
+     * What any behavior's body answers, for a reader of a call to one.
+     *
+     * <p>One of these for the whole compilation, for the reason {@link #expandedClauses} gives. A
+     * reader taking one depends on the bodies of the behaviors it asks about and on nothing else.
+     */
+    public static BehaviorAnswers behaviorAnswers(Db db) {
+        return new BehaviorAnswers() {
+
+            @Override
+            public Optional<CalledBody> bodyOf(ValueName.Behavior behavior) {
+                return Optional.ofNullable(db.ask(new Adequacy.BodyAtACall(behavior)).value());
+            }
+
+            @Override
+            public Optional<ARecursion> recursionOf(ValueName.Helper recursion) {
+                return Optional.ofNullable(db.ask(new Bodies.RecursionAtACall(recursion.module(),
+                        recursion.name())).value());
+            }
+        };
     }
 
     /**
@@ -1820,7 +2388,7 @@ public final class Shapes {
         public Answer<Map<TypeSymbol.AtModule, ValueShape>> compute(Db db) {
             Answer<Hir.Module> settled = db.ask(new Bodies.Settled(name));
             Answer<DerivedSymbols> scope = Names.derivedSymbols(db, name);
-            Answer<Map<String, souther.compiler.types.Type>> helpers =
+            Answer<Map<String, StandingSignature>> helpers =
                     db.ask(new Bodies.RecursiveCallSigs(name, InliningPolicy.FULL));
             // Elaborating a clause reads the rules of everything a declaration spreads, which is a
             // walk of the spreads. Asked here for the same reason the count asks it: the graph is
@@ -1849,9 +2417,9 @@ public final class Shapes {
                 try {
                     shapes.put(data.declares(),
                             ExecutableInvariants.of(data, governing.value().get(data.declares()),
-                                    scope.value(), publishedDeclarations(db), declarationKinds(db),
-                                    newtypeInners(db), effectiveFieldTypes(db),
-                                    helpers.value(), expandedClauses(db), statements));
+                                    scope.value(), declarationAccess(db),
+                                    reachedValueLocations(db), helpers.value(),
+                                    expandedClauses(db), statements));
                 } catch (Unanswerable _) {
                     // Rests on something already reported where it went wrong.
                 } catch (CompileException e) {

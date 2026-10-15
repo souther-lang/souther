@@ -1,16 +1,40 @@
 package souther.compiler.inputs;
 
+import souther.compiler.check.AnIndexedMap;
+import souther.compiler.check.AnOperationApplied;
+import souther.compiler.check.BoundOperationFacts;
+import souther.compiler.check.CalledBody;
+import souther.compiler.check.CallArguments;
 import souther.compiler.check.Choice;
+import souther.compiler.check.ClosureUses;
 import souther.compiler.check.DeclarationNewtypes;
+import souther.compiler.check.DeclaredArgument;
+import souther.compiler.check.DefaultBoundOperationFacts;
+import souther.compiler.check.ElementAnswer;
+import souther.compiler.check.ElementBindings;
+import souther.compiler.check.Location;
 import souther.compiler.check.ScopeStep;
 import souther.compiler.check.Symbols;
+import souther.compiler.check.ValueStanding;
 import souther.compiler.core.Core;
+import souther.compiler.numeric.LinearForm;
+import souther.compiler.semantics.HowAClosureIsApplied;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.CaseSelector;
+import souther.compiler.types.ModelOccurrence;
+import souther.compiler.types.TypeSymbol;
+import souther.compiler.types.ValueName;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -45,6 +69,11 @@ import java.util.Set;
  * about the location it stands at are two questions, asked of two values, meeting only where a
  * reader puts one answer to the other.
  *
+ * <p>What is reachable is what the declaration puts at a path ({@link DeclaredInput}), which is no
+ * reading and is there before one. A path is spelled the way the declaration names the location:
+ * an arm selecting the one case the declaration leaves a value narrows nothing, and written as a
+ * narrowing it would be a second spelling of a location the reading holds under the first.
+ *
  * <p>Which is a difference in how long each of them lives, and not only in what each of them is
  * about. What is here is a function of the program point — the bindings gone under, the arm gone
  * into — and changes at every step of a walk. The reading is one value for a whole analysis. Held
@@ -59,16 +88,164 @@ import java.util.Set;
  * <p>What an arm narrowed is this reading's own and not the environment's. It is a fact about where
  * a walk is in the tree rather than about where a binding came from — read under one arm and not
  * under the next — so it is held beside the environment and put to it here.
+ *
+ * <p>And which of the behaviors a body calls a row stands in for. A call to one of them is a value a
+ * row supplies, as a position's is, and a call to any other is one the model computes; which it is
+ * is a fact about the body being read and not about the call, so a rule a declaration states, which
+ * nothing stands a dependency in for, is read where none is.
  */
 public final class InputReads {
 
+    private static final ValueName.Stdlib.Operation GET = ValueName.Stdlib.operation("Map", "get");
+
+    /** What an option is left where it holds a value. */
+    private static final CasesLeft PRESENT = CasesLeft.of(Refinement.of(new Case.Presence(true)));
+
     private final BindingEnvironment names;
-    private final Map<BindingId, java.util.List<Denotation>> alternatives;
+    private final Map<BindingId, List<ReadMeaning.Occurrence>> alternatives;
+    private final DeclaredInput declared;
+    private final souther.compiler.carrier.Membership<ValueName.Behavior> dependencies;
+    private final Applied applied;
+    /** {@link #hashCode}, worked out the first time it is asked: nothing here changes, and what it
+     *  is worked out from holds every value bound on the way here. Nought where it has not been. */
+    private int hash;
+    /** Where each node {@link #pathOf} was asked of stands here, under the declarations
+     *  {@link #pathsUnder}; null until it is first asked. No part of what this reading is. */
+    private Map<Core, PathResolution> paths;
+    private DeclarationNewtypes pathsUnder;
+
+    /**
+     * The applications of closures, the arms of choices and the calls of behaviors a reading here is
+     * on.
+     *
+     * @param handed   the names an application handed one of the values written out, on the way
+     *                 here ({@link #handing})
+     * @param readings how many readings of one condition reading it here is one of: the product of
+     *                 how many values each closure on the way down is applied to, and how many arms
+     *                 each choice taken on the way down has ({@link #taking})
+     * @param taken    what each value taken as another on the way down stands for, the latest
+     *                 first; null where none was
+     * @param given    what a name was handed that stands at no position and reads bindings of its
+     *                 own, read where it was handed: a parameter of a behavior a call entered on the
+     *                 way down ({@link #calling}), and one an application handed a value written out
+     *                 ({@link #handing})
+     * @param entered  the behaviors whose bodies were entered on the way down
+     */
+    private record Applied(Set<BindingId> handed, long readings, Taken taken,
+                           Map<BindingId, Denotation> given, Set<ValueName.Behavior> entered) {
+
+        static final Applied NONE = new Applied(Set.of(), 1, null, Map.of(), Set.of());
+
+        Applied {
+            handed = Set.copyOf(handed);
+            given = Map.copyOf(given);
+            entered = Set.copyOf(entered);
+        }
+
+        /** The same, as one of {@code readings} readings, with {@code taken} for what was taken. */
+        Applied as(long readings, Taken taken) {
+            return new Applied(handed, readings, taken, given, entered);
+        }
+    }
+
+    /**
+     * What a reading takes a node as: another value, or a number of the arguments the node, a call,
+     * was given.
+     */
+    private sealed interface TakenAs {
+
+        /** Another value, read where it stands. */
+        record AValue(Denotation value) implements TakenAs {}
+
+        /** A form of the values the call the node is was given, read where the call stands. */
+        record AFormOfItsArguments(LinearForm<Core> form) implements TakenAs {}
+    }
+
+    /**
+     * That a reading here takes {@code node} as {@code as}, and what {@code older} says before it:
+     * a choice as the answer of the arm the reading is on, a call of a behavior as the body it
+     * enters, a call of an operation defined by cases as what the case the reading is on answers.
+     *
+     * <p>The node, and not one equal to it. A value is one value however often it is read, so two
+     * reads of the node are taken alike; two written alike are two values, each taken its own way.
+     */
+    private record Taken(Core node, TakenAs as, Taken older) {
+
+        /** What {@code e} is taken as, or null where it is not taken. */
+        TakenAs of(Core e) {
+            for (Taken at = this; at != null; at = at.older) {
+                if (at.node == e) {
+                    return at.as;
+                }
+            }
+            return null;
+        }
+
+        /**
+         * {@code more}, newest first, over this.
+         *
+         * <p>Without what of this {@code more} takes as well. {@link #of} reads the newest first, so
+         * a node {@code more} takes is answered from {@code more} wherever it stands below; kept, it
+         * would be one taking more for every value carried from a reading that was on it already,
+         * and a chain carried down a run of choices would double at each of them.
+         */
+        Taken under(Taken more) {
+            if (more == null) {
+                return this;
+            }
+            // A value carried from a reading this one went on from holds this one's older takings
+            // as they are, so most of the time there is nothing of this to keep.
+            for (Taken at = more; at != null; at = at.older) {
+                if (at == this) {
+                    return more;
+                }
+            }
+            Set<Core> newer = Collections.newSetFromMap(new IdentityHashMap<>());
+            for (Taken at = more; at != null; at = at.older) {
+                newer.add(at.node);
+            }
+            return more.over(without(newer));
+        }
+
+        /** This, with what takes one of {@code nodes} left out; null where nothing is left. */
+        private Taken without(Set<Core> nodes) {
+            Taken older = this.older == null ? null : this.older.without(nodes);
+            if (nodes.contains(node)) {
+                return older;
+            }
+            return older == this.older ? this : new Taken(node, as, older);
+        }
+
+        /** This, newest first, over {@code base}. */
+        private Taken over(Taken base) {
+            return base == null ? this
+                    : new Taken(node, as, older == null ? base : older.over(base));
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof Taken that && node == that.node
+                    && as.equals(that.as) && Objects.equals(older, that.older);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(System.identityHashCode(node), as, older);
+        }
+    }
 
     private InputReads(BindingEnvironment names,
-                       Map<BindingId, java.util.List<Denotation>> alternatives) {
+                       Map<BindingId, List<ReadMeaning.Occurrence>> alternatives,
+                       DeclaredInput declared,
+                       souther.compiler.carrier.Membership<ValueName.Behavior> dependencies,
+                       Applied applied) {
         this.names = names;
         this.alternatives = Map.copyOf(alternatives);
+        this.declared = declared;
+        this.dependencies = Objects.requireNonNull(dependencies,
+                "a body says which calls a row stands in for, if none");
+        this.applied = Objects.requireNonNull(applied,
+                "a reading is on some applications, if none");
     }
 
     /**
@@ -79,14 +256,27 @@ public final class InputReads {
      * would put the reading back inside the walk to be reached for later, so what comes in is the
      * part this uses.
      *
+     * <p>{@code declared} is what the declaration puts under those parameters, which is what says
+     * how a position the body narrows is spelled ({@link DeclaredInput}). Given
+     * {@link DeclaredInput#NONE}, every arm narrows the position it matched.
+     *
      * <p>{@code elements} is what the operations that handed their closures the contents of
      * containers were read to say, since the tree this walks has none of them left in it. Given
      * nothing, every name inside a closure names no position.
+     *
+     * <p>{@code dependencies} is what a row stands in for ({@link InputDomain#dependencies}).
+     *
+     * <p>{@code values} is what the values the body builds are defined as. In this tree a value is
+     * a call of its method, and what it is defined as is held in the other tree; handed none, every
+     * such call is a call this reading knows nothing of.
      */
-    public static InputReads ofParameters(Map<BindingId, String> parameters,
-                                          souther.compiler.check.ElementBindings elements) {
+    public static InputReads ofParameters(
+            Map<BindingId, String> parameters, DeclaredInput declared, ElementBindings elements,
+            ValueDefinitions values,
+            souther.compiler.carrier.Membership<ValueName.Behavior> dependencies) {
         return new InputReads(new BindingEnvironment(BindingEnvironment.rooted(parameters),
-                Map.of(), elements, false), Map.of());
+                Map.of(), elements, values, false), Map.of(), declared, dependencies,
+                Applied.NONE);
     }
 
     /**
@@ -102,11 +292,37 @@ public final class InputReads {
      * settled where the walk that reads it is written. Asked for afterwards, a walk of one tree
      * could be handed the other's reading and the first rule about a value an operation made would
      * be reported as this compiler failing to expand something.
+     *
+     * <p>The values this tree builds are defined in it, and read with its own bindings.
      */
     public static InputReads ofParametersWhereCallsStand(
-            Map<BindingId, String> parameters, souther.compiler.check.ElementBindings elements) {
+            Map<BindingId, String> parameters, DeclaredInput declared, ElementBindings elements,
+            souther.compiler.carrier.Membership<ValueName.Behavior> dependencies) {
         return new InputReads(new BindingEnvironment(BindingEnvironment.rooted(parameters),
-                Map.of(), elements, true), Map.of());
+                Map.of(), elements, ValueDefinitions.readWith(elements), true), Map.of(),
+                declared, dependencies, Applied.NONE);
+    }
+
+    /**
+     * Where the values this reading meets are read as what they are defined as: the reading a
+     * definition of one is read in ({@link ValueDefinitions#reading}). A reader that walks the
+     * definitions themselves walks them here, so that what a name inside one means is what it
+     * means to a reading that followed a name into it.
+     */
+    public InputReads whereValuesAreDefined() {
+        return names.values().reading();
+    }
+
+    /**
+     * Where a value's definition is read ({@link ValueDefinitions#reading}): no parameter, nothing
+     * declared under one, nothing a row stands in for, and the operations of the language standing
+     * — the bindings the definitions make and what their operations hand their closures, and the
+     * definitions of the values they name in turn.
+     */
+    static InputReads insideADefinition(ValueDefinitions values, ElementBindings definedWith) {
+        return new InputReads(new BindingEnvironment(Map.of(), Map.of(), definedWith, values,
+                true), Map.of(), DeclaredInput.NONE, souther.compiler.carrier.Membership.none(),
+                Applied.NONE);
     }
 
     /**
@@ -116,9 +332,11 @@ public final class InputReads {
      * <p>Which is why the bindings are handed in: a behavior nothing implements binds its
      * parameters nowhere a body could, and its clauses still name them.
      */
-    public static InputReads ofWhatIsDeclared(Map<BindingId, String> roots) {
+    public static InputReads ofWhatIsDeclared(Map<BindingId, String> roots,
+                                              DeclaredInput declared) {
         return new InputReads(new BindingEnvironment(BindingEnvironment.rooted(roots), Map.of(),
-                souther.compiler.check.ElementBindings.NONE, true), Map.of());
+                ElementBindings.NONE, ValueDefinitions.NONE, true), Map.of(), declared,
+                souther.compiler.carrier.Membership.none(), Applied.NONE);
     }
 
     /**
@@ -126,7 +344,7 @@ public final class InputReads {
      *
      * <p>Rooted at paths rather than at parameter names, which is what such a clause needs: it binds
      * the fields of the declaration that wrote it, and those fields stand wherever a value of that
-     * declaration stands — under a parameter, under a field of one, under what a sequence holds. A
+     * declaration stands — under a parameter, under a field of one, under what a container holds. A
      * name here is a field's binding and never a parameter's, so there is no name to look a
      * parameter up by.
      *
@@ -134,9 +352,11 @@ public final class InputReads {
      * reading of what a declaration wrote: that is the representation a declaration's own rules are
      * held in, and a clause read in the one that runs would have the calls in it gone.
      */
-    public static InputReads ofADeclaredClause(Map<BindingId, TermPath> roots) {
+    public static InputReads ofADeclaredClause(Map<BindingId, TermPath> roots,
+                                               DeclaredInput declared) {
         return new InputReads(new BindingEnvironment(roots, Map.of(),
-                souther.compiler.check.ElementBindings.NONE, true), Map.of());
+                ElementBindings.NONE, ValueDefinitions.NONE, true), Map.of(), declared,
+                souther.compiler.carrier.Membership.none(), Applied.NONE);
     }
 
     /**
@@ -148,8 +368,764 @@ public final class InputReads {
      * reading does with one is a rule it keeps whatever a body can be written to say.
      */
     static InputReads written(Map<BindingId, TermPath> roots, Map<BindingId, Core> bound,
-                              souther.compiler.check.ElementBindings elements) {
-        return new InputReads(new BindingEnvironment(roots, bound, elements, false), Map.of());
+                              ElementBindings elements) {
+        return new InputReads(new BindingEnvironment(roots, bound, elements,
+                ValueDefinitions.NONE, false), Map.of(),
+                DeclaredInput.NONE, souther.compiler.carrier.Membership.none(), Applied.NONE);
+    }
+
+    /**
+     * The same, on the application of a closure that hands {@code binding} {@code value}, one of the
+     * values a container was written with.
+     *
+     * <p>Where an application reads a condition is where the name is one value and not the set of
+     * them ({@link ReadMeaning.OneOf}), which is a fact about where a reading is, as an arm's
+     * narrowing is. A value at a position is that position, as an arm's is. One that names nothing
+     * is itself wherever it is read. One that names a binding of where it was written and stands at
+     * no position is read where it was written, as what a call hands a parameter is
+     * ({@link #calling}): its names are that reading's and not these.
+     */
+    public InputReads handing(BindingId binding, Denotation value, DeclarationNewtypes newtypes) {
+        Map<BindingId, List<ReadMeaning.Occurrence>> narrower = new LinkedHashMap<>(alternatives);
+        narrower.remove(binding);
+        Set<BindingId> handed = new HashSet<>(applied.handed());
+        handed.add(binding);
+        if (value.at().pathOf(value.value(), newtypes) instanceof PathResolution.At(TermPath at)) {
+            return new InputReads(names.naming(binding, at), narrower, declared, dependencies,
+                    new Applied(handed, applied.readings(), applied.taken(), applied.given(),
+                            applied.entered()));
+        }
+        if (namesSomething(value.value())) {
+            Map<BindingId, Denotation> given = new LinkedHashMap<>(applied.given());
+            given.put(binding, value);
+            return new InputReads(names, narrower, declared, dependencies, new Applied(handed,
+                    applied.readings(), applied.taken(), given, applied.entered()));
+        }
+        return new InputReads(names.handing(binding, value.value()), narrower, declared,
+                dependencies, new Applied(handed, applied.readings(), applied.taken(),
+                        applied.given(), applied.entered()));
+    }
+
+    /** Whether an application this reading is on handed {@code binding} one of the values a
+     *  container was written with ({@link #handing}). */
+    public boolean hands(BindingId binding) {
+        return applied.handed().contains(binding);
+    }
+
+    /**
+     * Whether what {@code name} stands for turns on which application of a closure this reading is
+     * on: whether it reads a name an application handed one of the values written out, itself or
+     * through the names it was given.
+     *
+     * <p>Such a name is one value on each application and another on the next, so it is not one
+     * value however it is read: a reader naming a value by its binding would name values of
+     * different applications alike.
+     */
+    public boolean turnsOnAnApplication(Core.Read name, Symbols symbols,
+                                        DeclarationNewtypes newtypes) {
+        return !applied.handed().isEmpty()
+                && readsAnApplied(name, symbols, newtypes, new HashSet<>());
+    }
+
+    private boolean readsAnApplied(Core e, Symbols symbols, DeclarationNewtypes newtypes,
+                                   Set<BindingId> met) {
+        if (e instanceof Core.Read read) {
+            if (applied.handed().contains(read.binding())) {
+                return true;
+            }
+            if (!met.add(read.binding())) {
+                return false;
+            }
+            return meaningOf(read, symbols, newtypes) instanceof ReadMeaning.Through through
+                    && through.denotes().at().readsAnApplied(through.denotes().value(), symbols,
+                            newtypes, met);
+        }
+        boolean[] found = {false};
+        Core.forEachChild(e, child -> found[0] = found[0]
+                || readsAnApplied(child, symbols, newtypes, met));
+        return found[0];
+    }
+
+    /** How many readings of one condition reading it here is one of ({@link Applied#readings}). */
+    public long readings() {
+        return applied.readings();
+    }
+
+    /**
+     * How far each operation handing {@code block}'s parameters the elements of a container goes
+     * applying it: one for a parameter handed one container's elements, one for each container a
+     * parameter is handed something of where several hand it. Empty where no parameter is handed
+     * the elements of any — and a parameter handed values written out is read on each
+     * application instead, so it is none of these.
+     */
+    public List<HowAClosureIsApplied> howItIsApplied(Core.Block block) {
+        List<HowAClosureIsApplied> out = new ArrayList<>();
+        for (Core.Binder param : block.params()) {
+            if (param == null || param.binding() == null
+                    || alternatives.containsKey(param.binding())) {
+                continue;
+            }
+            switch (names.roleOf(param.binding())) {
+                case BindingRole.Element(var held) -> out.add(held.applied());
+                case BindingRole.ElementOfSeveral(var held) ->
+                        held.forEach(each -> out.add(each.applied()));
+                case BindingRole.Root _, BindingRole.Alias _, BindingRole.Unknown _ -> { }
+            }
+        }
+        return List.copyOf(out);
+    }
+
+    /**
+     * The containers {@code block} is applied over, read here, one for each operation applying it
+     * — or empty where something other than an operation over a container may apply it.
+     *
+     * <p>A body entered by an application of the closure is entered only where one of these holds
+     * something. Empty says nothing is known of what enters it, and not that nothing does.
+     */
+    public List<AppliedOver> containersAppliedOver(Core.Block block) {
+        for (Core.Binder param : block.params()) {
+            if (param != null && param.binding() != null) {
+                List<HeldIn> handed = names.handedFrom(param.binding());
+                return names.enteredOver(param.binding()).stream()
+                        .map(container -> new AppliedOver(new Denotation(container, this),
+                                handed.stream().anyMatch(each -> each.container() == container
+                                        && each.ofAnOption())))
+                        .toList();
+            }
+        }
+        return List.of();
+    }
+
+    /**
+     * Every use of {@code block}: each application an operation makes of it, and whether anything
+     * else uses it — or null where no operation applies it. What is applied over is read where
+     * these are the names ({@link Denotation}).
+     */
+    public ClosureUses usesOf(Core.Block block) {
+        for (Core.Binder param : block.params()) {
+            if (param != null && param.binding() != null) {
+                return names.usesOf(param.binding());
+            }
+        }
+        return null;
+    }
+
+    /**
+     * A container a closure is applied over, and whether it is an option whose value it is handed:
+     * then what the closure is applied to is that one value, and it is applied where the option
+     * holds one.
+     */
+    public record AppliedOver(Denotation container, boolean anOption) {
+
+        public AppliedOver {
+            Objects.requireNonNull(container, "a closure is applied over some container");
+        }
+    }
+
+    /**
+     * What reading {@code block}'s body on each application of it that hands a parameter one of the
+     * values a container was written with comes to.
+     *
+     * <p>Read here, at the closure, and not where a condition in its body is: a name the body binds
+     * on the way to the condition is read where it was bound, which is inside an application and
+     * after the parameter was handed its value.
+     *
+     * <p>Counted before anything is made. How many applications there are is the product of how
+     * many values each parameter is handed, times the readings this one is already one of; past
+     * {@code most}, none of them is made, so a closure nested in closures costs what the figure
+     * allows and not what the nesting would. A container holding more than is written out is past
+     * it already.
+     *
+     * <p>Each application is handed one occurrence of each container there on some row, as
+     * {@code kept} decides, and is made only where the container holds it: what each occurrence is
+     * still kept by goes with the application. A parameter handed the elements of a container that
+     * holds none — written so, or with every occurrence dropped on every row — is handed nothing,
+     * and the closure is applied to nothing ({@link Applications.NoneMade}).
+     */
+    public Applications applicationsOf(Core.Block block, Symbols symbols,
+                                       DeclarationNewtypes newtypes, int most,
+                                       ReadMeaning.WhereKept kept) {
+        List<Core.Binder> handed = new ArrayList<>();
+        List<List<ReadMeaning.Occurrence>> occurrencesOf = new ArrayList<>();
+        HowAClosureIsApplied how = HowAClosureIsApplied.TO_EVERY_ELEMENT;
+        long readings = applied.readings();
+        for (int at = 0; at < block.params().size(); at++) {
+            Core.Binder param = block.params().get(at);
+            if (param == null || param.binding() == null) {
+                continue;
+            }
+            Core.Read read = new Core.Read(param.name(), param.binding(),
+                    block.paramTypes().get(at), block.pos());
+            switch (meaningOf(read, symbols, newtypes)) {
+                case ReadMeaning.OneOf one -> {
+                    List<ReadMeaning.Occurrence> occurrences = one.occurrencesWhere(kept);
+                    if (occurrences.isEmpty()) {
+                        return new Applications.NoneMade();
+                    }
+                    if (!alternatives.containsKey(param.binding())
+                            && names.roleOf(param.binding())
+                                    instanceof BindingRole.Element(var held)) {
+                        how = held.applied();
+                    }
+                    handed.add(param);
+                    occurrencesOf.add(occurrences);
+                    if (readings > most / occurrences.size()) {
+                        return new Applications.MoreThanAreRead();
+                    }
+                    readings *= occurrences.size();
+                }
+                case ReadMeaning.NoneHeld _ -> {
+                    return new Applications.NoneMade();
+                }
+                case ReadMeaning.MoreThanAreWrittenOut _ -> {
+                    return new Applications.PastWhatIsWrittenOut();
+                }
+                case ReadMeaning.Position _, ReadMeaning.Through _, ReadMeaning.Element _,
+                     ReadMeaning.Unknown _ -> { }
+            }
+        }
+        if (handed.isEmpty()) {
+            return new Applications.NoneHanded();
+        }
+        List<Applications.Made> applications = List.of(new Applications.Made(this, List.of()));
+        for (int at = 0; at < handed.size(); at++) {
+            List<Applications.Made> wider = new ArrayList<>();
+            for (Applications.Made each : applications) {
+                for (ReadMeaning.Occurrence occurrence : occurrencesOf.get(at)) {
+                    List<ReadMeaning.Occurrence.Kept> keptBy = new ArrayList<>(each.keptWhere());
+                    keptBy.addAll(occurrence.keptWhere());
+                    wider.add(new Applications.Made(each.reads().handing(
+                            handed.get(at).binding(), occurrence.value(), newtypes), keptBy));
+                }
+            }
+            applications = wider;
+        }
+        long counted = readings;
+        List<Applications.Made> each = applications.stream()
+                .map(one -> new Applications.Made(one.reads().readAs(counted), one.keptWhere()))
+                .toList();
+        // An operation applying its closure to one element at most picks it out by something else
+        // it was handed, and one applying it to some of them says not which; and applications made
+        // of every value of each of several parameters are made in an order no operation here
+        // states, so where one of them stops is not said either. Each is still an application a
+        // run may make, and what it states on it is still what it states.
+        if (how == HowAClosureIsApplied.AT_MOST_ONE || how == HowAClosureIsApplied.TO_SOME
+                || (handed.size() > 1 && how != HowAClosureIsApplied.TO_EVERY_ELEMENT)) {
+            return new Applications.Unsaid(each);
+        }
+        return new Applications.Each(each, how);
+    }
+
+    /**
+     * The application of {@code block} that hands {@code value}, one of the values {@code container}
+     * was written with, to the parameter {@code block}'s elements of it arrive on — or null where no
+     * parameter of it takes the elements of {@code container}.
+     *
+     * <p>For a statement pairing an element of a container with what the closure answers of it: on
+     * that application the parameter is that value, and a statement about the element is about the
+     * same value.
+     */
+    public InputReads handingTheElement(Core.Block block, Core container, Denotation value,
+                                        DeclarationNewtypes newtypes) {
+        for (Core.Binder param : block.params()) {
+            if (param != null && param.binding() != null
+                    && names.roleOf(param.binding()) instanceof BindingRole.Element(var held)
+                    && held.part() == HeldIn.Part.ELEMENT && held.container() == container) {
+                return handing(param.binding(), value, newtypes);
+            }
+        }
+        return null;
+    }
+
+    /**
+     * The container {@code e} stands for an element of, where it is a parameter a walk hands each
+     * element of one — or null where it is no such parameter.
+     *
+     * <p>Where a walk hands it elements of more than one container the parameter is none of them
+     * in particular, and this says nothing about it.
+     */
+    public Core containerOfTheElement(Core e) {
+        return Core.withoutStanding(e) instanceof Core.Read read && read.binding() != null
+                && names.roleOf(read.binding()) instanceof BindingRole.Element(var held)
+                && held.part() == HeldIn.Part.ELEMENT ? held.container() : null;
+    }
+
+    /** The same, as one of {@code readings} readings of one condition. */
+    private InputReads readAs(long readings) {
+        return new InputReads(names, alternatives, declared, dependencies,
+                applied.as(readings, applied.taken()));
+    }
+
+    /**
+     * The same, taking {@code node} as {@code as}, as one of {@code readings} readings for each this
+     * one is.
+     *
+     * <p>Two things are taken as another value. A choice whose arm a reading is on: where a value
+     * chosen by cases stands inside what is being read, what is read is read once for each arm, with
+     * the choice standing for what that arm answers, and the readings are as many as the arms. And a
+     * call of a behavior whose body a reading enters, which is that body read with the parameters
+     * standing for what the call handed ({@link #calling}), one reading. Which arm a run takes is said
+     * beside each reading by whoever split it; what is here is only that on this reading the node is
+     * that value, wherever it is reached from — through a name, under an access, as an argument.
+     */
+    public InputReads taking(Core node, Denotation as, int readings) {
+        return taking(node, new TakenAs.AValue(as), readings);
+    }
+
+    /**
+     * The same, taking the call {@code node} as {@code form} of the values it was given: a case of
+     * the definition an operation is written in, answering arithmetic over them.
+     */
+    public InputReads takingAForm(Core node, LinearForm<Core> form, int readings) {
+        return taking(node, new TakenAs.AFormOfItsArguments(form), readings);
+    }
+
+    private InputReads taking(Core node, TakenAs as, int readings) {
+        return new InputReads(names, alternatives, declared, dependencies,
+                applied.as(applied.readings() * readings,
+                        new Taken(Core.withoutStanding(node), as, applied.taken())));
+    }
+
+    /**
+     * What {@code e} is taken as on the reading here ({@link #taking}), where that is another
+     * value — or null where it is not taken, or taken as a form of its arguments.
+     */
+    public Denotation taken(Core e) {
+        // A build of a value is the value it is defined as on every reading, wherever it stands —
+        // under a name or not ({@link #denoting}).
+        Denotation defined = definedAs(e, this);
+        if (defined != null) {
+            return defined;
+        }
+        return applied.taken() == null
+                || !(applied.taken().of(Core.withoutStanding(e)) instanceof TakenAs.AValue(var as))
+                ? null : carryingWhatIsTaken(as);
+    }
+
+    /**
+     * The form of the values it was given the call {@code e} is taken as on the reading here
+     * ({@link #takingAForm}), or null where it is not taken as one.
+     */
+    public LinearForm<Core> takenAsAForm(Core e) {
+        return applied.taken() == null
+                || !(applied.taken().of(Core.withoutStanding(e))
+                        instanceof TakenAs.AFormOfItsArguments(var form)) ? null : form;
+    }
+
+    /** Whether {@code e} is taken as anything on the reading here, a value or a form. */
+    public boolean isTaken(Core e) {
+        return applied.taken() != null && applied.taken().of(Core.withoutStanding(e)) != null;
+    }
+
+    /**
+     * What a name given {@code value} where {@code writtenAt} reads stands for, and what it is read
+     * in.
+     *
+     * <p>The value as written, read there — except a build of a value, which stands for what the
+     * value is defined as, read where a definition is read ({@link ValueDefinitions#reading}). A
+     * definition names nothing of the place that builds it, so read in that place it would be read
+     * under names it has nothing to do with, and in the tree that runs, in a representation that is
+     * not its own. Which builds are builds is {@link ValueDefinitions#definitionOf}'s answer, and
+     * every way a name is given a value comes through here, so a value is read alike however its name
+     * was given it.
+     *
+     */
+    private static Denotation denoting(Core value, InputReads writtenAt) {
+        Denotation defined = definedAs(value, writtenAt);
+        return defined != null ? defined : new Denotation(value, writtenAt);
+    }
+
+    /** What the build {@code value} written where {@code writtenAt} reads is defined as, read where
+     *  a definition is — or null where it is no build. */
+    private static Denotation definedAs(Core value, InputReads writtenAt) {
+        ValueDefinitions values = writtenAt.names.values();
+        Core definition = values.definitionOf(value);
+        return definition == null ? null : new Denotation(definition, values.reading());
+    }
+
+    /**
+     * {@code value}, read where it was given, with what this reading takes as another value taken so
+     * there as well.
+     *
+     * <p>What a name was given is read in the reading it was given in, which knows nothing of what
+     * was taken after; a value taken is the one value it was taken as wherever it is reached from,
+     * so what this reading took goes with the value.
+     */
+    private Denotation carryingWhatIsTaken(Denotation value) {
+        if (applied.taken() == null) {
+            return value;
+        }
+        InputReads at = value.at();
+        Taken taken = at.applied.taken() == null ? applied.taken()
+                : at.applied.taken().under(applied.taken());
+        // Carried already: the reading it stands in holds what this one took, and as many
+        // readings. A reading made again would be one more value to hash wherever it is a key.
+        if (taken == at.applied.taken() && applied.readings() == at.applied.readings()) {
+            return value;
+        }
+        return new Denotation(value.value(), new InputReads(at.names, at.alternatives, at.declared,
+                at.dependencies, at.applied.as(applied.readings(), taken)));
+    }
+
+    /** The same, of an occurrence: its value and each truth it was kept by. */
+    private ReadMeaning.Occurrence carryingWhatIsTaken(ReadMeaning.Occurrence occurrence) {
+        return new ReadMeaning.Occurrence(carryingWhatIsTaken(occurrence.value()),
+                occurrence.keptWhere().stream().map(kept -> new ReadMeaning.Occurrence.Kept(
+                        carryingWhatIsTaken(kept.truth()), kept.holds())).toList());
+    }
+
+    /**
+     * Where the body of {@code behavior}, called with {@code args} here, is read: its parameters
+     * standing for what the call handed — a position where the argument stands at one, and the
+     * argument read here where it does not — and what the body binds to the elements of what known
+     * beside what this body does. The body is read as the tree its behavior's analysis reads,
+     * where the language's operations stand as calls, whichever tree this reading is of ({@link
+     * #calledWith}). Null where its body is entered already on the way here, which is
+     * the behavior reached again while its own answer is being read, or where the call hands it
+     * another number of values than it takes.
+     *
+     * <p>Nothing is stood in inside it. A row stands in the dependencies of the body it was written
+     * for, and an evaluation inside the called body is one each call makes afresh, so what one of
+     * them answers is no answer a row controls.
+     */
+    public InputReads calling(ValueName.Behavior behavior, CalledBody body, List<Core> args,
+                              DeclarationNewtypes newtypes) {
+        if (applied.entered().contains(behavior)) {
+            return null;
+        }
+        Set<ValueName.Behavior> entered = new HashSet<>(applied.entered());
+        entered.add(behavior);
+        return calledWith(body, args, Map.of(), entered, newtypes);
+    }
+
+    /**
+     * Where one step of a recursion over a list is read: the body a call of it names, with its
+     * parameters standing for what the call handed as {@link #calling} has them, and {@code element}
+     * standing at {@code at}, an element of the list the recursion walks — or null where the call
+     * hands another number of values than the body takes.
+     *
+     * <p>What the step's own calls of the recursion answer is no binding here; a reader of the step
+     * says what it takes them to answer.
+     */
+    public InputReads steppingThrough(CalledBody body, List<Core> args, BindingId element,
+                                      TermPath at, DeclarationNewtypes newtypes) {
+        return calledWith(body, args, Map.of(element, at), applied.entered(), newtypes);
+    }
+
+    /**
+     * Where the body of a search from a node is read: the body a call of it names, with its
+     * parameters standing for what the call handed as {@link #calling} has them — or null where the
+     * call hands another number of values than the body takes.
+     *
+     * <p>What the body's own calls of the search answer is no binding here; a reader of the body
+     * says what it takes them to answer.
+     */
+    public InputReads searching(CalledBody body, List<Core> args, DeclarationNewtypes newtypes) {
+        return calledWith(body, args, Map.of(), applied.entered(), newtypes);
+    }
+
+    /**
+     * Where {@code body} is read with what it binds known beside what this body does, each of
+     * {@code standing} at its position, and its parameters standing for what a call handed it,
+     * {@code entered} the bodies entered on the way — or null where the call hands another number
+     * of values than the body takes. A parameter handed a value at a position stands at it, and
+     * one handed anything else is given it as read here.
+     *
+     * <p>The body is the tree the analysis of its behavior reads, which keeps the language's
+     * operations standing as calls whichever tree the call was read in; the arguments stay read
+     * here.
+     */
+    private InputReads calledWith(CalledBody body, List<Core> args,
+                                  Map<BindingId, TermPath> standing,
+                                  Set<ValueName.Behavior> entered, DeclarationNewtypes newtypes) {
+        if (args.size() != body.parameters().size()) {
+            return null;
+        }
+        BindingEnvironment inside = names.entering(body.elements()).overStandingCalls();
+        for (Map.Entry<BindingId, TermPath> each : standing.entrySet()) {
+            inside = inside.naming(each.getKey(), each.getValue());
+        }
+        Map<BindingId, Denotation> given = new LinkedHashMap<>(applied.given());
+        for (int i = 0; i < args.size(); i++) {
+            Core.Binder parameter = body.parameters().get(i);
+            if (parameter == null || parameter.binding() == null) {
+                continue;
+            }
+            if (pathOf(args.get(i), newtypes) instanceof PathResolution.At(TermPath stands)) {
+                inside = inside.naming(parameter.binding(), stands);
+            } else {
+                given.put(parameter.binding(), new Denotation(args.get(i), this));
+            }
+        }
+        return new InputReads(inside, alternatives, declared,
+                souther.compiler.carrier.Membership.none(),
+                new Applied(applied.handed(), applied.readings(), applied.taken(), given,
+                        entered));
+    }
+
+    /** Whether the body of {@code behavior} was entered on the way here ({@link #calling}). */
+    public boolean entered(ValueName.Behavior behavior) {
+        return applied.entered().contains(behavior);
+    }
+
+    /** Whether a reading here is inside the body of a behavior a call names ({@link #calling}). */
+    public boolean insideACalledBody() {
+        return !applied.entered().isEmpty();
+    }
+
+    /** What reading a closure's body on each of its applications comes to ({@link
+     *  #applicationsOf}). */
+    public sealed interface Applications {
+
+        /**
+         * One application: the names in force on it, and what has to hold of the values for the
+         * container to hold the element it is handed — every truth the element was kept by, for
+         * each parameter handed one ({@link ReadMeaning.Occurrence}). An application handed an
+         * element a filter dropped is one no run makes.
+         */
+        record Made(InputReads reads, List<ReadMeaning.Occurrence.Kept> keptWhere) {
+
+            public Made {
+                Objects.requireNonNull(reads, "an application is read in some names");
+                keptWhere = List.copyOf(keptWhere);
+            }
+        }
+
+        /**
+         * One application per occurrence, in the order a walk of the container meets them, which
+         * is the order a run makes them in, and how far the operation goes making them.
+         */
+        record Each(List<Made> each, HowAClosureIsApplied how) implements Applications {
+
+            public Each {
+                each = List.copyOf(each);
+                if (how == null) {
+                    throw new IllegalArgumentException("applications are made some way");
+                }
+            }
+        }
+
+        /** No parameter is handed values written out: the body is read once, as it stands. */
+        record NoneHanded() implements Applications {}
+
+        /**
+         * A parameter is handed the elements of a container that holds none on any row, so the
+         * closure is applied to nothing and nothing in its body is reached.
+         *
+         * <p>Beside {@link NoneHanded} and the opposite of it. That one says which values the
+         * closure is handed are not written out, and its body is read once as it stands because
+         * some run may apply it to something; this one says no run applies it at all.
+         */
+        record NoneMade() implements Applications {}
+
+        /**
+         * One environment for each application a run may make, where which of them it makes is not
+         * said: the operation applies its closure to one element at most, or to some of them, or
+         * hands values to several parameters and stops.
+         *
+         * <p>What a condition states on each is said all the same, since that is a fact about the
+         * application and not about whether a run makes it; where each is made among the others is
+         * what is not.
+         */
+        record Unsaid(List<Made> each) implements Applications {
+
+            public Unsaid {
+                each = List.copyOf(each);
+            }
+        }
+
+        /** More applications than a condition is read on, counting the ones this reading is
+         *  already one of. */
+        record MoreThanAreRead() implements Applications {}
+
+        /**
+         * A parameter is handed the elements of a container holding more than a walk writes out
+         * ({@link ReadMeaning.MoreThanAreWrittenOut}), so the applications are not counted at all.
+         *
+         * <p>Beside {@link MoreThanAreRead} and not folded into it: the two stop at two figures,
+         * and a reader told which is told the one that was reached.
+         */
+        record PastWhatIsWrittenOut() implements Applications {}
+    }
+
+    /** Whether {@code e} reads a binding it does not make itself. */
+    private static boolean namesSomething(Core e) {
+        Set<BindingId> made = new HashSet<>();
+        Set<BindingId> read = new HashSet<>();
+        walkNames(e, made, read);
+        read.removeAll(made);
+        return !read.isEmpty();
+    }
+
+    /**
+     * The bindings {@code e} reads and the ones it makes. A binder this does not know of leaves the
+     * name it makes read and not made, which says the value names something — the answer that hands
+     * nothing, and never a wrong one.
+     */
+    private static void walkNames(Core e, Set<BindingId> made, Set<BindingId> read) {
+        switch (e) {
+            case Core.Read r -> read.add(r.binding());
+            case Core.LetIn let -> madeBy(let.binder(), made);
+            case Core.Block block -> block.params().forEach(each -> madeBy(each, made));
+            case Core.Match match -> match.cases().forEach(arm -> madeBy(arm.binder(), made));
+            case Core.IfConstructed fork -> madeBy(fork.binder(), made);
+            default -> { }
+        }
+        Core.forEachChild(e, child -> walkNames(child, made, read));
+    }
+
+    private static void madeBy(Core.Binder binder, Set<BindingId> made) {
+        if (binder != null && binder.binding() != null) {
+            made.add(binder.binding());
+        }
+    }
+
+    /** Whether a call to {@code behavior} is a value a row stands in for, read here. */
+    public boolean standsIn(ValueName.Behavior behavior) {
+        return dependencies.contains(behavior);
+    }
+
+    /**
+     * Whether any value read here may be an answer of a dependency.
+     *
+     * <p>A body that stands nothing in has no answer anywhere in it, and the names it reads are not
+     * walked to find that out — unless it is a body a call entered, whose parameters are read where
+     * the call stands. Asked first by a reader that would otherwise do work to find an answer in a
+     * body that has none.
+     */
+    public boolean mayHoldAnAnswer() {
+        return !dependencies.isEmpty() || !applied.given().isEmpty();
+    }
+
+    /**
+     * What a dependency answered that {@code e} is, at a place inside the answer — or null where
+     * it is no such thing.
+     *
+     * <p>The one place a value is found to be an answer, and the only maker of an
+     * {@link AnEvaluation}. Fields read off it are steps inside the answer; a name is the value it
+     * was bound to only where its meaning is that value ({@link ReadMeaning.Through}), so
+     * {@code let y = x} is the answer {@code x} is and {@code x + 1} is no answer at all. A field of
+     * a newtype is the value it wraps and no step.
+     *
+     * @param e the value, in the tree {@code this} reads
+     * @return the evaluation, the call written for it, where that call's arguments are read, and
+     *         the fields read off the answer in the order they are written
+     */
+    public AnAnswerAt answerAt(Core e, Symbols symbols, DeclarationNewtypes newtypes) {
+        if (!mayHoldAnAnswer()) {
+            return null;
+        }
+        List<TermPath.Step> steps = new ArrayList<>();
+        Core under = e;
+        InputReads reads = this;
+        while (true) {
+            // Which answer a value is does not turn on the type it stands as.
+            under = Core.withoutStanding(under);
+            // The same accesses held as one node, taken a name at a time from the last.
+            if (under instanceof Core.FieldProjection projection) {
+                under = projection.lastAccess();
+                continue;
+            }
+            if (under instanceof Core.FieldAccess field) {
+                if (Location.isStep(field.target().type(), field.field(), newtypes)) {
+                    steps.addFirst(new TermPath.Step.Field(field.field()));
+                }
+                under = field.target();
+                continue;
+            }
+            if (under instanceof Core.Read name
+                    && reads.meaningOf(name, symbols, newtypes) instanceof ReadMeaning.Through through) {
+                under = through.denotes().value();
+                reads = through.denotes().at();
+                continue;
+            }
+            // What a walk hands each element of an answer is a place inside that answer: the
+            // element, under the places the container is.
+            if (under instanceof Core.Read element && reads.containerOfTheElement(element) != null) {
+                AnAnswerAt container = reads.answerHoldingTheElementsOf(
+                        reads.containerOfTheElement(element), symbols, newtypes);
+                if (container == null) {
+                    return null;
+                }
+                List<TermPath.Step> inside = new ArrayList<>(container.steps());
+                inside.add(new TermPath.Step.Element());
+                inside.addAll(steps);
+                return new AnAnswerAt(container.evaluation(), container.arguments(),
+                        container.at(), inside);
+            }
+            break;
+        }
+        if (!(under instanceof Core.Call call && call.fn() instanceof Core.Reached reached
+                && reached.denotes() instanceof ValueName.Behavior dependency
+                && reads.standsIn(dependency))) {
+            return null;
+        }
+        // A call inside one of the language's own operations is none the model writes.
+        Optional<ModelOccurrence> written = ModelOccurrence.statedAt(call.occurrence());
+        return written.isEmpty() ? null : new AnAnswerAt(
+                new AnEvaluation(dependency, written.get()), call.args(), reads, steps);
+    }
+
+    /**
+     * The answer of a dependency whose very elements {@code container} holds, or null where it holds
+     * none's.
+     *
+     * <p>Through the operations that answer the elements of what they were given — a reordered list,
+     * a filtered one — as a walk to the position an element stands at goes through them
+     * ({@link InputPath#argumentWhoseElementsItHolds}), so an element of either is where it was
+     * whether the list it came from is a position of the input or an answer.
+     */
+    private AnAnswerAt answerHoldingTheElementsOf(Core container, Symbols symbols,
+                                                  DeclarationNewtypes newtypes) {
+        Denotation at = standing(container, symbols, newtypes);
+        while (true) {
+            AnAnswerAt found = at.at().answerAt(at.value(), symbols, newtypes);
+            if (found != null) {
+                return found;
+            }
+            ValueName operation;
+            List<Core> args;
+            switch (Core.withoutStanding(at.value())) {
+                case Core.Call call when call.fn() instanceof Core.Reached reached -> {
+                    operation = reached.denotes();
+                    args = call.args();
+                }
+                case Core.PreservedCall kept -> {
+                    operation = kept.declared().operation();
+                    args = kept.args();
+                }
+                default -> {
+                    return null;
+                }
+            }
+            DeclaredArgument holds = InputPath.argumentWhoseElementsItHolds(operation);
+            int position = holds == null ? -1 : CallArguments.positionOf(holds, operation);
+            if (position < 0 || position >= args.size()) {
+                return null;
+            }
+            at = at.at().standing(args.get(position), symbols, newtypes);
+        }
+    }
+
+    /**
+     * What {@link #answerAt} found.
+     *
+     * @param evaluation which evaluation of which dependency
+     * @param arguments  what the call written for it hands the dependency
+     * @param at         where those arguments are read
+     * @param steps      the fields read off the answer, in the order they are written
+     */
+    public record AnAnswerAt(AnEvaluation evaluation, List<Core> arguments, InputReads at,
+                             List<TermPath.Step> steps) {
+
+        public AnAnswerAt {
+            if (evaluation == null || arguments == null || at == null || steps == null) {
+                throw new IllegalArgumentException("an answer found is some evaluation, handed"
+                        + " something read somewhere, at some place inside it");
+            }
+            arguments = List.copyOf(arguments);
+            steps = List.copyOf(steps);
+        }
     }
 
     /**
@@ -161,18 +1137,20 @@ public final class InputReads {
      * it names is as many spellings of one position as there are walks, of which the axes carry
      * one.
      *
-     * <p>Only where the arm narrows the scrutinee to one distinction of it. An arm answering for
-     * several cases narrows to none of them in particular, and so does one naming a case that is
-     * itself a sum, which stands for the leaves under it while the position divides into those
-     * leaves. A name that stands for no position is what a reader is given for either — which is
-     * what it was given before there was anything to say.
+     * <p>Where the arm narrows the scrutinee, to one of its distinctions or to several: an arm naming
+     * a case that is itself a sum, or naming several cases, leaves the value the leaves they cover,
+     * and the name stands at the position narrowed to those. Where the declaration already leaves
+     * the value nothing the arm does not cover, the arm narrows nothing and the name stands at the
+     * position as it is.
      *
      * <p><b>And the narrowing is the checker's resolution, not one worked out from it here.</b>
      * Which case an arm took was decided there, together with what the value turns out to be once
      * it is taken and which leaves selecting it covers; a reader that took the case's name instead
      * would have an optional's present carrier and a sum's case declared under the same word
      * arriving as one thing, and a case above two leaves arriving as a place. So what crosses into
-     * this vocabulary is the resolved case, and nothing here asks what the scrutinee's type was.
+     * this vocabulary is the resolved selection, whole. The scrutinee's type is handed on with it and
+     * decides nothing about the case: it says which of the names a value wears the arm can be
+     * matching ({@link DeclaredInput#taking}).
      *
      * <p><b>And where the scrutinee stands for one of several written values, the arm narrows that
      * set.</b> Which is a different answer from the one above and not a weaker copy of it: a
@@ -190,16 +1168,20 @@ public final class InputReads {
         if (arm.binder() == null || arm.binder().binding() == null) {
             return this;
         }
-        // The narrowing the arm puts on the scrutinee, and nothing where the arm puts none: an arm
-        // selecting several cases selects no one of them, and one selecting a case that is itself a
-        // sum narrows to several of the position's distinctions and so to no one of them.
-        Refinement narrowing = arm.selectedCase().map(Refinement::of).orElse(null);
-        if (narrowing == null) {
+        if (arm.binding() instanceof Core.ArmBinding.Payload) {
+            InputReads holding = holdingWhatItHolds(scrutinee, arm.binder(), symbols, newtypes);
+            if (holding != null) {
+                return holding;
+            }
+        }
+        // An arm over an optional's two carriers at once leaves a position nothing to narrow it to.
+        CasesLeft selected = CasesLeft.selectedBy(arm.pattern());
+        if (selected == null) {
             return admitting(scrutinee, arm, symbols, newtypes);
         }
         // What the arm narrows is a position of the input, and a scrutinee that stands at none
         // narrows nothing.
-        TermPath standing = switch (pathOf(scrutinee, newtypes)) {
+        TermPath standing = switch (forkedOn(scrutinee, newtypes)) {
             case PathResolution.At(var at) -> at;
             case PathResolution.NotAPosition _ -> null;
             // A scrutinee that only may stand at a position narrows nothing here either. What an
@@ -210,22 +1192,391 @@ public final class InputReads {
         if (standing == null) {
             return admitting(scrutinee, arm, symbols, newtypes);
         }
-        TermPath narrowed = standing.refine(narrowing);
+        // The case is relative to the type the scrutinee stands as here, and the value may have been
+        // handed in as a wider one than it is. What the declaration puts at the position says
+        // whether the arm narrows it, finds it already the case, or finds it never one.
+        TermPath narrowed = switch (declared.taking(standing, scrutinee.type(), selected)) {
+            case DeclaredInput.Taking.Narrows(TermPath to) -> to;
+            case DeclaredInput.Taking.Implied _ -> standing;
+            // No value at the position is of the case, so the name under the arm stands at no
+            // position of it.
+            case DeclaredInput.Taking.Excluded _ -> null;
+        };
+        if (narrowed == null) {
+            return admitting(scrutinee, arm, symbols, newtypes);
+        }
         // And nothing is asked of the reading. What this answers is which location the arm's name
-        // stands for, which the arm and the scrutinee's path settle between them: the value that was
-        // matched, read as the case the arm selects. Whether a row is ever written there — whether
-        // the position exists, whether the rules leave the case anything — is a question about the
-        // model, and it is {@link InputDomain}'s to answer about the path this produced.
+        // stands for, which the arm, the scrutinee's path and the declaration settle between them:
+        // the value that was matched, read as the case the arm selects. Whether a row is ever
+        // written there — whether the position exists, whether the rules leave the case anything —
+        // is a question about the model, and it is {@link InputDomain}'s to answer about the path
+        // this produced.
         //
         // Held together, the two could not both be answered: the reading has to be built before it
         // can be asked, and it cannot be built without knowing which paths the body names. Asking
         // only the first here is what breaks that circle, and the cost of asking it alone is a name
         // that stands for a place no row reaches — which the reading refuses when it is asked.
-        return new InputReads(names.naming(arm.binder().binding(), narrowed), alternatives);
+        return new InputReads(names.naming(arm.binder().binding(), narrowed), alternatives,
+                declared, dependencies, applied);
     }
 
     /**
-     * The same, where what the arm binds is one of the values the scrutinee's set holds.
+     * Whether what {@code option} holds is made of an entry of the input's map that a lookup
+     * answered: the lookup's own answer, or an option made of it by an operation answering its
+     * closure on what an option holds. An arm opening it is about that entry.
+     *
+     * <p>Which entry an arm is about, and not what the name under it is. A name opening the
+     * lookup itself stands at the map's elements; one opening what a closure made of the entry's
+     * value stands for what the closure made, and the entry is only what it was made of. Either
+     * way what the arm states is about the entry whose key was asked for, which is what the
+     * proposition over the arm says. Asked of the option and not of each arm, since it is the
+     * same answer for every arm that opens it.
+     */
+    public boolean holdsAnEntryLookedUp(Core option, Symbols symbols,
+                                        DeclarationNewtypes newtypes) {
+        return whatItHolds(option, symbols, newtypes).madeOf() != null;
+    }
+
+    /**
+     * What a value an option holds is, said so that a name in any reading can be bound to it.
+     *
+     * <p>Worked out in the reading the option stands in, which is not this one wherever the option
+     * was reached through a binding or a call; and carried back as a position, which every reading
+     * spells alike, or as a value together with the reading it is read in. Bound in that form
+     * ({@link #holding}), a name stands for the same value wherever it is read, and nothing here
+     * asks whether two readings are the same object.
+     */
+    sealed interface WhatItHolds {
+
+        /** The entry a lookup picked out, whose value it is. Null where it was made of none. */
+        EntryLookedUp madeOf();
+
+        /** The value of the entry under the key. */
+        record AnEntry(EntryLookedUp entry) implements WhatItHolds {
+
+            public AnEntry {
+                Objects.requireNonNull(entry, "an entry some lookup picked out");
+            }
+
+            @Override
+            public EntryLookedUp madeOf() {
+                return entry;
+            }
+        }
+
+        /** The value at a position of the input: an optional's, narrowed to its value. */
+        record AtAPosition(TermPath at) implements WhatItHolds {
+
+            public AtAPosition {
+                Objects.requireNonNull(at, "some position");
+            }
+
+            @Override
+            public EntryLookedUp madeOf() {
+                return null;
+            }
+        }
+
+        /**
+         * What a closure answered on the value another option holds: its body, read where its
+         * parameter stands for that value, and what that value is — which says the entry it was
+         * made of, where it was made of one.
+         */
+        record MadeByAClosure(Denotation answered, WhatItHolds handed) implements WhatItHolds {
+
+            public MadeByAClosure {
+                Objects.requireNonNull(answered, "what the closure answered is read somewhere");
+                Objects.requireNonNull(handed, "and it was handed some value, said or not");
+            }
+
+            @Override
+            public EntryLookedUp madeOf() {
+                return handed.madeOf();
+            }
+        }
+
+        /** Nothing says. */
+        record Unsaid() implements WhatItHolds {
+
+            @Override
+            public EntryLookedUp madeOf() {
+                return null;
+            }
+        }
+    }
+
+    /**
+     * What {@code option}, read here, holds where it holds a value ({@link WhatItHolds}).
+     *
+     * <p>A lookup in the input's map holds the entry under the key. An operation answering its
+     * closure on what another option holds holds what the closure's body answers, read with the
+     * closure's parameter standing for what the other holds — worked out the same way, down to a
+     * lookup, an optional's position, or nothing said. The closure is read where it stands, and
+     * may be a name for one; only a closure written as a block of one parameter is read.
+     *
+     * <p>Each step goes into an argument of the call before it, and each call is found through the
+     * names it was bound to ({@link #standing}), which stops where a name comes round again, so
+     * the descent ends where the tree does.
+     */
+    WhatItHolds whatItHolds(Core option, Symbols symbols, DeclarationNewtypes newtypes) {
+        Denotation looked = standing(option, symbols, newtypes);
+        InputReads at = looked.at();
+        if (AnOperationApplied.of(Core.withoutStanding(looked.value()))
+                instanceof AnOperationApplied(ValueName operation, List<Core> args)) {
+            if (GET.equals(operation)) {
+                EntryLookedUp entry = args.size() == 2
+                        ? entryLookedUp(looked, args, symbols, newtypes) : null;
+                return entry == null ? new WhatItHolds.Unsaid() : new WhatItHolds.AnEntry(entry);
+            }
+            BoundOperationFacts.ClosureOnWhatItHolds made =
+                    DefaultBoundOperationFacts.get().answersTheClosureOnWhatItHolds(operation);
+            int held = made == null ? -1 : CallArguments.positionOf(made.option(), operation);
+            int closure = made == null ? -1 : CallArguments.positionOf(made.closure(), operation);
+            if (held < 0 || held >= args.size() || closure < 0 || closure >= args.size()) {
+                return new WhatItHolds.Unsaid();
+            }
+            Denotation step = at.standing(args.get(closure), symbols, newtypes);
+            if (!(Core.withoutStanding(step.value()) instanceof Core.Block block)
+                    || block.params().size() != 1 || block.params().getFirst() == null
+                    || block.params().getFirst().binding() == null) {
+                return new WhatItHolds.Unsaid();
+            }
+            WhatItHolds handed = at.whatItHolds(args.get(held), symbols, newtypes);
+            return new WhatItHolds.MadeByAClosure(new Denotation(block.body(),
+                    step.at().holding(block.params().getFirst().binding(), handed, newtypes)),
+                    handed);
+        }
+        // An optional at a position holds what stands there narrowed to its present case.
+        if (!(at.forkedOn(looked.value(), newtypes) instanceof PathResolution.At(TermPath path))) {
+            return new WhatItHolds.Unsaid();
+        }
+        TermPath narrowed = switch (at.declared.taking(path, looked.value().type(), PRESENT)) {
+            case DeclaredInput.Taking.Narrows(TermPath to) -> to;
+            case DeclaredInput.Taking.Implied _ -> path;
+            case DeclaredInput.Taking.Excluded _ -> null;
+        };
+        return narrowed == null ? new WhatItHolds.Unsaid() : new WhatItHolds.AtAPosition(narrowed);
+    }
+
+    /**
+     * This reading, with {@code name} standing for {@code held}: at the entry's element and read
+     * of that entry, at the position, or for what the closure answered, read where it was — or as
+     * it was, where nothing is said.
+     *
+     * <p>A value read where it was is handed as a call hands a parameter what it was given
+     * ({@link #calledWith}): a position where it stands at one, which every reading spells alike,
+     * and otherwise the value read there, in the reading its names are bound in, which a binding
+     * made here would not have.
+     */
+    private InputReads holding(BindingId name, WhatItHolds held, DeclarationNewtypes newtypes) {
+        return switch (held) {
+            case WhatItHolds.AnEntry(EntryLookedUp entry) -> new InputReads(
+                    names.naming(name, entry.element()).selecting(name, entry), alternatives,
+                    declared, dependencies, applied);
+            case WhatItHolds.AtAPosition(TermPath at) -> new InputReads(names.naming(name, at),
+                    alternatives, declared, dependencies, applied);
+            case WhatItHolds.MadeByAClosure(Denotation answered, var _)
+                    when answered.at().pathOf(answered.value(), newtypes)
+                            instanceof PathResolution.At(TermPath at) ->
+                    new InputReads(names.naming(name, at), alternatives, declared, dependencies,
+                            applied);
+            case WhatItHolds.MadeByAClosure(Denotation answered, var _) -> {
+                Map<BindingId, Denotation> given = new LinkedHashMap<>(applied.given());
+                given.put(name, answered);
+                yield new InputReads(names, alternatives, declared, dependencies,
+                        new Applied(applied.handed(), applied.readings(), applied.taken(), given,
+                                applied.entered()));
+            }
+            case WhatItHolds.Unsaid _ -> this;
+        };
+    }
+
+    /**
+     * This reading inside an arm opening {@code option}, with {@code name} standing for what it
+     * holds — or null where neither a lookup nor a closure says what that is, and what the arm
+     * narrows a position to is left to say it.
+     *
+     * <p>What a lookup in the input's map answered is the value of the entry under the key: the
+     * name stands at the map's elements, and is read of that entry and no other. What an operation
+     * answering its closure on what another option holds holds is the closure's answer on that
+     * one's value, so the value is never the entry's own: under
+     * {@code Option.map(x -> x + 1, Map.get(k, m))} the name is the entry's value and one more,
+     * and which entry it was made of is said apart from it ({@link #holdsAnEntryLookedUp}).
+     */
+    private InputReads holdingWhatItHolds(Core option, Core.Binder name, Symbols symbols,
+                                          DeclarationNewtypes newtypes) {
+        WhatItHolds held = whatItHolds(option, symbols, newtypes);
+        return switch (held) {
+            case WhatItHolds.AnEntry _, WhatItHolds.MadeByAClosure _ ->
+                    holding(name.binding(), held, newtypes);
+            case WhatItHolds.AtAPosition _, WhatItHolds.Unsaid _ -> null;
+        };
+    }
+
+    /**
+     * Where an entry a lookup answered stands, and the lookup that picked it out.
+     *
+     * @param element where the entry's value stands: the element of the map or of the list the
+     *                map was filed from
+     * @param lookup  the call that asked for the key, as the tree has it
+     */
+    public record EntryLookedUp(TermPath element, Core lookup) {
+
+        public EntryLookedUp {
+            Objects.requireNonNull(element, "an entry's value stands at some element");
+            Objects.requireNonNull(lookup, "an entry was picked out by some lookup");
+        }
+    }
+
+    /** The entry the lookup {@code looked}, handed {@code args}, picks out of a map of the input —
+     *  or null where the map is none. */
+    private EntryLookedUp entryLookedUp(Denotation looked, List<Core> args, Symbols symbols,
+                                        DeclarationNewtypes newtypes) {
+        if (looked.at().forkedOn(args.get(1), newtypes) instanceof PathResolution.At(
+                TermPath map)) {
+            return new EntryLookedUp(map.element(), looked.value());
+        }
+        // A map filed from a list holds the list's own elements, so what a lookup in it answers is
+        // one of them.
+        Denotation held = looked.at().standing(args.get(1), symbols, newtypes);
+        AnIndexedMap indexed = AnIndexedMap.of(held.value(), closure ->
+                Core.withoutStanding(held.at().standing(closure, symbols, newtypes).value())
+                        instanceof Core.Block block ? block : null);
+        if (indexed == null) {
+            return null;
+        }
+        Denotation walked = held.at().standing(indexed.walked(), symbols, newtypes);
+        return walked.at().forkedOn(walked.value(), newtypes) instanceof PathResolution.At(
+                TermPath list) ? new EntryLookedUp(list.element(), looked.value()) : null;
+    }
+
+    /**
+     * Which part of which container a name is the element of, and the name that was given it.
+     *
+     * @param name      the binding that was handed the element, which is not an alias of another
+     * @param container the container it is held in: by its position where it has one, and by what
+     *                  it is made of otherwise, so that the elements of what a walk answered are
+     *                  not the elements of what the walk was given
+     * @param part      whether the name is the element or the key of its entry
+     */
+    record ElementStood(BindingId name, ContainerOf container, HeldIn.Part part) {
+
+        ElementStood {
+            Objects.requireNonNull(name, "an element is stood for by some name");
+            Objects.requireNonNull(container, "an element is held in some container");
+            Objects.requireNonNull(part, "an element is the element or the key of its entry");
+        }
+    }
+
+    /** The container an element is held in. */
+    sealed interface ContainerOf {
+
+        /** One that stands at a position of the input. */
+        record AtAPosition(TermPath at) implements ContainerOf {
+
+            public AtAPosition {
+                Objects.requireNonNull(at, "a container at a position is at one");
+            }
+        }
+
+        /** One that stands at none, which an operation answered: told from another by what it is
+         *  made of. */
+        record Made(Core expression) implements ContainerOf {
+
+            public Made {
+                Objects.requireNonNull(expression, "a container made is made of something");
+            }
+        }
+    }
+
+    /**
+     * Each element of a container that {@code e} reads a name for: the elements, and not the
+     * names for a position that is no container's element or for a value an operation made.
+     *
+     * <p>What tells two names for two elements of one container from one name met twice, and a
+     * name for an entry's key from one for its value. A position inside a container says an element
+     * and not which one, so that is the position's to say and not this's.
+     */
+    List<ElementStood> elementsStoodForIn(Core e, DeclarationNewtypes newtypes) {
+        Set<BindingId> made = new HashSet<>();
+        Set<BindingId> read = new LinkedHashSet<>();
+        walkNames(e, made, read);
+        // A name bound inside the expression is a different value on each application of what
+        // binds it, as a closure's parameter is on each element it is handed, and so no one
+        // element the comparison is read of.
+        read.removeAll(made);
+        List<ElementStood> out = new ArrayList<>();
+        for (BindingId each : read) {
+            ElementStood stood = elementStoodBy(each, newtypes, 0);
+            if (stood != null) {
+                out.add(stood);
+            }
+        }
+        return List.copyOf(out);
+    }
+
+    /** The element {@code name} is a name for, through the names it was only given. */
+    private ElementStood elementStoodBy(BindingId name, DeclarationNewtypes newtypes, int depth) {
+        return switch (names.roleOf(name)) {
+            case BindingRole.Element(HeldIn held) -> new ElementStood(name,
+                    pathOf(held.container(), newtypes) instanceof PathResolution.At(TermPath at)
+                            ? new ContainerOf.AtAPosition(at)
+                            : new ContainerOf.Made(Core.withoutStanding(held.container())),
+                    held.part());
+            // A name given the position of an element, as the value of an entry a lookup
+            // answered is.
+            case BindingRole.Root(TermPath path) -> stoodAt(name, path);
+            // A name only given another is that one, so that the same element met under two names
+            // is not two. Bounded by how far names are given names, which is a few.
+            case BindingRole.Alias(Core given) -> depth < KEPT_NAMES_APART
+                    && Core.withoutStanding(given) instanceof Core.Read root
+                    ? elementStoodBy(root.binding(), newtypes, depth + 1) : null;
+            case BindingRole.ElementOfSeveral _, BindingRole.Unknown _ -> null;
+        };
+    }
+
+    /** How many names given names are followed to the element. */
+    private static final int KEPT_NAMES_APART = 16;
+
+    private static ElementStood stoodAt(BindingId name, TermPath path) {
+        if (path.steps().isEmpty()) {
+            return null;
+        }
+        TermPath held = new TermPath(path.head(), path.steps().subList(0, path.steps().size() - 1));
+        ContainerOf in = new ContainerOf.AtAPosition(held);
+        return switch (path.steps().getLast()) {
+            case TermPath.Step.Element _ -> new ElementStood(name, in, HeldIn.Part.ELEMENT);
+            case TermPath.Step.Key _ -> new ElementStood(name, in, HeldIn.Part.KEY);
+            case TermPath.Step.Field _, TermPath.Step.Refine _ -> null;
+        };
+    }
+
+    /**
+     * The entries the names in force are the value of, by the name: what is stated of such a name
+     * is stated of the entry the lookup answered, and of no other element of the container.
+     */
+    public Map<BindingId, EntryLookedUp> entriesLookedUp() {
+        return names.selected();
+    }
+
+    /**
+     * The position the key {@code key} makes of the element at {@code element} stands at, or null
+     * where it is no position: a closure answering a field of its parameter, which is what each
+     * entry of a map filed from a list is under.
+     */
+    public TermPath keyOfTheElement(Core.Block key, TermPath element,
+                                    DeclarationNewtypes newtypes) {
+        InputReads handed = new InputReads(names.naming(key.params().getFirst().binding(),
+                element), alternatives, declared, dependencies, applied);
+        return handed.forkedOn(key.body(), newtypes) instanceof PathResolution.At(TermPath at)
+                ? at : null;
+    }
+
+    /**
+     * The same, where what the arm binds is one of the values the scrutinee's set holds — or the
+     * one value it stands for, where that value is written out. A closure handed one of the
+     * values a list was written with matches that value, and the name under the arm is the value
+     * as the arm takes it, as it would be one member of the set.
      *
      * <p>Only where the arm's carriers are the values themselves. A case that binds what an optional
      * holds binds something under the value that was matched rather than the value, so the members
@@ -237,12 +1588,9 @@ public final class InputReads {
      * could not classify would be keeping a member the arm excludes, while one that dropped it would
      * be losing a member the arm admits. Neither is the set, so the name is left with none.
      *
-     * <p>Which a member is is read off the construction or the case written where it stands, and the
-     * arm's own carriers reach further than that: a case may name a primitive, and a value written
-     * as a number is not a construction. No model gets here that way — a declared sum's cases are
-     * declared data, and the union that can name a primitive is anonymous and may not be written in
-     * a narrow type position, so no container's element type has one. A language that let one be
-     * written would arrive at the guard above rather than at a set with a member misfiled.
+     * <p>Which a member is is {@link WrittenCase}'s answer, held to the atoms the arm's cases cover
+     * ({@link Core.ResolvedPattern#takes}), so a member under a case that is itself a sum is kept by
+     * the arm written for the sum, and a number is the primitive it is.
      *
      * <p>And nothing is narrowed to no members. An arm admitting none of what the container holds is
      * an arm no value reaches, so the name inside it stands for nothing — which is what a name with
@@ -251,30 +1599,93 @@ public final class InputReads {
     private InputReads admitting(Core scrutinee, Core.Case arm, Symbols symbols,
                                  DeclarationNewtypes newtypes) {
         ReadMeaning.OneOf one = pluralityOf(scrutinee, symbols, newtypes);
-        if (one == null) {
-            return this;
+        List<ReadMeaning.Occurrence> values;
+        if (one != null) {
+            values = one.asWritten();
+        } else {
+            Denotation stands = standing(new Denotation(scrutinee, this), symbols, newtypes,
+                    new HashSet<>());
+            if (WrittenCase.of(stands.value()).isEmpty()) {
+                return denotingWhatWasMatched(scrutinee, arm, symbols, newtypes);
+            }
+            values = List.of(ReadMeaning.Occurrence.always(stands));
         }
         for (CaseSelector selector : arm.pattern().selectors()) {
             if (!(selector.refinement() instanceof souther.compiler.types.Refinement.Direct)) {
                 return this;
             }
         }
-        java.util.List<Denotation> left = new java.util.ArrayList<>();
-        for (Denotation each : one.alternatives()) {
-            souther.compiler.types.TypeSymbol written = caseWritten(each.value());
-            if (written == null) {
+        // What each occurrence was kept by stays with it: the arm takes some of them out, and
+        // whether a container holds the ones left is what it was before.
+        List<ReadMeaning.Occurrence> left = new ArrayList<>();
+        for (ReadMeaning.Occurrence each : values) {
+            Optional<TypeSymbol> written = WrittenCase.of(each.value().value());
+            if (written.isEmpty()) {
                 return this;
             }
-            if (arm.caseTypes().contains(written)) {
+            if (arm.pattern().takes(written.get())) {
                 left.add(each);
             }
         }
         if (left.isEmpty()) {
             return this;
         }
-        Map<BindingId, java.util.List<Denotation>> wider = new LinkedHashMap<>(alternatives);
+        Map<BindingId, List<ReadMeaning.Occurrence>> wider = new LinkedHashMap<>(alternatives);
         wider.put(arm.binder().binding(), left);
-        return new InputReads(names, wider);
+        return new InputReads(names, wider, declared, dependencies, applied);
+    }
+
+    /**
+     * The same, where the scrutinee is what a call answered: the name stands for the value that was
+     * matched, which is that answer.
+     *
+     * <p>Which value a name is and what is known of the case it was taken as are two facts. Nothing
+     * here narrows what a call answered — there is no position to narrow and no set to filter — but
+     * {@code Amount as current} over {@code read(1)} is still the value {@code read(1)} answered, and
+     * a reader asking what {@code current} is goes on to the call. Given no meaning, the name was a
+     * value nothing could say anything about, and a comparison over it was one this compiler named a
+     * column for when it was written as the call and read nothing of when it was written through the
+     * name.
+     *
+     * <p><b>Only an answer, because only there is the narrowing nothing to lose.</b> What a call
+     * answers is a value this reading holds nothing inside of, so the name read through to it is read
+     * as the call — what the arm took it as adds nothing a reader could have looked at. A value the
+     * body
+     * built is one this reading looks inside, and read through without the arm it is every case it
+     * could be: {@code B as b} over {@code if flag then A {..} else B {..}} would be the choice on
+     * {@code flag}, and over a written {@code A} a construction asked for a field it has none of.
+     * Which is why the scrutinee is followed through its names first ({@link #standing}): what
+     * decides is the value they stand for and not how the {@code match} spelled it.
+     *
+     * <p>Only the name of the matched value ({@link Core.ArmBinding.Selected}). What stands under
+     * an optional's present carrier is not the value that was matched, and a name for it read as
+     * the scrutinee would stand for the optional it was opened from.
+     *
+     * <p>And only where the scrutinee is at no position. One that stands at a position the arm does
+     * not narrow, or at one of several, names a place, and a name read through to it would stand at
+     * the place as it is — wider than the case the arm took.
+     */
+    private InputReads denotingWhatWasMatched(Core scrutinee, Core.Case arm, Symbols symbols,
+                                              DeclarationNewtypes newtypes) {
+        if (!(arm.binding() instanceof Core.ArmBinding.Selected selected)
+                || !(forkedOn(scrutinee, newtypes) instanceof PathResolution.NotAPosition)
+                || !answered(standing(new Denotation(scrutinee, this), symbols, newtypes,
+                        new HashSet<>()).value())) {
+            return this;
+        }
+        return and(selected.binder(), scrutinee);
+    }
+
+    /**
+     * Whether {@code e} is what a call answered: one the body reaches outside itself, or an
+     * operation of the language the tree keeps standing. Either way a value nothing in this tree
+     * builds.
+     */
+    private static boolean answered(Core e) {
+        return switch (Core.withoutStanding(e)) {
+            case Core.Call _, Core.PreservedCall _ -> true;
+            case null, default -> false;
+        };
     }
 
     /**
@@ -303,13 +1714,69 @@ public final class InputReads {
                 ? one : null;
     }
 
-    /** Which case {@code e} is written as, or null where it is not written as one. */
-    private static souther.compiler.types.TypeSymbol caseWritten(Core e) {
-        return switch (Core.withoutStanding(e)) {
-            case Core.Construct nd -> nd.typeName();
-            case Core.UnitValue unit -> unit.data();
-            default -> null;
-        };
+    /**
+     * Whether every row takes {@code arm} of a {@code match} on {@code scrutinee} — true where every
+     * case the scrutinee can be is one the arm takes, false where none is, and empty where which
+     * arm is taken turns on the row.
+     *
+     * <p>Known only where every value the scrutinee can stand for settles its own case
+     * ({@link WrittenCase}) — a construction, an optional's carrier, a value of a primitive type.
+     * A helper handed such a value at the call matches what it was handed, and which of its arms
+     * that takes is settled before any row is written: there is no position under the
+     * {@code match} for a row to put a case at, and none is needed.
+     *
+     * <p>One answer for every reader of an arm, the ways a body is walked and what reaching the arm
+     * states alike, so an arm no row takes is neither walked nor a narrowing nobody can read.
+     */
+    public Optional<Boolean> whetherEveryRowTakes(Core.Case arm, Core scrutinee, Symbols symbols,
+                                                  DeclarationNewtypes newtypes) {
+        return whetherEveryRowTakes(arm, casesWritten(scrutinee, symbols, newtypes));
+    }
+
+    /**
+     * The same, of the cases the scrutinee was already read to be ({@link #casesWritten}) — which
+     * is one question per {@code match} however many arms are asked about it.
+     */
+    public static Optional<Boolean> whetherEveryRowTakes(Core.Case arm, Set<TypeSymbol> written) {
+        if (written == null) {
+            return Optional.empty();
+        }
+        long taken = written.stream().filter(arm.pattern()::takes).count();
+        if (taken == written.size()) {
+            return Optional.of(true);
+        }
+        return taken == 0 ? Optional.of(false) : Optional.empty();
+    }
+
+    /**
+     * The cases {@code e} can be here, where every value it can stand for settles its own case
+     * ({@link WrittenCase}) — or null where any of them does not.
+     *
+     * <p>The value a name stands for, followed as far as it goes ({@link #standing}), and where that
+     * is a name standing for one of several written values ({@link ReadMeaning.OneOf}), each of
+     * them.
+     */
+    public Set<TypeSymbol> casesWritten(Core e, Symbols symbols, DeclarationNewtypes newtypes) {
+        Denotation stands = standing(new Denotation(e, this), symbols, newtypes, new HashSet<>());
+        Optional<TypeSymbol> one = WrittenCase.of(stands.value());
+        if (one.isPresent()) {
+            return Set.of(one.get());
+        }
+        if (!(Core.withoutStanding(stands.value()) instanceof Core.Read name
+                && stands.at().meaningOf(name, symbols, newtypes) instanceof ReadMeaning.OneOf many)) {
+            return null;
+        }
+        // Of every value it may be, kept or not: a case none of them is, is a case no kept one is.
+        Set<TypeSymbol> out = new LinkedHashSet<>();
+        for (Denotation each : many.everyValueItMayBe()) {
+            Optional<TypeSymbol> written =
+                    WrittenCase.of(standing(each, symbols, newtypes, new HashSet<>()).value());
+            if (written.isEmpty()) {
+                return null;
+            }
+            out.add(written.get());
+        }
+        return out;
     }
 
     /**
@@ -353,25 +1820,98 @@ public final class InputReads {
             case ScopeStep.Let(Core.LetIn binding) -> and(binding.binder(), binding.value());
             case ScopeStep.Chosen(Choice.Decides decidedBy) ->
                     choosing(decidedBy, symbols, newtypes);
-            case ScopeStep.Block _ -> this;
+            case ScopeStep.Block(Core.Block block) -> handedWhatOptionsHold(block, symbols,
+                    newtypes);
         };
+    }
+
+    /**
+     * The same, inside {@code block}, with each parameter an operation hands what an option holds
+     * standing for that value ({@link #whatItHolds}, {@link #holding}).
+     *
+     * <p>An option holds one value or none, and an operation applying its closure to every element
+     * of one hands the parameter that value, so a statement inside the closure is about it — the
+     * same value the name under an arm opening the option stands for, and read the same way.
+     */
+    private InputReads handedWhatOptionsHold(Core.Block block, Symbols symbols,
+                                             DeclarationNewtypes newtypes) {
+        InputReads out = this;
+        for (Core.Binder param : block.params()) {
+            if (param != null && param.binding() != null
+                    && names.roleOf(param.binding()) instanceof BindingRole.Element(var held)
+                    && held.ofAnOption()) {
+                out = out.holding(param.binding(),
+                        out.whatItHolds(held.container(), symbols, newtypes), newtypes);
+            }
+        }
+        return out;
     }
 
     /** The same, inside what {@code binder} binds. */
     public InputReads and(Core.Binder binder, Core value) {
         BindingEnvironment inside = names.inside(binder, value);
-        return inside == names ? this : new InputReads(inside, alternatives);
+        return inside == names ? this
+                : new InputReads(inside, alternatives, declared, dependencies, applied);
     }
 
-    /** Where {@code e} stands, read here ({@link PathResolution}). */
+    /**
+     * Where {@code e} stands, read here ({@link PathResolution}): a position, and never a narrowing
+     * of one to several cases ({@link PathResolution#heldAt}).
+     *
+     * <p>Answered once for each node asked here. Every reader of a condition asks where its parts
+     * stand — the arithmetic of a side, whether a value is the same on every run, whether two
+     * cases are written out — and each asks it of the same nodes in the same reading. What it
+     * comes to turns on nothing but the node and this reading, which does not change; the node
+     * and not one equal to it, since what this reading takes a node as is taken of that node
+     * ({@link #taken}).
+     */
     public PathResolution pathOf(Core e, DeclarationNewtypes newtypes) {
-        return InputPath.of(e, names, newtypes);
+        if (paths == null) {
+            paths = new IdentityHashMap<>();
+            pathsUnder = newtypes;
+        } else if (pathsUnder != newtypes) {
+            return InputPath.of(e, names, newtypes, this::taken).heldAt();
+        }
+        PathResolution held = paths.get(e);
+        if (held == null) {
+            held = InputPath.of(e, names, newtypes, this::taken).heldAt();
+            paths.put(e, held);
+        }
+        return held;
+    }
+
+    /** What a name means here, for a walk that goes on in this reading ({@link InputPath}). */
+    BindingEnvironment names() {
+        return names;
+    }
+
+    /**
+     * What a fork on {@code e} reads: where it stands, with what the arms above already left it.
+     *
+     * <p>Beside {@link #pathOf} because the two questions part at a name an arm bound over several
+     * cases. The value stands at the sum's position; a fork on it is asked of the cases the arm
+     * left, so that an arm inside naming one of them narrows the same narrowing further rather than
+     * the position afresh ({@link DeclaredInput#taking}).
+     */
+    public PathResolution forkedOn(Core e, DeclarationNewtypes newtypes) {
+        return InputPath.of(e, names, newtypes, this::taken);
     }
 
     /** Where in the element handed to {@code binding} the value a walk answered stands, or null
      *  where the walk answered no place of it ({@link ElementProjection}). */
     ElementProjection projectionAt(BindingId binding) {
         return names.projectionAt(binding);
+    }
+
+    /** What the walk handing {@code binding} its element answered, as the closure, where a licence
+     *  says it answered one value per element ({@link ElementAnswer}). */
+    ElementAnswer answerAt(BindingId binding) {
+        return names.answerAt(binding);
+    }
+
+    /** What each binding of the body holds, for reading a closure's answer through the names in it. */
+    Map<BindingId, Core> heldByTheBody() {
+        return names.heldByTheBody();
     }
 
     /**
@@ -449,6 +1989,67 @@ public final class InputReads {
     }
 
     /**
+     * Whether {@code e} is a value the source wrote out all the way down, read here — which is a
+     * value the same every time.
+     *
+     * <p>A written value, one built out of written values, and a name that stands for one: the one
+     * value it denotes, or every value it can take where those are written down
+     * ({@link ReadMeaning.OneOf}). The last is what a closure handed the elements of a list written
+     * out is handed, so what it applies to its parameter is applied to a written value — and it is
+     * here and not with a reader of the closure because what a name stands for is this reading's
+     * answer. A reader that kept its own account of which names are written would be a second
+     * answer, and one that knew it only for the closure it happened to be walking would read the
+     * same name two ways.
+     *
+     * <p>A list is written out only where every element is: a list holding a position is a list of
+     * that position's values.
+     */
+    public boolean writtenOut(Core e, Symbols symbols, DeclarationNewtypes newtypes) {
+        return writtenOut(new Denotation(e, this), true, symbols, newtypes, new HashSet<>());
+    }
+
+    /**
+     * Whether {@code e} is one value the source wrote out all the way down, read here.
+     *
+     * <p>{@link #writtenOut} with a name that stands for every value of several left out, at any
+     * depth. Each of those values is written, and still the name is one of them on one run and
+     * another on the next: what it holds is not one value, whatever each value is.
+     */
+    public boolean writtenOutAsOneValue(Core e, Symbols symbols, DeclarationNewtypes newtypes) {
+        return writtenOut(new Denotation(e, this), false, symbols, newtypes, new HashSet<>());
+    }
+
+    private static boolean writtenOut(Denotation from, boolean ofSeveral, Symbols symbols,
+                                      DeclarationNewtypes newtypes, Set<BindingId> met) {
+        Denotation at = standing(from, symbols, newtypes, met);
+        InputReads reads = at.at();
+        return switch (Core.withoutStanding(at.value())) {
+            case Core.Int _, Core.Decimal _, Core.Str _, Core.Bool _, Core.Temporal _,
+                 Core.UnitValue _, Core.OptionNone _ -> true;
+            case Core.Read name -> ofSeveral
+                    && reads.meaningOf(name, symbols, newtypes, new HashSet<>(met))
+                            instanceof ReadMeaning.OneOf one
+                    && one.everyValueItMayBe().stream()
+                            .allMatch(each -> writtenOut(each, true, symbols, newtypes,
+                                    new HashSet<>(met)));
+            case Core.Neg negated -> writtenOut(new Denotation(negated.operand(), reads),
+                    ofSeveral, symbols, newtypes, new HashSet<>(met));
+            case Core.OptionSome some -> writtenOut(new Denotation(some.value(), reads),
+                    ofSeveral, symbols, newtypes, new HashSet<>(met));
+            case Core.ListLit list -> list.elements().stream()
+                    .allMatch(each -> writtenOut(new Denotation(each, reads), ofSeveral, symbols,
+                            newtypes, new HashSet<>(met)));
+            case Core.Tuple tuple -> tuple.elements().stream()
+                    .allMatch(each -> writtenOut(new Denotation(each, reads), ofSeveral, symbols,
+                            newtypes, new HashSet<>(met)));
+            case Core.Construct made -> made.values().stream()
+                    .allMatch(each -> writtenOut(new Denotation(each.value(), reads), ofSeveral,
+                            symbols, newtypes, new HashSet<>(met)));
+            case null, default -> false;
+        };
+    }
+
+    /**
      * The same, through the bindings a walk into a container has already met.
      *
      * <p>One set for the whole answer, because the answer reaches back into this: a name an
@@ -470,19 +2071,50 @@ public final class InputReads {
             // containers it is an element of.
             case PathResolution.MayStandAt _ -> { }
         }
-        java.util.List<Denotation> narrowed = alternatives.get(read.binding());
+        // What a call handed a parameter of the body it entered, read where the call stands.
+        Denotation given = applied.given().get(read.binding());
+        if (given != null) {
+            // What this reading took goes with a value read where it was given, and not into a
+            // definition, which is read where nothing taken on the way here is.
+            Denotation defined = definedAs(given.value(), given.at());
+            return new ReadMeaning.Through(defined != null ? defined
+                    : carryingWhatIsTaken(given));
+        }
+        List<ReadMeaning.Occurrence> narrowed = alternatives.get(read.binding());
         if (narrowed != null) {
-            return new ReadMeaning.OneOf(narrowed);
+            return new ReadMeaning.OneOf(narrowed.stream().map(this::carryingWhatIsTaken)
+                    .toList());
         }
         return switch (names.roleOf(read.binding())) {
-            case BindingRole.Element(var container) -> {
-                java.util.List<Denotation> written =
-                        writtenElementsOf(new Denotation(container, this), symbols, newtypes, met);
-                yield written == null ? new ReadMeaning.Element() : new ReadMeaning.OneOf(written);
+            // What a container written out holds is the occurrences that walk writes out
+            // ({@link WrittenOutElements}), and what a walk answering one value per element of a
+            // container it cannot write out holds is that walk's answer on one of them. A map's
+            // keys are among neither, so a key is a key of the map and which one is not said.
+            case BindingRole.Element(var held) -> {
+                if (held.part() != HeldIn.Part.ELEMENT) {
+                    yield new ReadMeaning.Element();
+                }
+                Denotation container = standing(new Denotation(held.container(), this), symbols,
+                        newtypes, met);
+                switch (WrittenOutElements.of(container, symbols, newtypes, met)) {
+                    // No element at all, which is an answer of its own and not a set of none.
+                    case WrittenOutElements.Walked.Each each when each.asWritten().isEmpty() -> {
+                        yield new ReadMeaning.NoneHeld();
+                    }
+                    case WrittenOutElements.Walked.Each each -> {
+                        yield new ReadMeaning.OneOf(each.asWritten());
+                    }
+                    case WrittenOutElements.Walked.PastTheFigure _ -> {
+                        yield new ReadMeaning.MoreThanAreWrittenOut();
+                    }
+                    case WrittenOutElements.Walked.NotWrittenOut _ -> { }
+                }
+                ReadMeaning answered = answerOnEachElement(container, symbols, newtypes, met);
+                yield answered == null ? new ReadMeaning.Element() : answered;
             }
             // An element of more than one container is an element, and what it may be is not the
             // values of any one of them. Answered with what one container was written with, a name
-            // would stand for a value out of a sequence the run it is on never walked; answered
+            // would stand for a value out of a container the run it is on never walked; answered
             // with what all of them were, it would stand for a set no run puts there.
             case BindingRole.ElementOfSeveral _ -> new ReadMeaning.Element();
             // Read in this environment. Bindings are added on the way down and each tells itself
@@ -494,7 +2126,7 @@ public final class InputReads {
             // A name bound to the very read being answered is a name this knows nothing about: the
             // value would be the question, and a reader handed it would ask it again.
             case BindingRole.Alias(var value) -> value == read ? new ReadMeaning.Unknown()
-                    : new ReadMeaning.Through(new Denotation(value, this));
+                    : new ReadMeaning.Through(denoting(value, this));
             case BindingRole.Unknown _ -> new ReadMeaning.Unknown();
             // A parameter is the position it is the name of. The walk above reaches it by the same
             // fact, so nothing gets here — and what would be said if anything did is what is said
@@ -504,17 +2136,19 @@ public final class InputReads {
     }
 
     /**
-     * The elements {@code container} was written with, or null where it was not written out.
+     * The elements a container standing as {@code standing} was written with, or null where it was
+     * not written out.
      *
      * <p>What makes this an answer about every element and not about some of them is that the
-     * container is followed only through steps with one successor — a name this environment bound,
-     * and the body of a binding — until a list written in the source is standing there. An operation
-     * that builds a container answers elements this walk cannot enumerate, and the walk stops rather
-     * than reading what went in: {@code List.append(xs, ys)} holds the elements of both, and a
-     * reading that took either would have written out a set missing the other half.
+     * container was followed only through steps with one successor ({@link #standing}) — a name
+     * this environment bound, and the body of a binding — and a list written in the source is what
+     * stands there. An operation that builds a container answers elements this walk cannot
+     * enumerate, and the walk stops rather than reading what went in: {@code List.append(xs, ys)}
+     * holds the elements of both, and a reading that took either would have written out a set
+     * missing the other half.
      *
      * <p><b>Followed with this environment and never with the body's.</b> What a binding holds is
-     * also recorded over the whole body ({@link souther.compiler.check.ElementBindings#boundTo}), and
+     * also recorded over the whole body ({@link ElementBindings#boundTo}), and
      * reading a container out of that would give a value with no environment to read it in — after
      * which the environment each element is read in would be whichever one the caller had in hand.
      * Where the way to the list runs through a binding this walk has not passed, the elements are
@@ -525,11 +2159,7 @@ public final class InputReads {
      * a statement about every member to be about, and a statement quantified over no members holds
      * whatever it says.
      */
-    private static java.util.List<Denotation> writtenElementsOf(Denotation container,
-                                                                Symbols symbols,
-                                                                DeclarationNewtypes newtypes,
-                                                                Set<BindingId> met) {
-        Denotation standing = standing(container, symbols, newtypes, met);
+    private static java.util.List<Denotation> writtenElementsOf(Denotation standing) {
         if (!(Core.withoutStanding(standing.value()) instanceof Core.ListLit written)
                 || written.elements().isEmpty()) {
             return null;
@@ -542,13 +2172,165 @@ public final class InputReads {
     }
 
     /**
-     * {@code from} followed through the steps that have one successor, as far as they go.
+     * What a container standing as {@code standing} holds at each element, where it is the answers
+     * of one walk, one for each element of what that walk was handed — or null where it is not.
      *
-     * <p>A name standing for one value and the body of a binding, and nothing else. A normal form
-     * and never a failure: what comes back where nothing applies is what went in, which a caller
-     * reads rather than treating as an absence.
+     * <p>The step's body, read where the walk stands, with the step's parameter standing for the
+     * element it was handed. {@code List.map(x -> x + 1, xs)} holds {@code x + 1} for each element
+     * of {@code xs}, so a rule about one of its elements is a rule about {@code x + 1}, and what
+     * {@code x} is is the reading's question like any other name's.
      *
-     * <p><b>Which names those are is {@link #meaningOf}'s answer and is not read off the bindings
+     * <p>The walk this container is and not one over the same elements. Two walks over {@code xs}
+     * answer different values, so which step's body an element is is read off the application that
+     * built the container ({@link ElementBindings#stepAnsweredOnEachElement}), and where that
+     * application answers no run of one value per element — a {@code filter} keeps some of them, a
+     * set's {@code map} may answer one value for two — the element is an element and nothing more.
+     *
+     * <p>Read in the environment the walk stands in. A name the step's body reads from outside it
+     * was bound above the walk, and what it stands for there is what the step was applied under.
+     *
+     * <p>And where what the walk was handed was written out, each element is the step's answer on
+     * one of the values it was written with — one of several, each read on the application handing
+     * the step that value ({@link ReadMeaning.OneOf}), as an element of the written list itself is.
+     */
+    private static ReadMeaning answerOnEachElement(Denotation standing, Symbols symbols,
+                                                   DeclarationNewtypes newtypes,
+                                                   Set<BindingId> met) {
+        AnsweredByAWalk answered = answeredByAWalk(standing, symbols, newtypes, met);
+        return answered != null ? answered.meaning()
+                : componentOfAnAnsweredElement(standing, symbols, newtypes, met);
+    }
+
+    /** What a walk's answers are read as, and the walk that answered them. */
+    private record AnsweredByAWalk(ElementBindings.StepOnEachElement walk, ReadMeaning meaning) {}
+
+    /** {@link #answerOnEachElement} for a container that is one walk's answers, or null where it
+     *  is not one. */
+    private static AnsweredByAWalk answeredByAWalk(Denotation standing, Symbols symbols,
+                                                   DeclarationNewtypes newtypes,
+                                                   Set<BindingId> met) {
+        InputReads at = standing.at();
+        ElementBindings.StepOnEachElement walk = ElementBindings.stepAnsweredOnEachElement(
+                standing.value(), closure -> Core.withoutStanding(
+                        standing(new Denotation(closure, at), symbols, newtypes, met).value())
+                        instanceof Core.Block block ? block : null);
+        if (walk == null) {
+            return null;
+        }
+        List<Denotation> walked = walk.element() == null
+                || walk.element().binding() == null ? null
+                : writtenElementsOf(standing(new Denotation(walk.walked(), at), symbols, newtypes,
+                        new HashSet<>(met)));
+        if (walked == null) {
+            return new AnsweredByAWalk(walk,
+                    new ReadMeaning.Through(new Denotation(walk.step().body(), at)));
+        }
+        List<Denotation> each = new ArrayList<>();
+        for (Denotation value : walked) {
+            each.add(new Denotation(walk.step().body(),
+                    at.handing(walk.element().binding(), value, newtypes)));
+        }
+        return new AnsweredByAWalk(walk, ReadMeaning.OneOf.ofEvery(each));
+    }
+
+    /**
+     * The component {@code standing} holds at each element, where it is a component of the tuples
+     * a walk answered, or null where it is not.
+     *
+     * <p>{@code Map.fromList(List.map(x -> (x, 1), xs))} holds {@code 1}: each value is the second
+     * component of an entry, and the entry is what the step answered on an element. Some entry and
+     * not each, since a key filed twice keeps the later value; so what this licenses is where a
+     * value came from, which is all the reading of an element asks.
+     *
+     * <p>Only where the entries are one step's answer on an element, and where that value is no
+     * less the value of the entry that is left. Entries filed under one key leave the last, so a
+     * value an earlier entry carried is compared with nothing, and a line drawn on it would be met
+     * by a row that never runs the comparison there. What makes the loss harmless is that entries
+     * under one key carry one value ({@link #fixedByTheKey}); where that is not shown the element
+     * is an element. Entries written out would make each value one of the components written, and
+     * the one left is only some of them, so a list of alternatives would name values the map does
+     * not hold.
+     */
+    private static ReadMeaning componentOfAnAnsweredElement(Denotation standing, Symbols symbols,
+                                                            DeclarationNewtypes newtypes,
+                                                            Set<BindingId> met) {
+        ElementBindings.Projection part = ElementBindings.componentOfTheElementsOf(
+                standing.value());
+        if (part == null) {
+            return null;
+        }
+        Denotation entries = standing(new Denotation(part.of(), standing.at()), symbols, newtypes,
+                met);
+        AnsweredByAWalk answered = answeredByAWalk(entries, symbols, newtypes, met);
+        if (answered == null || !(answered.meaning() instanceof ReadMeaning.Through through)
+                || answered.walk().element() == null
+                || answered.walk().element().binding() == null) {
+            return null;
+        }
+        Denotation written = standing(through.denotes(), symbols, newtypes, met);
+        if (!(Core.withoutStanding(written.value()) instanceof Core.Tuple tuple)
+                || Math.max(part.index(), part.filedUnder()) >= tuple.elements().size()) {
+            return null;
+        }
+        Core value = tuple.elements().get(part.index());
+        return fixedByTheKey(tuple.elements().get(part.filedUnder()), value,
+                answered.walk().element().binding(), written.at())
+                ? new ReadMeaning.Through(new Denotation(value, written.at())) : null;
+    }
+
+    /**
+     * Whether two entries of one walk that are filed under the same key carry the same value, so
+     * that the entry which is left holds what the one it replaced held.
+     *
+     * <p>Shown for the two forms that need no argument about the step: a value that does not read
+     * the element at all, which is one value whichever element it is, and a value that reads only
+     * the element where the key is that element itself, so that entries under one key are entries
+     * of equal elements. Every name the value reads is the element, or a parameter of the
+     * behavior, which is the same one for every element. Whatever else it reads — a name bound in
+     * the step, or by a let above it — is a name this does not know to be one value per key, and
+     * the answer is no.
+     */
+    private static boolean fixedByTheKey(Core key, Core value, BindingId element,
+                                         InputReads at) {
+        boolean keyIsTheElement = Core.withoutStanding(key) instanceof Core.Read read
+                && read.binding().equals(element);
+        Set<BindingId> made = new HashSet<>();
+        Set<BindingId> read = new HashSet<>();
+        walkNames(value, made, read);
+        read.removeAll(made);
+        return read.stream().allMatch(binding -> (keyIsTheElement && binding.equals(element))
+                || at.names.roleOf(binding) instanceof BindingRole.Root);
+    }
+
+    /**
+     * What {@code e} stands as here: followed through every name that stands for one value and
+     * every binding whose body is the value, and read in the names in force where it ends.
+     *
+     * <p>Beside {@link #denotes}, which follows names alone. A helper the source called stands as
+     * the binding of its parameters around its body, so what a call to one stands as is past a
+     * binding a walk after names stops at.
+     */
+    public Denotation standing(Core e, Symbols symbols, DeclarationNewtypes newtypes) {
+        return standing(new Denotation(e, this), symbols, newtypes, new HashSet<>());
+    }
+
+    /**
+     * What {@code e} stands as here, as a value a reader may take apart: each part it finds is
+     * followed where {@code e} was written ({@link ValueStanding.Standing#part}).
+     */
+    public ValueStanding.Standing<InputReads, ?> standingValue(Core e, Symbols symbols,
+                                                              DeclarationNewtypes newtypes) {
+        return ValueStanding.one(e, this, new Followed(symbols, newtypes, new HashSet<>()));
+    }
+
+    /**
+     * {@code from} followed through the steps that have one successor, as far as they go
+     * ({@link ValueStanding}).
+     *
+     * <p>A normal form and never a failure: what comes back where nothing applies is what went in,
+     * which a caller reads rather than treating as an absence.
+     *
+     * <p><b>Which names are followed is {@link #meaningOf}'s answer and is not read off the bindings
      * here.</b> A name is a position, or one of several values, or an element, before it is what it
      * was bound to, and there is no way to read a binding's value here without that order having
      * been applied: the environment answers what a name is ({@link BindingRole}) and hands out
@@ -556,30 +2338,64 @@ public final class InputReads {
      * that both holds a value and is what an operation handed an element on, which is the shape
      * joining two walks leaves.
      *
-     * <p>By the bindings met, which is what makes it stop. Each tells itself from every other, so a
-     * name that came round to itself is one already answered for.
+     * <p>No plurality is followed into. A name that is one of several values stands as the name,
+     * which is what a reader asking for one value is owed.
      */
-    private static Denotation standing(Denotation from, Symbols symbols,
-                                       DeclarationNewtypes newtypes, Set<BindingId> met) {
-        Denotation at = from;
-        while (true) {
-            switch (at.value()) {
-                case Core.Read name -> {
-                    if (!met.add(name.binding())
-                            || !(at.at().meaningOf(name, symbols, newtypes, met)
-                                    instanceof ReadMeaning.Through through)) {
-                        return at;
-                    }
-                    at = through.denotes();
-                }
-                case Core.LetIn let ->
-                        at = new Denotation(let.body(), at.at().and(let.binder(), let.value()));
-                // What a value is does not turn on the type it stands as.
-                case Core.Widen w -> at = new Denotation(w.value(), at.at());
-                default -> {
-                    return at;
-                }
+    static Denotation standing(Denotation from, Symbols symbols,
+                               DeclarationNewtypes newtypes, Set<BindingId> met) {
+        ValueStanding.Standing<InputReads, Followed> stands =
+                ValueStanding.one(from.value(), from.at(), new Followed(symbols, newtypes, met));
+        return new Denotation(stands.value(), stands.at());
+    }
+
+    /**
+     * What this reading answers about names, for the walk that follows them.
+     *
+     * <p>By the bindings met, which is what makes a walk stop: each tells itself from every other,
+     * so a name that came round to itself is one already answered for. Shared with
+     * {@link #meaningOf}, which follows a container to its elements by this same walk, so the two
+     * stop at the same names.
+     */
+    private record Followed(Symbols symbols, DeclarationNewtypes newtypes, Set<BindingId> met)
+            implements ValueStanding.Names<InputReads, Followed> {
+
+        private Followed {
+            Objects.requireNonNull(newtypes, "a name is followed knowing what each name wraps");
+        }
+
+        @Override
+        public ValueStanding.ReadThrough<InputReads> readThrough(Core.Read read, InputReads at) {
+            if (!met.add(read.binding())
+                    || !(at.meaningOf(read, symbols, newtypes, met)
+                            instanceof ReadMeaning.Through through)) {
+                return null;
             }
+            return new ValueStanding.ReadThrough<>(through.denotes().value(),
+                    through.denotes().at());
+        }
+
+        @Override
+        public List<ValueStanding.ReadThrough<InputReads>> alternativesOf(Core.Read read,
+                                                                          InputReads at) {
+            return null;
+        }
+
+        @Override
+        public InputReads inside(Core.LetIn li, InputReads at) {
+            return at.and(li.binder(), li.value());
+        }
+
+        // A value this reading takes as another is that value: a choice the answer of the arm it
+        // is on, a call the body it entered.
+        @Override
+        public ValueStanding.ReadThrough<InputReads> taken(Core node, InputReads at) {
+            Denotation as = at.taken(node);
+            return as == null ? null : new ValueStanding.ReadThrough<>(as.value(), as.at());
+        }
+
+        @Override
+        public Followed oneAtATime() {
+            return this;
         }
     }
 
@@ -604,15 +2420,27 @@ public final class InputReads {
                 new HashSet<>()).value()) instanceof Core.Str written ? written.value() : null;
     }
 
-    /** Where an element handed to {@code binding} stands ({@link InputPath#elementAt}). */
+    /** Where an element handed to {@code binding} stands ({@link InputPath#elementAt}), at a
+     *  position and never at a narrowing of one to several cases ({@link PathResolution#heldAt}). */
     public PathResolution elementAt(BindingId binding, DeclarationNewtypes newtypes) {
-        return InputPath.elementAt(binding, names, newtypes);
+        return InputPath.elementAt(binding, names, newtypes, this::taken).heldAt();
+    }
+
+    /** Where the elements {@code e} holds stand, where it holds every occurrence of that position
+     *  and each as often ({@link InputPath#everyElementOf}). */
+    public PathResolution everyElementOf(Core e, DeclarationNewtypes newtypes) {
+        return InputPath.everyElementOf(e, names, newtypes, this::taken);
+    }
+
+    /** The same, of the elements handed to {@code binding} ({@link InputPath#everyElementAt}). */
+    public PathResolution everyElementAt(BindingId binding, DeclarationNewtypes newtypes) {
+        return InputPath.everyElementAt(binding, names, newtypes, this::taken);
     }
 
     /** Where {@code e}'s value came from. Not where it is: a value made from a position is not that
      *  position ({@link InputPath#cameFrom}). */
     public PathResolution cameFrom(Core e, DeclarationNewtypes newtypes) {
-        return InputPath.cameFrom(e, names, newtypes);
+        return InputPath.cameFrom(e, names, newtypes, this::taken).heldAt();
     }
 
     /**
@@ -627,16 +2455,25 @@ public final class InputReads {
     public boolean equals(Object other) {
         return this == other
                 || (other instanceof InputReads that && names.equals(that.names)
-                        && alternatives.equals(that.alternatives));
+                        && alternatives.equals(that.alternatives)
+                        && declared.equals(that.declared)
+                        && dependencies.equals(that.dependencies)
+                        && applied.equals(that.applied));
     }
 
     @Override
     public int hashCode() {
-        return names.hashCode() * 31 + alternatives.hashCode();
+        int h = hash;
+        if (h == 0) {
+            h = Objects.hash(names, alternatives, declared, dependencies, applied);
+            hash = h;
+        }
+        return h;
     }
 
     @Override
     public String toString() {
-        return "InputReads[names=" + names + ", alternatives=" + alternatives + "]";
+        return "InputReads[names=" + names + ", alternatives=" + alternatives + ", declared="
+                + declared + "]";
     }
 }

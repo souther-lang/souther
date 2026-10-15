@@ -17,10 +17,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * A rule an author wrote about a value an operation made from a position is named at that position.
  *
- * <p>Not measured there. What a {@code map} answers is made from what stands at a position and is
- * not those values, so a line drawn there would be at values the rule is not about — and an author
- * cannot tell such a line from one their model states. Reading the rule back through the closure is
- * a different capability and not one this has.
+ * <p>Not measured there. What a {@code filterMap} answers is made from what stands at a position
+ * and is not those values, and no one of its elements is the closure's answer on one element — so
+ * a line drawn there would be at values the rule is not about, and an author cannot tell such a
+ * line from one their model states.
  *
  * <p>What it must not be is silent. The author wrote a comparison; a reading that placed it nowhere
  * reported a model that states no rule there, which is the answer a body with no rule in it gives.
@@ -48,7 +48,7 @@ class ARuleAboutAValueMadeFromAPositionIsNamedTest {
             let scored (people) =
                 Count(List.length(
                     List.filter(s -> s.value >= 18,
-                        List.map(q -> Score(q.age + 100), people))))
+                        List.filterMap(q -> List.get(0, [Score(q.age + 100)]), people))))
             """;
 
     private static PartitionEvidence measured() {

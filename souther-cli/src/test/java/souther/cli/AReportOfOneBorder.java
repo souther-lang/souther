@@ -1,11 +1,15 @@
 package souther.cli;
 
+import souther.compiler.check.PathReachability;
+import souther.compiler.meaning.AuthoredPointMapping;
+import souther.compiler.meaning.Derivation;
+import souther.compiler.meaning.WrittenLine;
 import souther.compiler.query.WeakeningSet;
 import souther.compiler.types.WrittenOwner;
 import souther.compiler.query.Weakening;
 import souther.compiler.query.Measurement;
 import souther.compiler.check.Carrier;
-import souther.compiler.coverage.ComparisonEmissionSite;
+import souther.compiler.coverage.ConditionOutcomeSite;
 import souther.compiler.coverage.CorePath;
 import souther.compiler.coverage.NodeAddress;
 import souther.compiler.coverage.NumberingIdentity;
@@ -28,6 +32,7 @@ import souther.compiler.partition.BoundaryTarget;
 import souther.compiler.check.ComparisonClaim;
 import souther.compiler.partition.Demand;
 import souther.compiler.partition.DomainPoint;
+import souther.compiler.partition.ElementsMetOn;
 import souther.compiler.partition.LineOrigin;
 import souther.compiler.partition.PointRole;
 import souther.compiler.query.Adequacy;
@@ -35,6 +40,7 @@ import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.ItemAssessment;
 import souther.compiler.query.PartitionDerivation;
 import souther.compiler.query.PartitionEvidence;
+import souther.compiler.query.RowWitnesses;
 import souther.compiler.report.AdequacyReport;
 import souther.compiler.source.SourceId;
 import souther.compiler.diag.Citation;
@@ -51,6 +57,7 @@ import souther.compiler.types.TypeSymbols;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
 
@@ -75,11 +82,11 @@ final class AReportOfOneBorder {
      * numbering and of nothing else, so what is written here is the numbering — one comparison, in
      * the body this fixture stands for — and the place is read out of it.
      */
-    private static final ComparisonEmissionSite WHERE =
+    private static final ConditionOutcomeSite WHERE =
             SiteNumbering.of(new NumberingIdentity("example.rate", Map.of(),
-                            List.of(new SiteAddress.Comparison(
+                            List.of(new SiteAddress.ConditionOutcome(
                                     new NodeAddress("example.rate", Set.of(CorePath.ROOT))))))
-                    .comparison(0);
+                    .outcome(0);
 
     /** The number the lines below are on, which their orders are the orders of. */
     private static final NumericTerm.ValueOf AT_W_A =
@@ -133,8 +140,12 @@ final class AReportOfOneBorder {
                         new RuleRef.Comparison("weigh", wrote),
                         new ModelOccurrence(wrote, ExpansionLineage.ORIGINAL),
                         new souther.compiler.check.RuleReportAnchor.ByTheModuleThatWroteIt(),
-                        List.of(WHERE)),
-                new LineFacts(new ComparisonClaim.Cut(Towards.BELOW, true)));
+                        List.of(WHERE), ElementsMetOn.EVERY),
+                Optional.empty(),
+                new LineFacts(new ComparisonClaim.Cut(Towards.BELOW, true)),
+                new AuthoredPointMapping.Proven(WrittenLine.THE_COMPARISON,
+                        new ComparisonClaim.Cut(Towards.BELOW, true),
+                        Derivation.AComparisonRead.Facing.NOTHING_WRITTEN, true));
         return Border.at(
                 BoundaryTarget.at(
                         new BorderQuantity.OfACoordinate("weigh", AT_W_A,
@@ -184,7 +195,7 @@ final class AReportOfOneBorder {
                                         new souther.compiler.observe.RowRef("take",
                                                 new souther.compiler.source.SourceId("0"),
                                                 new souther.compiler.observe.RowIdentity.Unnamed(1))),
-                                java.util.Optional.empty()))));
+                                java.util.Optional.empty(), java.util.Optional.empty()))));
     }
 
     /**
@@ -223,7 +234,7 @@ final class AReportOfOneBorder {
 
     /** A row is at every point the border owes. */
     static Measurement<ItemAssessment.Coverage> hit(PointRole role) {
-        return settled(new ItemAssessment.Coverage.Hit());
+        return settled(new ItemAssessment.Coverage.Hit(RowWitnesses.ANOTHER_ROW));
     }
 
     /**
@@ -298,22 +309,25 @@ final class AReportOfOneBorder {
                 new souther.compiler.query.BehaviorEvidence(
                         Adequacy.RowReading.NONE, null, partition, lines,
                         lines.readAs(read -> souther.compiler.query
-                                .BorderObligationPointAssessment.across(read).stream()
+                                .BorderObligationPointAssessment.across(read, _ -> List.of())
+                                .stream()
                                 .filter(point -> point.belongsToBehaviorAccount("weigh"))
                                 .toList()),
-                        null, null, null),
+                        null, null, null, null),
                 new souther.compiler.query.RowSummary(List.of()),
                 souther.compiler.query.ClaimAnnotations.NONE, List.of(), java.util.Map.of(),
-                java.util.Map.of(), rulePlaces(lines), java.util.Map.of(), java.util.Map.of(),
-                java.util.Map.of());
+                AdequacyReport.ConditionsShown.NONE, rulePlaces(lines), java.util.Map.of(),
+                java.util.Map.of(), Map.of(), PathReachability.Answers.Contradictions.NONE,
+                Map.of(), Map.of());
         return new AdequacyReport(AdequacyReport.SCHEMA_VERSION, "test", WeakeningSet.none(),
                 List.of(new AdequacyReport.ModuleReport("example.wide",
                         new SourceId("wide.sou"), List.of(behavior), List.of(),
                         // Nothing this module's declarations are owed, and nothing that finding
                         // them went without: the fixture is about one behavior's own lines.
                         new AdequacyReport.DeclarationsShown(
-                                new Adequacy.DeclaredBoundaries(List.of(), java.util.Map.of()),
-                                java.util.Map.of(), java.util.Map.of()))))
+                                new Adequacy.DeclaredBoundaries(List.of(), List.of(), List.of(),
+                                        Map.of()),
+                                AdequacyReport.ConditionsShown.NONE, Map.of(), Map.of()))))
                 .adequacy();
     }
 

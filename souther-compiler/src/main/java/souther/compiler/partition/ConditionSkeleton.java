@@ -1,6 +1,8 @@
 package souther.compiler.partition;
 
+import souther.compiler.check.ScopeStep;
 import souther.compiler.core.Core;
+import souther.compiler.inputs.Denotation;
 import souther.compiler.types.BinOp;
 
 import java.util.ArrayList;
@@ -36,36 +38,43 @@ final class ConditionSkeleton {
     private ConditionSkeleton() {}
 
     /**
-     * The parts of {@code condition}, in the order they are written.
+     * The parts of {@code condition}, in the order they are written, each with the reading it
+     * stands in — {@code names} as it is where the condition is, stepped into every binding the cut
+     * goes through.
      *
      * <p>Nodes of the tree handed in, so a reader that met one while walking the same tree has the
      * same object. Told apart by being those objects and never by what they hold: {@code a > 0 && a
      * > 0} writes one comparison twice, and parts compared by their contents would be one part.
+     *
+     * <p><b>And never apart from where they stand.</b> The cut goes through the body of a binding,
+     * and what the body names is what the binding gave it: a helper expanded into a closure binds its
+     * parameters there. A part handed on without that reading would be asked about in the one the
+     * condition stands in, where the helper's parameter is no name at all.
      */
-    static List<Core> atoms(Core condition) {
-        List<Core> out = new ArrayList<>();
-        cut(condition, out);
+    static List<Denotation> atoms(Core condition, WhatNamesStandFor names) {
+        List<Denotation> out = new ArrayList<>();
+        cut(condition, names, out);
         return out;
     }
 
-    private static void cut(Core standing, List<Core> out) {
+    private static void cut(Core standing, WhatNamesStandFor names, List<Denotation> out) {
         // What decides the answer is the value, whatever type it stands as.
         Core e = Core.withoutStanding(standing);
         switch (e) {
             // Both sides decide the fork: one of them coming out the wrong way is the whole answer,
             // and a rule about either is a rule the fork tests.
             case Core.Binary both when both.op() == BinOp.AND || both.op() == BinOp.OR -> {
-                cut(both.left(), out);
-                cut(both.right(), out);
+                cut(both.left(), names, out);
+                cut(both.right(), names, out);
             }
             // A binding whose body is the answer. What it computes is a value the body may or may
             // not read, and reading it here would be following where a value came from rather than
-            // what this expression answers with.
-            case Core.LetIn let -> cut(let.body(), out);
+            // what this expression answers with. Its name stands for what it was given, there.
+            case Core.LetIn let -> cut(let.body(), names.entering(new ScopeStep.Let(let)), out);
             // And everything else is a part. Not because nothing is inside it, but because what is
             // inside is on the way to a value: an argument, a closure, the target of a field.
             case null -> { }
-            default -> out.add(e);
+            default -> out.add(new Denotation(e, names.reads()));
         }
     }
 }

@@ -16,6 +16,6 @@ public final class QuantityFixtures {
      */
     public static BorderQuantity.Stands stands(BorderQuantity quantity, Criterion where,
                                                BorderQuantity.Observation observation) {
-        return quantity.standsAt(where, quantity.read(observation));
+        return quantity.standsAt(where, observation);
     }
 }

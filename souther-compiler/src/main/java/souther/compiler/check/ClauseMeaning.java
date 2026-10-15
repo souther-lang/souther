@@ -48,13 +48,22 @@ public sealed interface ClauseMeaning permits ClauseMeaning.Stated, ClauseMeanin
      * the same field through two of them and a set of bindings would mean something only to the
      * reading that built it. The names are the same names in every reading there will ever be.
      *
+     * <p><b>Which places it reads is said beside them, and is a different question.</b> Which
+     * fields a construction has to have filled is answered by the fields. Whether the clause holds
+     * back what stands at a place inside the value is answered by the places it reads and what it
+     * reads there ({@link ClauseRead}): a rule over {@code pending.low} reads the field
+     * {@code pending} and not the place {@code pending.boss}, and a rule over how many a set holds
+     * reads the set and none of its elements' values.
+     *
      * @param ref which clause of which declaration this is
      * @param states what its form says
      * @param fieldsRead the fields of the declaration's value that its form reads, including the
      *     ones reached through what the declaration spreads
+     * @param reads the places of the declaration's value its form reads, and what it reads at each
      * @param parts the rules its author wrote it as, and how they are joined
      */
-    record Stated(Clause.Ref ref, TermMeaning states, Set<String> fieldsRead, Parts parts)
+    record Stated(Clause.Ref ref, TermMeaning states, Set<String> fieldsRead,
+                  Set<ClauseRead> reads, Parts parts)
             implements ClauseMeaning {
 
         public Stated {
@@ -62,6 +71,11 @@ public sealed interface ClauseMeaning permits ClauseMeaning.Stated, ClauseMeanin
             Objects.requireNonNull(states, "a clause that has a form states what the form says");
             Objects.requireNonNull(parts, "a clause is written as some rules");
             fieldsRead = Set.copyOf(fieldsRead);
+            reads = Set.copyOf(reads);
+            if (fieldsRead.isEmpty() != reads.isEmpty()) {
+                throw new IllegalArgumentException("a clause that reads a field reads some place"
+                        + " of the value, and one that reads none reads no place");
+            }
         }
     }
 

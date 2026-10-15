@@ -105,9 +105,14 @@ class WhatARowSatisfiedOnTheWayDoesNotTurnOnTheSpellingTest {
      */
     private static String said(List<OnTheWay> assumed) {
         return assumed.stream().map(each -> switch (each) {
-            case OnTheWay.TakenIn taken -> taken.taken().toString();
+            case OnTheWay.TakenIn taken -> taken.demand().toString();
             case OnTheWay.Narrowed narrowed -> narrowed.position().toString();
-            case OnTheWay.Declined left -> left.why().toString();
+            case OnTheWay.Declined left -> left.whys().toString();
+            case OnTheWay.Settled settled -> "settled " + settled.thisWay();
+            case OnTheWay.OneOf several -> "one of "
+                    + several.alternatives().stream()
+                            .map(WhatARowSatisfiedOnTheWayDoesNotTurnOnTheSpellingTest::said)
+                            .toList();
         }).toList().toString();
     }
 

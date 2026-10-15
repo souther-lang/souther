@@ -2,22 +2,29 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.check.NonAffineOperation;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.core.Core;
 import souther.compiler.numeric.ExactRatio;
+import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.ValueDefinitions;
+import souther.compiler.meaning.WhyNotTaken;
+import souther.compiler.meaning.WhyUnread;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
+import souther.compiler.types.ValueName;
 import java.util.List;
 import java.util.Map;
 import java.util.function.BiPredicate;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -61,8 +68,14 @@ class WhatAWalkTakesInHoldsOfEveryRowItLetsThroughTest {
             behavior withACall : (p: Pair) -> Bool
             let withACall (p) = p.x > 0 && Int.max(p.y, 3) > 10
 
+            behavior withAnUnreadCall : (p: Pair) -> Bool
+            let withAnUnreadCall (p) = p.x > 0 && Int.floorMod(p.y, p.x) > 1
+
             behavior product : (p: Pair) -> Bool
             let product (p) = p.x * p.y > 4
+
+            behavior productThroughACall : (p: Pair) -> Bool
+            let productThroughACall (p) = Decimal.fromInt(p.x * p.y) > Decimal.fromInt(4)
 
             behavior nested : (p: Pair) -> Bool
             let nested (p) = (p.x > 0 || p.y > 1) && p.y < 5
@@ -75,7 +88,9 @@ class WhatAWalkTakesInHoldsOfEveryRowItLetsThroughTest {
             "either", (x, y) -> x > 0 || y > 10,
             "affineSum", (x, y) -> x + 2 * y <= 7,
             "withACall", (x, y) -> x > 0 && Math.max(y, 3) > 10,
+            "withAnUnreadCall", (x, y) -> x > 0 && Math.floorMod(y, x) > 1,
             "product", (x, y) -> x * y > 4,
+            "productThroughACall", (x, y) -> x * y > 4,
             "nested", (x, y) -> (x > 0 || y > 1) && y < 5);
 
     /**
@@ -95,10 +110,15 @@ class WhatAWalkTakesInHoldsOfEveryRowItLetsThroughTest {
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         souther.compiler.inputs.InputDomain inputs =
                 compilation.db().ask(new Adequacy.Inputs(module)).value().get(behavior);
-        InputReads reads = InputReads.ofParameters(inputs.parameterReads(),
-                checked.elementBindings().get(behavior));
+        InputReads reads = InputReads.ofParameters(inputs.parameterReads(), inputs.declared(rules),
+                checked.elementBindings().get(behavior),
+                ValueDefinitions.of(checked.analysisBodies().get(behavior), rules.newtypes()),
+                inputs.dependencies());
+        InputReading read = inputs.reading(rules);
         return ReachingCuts.stating(Condition.of(body, reads, rules.symbols(), rules.newtypes(),
-                new ConditionNumbering(module, behavior)), inputs.reading(rules), holding);
+                new ConditionNumbering(module, behavior, ConditionOccurrence.Reading.DIVIDING)),
+                read, holding,
+                WhatConditionsState.of(read)).entries();
     }
 
     /** Whether {@code cut} holds where {@code x} and {@code y} stand at these values. */
@@ -110,8 +130,8 @@ class WhatAWalkTakesInHoldsOfEveryRowItLetsThroughTest {
             String term = each.getKey().toString();
             assertTrue(term.endsWith("x") || term.endsWith("y"),
                     () -> "the cuts of this model are over its two positions: " + term);
-            value = value.plus(each.getValue().times(
-                    ExactRatio.of(term.endsWith("x") ? x : y))).orNull();
+            value = each.getValue().times(ExactRatio.of(term.endsWith("x") ? x : y))
+                    .flatMap(value::plus).orNull();
         }
         int against = value.signum();
         return switch (cut.rel()) {
@@ -139,7 +159,8 @@ class WhatAWalkTakesInHoldsOfEveryRowItLetsThroughTest {
                 // holds of is asked where such a model is written.
                 List<TakenConstraint.Affine> cuts = stating(behavior, holding).stream()
                         .filter(each -> each instanceof OnTheWay.TakenIn)
-                        .map(each -> ((OnTheWay.TakenIn) each).taken())
+                        .map(each -> ((OnTheWay.TakenIn) each).demand())
+                        .map(each -> ((RowDemand.Relational) each).constraint())
                         .map(TakenConstraint.Affine.class::cast)
                         .toList();
                 for (int x = -4; x <= 13; x++) {
@@ -182,16 +203,28 @@ class WhatAWalkTakesInHoldsOfEveryRowItLetsThroughTest {
      * The two ways round a fork's operators say one of two things, and neither is approximated.
      *
      * <p>{@code A && B} coming out false says one of them failed and names neither. Taking either
-     * would narrow a region on something no row here satisfies, which is what the answer being a
-     * decline rather than a cut is for — and it is filed at the whole condition, since neither
-     * operand is what could not be carried.
+     * would narrow a region on something no row here satisfies, so it is put on the way whole, at
+     * the whole condition, as its two alternatives — each a way a row is looked for along — and
+     * what every arriving row met is what it met along one of them.
      */
     @Test
-    void anArmThatStatesOneOfTwoThingsIsDeclinedWhole() {
-        assertEquals(List.of(new OnTheWay.Why.OneOfTwoThings()), whys("both", false));
-        assertEquals(List.of(new OnTheWay.Why.OneOfTwoThings()), whys("either", true));
+    void anArmThatStatesOneOfTwoThingsIsOnTheWayAsItsAlternatives() {
+        for (List<OnTheWay> stated : List.of(stating("both", false), stating("either", true))) {
+            OnTheWay.OneOf several = assertInstanceOf(OnTheWay.OneOf.class,
+                    assertOne(stated), () -> "one entry, at the whole condition: " + stated);
+            assertEquals(2, several.alternatives().size(), () -> "an alternative per operand: "
+                    + several);
+            assertTrue(several.alternatives().stream().allMatch(each -> each.size() == 1
+                            && each.getFirst() instanceof OnTheWay.TakenIn),
+                    () -> "each operand taken in on its own alternative: " + several);
+        }
         assertEquals(List.of(), whys("both", true), "and both operands are taken in the other way");
         assertEquals(List.of(), whys("either", false));
+    }
+
+    private static OnTheWay assertOne(List<OnTheWay> stated) {
+        assertEquals(1, stated.size(), () -> "one entry: " + stated);
+        return stated.getFirst();
     }
 
     /**
@@ -205,21 +238,27 @@ class WhatAWalkTakesInHoldsOfEveryRowItLetsThroughTest {
      */
     @Test
     void aComparisonItCouldNotTurnIntoACutSaysThatAndNoMore() {
-        assertEquals(List.of(new OnTheWay.Why.ComparisonNotRepresentedAsACut()),
-                whys("product", true));
+        WhyNotTaken product = new WhyNotTaken.MeaningUnread(new WhyUnread.OutsideTheLinearFragment(
+                NonAffineOperation.PRODUCT_OF_NON_CONSTANT_VALUES));
+        assertEquals(List.of(product), whys("product", true));
+        // The same product handed to an operation the library says answers what it was handed:
+        // the call is where the reading stopped, and why is what stopped its argument.
+        assertEquals(List.of(product), whys("productThroughACall", true));
         // The affine operand is taken in beside it: a conjunction coming out true says both, and
         // one of them being unreadable is no reason to lose the other.
-        assertEquals(List.of(new OnTheWay.Why.ComparisonNotRepresentedAsACut()),
-                whys("withACall", true));
-        assertEquals(1, stating("withACall", true).stream()
+        assertEquals(List.of(new WhyNotTaken.MeaningUnread(
+                        new WhyUnread.NoFormOfWhatItAnswers(
+                                new ValueName.Stdlib.Operation("Int", "floorMod")))),
+                whys("withAnUnreadCall", true));
+        assertEquals(1, stating("withAnUnreadCall", true).stream()
                 .filter(each -> each instanceof OnTheWay.TakenIn).count());
     }
 
     /** What the walk declined, and why, in the order it met them. */
-    private static List<OnTheWay.Why> whys(String behavior, boolean holding) {
+    private static List<WhyNotTaken> whys(String behavior, boolean holding) {
         return stating(behavior, holding).stream()
                 .filter(each -> each instanceof OnTheWay.Declined)
-                .map(each -> ((OnTheWay.Declined) each).why())
+                .flatMap(each -> ((OnTheWay.Declined) each).whys().stream())
                 .toList();
     }
 }

@@ -76,6 +76,8 @@ public final class Evaluated {
             case Core.MaterialisedValue _ -> List.of();
             case Core.Neg neg -> always(neg.operand());
             case Core.FieldAccess access -> always(access.target());
+            // What the names are read off; reading a name runs nothing of its own.
+            case Core.FieldProjection projection -> always(projection.base());
             case Core.TupleGet get -> always(get.tuple());
             case Core.OptionSome option -> always(option.value());
             // What it holds runs; standing as a wider type runs nothing of its own.

@@ -31,6 +31,25 @@ class AnOutputReadsThePublicationOfAValueTest {
             let ys = List.reverse(ks)
             """;
 
+    private static final String ROWS_BESIDE = """
+            module n
+
+            behavior counted : (xs: List<Int>, n: Int) -> Int
+            let counted (xs, n) = List.length(xs) + n
+            """;
+
+    /** One value that runs and one that folds to a constant, both for the rows to name. */
+    private static final String ATTACHED = """
+            examples for n
+
+            let few = List.reverse([1, 2])
+
+            let one = 1
+
+            example counted
+                | (few, one) -> 3
+            """;
+
     @Test
     void aValueTheClauseListsIsPublishedAndOneItDoesNotIsKept() {
         CheckedModule module = CheckedProgram.of(List.of(MODULE)).module("m");
@@ -38,6 +57,21 @@ class AnOutputReadsThePublicationOfAValueTest {
         assertEquals(Publication.PUBLISHED,
                 module.publicationOfValue(new ValueName.Helper("m", "ys")));
         assertEquals(Publication.KEPT, module.publicationOfValue(new ValueName.Helper("m", "ks")));
+    }
+
+    /**
+     * A value an attached file declares joins the module its rows join, and is kept: the model
+     * compiles to nothing of that file, so there is nothing of it for another module to call.
+     */
+    @Test
+    void aValueAnAttachedFileDeclaresIsTheModulesAndKept() {
+        CheckedModule module = CheckedProgram.of(List.of(ROWS_BESIDE, ATTACHED)).module("n");
+        ValueName.Helper few = new ValueName.Helper("n", "few");
+
+        assertEquals(few, module.value(few).name());
+        assertEquals(Publication.KEPT, module.publicationOfValue(few));
+        assertEquals(Publication.KEPT, module.publicationOfValue(new ValueName.Helper("n", "one")));
+        assertEquals(List.of(), module.valueEntries());
     }
 
     @Test

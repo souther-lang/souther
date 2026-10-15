@@ -1,6 +1,5 @@
 package souther.lsp.analysis;
 
-import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
@@ -70,7 +69,7 @@ final class LastAnswered<T> {
 
     /** Forgets every document the workspace no longer holds, so a file that was deleted or renamed
      * leaves nothing behind. */
-    void forgetAllBut(Collection<String> uris) {
-        byDocument.keySet().retainAll(Set.copyOf(uris));
+    void forgetAllBut(Set<String> uris) {
+        byDocument.keySet().retainAll(uris);
     }
 }

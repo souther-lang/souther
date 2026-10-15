@@ -1,0 +1,22 @@
+// A position the body reads and sends every class of one way is told apart as one group.
+//
+// One arm for both cases is a decision about `k` that tells nothing apart.
+//
+// told apart at k: 1 group of 2
+// told apart at n: 2 groups of 2
+module example.oneway
+
+data A
+data B
+data Kind = A | B
+
+data Ok = { n: Int }
+
+behavior judge : (k: Kind, n: Int) -> Ok
+    constructs Ok
+
+let judge (k, n) = {
+    guard n > 10 else Ok { n = 0 }
+    match k with
+        | A | B -> Ok { n = 1 }
+}

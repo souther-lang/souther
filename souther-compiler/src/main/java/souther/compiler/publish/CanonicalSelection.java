@@ -99,6 +99,19 @@ public final class CanonicalSelection<T> {
         }
 
         /**
+         * The order of a kind some of whose members carry something beside what places them.
+         *
+         * <p>Each member sits at the place {@code placeOf} names for it, and the places are written
+         * out. For a kind whose members are mostly values but some of which carry a payload the
+         * order has nothing to say about: the place is what the order decides, and two members at
+         * one place are refused by {@link #keep} as they are anywhere else, so a holder makes them
+         * one before it asks.
+         */
+        static <T> Order<T> overPlaces(List<?> places, Function<T, Object> placeOf) {
+            return new Order<>(List.copyOf(places), placeOf);
+        }
+
+        /**
          * The order of a kind whose members carry something, one place per family.
          *
          * <p>A family and not a class. What a report says once may be answered in more than one

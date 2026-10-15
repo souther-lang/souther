@@ -214,12 +214,16 @@ class ABoundaryIsAValueTheRecordCanHoldTest {
 
     /** A guard drawn at a value the record cannot hold divides nothing and is no edge either. Held
      * because the two answers are computed from one list, and a line left in the cuts while the
-     * intervals dropped it is this same defect one field over. */
+     * intervals dropped it is this same defect one field over.
+     *
+     * <p>Drawn between 1440 and 1441, so that neither side holds a start. A line between 1439 and
+     * 1440 has the last start there is on its far side, and a row at it is one the line is drawn
+     * against. */
     @Test
     void aLineTheRecordCannotHoldIsNotABoundaryEither() throws Exception {
         String gated = TIMESHEET
                 .replace("interval.endsAt.value - interval.startsAt.value >= 480",
-                        "interval.startsAt.value >= 1440")
+                        "interval.startsAt.value >= 1441")
                 .replace("then LongShift", "then LongShift")
                 .replace("else ShortShift", "else ShortShift");
         List<String> asked = boundariesOf(gated);
@@ -231,7 +235,8 @@ class ABoundaryIsAValueTheRecordCanHoldTest {
         // this compile holds and names its declaration where it is not, so matching the first of
         // those would stop seeing the second — which is a line drawn by a guard all the same.
         assertFalse(asked.stream().anyMatch(l -> l.contains("guard")),
-                () -> "no interval starts at 1440, so the comparison has no line to be at: " + asked);
+                () -> "no interval starts at 1440 or 1441, so the comparison has no line to be at: "
+                        + asked);
     }
 
     /**
@@ -463,7 +468,7 @@ class ABoundaryIsAValueTheRecordCanHoldTest {
         // settled by building one. Two kinds of witness, and the projection proves neither.
         // Under the declarations: both lines are the record's own clause, so the behavior carrying
         // the type is owed nothing at them and the module's account is where the two are counted.
-        assertTrue(report.contains("declarations   obligations 2/4"),
+        assertTrue(report.contains("declarations   borders 2   obligations 2/4"),
                 () -> "the row at 0 is met, and 10 was built and is owed:\n" + report);
         // Under the declaration that drew it, in the terms it wrote: the line is owed once over
         // every position carrying the type (issue #1062).

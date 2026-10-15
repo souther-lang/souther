@@ -6,6 +6,7 @@ import souther.compiler.diag.Located;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Adequacy;
+import souther.test.OnItsOwnStack;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -14,7 +15,6 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -215,23 +215,9 @@ class CompileDeepExpressionTest {
                 door + ": expected a depth diagnostic, got: " + thrown.getMessage());
     }
 
-    /**
-     * Runs {@code work} on a thread with {@code stackBytes} of stack and returns what it threw, or
-     * null where it returned. The wait is bounded: work that never comes back is a failure with a
-     * name on it, not a run that sits there.
-     */
-    private static Throwable run(Runnable work, int stackBytes) throws InterruptedException {
-        AtomicReference<Throwable> caught = new AtomicReference<>();
-        Thread t = new Thread(null, () -> {
-            try {
-                work.run();
-            } catch (Throwable x) {
-                caught.set(x);
-            }
-        }, "deep-expression", stackBytes);
-        t.start();
-        t.join(120_000);
-        assertFalse(t.isAlive(), "the compile did not come back within 120s");
-        return caught.get();
+    /** Runs {@code work} on a thread with {@code stackBytes} of stack and returns what it threw, or
+     *  null where it returned. */
+    private static Throwable run(Runnable work, int stackBytes) {
+        return OnItsOwnStack.run("a compile of a deep expression", stackBytes, work);
     }
 }

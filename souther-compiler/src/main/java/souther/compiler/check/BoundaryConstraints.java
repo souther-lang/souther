@@ -25,19 +25,23 @@ import souther.compiler.core.ConstraintProjection;
 import souther.compiler.core.Core;
 import souther.compiler.core.IntNegation;
 import souther.compiler.core.Kernel;
+import souther.compiler.core.MessageForm;
 import souther.compiler.core.ValueShape;
 import souther.compiler.numeric.EndSide;
 import souther.compiler.types.BindingId;
+import souther.compiler.types.LeafScalar;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * What the clauses of a data made of one field are as the standard constraints a decoder names, so
@@ -68,12 +72,16 @@ public final class BoundaryConstraints {
      *  call. */
     private final Symbols symbols;
 
+    /** What each newtype wraps, which is what an element that is one is reported as. */
+    private final NewtypeInners inners;
+
     /** The binding the data's one field is read through, which is which field a read is of — the
      *  name it is written with is only what it is called. */
     private final BindingId field;
 
-    private BoundaryConstraints(Symbols symbols, BindingId field) {
+    private BoundaryConstraints(Symbols symbols, NewtypeInners inners, BindingId field) {
         this.symbols = symbols;
+        this.inners = inners;
         this.field = field;
     }
 
@@ -101,11 +109,11 @@ public final class BoundaryConstraints {
      * <p>Whether the reading reached every clause is part of the answer ({@link Projections}),
      * because a clause it did not reach and a clause it has no answer for are two different things.
      */
-    public static Projections of(Symbols symbols, TypeSymbol.AtModule named,
+    public static Projections of(Symbols symbols, NewtypeInners inners, TypeSymbol.AtModule named,
                                  ValueShape.Field sole, ExpandedClauseLookup form,
                                  InvariantStatements statements) {
-        return new BoundaryConstraints(symbols, sole.binding()).of(named, sole.type(), form,
-                statements);
+        return new BoundaryConstraints(symbols, inners, sole.binding()).of(named, sole.type(),
+                form, statements);
     }
 
     /**
@@ -374,15 +382,56 @@ public final class BoundaryConstraints {
             return Optional.of(matching(call));
         }
         // `List.allDistinctBy(x -> x, value)` says of the elements that no two are equal, by the same
-        // value equality (spec §collections). A projection that is not the identity says it
-        // of something else — the elements' products, their ids — and there is no constraint for
-        // that, so the clause keeps its own check.
-        if (base instanceof Type.ListOf && statesDistinctness(call)
-                && call.args().size() == 2 && isValue(call.args().get(1))
-                && isIdentity(call.args().get(0))) {
-            return Optional.of(new Unique());
+        // value equality (spec §collections). Read where every builder of a list reads it
+        // (ElementsApart), so the decoder and the rows composed for it agree about which rule says
+        // so. Apart at a run of fields says it of something else — the elements' ids — and there is
+        // no constraint for that, so the clause keeps its own check. Nor is there one where the
+        // elements have no message form: the constraint reports the elements it finds repeated, and
+        // a decoder library cannot write them.
+        List<String> apart = ElementsApart.apartAt(call, field);
+        if (base instanceof Type.ListOf list && apart != null && apart.isEmpty()) {
+            MessageForm element = messageForm(list.element(), Set.of());
+            return element == null ? Optional.empty() : Optional.of(new Unique(element));
         }
         return Optional.empty();
+    }
+
+    /**
+     * The form a value of {@code type} is written into an issue in, or null where it has none.
+     *
+     * <p>A newtype has the form of what it wraps, a list the form of its elements, and a scalar its
+     * own; nothing else has one. A newtype that wraps itself, directly or through a list, has values
+     * of no bounded depth and no form either.
+     *
+     * @param unwrapping the newtypes the walk is already inside
+     */
+    private MessageForm messageForm(Type type, Set<TypeSymbol> unwrapping) {
+        if (type instanceof Type.Prim prim) {
+            LeafScalar scalar = LeafScalar.of(prim);
+            return scalar == null ? null : new MessageForm.Scalar(scalar);
+        }
+        if (type instanceof Type.ListOf list) {
+            MessageForm element = messageForm(list.element(), unwrapping);
+            return element == null ? null : new MessageForm.ListOf(element);
+        }
+        TypeOps.NewtypeSpine spine = TypeOps.newtypeSpine(type, inners);
+        if (spine.layers().isEmpty() || spine.terminal() instanceof Type.Ref) {
+            return null;
+        }
+        Set<TypeSymbol> inside = new HashSet<>(unwrapping);
+        for (TypeOps.Layer layer : spine.layers()) {
+            if (!inside.add(layer.named())) {
+                return null;
+            }
+        }
+        MessageForm form = messageForm(spine.terminal(), inside);
+        if (form == null) {
+            return null;
+        }
+        for (TypeOps.Layer layer : spine.layers().reversed()) {
+            form = new MessageForm.Newtype(layer.named(), form);
+        }
+        return form;
     }
 
     private static Optional<BoundaryConstraint> ofStringLength(ComparisonClaim placed,
@@ -473,23 +522,6 @@ public final class BoundaryConstraints {
     private boolean applies(Core.PreservedCall call, Kernel kernel) {
         return call.operation() instanceof ValueName.Stdlib.Operation operation
                 && symbols.kernelOf(operation) == kernel;
-    }
-
-    /** Whether {@code call} states that the elements are distinct — the library's own predicate for
-     *  it, which has a Souther body rather than a kernel and so is a value the library hands over
-     *  ({@link Symbols#theDistinctnessPredicate}). */
-    private boolean statesDistinctness(Core.PreservedCall call) {
-        return symbols.theDistinctnessPredicate().equals(call.operation());
-    }
-
-    /** Whether a projection hands back what it was given — {@code x -> x}, however the parameter is
-     * spelled. A block with one parameter is how a lambda arrives here (spec §blocks). The body reads
-     * the parameter when it reads that binding; a name spelled like it, bound elsewhere, is another
-     * value. */
-    private static boolean isIdentity(Core e) {
-        return Core.withoutStanding(e) instanceof Core.Block block && block.params().size() == 1
-                && Core.withoutStanding(block.body()) instanceof Core.Read read
-                && read.binding().equals(block.params().get(0).binding());
     }
 
     /** An Int literal, negation included ({@code -1}), or null when the operand is not one. */

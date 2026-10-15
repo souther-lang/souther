@@ -97,6 +97,7 @@ public final class TypeChecker {
      */
     public static Reported checkModule(Hir.Module module, DerivedSymbols symbols,
                                        DeclarationAccess declarations,
+                                       ReachedValueLocations reachedLocations,
                                        UninhabitableTypes.WithNoValue withNoValue,
                                        DeclarationLocations declaredAt,
                                        ReadingPolicy policy,
@@ -107,8 +108,8 @@ public final class TypeChecker {
                                        Map<String, LoweringRole> roles,
                                        Map<ValueName.Behavior, ReqSig> reqSigs,
                                        Map<ValueName.Behavior, ReqSig> calleeSigs,
-                                       Map<String, Type> recursiveHelperFns,
-                                       Map<String, Hir.FnDef> imported, Set<String> settled,
+                                       Map<String, StandingSignature> recursiveHelperFns,
+                                       ClosedImports imported, Set<String> settled,
                                        Map<TypeSymbol.AtModule, ValueShape> shapes,
                                        Preserved.SettledValues declaredElsewhere) {
         Elaborated elaborated = new Elaborated();
@@ -121,7 +122,7 @@ public final class TypeChecker {
         List<CompileException> errors = new ArrayList<>();
         boolean stopped = false;
         try {
-            checkRecovering(module, symbols, declarations,
+            checkRecovering(module, symbols, declarations, reachedLocations,
                     withNoValue,
                     declaredAt,
                     policy, sigs,
@@ -157,13 +158,14 @@ public final class TypeChecker {
                                     ReadingPolicy policy,
                                      InvariantChecker.Source discharge,
                                      Symbols symbols, DeclarationAccess declarations,
+                                     ReachedValueLocations reachedLocations,
                                      Map<ValueName.Behavior, ReqSig> calleeSigs,
                                      Map<ValueName.Behavior, ReqSig> reqSigs, HelperInliner inliner,
-                                     Map<String, Type> recursiveHelperFns,
+                                     Map<String, StandingSignature> recursiveHelperFns,
                                      Map<String, DataChecker.Constructs> recHelperConstructs,
                                      Preserved.SettledValues settledValues) {
         return SpecChecker.checkSpecFn(spec, fn, loweredBody, discharge, symbols, declarations,
-                policy,
+                reachedLocations, policy,
                 calleeSigs, reqSigs, inliner, recursiveHelperFns, recHelperConstructs,
                 settledValues);
     }
@@ -187,7 +189,7 @@ public final class TypeChecker {
 
     /** The signatures every recursive helper a representation can reach would be called under —
      *  what typing a call left standing needs, whether or not this module turned out to reach it. */
-    public static Map<String, Type> recursiveCallSigs(
+    public static Map<String, StandingSignature> recursiveCallSigs(
             HelperTable table,
             java.util.Collection<souther.compiler.types.ReachName.Declaration> references,
             Symbols symbols) {
@@ -244,6 +246,7 @@ public final class TypeChecker {
      */
     static void checkRecovering(Hir.Module module, DerivedSymbols symbols,
                                         DeclarationAccess declarations,
+                                        ReachedValueLocations reachedLocations,
                                         UninhabitableTypes.WithNoValue withNoValue,
                                         DeclarationLocations declaredAt,
                                        ReadingPolicy policy,
@@ -254,11 +257,11 @@ public final class TypeChecker {
                                         List<CompileException> errors,
                                         Elaborated elaborated, List<Unanswerable> abandoned,
                                         Map<ValueName.Behavior, ReqSig> reqSigs,
-                                        Map<String, Type> recursiveHelperFns,
-                                        Map<String, Hir.FnDef> publishedToHere,
+                                        Map<String, StandingSignature> recursiveHelperFns,
+                                        ClosedImports publishedToHere,
                                         Set<String> settled,
                                         Map<TypeSymbol.AtModule, ValueShape> shapes) {
-        PublishedDeclarations published = declarations.published();
+        SumCases sums = declarations.sums();
         DeclarationKinds kinds = declarations.kinds();
         // Both components, because what reads this walks both: a helper is checked whether the module
         // declared it or took it on to emit, and one missing here is a helper checked against a body
@@ -364,10 +367,11 @@ public final class TypeChecker {
                         if (symbols.declarations().declaration(data.declares())
                                 instanceof Derived.Data derived) {
                             DataChecker.checkData(derived,
-                                    CheckContext.of(symbols, declarations).forData(data));
+                                    CheckContext.of(symbols, declarations, reachedLocations)
+                                            .forData(data));
                         }
                     }
-                    case Hir.SumData sum -> DataChecker.checkSum(sum, symbols, kinds, published);
+                    case Hir.SumData sum -> DataChecker.checkSum(sum, symbols, kinds, sums);
                     case Hir.UnitData _ -> { }
                 }
             });
@@ -438,6 +442,7 @@ public final class TypeChecker {
         for (Hir.Def d : module.defs()) {
             ownTypes.add(d.name());
         }
+        Map<String, Hir.FnDef> helpers = HelperInliner.helpersOf(module);
         for (String e : module.exposing().named()) {
             int dot = e.indexOf('.');
             // `exposing` is type-granular: a data's decoder/encoder are always public API once the
@@ -456,7 +461,7 @@ public final class TypeChecker {
                 // written against, and the rule itself. A behavior's own `let` is not — what a reader
                 // reaches there is the behavior, which it calls, and the module publishes its
                 // specification rather than the body it was given (ADR-0005).
-                Hir.FnDef helper = HelperInliner.helpersOf(module).get(e);
+                Hir.FnDef helper = helpers.get(e);
                 if (helper != null) {
                     // The same rule a body is held to (spec §an-attached-files-values-are-for-its-rows),
                     // read here because an `exposing` list is a list of names and not an expression, so
@@ -554,7 +559,7 @@ public final class TypeChecker {
         // declares, which is the same check every other definition of this module gets. There is
         // nothing left here for a reading of its own to ask.
         collect(errors, abandoned, () -> HelperTyping.checkHelpers(inliner, toCheck, symbols,
-                published, kinds, reqSigs, recursiveHelperFns, loweredBodies,
+                declarations, reachedLocations, reqSigs, recursiveHelperFns, loweredBodies,
                 LoweringRole.valuesWithAnEntry(elaborated.roles, module.name()), elaborated));
         // Recursion is total by default (spec §fn-declaration): a non-`partial` recursive helper must
         // be structurally recursive, so its examples terminate at compile time.
@@ -589,11 +594,12 @@ public final class TypeChecker {
         });
         // a composition named by `exposing` must declare its output there, matching the inferred one
         // (spec §declared-composition-output, ADR-0024), so a far-away change cannot grow a published output silently.
-        collect(errors, abandoned, () -> SpecChecker.checkUnionMemberNames(module, sigs, published));
+        collect(errors, abandoned, () -> SpecChecker.checkUnionMemberNames(module, sigs, kinds,
+                sums));
         collect(errors, abandoned, () -> SpecChecker.checkUnionMemberFields(module, sigs, symbols,
-                kinds, published));
+                kinds, sums));
         collect(errors, abandoned, () -> SpecChecker.checkExposedPipeOutputs(module,
-                sigs, published));
+                sigs, kinds, sums));
         // What this module reaches out with may not rest on what it keeps to itself — a name in
         // `exposing`, and an injection target, whose base is public whatever `exposing` says. After
         // the exposing signature checks: a signature that should not be there at all (E1605), or one

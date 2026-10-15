@@ -1,9 +1,13 @@
 package souther.compiler.check;
 
 import souther.compiler.semantics.BuiltFrom;
+import souther.compiler.semantics.ElementLineage;
+import souther.compiler.semantics.PieceOfAnElement;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.ElementProjection;
+import souther.compiler.inputs.HeldIn;
 import souther.compiler.types.BindingId;
+import souther.compiler.types.ReachName;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
@@ -12,9 +16,11 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
 
 /**
- * Which of a body's bindings hold an element of a container, and of which container.
+ * Which of a body's bindings hold an element of a container, or the key a map files one under, and
+ * of which container.
  *
  * <p>A fact about the program and not about any reader of it. What a standard-library operation
  * hands its closure is stated by the library's own signature ({@link Combinators}); this is that
@@ -43,11 +49,13 @@ import java.util.Set;
  * container is not always one — it can be what another operation answered, which is where a reading
  * of provenance goes on rather than stopping ({@link ElementLineage}).
  */
-public record ElementBindings(Map<BindingId, List<Core>> containers,
+public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
                               Map<BindingId, Core> held,
                               ElementProvenance provenance,
                               Map<BindingId, ElementProjection> projected,
-                              ValueTemplates templates) {
+                              ValueTemplates templates,
+                              Map<BindingId, ElementAnswer> answers,
+                              Map<BindingId, ClosureUses> uses) {
 
     /** Nothing was read, which is what a body with no combinator in it comes to. */
     public static final ElementBindings NONE =
@@ -57,30 +65,64 @@ public record ElementBindings(Map<BindingId, List<Core>> containers,
         containers = Map.copyOf(containers);
         held = Map.copyOf(held);
         projected = Map.copyOf(projected);
+        answers = Map.copyOf(answers);
+        uses = Map.copyOf(uses);
         if (templates == null) {
             throw new IllegalArgumentException("a body builds values it holds the meaning of, or"
                     + " none");
         }
     }
 
+    /** Of a body whose closures are asked for no more than what they answered. */
+    public ElementBindings(Map<BindingId, List<HeldIn>> containers, Map<BindingId, Core> held,
+                           ElementProvenance provenance,
+                           Map<BindingId, ElementProjection> projected,
+                           ValueTemplates templates,
+                           Map<BindingId, ElementAnswer> answers) {
+        this(containers, held, provenance, projected, templates, answers, Map.of());
+    }
+
+    /** Of a body whose closures are asked for no more than the place they answered. */
+    public ElementBindings(Map<BindingId, List<HeldIn>> containers, Map<BindingId, Core> held,
+                           ElementProvenance provenance,
+                           Map<BindingId, ElementProjection> projected,
+                           ValueTemplates templates) {
+        this(containers, held, provenance, projected, templates, Map.of());
+    }
+
     /** Of a body that builds no value. */
-    public ElementBindings(Map<BindingId, List<Core>> containers, Map<BindingId, Core> held,
+    public ElementBindings(Map<BindingId, List<HeldIn>> containers, Map<BindingId, Core> held,
                            ElementProvenance provenance,
                            Map<BindingId, ElementProjection> projected) {
         this(containers, held, provenance, projected, ValueTemplates.NONE);
     }
 
     /**
-     * What a name given {@code value} holds: the value itself, or where it is a build of one, what
-     * the value is.
+     * What this and {@code other} say together, of two bodies that share no binding — a body, and
+     * the body of a behavior it calls read where the call stands.
      *
-     * <p>Asked where a name is bound, so that everything that reads the name reads the meaning and
-     * not the edge that asked for it.
+     * <p>A value built in either means what it means wherever it is built, so the values both build
+     * are one meaning each.
      */
-    public Core dereferenced(Core standing) {
-        // The type a name is in force at says nothing about which value it holds.
-        Core value = Core.withoutStanding(standing);
-        return value instanceof Core.MaterialisedValue build ? templates.bodyOf(build) : value;
+    public ElementBindings and(ElementBindings other) {
+        if (other.equals(NONE)) {
+            return this;
+        }
+        Map<BindingId, List<HeldIn>> joinedContainers = new LinkedHashMap<>(containers);
+        joinedContainers.putAll(other.containers);
+        Map<BindingId, Core> joinedHeld = new LinkedHashMap<>(held);
+        joinedHeld.putAll(other.held);
+        Map<BindingId, ElementProjection> joinedProjected = new LinkedHashMap<>(projected);
+        joinedProjected.putAll(other.projected);
+        Map<ReachName.Declaration, Core> joinedTemplates = new LinkedHashMap<>(templates.templates());
+        joinedTemplates.putAll(other.templates.templates());
+        Map<BindingId, ElementAnswer> joinedAnswers = new LinkedHashMap<>(answers);
+        joinedAnswers.putAll(other.answers);
+        Map<BindingId, ClosureUses> joinedEntries = new LinkedHashMap<>(uses);
+        joinedEntries.putAll(other.uses);
+        return new ElementBindings(joinedContainers, joinedHeld, provenance.and(other.provenance),
+                joinedProjected, new ValueTemplates(joinedTemplates), joinedAnswers,
+                joinedEntries);
     }
 
     /**
@@ -93,6 +135,18 @@ public record ElementBindings(Map<BindingId, List<Core>> containers,
      */
     public ElementProjection projectionAt(BindingId binding) {
         return binding == null ? null : projected.get(binding);
+    }
+
+    /**
+     * What the closure handed the element at {@code binding} answered, as the closure and the
+     * parameter it was written about, or null where no licensed walk answered one per element of it.
+     *
+     * <p>The beside of {@link #projectionAt}: that is the answer where it is a place of the element,
+     * and this is what is left to read where it is not. The same licence stands behind both, so a
+     * closure is here exactly where a place would have been given had the answer been one.
+     */
+    public ElementAnswer answerAt(BindingId binding) {
+        return binding == null ? null : answers.get(binding);
     }
 
     /**
@@ -109,17 +163,36 @@ public record ElementBindings(Map<BindingId, List<Core>> containers,
     }
 
     /**
-     * The containers an element at {@code binding} was taken from, empty where the binding holds
-     * something else.
+     * The containers what is at {@code binding} was taken from, each with the part of it the binding
+     * was handed, empty where the binding holds something else.
      *
-     * <p>More than one where one block was handed to more than one walk: the binding takes an
-     * element of a different container on each run, which is a fact about the model and not a
-     * reading that stopped. Answered as none, a name that plainly holds an element would read as a
-     * name from nowhere; answered as whichever came first, a rule inside the block would be filed
-     * at a container it says nothing about.
+     * <p>More than one where one block was handed to more than one walk: the binding takes from a
+     * different container on each run, which is a fact about the model and not a reading that
+     * stopped. Answered as none, a name that plainly holds an element would read as a name from
+     * nowhere; answered as whichever came first, a rule inside the block would be filed at a
+     * container it says nothing about.
      */
-    public List<Core> containersOf(BindingId binding) {
+    public List<HeldIn> containersOf(BindingId binding) {
         return binding == null ? List.of() : containers.getOrDefault(binding, List.of());
+    }
+
+    /**
+     * The containers the closure {@code binding} is a parameter of is applied over, one for each
+     * operation applying it, or empty where something other than an operation over a container may
+     * apply it ({@link ClosureEntries}).
+     *
+     * <p>Empty says nothing is known and not that nothing enters the closure: a reader that took it
+     * for the second would hold every run out of a closure that is also called directly.
+     */
+    public List<Core> enteredOver(BindingId binding) {
+        ClosureUses of = usesOf(binding);
+        return of == null ? List.of() : of.enteredOver();
+    }
+
+    /** Every use of the closure {@code binding} is a parameter of, or null where no operation
+     *  applies it ({@link ClosureEntries}). */
+    public ClosureUses usesOf(BindingId binding) {
+        return binding == null ? null : uses.get(binding);
     }
 
     public boolean isEmpty() {
@@ -161,13 +234,13 @@ public record ElementBindings(Map<BindingId, List<Core>> containers,
 
     private static ElementBindings of(Core body, List<Core> templates, ValueTemplates values,
                                       ElementProvenance provenance, DeclarationNewtypes newtypes) {
-        Map<BindingId, List<Core>> found = new LinkedHashMap<>();
+        Map<BindingId, List<HeldIn>> found = new LinkedHashMap<>();
         Map<BindingId, Core> held = new LinkedHashMap<>();
         Map<BindingId, Core> answered = new LinkedHashMap<>();
         Map<BindingId, Core> standing = new LinkedHashMap<>();
-        walk(body, found, held, provenance, answered, standing, values);
+        walk(body, found, held, provenance, answered, standing);
         for (Core template : templates) {
-            walk(template, found, held, provenance, answered, standing, values);
+            walk(template, found, held, provenance, answered, standing);
         }
         // What one walk hands its closure is what a licence and a projection are about, and a
         // binding taking elements of more than one container has no one walk to be about. The
@@ -178,17 +251,24 @@ public record ElementBindings(Map<BindingId, List<Core>> containers,
                 standing.remove(element);
             }
         });
+        Map<BindingId, ElementAnswer> closures = new LinkedHashMap<>();
         Map<BindingId, ElementProjection> projected =
-                projections(answered, found, held, provenance, newtypes);
+                projections(answered, found, held, provenance, newtypes, closures);
         standing.forEach((element, closure) -> {
+            closures.putIfAbsent(element, new ElementAnswer(element, closure));
             ElementProjection was =
                     ElementProjection.read(closure, element, held, newtypes);
             if (was != null) {
                 projected.putIfAbsent(element, was);
             }
         });
+        List<Core> roots = new ArrayList<>();
+        roots.add(body);
+        roots.addAll(templates);
+        Map<BindingId, ClosureUses> entered = ClosureEntries.of(roots, held);
         return found.isEmpty() && provenance.isEmpty() && values.templates().isEmpty() ? NONE
-                : new ElementBindings(found, held, provenance, projected, values);
+                : new ElementBindings(found, held, provenance, projected, values, closures,
+                        entered);
     }
 
     /**
@@ -212,9 +292,9 @@ public record ElementBindings(Map<BindingId, List<Core>> containers,
      * about, so the source is read and agreed with rather than discarded.
      */
     private static Map<BindingId, ElementProjection> projections(
-            Map<BindingId, Core> answered, Map<BindingId, List<Core>> containers,
+            Map<BindingId, Core> answered, Map<BindingId, List<HeldIn>> containers,
             Map<BindingId, Core> held, ElementProvenance provenance,
-            DeclarationNewtypes newtypes) {
+            DeclarationNewtypes newtypes, Map<BindingId, ElementAnswer> closures) {
         Map<BindingId, ElementProjection> out = new LinkedHashMap<>();
         answered.forEach((parameter, body) -> {
             // The element the closure was applied to, which is what the parameter was bound to.
@@ -225,12 +305,14 @@ public record ElementBindings(Map<BindingId, List<Core>> containers,
             // Of the one container the walk is over. A binding taking elements of more than one
             // has no one walk for a projection to be of, and which of them this answer is a place
             // in is the very thing that could not be worked out.
-            List<Core> from =
+            List<HeldIn> from =
                     containers.getOrDefault(read.binding(), List.of());
-            if (from.size() != 1
-                    || !readsWhatIsHeldBy(from.get(0), provenance.projectedFrom(parameter), held)) {
+            if (from.size() != 1 || from.get(0).part() != HeldIn.Part.ELEMENT
+                    || !readsWhatIsHeldBy(from.get(0).container(),
+                            provenance.projectedFrom(parameter), held)) {
                 return;
             }
+            closures.putIfAbsent(read.binding(), new ElementAnswer(parameter, body));
             ElementProjection projected =
                     ElementProjection.read(body, parameter, held, newtypes);
             if (projected != null) {
@@ -280,17 +362,18 @@ public record ElementBindings(Map<BindingId, List<Core>> containers,
         return false;
     }
 
-    private static void walk(Core e, Map<BindingId, List<Core>> found,
+    private static void walk(Core e, Map<BindingId, List<HeldIn>> found,
                              Map<BindingId, Core> held,
                              ElementProvenance provenance, Map<BindingId, Core> answered,
-                             Map<BindingId, Core> standing, ValueTemplates values) {
+                             Map<BindingId, Core> standing) {
         if (e instanceof Core.LetIn let && let.binder() != null
                 && let.binder().binding() != null) {
-            // A name given a build of a value holds what the value is: what it was bound to is the
-            // template, and the build is only where it was asked for.
-            Core value = Core.withoutStanding(let.value());
-            held.putIfAbsent(let.binder().binding(), value instanceof Core.MaterialisedValue build
-                    ? values.bodyOf(build) : value);
+            // What a name was given, as it was written. A build of a value is held as the build:
+            // what the value is defined as is read where definitions are read, by the one place
+            // that says what a name stands for (InputReads#meaningOf), and what this table answers
+            // — where an element came from, which position a value stands at — is nothing a
+            // definition holds, since a value takes no input.
+            held.putIfAbsent(let.binder().binding(), Core.withoutStanding(let.value()));
             // The body of a binding is read only where a fact proved before the tree was rewritten
             // says this binding is a closure parameter of a walk answering one per element. The
             // shape connects the two ends; it establishes nothing, and a binding nothing licenses
@@ -313,7 +396,7 @@ public record ElementBindings(Map<BindingId, List<Core>> containers,
             handed(preserved.declared().operation(), preserved.args(), found, standing, held);
         }
         Core.forEachChild(e, child ->
-                walk(child, found, held, provenance, answered, standing, values));
+                walk(child, found, held, provenance, answered, standing));
     }
 
     /**
@@ -331,27 +414,201 @@ public record ElementBindings(Map<BindingId, List<Core>> containers,
      */
     private static void handed(ValueName operation,
                                List<Core> args,
-                               Map<BindingId, List<Core>> found,
+                               Map<BindingId, List<HeldIn>> found,
                                Map<BindingId, Core> standing, Map<BindingId, Core> held) {
         Combinators.Handed handed = Combinators.handedTo(operation, args,
                 closure -> blockOf(closure, held));
-        if (handed == null || handed.element().binding() == null) {
+        if (handed == null) {
+            return;
+        }
+        // The key a map files the element under is handed beside it, and is a part of the map of
+        // its own. Nothing below is about a key: what is licensed per element is a run's answer for
+        // the element.
+        if (handed.key() != null && handed.key().binding() != null) {
+            takes(found, handed.key().binding(),
+                    new HeldIn(handed.container(), HeldIn.Part.KEY, handed.applied(), false));
+        }
+        if (handed.element().binding() == null) {
             return;
         }
         BindingId element = handed.element().binding();
-        // The nearest binding of a name stands, as everywhere else: a body binding one twice has
-        // two bindings, and each is answered where it is. One closure handed to two calls is one
-        // binding taking elements of two containers, and both are kept — which of them a run is in
-        // is what the binding cannot say, and saying neither would lose the element as well.
-        List<Core> from =
-                found.computeIfAbsent(element, _ -> new ArrayList<>());
-        if (from.stream().noneMatch(each -> each == handed.container())) {
-            from.add(handed.container());
-        }
+        boolean ofAnOption =
+                DefaultBoundOperationFacts.get().answersTheClosureOnWhatItHolds(operation) != null;
+        takes(found, element, new HeldIn(handed.container(), HeldIn.Part.ELEMENT,
+                handed.applied(), ofAnOption));
         if (standing != null && answersOnePerElementOf(operation, handed.container(), args)) {
             standing.putIfAbsent(element, handed.step().body());
         }
     }
+
+    /**
+     * That {@code binding} is handed {@code what}.
+     *
+     * <p>The nearest binding of a name stands, as everywhere else: a body binding one twice has two
+     * bindings, and each is answered where it is. One closure handed to two calls is one binding
+     * taking from two containers, and both are kept — which of them a run is in is what the binding
+     * cannot say, and saying neither would lose the element as well.
+     */
+    private static void takes(Map<BindingId, List<HeldIn>> found, BindingId binding,
+                              HeldIn what) {
+        List<HeldIn> from = found.computeIfAbsent(binding, _ -> new ArrayList<>());
+        if (from.stream().noneMatch(each -> each.container() == what.container()
+                && each.part() == what.part())) {
+            from.add(what);
+        }
+    }
+
+    /**
+     * A step a container holds the answers of, one for each element of what it walks.
+     *
+     * @param step    the step
+     * @param element the parameter of the step each element arrives on
+     * @param walked  the argument whose elements it is handed
+     */
+    public record StepOnEachElement(Core.Block step, Core.Binder element, Core walked) {}
+
+    /**
+     * The step whose answers {@code container} holds, one for each element of what the application
+     * hands that step, or null where it holds no such run.
+     *
+     * <p>Of this application and of no other over the same elements. The step is the one this call
+     * was handed and the elements are those of the argument it hands them from, and the operation
+     * answering one value per element of that very argument is what makes each element of the
+     * answer the step's answer on one of them ({@link #answersOnePerElementOf}).
+     *
+     * <p>Only of an operation still standing as itself. Where one has been expanded away, what the
+     * tree holds is a walk the rewrite left, and which of its bindings is the step's answer is
+     * the expansion's to have written down ({@link ElementProvenance}).
+     *
+     * @param blockOf the block a closure argument stands for, where the call stands
+     */
+    public static StepOnEachElement stepAnsweredOnEachElement(Core container,
+                                                              Function<Core, Core.Block> blockOf) {
+        // What a container holds does not turn on the type it stands as.
+        if (!(Core.withoutStanding(container) instanceof Core.PreservedCall call)) {
+            return null;
+        }
+        ValueName operation = call.declared().operation();
+        Combinators.Handed handed = Combinators.handedTo(operation, call.args(), blockOf);
+        return handed != null && answersOnePerElementOf(operation, handed.container(), call.args())
+                ? new StepOnEachElement(handed.step(), handed.element(), handed.container())
+                : null;
+    }
+
+    /**
+     * A step that makes a piece of each element of {@code walked}, and what the piece is: the
+     * container is those pieces put end to end in the order of the elements
+     * ({@link BoundOperationFacts#assembles}).
+     *
+     * @param step    the step
+     * @param element the parameter of the step each element arrives on
+     * @param walked  the argument whose elements it is handed
+     * @param piece   what the piece of one element is
+     */
+    public record PiecesOfEachElement(Core.Block step, Core.Binder element, Core walked,
+                                      PieceOfAnElement piece) {}
+
+    /**
+     * The step {@code container} is put together of a piece of each element by, or null where it
+     * is not so put together.
+     *
+     * <p>Of this application and of no other over the same elements, as
+     * {@link #stepAnsweredOnEachElement} is: the step is the one this call was handed, and the
+     * elements are those of the argument the operation is proved to make pieces of.
+     *
+     * @param blockOf the block a closure argument stands for, where the call stands
+     */
+    public static PiecesOfEachElement piecesOfEachElement(Core container,
+                                                          Function<Core, Core.Block> blockOf) {
+        if (!(Core.withoutStanding(container) instanceof Core.PreservedCall call)) {
+            return null;
+        }
+        ValueName operation = call.declared().operation();
+        BoundOperationFacts.Assembled assembled =
+                DefaultBoundOperationFacts.get().assembles(operation);
+        if (assembled == null) {
+            return null;
+        }
+        Combinators.Handed handed = Combinators.handedTo(operation, call.args(), blockOf);
+        int source = CallArguments.positionOf(assembled.source(), operation);
+        int closure = CallArguments.positionOf(assembled.closure(), operation);
+        return handed != null && source >= 0 && source < call.args().size()
+                && closure >= 0 && closure < call.args().size()
+                && call.args().get(source) == handed.container()
+                && call.args().get(closure) == handed.closure()
+                ? new PiecesOfEachElement(handed.step(), handed.element(), handed.container(),
+                        assembled.piece())
+                : null;
+    }
+
+    /**
+     * The step whose answer on every element of what the application hands it is one of the
+     * elements {@code container} holds, or null where it holds no such run.
+     *
+     * <p>Beside {@link #stepAnsweredOnEachElement} and licensing less of the answer and more of the
+     * operations: an element of the container is the step's answer on some element, and every such
+     * answer is an element of it, so a statement about some element of the container is a statement
+     * about the step's answer on some element of what it walks. How many elements the container
+     * holds, and which element answered which, is not said — a set holds a value once however many
+     * elements answered it.
+     */
+    public static StepOnEachElement stepHoldingTheAnswerOnEachElement(
+            Core container, Function<Core, Core.Block> blockOf) {
+        if (!(Core.withoutStanding(container) instanceof Core.PreservedCall call)) {
+            return null;
+        }
+        ValueName operation = call.declared().operation();
+        Combinators.Handed handed = Combinators.handedTo(operation, call.args(), blockOf);
+        return handed != null
+                && holdsTheAnswerOnEachElementOf(operation, handed.container(), call.args())
+                ? new StepOnEachElement(handed.step(), handed.element(), handed.container())
+                : null;
+    }
+
+    /** Whether the answer of {@code operation} holds what its closure answered on every element of
+     *  the argument {@code container} is, and nothing else. */
+    private static boolean holdsTheAnswerOnEachElementOf(ValueName operation, Core container,
+                                                         List<Core> args) {
+        ElementLineage<DeclaredArgument> image =
+                DefaultBoundOperationFacts.get().holdsTheImageOfEveryElement(operation);
+        if (!(image instanceof ElementLineage.ClosureResult<DeclaredArgument> made)
+                || made.source().elements() != 1) {
+            return false;
+        }
+        int at = CallArguments.positionOf(made.source().argument(), operation);
+        return at >= 0 && at < args.size() && args.get(at) == container;
+    }
+
+    /**
+     * The argument whose elements are tuples a component of which every element of {@code
+     * container} is, or null where {@code container} is no such application.
+     *
+     * <p>Which argument is the declaration's ({@link BuiltFrom#componentOfTheElementsOf}); this
+     * finds it in the call. A value of the answer is a component of some element of it, and which
+     * element is not said, so a reader takes it as it takes the elements of a walk and no more.
+     */
+    public static Projection componentOfTheElementsOf(Core container) {
+        if (!(Core.withoutStanding(container) instanceof Core.PreservedCall call)) {
+            return null;
+        }
+        ValueName operation = call.declared().operation();
+        BuiltFrom<DeclaredArgument> built =
+                DefaultBoundOperationFacts.get().buildsItsResultFrom(operation);
+        ElementLineage.TupleComponent<DeclaredArgument> part =
+                built == null ? null : built.componentOfTheElementsOf();
+        if (part == null) {
+            return null;
+        }
+        int at = CallArguments.positionOf(part.source().argument(), operation);
+        return at >= 0 && at < call.args().size()
+                ? new Projection(call.args().get(at), part.index(), part.filedUnder()) : null;
+    }
+
+    /**
+     * A component of the elements of {@code of}, which hold tuples, and the component they are
+     * filed under: elements that agree on it leave one of them in the answer.
+     */
+    public record Projection(Core of, int index, int filedUnder) {}
 
     /**
      * Whether {@code operation} answers exactly one value per element of what it hands its closure.

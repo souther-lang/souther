@@ -5,10 +5,17 @@ import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.BehaviorBodies;
 import souther.compiler.check.BehaviorRequirement;
+import souther.compiler.check.DeclarationKinds;
 import souther.compiler.check.Derived;
+import souther.compiler.check.EnumerationListings;
+import souther.compiler.check.NewtypeInners;
+import souther.compiler.check.Ordering;
 import souther.compiler.check.Preserved;
 import souther.compiler.check.Requirements;
 import souther.compiler.check.Sig;
+import souther.compiler.check.ListedCases;
+import souther.compiler.check.SumCases;
+import souther.compiler.check.TypeOps;
 import souther.compiler.check.ValueEntries;
 import souther.compiler.check.DerivedSymbols;
 import souther.compiler.codegen.LinkageProjections;
@@ -25,17 +32,17 @@ import souther.compiler.meta.CopyAgreement;
 import souther.compiler.meta.LinkageAgreement;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
-import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Deque;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.SortedMap;
 import java.util.TreeMap;
@@ -73,46 +80,10 @@ public final class Linkages {
     }
 
     /**
-     * Every module whose declarations a module may be built against: every module it names —
-     * imported, or written as a qualifier, which needs no import — what the modules it reads off the
-     * path carry beside their text as reaching, and so on from each.
-     *
-     * <p>A behavior a composition builds may be declared in a module the composition's own module
-     * never imports — the stage's module does — so what a projection or an emission reads is bounded
-     * by this and not by the import lines of the one module. The language's own modules are not
-     * here: what they declare is the same on every side of every artifact.
-     */
-    public record InSight(String name) implements Key<List<String>> {
-        @Override
-        public String module() {
-            return name;
-        }
-
-        @Override
-        public Answer<List<String>> compute(Db db) {
-            Set<String> seen = new LinkedHashSet<>();
-            Deque<String> pending = new ArrayDeque<>();
-            pending.add(name);
-            while (!pending.isEmpty()) {
-                String module = pending.removeFirst();
-                if (Reserved.isNamespace(module) || !seen.add(module)) {
-                    continue;
-                }
-                List<String> named = db.ask(new Named(module)).value();
-                if (named != null) {
-                    pending.addAll(named);
-                }
-            }
-            return Answer.of(List.copyOf(seen));
-        }
-    }
-
-    /**
      * The modules one module names: what it imports or writes as a qualifier, and, for a module
      * off the path, what it carries beside its text as reaching.
      *
-     * <p>Its own question so a module's text is walked for these once, whichever module's
-     * {@link InSight} it is on the way to.
+     * <p>Its own question so a module's text is walked for these once, whichever module asks.
      */
     public record Named(String name) implements Key<List<String>> {
         @Override
@@ -124,7 +95,7 @@ public final class Linkages {
         public Answer<List<String>> compute(Db db) {
             Front.FromPath.OnThePath onThePath = Front.onThePath(db, name);
             if (onThePath != null) {
-                return Answer.of(List.copyOf(Front.reaches(onThePath.read())));
+                return Answer.of(onThePath.reaches());
             }
             Ast.Module written = db.ask(new Front.Available(name)).value();
             return written == null ? Answer.of(List.of())
@@ -137,18 +108,25 @@ public final class Linkages {
      * offer here — which a module that did not come out, or one off the path held to another version
      * of what it was built against, does not.
      *
+     * <p>The modules it may be built against are the ones it names ({@link Named}) and, from each, the
+     * ones that one may be built against. A behavior a composition builds may be declared in a module
+     * the composition's own module never imports — the stage's module does — so this is not bounded
+     * by the import lines of the one module. The language's own modules are not among them: what they
+     * declare is the same on every side of every artifact.
+     *
+     * <p>Only the modules it names are asked. A module offers only once every module it may be built
+     * against does ({@link Provided}), so a named module that offers has answered this for everything
+     * beyond it; and a module this compilation does not have names nothing. Asking each module's
+     * whole reach instead would ask, down a chain of modules, every link of the chain once per link.
+     *
      * <p>Asked of whether each offers anything and not of what it offers, so a module is told when
      * one of those stops or starts coming out and not whenever one of them declares something.
      * What each declaration offers is asked one declaration at a time where it is read
      * ({@link #reading}).
      */
     static boolean everyModuleInSightOffers(Db db, String name) {
-        List<String> inSight = db.ask(new InSight(name)).value();
-        if (inSight == null) {
-            return false;
-        }
-        for (String module : inSight) {
-            if (!module.equals(name) && held(db, module)
+        for (String module : db.ask(new Named(name)).value()) {
+            if (!module.equals(name) && !Reserved.isNamespace(module) && held(db, module)
                     && !db.ask(new Offers(module)).present()) {
                 return false;
             }
@@ -207,9 +185,7 @@ public final class Linkages {
 
     /** Whether this compilation has {@code module}, compiled here or on the path. */
     private static boolean held(Db db, String module) {
-        return Front.onThePath(db, module) != null
-                || (db.ask(new Front.Declared()).value() instanceof List<String> declared
-                        && declared.contains(module));
+        return Front.onThePath(db, module) != null || Front.declaredHere(db, module);
     }
 
     /**
@@ -264,20 +240,79 @@ public final class Linkages {
                 }
                 declarations.add(declaration);
             }
+            Map<TypeKey, Optional<LinkageProjection.HeldOrder>> orders =
+                    orders(db, name, declarations);
+            if (orders == null) {
+                return Answer.absent();
+            }
             Map<String, List<ValueName.Behavior>> required = new LinkedHashMap<>();
             requirements.value().forEach((behavior, each) ->
                     required.put(behavior, Requirements.names(each)));
+            // Read through the reader, so what the projection reads of the declarations is what it
+            // records it rests on: the compilation's own answer for what a sum's cases are would be
+            // read past it. What each sum lists is read off the symbols, which read through it too.
+            DeclarationKinds kinds = reader.readingKinds(Shapes.declarationKinds(db));
+            SumCases sums =
+                    SumCases.asWrittenOnceEach(kinds, ListedCases.asWritten(symbols.value()));
             SortedMap<LinkageTarget, LinkageProjection> provides = LinkageProjections.of(
                     new LinkageProjections.Settled(name, written.published(), declarations,
-                            signatures.value(), implementations.value().states(), required,
-                            values, symbols.value(),
-                            reader.readingPublished(Shapes.publishedDeclarations(db))),
+                            orders, signatures.value(), implementations.value().states(), required,
+                            values, symbols.value(), kinds, sums),
                     reader);
             if (onThePath != null) {
                 itOffersWhatItsClassesOffer(name, provides, onThePath.provides());
             }
             return Answer.of(new Of(provides, reader.read()));
         }
+    }
+
+    /**
+     * How a value of each of {@code declarations} is compared as the JVM holds it, by the
+     * declaration — or null where what the module declares has no answer.
+     *
+     * <p>Worked out from what the declarations mean, through doors that record nothing. A class
+     * elsewhere that compares one of these is built against the projection saying how, and that
+     * projection moves wherever this answer does; the declarations read on the way to the answer —
+     * every name under a newtype, every sum of the module a case could be listed by — are not ones
+     * that class links by.
+     *
+     * <p>A declaration compared at all is compared as a newtype held as its own {@code Comparable}
+     * or as a value an enumeration places, since every other order belongs to a type no module
+     * declares.
+     */
+    private static Map<TypeKey, Optional<LinkageProjection.HeldOrder>> orders(
+            Db db, String name, List<TypeKey> declarations) {
+        Answer<DerivedSymbols> symbols = Names.derivedSymbols(db, name);
+        if (!symbols.present()) {
+            return null;
+        }
+        NewtypeInners inners = Shapes.newtypeInners(db);
+        DeclarationKinds kinds = Shapes.declarationKinds(db);
+        SumCases sums = Shapes.sumCases(db);
+        // Which enumerations list a value, worked out once for each module asked of: asked again
+        // for every unit, it would read every sum of the module once per unit it declares.
+        Map<String, Map<TypeKey, Set<TypeSymbol>>> listings = new HashMap<>();
+        EnumerationListings listing = value -> listings
+                .computeIfAbsent(value.module(), module -> TypeOps.enumerationsListing(module,
+                        symbols.value().declaredNamesIn(module), kinds, sums))
+                .getOrDefault(value.key(), Set.of());
+        Map<TypeKey, Optional<LinkageProjection.HeldOrder>> out = new HashMap<>();
+        for (TypeKey declaration : declarations) {
+            Hir.Def def = symbols.value().declaredNode(declaration);
+            Ordering how = def == null ? null : Ordering.of(Type.ref(def.declares()), inners,
+                    kinds, sums, listing);
+            LinkageProjection.HeldOrder held = switch (how) {
+                case null -> null;
+                case Ordering.Wrapped _ -> new LinkageProjection.HeldOrder.Natural();
+                case Ordering.Places places ->
+                        new LinkageProjection.HeldOrder.Places(places.enumeration());
+                case Ordering.Longs _, Ordering.Natural _, Ordering.Strings _ ->
+                        throw new IllegalStateException("`" + declaration + "` is ordered as "
+                                + how + ", which is the order of a type no module declares");
+            };
+            out.put(declaration, Optional.ofNullable(held));
+        }
+        return out;
     }
 
     /**
@@ -356,11 +391,13 @@ public final class Linkages {
      * of another module its classes were built against, held to what that declaration's module
      * offers here (spec {@code [#a-published-module-agrees-with-what-it-was-built-against]}).
      *
-     * <p>What a module compiled here offers is what its classes are about to offer; what a module
-     * off the path offers is what its classes record. A declaration a module off the path offers
-     * differently from what a module built against it assumed is said about the module that assumed
-     * it — the one whose classes stop when they reach it — and not about any module built on that
-     * one: a module that did not read the declaration is not held to it.
+     * <p>Held only to modules on the path, as their classes record what they offer. A module off the
+     * path reaching one compiled here is said as that ({@link Front.NeedsThisCompilation}): its
+     * classes do not find it whatever it offers, and telling the author to rebuild against it would
+     * fix nothing. A declaration a module off the path offers differently from what a module built
+     * against it assumed is said about the module that assumed it — the one whose classes stop when
+     * they reach it — and not about any module built on that one: a module that did not read the
+     * declaration is not held to it.
      *
      * <p>Asked of every module read off the path, where the compilation's problems are gathered, and
      * not by whoever goes on to use some of the module.
@@ -429,7 +466,7 @@ public final class Linkages {
             Map<String, Map<CopyTarget, CopyRecord>> copiesOfferedBy = new HashMap<>();
             CopyAgreement.Held copies = CopyAgreement.of(onThePath.requiredCopies(),
                     module -> copiesOfferedBy.computeIfAbsent(module,
-                            m -> Copies.offered(db, m)));
+                            m -> Copies.offeredOnThePath(db, m)));
             for (CopyAgreement.Disagreement disagreement : copies.disagreements()) {
                 CopyTarget target = disagreement.target();
                 Diagnostic said = switch (disagreement) {
@@ -456,36 +493,24 @@ public final class Linkages {
             if (!reports.isEmpty()) {
                 return Answer.absent(reports);
             }
-            // A module not in this compilation, or one that did not come out, or a behavior said
-            // missing as a requirement: said where it is found, and not held here.
+            // A module not in this compilation, or one that did not come out, a module compiled here
+            // (Front.NeedsThisCompilation), or a behavior said missing as a requirement: said where it
+            // is found, and not held here.
             return held.complete() && copies.complete() && !saidElsewhere
                     ? Answer.of(Boolean.TRUE) : Answer.absent();
         }
     }
 
     /**
-     * What {@code module} offers as a class built against it reads it: as its classes record it,
-     * for a module off the path, and as its classes are about to offer it, for one compiled here —
-     * or null where this compilation does not have it, or it did not come out.
+     * What {@code module} offers as a class built against it reads it, as its classes record it —
+     * or null where the path does not carry it. A module compiled here is not one a module on the
+     * path can link against at all ({@link Front.NeedsThisCompilation}), so what it would offer is
+     * not asked.
      */
     private static Map<LinkageTarget, LinkageRecord> offered(Db db, String module) {
         Front.FromPath.OnThePath onThePath = Front.onThePath(db, module);
-        if (onThePath != null) {
-            return onThePath.provides();
-        }
-        if (!held(db, module)) {
-            return null;
-        }
-        Answer<Of> provided = db.ask(new Provided(module));
-        if (!provided.present()) {
-            return null;
-        }
-        Map<LinkageTarget, LinkageRecord> out = new TreeMap<>();
-        provided.value().provides().forEach((target, projection) ->
-                out.put(target, LinkageRecord.of(projection)));
-        return out;
+        return onThePath == null ? null : onThePath.provides();
     }
-
     /** One side of a fact that moved, as a report shows it; a dash where that side says nothing. */
     private static String shown(String fact) {
         return fact == null ? "—" : fact;

@@ -42,10 +42,22 @@ class ANameARuleWritesIsMadeWhereOneIsReadTest {
      * <p>{@code UniversalElementFacts} is in the first group and is the one to watch: it rebases
      * what a reading said about an element onto the field a construction wrote it at, which is the
      * one place a name is made out of another name.
+     *
+     * <p>{@code ElementsApart} is in the first group as well. It writes down the container a rule
+     * keeping elements apart is about as the clause names it — a value of the declaration and the
+     * fields read off it — and reads the same name, a step shorter, of each record a run of fields
+     * passes through on the way to the container: the record there names it from itself.
+     *
+     * <p>{@code Clauses$ReadsOfAClause} is in the first group too. It writes down the places a
+     * clause reads as the clause names them — a field of the value and the fields read off it,
+     * which of them are steps answered by {@code Location} — so that whether a rule reads a place
+     * is published by the declaration rather than worked out by whoever asks.
      */
     private static final List<String> THE_MAKERS = List.of(
             "souther.compiler.check.CardinalityPremise",
             "souther.compiler.check.CardinalityTransfer",
+            "souther.compiler.check.Clauses$ReadsOfAClause",
+            "souther.compiler.check.ElementsApart",
             "souther.compiler.check.GuaranteeWalk",
             "souther.compiler.check.InvariantChecker",
             "souther.compiler.check.UniversalElementFacts",
@@ -69,6 +81,10 @@ class ANameARuleWritesIsMadeWhereOneIsReadTest {
      * asking has either been handed the answer — which is the shape to want, since a value chosen
      * for naming a place carries the name it was chosen for — or has stopped needing it, and those
      * are different things to know.
+     *
+     * <p>{@code NestedContainersAddingUp} asks it of the container one level down, under the
+     * element of the level above, so that the rules of that element's record about the container
+     * are read where the container is built — the name handed on, as every caller here does.
      */
     @Test
     void aPlaceBecomesANameInOnePlace() {
@@ -77,9 +93,9 @@ class ANameARuleWritesIsMadeWhereOneIsReadTest {
                 "a position is turned into a name somewhere, or this is watching a name nothing"
                         + " calls");
         assertEquals(List.of("souther.compiler.inputs.PlacedRules",
-                        "souther.compiler.inputs.ReadQuantities",
+                        "souther.compiler.inputs.ReadQuantities$Roots",
                         "souther.compiler.inputs.RuleAddress",
-                        "souther.compiler.partition.Generator"),
+                        "souther.compiler.partition.NestedContainersAddingUp"),
                 callersOf(souther.compiler.inputs.TermPath.class, "ruleKeyUnder"),
                 "a position becomes what a rule calls it here, and is handed on as that");
     }

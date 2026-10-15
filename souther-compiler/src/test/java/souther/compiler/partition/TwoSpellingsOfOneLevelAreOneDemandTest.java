@@ -10,6 +10,9 @@ import souther.compiler.check.InvariantStatementId;
 import souther.compiler.check.PartId;
 import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.RuleRef;
+import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.TermOrdersFixtures;
+import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Towards;
@@ -77,6 +80,27 @@ class TwoSpellingsOfOneLevelAreOneDemandTest {
                 "which the key does not tell apart, being about the place alone");
     }
 
+    /**
+     * A line at one place is one target however its level was spelled, and is named one way.
+     *
+     * <p>The two together, because they have to agree: readings folded into one line by their
+     * target are written under one label, and a label that followed the spelling would name the
+     * folded line after whichever reading arrived first.
+     */
+    @Test
+    void twoSpellingsOfOneLevelAreOneTargetNamedOneWay() {
+        NumericTerm.ValueOf cost = new NumericTerm.ValueOf(TermPath.of("cost"));
+        BorderQuantity quantity = new BorderQuantity.OfACoordinate("b", cost,
+                TermOrdersFixtures.itself(cost, DECIMALS));
+        BoundaryTarget unspelled = BoundaryTarget.at(quantity, at("0"));
+        BoundaryTarget spelled = BoundaryTarget.at(quantity, at("0.00"));
+
+        assertNotEquals(unspelled.cut(), spelled.cut(), "each keeps the level as it was written");
+        assertEquals(unspelled, spelled, "and they are one place");
+        assertEquals(unspelled.hashCode(), spelled.hashCode(), "found under one key");
+        assertEquals(unspelled.label(), spelled.label(), "and named one way");
+    }
+
     /** One demand asked at two readings, each spelling its level its own way. */
     @Test
     void twoSpellingsOfOnePointAreOneDemand() {
@@ -94,7 +118,7 @@ class TwoSpellingsOfOneLevelAreOneDemandTest {
         Demand other = new Demand.Owed(new Criterion.AtTheLevel(at("1")));
 
         assertFalse(asked.sameAs(other), "a row at zero is no row at one");
-        assertFalse(asked.sameAs(new Demand.NotOwed(NotOwedReason.THE_RULES_REFUSE_IT)),
+        assertFalse(asked.sameAs(new Demand.NotOwed(NotOwedReason.NO_VALUE_CAN_STAND_THERE)),
                 "and a point nobody is owed a row at is not a point asking for one");
     }
 
@@ -115,12 +139,12 @@ class TwoSpellingsOfOneLevelAreOneDemandTest {
     /** A debt keyed on a level is keyed on the level and not on how it was written. */
     @Test
     void twoSpellingsOfOneLineAreOneDebt() {
-        BorderObligationId one = new BorderObligationId(aLine(), at("0"));
-        BorderObligationId same = new BorderObligationId(aLine(), at("0.00"));
+        BorderObligationId one = new BorderObligationId(aLine(), Optional.of(at("0")));
+        BorderObligationId same = new BorderObligationId(aLine(), Optional.of(at("0.00")));
 
         assertEquals(one, same, "one line at one place is one debt");
         assertEquals(one.hashCode(), same.hashCode(), "and a map of debts finds it there");
-        assertNotEquals(one, new BorderObligationId(aLine(), at("1")),
+        assertNotEquals(one, new BorderObligationId(aLine(), Optional.of(at("1"))),
                 "while the same rule cutting at another place is another debt");
     }
 
@@ -189,7 +213,7 @@ class TwoSpellingsOfOneLevelAreOneDemandTest {
                 "and one line, one name");
         assertEquals(ExactRatio.of(wide).key(), counted.key(),
                 "a number the quantity counts to is named by the ratio's own name");
-        assertTrue(Seam.of(LevelSpace.onACarrier(DECIMALS), line, Towards.BELOW)
+        assertTrue(HeldSeams.of(LevelSpace.onACarrier(DECIMALS), line, Towards.BELOW)
                         .key().length() < 128,
                 "and the division that line makes is named from the same parts");
 
@@ -281,7 +305,7 @@ class TwoSpellingsOfOneLevelAreOneDemandTest {
         assertEquals("2026-01-01", day.written(), "and what an author reads is the date");
         assertEquals(days.written(Count.of(20454)), day.written(),
                 "which is what the carrier says of that place");
-        assertEquals("20454|20455", Seam.of(LevelSpace.onACarrier(days), day, Towards.BELOW)
+        assertEquals("20454|20455", HeldSeams.of(LevelSpace.onACarrier(days), day, Towards.BELOW)
                         .spelled(),
                 "and the division of the days is spelled from the counts either side of it");
         assertEquals("7", Level.OfTheQuantity.of(7).written(),

@@ -96,18 +96,19 @@ class AClassOfATakenNumberIsFilledByWhatFillsAPointOfItTest {
             }
             """;
 
-    /** A class of counts higher than what its position holds any of, which this compiler tries a
-     *  few of and gives up on. */
+    /** A class of counts of whole numbers, which this compiler tries a few of and gives up on: it
+     *  builds no collection larger than how many elements a proposed one holds, and every count
+     *  the class admits is past that. */
     private static final String MORE_THAN_IT_HOLDS = """
             module example.taken
 
-            behavior h : (s: Set<Bool>) -> Bool
+            behavior h : (s: Set<Int>) -> Bool
             let h (s) = {
-                guard Set.size(s) >= 3 else false
+                guard Set.size(s) >= %d else false
 
                 true
             }
-            """;
+            """.formatted(CompositionBudget.ELEMENTS_A_PROPOSAL_HOLDS.maximum() + 1);
 
     /**
      * A class of the hour is offered a time standing in it.
@@ -195,9 +196,9 @@ class AClassOfATakenNumberIsFilledByWhatFillsAPointOfItTest {
      * value for.
      *
      * <p>The two sentences a class with no value can carry, and which of them it is turns on
-     * whether the search looked everywhere. A set of truths holds two at most, so the counts this
-     * class admits run past what this compiler tries and none of the ones it tried built — which is
-     * this compiler giving up, not the position having no such value. Told the other way, an author
+     * whether the search looked everywhere. There are sets of dates of every size, and the counts
+     * this class admits run past what this compiler tries with none of the ones it tried built —
+     * which is this compiler giving up, not the position having no such value. Told the other way, an author
      * reads a shortfall of this compiler's as a fact about the model, which is what the classes of
      * a taken number were doing before any of this.
      */

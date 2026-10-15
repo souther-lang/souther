@@ -2,18 +2,30 @@ package souther.compiler.flow;
 
 import souther.compiler.check.Choice;
 import souther.compiler.check.ScopeStep;
+import souther.compiler.core.ACopyOfAnApplication;
 import souther.compiler.core.Core;
 import souther.compiler.types.BindingId;
+import souther.compiler.types.ModelOccurrence;
+import souther.compiler.types.OccurrenceLineage;
+import souther.compiler.types.Type;
 
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.IdentityHashMap;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.SequencedMap;
 import java.util.SequencedSet;
 import java.util.Set;
 import java.util.function.Function;
+import java.util.function.Predicate;
 
 /**
  * The ways an expression arrives at a value, read off the body it is written in.
@@ -66,6 +78,54 @@ public final class ValueArrivals<P> {
     private final IdentityHashMap<Core, Paths<P>> settled = new IdentityHashMap<>();
 
     /**
+     * The ways into the arms of each fork, under the naming the fork was settled in.
+     *
+     * <p>That naming and not this one, because how a way into an arm is written can turn on what a
+     * name in the condition reads. Worked out when an arm is asked about and not when the fork is
+     * met: a naming may number what it is asked to name, and an arm no run goes into is one nothing
+     * asks about.
+     */
+    private final IdentityHashMap<Core.If, IntoArms> into = new IdentityHashMap<>();
+
+    /**
+     * Which arms of each fork a run can enter, decided once where the fork is settled.
+     *
+     * <p>Held so that every reader asking whether an arm is there reads the one decision: what the
+     * condition states where the reading has that in hand, and what its parts come to otherwise.
+     */
+    private final IdentityHashMap<Core.If, boolean[]> enters = new IdentityHashMap<>();
+
+    /** The ways into the arms of one fork, each worked out the first time it is asked for. */
+    private final class IntoArms {
+
+        private final Core.If fork;
+        private final Naming<P> naming;
+        private final List<Ways<P>> found = new ArrayList<>(Arrays.asList(null, null));
+
+        private IntoArms(Core.If fork, Naming<P> naming) {
+            this.fork = fork;
+            this.naming = naming;
+        }
+
+        /** Both arms' ways, said as not known: for a fork the model does not state, whose arms no
+         *  way of the body goes down. */
+        IntoArms withNoWaysKnown() {
+            found.set(0, new Ways.Unknown<>());
+            found.set(1, new Ways.Unknown<>());
+            return this;
+        }
+
+        Ways<P> at(int part) {
+            Ways<P> ways = found.get(part);
+            if (ways == null) {
+                ways = intoArm(fork, part, naming);
+                found.set(part, ways);
+            }
+            return ways;
+        }
+    }
+
+    /**
      * Which occurrences have been descended into.
      *
      * <p>Not the same as which have been settled, and held apart because running them together left
@@ -78,8 +138,32 @@ public final class ValueArrivals<P> {
     private final Set<Core> walked =
             java.util.Collections.newSetFromMap(new IdentityHashMap<>());
 
+    /**
+     * The arms of a {@code match} no value of its scrutinee takes, which this reading did not go
+     * into ({@link ComparisonWays#mayTake}).
+     */
+    private final Set<Core.Case> untaken =
+            java.util.Collections.newSetFromMap(new IdentityHashMap<>());
+
     /** Whether a call kept standing is a defect here or an operation the model names. */
     private final WhereTheOperationsAre operations;
+
+    /**
+     * The copy of an application the model states that each node is code of, or null where it is
+     * the model's own code — where the operations stand, and never where they are expanded
+     * ({@link #readCopies}). What the model handed the application is the model's code even where
+     * the copy holds it, and says so.
+     */
+    private final IdentityHashMap<Core, OccurrenceLineage.Expansion> codeOf =
+            new IdentityHashMap<>();
+
+    /** The nodes a copy of an application the model states is entered at, which is what the
+     *  application answers. */
+    private final Set<Core> enteredAt = Collections.newSetFromMap(new IdentityHashMap<>());
+
+    /** Whether the model states the application each copy met was made for, by the copy: every
+     *  node of one copy asks the same question. */
+    private final Map<OccurrenceLineage.Expansion, Boolean> stated = new HashMap<>();
 
     /**
      * What a value built in the tree means, for a tree that builds values it does not hold the
@@ -161,8 +245,18 @@ public final class ValueArrivals<P> {
      */
     public static <P> ValueArrivals<P> ofBodyWhereTheOperationsStand(
             Core body, Naming<P> naming, Function<Core.MaterialisedValue, Core> templates) {
-        return ofBody(body, naming, ComparisonWays.OF_THE_TREE, WhereTheOperationsAre.STAND_IN_IT,
-                templates, new IdentityHashMap<>());
+        return ofBodyWhereTheOperationsStand(body, naming, ComparisonWays.OF_THE_TREE, templates);
+    }
+
+    /**
+     * The same, with what says which ways a value comes out handed in: a reader that can say more
+     * than the tree does about an operation's answer says it here, for both halves at once.
+     */
+    public static <P> ValueArrivals<P> ofBodyWhereTheOperationsStand(
+            Core body, Naming<P> naming, ComparisonWays ways,
+            Function<Core.MaterialisedValue, Core> templates) {
+        return ofBody(body, naming, ways, WhereTheOperationsAre.STAND_IN_IT, templates,
+                new IdentityHashMap<>());
     }
 
     private static <P> ValueArrivals<P> ofBody(Core body, Naming<P> naming, ComparisonWays ways,
@@ -174,6 +268,7 @@ public final class ValueArrivals<P> {
         ValueArrivals<P> reading =
                 new ValueArrivals<>(naming, semantics, operations, templates, templateComes);
         if (body != null) {
+            reading.readCopies(body, null);
             reading.fill(body, naming, ways, Map.of());
         }
         return reading;
@@ -236,9 +331,43 @@ public final class ValueArrivals<P> {
         return new Comes(truths);
     }
 
+    /**
+     * Whether a run can go into arm {@code part} of {@code fork}: the one answer to it, decided
+     * where the fork was settled ({@link ComparisonWays#stated}).
+     *
+     * <p>Asked of a fork this was rooted at, and it raises for one it was not, for the reason
+     * {@link #waysAt} does.
+     */
+    public boolean mayEnter(Core.If fork, int part) {
+        if (semantics != null) {
+            return semantics.mayEnter(fork, part);
+        }
+        boolean[] arms = enters.get(fork);
+        if (arms == null) {
+            throw new IllegalArgumentException("this reading was not rooted at the body holding"
+                    + " the fork at " + fork.pos());
+        }
+        return arms[part];
+    }
+
     /** Whether {@code e} can be evaluated to a value. */
     public boolean arrivesAt(Core e) {
         return comesAt(e).arrives();
+    }
+
+    /**
+     * Whether arm {@code part} of {@code match} is one a value of its scrutinee takes — what the
+     * body does, as {@link #comesAt} is, so the half with no naming answers it.
+     *
+     * <p>Beside whether a run arrives at the arm, because the two are not the same news: an arm no
+     * case of the scrutinee is taken by no run, and an arm whose body answers nothing is one runs go
+     * into.
+     */
+    public boolean takes(Core.Match match, int part) {
+        if (semantics != null) {
+            return semantics.takes(match, part);
+        }
+        return !untaken.contains(match.cases().get(part));
     }
 
     /**
@@ -253,24 +382,52 @@ public final class ValueArrivals<P> {
      * <p>An empty list says the value is never settled that way, so it is only ever answered where
      * the reading of what the body does agrees. A naming that dropped every way to a truth the body
      * comes to has enumerated nothing, not established an absence.
+     *
+     * <p>Told apart where what a run is seen doing says all of every way: where one went through
+     * an arm whose ways in a run was not seen taking one of, a run seen on it may have been on
+     * another.
      */
     public Ways<P> waysTo(Core e, boolean want) {
         if (!(waysAt(e) instanceof Paths.Held<P> held)) {
             return new Ways.Unknown<>();
         }
         List<P> paths = new ArrayList<>();
+        boolean seenApart = true;
         for (Arrival<P> each : held.arrivals()) {
             if (each.value() == Truth.UNREAD || !each.isComplete()) {
                 return new Ways.Unknown<>();
             }
             if (each.value() == Truth.of(want)) {
                 paths.add(each.path());
+                seenApart &= each.provenance().isSeenWhole();
             }
         }
         if (paths.isEmpty() && comesAt(e).mayCome(want)) {
             return new Ways.Unknown<>();
         }
-        return new Ways.Known<>(paths);
+        return new Ways.Known<>(paths, seenApart);
+    }
+
+    /**
+     * The ways a run goes into arm {@code part} of {@code fork}, or that this reading cannot
+     * enumerate them.
+     *
+     * <p>The one answer to what a way into an arm is, for every reader that walks into one. Not the
+     * ways the condition comes out that way and nothing more: where it comes out that way by one way
+     * only, a run at the arm is a run seen having come that way, and the arm is where a condition
+     * no construct of its own records is seen ({@link Naming#seenAtTheArm}). Where it comes out that
+     * way by more than one, the arm cannot say which, and the ways are the condition's.
+     *
+     * <p>Asked of a fork this was rooted at, and it raises for one it was not, for the reason
+     * {@link #waysAt} does.
+     */
+    public Ways<P> waysInto(Core.If fork, int part) {
+        IntoArms arms = into.get(fork);
+        if (arms == null) {
+            throw new IllegalArgumentException("this reading was not rooted at the body holding"
+                    + " the fork at " + fork.pos());
+        }
+        return arms.at(part);
     }
 
     // ---------------------------------------------------------------- filling
@@ -370,9 +527,95 @@ public final class ValueArrivals<P> {
         if (already != null) {
             return already;
         }
-        Paths<P> answer = normalised(e, reading(e, naming, comparisons, bound));
+        Paths<P> answer = reading(e, naming, comparisons, bound);
+        if (enteredAt.contains(e)) {
+            answer = answering(e, answer, naming, comparisons, bound);
+        }
+        answer = normalised(e, answer);
         settled.put(e, answer);
         return answer;
+    }
+
+    /**
+     * Which copy of an application the model states each node of {@code e} is code of, and where
+     * each such copy is entered — worked out from the body's shape before anything is settled.
+     *
+     * <p>A function of where a node stands and of nothing a walk carries. A node is settled where
+     * the value it is part of is read and again where the body is filled, and each of those has to
+     * find the same answer, so it is read off the tree once, here, and looked up.
+     *
+     * <p>A node that says where it is written says which copy it belongs to: the model's own code
+     * where it is code of none, the copy where the model states that copy's application, and,
+     * where it is code of a copy made inside another copy's code — which the model states nothing
+     * of — still the copy its parent is code of. One that does not say — a name, a literal, a value
+     * built from parts — is code of whatever its parent is code of. A node met under two of these is
+     * one shared across two places, and which of its readings is kept would turn on which was
+     * walked first, so it is refused.
+     */
+    private void readCopies(Core e, OccurrenceLineage.Expansion parent) {
+        if (e == null) {
+            return;
+        }
+        OccurrenceLineage.Expansion in = parent;
+        ACopyOfAnApplication copy = null;
+        if (operations == WhereTheOperationsAre.STAND_IN_IT
+                && ACopyOfAnApplication.occurrenceOf(e) != null) {
+            ACopyOfAnApplication code = ACopyOfAnApplication.of(e);
+            copy = code != null && stated(code) ? code : null;
+            if (code == null || copy != null) {
+                in = copy == null ? null : copy.copy();
+            }
+        }
+        if (codeOf.containsKey(e)) {
+            if (!Objects.equals(codeOf.get(e), in)) {
+                throw new IllegalStateException("one Core instance is code of " + codeOf.get(e)
+                        + " in one place and of " + in + " in another: " + e);
+            }
+            return;
+        }
+        codeOf.put(e, in);
+        if (copy != null && !copy.copy().equals(parent)) {
+            enteredAt.add(e);
+        }
+        OccurrenceLineage.Expansion inner = in;
+        Core.forEachChild(e, child -> readCopies(child, inner));
+    }
+
+    /** Whether {@code e} is code of a copy of an application the model states. */
+    private boolean inACopy(Core e) {
+        return codeOf.get(e) != null;
+    }
+
+    /**
+     * Whether the model states the application {@code copy} was made for.
+     *
+     * <p>Where the operations stand, an application the model writes is one value of the model's,
+     * as a call of one the language keeps standing is, and the walk the operation's code does is
+     * the operation's: no way through it is a way of the body. Where they are expanded, that walk
+     * is part of the tree that runs, and its ways are ways of it.
+     */
+    private boolean stated(ACopyOfAnApplication copy) {
+        return stated.computeIfAbsent(copy.copy(),
+                each -> ModelOccurrence.statedAt(copy.application()).isPresent());
+    }
+
+    /**
+     * The ways to {@code e}, the node a copy of an application is entered at, which is what the
+     * application answers: the ways of what the model handed it as {@code read} has them, split
+     * by the truth the application answers where it answers one, as a call of an operation standing
+     * is ({@link #built}).
+     */
+    private Paths<P> answering(Core e, Paths<P> read, Naming<P> naming,
+                               ComparisonWays comparisons, Map<BindingId, Bound<P>> bound) {
+        if (!Type.BOOL.equals(e.type()) || read.orNone().size() != 1) {
+            return read;
+        }
+        Paths<P> settledTwoWays = comparedOut(e, read.orNone().get(0), naming, comparisons,
+                named -> {
+                    Bound<P> was = bound.get(named.binding());
+                    return was == null ? null : was.settledBy();
+                });
+        return settledTwoWays != null ? settledTwoWays : read;
     }
 
     /**
@@ -415,8 +658,21 @@ public final class ValueArrivals<P> {
                                 inside(into, naming, comparisons, bound))
                         : new Paths.Held<>(List.of());
             }
-            case Core.Binary binary when binary.op().stopsWhenItsAnswerIsSettled() ->
-                    through(binary, naming, comparisons, bound);
+            // Not inside a copy of an application: the operation stopping early is its own walk,
+            // and the value comes out as the application answers.
+            case Core.Binary binary when binary.op().stopsWhenItsAnswerIsSettled()
+                    && !inACopy(binary) -> through(binary, naming, comparisons, bound);
+            // A fork inside one of the language's own operations is the operation's and not the
+            // body's: what the language defines the meaning of is the operation, so the ways
+            // through the walk it does are no ways of the body. It arrives as one value, as a call
+            // of the operation standing does.
+            case Core.If iff when !statedByTheModel(iff.place()) -> {
+                into.put(iff, new IntoArms(iff, naming).withNoWaysKnown());
+                enters.put(iff, new boolean[] {true, true});
+                yield built(iff, naming, comparisons, bound);
+            }
+            case Core.Match match when !statedByTheModel(match.place()) ->
+                    built(match, naming, comparisons, bound);
             case Core.If iff -> fork(iff, naming, comparisons, bound);
             case Core.Match match -> arms(match, naming, comparisons, bound);
             case Core.IfConstructed constructed -> attempted(constructed, naming, comparisons, bound);
@@ -455,7 +711,9 @@ public final class ValueArrivals<P> {
                 return out;
             }
         }
-        if (out.orNone().size() == 1) {
+        // A value of an application's code is the application's, and comes out the way the
+        // application answers ({@link #answering}).
+        if (out.orNone().size() == 1 && !inACopy(e)) {
             Paths<P> settledTwoWays = comparedOut(e, out.orNone().get(0), naming, comparisons,
                     read -> {
                         Bound<P> named = bound.get(read.binding());
@@ -500,16 +758,16 @@ public final class ValueArrivals<P> {
     private void side(Core value, boolean held, Arrival<P> under, Naming<P> naming, Gathered out) {
         P named = naming.side(value, held);
         if (named == null) {
-            // The way is there and this naming has no words for it.
-            out.add(new Arrival<>(Truth.of(held), under.provenance().partial()));
+            // The way is there and this naming has no words for it. Which way the truth came out is
+            // still known, and is kept for whatever further on sees a run that came this way.
+            out.add(new Arrival<>(Truth.of(held), under.provenance().unworded(value, held)));
             return;
         }
-        P both = naming.join(under.path(), named);
+        Provenance<P> both = under.provenance().rewritten(path -> naming.join(path, named));
         if (both == null) {
             return;
         }
-        out.add(new Arrival<>(Truth.of(held),
-                new Provenance<>(both, under.provenance().completeness())));
+        out.add(new Arrival<>(Truth.of(held), both));
     }
 
     /**
@@ -534,17 +792,32 @@ public final class ValueArrivals<P> {
             return left;
         }
         boolean rightArrives = arrivesAt(binary.right());
+        // The left's one way of going on, and its one way of stopping, where it has one: a run
+        // through the right, or a run that did not run it, is then seen having come that way.
+        Arrival<P> onlyOn = onlyWayOut(binary.left(), binary.op().rightRunsWhenLeftIs());
+        Arrival<P> onlyStop = onlyWayOut(binary.left(), !binary.op().rightRunsWhenLeftIs());
         Gathered out = new Gathered();
         for (Arrival<P> each : left.orNone()) {
             if (each.value() == goesOn) {
                 if (right instanceof Paths.Beyond) {
                     return right;
                 }
-                out.under(each.provenance(), right.orNone(), naming);
+                if (each == onlyOn) {
+                    for (Arrival<P> after : right.orNone()) {
+                        out.under(each.provenance().rewritten(
+                                path -> naming.wentOn(binary, path, after)), List.of(after),
+                                naming);
+                    }
+                } else {
+                    out.under(each.provenance(), right.orNone(), naming);
+                }
             } else if (each.value() == Truth.UNREAD) {
                 if (rightArrives) {
                     out.add(each);
                 }
+            } else if (each == onlyStop) {
+                out.add(new Arrival<>(each.value(), each.provenance().rewritten(
+                        path -> naming.stoppedShort(binary, path))));
             } else {
                 out.add(each);
             }
@@ -563,10 +836,21 @@ public final class ValueArrivals<P> {
         Core[] arms = {iff.then(), iff.els()};
         settle(iff.cond(), naming, comparisons, bound);
         Comes cond = comesAt(iff.cond());
-        Gathered out = new Gathered();
+        IntoArms waysInto = new IntoArms(iff, naming);
+        into.put(iff, waysInto);
+        boolean[] entering = new boolean[arms.length];
         for (int part = 0; part < arms.length; part++) {
             boolean want = part == 0;
-            if (!cond.mayCome(want)) {
+            // Entered unless ruled out: a way the rules leave something behind, or that was not
+            // asked of them, may be taken, and that is all entering it says.
+            Optional<AWayThrough> stated = comparisons.stated(iff, want);
+            entering[part] = stated.isPresent()
+                    ? !(stated.get() instanceof AWayThrough.RuledOut) : cond.mayCome(want);
+        }
+        enters.put(iff, entering);
+        Gathered out = new Gathered();
+        for (int part = 0; part < arms.length; part++) {
+            if (!entering[part]) {
                 continue;
             }
             Paths<P> body = settle(arms[part], naming, comparisons, bound);
@@ -576,7 +860,7 @@ public final class ValueArrivals<P> {
             if (body instanceof Paths.Beyond) {
                 return body;
             }
-            for (Provenance<P> way : waysIn(iff, part, want, naming)) {
+            for (Provenance<P> way : waysIn(iff, part, waysInto.at(part), naming)) {
                 out.under(way, body.orNone(), naming);
                 if (out.isBeyond()) {
                     return out.paths();
@@ -587,18 +871,107 @@ public final class ValueArrivals<P> {
     }
 
     /**
-     * The ways into arm {@code part}, as the condition's ways of coming out that way where they can
-     * all be written down, and as the arm itself where they cannot.
+     * The ways into arm {@code part}, as {@link #waysInto} answers them where they can all be
+     * written down, and as the arm itself where they cannot.
      *
      * <p>Which arms there are is settled before this, off what the condition comes out as. This
      * settles only how a way into one is written, so a naming with no words for the fork leaves the
      * way {@link Completeness#PARTIAL} and takes no arm away.
      */
-    private List<Provenance<P>> waysIn(Core.If iff, int part, boolean want, Naming<P> naming) {
-        if (waysTo(iff.cond(), want) instanceof Ways.Known<P> known && !known.paths().isEmpty()) {
-            return known.paths().stream().map(this::whole).toList();
+    private List<Provenance<P>> waysIn(Core.If iff, int part, Ways<P> into, Naming<P> naming) {
+        Provenance<P> arm = armWay(iff, part, naming);
+        if (into instanceof Ways.Known<P> known && !known.paths().isEmpty()) {
+            if (known.seenApart()) {
+                return known.paths().stream().map(this::whole).toList();
+            }
+            // Each holds what it says, and a run on any of them is seen at the arm and no more
+            // closely: which is the arm, where the naming has words for it.
+            if (arm.isComplete()) {
+                return known.paths().stream()
+                        .map(each -> new Provenance<>(each, Completeness.COMPLETE, List.of(),
+                                arm.path()))
+                        .toList();
+            }
         }
-        return List.of(armWay(iff, part, naming));
+        return List.of(arm);
+    }
+
+    /**
+     * The ways into arm {@code part}, under the naming the fork was settled in.
+     *
+     * <p>The arm's word for the condition's one way where it has one, and the condition's ways
+     * otherwise. The one way may be one the naming could not write down whole, or one whose value
+     * this reading could not work out: what was missing from it is what a run at the arm is seen
+     * doing, since the arm is taken exactly where that way is and came out the arm's way.
+     *
+     * <p>Where there are several, each as a run down the arm is seen taking it, and none of them is
+     * left out for another: what the naming could not write of one way is that way's, and a way
+     * into the arm written whole stays written whole beside it. Only the ways into this arm are
+     * asked of — a way the condition comes out the other way by is no way here, whatever it is
+     * missing, and so is one the naming sees no run take. Where that leaves none and the body does
+     * come out this way, the naming has refused what the body does, and the ways are not known.
+     */
+    private Ways<P> intoArm(Core.If iff, int part, Naming<P> naming) {
+        boolean want = part == 0;
+        Arrival<P> only = onlyWayOut(iff.cond(), want);
+        if (only != null) {
+            P seen = naming.seenAtTheArm(iff, part, only);
+            if (seen != null) {
+                return new Ways.Known<>(List.of(seen), only.provenance().isSeenWhole());
+            }
+        }
+        if (!(waysAt(iff.cond()) instanceof Paths.Held<P> held)) {
+            return new Ways.Unknown<>();
+        }
+        // Each once: two arrivals the arm writes down alike are one way into it.
+        SequencedSet<P> paths = new LinkedHashSet<>();
+        boolean seenWhole = true;
+        for (Arrival<P> each : held.arrivals()) {
+            // A way whose value this reading could not work out may come out either, so it is one
+            // of the ways here.
+            if (each.value() != Truth.of(want) && each.value() != Truth.UNREAD) {
+                continue;
+            }
+            switch (naming.oneOfTheWaysIn(iff, part, each)) {
+                case WayWritten.As<P>(P seen) -> {
+                    paths.add(seen);
+                    seenWhole &= each.provenance().isSeenWhole();
+                }
+                case WayWritten.NoWords<P> _ -> {
+                    return new Ways.Unknown<>();
+                }
+                case WayWritten.NoRun<P> _ -> { }
+            }
+        }
+        if (paths.isEmpty() && comesAt(iff.cond()).mayCome(want)) {
+            return new Ways.Unknown<>();
+        }
+        List<P> ways = List.copyOf(paths);
+        return new Ways.Known<>(ways, seenWhole && naming.toldApart(ways));
+    }
+
+    /**
+     * The one way {@code cond} may come out {@code want}, or null where it may by none or by more
+     * than one.
+     *
+     * <p>A way whose value this reading could not work out may come out either, so it is one of the
+     * ways to {@code want} and is counted with them. Where it is the only one, a run that came out
+     * {@code want} came that way.
+     */
+    private Arrival<P> onlyWayOut(Core cond, boolean want) {
+        if (!(waysAt(cond) instanceof Paths.Held<P> held)) {
+            return null;
+        }
+        Arrival<P> only = null;
+        for (Arrival<P> each : held.arrivals()) {
+            if (each.value() == Truth.of(want) || each.value() == Truth.UNREAD) {
+                if (only != null) {
+                    return null;
+                }
+                only = each;
+            }
+        }
+        return only;
     }
 
     /**
@@ -609,7 +982,17 @@ public final class ValueArrivals<P> {
     private Provenance<P> armWay(Core fork, int part, Naming<P> naming) {
         P named = naming.forkArm(fork, part);
         return named == null
-                ? new Provenance<>(naming.nowhere(), Completeness.PARTIAL) : whole(named);
+                ? new Provenance<>(naming.nowhere(), Completeness.PARTIAL, List.of(), null)
+                : whole(named);
+    }
+
+    /** Whether the model states the fork that stands at {@code place}, as against one that stands
+     *  inside an operation of the language. */
+    private boolean statedByTheModel(Core.ForkPlace place) {
+        // Where the operations are expanded the walk they do is part of the tree that runs, and
+        // its ways are ways of it.
+        return operations == WhereTheOperationsAre.ARE_EXPANDED_IN_IT
+                || ModelOccurrence.statedAt(place.occurrence()).isPresent();
     }
 
     private Paths<P> arms(Core.Match match, Naming<P> naming, ComparisonWays comparisons,
@@ -619,8 +1002,15 @@ public final class ValueArrivals<P> {
             return new Paths.Held<>(List.of());
         }
         Gathered out = new Gathered();
+        Predicate<Core.Case> mayTake = comparisons.mayTake(match);
         for (int part = 0; part < match.cases().size(); part++) {
             Core.Case arm = match.cases().get(part);
+            // An arm no value of the scrutinee takes is no way of the body, as a side of a
+            // condition nothing brings out is none.
+            if (!mayTake.test(arm)) {
+                untaken.add(arm);
+                continue;
+            }
             ScopeStep into = new ScopeStep.Chosen(Choice.Decides.ofCase(match, arm));
             Paths<P> body = settle(arm.body(), naming.entering(into), comparisons.entering(into),
                     inside(into, naming, comparisons, bound));
@@ -632,7 +1022,8 @@ public final class ValueArrivals<P> {
             }
             P named = naming.matchCase(match, part);
             Provenance<P> way = named == null
-                    ? new Provenance<>(naming.nowhere(), Completeness.PARTIAL) : whole(named);
+                    ? new Provenance<>(naming.nowhere(), Completeness.PARTIAL, List.of(), null)
+                    : whole(named);
             out.under(way, body.orNone(), naming);
             if (out.isBeyond()) {
                 return out.paths();
@@ -698,9 +1089,23 @@ public final class ValueArrivals<P> {
          * everything gathered so far for every candidate: a naming whose equality is worked out
          * from what the way consulted pays that search once per pair, and the cost of gathering
          * one body's ways grew with their square.
+         *
+         * <p>Each key is the way it is kept under: the way itself, truths and all, while there is
+         * room for them; and past the room, the way as a way ({@link Provenance#asAWay}).
          */
-        private final SequencedSet<Arrival<P>> ways = new LinkedHashSet<>();
+        private final SequencedMap<Arrival<P>, Arrival<P>> ways = new LinkedHashMap<>();
         private boolean beyond;
+
+        /**
+         * Whether ways that differ only in truths no naming wrote are held as one.
+         *
+         * <p>Apart while there is room, since which way such a truth came out is what lets an arm
+         * write a way down, and which of two ways settles one truth both ways and is no run. Past
+         * the room, as one, holding the truths every one of them kept: told apart there, they are as
+         * many as the combinations of those truths, and the bound would be spent on what no naming
+         * wrote where the ways it did write fit.
+         */
+        private boolean asWays;
 
         boolean isBeyond() {
             return beyond;
@@ -712,15 +1117,36 @@ public final class ValueArrivals<P> {
 
         /** One way, where it is not one this already holds and there is still room for it. */
         void add(Arrival<P> way) {
-            if (beyond || ways.contains(way)) {
+            if (beyond) {
                 return;
             }
-            if (ways.size() >= naming.mostArrivals()) {
-                beyond = true;
-                ways.clear();
+            // Asked and kept in one look: a way is hashed from everything it consulted, and two
+            // looks pay that twice for every candidate.
+            int before = ways.size();
+            keep(way);
+            if (ways.size() > before && ways.size() > naming.mostArrivals()) {
+                if (!asWays) {
+                    asWays = true;
+                    List<Arrival<P>> apart = List.copyOf(ways.values());
+                    ways.clear();
+                    apart.forEach(this::keep);
+                }
+                if (ways.size() > naming.mostArrivals()) {
+                    beyond = true;
+                    ways.clear();
+                }
+            }
+        }
+
+        private void keep(Arrival<P> way) {
+            if (!asWays) {
+                ways.putIfAbsent(way, way);
                 return;
             }
-            ways.addLast(way);
+            Provenance<P> asAWay = way.provenance().asAWay();
+            ways.merge(asAWay == way.provenance() ? way : new Arrival<>(way.value(), asAWay), way,
+                    (held, again) -> new Arrival<>(held.value(),
+                            held.provenance().sharedWith(again.provenance())));
         }
 
         /** Each arrival held to what already holds along the way to it. */
@@ -729,16 +1155,15 @@ public final class ValueArrivals<P> {
                 if (beyond) {
                     return;
                 }
-                P both = naming.join(holds.path(), each.path());
+                Provenance<P> both = holds.then(each.provenance(), naming);
                 if (both != null) {
-                    add(new Arrival<>(each.value(), new Provenance<>(both,
-                            holds.completeness().and(each.provenance().completeness()))));
+                    add(new Arrival<>(each.value(), both));
                 }
             }
         }
 
         Paths<P> paths() {
-            return beyond ? new Paths.Beyond<>() : new Paths.Held<>(List.copyOf(ways));
+            return beyond ? new Paths.Beyond<>() : new Paths.Held<>(List.copyOf(ways.values()));
         }
     }
 
@@ -750,7 +1175,10 @@ public final class ValueArrivals<P> {
      *
      * <p>What the parts of a value come to is not what the value comes to. A thing built out of
      * several is the constructor's answer and no way to it carries a truth of its own, so these
-     * arrive with nothing said about which of the two they are.
+     * arrive with nothing said about which of the two they are — and a truth a part came out that
+     * the naming had no words for is no truth of the value either. What is kept of it is that the
+     * way is missing something: kept as the part's truth, two ways that differ only in a part's
+     * truth would be two ways to a value settled one way.
      *
      * <p>A side this reading will not hold the ways of leaves the product one it will not hold
      * either, and it is answered before the pairing is taken rather than after.
@@ -762,11 +1190,9 @@ public final class ValueArrivals<P> {
         Gathered out = new Gathered();
         for (Arrival<P> one : left.orNone()) {
             for (Arrival<P> other : right.orNone()) {
-                P both = naming.join(one.path(), other.path());
+                Provenance<P> both = one.provenance().then(other.provenance(), naming);
                 if (both != null) {
-                    out.add(new Arrival<>(Truth.UNREAD, new Provenance<>(both,
-                            one.provenance().completeness()
-                                    .and(other.provenance().completeness()))));
+                    out.add(new Arrival<>(Truth.UNREAD, both.asAWay()));
                 }
                 if (out.isBeyond()) {
                     return out.paths();
@@ -786,7 +1212,7 @@ public final class ValueArrivals<P> {
     }
 
     private Provenance<P> whole(P path) {
-        return new Provenance<>(path, Completeness.COMPLETE);
+        return new Provenance<>(path, Completeness.COMPLETE, List.of(), null);
     }
 
     // ------------------------------------------------------------------- the tree
@@ -813,6 +1239,8 @@ public final class ValueArrivals<P> {
             case Core.MaterialisedValue _ -> List.of();
             case Core.Neg neg -> present(neg.operand());
             case Core.FieldAccess access -> present(access.target());
+            // Built out of what the names are read off, which is the one value evaluated.
+            case Core.FieldProjection projection -> present(projection.base());
             case Core.TupleGet get -> present(get.tuple());
             case Core.OptionSome option -> present(option.value());
             case Core.Widen widen -> present(widen.value());

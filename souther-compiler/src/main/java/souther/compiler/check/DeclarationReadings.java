@@ -1,7 +1,11 @@
 package souther.compiler.check;
 
+import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
-import souther.compiler.values.KnownExtents;
+import souther.compiler.types.TypeSymbol;
+import souther.compiler.revision.RevisionKnowledge;
+import souther.compiler.revision.RevisionWork;
+import souther.compiler.revision.StoreWork;
 import souther.compiler.values.StringMachineAnswers;
 
 import java.util.function.Supplier;
@@ -33,16 +37,18 @@ public interface DeclarationReadings {
     StringMachineAnswers of(TypeKey declaration);
 
     /**
-     * Where the sets met anywhere in this revision were found to stop.
+     * What the revision this lends under has worked out.
      *
      * <p>Beside the two above and on a lifetime of its own, because it is about neither a
-     * declaration nor a reading. Where a set's strings stop is settled by the set and by an
-     * allowance minted for that set, so the answer is one the revision has rather than one a
-     * declaration came to — every reading made under the revision asks the same one, and a reading
-     * with no revision behind it has {@link KnownExtents#NONE} and walks what it meets.
+     * declaration nor a reading: every answer it holds is settled by the work it answers and the
+     * allowance that work mints for itself ({@link RevisionWork}). One capability whatever the work
+     * is, so that a reader rebuilding a lender hands the whole of what the revision knows on with
+     * one call, and a kind of work added later is nothing such a reader has to hear about. A
+     * reading with no revision behind it has {@link RevisionKnowledge#NONE} and does every piece
+     * of work it meets.
      */
-    default KnownExtents extents() {
-        return KnownExtents.NONE;
+    default RevisionKnowledge revision() {
+        return RevisionKnowledge.NONE;
     }
 
     /**
@@ -64,10 +70,65 @@ public interface DeclarationReadings {
      * source left, which is not the declaration's own. Which source it is, is what its origin says
      * ({@link RuleReadingSource.Origin}), so that is what is handed here and not the source.
      */
-    default DeclarationReading reading(TypeKey declaration, RuleReadingSource.Origin origin,
-                                       ReadingPolicy policy,
+    default DeclarationReading reading(TypeSymbol.AtModule declaration,
+                                       RuleReadingSource.Origin origin, ReadingPolicy policy,
                                        Supplier<InvariantChecker.Seeded> read) {
-        return DeclarationReading.of(read.get());
+        return DeclarationReading.of(declaration, read.get());
+    }
+
+    /**
+     * Whose canonical reading {@code declaration}'s is: the declaration itself, or the name
+     * beneath it whose reading is the same reading.
+     *
+     * <p>A newtype that writes nothing, worn over another newtype that writes nothing, adds nothing
+     * a reading reads: its value is the same location as the value beneath, no rule of its own is
+     * read there, and the walk goes on into the same names. So its reading is the one beneath, and
+     * a chain of such names is read once rather than once per name with the whole chain under each.
+     * Only that edge: a name worn over one that writes rules reads them as a walk reaches them, and
+     * the name beneath reads them as its own, which are two readings.
+     *
+     * <p>Answered by whoever answers for the compilation's declarations, and here by the
+     * declaration itself. A lender with nothing to ask shares nothing, which is the reading every
+     * declaration has of its own.
+     */
+    default TypeSymbol.AtModule ownerOf(TypeSymbol.AtModule declaration) {
+        return declaration;
+    }
+
+    /**
+     * The newtype {@code named} is worn over, where both of them write nothing; null where either
+     * writes something or {@code named} is worn over anything else.
+     *
+     * <p>One edge of what {@link #ownerOf} follows, and the only edge: a reading of {@code named}
+     * is the reading of what this answers. Asked of what each declaration publishes and of what
+     * it wraps, in that order, so a reader whose answers are kept by what they read depends on the
+     * declaration beneath only where the one above writes nothing.
+     */
+    static TypeSymbol.AtModule wornOverWritingNothing(TypeKey named,
+                                                      PublishedDeclarations published,
+                                                      NewtypeInners inners) {
+        if (!writesNothing(published.of(named))) {
+            return null;
+        }
+        return inners.of(named) instanceof Type.Ref ref
+                && ref.name() instanceof TypeSymbol.AtModule beneath
+                && writesNothing(published.of(beneath.key()))
+                ? beneath : null;
+    }
+
+    /**
+     * Whether {@code declared} is a newtype that adds nothing a reading reads: no clause of its own
+     * and nothing spread into it.
+     *
+     * <p>Asked of what the declaration publishes and of nothing a reading made. A clause nobody
+     * could work out is published as one all the same, and a declaration whose meaning could not be
+     * read is not one that says nothing — so neither is taken for a name that writes nothing.
+     */
+    private static boolean writesNothing(PublishedDeclarationResult declared) {
+        return declared instanceof PublishedDeclarationResult.Found(
+                        DeclarationMeaning.Product product)
+                && product.newtype() && product.includes().isEmpty()
+                && product.clauses().isEmpty();
     }
 
     /**
@@ -78,11 +139,11 @@ public interface DeclarationReadings {
      * nothing. What it makes is kept, because it is the declaration's canonical reading and the
      * question that asked for the answer is the next to want it.
      */
-    default DeclarationReading readingForAnAnswer(TypeKey declaration,
+    default DeclarationReading readingForAnAnswer(TypeSymbol.AtModule declaration,
                                                   RuleReadingSource.Origin origin,
                                                   ReadingPolicy policy,
                                                   Supplier<InvariantChecker.Seeded> read) {
-        return DeclarationReading.of(read.get());
+        return DeclarationReading.of(declaration, read.get());
     }
 
     /**
@@ -97,7 +158,7 @@ public interface DeclarationReadings {
      * is a reading like any other, and what it comes to is what its own counterfactual is handed.
      *
      * <p>Worked out is not walked again. Where the sets those readings meet were found to stop is
-     * the revision's ({@link #extents}), and a set two declarations both reach is walked for the
+     * the revision's ({@link #revision}), and a set two declarations both reach is walked for the
      * first of them — which is a fact about the set and about no declaration, so neither reading
      * comes to anything it would not have come to alone.
      *
@@ -112,16 +173,21 @@ public interface DeclarationReadings {
             @Override
             public StringMachineAnswers of(TypeKey declaration) {
                 return declaration.equals(named)
-                        ? recorder : StringMachineAnswers.unborrowed(lender.extents());
+                        ? recorder : StringMachineAnswers.unborrowed(lender.revision());
             }
 
             @Override
-            public KnownExtents extents() {
-                return lender.extents();
+            public RevisionKnowledge revision() {
+                return lender.revision();
             }
 
             @Override
-            public DeclarationReading reading(TypeKey declaration,
+            public TypeSymbol.AtModule ownerOf(TypeSymbol.AtModule declaration) {
+                return lender.ownerOf(declaration);
+            }
+
+            @Override
+            public DeclarationReading reading(TypeSymbol.AtModule declaration,
                                               RuleReadingSource.Origin origin,
                                               ReadingPolicy policy,
                                               Supplier<InvariantChecker.Seeded> read) {
@@ -129,7 +195,7 @@ public interface DeclarationReadings {
             }
 
             @Override
-            public DeclarationReading readingForAnAnswer(TypeKey declaration,
+            public DeclarationReading readingForAnAnswer(TypeSymbol.AtModule declaration,
                                                          RuleReadingSource.Origin origin,
                                                          ReadingPolicy policy,
                                                          Supplier<InvariantChecker.Seeded> read) {
@@ -151,5 +217,5 @@ public interface DeclarationReadings {
      * counterfactual is handed. Handing out one shared object would make every such reading write
      * into the same maps.
      */
-    DeclarationReadings NONE = _ -> StringMachineAnswers.unborrowed(KnownExtents.NONE);
+    DeclarationReadings NONE = _ -> StringMachineAnswers.unborrowed(RevisionKnowledge.NONE);
 }

@@ -82,9 +82,7 @@ class ANumberNamedWhereNoValueIsWrittenIsStillMeasuredTest {
     void theOrderIsAnsweredWhereThereIsNoPosition() {
         Read read = of();
 
-        assertEquals(Carrier.ofValue(Type.INT, read.rules().inners(), read.rules().symbols(),
-                        read.rules().kinds(),
-                        read.rules().published()),
+        assertEquals(Carrier.ofValue(Type.INT, read.rules().declarations()),
                 read.quantities().ordersOf(new NumericTerm.ValueOf(DEADLINE)).answered(),
                 "the declarations put a whole number at the name every case spreads");
     }

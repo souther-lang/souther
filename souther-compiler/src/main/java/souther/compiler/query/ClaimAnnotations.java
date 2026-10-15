@@ -2,7 +2,9 @@ package souther.compiler.query;
 
 import souther.compiler.claims.ClaimVerdict;
 import souther.compiler.claims.Claims;
+import souther.compiler.diag.SourcePos;
 import souther.compiler.inputs.Unsettlement;
+import souther.compiler.meaning.WhyNotTaken;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -148,7 +150,7 @@ public record ClaimAnnotations(List<Said> all) {
         }
 
         @Override
-        public Why aConditionWasNotRead(souther.compiler.diag.SourcePos at) {
+        public Why aConditionWasNotRead(SourcePos at, List<WhyNotTaken> why) {
             return Why.A_RULE_WENT_UNREAD;
         }
 

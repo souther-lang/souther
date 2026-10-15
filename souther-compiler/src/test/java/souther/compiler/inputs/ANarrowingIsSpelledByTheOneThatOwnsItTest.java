@@ -6,6 +6,7 @@ import souther.compiler.check.DeclaredSig;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
+import souther.compiler.check.TypeCardinality;
 import souther.compiler.check.TypeView;
 import souther.compiler.core.Core;
 import souther.compiler.query.Bodies;
@@ -108,12 +109,9 @@ class ANarrowingIsSpelledByTheOneThatOwnsItTest {
      * has not been resolved against the declarations is one that cannot answer for a case standing
      * over several leaves, whatever it is called.
      *
-     * <p>{@code allOf} is the third name and not a third answer. It takes the same
-     * {@link ResolvedCase} and says every distinction that selection covers; {@code of} is that
-     * asked for the one case where there is exactly one, and is written in terms of it. Two readers
-     * want the two — a path takes a single narrowing or none, and what the rules leave an arm is
-     * asked of every distinction it can arrive at — and the check below is that the second is the
-     * first read again rather than a second decision about what a selection covers.
+     * <p>{@code allOf} is the way in from a {@link ResolvedCase}, and says every distinction that
+     * selection covers. Which of them a path is narrowed to is {@link CasesLeft}'s, made out of
+     * this answer rather than beside it, so a selection is decided once.
      */
     @Test
     void everyWayInTakesAValueThatSettlesTheNarrowing() {
@@ -133,9 +131,9 @@ class ANarrowingIsSpelledByTheOneThatOwnsItTest {
                         + " resolved to select, and from nothing that settles less than either");
     }
 
-    /** And the singular reading is the plural one, asked for the case where there is exactly one. */
+    /** And the cases an arm leaves a value are every one its selection covers, and only those. */
     @Test
-    void theOneNarrowingIsTheOnlyOneCovered() {
+    void theCasesLeftAreEveryOneCovered() {
         Read read = read(A_MODEL_OF_EVERY_SHAPE);
 
         for (Core.Case arm : armsOf(read.body)) {
@@ -143,9 +141,9 @@ class ANarrowingIsSpelledByTheOneThatOwnsItTest {
                 continue;
             }
             ResolvedCase selected = arm.selectedCase().orElseThrow();
-            List<Refinement> covered = Refinement.allOf(selected);
-            assertEquals(covered.size() == 1 ? covered.get(0) : null, Refinement.of(selected),
-                    () -> "the one narrowing of `" + selected + "` is whatever it alone covers");
+            assertEquals(java.util.Set.copyOf(Refinement.allOf(selected)),
+                    java.util.Set.copyOf(CasesLeft.of(selected).atoms()),
+                    () -> "what `" + selected + "` leaves is whatever it covers");
         }
     }
 
@@ -180,7 +178,7 @@ class ANarrowingIsSpelledByTheOneThatOwnsItTest {
                 continue;
             }
             ResolvedCase selected = arm.selectedCase().orElseThrow();
-            answered.put(selected.toString(), Refinement.of(selected));
+            answered.put(selected.toString(), CasesLeft.of(selected).only());
         }
 
         assertEquals(List.of(
@@ -278,8 +276,8 @@ class ANarrowingIsSpelledByTheOneThatOwnsItTest {
     /** The narrowing to one leaf, spelled the way the checker's resolution of an arm spells it: a
      *  leaf is a case that covers itself, so selecting it narrows to that one distinction. */
     private static Refinement aLeaf(TypeSymbol leaf) {
-        return Refinement.of(ResolvedCase.of(
-                souther.compiler.types.CaseSelector.direct(leaf), List.of(leaf)));
+        return Refinement.allOf(ResolvedCase.of(
+                souther.compiler.types.CaseSelector.direct(leaf), List.of(leaf))).getFirst();
     }
 
     /** Every arm of every {@code match} the body holds, outermost first. */
@@ -300,8 +298,8 @@ class ANarrowingIsSpelledByTheOneThatOwnsItTest {
     private static List<Case> distinctionsAt(Read read, TermPath at) {
         return Distinctions.ofType(
                 TypeView.asWritten(read.inputs.at(at).view().declared(), read.rules.symbols(),
-                        read.rules.published()),
-                read.rules.symbols(), read.rules.published());
+                        read.rules.kinds(), read.rules.sums()).shape(),
+                read.rules.symbols(), read.rules.kinds(), read.rules.sums());
     }
 
     private record Read(InputDomain inputs, Core body, RuleReadingSource rules) {}
@@ -315,9 +313,12 @@ class ANarrowingIsSpelledByTheOneThatOwnsItTest {
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
+        RuleReadingContext reading =
+                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES);
         return new Read(
-                InputDomain.of(sigs.get("visit"),
-                        RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES)),
+                InputDomain.of(sigs.get("visit"), reading,
+                        TypeCardinality.Counts.workedOutIn(reading),
+                        souther.compiler.carrier.Membership.none()),
                 checked.behaviorBodies().get("visit"), rules);
     }
 }

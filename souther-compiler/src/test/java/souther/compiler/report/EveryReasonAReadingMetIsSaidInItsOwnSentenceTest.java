@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.observe.Incompleteness;
+import souther.compiler.observe.Limits;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.partition.ReadingGap;
 import souther.compiler.publish.WeakeningWord;
@@ -93,7 +94,7 @@ class EveryReasonAReadingMetIsSaidInItsOwnSentenceTest {
                         WeakeningWord.BORDER_VALUE_UNREADABLE, Set.of("Observation"),
                         WeakeningWord.BORDER_VALUE_ABSENT, Set.of("NoValue"),
                         WeakeningWord.BORDER_OBSERVATION_UNAVAILABLE,
-                                Set.of("CouldNotWalk", "CouldNotReadRow"),
+                                Set.of("CouldNotWalk", "CouldNotReadRow", "ReachNotRead"),
                         WeakeningWord.BORDER_VALUE_NOT_WORKED_OUT, Set.of("CouldNotWorkOut")),
                 under,
                 () -> "the words no longer stand over the reasons they were meant to: " + under);
@@ -117,13 +118,18 @@ class EveryReasonAReadingMetIsSaidInItsOwnSentenceTest {
         for (Class<?> permitted : ReadingGap.class.getPermittedSubclasses()) {
             switch (permitted.getSimpleName()) {
                 case "Observation" -> everyCodeAValueArrivesUnreadWith().forEach(
-                        code -> out.add(ReadingGap.of(code)));
+                        cause -> out.add(ReadingGap.of(cause)));
                 case "NoValue" -> out.add(ReadingGap.NO_VALUE);
                 case "CouldNotWalk" -> out.add(ReadingGap.COULD_NOT_WALK);
                 case "CouldNotReadRow" -> out.add(ReadingGap.COULD_NOT_READ_ROW);
                 case "CouldNotWorkOut" -> {
                     for (UnheldNumber why : UnheldNumber.values()) {
                         out.add(ReadingGap.of(why));
+                    }
+                }
+                case "ReachNotRead" -> {
+                    for (ReadingGap.ReachNotRead.Why why : ReadingGap.ReachNotRead.Why.values()) {
+                        out.add(new ReadingGap.ReachNotRead(why));
                     }
                 }
                 // A reason added to the type and not to this list. Written as a failure rather than
@@ -143,12 +149,12 @@ class EveryReasonAReadingMetIsSaidInItsOwnSentenceTest {
      * would be as wide as whoever wrote it remembered — which is how a word that groups two codes
      * came to be checked as a word that groups one.
      */
-    private static Set<Incompleteness.Code> everyCodeAValueArrivesUnreadWith() {
-        Set<Incompleteness.Code> out = new LinkedHashSet<>();
+    private static Set<Incompleteness.Cause> everyCodeAValueArrivesUnreadWith() {
+        Set<Incompleteness.Cause> out = new LinkedHashSet<>();
         for (Class<?> shape : ObservedValue.class.getPermittedSubclasses()) {
-            Incompleteness.Code code = oneOf(shape).unread();
-            if (code != null) {
-                out.add(code);
+            Incompleteness.Cause cause = oneOf(shape).cause();
+            if (cause != null) {
+                out.add(cause);
             }
         }
         return out;
@@ -173,7 +179,7 @@ class EveryReasonAReadingMetIsSaidInItsOwnSentenceTest {
             case "Mapping" -> new ObservedValue.Mapping(List.of());
             case "Absent" -> new ObservedValue.Absent();
             case "Unknown" -> new ObservedValue.Unknown("nothing read it");
-            case "Truncated" -> new ObservedValue.Truncated();
+            case "Truncated" -> new ObservedValue.Truncated(Limits.DEFAULT.nodesFigure());
             default -> throw new IllegalStateException(
                     "a shape a value can take that this test cannot make: " + shape);
         };

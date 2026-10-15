@@ -11,6 +11,8 @@ import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 import souther.compiler.core.Core;
+import souther.compiler.meaning.Proposition;
+import souther.compiler.meaning.WhyNotTaken;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import java.util.ArrayList;
@@ -179,8 +181,10 @@ final class Predicates {
      * same way: a binding is entered as what it was given ({@link Terms#inside}), so a read of the
      * binder is the value it was given, and the two spellings name the same thing.
      */
-    private boolean names(Core e, Set<FactSubject> handed, Denotations at) {
-        if (handed.contains(terms.subjectOf(e, at))) {
+    private boolean names(Core e, Term.Chains handed, Denotations at) {
+        // Every subexpression standing here and not only the node: a projection's shorter
+        // projections are not children, and each may be the value handed.
+        if (terms.heldAt(e, at, handed) != null) {
             return true;
         }
         // A binding is crossed as a binding. Its body is what the clause names, read inside it; what
@@ -192,6 +196,17 @@ final class Predicates {
         boolean[] found = {false};
         Core.forEachChild(e, child -> found[0] = found[0] || names(child, handed, at));
         return found[0];
+    }
+
+    /** {@code subjects} as chains of names, for asking which subexpression of a clause is one. */
+    private static Term.Chains chainsOf(Set<FactSubject> subjects) {
+        List<Term> held = new ArrayList<>(subjects.size());
+        for (FactSubject each : subjects) {
+            if (each != null) {
+                held.add(each.identity());
+            }
+        }
+        return new Term.Chains(held);
     }
 
     /** What each of {@code values} is, where the site that hands them over stands. */
@@ -749,15 +764,18 @@ final class Predicates {
     /** What one part of a clause owes, read as the comparison it states. */
     private Owed owing(Core inv, Denotations at, Set<FactSubject> unnamed,
                        boolean positive, boolean decidesFalse, Discharge discharge) {
-        ComparisonReadings readings = Conditions.comparisonsStatedBy(terms, inv, at);
-        if (readings.inReadingOrder().isEmpty()) {
+        // What is owed is the clause, so only the readings that are it: one that only follows from
+        // it, established, would discharge a clause that asks more.
+        List<StatedComparison> readings =
+                Conditions.comparisonsStatedBy(terms, inv, at).theCondition();
+        if (readings.isEmpty()) {
             return owedBy(inv, at, unnamed, positive, decidesFalse);
         }
         // The first reading this construction can be read against is the one taken, which is what
         // the reading order is for. Reading a predicate never takes a reading away, so a reading
         // that came to nothing leaves the next one to answer rather than answering for it.
         Owed answer = null;
-        for (StatedComparison stated : readings.inReadingOrder()) {
+        for (StatedComparison stated : readings) {
             answer = owedBy(stated, inv, at, unnamed, positive, decidesFalse, discharge);
             if (!answer.unreadable()) {
                 return answer;
@@ -795,7 +813,7 @@ final class Predicates {
         // that is not in the relation is not something the relation depends on — turning a clause
         // away for a value it does not actually rest on would report nothing about a value the
         // author was never asked about.
-        LinearForm<FactSubject> between = la == null || ra == null ? null : la.minus(ra);
+        LinearForm<FactSubject> between = Terms.add(la, ra, true);
         if (between != null && discharge.takesIn(between)) {
             numeric = new NumericConstraint(between, stated.relationUnder(positive));
             // The same clause read as the cases of whatever chooses inside it. Both readings are
@@ -820,7 +838,7 @@ final class Predicates {
         // A predicate over a value no guard could be written about is not a predicate a guard will
         // settle, so it is not owed as one — where the domain can say something of that value it has
         // already said it above, and where it cannot the run-time check stands for the clause.
-        List<FactSubject> keys = !unnamed.isEmpty() && names(polar.expr(), unnamed, at)
+        List<FactSubject> keys = !unnamed.isEmpty() && names(polar.expr(), chainsOf(unnamed), at)
                 ? List.of() : factKeys(polar.expr(), at);
         boolean stated = polar.positive();
         Fact fact = keys.isEmpty() ? null : new Fact(stated ? keys : firstOnly(keys), stated);
@@ -950,12 +968,24 @@ final class Predicates {
      *
      * @param taken     whether any of these domains took the condition in
      * @param shapeRead whether a rule here read the shape it is written in at all
+     * @param notTaken  why a part of what the condition states was not taken in, each once, where
+     *                  what it states was read ({@link MeaningAssumptions}); empty where every part
+     *                  was, or where the condition was read as it stands
      */
-    record Assumed(Known known, boolean taken, boolean shapeRead) {
+    record Assumed(Known known, boolean taken, boolean shapeRead, List<WhyNotTaken> notTaken) {
+
+        Assumed(Known known, boolean taken, boolean shapeRead) {
+            this(known, taken, shapeRead, List.of());
+        }
+
+        Assumed {
+            notTaken = List.copyOf(new LinkedHashSet<>(notTaken));
+        }
 
         Assumed alsoRead(boolean moreTaken, boolean moreShape) {
             return (moreTaken && !taken) || (moreShape && !shapeRead)
-                    ? new Assumed(known, taken || moreTaken, shapeRead || moreShape) : this;
+                    ? new Assumed(known, taken || moreTaken, shapeRead || moreShape, notTaken)
+                    : this;
         }
     }
 
@@ -964,6 +994,28 @@ final class Predicates {
      * outside the affine fragment, leave {@code k} unchanged (sound). */
     Assumed assumeCond(Core rawCond, Known k, Denotations at, boolean positive) {
         return new Assuming(this).read(rawCond, positive, at, terms::inside).from(k);
+    }
+
+    /**
+     * Refines {@code k} by what {@code stated} — what {@code cond} states — coming out
+     * {@code positive} makes certain ({@link MeaningAssumptions}), and by {@code cond} itself having
+     * come out that way: the expression is what a guard settling it again would settle, whatever it
+     * states.
+     */
+    Assumed assumeMeaning(Proposition stated, Core cond, Known k, Denotations at, boolean positive,
+                          MeaningAssumptions.InputPlaces places) {
+        Assumed meant = MeaningAssumptions.assumed(stated, positive, k, terms, places, at);
+        FactSubject key = terms.subjectOf(cond, at);
+        return key == null ? meant
+                : new Assumed(meant.known().taking(key, positive, Known.Held.ON_THE_PATH), true,
+                        meant.shapeRead(), meant.notTaken());
+    }
+
+    /** {@code k} with what {@code stated} states taken as holding, where it is what has to hold to
+     *  stand somewhere and no condition of the body states it. */
+    Assumed assumeHolding(Proposition stated, Known k, Denotations at,
+                          MeaningAssumptions.InputPlaces places) {
+        return MeaningAssumptions.assumed(stated, true, k, terms, places, at);
     }
 
     /**
@@ -1031,10 +1083,11 @@ final class Predicates {
     /**
      * What taking one part of a condition as holding comes to.
      *
-     * <p>Every reading of the comparison it states, because each of them holds of the same values:
-     * the order a call decides, and the bound on the sign that decides it. Which one a clause is
-     * read against is settled where the clause is read, so a guard states each of them rather than
-     * choosing here.
+     * <p>Every reading of the comparison it states that holds where the part comes out this way:
+     * the order a call decides, and the bound on the sign that decides it. Where the part fails,
+     * an order it only proves where it holds is not among them. Which one a clause is read against
+     * is settled where the clause is read, so a guard states each of them rather than choosing
+     * here.
      */
     private Assumed taking(ClauseExpr.Part part, Known k, Denotations at) {
         boolean positive = part.positive();
@@ -1046,7 +1099,7 @@ final class Predicates {
             return taking(cond, join.writtenHalves(), k, at, positive);
         }
         List<StatedComparison> readings =
-                Conditions.comparisonsStatedBy(terms, cond, at).inReadingOrder();
+                Conditions.comparisonsStatedBy(terms, cond, at).holdingWhere(positive);
         if (readings.isEmpty()) {
             return taking(cond, List.of(), k, at, positive);
         }
@@ -1126,8 +1179,10 @@ final class Predicates {
         boolean shapeRead = !known.isEmpty();
         LinearForm<FactSubject> la = terms.affineOf(stated.left(), at);
         LinearForm<FactSubject> ra = terms.affineOf(stated.right(), at);
-        if (la != null && ra != null) {
-            LinearForm<FactSubject> compared = la.minus(ra);
+        // A difference no ratio holds is not taken in, the same as a side that is no form: what the
+        // path knows stays what it was, which is the sound answer with less.
+        LinearForm<FactSubject> compared = Terms.add(la, ra, true);
+        if (compared != null) {
             out = out.taking(compared, stated.relationUnder(positive), Known.Held.ON_THE_PATH,
                     terms.kindsOf(compared));
             taken = true;
@@ -1324,11 +1379,12 @@ final class Predicates {
                                     boolean positive) {
         LinearForm<FactSubject> la = terms.affineOf(stated.left(), at);
         LinearForm<FactSubject> ra = terms.affineOf(stated.right(), at);
-        if (la == null || ra == null) {
+        LinearForm<FactSubject> between = Terms.add(la, ra, true);
+        if (between == null) {
             return false;
         }
         Piecewise cases = piecewiseOf(
-                new NumericConstraint(la.minus(ra), stated.relationUnder(positive)),
+                new NumericConstraint(between, stated.relationUnder(positive)),
                 stated.left(), stated.right(), at);
         return cases != null && cases.refutedBy(k.numbers());
     }
@@ -1362,9 +1418,16 @@ final class Predicates {
             if (answered == null) {
                 return null;
             }
+            // The rule with the atom taken out and what this arm answers put in its place. A form
+            // no ratio holds is a reading this does not make, and the clause keeps the reading it
+            // has without the cases.
             LinearForm<FactSubject> instead = owed.form()
-                    .minus(LinearForm.atom(atom).times(coefficient))
-                    .plus(answered.times(coefficient));
+                    .minus(LinearForm.weighing(atom, coefficient))
+                    .flatMap(without -> answered.times(coefficient).flatMap(without::plus))
+                    .orNull();
+            if (instead == null) {
+                return null;
+            }
             List<NumericConstraint> given = new ArrayList<>();
             Map<FactSubject, Granularity> kinds = new HashMap<>(terms.kindsOf(instead));
             // What the call answers here, said of the call itself: in this case the two are one
@@ -1373,7 +1436,10 @@ final class Predicates {
             // reading and to no other — a recipe over the arms answers about the value itself and
             // has nothing to tie back — which is why what is shared with that reader stops at the
             // arms and what they settle.
-            LinearForm<FactSubject> answeredHere = LinearForm.atom(atom).minus(answered);
+            LinearForm<FactSubject> answeredHere = LinearForm.atom(atom).minus(answered).orNull();
+            if (answeredHere == null) {
+                return null;
+            }
             given.add(new NumericConstraint(answeredHere, Rel.EQ));
             kinds.putAll(terms.kindsOf(answeredHere));
             for (NumericConstraint stands : Conditions.settledBy(terms, arm.decidedBy(), at)) {
@@ -1576,6 +1642,16 @@ final class Predicates {
                     }
                     List<String> out = new ArrayList<>(head);
                     out.add(fa.field());
+                    yield out;
+                }
+                // The same a name at a time, along the names rather than down the stack.
+                case Core.FieldProjection p -> {
+                    List<String> head = chain(p.base());
+                    if (head == null) {
+                        yield null;
+                    }
+                    List<String> out = new ArrayList<>(head);
+                    p.steps().inOrder().forEach(step -> out.add(step.field()));
                     yield out;
                 }
                 case Core.Read r when chains.containsKey(r.binding()) -> chains.get(r.binding());

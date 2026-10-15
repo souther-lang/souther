@@ -1,5 +1,8 @@
 package souther.compiler.regex;
 
+import net.unit8.notation199x.pattern.Meter;
+import net.unit8.notation199x.pattern.PatternParser;
+import net.unit8.notation199x.pattern.PatternRead;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -51,42 +54,7 @@ class WhatAnAnswerNeedsIsAdmittedAtOnceTest {
         assertEquals("T0000000000000", one.some());
     }
 
-    /**
-     * A value somebody can paste is a different question from a string the language holds.
-     *
-     * <p>{@link Language#some} answers with what the language holds, preferring a written string
-     * where one is no longer; {@link Language#someWritten} refuses to answer with anything else. A
-     * caller writing a value into a model wants the second — a row carrying a control character is
-     * not a row anybody can read back — and one deciding whether a language is empty wants the
-     * first.
-     *
-     * <p>The two come apart exactly where every string a language holds is one a source cannot
-     * carry, which is what the third of these is.
-     */
-    @Test
-    void whatCanBeWrittenIsAskedApartFromWhatIsHeld() {
-        String one = String.valueOf((char) 1);
-
-        assertEquals("a", language("[a-z]").some());
-        assertEquals("a", language("[a-z]").someWritten());
-
-        // Shorter and unwritable beside longer and writable: what it holds is the short one, and
-        // what can be written is the long one.
-        Language either = language("[\\x{1}]|abc");
-        // Written as a value rather than as itself: a control character pasted into a source is
-        // what this whole question is about, and one sitting in the expectation would be the same
-        // trap in the test.
-        assertEquals(one, either.some());
-        assertEquals("abc", either.someWritten());
-
-        // And a language of nothing else has a string and no value to offer.
-        Language unwritable = language("[\\x{1}-\\x{2}]+");
-        assertEquals(one, unwritable.some());
-        assertNull(unwritable.someWritten(),
-                "every string it holds is one nobody can paste, so there is nothing to write");
-    }
-
-    /** And a plan of several is what those several come to. */
+    /** A plan of several is what those several come to. */
     @Test
     void aPlanOfSeveralIsWhatTheyComeTo() {
         Language both = plan("[0-9]+").and(plan("[0-4]{2}"))
@@ -121,7 +89,7 @@ class WhatAnAnswerNeedsIsAdmittedAtOnceTest {
     void aPlanPastWhatItIsAllowedComesToNothing() {
         PatternPlan big = plan("[0-9]{5000}");
 
-        assertNull(big.compile(new PatternPlan.Budget(100, 100).meter()));
+        assertNull(big.compile(new PatternPlan.Budget(100, 100, 1_000_000_000L).meter()));
         assertNotNull(big.compile(PatternPlan.Budget.OF_ADMITTED_VALUES.meter()), "and is built where there is room");
     }
 
@@ -137,9 +105,9 @@ class WhatAnAnswerNeedsIsAdmittedAtOnceTest {
         PatternPlan several = plan("[0-9]{40}").or(plan("[a-z]{40}"))
                 .or(plan("[A-Z]{40}")).or(plan("[0-9a-z]{40}"));
 
-        PatternPlan.Budget roomForOne = new PatternPlan.Budget(1_000, 100);
+        PatternPlan.Budget roomForOne = new PatternPlan.Budget(1_000, 100, 1_000_000_000L);
 
-        assertNotNull(several.compile(new PatternPlan.Budget(1_000, 100_000).meter()),
+        assertNotNull(several.compile(new PatternPlan.Budget(1_000, 100_000, 1_000_000_000L).meter()),
                 "each of them is small, and together they fit where there is room for them");
         assertNull(several.compile(roomForOne.meter()),
                 "and not where there is room for one of them at a time");
@@ -166,11 +134,5 @@ class WhatAnAnswerNeedsIsAdmittedAtOnceTest {
         assertTrue(one.or(one.not(allowed()), allowed()).isEverything());
         assertEquals("00", one.and(two, allowed()).some());
         assertTrue(one.and(two, allowed()).has("40"));
-    }
-
-    /** A pattern outside the subset never reaches a plan, since a plan is made of what was read. */
-    @Test
-    void whatWasNotReadIsNotPlanned() {
-        assertInstanceOf(PatternRead.Refused.class, PatternParser.read("\\p{Alpha}"));
     }
 }

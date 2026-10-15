@@ -70,6 +70,58 @@ public record ModelOccurrence(SourceConstructOrigin origin, ExpansionLineage lin
      * that was handed over, and what stands after that belongs to whoever handed it.
      */
     public static Optional<ModelOccurrence> statedAt(ConstructOccurrence occurrence) {
+        Deque<ExpansionLineage.Expansion> open = openAt(occurrence);
+        // What the model states nothing at: a construct standing inside one of the language's own
+        // operations, which the reading that states rules never enters. Every other copy still open
+        // is a copy the model itself makes — a helper spliced into each call of it — and those are
+        // what a construct of the model stands in.
+        //
+        // Read off the name a copy is of, which is what says whose code was copied: everything the
+        // library declares is reached under the name the library publishes it by, private helpers
+        // included ({@link souther.compiler.check.HelperTable}), and nothing a module declares is
+        // reached under one. So a copy of the language's own code is one of these and a copy of a
+        // model's code is not, whichever of them the call that made it was written in.
+        if (open.stream().anyMatch(each -> each.expanded() instanceof ValueName.Stdlib.Operation)) {
+            return Optional.empty();
+        }
+        ExpansionLineage model = ExpansionLineage.ORIGINAL;
+        for (Iterator<ExpansionLineage.Expansion> outermost = open.descendingIterator();
+                outermost.hasNext();) {
+            ExpansionLineage.Expansion each = outermost.next();
+            model = model.copiedInto(each.expanded(), each.at());
+        }
+        return Optional.of(new ModelOccurrence(occurrence.origin(), model));
+    }
+
+    /**
+     * The call of one of the language's own operations whose body {@code occurrence} stands in, as
+     * the construct of the model that call is — the outermost such call, where the body of one
+     * calls another — or empty where it stands in none, or the call that made the copy is no call
+     * the source wrote.
+     *
+     * <p>Where an expansion leaves a construct of an operation's body as all there is of an
+     * expression, the expression is what that call answers: an operation's body is what it answers,
+     * and the outermost copy is the call the expression was written as.
+     */
+    public static Optional<ModelOccurrence> operationCalledAround(ConstructOccurrence occurrence) {
+        ExpansionLineage model = ExpansionLineage.ORIGINAL;
+        for (Iterator<ExpansionLineage.Expansion> outermost = openAt(occurrence).descendingIterator();
+                outermost.hasNext();) {
+            ExpansionLineage.Expansion each = outermost.next();
+            if (each.expanded() instanceof ValueName.Stdlib.Operation) {
+                return each.at() instanceof ExpansionSite.Written(SourceConstructOrigin call)
+                        ? Optional.of(new ModelOccurrence(call, model)) : Optional.empty();
+            }
+            model = model.copiedInto(each.expanded(), each.at());
+        }
+        return Optional.empty();
+    }
+
+    /**
+     * The copies {@code occurrence} still stands in, the innermost on top: every copy made on the
+     * way to it, less those a block handed over has crossed out of.
+     */
+    private static Deque<ExpansionLineage.Expansion> openAt(ConstructOccurrence occurrence) {
         // Refused rather than met further in: a construct of the model is some construct, and what
         // a walk over one that was not would come back with is an answer about nothing.
         if (occurrence == null) {
@@ -95,26 +147,7 @@ public record ModelOccurrence(SourceConstructOrigin origin, ExpansionLineage lin
             }
             open.push(step);
         }
-        // What the model states nothing at: a construct standing inside one of the language's own
-        // operations, which the reading that states rules never enters. Every other copy still open
-        // is a copy the model itself makes — a helper spliced into each call of it — and those are
-        // what a construct of the model stands in.
-        //
-        // Read off the name a copy is of, which is what says whose code was copied: everything the
-        // library declares is reached under the name the library publishes it by, private helpers
-        // included ({@link souther.compiler.check.HelperTable}), and nothing a module declares is
-        // reached under one. So a copy of the language's own code is one of these and a copy of a
-        // model's code is not, whichever of them the call that made it was written in.
-        if (open.stream().anyMatch(each -> each.expanded() instanceof ValueName.Stdlib.Operation)) {
-            return Optional.empty();
-        }
-        ExpansionLineage model = ExpansionLineage.ORIGINAL;
-        for (Iterator<ExpansionLineage.Expansion> outermost = open.descendingIterator();
-                outermost.hasNext();) {
-            ExpansionLineage.Expansion each = outermost.next();
-            model = model.copiedInto(each.expanded(), each.at());
-        }
-        return Optional.of(new ModelOccurrence(occurrence.origin(), model));
+        return open;
     }
 
     /** The copies of {@code lineage}, outermost first. */

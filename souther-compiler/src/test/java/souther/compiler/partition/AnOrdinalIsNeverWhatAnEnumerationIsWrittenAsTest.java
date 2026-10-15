@@ -6,6 +6,8 @@ import souther.compiler.check.Carrier;
 import souther.compiler.inputs.BoundaryDomain;
 import souther.compiler.numeric.Count;
 import souther.compiler.observe.ObservedValue;
+import souther.compiler.query.Shapes;
+import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
 import souther.compiler.types.TypeSymbol;
@@ -113,21 +115,14 @@ class AnOrdinalIsNeverWhatAnEnumerationIsWrittenAsTest {
                             No }
                         """, "Main");
         compilation.answerEverything();
-        String module = compilation.modules().get(0);
-        souther.compiler.check.Symbols symbols =
-                souther.compiler.query.Scopes.derived(compilation.db(), module).value();
 
         assertNull(Carrier.ofValue(
-                souther.compiler.types.Type.ref(TypeSymbols.declared(new TypeKey("example.onecase", "Qualified"))),
-                souther.compiler.query.Shapes.newtypeInners(compilation.db()),
-                symbols, souther.compiler.query.Shapes.declarationKinds(compilation.db()),
-                souther.compiler.query.Shapes.publishedDeclarations(compilation.db())),
+                Type.ref(TypeSymbols.declared(new TypeKey("example.onecase", "Qualified"))),
+                Shapes.declarationAccess(compilation.db())),
                 "one case of a sum is not the sum");
         assertNotNull(Carrier.ofValue(
-                souther.compiler.types.Type.ref(TypeSymbols.declared(new TypeKey("example.onecase", "Stage"))),
-                souther.compiler.query.Shapes.newtypeInners(compilation.db()),
-                symbols, souther.compiler.query.Shapes.declarationKinds(compilation.db()),
-                souther.compiler.query.Shapes.publishedDeclarations(compilation.db())),
+                Type.ref(TypeSymbols.declared(new TypeKey("example.onecase", "Stage"))),
+                Shapes.declarationAccess(compilation.db())),
                 "and the sum itself still is");
     }
 

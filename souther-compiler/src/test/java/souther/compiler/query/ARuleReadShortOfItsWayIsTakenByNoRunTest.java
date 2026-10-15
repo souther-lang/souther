@@ -4,15 +4,14 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.coverage.AlignedObservation;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.coverage.Observation;
-import souther.compiler.partition.AnswersDemanded;
+import souther.compiler.meaning.WhyNotTaken;
 import souther.compiler.partition.ConditionOccurrence;
 import souther.compiler.partition.DecidedCondition;
 import souther.compiler.partition.DecisionCondition;
 import souther.compiler.partition.DecisionReading;
 import souther.compiler.partition.DecisionRule;
-import souther.compiler.partition.OnTheWay;
 import souther.compiler.partition.RulesTaken;
-import souther.compiler.partition.WayToTheBorder;
+import souther.compiler.partition.RunPlacement;
 
 import java.util.List;
 import java.util.Map;
@@ -50,13 +49,18 @@ class ARuleReadShortOfItsWayIsTakenByNoRunTest {
 
     private static final DecisionRule NO_DISTINCTION = new DecisionRule(Map.of());
 
+    /** Why the condition below is not read: a quantity on no order a region measures. */
+    private static final WhyNotTaken ON_NO_ORDER =
+            new WhyNotTaken.OutsideDomain(WhyNotTaken.DomainLimit.A_QUANTITY_ON_NO_ORDER);
+
     /** A rule that turns on one condition this reading has no words for, so it is not
      *  {@link #NO_DISTINCTION} and a finding about one is not a finding about the other. */
     private static final DecisionRule ONE_DISTINCTION = new DecisionRule(Map.of(
-            new DecisionCondition.AConditionNotRead(new ConditionOccurrence("decides", 0),
-                    new OnTheWay.Why.NoWordsForTheShape()),
+            new DecisionCondition.AConditionNotRead(new ConditionOccurrence(
+                    "decides", ConditionOccurrence.Reading.DECIDING, 0), ON_NO_ORDER),
             new DecidedCondition.Unread(new DecisionCondition.AConditionNotRead(
-                    new ConditionOccurrence("decides", 0), new OnTheWay.Why.NoWordsForTheShape()),
+                    new ConditionOccurrence("decides", ConditionOccurrence.Reading.DECIDING, 0),
+                    ON_NO_ORDER),
                     true)));
 
     @Test
@@ -65,7 +69,7 @@ class ARuleReadShortOfItsWayIsTakenByNoRunTest {
         assertEquals(new RulesTaken.WhichRule.CouldNotTell(
                         RulesTaken.WhichRule.Why.NO_RULE_IS_RECOGNISABLE),
                 rulesOf(compilation, reading(ruled(NO_DISTINCTION, false)))
-                        .takenBy(nothingSeen(compilation)));
+                        .takenBy(InputsOfTheBody.aRunSeen(nothingSeen(compilation))));
     }
 
     @Test
@@ -73,7 +77,7 @@ class ARuleReadShortOfItsWayIsTakenByNoRunTest {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
         assertEquals(new RulesTaken.WhichRule.TookThis(NO_DISTINCTION),
                 rulesOf(compilation, reading(ruled(NO_DISTINCTION, true)))
-                        .takenBy(nothingSeen(compilation)));
+                        .takenBy(InputsOfTheBody.aRunSeen(nothingSeen(compilation))));
     }
 
     /**
@@ -114,10 +118,11 @@ class ARuleReadShortOfItsWayIsTakenByNoRunTest {
         DecisionReading.Ruled readShort = ruled(ONE_DISTINCTION, false);
         DecisionEvidence evidence = evidenceWithNoRows(reading(whole, readShort));
 
-        assertEquals(WeakeningSet.none(), evidence.at(whole).weakening(),
+        assertEquals(WeakeningSet.none(), evidence.at(statedAt(whole)).weakening(),
                 "the rule read in full rests on nothing its neighbour went without");
         assertEquals(WeakeningSet.of(new Weakening.DecisionRuleReadShort("decides")),
-                evidence.at(readShort).weakening(), "and the rule read short rests on that");
+                evidence.at(statedAt(readShort)).weakening(),
+                "and the rule read short rests on that");
 
         assertEquals(Adequacy.Finding.Disposition.UNDECIDED,
                 findingAbout(evidence, readShort).disposition(),
@@ -128,30 +133,36 @@ class ARuleReadShortOfItsWayIsTakenByNoRunTest {
 
     private static Adequacy.Finding findingAbout(DecisionEvidence evidence,
                                                  DecisionReading.Ruled ruled) {
-        return Adequacy.Finding.by(new FindingSubject.OfABehavior("decides"), evidence.at(ruled),
-                new About.ARuleNoRowTakes("decides", ruled));
+        return Adequacy.Finding.by(new FindingSubject.OfABehavior("decides"),
+                evidence.at(statedAt(ruled)), new About.ARuleNoRowTakes("decides", ruled));
+    }
+
+    /** The rule of {@code ruled}, stated at that one place. */
+    private static DecisionReading.Stated statedAt(DecisionReading.Ruled ruled) {
+        return new DecisionReading.Stated(ruled.rule(), List.of(ruled));
     }
 
     private static DecisionReading.Ruled ruled(DecisionRule rule, boolean whole) {
-        return new DecisionReading.Ruled(rule, List.of(), WayToTheBorder.UNTOUCHED,
-                AnswersDemanded.NOTHING, whole);
+        return new DecisionReading.Ruled(rule, List.of(), whole);
     }
 
     private static DecisionReading reading(DecisionReading.Ruled... found) {
-        return new DecisionReading("decides", List.of(found),
-                new DecisionReading.Enumeration.Complete());
+        return new DecisionReading("decides", List.of(found), List.of(),
+                new DecisionReading.Enumeration.Complete(), Map.of());
     }
 
     /** What the rows of {@code read} took where nobody wrote a row, as the account makes it. */
     private static DecisionEvidence evidenceWithNoRows(DecisionReading read) {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
         return new DecisionEvidence(read, DecisionEvidence.of("decides",
-                rulesOf(compilation, read), List.of(), WeakeningSet.none()));
+                rulesOf(compilation, read), List.of(), WeakeningSet.none()), Map.of());
     }
 
-    private static RulesTaken rulesOf(Compilation compilation, DecisionReading read) {
+    private static RunPlacement rulesOf(Compilation compilation, DecisionReading read) {
         Bodies.Elaborated checked = checkedOf(compilation);
-        return RulesTaken.of(read, checked.behaviorBodies().get("decides"), checked.plan());
+        return new RunPlacement(
+                RulesTaken.of(read, checked.behaviorBodies().get("decides"), checked.plan()),
+                InputsOfTheBody.of(compilation, "decides"));
     }
 
     /** A run that was seen doing nothing, under the numbering of this compilation. */

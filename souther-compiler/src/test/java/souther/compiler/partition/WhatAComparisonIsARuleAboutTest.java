@@ -8,19 +8,28 @@ import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Comparison;
 import souther.compiler.check.StatedContract;
 import souther.compiler.core.Core;
+import souther.compiler.coverage.Arrivals;
 import souther.compiler.diag.Citation;
+import souther.compiler.inputs.ComparedNumber;
 import souther.compiler.inputs.InputDomain;
+import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
+import souther.compiler.meaning.Proposition;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.types.BindingId;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * What a comparison is a rule about, which decides what it raises.
@@ -48,6 +57,18 @@ class WhatAComparisonIsARuleAboutTest {
      * arrives in.
      */
     private static ComparisonAssessment about(String params, String clause) {
+        Read read = read(params, clause);
+        return ComparisonAssessment.of("f", read.comparison().stated(),
+                Citation.of(read.binary().pos()), read.reading(), read.reads(),
+                ClosureApplications.OUTSIDE, read.rule(), Arrivals.inTheTree(read.binary()), false,
+                WhatConditionsState.of(read.reading()), Optional.empty());
+    }
+
+    /** The one comparison an {@code ensures} over {@code params} states, and what it is read in. */
+    private record Read(Core.Binary binary, Comparison comparison, InputReading reading,
+                        InputReads reads, BindingId rule) {}
+
+    private static Read read(String params, String clause) {
         String source = """
                 module g
 
@@ -79,10 +100,33 @@ class WhatAComparisonIsARuleAboutTest {
         for (Contract.Param param : stated.params()) {
             roots.putIfAbsent(param.binding(), param.name());
         }
-        return ComparisonAssessment.of("f", comparison.stated(), Citation.of(binary.pos()),
-                inputs.reading(rules),
-                InputReads.ofWhatIsDeclared(roots), rule.value(),
-                souther.compiler.coverage.Arrivals.inTheTree(read), false);
+        return new Read(binary, comparison, inputs.reading(rules),
+                InputReads.ofWhatIsDeclared(roots, inputs.declared(rules)), rule.value());
+    }
+
+    /**
+     * A case of an enumeration held equal to the value, or not, draws no line on the order the
+     * cases are declared in, whichever reader asks: the one reading of a comparison as a number
+     * places nothing, and no rule that reads it states a relation on the order.
+     *
+     * <p>An order relation on the cases is a line on that order.
+     */
+    @Test
+    void aCaseHeldEqualToAnEnumerationsValueIsNoLineOnItsOrder() {
+        for (String clause : List.of("g == Mid", "g /= Mid", "Mid == g")) {
+            Read read = read("(g: Grade)", clause);
+            assertNull(ComparedNumber.lineOf(read.comparison().stated(), read.reading(),
+                    read.reads()), () -> clause + " places nothing on the order");
+            List<Proposition> stated = Pullback.byEachRule(read.comparison().stated(),
+                    read.reads(), read.reading());
+            assertTrue(stated.stream().anyMatch(Proposition.InCases.class::isInstance),
+                    () -> clause + " is read as which case g is: " + stated);
+            assertTrue(stated.stream().noneMatch(Proposition.Compared.class::isInstance),
+                    () -> clause + " is read by no rule as a relation on the order: " + stated);
+        }
+        Read ordered = read("(g: Grade)", "g < Mid");
+        assertNotNull(ComparedNumber.lineOf(ordered.comparison().stated(), ordered.reading(),
+                ordered.reads()), "an order relation on the cases is a line on that order");
     }
 
     /** The same over two {@code Int} positions, which is what most of the table is written over. */
@@ -221,8 +265,9 @@ class WhatAComparisonIsARuleAboutTest {
                 "and one against itself cuts nothing, on that order like any other");
         assertEquals("AcrossPositions", named(about("(g: Grade, h: Grade)", "g <= h")),
                 "an enumeration's cases are ordered by the sum they are of");
-        assertEquals("AtAPosition", named(about("(g: Grade)", "g == Mid")),
-                "and a case written against one of them is a value of that position");
+        assertEquals("StatesNoRelation", named(about("(g: Grade)", "g == Mid")),
+                "and a case held equal to one of them asks which case it is, and nothing of the"
+                        + " order");
         assertEquals("AtAPosition", named(about("(s: String)", "s == \"m\"")),
                 "a string against a written string is read where the arithmetic cannot go");
     }
@@ -237,10 +282,27 @@ class WhatAComparisonIsARuleAboutTest {
     @Test
     void aLineTheQuantityDoesNotReachIsUnderstoodRatherThanUnread() {
         assertEquals("OutsideTheDomain",
-                named(about("(xs: List<Int>)", "List.length(xs) <= -1")),
-                "a length below zero is a line the quantity never reaches");
+                named(about("(xs: List<Int>)", "List.length(xs) <= -2")),
+                "a line between two lengths below zero is one the quantity never reaches");
         assertEquals("AtAPosition", named(about("(xs: List<Int>)", "List.length(xs) <= 3")),
                 "and the same rule at a length it does reach cuts the position");
+    }
+
+    /**
+     * A line at the very start of what the quantity takes is a line, however the rule is spelled.
+     *
+     * <p>{@code List.length(xs) <= -1} and {@code List.length(xs) < 0} draw one line, between minus
+     * one and nought. No length satisfies either, and an empty list stands at the line on its far
+     * side: a row there shows which way the rule went, and catches the rule written
+     * {@code <= 0}. Which is the answer a guard the declarations never satisfy gets wherever the
+     * number it wrote falls.
+     */
+    @Test
+    void aLineAtTheStartOfWhatTheQuantityTakesIsALineHoweverItIsSpelled() {
+        assertEquals("AtAPosition", named(about("(xs: List<Int>)", "List.length(xs) <= -1")),
+                "the empty list is on the far side of the line");
+        assertEquals("AtAPosition", named(about("(xs: List<Int>)", "List.length(xs) < 0")),
+                "and the same line, spelled with the number on its far side, is the same line");
     }
 
     /** What the rule does to the quantity it cuts. */

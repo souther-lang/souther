@@ -5,6 +5,7 @@ import souther.compiler.core.Contract;
 import souther.compiler.check.BehaviorRequirement;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
+import souther.compiler.check.SumCases;
 import souther.compiler.check.Symbols;
 import souther.compiler.observe.FieldTypes;
 import souther.compiler.source.SourceId;
@@ -41,8 +42,8 @@ public final class ExampleExecution {
 
     private final Prepared prepared;
     private final Symbols symbols;
-    /** What the declarations the rows name say about themselves. */
-    private final souther.compiler.check.PublishedDeclarations published;
+    /** What a value of each sum the rows name can be. */
+    private final SumCases sums;
     /** Which form each of those declarations was written in. */
     private final souther.compiler.check.DeclarationKinds kinds;
     private final FieldTypes fields;
@@ -54,7 +55,7 @@ public final class ExampleExecution {
     private final Map<String, ExampleExecution> declaring;
 
     public ExampleExecution(Prepared prepared, Symbols symbols,
-                            souther.compiler.check.PublishedDeclarations published,
+                            SumCases sums,
                             souther.compiler.check.DeclarationKinds kinds,
                             FieldTypes fields,
                             Map<ValueName.Behavior, Sig> signatures,
@@ -65,7 +66,7 @@ public final class ExampleExecution {
                             Map<String, ExampleExecution> declaring) {
         this.prepared = prepared;
         this.symbols = symbols;
-        this.published = published;
+        this.sums = sums;
         this.kinds = kinds;
         this.fields = fields;
         this.declaring = declaring;
@@ -102,9 +103,9 @@ public final class ExampleExecution {
         return symbols;
     }
 
-    /** What the declarations the rows name say about themselves. */
-    public souther.compiler.check.PublishedDeclarations published() {
-        return published;
+    /** What a value of each sum the rows name can be. */
+    public SumCases sums() {
+        return sums;
     }
 
     /** Which form each of those declarations was written in. */

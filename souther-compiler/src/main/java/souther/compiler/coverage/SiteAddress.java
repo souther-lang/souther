@@ -3,9 +3,9 @@ package souther.compiler.coverage;
 /**
  * What one number the instrumentation hands out is an address of.
  *
- * <p>Two families under one numbering. An arm and a comparison are both places a run is recorded at
+ * <p>Two families under one numbering. An arm and a condition are both places a run is recorded at
  * and both take a number from the one counter, because what records a run is one set of numbers; a
- * number written for an arm and a number written for a comparison are told apart by nothing in the
+ * number written for an arm and a number written for a condition are told apart by nothing in the
  * number itself. So the numbering says which each was issued to, and says it here.
  *
  * <p>The whole of what a number means, so that a numbering can be held against another one. A number
@@ -35,19 +35,19 @@ public sealed interface SiteAddress {
         }
     }
 
-    /** Where a run through one comparison is recorded. A comparison is one construct, so there is
-     *  no part: what a fork holds several of is arms. */
-    record Comparison(NodeAddress comparison) implements SiteAddress {
+    /** Where the way one condition came out is recorded: the node whose value is the condition. A
+     *  condition is one value, so there is no part: what a fork holds several of is arms. */
+    record ConditionOutcome(NodeAddress at) implements SiteAddress {
 
-        public Comparison {
-            if (comparison == null) {
-                throw new IllegalArgumentException("a comparison is one written somewhere");
+        public ConditionOutcome {
+            if (at == null) {
+                throw new IllegalArgumentException("a condition is one computed somewhere");
             }
         }
 
         @Override
         public String toString() {
-            return "comparison at " + comparison;
+            return "condition at " + at;
         }
     }
 }

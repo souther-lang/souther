@@ -1,0 +1,27 @@
+// What a way says about a position is what all of its decisions admit there together.
+//
+// Inside the arm for A or B, the arm for B or C is taken by B alone, and the one for A or D by A
+// alone. C and D both go the outer way round and are never told apart; read one decision at a time,
+// the inner arms would split them.
+//
+// told apart at k: 3 groups of 4
+module example.together
+
+data A
+data B
+data C
+data D
+data Kind = A | B | C | D
+
+data Ok = { n: Int }
+
+behavior judge : (k: Kind) -> Ok
+    constructs Ok
+
+let judge (k) =
+    match k with
+        | A | B ->
+            match k with
+                | B | C -> Ok { n = 1 }
+                | A | D -> Ok { n = 2 }
+        | C | D -> Ok { n = 3 }

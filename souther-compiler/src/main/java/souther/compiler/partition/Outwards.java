@@ -9,10 +9,10 @@ import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.PlacesApart;
 import souther.compiler.values.ValueSet;
-import souther.exact.ExactFailure;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * The values of a run tried in order, from one of them outward.
@@ -175,7 +175,15 @@ final class Outwards {
         // Unless the run is that one place, and then there is nothing further for a way of naming
         // one to reach. Said the other way, a run bounded to a single value would have this
         // compiler reporting a population it writes some of — of a walk that wrote all of it.
+        //
+        // And unless the narrowings name the places outright: a set of finitely many values is
+        // every place there is to try, with no step needed to reach the next, so they are walked
+        // as an order that counts is.
         if (!carrier.counts()) {
+            List<Place> named = carrier.everyPlaceOf(admits);
+            if (named != null) {
+                return namedFrom(first, named, carrier, within, howManyTaken, admits, apart);
+            }
             return new Walked(List.of(first), onePlace(within, first)
                     ? Ended.HAVING_TRIED_THEM_ALL : Ended.WITH_NO_STEP_TO_TAKE);
         }
@@ -221,15 +229,21 @@ final class Outwards {
             }
             above = steppedAbove.orNull();
             below = steppedBelow.orNull();
-            Place[] neighbours;
-            try {
-                neighbours = new Place[] {
-                        onTheCarrier(above, carrier), onTheCarrier(below, carrier)};
-            } catch (ExactFailure failure) {
+            ExactAnswer<Optional<Place>> placeAbove = onTheCarrier(above, carrier);
+            ExactAnswer<Optional<Place>> placeBelow = onTheCarrier(below, carrier);
+            if (placeAbove instanceof ExactAnswer.Unheld<Optional<Place>> unheldAbove) {
                 ended = Ended.AT_A_PLACE_IT_COULD_NOT_HOLD;
-                unheld = UnheldNumber.of(failure);
+                unheld = unheldAbove.why();
                 break;
             }
+            if (placeBelow instanceof ExactAnswer.Unheld<Optional<Place>> unheldBelow) {
+                ended = Ended.AT_A_PLACE_IT_COULD_NOT_HOLD;
+                unheld = unheldBelow.why();
+                break;
+            }
+            Place[] neighbours = {
+                    ((ExactAnswer.Held<Optional<Place>>) placeAbove).value().orElse(null),
+                    ((ExactAnswer.Held<Optional<Place>>) placeBelow).value().orElse(null)};
             boolean took = false;
             for (Place next : neighbours) {
                 if (next == null || !within.admits(next)) {
@@ -268,10 +282,34 @@ final class Outwards {
         return new Walked(out, ended, unheld);
     }
 
-    /** The place a number is on the carrier, or null where the carrier holds none there. */
-    private static Place onTheCarrier(ExactRatio at, Carrier carrier) {
-        Count count = Count.at(at);
-        return count == null ? null : carrier.onTheGrid(count);
+    /** The place a number is on the carrier, empty where the carrier holds none there, and unheld
+     *  where the host had no room to write the count out. */
+    private static ExactAnswer<Optional<Place>> onTheCarrier(ExactRatio at, Carrier carrier) {
+        return Count.written(at).map(count -> count.map(carrier::onTheGrid));
+    }
+
+    /**
+     * {@code first}, then each of {@code named} the run holds and the narrowings take in, as many
+     * as {@code howManyTaken}.
+     *
+     * <p>Every one of them where that many are left, since the set is every place there is; the
+     * figure where a place it names was left untaken.
+     */
+    private static Walked namedFrom(Place first, List<Place> named, Carrier carrier,
+                                    NumericDomain.Bounds within, int howManyTaken,
+                                    ValueSet admits, PlacesApart apart) {
+        List<Place> out = new ArrayList<>();
+        out.add(first);
+        for (Place each : named) {
+            if (each.sameAs(first) || !takenIn(each, carrier, within, admits, apart)) {
+                continue;
+            }
+            if (out.size() == howManyTaken) {
+                return new Walked(out, Ended.AT_THE_FIGURE_OF_CANDIDATES);
+            }
+            out.add(each);
+        }
+        return new Walked(out, Ended.HAVING_TRIED_THEM_ALL);
     }
 
     /**

@@ -219,6 +219,13 @@ class OnlyAProjectionSaysHowFarAMeasurementGotTest {
                                 + "Lsouther/compiler/query/InteractionEvidence$OfOneMeeting;"
                                 + "Lsouther/compiler/query/About;)"
                                 + "Lsouther/compiler/query/Adequacy$Finding;",
+                        // And the reading of one rewrite of a body, for the same reason: another
+                        // rewrite left open bears on that one and not on this.
+                        "souther.compiler.query.Adequacy$Finding#by("
+                                + "Lsouther/compiler/query/FindingSubject;"
+                                + "Lsouther/compiler/query/ReplacementEvidence$OfOneRewrite;"
+                                + "Lsouther/compiler/query/About;)"
+                                + "Lsouther/compiler/query/Adequacy$Finding;",
                         // And the walk over the rows at one line, which says which other lines
                         // those rows leave standing beside it. What it went without is asymmetric —
                         // a row read leaves fewer lines standing and never more — so it names one
@@ -227,8 +234,19 @@ class OnlyAProjectionSaysHowFarAMeasurementGotTest {
                         // saying it of a value that may have been asked nothing.
                         "souther.compiler.query.Adequacy$Finding#by("
                                 + "Lsouther/compiler/query/FindingSubject;"
-                                + "Lsouther/compiler/query/AnotherLineTheRowsAllow$OneDoes;"
+                                + "Lsouther/compiler/query/AnotherLineTheRowsAllow$Stands;"
                                 + "Lsouther/compiler/query/About;)"
+                                + "Lsouther/compiler/query/Adequacy$Finding;",
+                        // And a measure together with what is open about the obligation itself,
+                        // for an obligation at classes of positions. Two things found it and each
+                        // is taken whole: what the measurement went without is its own, and
+                        // whether a row can be written at the classes is the body's — which is
+                        // what is open about the obligation and not what the measure went without.
+                        "souther.compiler.query.Adequacy$Finding#by("
+                                + "Ljava/lang/String;"
+                                + "Lsouther/compiler/query/Measure;"
+                                + "Lsouther/compiler/query/About;"
+                                + "Lsouther/compiler/publish/CanonicalSelection;)"
                                 + "Lsouther/compiler/query/Adequacy$Finding;",
                         "souther.compiler.query.Adequacy$Finding#noticed("
                                 + "Lsouther/compiler/query/FindingSubject;"

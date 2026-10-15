@@ -1,0 +1,38 @@
+// Two closures over one list, one inside the other, each matching what it was handed: a way down
+// both is about one element or two, and is taken either way.
+//
+// Inside the outer closure's `North` arm the inner closure runs over the same list. A way down the
+// outer `North` and the inner `South` asks a `North` and a `South` of the list, which two elements
+// are and one is not; read as one element it would be a way no value takes, and the `match` on `f`
+// standing only on it would be one no run makes. Which it is, is not read, so neither arm on it is
+// put to the element's classes — and the way stays, with `f` told apart on it.
+//
+// The outer arms alone are one application each, and tell the element's cases apart.
+//
+// told apart at f: 2 groups of 2
+// told apart at xs[*]: 2 groups of 2
+module example.twoclosuresoverone
+
+data Yes
+data No
+data Flag = Yes | No
+
+data North
+data South
+data Region = North | South
+
+data Ok = { n: Int }
+
+behavior judge : (f: Flag, xs: List<Region>) -> Ok
+    constructs Ok
+
+let judge (f, xs) = {
+    guard List.all(r -> match r with
+        | North -> List.all(s -> match s with
+            | South -> (match f with
+                | Yes -> true
+                | No -> false)
+            | North -> true, xs)
+        | South -> true, xs) else Ok { n = 1 }
+    Ok { n = 2 }
+}

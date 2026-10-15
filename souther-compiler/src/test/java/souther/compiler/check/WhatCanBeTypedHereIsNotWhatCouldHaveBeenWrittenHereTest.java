@@ -5,6 +5,7 @@ import souther.compiler.types.ValueName;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -29,9 +30,12 @@ class WhatCanBeTypedHereIsNotWhatCouldHaveBeenWrittenHereTest {
 
     private static final Type FOLD = Type.fn(java.util.List.of(Type.INT), Type.INT);
 
+    private static final StandingSignature STANDING_FOLD =
+            new StandingSignature(List.of("n"), new Type.FnOf(List.of(Type.INT), Type.INT));
+
     /** A scope as a body reaching the library's recursion is read under. */
     private static Scope standingOnTheFold() {
-        return Scope.NONE.reaching(Map.of("List.foldFrom", FOLD));
+        return Scope.NONE.reaching(Map.of("List.foldFrom", STANDING_FOLD));
     }
 
     @Test
@@ -67,7 +71,7 @@ class WhatCanBeTypedHereIsNotWhatCouldHaveBeenWrittenHereTest {
     @Test
     void theTwoAreCarriedTogether() {
         Scope scope = Scope.NONE.naming(Map.of("settle", FOLD))
-                .reaching(Map.of("List.foldFrom", FOLD));
+                .reaching(Map.of("List.foldFrom", STANDING_FOLD));
 
         assertNotNull(scope.of(new ValueName.Behavior("m", "settle"), "settle"));
         assertNotNull(scope.of(ValueName.Stdlib.operation("List", "foldFrom"), "List.foldFrom"));

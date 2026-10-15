@@ -1,20 +1,32 @@
 package souther.compiler.coverage;
 
+import souther.compiler.core.ACopyOfAnApplication;
 import souther.compiler.core.Core;
 import souther.compiler.diag.Citation;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.observe.WorkFigure;
+import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.ConstructOccurrence;
+import souther.compiler.types.ExpansionSite;
+import souther.compiler.types.ModelOccurrence;
+import souther.compiler.types.OccurrenceLineage;
 import souther.compiler.types.SourceConstruct;
 import souther.compiler.types.SourceConstructOrigin;
+import souther.compiler.types.Type;
+import souther.compiler.types.ValueName;
 import souther.compiler.types.WrittenOwner;
 
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Optional;
 import java.util.Map;
+import java.util.SequencedMap;
+import java.util.Set;
 
 /**
  * The arms of a behavior's body that an {@code example} row can be in or not in.
@@ -43,8 +55,11 @@ import java.util.Map;
  * question about the source out of the tree that runs, which is how a comprehension came to be
  * reported as a {@code guard} with a {@code then} arm.
  *
- * <p>Helper bodies are not walked: a non-recursive helper is already inlined into the body that uses it,
- * and a recursive one is a shared method rather than a fork in any one behavior.
+ * <p>A non-recursive helper is already inlined into the body that uses it. A recursive one is a shared
+ * method rather than a fork in any one behavior, so its arms are no behavior's to cover; its
+ * comparisons are numbered all the same, owed by nobody, because which caller's rule one of them is
+ * is something only that caller's reading can say — and it can say it only of a run that was
+ * recorded there.
  */
 public final class CoverageSites {
 
@@ -114,6 +129,28 @@ public final class CoverageSites {
      * nothing ran, which no count can be told apart from a real one.
      */
     public static final int NO_SITE = -1;
+
+    /**
+     * How many nodes a fork's siblings may add to it, counted as every sibling carried in every
+     * other arm.
+     *
+     * <p>A bound on what measuring costs, not a rule of the language and not what keeps the classes
+     * within the JVM's limits — a class past those is written again without the siblings it carried
+     * ({@code Backend}). Carrying grows with the square of a fork's arms, and every measured build
+     * of the module writes and loads what is carried, so a fork over this carries none and says so
+     * of each sibling; one under it carries them all.
+     */
+    static final int MOST_NODES_A_FORK_CARRIES = 4000;
+
+    /**
+     * How many answers of one arm or body a proof that two programs are one reads before it gives
+     * up.
+     *
+     * <p>Giving up leaves the proof unmade, which is what every proof this does not attempt already
+     * is: the rewrite is asked about and looked for like any other. So this decides how much of the
+     * source is read to save a search, and never what the measure comes to.
+     */
+    static final int MOST_ANSWERS_A_PROOF_READS = 64;
 
     /**
      * What a row is owed for, which is not the same as where one runs.
@@ -284,7 +321,7 @@ public final class CoverageSites {
      * of these would be counting a place its denominator was never about.
      */
     public record ComparisonSite(String body, SourceOutcome.Compared outcome, Citation at,
-                                 ComparisonEmissionSite index, int ordinal, Obligation obligation)
+                                 ConditionOutcomeSite index, int ordinal, Obligation obligation)
             implements Site {
 
         public ComparisonSite {
@@ -295,6 +332,35 @@ public final class CoverageSites {
         public ComparisonSite ownedBy(String behavior) {
             return new ComparisonSite(body, outcome, at, index, ordinal,
                     obligation.ownedBy(behavior));
+        }
+    }
+
+    /**
+     * Where a run records which way one application of one of the language's operations answered,
+     * where the application answers a truth and the model states it.
+     *
+     * <p>Not a {@link Site}. A site is a place a row is owed for, and nothing is owed for an
+     * application answering one way: a rule that turns on it is owed, and the rule says so. This is
+     * the place a run through that rule is seen at, which a comparison has too and an arm is.
+     *
+     * @param body        the body the code that answers is physically in, as for a {@link Site}
+     * @param application which application, in the copy of the body it stands in. What a reading
+     *                    of the rules names it by is the construct of the model it is
+     *                    ({@link ModelOccurrence#statedAt}), which this is one materialisation of
+     * @param writtenAt   where the application is written, for a reader sent to it. Not where its
+     *                    answer is worked out: an operation the library implements in the language
+     *                    answers inside its own code, and a place there is a place in the library
+     * @param index       where the run records it. Shared with the comparison the answering node is,
+     *                    where it is one
+     */
+    public record AnswerSite(String body, ConstructOccurrence application, Citation writtenAt,
+                             ConditionOutcomeSite index) {
+
+        public AnswerSite {
+            if (body == null || application == null || writtenAt == null || index == null) {
+                throw new IllegalArgumentException("where an application's answer is recorded is"
+                        + " one application, in one body, at one place");
+            }
         }
     }
 
@@ -347,14 +413,28 @@ public final class CoverageSites {
         private final List<Site> sites;
         private final List<GuardRef> guards;
         private final IdentityHashMap<Core, int[]> byNode;
-        private final Map<ConstructOccurrence, ComparisonEmissionSite> byComparison;
+        private final Map<ConstructOccurrence, ConditionOutcomeSite> byComparison;
         private final IdentityHashMap<Core, ControlPlace.Arm[]> armsByNode;
+        /** Where each application the model states answers, and the node it answers at, in the
+         *  order the walk met them. */
+        private final List<AnsweredAt> answered;
+        /** The same, by the node it answers at. By identity for the reason {@code byNode} is. */
+        private final IdentityHashMap<Core, AnswerSite> answersByNode;
+        /** The same, by the application. */
+        private final Map<ConstructOccurrence, AnswerSite> answersByApplication;
         private final java.util.Set<Core> mayRepeat;
         /** The values emitted as a method of their own, and which behavior calls which. */
         private final Methods methods;
         private final Map<Integer, Citation> reachedAt;
         private final ComparisonCatalog comparisons;
         private final SiteNumbering numbering;
+        /** For each fork, per arm, the parts of the siblings the classes carry in that arm. */
+        private final IdentityHashMap<Core, int[][]> carried;
+        private final ArmReplacements replacements;
+        /** For each body, where it could answer other than one value. */
+        private final Map<String, ArmReplacements.Differs> oneValue;
+        /** What every arm the walk met means, whether or not a run through it is recorded. */
+        private final Map<AsWritten, SourceOutcome.Arm> armsAsWritten;
 
         /**
          * Made where the bodies are walked, and nowhere a caller can reach.
@@ -371,13 +451,18 @@ public final class CoverageSites {
          * bodies that no source produces, which is the only other caller the package allows.
          */
         Plan(List<Site> sites, List<GuardRef> guards, IdentityHashMap<Core, int[]> byNode,
-             Map<ConstructOccurrence, ComparisonEmissionSite> byComparison,
+             Map<ConstructOccurrence, ConditionOutcomeSite> byComparison,
              IdentityHashMap<Core, ControlPlace.Arm[]> armsByNode,
+             List<AnsweredAt> answered,
              java.util.Set<Core> mayRepeat,
              Map<Integer, Citation> reachedAt,
              ComparisonCatalog comparisons,
              SiteNumbering numbering,
-             Methods methods) {
+             Methods methods,
+             IdentityHashMap<Core, int[][]> carried,
+             ArmReplacements replacements,
+             Map<String, ArmReplacements.Differs> oneValue,
+             Map<AsWritten, SourceOutcome.Arm> armsAsWritten) {
             // Half of what a numbering could get wrong is the key's own answer now: an occurrence
             // names a comparison and nothing else, so there is no number to put on an `&&` or on
             // arithmetic, which is what would have had the emitter copy half a `long` off the
@@ -393,13 +478,23 @@ public final class CoverageSites {
                 requireHeld(numbered, comparisons, "numbered");
             }
             // And the numbering says what each number it handed out addresses, so there is one
-            // address per site and it is at the site's own number. A plan is put together field by
-            // field, so the two can be handed over out of step — and a reader asking what a hit
+            // address per place and it is at the place's own number. A plan is put together field
+            // by field, so the two can be handed over out of step — and a reader asking what a hit
             // means would be told about a place the number was never issued to, or about none.
-            if (numbering.identity().byNumber().size() != sites.size()) {
-                throw new IllegalArgumentException("this plan numbered " + sites.size()
+            //
+            // The places are the sites and the answers no comparison was already recorded at: an
+            // answer at a comparison's node is recorded at the comparison's number.
+            Set<RunSite> addressed = new HashSet<>();
+            for (Site site : sites) {
+                addressed.add(site.index());
+            }
+            for (AnsweredAt answer : answered) {
+                addressed.add(answer.site().index());
+            }
+            if (numbering.identity().byNumber().size() != addressed.size()) {
+                throw new IllegalArgumentException("this plan numbered " + addressed.size()
                         + " places and says what " + numbering.identity().byNumber().size()
-                        + " of them are; the sites and the addresses are one answer or they are"
+                        + " of them are; the places and the addresses are one answer or they are"
                         + " two");
             }
             this.sites = sites;
@@ -407,11 +502,92 @@ public final class CoverageSites {
             this.byNode = byNode;
             this.byComparison = byComparison;
             this.armsByNode = armsByNode;
+            this.answered = List.copyOf(answered);
+            this.answersByNode = new IdentityHashMap<>();
+            this.answersByApplication = new LinkedHashMap<>();
+            for (AnsweredAt answer : this.answered) {
+                // One application per node. Two the model states working their answers out at one
+                // node would be one place a run is seen at answering for two constructs, and filed
+                // by node the second would take the first's place without anything saying so.
+                AnswerSite before = this.answersByNode.put(answer.node(), answer.site());
+                if (before != null) {
+                    throw new IllegalArgumentException("the applications " + before.application()
+                            + " and " + answer.site().application() + " answer at one node");
+                }
+                this.answersByApplication.put(answer.site().application(), answer.site());
+            }
             this.mayRepeat = mayRepeat;
             this.reachedAt = reachedAt;
             this.comparisons = comparisons;
             this.numbering = numbering;
             this.methods = methods;
+            this.carried = carried;
+            this.replacements = replacements;
+            this.oneValue = Map.copyOf(oneValue);
+            this.armsAsWritten = Map.copyOf(armsAsWritten);
+        }
+
+        /**
+         * The parts of the siblings the classes carry in arm {@code part} of {@code node}, in the
+         * order the emitter puts them; empty where they carry none.
+         *
+         * <p>What the emitter asks at each arm it puts a switch in front of. Asked of the plan and
+         * not worked out where the code is written, because a reader of a run is told the same thing
+         * by {@link #replacements}, and two answers to which siblings are there would be a run asking
+         * for one the classes do not have.
+         */
+        public int[] carriedAt(Core node, int part) {
+            int[][] arms = carried.get(node);
+            return arms == null || arms[part] == null ? new int[0] : arms[part].clone();
+        }
+
+        /** Which other arm's expression each numbered arm can be run with in its place. */
+        public ArmReplacements replacements() {
+            return replacements;
+        }
+
+        /**
+         * Where {@code body} could answer other than one value, as the source says: the ways to an
+         * answer that reads what the body is given, or that is not the one the others are. A body
+         * whose every such way the model's rules prove nothing goes down answers one value
+         * whatever it is given, which no row could tell from a rewrite answering that value.
+         *
+         * <p>Read as always where nothing was read of the body, which is what a proof of nothing
+         * is.
+         */
+        public ArmReplacements.Differs fromOneValue(String body) {
+            return oneValue.getOrDefault(body, ArmReplacements.Differs.ALWAYS);
+        }
+
+        Map<String, ArmReplacements.Differs> oneValue() {
+            return oneValue;
+        }
+
+        /**
+         * What arm {@code arm} of its fork means, whether or not a run through it is recorded.
+         *
+         * <p>Apart from the sites. A sibling an arm is rewritten as is a way through the fork the
+         * author wrote, and it may be one nothing records — an arm no row could reach has no site
+         * — while a report about the rewrite still has to say which arm it is.
+         *
+         * @throws IllegalArgumentException where the walk met no such arm: whatever names it was
+         *                                  made from some other plan's bodies
+         */
+        public SourceOutcome.Arm outcomeOf(AsWritten arm) {
+            SourceOutcome.Arm outcome = armsAsWritten.get(arm);
+            if (outcome == null) {
+                throw new IllegalArgumentException("this plan met no arm " + arm.part() + " of "
+                        + arm.origin());
+            }
+            return outcome;
+        }
+
+        Map<AsWritten, SourceOutcome.Arm> armsAsWritten() {
+            return armsAsWritten;
+        }
+
+        IdentityHashMap<Core, int[][]> carried() {
+            return carried;
         }
 
         /** Every place of this module, in the order they were numbered. */
@@ -460,12 +636,58 @@ public final class CoverageSites {
             return reachedAt;
         }
 
-        Map<ConstructOccurrence, ComparisonEmissionSite> byComparison() {
+        Map<ConstructOccurrence, ConditionOutcomeSite> byComparison() {
             return byComparison;
         }
 
         IdentityHashMap<Core, ControlPlace.Arm[]> armsByNode() {
             return armsByNode;
+        }
+
+        IdentityHashMap<Core, AnswerSite> answersByNode() {
+            return answersByNode;
+        }
+
+        List<AnsweredAt> answered() {
+            return answered;
+        }
+
+        /**
+         * Where the answer {@code node} works out is recorded, or empty where it is not where an
+         * application the model states answers.
+         *
+         * <p>Asked of the node by the emitter, which is walking the nodes. Absent is ordinary: most
+         * nodes are nothing of the kind.
+         */
+        public Optional<ConditionOutcomeSite> answerSiteOf(Core node) {
+            AnswerSite answer = answersByNode.get(node);
+            return answer == null ? Optional.empty() : Optional.of(answer.index());
+        }
+
+        /**
+         * Which application answers at {@code node}, in the copy of the body it stands in, or empty
+         * where none the model states does.
+         *
+         * <p>The same question as {@link #answerSiteOf} answered with the construct rather than the
+         * place, for a reader that files what it found about the node under what a rule names.
+         */
+        public Optional<ConstructOccurrence> applicationAnsweringAt(Core node) {
+            AnswerSite answer = answersByNode.get(node);
+            return answer == null ? Optional.empty() : Optional.of(answer.application());
+        }
+
+        /** Every place an answer is recorded at, which is what an emitter is held to having
+         *  written, in the order the walk met them. */
+        public List<AnswerSite> answers() {
+            return answered.stream().map(AnsweredAt::site).toList();
+        }
+
+        /** The places an answer of {@code behavior}'s is recorded at, in its own body and in the
+         *  values it calls, in the order the walk met them. */
+        public List<AnswerSite> answers(String behavior) {
+            return answered.stream().map(AnsweredAt::site)
+                    .filter(answer -> methods.owes(behavior, answer.body()))
+                    .toList();
         }
 
         java.util.Set<Core> mayRepeat() {
@@ -476,6 +698,21 @@ public final class CoverageSites {
          *  made here in this package, so what holds a way into these trees is not handed out. */
         Methods methods() {
             return methods;
+        }
+
+        /**
+         * Whether a run of the behavior whose body is {@code emitted} makes one call of
+         * {@code helper} from outside the helper's own method, once: one call written, in the
+         * behavior's own body, at a place one run passes once.
+         *
+         * <p>What says whose a run recorded in the helper's method is. Where this holds, a run
+         * recorded there is that call's. Anything less — two calls written, a call in a value's
+         * method run once per call of the value, a call inside a closure applied once per element
+         * — and it is any of the calls the run made.
+         */
+        public boolean runsOnce(ValueName.Helper helper, Core emitted) {
+            Core.Call only = methods.onlyCallOf(helper, emitted);
+            return only != null && !mayRepeat(only);
         }
 
         /** What this plan is a numbering of, as two builds can be held against each other by. */
@@ -493,10 +730,11 @@ public final class CoverageSites {
         }
 
         public static final Plan NONE = new Plan(List.of(), List.of(), new IdentityHashMap<>(),
-                new LinkedHashMap<>(), new IdentityHashMap<>(),
-                java.util.Set.of(), new LinkedHashMap<>(),
+                new LinkedHashMap<>(), new IdentityHashMap<>(), List.of(),
+                Set.of(), new LinkedHashMap<>(),
                 ComparisonCatalog.of(ModuleBodies.none()),
-                SiteNumbering.of(NumberingIdentity.forThePlanOfNothing()), Methods.NONE);
+                SiteNumbering.of(NumberingIdentity.forThePlanOfNothing()), Methods.NONE,
+                new IdentityHashMap<>(), ArmReplacements.NONE, Map.of(), Map.of());
 
         /**
          * Whether one run of the behavior can pass {@code node} more than once.
@@ -528,16 +766,19 @@ public final class CoverageSites {
 
         /**
          * Which way {@code which} coming out {@code result} is, or empty where this plan numbered
-         * no comparison there.
+         * nothing there. {@code which} is a comparison of these bodies, or an application whose
+         * answer this plan records.
          *
-         * <p>The only maker of one of these, and what pairs the comparison with the address a run
+         * <p>The only maker of one of these, and what pairs the construct with the address a run
          * through it is recorded at. The two are separate questions and one plan answers both, so a
-         * caller never holds an outcome whose site was issued for some other comparison.
+         * caller never holds an outcome whose site was issued for some other construct.
          */
-        public java.util.Optional<ControlPlace.Outcome> outcomeOf(
-                ConstructOccurrence which, boolean result) {
-            return emissionSiteOf(which)
-                    .map(site -> new ControlPlace.Outcome(which, site, result));
+        public Optional<ControlPlace.Outcome> outcomeOf(ConstructOccurrence which,
+                                                        boolean result) {
+            AnswerSite answered = answersByApplication.get(which);
+            Optional<ConditionOutcomeSite> at = answered != null
+                    ? Optional.of(answered.index()) : emissionSiteOf(which);
+            return at.map(site -> new ControlPlace.Outcome(which, site, result));
         }
 
         /**
@@ -547,9 +788,13 @@ public final class CoverageSites {
          * has arms, and control points for them, and no site at all — so a reader asking this to
          * find out whether there is anything to be about would skip exactly the bodies a claim is
          * made in.
+         *
+         * <p>A place an application's answer is recorded at is one such site, beside the arms and
+         * comparisons: a body whose only condition is what {@code List.any(x -> x, xs)} answers has
+         * no arm and no comparison of its own, and its answer is still recorded.
          */
         public boolean hasNoProbes() {
-            return sites.isEmpty();
+            return sites.isEmpty() && answersByNode.isEmpty();
         }
 
         /** The probe numbers of {@code node}'s arms, in the order the emitter emits them, or null
@@ -570,9 +815,8 @@ public final class CoverageSites {
          * later and from more: a comparison the partition reads nothing off keeps its site and nobody
          * asks about it. The emitter walks comparisons in both cases and asks this of each.
          */
-        public java.util.Optional<ComparisonEmissionSite> emissionSiteOf(
-                ConstructOccurrence which) {
-            return java.util.Optional.ofNullable(byComparison.get(ofThisPlan(which)));
+        public Optional<ConditionOutcomeSite> emissionSiteOf(ConstructOccurrence which) {
+            return Optional.ofNullable(byComparison.get(ofThisPlan(which)));
         }
 
         /**
@@ -697,6 +941,13 @@ public final class CoverageSites {
             executable.put(method.getKey(), ExecutableIdentity.of(method.getValue(),
                     Binders.of(of.module(), walk.places)));
         }
+        // And the helpers a run passes through, last, for the same reason: their comparisons alone,
+        // which no behavior owes and a caller's reading holds its rows to.
+        for (Map.Entry<String, Core> passage : of.passages().entrySet()) {
+            walk.passage(passage.getKey(), passage.getValue());
+            executable.put(passage.getKey(), ExecutableIdentity.of(passage.getValue(),
+                    Binders.of(of.module(), walk.places)));
+        }
         return new Walked(comparisons, walk, executable, Methods.of(of));
     }
 
@@ -721,7 +972,7 @@ public final class CoverageSites {
                         arm.obligation());
                 case DraftComparisonSite compared -> new ComparisonSite(compared.behavior(),
                         compared.outcome(), compared.at(),
-                        numbering.comparison(compared.raw()), compared.ordinal(),
+                        numbering.outcome(compared.raw()), compared.ordinal(),
                         compared.obligation());
             });
         }
@@ -731,9 +982,9 @@ public final class CoverageSites {
                     armAt(numbering, draft.whereThen()), armAt(numbering, draft.whereElse()),
                     draft.at()));
         }
-        Map<ConstructOccurrence, ComparisonEmissionSite> byComparison = new LinkedHashMap<>();
+        Map<ConstructOccurrence, ConditionOutcomeSite> byComparison = new LinkedHashMap<>();
         walk.byComparison.forEach((which, raw) ->
-                byComparison.put(which, numbering.comparison(raw)));
+                byComparison.put(which, numbering.outcome(raw)));
         IdentityHashMap<Core, ControlPlace.Arm[]> armsByNode = new IdentityHashMap<>();
         walk.armsByNode.forEach((node, arms) -> {
             ControlPlace.Arm[] here = new ControlPlace.Arm[arms.length];
@@ -742,9 +993,32 @@ public final class CoverageSites {
             }
             armsByNode.put(node, here);
         });
+        List<AnsweredAt> answered = walk.answers.values().stream()
+                .map(draft -> new AnsweredAt(draft.node(), new AnswerSite(draft.body(),
+                        draft.application(), draft.writtenAt(),
+                        numbering.outcome(draft.raw()))))
+                .toList();
+        // The siblings with their ways read back as places, through the same issue as the arms
+        // above, so a way and an arm of the plan are one place and not two that agree.
+        SequencedMap<Integer, ArmReplacements.AtSite> bySite = new LinkedHashMap<>();
+        walk.replacements.forEach((site, draft) -> {
+            Map<Integer, ArmReplacements.Sibling> siblings = new LinkedHashMap<>();
+            draft.siblings().forEach((with, sibling) -> {
+                ArmReplacements.Differs differs = sibling.differs().placed(numbering, issued);
+                siblings.put(with, sibling.notCarried().isPresent()
+                        ? new ArmReplacements.Sibling.NotCarried(sibling.notCarried().get(),
+                                differs)
+                        : new ArmReplacements.Sibling.Carried(differs));
+            });
+            bySite.put(site, new ArmReplacements.AtSite(draft.fork(), draft.part(), siblings));
+        });
+        Map<String, ArmReplacements.Differs> oneValue = new LinkedHashMap<>();
+        walk.oneValue.forEach((body, differs) ->
+                oneValue.put(body, differs.placed(numbering, issued)));
         return new Plan(List.copyOf(sites), List.copyOf(guards), walk.byNode,
-                byComparison, armsByNode, walk.mayRepeat, Map.copyOf(walk.reachedAt),
-                comparisons, numbering, found.methods());
+                byComparison, armsByNode, answered, walk.mayRepeat, Map.copyOf(walk.reachedAt),
+                comparisons, numbering, found.methods(), walk.carried,
+                new ArmReplacements(bySite), oneValue, walk.armsAsWritten);
     }
 
     /** The arm {@code raw} addresses, where an arm was numbered at all. */
@@ -801,6 +1075,21 @@ public final class CoverageSites {
                                        int raw, int ordinal, Obligation obligation)
             implements DraftSite {}
 
+    /** Where one application's answer is recorded, as the walk has it, and the node it is
+     *  recorded at. */
+    private record DraftAnswer(Core node, String body, ConstructOccurrence application,
+                               Citation writtenAt, int raw) {}
+
+    /**
+     * One place an answer is recorded, and the node the emitter records it at.
+     *
+     * <p>A pair and not two maps, because the plan is handed these in the order the walk met them
+     * and asked for them two ways: by node, which is what the emitter walks, and in that order,
+     * which is what a reader listing them reads. Handed as a map by node, the order would be the
+     * order nodes hash in, which changes from run to run.
+     */
+    record AnsweredAt(Core node, AnswerSite site) {}
+
     /** One arm as the walk has it: which arm it is, and the number its place was given where the
      *  emitter records one. */
     private record DraftArm(ArmOccurrence arm, java.util.OptionalInt raw,
@@ -810,6 +1099,39 @@ public final class CoverageSites {
             return raw.isPresent();
         }
     }
+
+    /**
+     * Where two programs could answer differently, as the walk has it: each way a list of the arms
+     * it goes through, before those arms are places.
+     */
+    private record DraftDiffers(boolean always, List<List<DraftArm>> ways) {
+
+        static final DraftDiffers ALWAYS = new DraftDiffers(true, List.of());
+
+        ArmReplacements.Differs placed(SiteNumbering numbering,
+                                       IdentityHashMap<DraftArm, ControlPlace.Arm> issued) {
+            if (always) {
+                return ArmReplacements.Differs.ALWAYS;
+            }
+            List<List<ControlPlace.Arm>> out = new ArrayList<>();
+            for (List<DraftArm> way : ways) {
+                out.add(way.stream().map(arm -> placeOf(arm, numbering, issued)).toList());
+            }
+            return new ArmReplacements.Differs(false, out);
+        }
+    }
+
+    /** One sibling as the walk has it: why it is not carried, where it is not, and where it parts
+     *  from the arm. */
+    private record DraftSibling(Optional<ArmReplacements.Sibling.Why> notCarried,
+                                DraftDiffers differs) {}
+
+    /** One numbered arm and its siblings as the walk has them. */
+    private record DraftAtSite(SourceConstructOrigin fork, int part,
+                               SequencedMap<Integer, DraftSibling> siblings) {}
+
+    /** One answer a body can come to, and the arms on the way to it. */
+    private record Leaf(Core answer, List<DraftArm> way) {}
 
     /** The two arms of one {@code if} as the walk has them. */
     private record DraftGuard(String behavior, SourceConstructOrigin origin, DecidedBy decided,
@@ -827,7 +1149,28 @@ public final class CoverageSites {
         private final List<DraftGuard> guards = new ArrayList<>();
         private final IdentityHashMap<Core, int[]> byNode = new IdentityHashMap<>();
         private final Map<ConstructOccurrence, Integer> byComparison = new LinkedHashMap<>();
+        /** Where the answer of each application of an operation the model states is recorded, by
+         *  the application, in the order the walk met them. */
+        private final Map<ConstructOccurrence, DraftAnswer> answers = new LinkedHashMap<>();
+        /** The copy the node the walk is at stands in, as the nearest node above it that says. */
+        private OccurrenceLineage standingIn = OccurrenceLineage.ORIGINAL;
         private final IdentityHashMap<Core, DraftArm[]> armsByNode = new IdentityHashMap<>();
+        private final IdentityHashMap<Core, int[][]> carried = new IdentityHashMap<>();
+        private final SequencedMap<Integer, DraftAtSite> replacements = new LinkedHashMap<>();
+        /** The arms of each fork the walk has passed, which is what a way through a body down to
+         *  one of its answers goes through. */
+        private final IdentityHashMap<Core, List<Core>> forkBodies = new IdentityHashMap<>();
+        /** What each subtree does, built once and only for the subtrees two of which may be one,
+         *  under the binders of the body it is in. */
+        private final IdentityHashMap<Core, ExecutableIdentity> identities =
+                new IdentityHashMap<>();
+        /** For each body, where it could answer other than one value. */
+        private final Map<String, DraftDiffers> oneValue = new LinkedHashMap<>();
+        /** What every arm met means, measured or not. */
+        private final Map<AsWritten, SourceOutcome.Arm> armsAsWritten = new LinkedHashMap<>();
+        /** How many nodes each subtree an arm's size was asked of is, counted once: an arm holding
+         *  a chain of conditions holds every arm further down it. */
+        private final IdentityHashMap<Core, Integer> sizes = new IdentityHashMap<>();
         /** Which node each fork of these bodies is, so that the one place forks are recognised is
          *  the one place two of them being one can be refused. */
         private final Map<ConstructOccurrence, Core> forks = new LinkedHashMap<>();
@@ -845,6 +1188,9 @@ public final class CoverageSites {
          *  because every node below such a place is one, which is what makes it a state of the walk
          *  and not a property of the call. */
         private boolean repeating;
+        /** The bindings a copy of one of the language's operations opens with that hold a value it
+         *  was handed, as the walk passes them. */
+        private final Set<BindingId> handed = new HashSet<>();
         /** The outcomes that carry nothing of their own. What each of them means is settled with
          *  the construct beside it, so one instance stands for every occurrence. */
         private static final SourceOutcome.Arm HELD =
@@ -896,7 +1242,371 @@ public final class CoverageSites {
             // handed out for a place, and this is what says which place that is in something a
             // second walk of the same body also arrives at.
             this.places = NodeAddresses.of(name, body);
+            this.standingIn = OccurrenceLineage.ORIGINAL;
+            this.identities.clear();
             walk(body, true);
+            oneValue.put(name, fromOneValue(body));
+        }
+
+        /**
+         * A helper's method a run passes through, with its comparisons numbered and nothing else.
+         *
+         * <p>Its arms are no behavior's: the method is one however many calls run it, and which
+         * call a fork in it was decided for is not a question this walk can answer. A comparison
+         * is numbered for the run that got an answer out of it, and the caller's reading is what
+         * says which of its calls that was.
+         *
+         * <p>Every node of it is one a run may pass again: the method calls itself.
+         */
+        void passage(String name, Core body) {
+            this.behavior = name;
+            this.ordinal = 0;
+            this.answering = NormalReturn.ofBody(body);
+            this.places = NodeAddresses.of(name, body);
+            this.standingIn = OccurrenceLineage.ORIGINAL;
+            this.identities.clear();
+            comparisonsIn(body, true);
+        }
+
+        private void comparisonsIn(Core e, boolean reachable) {
+            boolean inside = reachable && answers(e);
+            mayRepeat.add(e);
+            switch (e) {
+                case Core.PreservedCall p -> throw p.unexpectedIn("coverage numbering");
+                case Core.MaterialisedValue m -> throw new IllegalStateException(
+                        "the tree that runs builds a value by calling it, and this is a build of one"
+                                + " in the tree an analysis reads: " + m.value());
+                case Core.FieldProjection p -> throw p.unexpectedIn("coverage numbering");
+                case Core.Binary b -> {
+                    number(b, inside);
+                    Core.forEachChild(b, child -> comparisonsIn(child, inside));
+                }
+                // A function the call never applies is not emitted, as in a behavior's body.
+                case Core.Call c -> {
+                    for (int i = 0; i < c.args().size(); i++) {
+                        comparisonsIn(c.args().get(i), inside && !c.omitsFunctionBody(i));
+                    }
+                }
+                default -> Core.forEachChild(e, child -> comparisonsIn(child, inside));
+            }
+        }
+
+        /**
+         * Where {@code body} could answer other than one value: the ways to an answer that is not
+         * the same on every run, and to an answer that is not the first one that is.
+         *
+         * <p>A body whose every other way the rules close answers that one value. Which value is
+         * not worked out here: a run of the body came to it, and that run is what says.
+         */
+        private DraftDiffers fromOneValue(Core body) {
+            List<Leaf> leaves = new ArrayList<>();
+            if (!leaves(body, List.of(), leaves)) {
+                return DraftDiffers.ALWAYS;
+            }
+            Leaf one = null;
+            for (Leaf leaf : leaves) {
+                if (sameOnEveryRun(leaf.answer())) {
+                    one = leaf;
+                    break;
+                }
+            }
+            if (one == null) {
+                return DraftDiffers.ALWAYS;
+            }
+            List<List<DraftArm>> ways = new ArrayList<>();
+            for (Leaf leaf : leaves) {
+                if (!sameOnEveryRun(leaf.answer()) || !sameAs(leaf.answer(), one.answer())) {
+                    if (leaf.way().isEmpty()) {
+                        return DraftDiffers.ALWAYS;
+                    }
+                    ways.add(leaf.way());
+                }
+            }
+            return new DraftDiffers(false, ways);
+        }
+
+        /**
+         * Where {@code arm} could answer otherwise than {@code sibling} does: the ways through the
+         * arm to an answer that is not the sibling's.
+         */
+        private DraftDiffers differs(Core arm, Core sibling) {
+            List<Leaf> leaves = new ArrayList<>();
+            if (!leaves(arm, List.of(), leaves)) {
+                return DraftDiffers.ALWAYS;
+            }
+            List<List<DraftArm>> ways = new ArrayList<>();
+            for (Leaf leaf : leaves) {
+                if (!sameAs(leaf.answer(), sibling)) {
+                    if (leaf.way().isEmpty()) {
+                        return DraftDiffers.ALWAYS;
+                    }
+                    ways.add(leaf.way());
+                }
+            }
+            return new DraftDiffers(false, ways);
+        }
+
+        /**
+         * Every answer {@code e} can come to, each with the arms on the way to it: down every arm
+         * of a fork this walk has passed, and down what a {@code let} answers with. Anything else
+         * is an answer of its own. False where there are more of them than
+         * {@link #MOST_ANSWERS_A_PROOF_READS}, which leaves the proof unmade rather than made over
+         * part of the answers.
+         */
+        private boolean leaves(Core e, List<DraftArm> way, List<Leaf> out) {
+            Core plain = Core.withoutStanding(e);
+            List<Core> bodies = forkBodies.get(plain);
+            DraftArm[] arms = armsByNode.get(plain);
+            if (bodies != null && arms != null && arms.length == bodies.size()) {
+                for (int i = 0; i < bodies.size(); i++) {
+                    List<DraftArm> further = new ArrayList<>(way);
+                    further.add(arms[i]);
+                    if (!leaves(bodies.get(i), further, out)) {
+                        return false;
+                    }
+                }
+                return true;
+            }
+            if (plain instanceof Core.LetIn let) {
+                return leaves(let.body(), way, out);
+            }
+            out.add(new Leaf(e, List.copyOf(way)));
+            return out.size() <= MOST_ANSWERS_A_PROOF_READS;
+        }
+
+        /** Whether two subtrees do the same thing: one size, and then what each does. */
+        private boolean sameAs(Core a, Core b) {
+            return a == b || (nodesIn(a) == nodesIn(b) && identity(a).equals(identity(b)));
+        }
+
+        private ExecutableIdentity identity(Core e) {
+            return identities.computeIfAbsent(e,
+                    each -> ExecutableIdentity.of(each, Binders.of(module, places)));
+        }
+
+        /**
+         * Whether {@code e} comes to the same value on every run, however the body was entered and
+         * whatever its dependencies answer.
+         *
+         * <p>Asked of what each kind of node is, with no default: a value reaches a body from
+         * outside by more than a name — a dependency's answer arrives as a call, and a function
+         * value as an application — so what a node does with the run is a question for each kind,
+         * and a kind added later is a decision this has to make rather than one it makes by
+         * falling through. Narrow on purpose. A literal, and what is built or computed from
+         * literals alone, is the same on every run; everything that calls, applies, reads, binds
+         * or branches is not said to be, which leaves some answers that are always one value
+         * unproven and proves none that are not.
+         */
+        private static boolean sameOnEveryRun(Core e) {
+            return switch (e) {
+                case Core.Int _, Core.Decimal _, Core.Str _, Core.Bool _, Core.Temporal _,
+                     Core.UnitValue _, Core.OptionNone _ -> true;
+                case Core.Neg _, Core.FieldAccess _, Core.Binary _, Core.ListLit _,
+                     Core.OptionSome _, Core.Tuple _, Core.TupleGet _, Core.Construct _,
+                     Core.Widen _ -> {
+                    boolean[] all = {true};
+                    Core.forEachChild(e, child -> all[0] = all[0] && sameOnEveryRun(child));
+                    yield all[0];
+                }
+                case Core.Read _, Core.Call _, Core.PreservedCall _, Core.Apply _,
+                     Core.MaterialisedValue _, Core.FieldProjection _, Core.Block _, Core.If _,
+                     Core.IfConstructed _, Core.LetIn _, Core.Match _, Core.Unreachable _ -> false;
+            };
+        }
+
+        /**
+         * One node, after asking whether it is where an operation the model applies answers.
+         *
+         * <p>Asked of every node on the way down and before what is under it, because what tells an
+         * application's answer from the code it is made of is the copy the node stands in against
+         * the copy its parent stands in — and that is only in hand on the way down.
+         */
+        private void walk(Core e, boolean reachable) {
+            OccurrenceLineage outer = standingIn;
+            Stands stands = standsIn(e);
+            if (stands != null) {
+                if (reachable && answers(e)) {
+                    answerOf(e, stands.answering(), stands.lineage(), outer);
+                }
+                standingIn = stands.lineage();
+            }
+            descend(e, reachable);
+            standingIn = outer;
+        }
+
+        /**
+         * The copy a node stands in, and the node under it whose value is the node's.
+         *
+         * <p>Two facts and not one, because a copy is found at one node and answers at another. The
+         * bindings an operation's copy opens with are where the walk meets the copy, and what the
+         * application answers is the value of what they bind it around — which is where a run is on
+         * the stack with the answer, and which may be a comparison the plan already watches.
+         */
+        private record Stands(Core answering, OccurrenceLineage lineage) {}
+
+        /**
+         * Where {@code e}'s answer is worked out, if {@code e} is the node an application of one of
+         * the language's operations answers at and the model states that application.
+         *
+         * <p>Two shapes, both answering a truth. An operation the library implements in the
+         * language is copied into the body where it is applied, and nothing in the tree that runs
+         * is the application itself: the copy is found where it is entered, and its answer is
+         * recorded at the node inside the copy's bindings whose value it is ({@link #standsIn}).
+         * One the runtime implements stays a call, and the call is the application.
+         *
+         * <p>Where a reader is sent is where the copy was found ({@code found}), which is where the
+         * application is written. The node the answer is worked out at is the operation's own
+         * code, and a place there is a place in the library.
+         *
+         * <p>Only where the model states the application. One written inside another operation's
+         * own body is copied once per application of that operation, and the model states none of
+         * them ({@link ModelOccurrence#statedAt}) — a rule is never read off one, so a run through
+         * one is nothing a rule can be held to.
+         *
+         * <p>A node that is itself a comparison this plan numbers is recorded at the comparison's
+         * place. The two are one value at one place, and a second number for it would be a place
+         * the emitter writes twice. Which is what the answer of an operation whose code compares is:
+         * the copy's comparison is where the run has the answer, and the application is recorded
+         * there with it.
+         *
+         * <p>Only the copies opened inside the last closure the node applies. A closure handed to
+         * an operation is applied inside that operation's copy, so a node can open both — and what
+         * it answers is the closure's answer, not the operation's: {@code List.map} answers a list,
+         * and the truth an element's closure answers is the application written in the closure.
+         */
+        private void answerOf(Core found, Core e, OccurrenceLineage mine,
+                              OccurrenceLineage outer) {
+            if (!Type.BOOL.equals(e.type())) {
+                return;
+            }
+            List<OccurrenceLineage.Expansion> copies = opened(mine, outer);
+            for (int at = copies.size() - 1; at >= 0; at--) {
+                if (copies.get(at).at() instanceof ExpansionSite.Supplied) {
+                    copies = copies.subList(at + 1, copies.size());
+                    break;
+                }
+            }
+            List<ConstructOccurrence> applications = new ArrayList<>();
+            for (OccurrenceLineage.Expansion opened : copies) {
+                if (opened.expanded() instanceof ValueName.Stdlib.Operation
+                        && opened.at() instanceof ExpansionSite.Written written) {
+                    applications.add(new ConstructOccurrence(written.origin(), opened.within()));
+                }
+            }
+            if (e instanceof Core.Call call && call.fn() instanceof Core.Reached reached
+                    && reached.denotes() instanceof ValueName.Stdlib.Operation
+                    && call.occurrence().isWritten()) {
+                applications.add(call.occurrence());
+            }
+            applications.removeIf(each -> ModelOccurrence.statedAt(each).isEmpty());
+            if (applications.isEmpty()) {
+                return;
+            }
+            // One at most. An application the model states stands in the model's code, and what
+            // stands inside another operation's copy is code the model states nothing of — so two
+            // that the model both states cannot open at one node.
+            if (applications.size() > 1) {
+                throw new IllegalStateException("the applications " + applications
+                        + " answer at one node of `" + behavior + "`; an application the model"
+                        + " states is never inside the copy of another");
+            }
+            ConstructOccurrence application = applications.get(0);
+            if (answers.containsKey(application)) {
+                throw new IllegalStateException("the application " + application
+                        + " answers at two nodes of `" + behavior + "`; an application is copied"
+                        + " into a body once");
+            }
+            Integer raw = null;
+            if (e instanceof Core.Binary binary) {
+                ConstructOccurrence compared = comparisons.occurrenceAt(binary).orElse(null);
+                if (compared != null) {
+                    number(binary, true);
+                    raw = byComparison.get(compared);
+                }
+            }
+            if (raw == null) {
+                raw = numbering.number(new SiteAddress.ConditionOutcome(places.of(e)));
+            }
+            answers.put(application,
+                    new DraftAnswer(e, behavior, application, Citation.of(found.pos()), raw));
+        }
+
+        /**
+         * The node one walk step stands at, as the copy it stands in: read where the node carries
+         * one, and through the binding that opens a copy of one of the language's operations to
+         * what answers for it.
+         *
+         * <p>Null where nothing on the way says. A name, a literal or a value built from parts stand
+         * in whatever copy their parent stands in, and say nothing of it themselves. So does a
+         * widening: it is a node of its own, standing as another type, and the node it holds is
+         * where the value an application answers is on the stack — asked next, against the copy
+         * the widening's parent stands in.
+         *
+         * <p>And so does every other binding. Which copy a binding is part of is what owns its
+         * binder, so the binding an operation's copy opens with — its parameters bound to what the
+         * application handed it — is the copy and is looked through. A binding an author wrote is
+         * not: its value is its body's, and looked through, the copy its body opens would be read
+         * as opened at the author's {@code let}, and what the application answered would be put
+         * where the {@code let} is written.
+         *
+         * <p>The node the bindings are looked through to is the one the copy answers at: the value
+         * of a binding is its body's, and the copy's own bindings stand around the code that works
+         * the answer out.
+         */
+        private static Stands standsIn(Core e) {
+            Core at = e;
+            while (true) {
+                switch (at) {
+                    case Core.LetIn let when opensACopyOfAnOperation(let) -> at = let.body();
+                    case Core.Widen _ -> {
+                        return null;
+                    }
+                    default -> {
+                        ConstructOccurrence occurrence = ACopyOfAnApplication.occurrenceOf(at);
+                        return occurrence == null || !occurrence.isWritten() ? null
+                                : new Stands(at, occurrence.lineage());
+                    }
+                }
+            }
+        }
+
+        /** Whether {@code let} binds what an application of one of the language's operations
+         *  handed the copy of it, which is the binding that copy opens with. */
+        private static boolean opensACopyOfAnOperation(Core.LetIn let) {
+            return ACopyOfAnApplication.ofACopyOfAnOperation(let);
+        }
+
+        /**
+         * The copies {@code mine} stands in that {@code outer} does not, outermost first: the
+         * copies a node entered that its parent was not in.
+         */
+        private static List<OccurrenceLineage.Expansion> opened(OccurrenceLineage mine,
+                                                                OccurrenceLineage outer) {
+            Set<OccurrenceLineage> already = new HashSet<>();
+            for (OccurrenceLineage each = outer; ; each = within(each)) {
+                already.add(each);
+                if (each instanceof OccurrenceLineage.Original) {
+                    break;
+                }
+            }
+            List<OccurrenceLineage.Expansion> out = new ArrayList<>();
+            for (OccurrenceLineage each = mine; !already.contains(each); each = within(each)) {
+                if (each instanceof OccurrenceLineage.Expansion copy) {
+                    out.add(0, copy);
+                }
+                if (each instanceof OccurrenceLineage.Original) {
+                    break;
+                }
+            }
+            return out;
+        }
+
+        private static OccurrenceLineage within(OccurrenceLineage lineage) {
+            return switch (lineage) {
+                case OccurrenceLineage.Original original -> original;
+                case OccurrenceLineage.Expansion copy -> copy.within();
+                case OccurrenceLineage.Materialisation built -> built.within();
+            };
         }
 
         /**
@@ -923,10 +1633,20 @@ public final class CoverageSites {
             // is what lowering rewrites and carries whatever position it was built from, so it is
             // the fork that is asked and not the arm.
             ArmReportAnchor anchor = anchorOf(owner, origin);
+            // What the arm means, before whether it is measured is asked: a rewrite can name it as
+            // the sibling it answers as either way. A helper spliced in twice meets one arm twice,
+            // and an arm that meant two things at two calls would be two arms under one name.
+            SourceOutcome.Arm before =
+                    armsAsWritten.putIfAbsent(new AsWritten(origin, part), outcome);
+            if (before != null && !before.equals(outcome)) {
+                throw new IllegalStateException("arm " + part + " of " + origin + " is " + before
+                        + " where one call reaches it and " + outcome + " where another does");
+            }
             // The arm is made either way. Whether a run through it can be recorded is the second
             // question and only the probe turns on it — an arm nothing could record is still an arm,
             // and the readings that judge one need to be able to name it.
-            if (!(reachable && answers(arm) && answering.mayEnter(owner, part))) {
+            if (!(reachable && answers(arm) && answering.mayEnter(owner, part))
+                    || restatesWhatItWasHanded(owner)) {
                 return new DraftArm(which, java.util.OptionalInt.empty(), anchor);
             }
             // Asked before the place is numbered, so that a tree nothing wrote is refused for being
@@ -942,6 +1662,48 @@ public final class CoverageSites {
             sites.add(new DraftArmSite(draft, behavior, outcome, ordinal++,
                     new Obligation(behavior, origin, part, decided)));
             return draft;
+        }
+
+        /**
+         * Whether {@code fork} is an operation of the language forking on the truth it was handed,
+         * which is no way of its own.
+         *
+         * <p>{@code Bool.not} is written as a fork on its argument. Each way through it is a way
+         * the truth handed to it came out, which is the caller's truth and is owed where the
+         * caller decides by it — so {@code Bool.not(p)} and {@code p == false} are one condition
+         * and owe the same arms. A fork an operation draws a line of its own at, as
+         * {@code Int.max} compares its two arguments, is a way the model's rows go through and
+         * stays owed.
+         */
+        private boolean restatesWhatItWasHanded(Core fork) {
+            if (!(Core.withoutStanding(fork) instanceof Core.If iff)
+                    || ModelOccurrence.statedAt(iff.occurrence()).isPresent()
+                    || !(iff.occurrence().lineage() instanceof OccurrenceLineage.Expansion copy
+                            && copy.expanded() instanceof ValueName.Stdlib.Operation)) {
+                return false;
+            }
+            // What the operation was handed: a binding its copy opens with, of a value from
+            // outside it. A value the copy works out itself, or one its own closures are handed,
+            // is a line it draws.
+            return Core.withoutStanding(iff.cond()) instanceof Core.Read read
+                    && handed.contains(read.binding());
+        }
+
+        /** Whether {@code let} binds a value an operation's copy was handed: one that reads nothing
+         *  the copy itself binds. */
+        private static boolean handsInWhatTheCopyWasGiven(Core.LetIn let) {
+            return opensACopyOfAnOperation(let)
+                    && !readsABindingOf(let.value(), let.binder().binding().owner());
+        }
+
+        private static boolean readsABindingOf(Core e, BindingOwner owner) {
+            if (Core.withoutStanding(e) instanceof Core.Read read
+                    && read.binding().owner().equals(owner)) {
+                return true;
+            }
+            boolean[] found = {false};
+            Core.forEachChild(e, child -> found[0] = found[0] || readsABindingOf(child, owner));
+            return found[0];
         }
 
         /**
@@ -1010,6 +1772,109 @@ public final class CoverageSites {
             armsByNode.put(fork, arms);
         }
 
+        /**
+         * Which siblings each numbered arm of {@code fork} can be run with in its place, and which
+         * of them the classes carry.
+         *
+         * <p>A sibling whose expression is {@code unreachable} is not one: answering with it is
+         * every row through the arm stopping, which no rewrite worth asking about is. Nor is one
+         * that does what the arm does, read apart from where each is written: answering as it is
+         * answering as the arm, and nothing could tell the two apart. A sibling that
+         * reads the name its own arm gives the value cannot stand anywhere else. And a fork whose
+         * siblings, carried in every arm, would grow it by more than {@link #MOST_NODES_A_FORK_CARRIES}
+         * carries none of them.
+         *
+         * @param names what each arm calls the value it was entered with, null where it calls it
+         *              nothing
+         */
+        private void replacements(Core fork, SourceConstructOrigin origin, DraftArm[] arms,
+                                  List<Core> bodies, List<BindingId> names) {
+            // Kept for the forks around this one: an answer of theirs reached through this fork is
+            // one of these arms' answers.
+            forkBodies.put(fork, List.copyOf(bodies));
+            List<Integer> candidates = new ArrayList<>();
+            int size = 0;
+            for (int part = 0; part < bodies.size(); part++) {
+                if (!(Core.withoutStanding(bodies.get(part)) instanceof Core.Unreachable)) {
+                    candidates.add(part);
+                    size += nodesIn(bodies.get(part));
+                }
+            }
+            // A sibling that reads the name its own arm gives the value cannot stand anywhere
+            // else: that name stands for nothing there, so it is no program the body could be
+            // written as. Asked once of each sibling, since it is the sibling's and not the arm's.
+            boolean[] readsItsOwnName = new boolean[bodies.size()];
+            for (int sibling : candidates) {
+                BindingId own = names.get(sibling);
+                readsItsOwnName[sibling] = own != null && reads(bodies.get(sibling), own);
+            }
+            boolean tooLarge = (long) size * (arms.length - 1) > MOST_NODES_A_FORK_CARRIES;
+            int[][] carriedHere = new int[arms.length][];
+            for (int part = 0; part < arms.length; part++) {
+                // Only an arm a run is recorded in has a switch in front of it: nothing else is
+                // an arm a row is in, so nothing else is an arm a row could notice being replaced.
+                if (!arms[part].isMeasured()) {
+                    carriedHere[part] = new int[0];
+                    continue;
+                }
+                List<Integer> carriedParts = new ArrayList<>();
+                SequencedMap<Integer, DraftSibling> siblings = new LinkedHashMap<>();
+                List<Integer> asked = new ArrayList<>(List.of(part));
+                for (int sibling : candidates) {
+                    // Two siblings that do the same thing are one rewrite of the arm, asked once.
+                    if (readsItsOwnName[sibling] || asked.stream().anyMatch(other ->
+                            sameAs(bodies.get(other), bodies.get(sibling)))) {
+                        continue;
+                    }
+                    asked.add(sibling);
+                    // An arm whose every answer is what the sibling answers is the sibling under
+                    // another place, and answering as it is answering as itself: no row could tell
+                    // the two apart, so it is no rewrite to ask a row about.
+                    DraftDiffers differs = differs(bodies.get(part), bodies.get(sibling));
+                    if (!differs.always() && differs.ways().isEmpty()) {
+                        continue;
+                    }
+                    if (tooLarge) {
+                        siblings.put(sibling, new DraftSibling(
+                                Optional.of(new ArmReplacements.Sibling.Why.PastWhatAForkCarries(
+                                        WorkFigure.NODES_A_FORK_CARRIES.at(
+                                                MOST_NODES_A_FORK_CARRIES))), differs));
+                    } else {
+                        siblings.put(sibling, new DraftSibling(Optional.empty(), differs));
+                        carriedParts.add(sibling);
+                    }
+                }
+                carriedHere[part] = carriedParts.stream().mapToInt(Integer::intValue).toArray();
+                if (!siblings.isEmpty()) {
+                    replacements.put(arms[part].raw().getAsInt(),
+                            new DraftAtSite(origin, part, siblings));
+                }
+            }
+            carried.put(fork, carriedHere);
+        }
+
+        /** Whether {@code e} reads {@code binding} anywhere under it. */
+        private static boolean reads(Core e, BindingId binding) {
+            if (e instanceof Core.Read r && r.binding().equals(binding)) {
+                return true;
+            }
+            boolean[] found = {false};
+            Core.forEachChild(e, child -> found[0] = found[0] || reads(child, binding));
+            return found[0];
+        }
+
+        /** How many nodes {@code e} is, which is what carrying it once more costs. */
+        private int nodesIn(Core e) {
+            Integer known = sizes.get(e);
+            if (known != null) {
+                return known;
+            }
+            int[] count = {1};
+            Core.forEachChild(e, child -> count[0] += nodesIn(child));
+            sizes.put(e, count[0]);
+            return count[0];
+        }
+
         /** The probe numbers of {@code arms}, in their order, {@link #NO_SITE} where an arm has
          *  none. What the emitter indexes and what the branch measure counts. */
         private static int[] probesOf(DraftArm... arms) {
@@ -1034,7 +1899,7 @@ public final class CoverageSites {
         private int comparisonSite(SourceOutcome.Compared outcome, Core owner,
                                    SourceConstructOrigin origin, DecidedBy decided) {
             written(origin, owner);
-            int raw = numbering.number(new SiteAddress.Comparison(places.of(owner)));
+            int raw = numbering.number(new SiteAddress.ConditionOutcome(places.of(owner)));
             sites.add(new DraftComparisonSite(behavior, outcome, Citation.of(owner.pos()), raw,
                     ordinal++, new Obligation(behavior, origin, 0, decided)));
             return raw;
@@ -1069,7 +1934,7 @@ public final class CoverageSites {
          *                  that aborts, so nothing below such a point is a fork a row takes: the row
          *                  that would take it is E1911 and states nothing
          */
-        private void walk(Core e, boolean reachable) {
+        private void descend(Core e, boolean reachable) {
             // Everything below this node is reached by way of the node, so what the node cannot do
             // nothing inside it can do either.
             boolean inside = reachable && answers(e);
@@ -1097,15 +1962,20 @@ public final class CoverageSites {
                 case Core.FieldAccess fa ->
                         walk(structural.take(new CoreStructure.Edge.FieldTarget(), fa.target()),
                                 inside);
+                // What reading a type's guarantees reaches a value by. The tree that runs reads a
+                // field an access at a time, so one arriving here is the wrong tree.
+                case Core.FieldProjection p -> throw p.unexpectedIn("coverage numbering");
                 case Core.Binary b -> {
                     number(b, inside);
                     walk(structural.take(new CoreStructure.Edge.BinaryLeft(), b.left()), inside);
                     walk(structural.take(new CoreStructure.Edge.BinaryRight(), b.right()), inside);
                 }
                 case Core.Call c -> {
+                    // A function the call never applies is not emitted, so what is inside it is a
+                    // fork with the structure and no site, like the forks below an abort.
                     for (int i = 0; i < c.args().size(); i++) {
                         walk(structural.take(new CoreStructure.Edge.CallArgument(i),
-                                c.args().get(i)), inside);
+                                c.args().get(i)), inside && !c.omitsFunctionBody(i));
                     }
                 }
                 // What a representation kept standing for an analysis to read. Coverage is measured
@@ -1123,6 +1993,9 @@ public final class CoverageSites {
                 }
                 case Core.LetIn li -> {
                     walk(structural.take(new CoreStructure.Edge.LetValue(), li.value()), inside);
+                    if (handsInWhatTheCopyWasGiven(li)) {
+                        handed.add(li.binder().binding());
+                    }
                     walk(structural.take(new CoreStructure.Edge.LetBody(), li.body()), inside);
                 }
                 // A function value, and its arms are arms: what is written here runs when whatever
@@ -1182,6 +2055,8 @@ public final class CoverageSites {
                     walk(structural.take(new CoreStructure.Edge.IfElse(), iff.els()), inside);
                     byNode.put(iff, probesOf(then, els));
                     arms(iff, iff.occurrence(), new DraftArm[] {then, els});
+                    replacements(iff, iff.origin(), new DraftArm[] {then, els},
+                            List.of(iff.then(), iff.els()), Arrays.asList(null, null));
                     if (then.isMeasured() || els.isMeasured()) {
                         guards.add(new DraftGuard(behavior, iff.origin(), decided,
                                 then.raw(), els.raw(), iff.pos()));
@@ -1205,6 +2080,14 @@ public final class CoverageSites {
                     }
                     byNode.put(m, probesOf(arms));
                     arms(m, m.occurrence(), arms);
+                    List<Core> bodies = new ArrayList<>();
+                    List<BindingId> names = new ArrayList<>();
+                    for (Core.Case arm : m.cases()) {
+                        bodies.add(arm.body());
+                        names.add(arm.binding().binder() == null ? null
+                                : arm.binding().binder().binding());
+                    }
+                    replacements(m, m.origin(), arms, bodies, names);
                 }
                 case Core.IfConstructed ic -> {
                     // The construction the attempt tests. Taken as the one slot it is, and gone
@@ -1237,6 +2120,15 @@ public final class CoverageSites {
                     }
                     byNode.put(ic, probesOf(arms));
                     arms(ic, ic.occurrence(), arms);
+                    List<Core> bodies = new ArrayList<>();
+                    List<BindingId> names = new ArrayList<>();
+                    bodies.add(ic.then());
+                    names.add(ic.binder() == null ? null : ic.binder().binding());
+                    for (Core.ElseArm arm : ic.els()) {
+                        bodies.add(arm.body());
+                        names.add(null);
+                    }
+                    replacements(ic, ic.origin(), arms, bodies, names);
                 }
             }
             // That the walk went to every slot the node has. A node kind that grows a child stops

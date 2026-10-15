@@ -123,9 +123,12 @@ class EveryPartOfABehaviorsEvidenceIsAskedForItsHandlesTest {
             // they establish about the cases, about the arms, which rules of the body's decision
             // they took, and which combinations of those decisions the rows made. The last two are
             // read off the body's own forks and comparisons, which is where a run is recorded and
-            // not a rule the model states. None of them is a reading of a rule of the model.
+            // not a rule the model states. None of them is a reading of a rule of the model. Nor
+            // is which rewrites of the body the rows tell apart, which is read off the arms and
+            // the rows' answers.
             case Adequacy.RowReading _, Adequacy.SignatureEvidence _,
-                 Adequacy.BranchEvidence _, DecisionEvidence _, InteractionEvidence _ -> { }
+                 Adequacy.BranchEvidence _, DecisionEvidence _, InteractionEvidence _,
+                 ReplacementEvidence _ -> { }
             default -> fail("a part of a behavior's evidence has not said whether it holds a handle"
                     + " for a rule it read: " + value.getClass());
         }

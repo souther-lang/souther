@@ -16,6 +16,7 @@ import souther.compiler.query.NothingWasAsked;
 import souther.compiler.query.OutputCaseEvidence;
 import souther.compiler.query.PartitionDerivation;
 import souther.compiler.query.PartitionEvidence;
+import souther.compiler.query.ReplacementEvidence;
 
 /**
  * What a person is told about a measure that has no number.
@@ -140,6 +141,9 @@ record ReasonProse(Introduction introduction, String said) {
             };
             case PartitionDerivation.NothingIsDivided _ ->
                     "the rules of this behavior divide no position";
+            case ReplacementEvidence.NoBody it -> switch (it) {
+                case NO_BODY -> "this behavior has no body";
+            };
         };
     }
 
@@ -181,6 +185,10 @@ record ReasonProse(Introduction introduction, String said) {
             case PartitionEvidence.PairSpace.NoRows it -> switch (it) {
                 case NO_ROWS -> "no row names this behavior";
             };
+            case ReplacementEvidence.NotAsked it -> switch (it) {
+                case NOT_ASKED -> "the build did not ask for the rows to be run under a rewrite";
+                case NO_ROWS -> "no row names this behavior";
+            };
         };
     }
 
@@ -194,6 +202,14 @@ record ReasonProse(Introduction introduction, String said) {
             };
             case Adequacy.BranchEvidence.Unreadable it -> switch (it) {
                 case UNREADABLE -> "the arms could not be read";
+            };
+            case ReplacementEvidence.BodyWasNotRead it -> switch (it) {
+                case BODY_WAS_NOT_READ ->
+                        "nothing read this behavior's body, so what it could be rewritten as is"
+                                + " unknown";
+            };
+            case ReplacementEvidence.Unreadable it -> switch (it) {
+                case UNREADABLE -> "the rows could not be run under a rewrite";
             };
             case Adequacy.RowReading.Unavailable it -> switch (it) {
                 case ROWS_UNAVAILABLE -> "nothing came back from the rows";
@@ -232,6 +248,11 @@ record ReasonProse(Introduction introduction, String said) {
             case ItemAssessment.PlaceCouldNotBeWorkedOut it -> switch (it) {
                 case PLACE_COULD_NOT_BE_WORKED_OUT ->
                         "this point's own place on the order could not be read";
+            };
+            case ItemAssessment.NotTiedToTheAuthorsLine it -> switch (it) {
+                case NOT_TIED_TO_THE_AUTHORS_LINE ->
+                        "a reading of this comparison turns where a caller's choice does, and is"
+                                + " not shown to be at this point of the line its author wrote";
             };
             // One sentence for both measures. What is missing is the reading of the body, which
             // is the same fact whichever of the two was asking — and a reader told it twice in two

@@ -6,6 +6,7 @@ import souther.compiler.check.DeclaredSig;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
+import souther.compiler.check.TypeCardinality;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
@@ -124,6 +125,63 @@ class AFixedValueIsPartOfTheRegionEveryQuestionIsAnsweredAgainstTest {
                 "z at 100 under z <= y and y <= 2x leaves x at 50 and above");
     }
 
+    /**
+     * A fixing at a hole leaves nothing, in either vocabulary a hole is taken in by.
+     *
+     * <p>Which is what a line at a value the way holds a position apart from comes to: the ends of
+     * where {@code x} runs are the whole order either way, and the hole is in the region and not in
+     * them.
+     */
+    @Test
+    void aFixingAtAPlaceTheRegionHoldsThePositionApartFromLeavesNothing() {
+        Count five = Count.of(BigDecimal.valueOf(5));
+
+        assertTrue(region().apartFrom(term("x"), five).given(term("x"), five)
+                        .emptiness().isPresent(),
+                "x held apart from 5 and given 5 is refused");
+        assertTrue(region().assuming(LinearForm.<NumericTerm>atomMinusConstant(term("x"),
+                                ExactRatio.of(5)), Rel.NE).taken()
+                        .given(term("x"), five).emptiness().isPresent(),
+                "x - 5 /= 0 taken in and x given 5 is refused");
+    }
+
+    /**
+     * A hole is refused by whatever puts the position at it, and a rule pinning the position there
+     * puts it there as surely as a fixing does.
+     *
+     * <p>What a line naming a value asks of a region: whether a row stands at the value. The line is
+     * taken in as an equation, so the region holding the position apart from that value has to
+     * answer the equation empty — or a hole the way leaves is one more thing a line naming its value
+     * is drawn through.
+     */
+    @Test
+    void aRulePinningAPositionAtAPlaceItIsHeldApartFromLeavesNothing() {
+        Count five = Count.of(BigDecimal.valueOf(5));
+        LinearForm<NumericTerm> atFive =
+                LinearForm.<NumericTerm>atomMinusConstant(term("x"), ExactRatio.of(5));
+
+        assertTrue(region().apartFrom(term("x"), five).assuming(atFive, Rel.EQ).taken()
+                        .emptiness().isPresent(),
+                "x held apart from 5 and x - 5 = 0 is refused");
+        assertTrue(region().assuming(atFive, Rel.NE).taken().assuming(atFive, Rel.EQ).taken()
+                        .emptiness().isPresent(),
+                "x - 5 /= 0 and x - 5 = 0 is refused");
+        assertFalse(region().apartFrom(term("x"), five)
+                        .assuming(LinearForm.<NumericTerm>atomMinusConstant(term("x"),
+                                ExactRatio.of(6)), Rel.EQ).taken()
+                        .emptiness().isPresent(),
+                "x held apart from 5 holds x = 6");
+    }
+
+    /** And a fixing beside the hole is not. */
+    @Test
+    void andAFixingBesideTheHoleIsNot() {
+        assertFalse(region().apartFrom(term("x"), Count.of(BigDecimal.valueOf(5)))
+                        .given(term("x"), Count.of(BigDecimal.valueOf(6)))
+                        .emptiness().isPresent(),
+                "x held apart from 5 holds 6");
+    }
+
     /** Where the term runs, of a region that holds something — which every region here does. */
     private static NumericDomain.Bounds runsBetween(SearchRegion within,
                                                     NumericTerm.FromOnePosition term) {
@@ -145,8 +203,7 @@ class AFixedValueIsPartOfTheRegionEveryQuestionIsAnsweredAgainstTest {
 
     /** The form {@code one - other}. */
     private static LinearForm<NumericTerm> minus(String one, String other) {
-        return LinearForm.<NumericTerm>atom(term(one))
-                .minus(LinearForm.<NumericTerm>atom(term(other)));
+        return LinearForm.<NumericTerm>difference(term(one), term(other));
     }
 
     /**
@@ -188,7 +245,10 @@ class AFixedValueIsPartOfTheRegionEveryQuestionIsAnsweredAgainstTest {
         Map<String, DeclaredSig> sigs =
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
         RuleReadingSource rules = RuleReadings.of(compilation, module);
-        return new Read(InputDomain.of(sigs.get("read"),
-                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES)), rules);
+        RuleReadingContext reading =
+                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES);
+        return new Read(InputDomain.of(sigs.get("read"), reading,
+                TypeCardinality.Counts.workedOutIn(reading),
+                souther.compiler.carrier.Membership.none()), rules);
     }
 }

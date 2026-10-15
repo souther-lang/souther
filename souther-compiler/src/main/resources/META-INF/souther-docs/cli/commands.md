@@ -12,7 +12,7 @@ against, so it says what this build does rather than what a text was last edited
 ## init
 
 ```
-souther init [<groupId>:<artifactId>] [-d|--dir <path>] [--build maven|gradle]
+souther init [<groupId>:<artifactId>] [-d|--dir <path>] [--build maven|gradle|none]
                                       [--model none|minimal|full] [--module <name>]
 ```
 
@@ -38,17 +38,34 @@ $ souther init com.example:hello
 wrapper pins a Gradle version, and a version pinned when this compiler was released is one it can
 never revisit. It says to run `gradle wrapper` first.
 
-The generated Gradle build names no Souther version, where the Maven one names the version of the
-compiler that wrote it. On Gradle the plugin adds the runtime at the version it compiles with, so
-there is no second number in the build script to keep in step — and the version it compiles with is
-the one that plugin release was verified against, which need not be the one that ran `souther init`.
-Write it to say which:
+`--build none` is for a project with no Java build, one that reaches Souther through `souther compile
+--target`. It writes the source and a `.souther-version` naming the Souther that ran it — the one
+file that says which Souther the project's direct use requires, where there is no build file to say
+it — and nothing else. There is no coordinate to give, and one written is refused: the project is the
+directory, and its module is `--module` or the directory's name, a hyphen written as an underscore.
+A directory whose name is not one a module can have is refused and asked for `--module`. An existing
+`.souther-version` is left as it is. What it says to run next is `souther compile --target <target>`,
+with no target named: which backends are installed is theirs to say, and this command knows none
+besides the JVM.
+
+Either build names the Souther that wrote it, once. The Maven one names it as the version of the
+`souther-runtime` dependency, which the plugin reads as the Souther to compile with. The Gradle one
+names it in the plugin's extension, which has no default, and the plugin adds the runtime at that
+version itself:
 
 ```kotlin
 souther {
-    southerVersion = "0.1.0-rc5"
+    southerVersion = "0.4.0"
 }
 ```
+
+Adding to a Gradle build writes the same block at the end of the script. One that already applies the
+plugin and does not say `southerVersion` is refused before anything is written, and told the block
+to write: the model would not build without it, and writing it could override a version a convention
+plugin gives. A script this command cannot read through — in Groovy, a `/` that is not a comment's,
+which opens a string or divides according to what a parser says, or anywhere a string, a comment or a
+brace that does not close — is refused too, with nothing written: where its blocks are is then not
+something it can tell.
 
 Where a `pom.xml` or a `build.gradle.kts` is already there, the coordinate is read out of it rather
 than written on the line, `--build` is not read — the build that is there is the build — and what is
@@ -76,27 +93,118 @@ beside.
 
 ```
 souther compile <file.sou>... -d|--dir <outdir> [-cp|--class-path <path>]
-                              [--adequacy off|witness|all|reliable-domain|classes]
-                              [--warnings report|error]
+                              [--adequacy off|witness|all] [--warnings report|error]
 ```
 
 Type-checks the given files together, resolving imports across them, and writes `.class` files
 under `-d`. `-cp` (`--class-path`) points at modules another project compiled. `--adequacy`
 additionally warns about what the `example` rows do not cover; it defaults to `off`, and `souther
-examples` asks the same question as a report. Its words name two things at once: how much to measure
-and what the build is held to. `witness` reads what the rows already ran; `all` adds what the arms
-and the borders take a second run to find out and holds the build to simplified domain coverage;
-`reliable-domain` measures what `all` does and holds it to reliable domain coverage, which asks for a
-row well inside each line and one well outside it as well as the two against it; `classes` is that
-bar and a class of a position no row's value falls in, which is what a model whose rows are meant to
-be finished is held to.
+examples` asks the same question as a report. It says how much to measure and nothing else.
+`witness` reads what the rows already ran; `all` adds what the arms and the lines a fork drew take a
+second run to find out. What a gap is does not depend on the word: every obligation the account
+derives is one, and no caller chooses which.
 
 `--warnings error` refuses the build that warned: nothing is written and the exit code is non-zero.
 It gates every warning and not only the adequacy ones, so a build that wants to fail on coverage
-alone wants `souther examples --strict`, which refuses coverage findings and nothing else. Both
-take `--adequacy`, and the same word names the same bar on either, so the build that answers
-`examples --adequacy classes --strict` alike is `compile --adequacy classes --warnings error`.
+alone wants `souther examples --strict`, which refuses coverage findings and nothing else.
+`compile --adequacy all --warnings error` and `examples --strict` refuse the same coverage findings.
 The default is `report`, which prints them and writes the classes.
+
+```
+souther compile --target <target> <target-arguments>...
+```
+
+`--target` compiles for something other than the JVM. Written first, it chooses which grammar the rest
+of the line is read in: `jvm` is built in and is what a line without `--target` means, so `souther
+compile --target jvm -d classes m.sou` is `souther compile -d classes m.sou`. Any other target is an
+installed backend, and from the target's name on the line is the backend's, verbatim. This command
+reads none of it, `--help` included: `souther compile --target wasm --help` is the wasm backend
+asking itself what it takes. Written anywhere but first, `--target` is an option `compile` does not
+have.
+
+A backend is an executable jar, or a link to one, in `$SOUTHER_HOME/backends` — `~/.souther/backends`
+where `SOUTHER_HOME` is not set — or in the directory a package manager's launcher names with
+`-Dsouther.backends`, searched in that order. It says what it is in
+`META-INF/souther/backend.properties`, which has two keys and no others: `name`, the target it answers
+to, and `souther.version`, the Souther it was built against. This command chooses the jar whose pair
+is this Souther's, so jars for several versions can stand side by side; two of one pair in a directory
+are refused. The first directory that holds the pair decides, so a development build in
+`$SOUTHER_HOME` stands in for a packaged one of the same pair. A jar built against another Souther is
+not this one's backend wherever it stands, so it hides nothing further down the list. Which backend
+release that jar is has no part in the choice.
+
+Where no directory holds the pair, the backend is fetched from Maven Central into the first directory,
+as `souther backend fetch` does, and then run; a jar for the target built against another Souther is
+left where it is, and the fetched one stands beside it. Fetching is said
+on standard error. `SOUTHER_BACKEND_OFFLINE`, set to anything but the empty string, tells a compile to fetch nothing; it is
+not an option, since from the target's name on the line is the backend's. It reaches this command's
+fetching and nothing else, so a backend that fetches tools of its own when it runs does so as before.
+
+The backend runs as a process of its own, under this command's `java`, with the JVM arguments this
+Souther requires — the ones `souther tooling` lists. Its arguments, working directory, environment and
+standard streams are the command's own, and the exit status is the backend's. A target that is
+neither installed nor fetched is refused with exit status 2, naming each directory searched and what
+it held, and what Maven Central answered. Two jars of one pair, a jar that is not a backend and a link
+to a jar that is not there are refused with exit status 2 too, and nothing is fetched in their place.
+Nothing runs before either.
+
+<!-- souther-section: backend -->
+## backend
+
+```
+souther backend fetch <target>
+```
+
+Fetches the newest release of the target's backend that was built against this Souther from Maven
+Central, and compiles nothing. It is for a machine that will not reach the network when it compiles,
+and for taking a release newer than the one fetched before. Which releases there are is read from the
+artifact's `maven-metadata.xml`, and the Souther each was built against from its pom's
+`souther.version`, or the parent pom's where the pom does not state it. Which release is newest is the
+backend's own numbering, and plays no part in which Souther a release is for. A release whose pom is
+missing or does not say what it was built against is passed over, and named where nothing else was
+found.
+
+The jar is written to `$SOUTHER_HOME/backends`, or `~/.souther/backends`, as `<target>-<version>.jar`,
+and where it came from is written beside it. A fetch replaces only what an earlier fetch wrote under
+that name, and a release fetched before and still in place is not fetched again. A jar under that
+name that no fetch wrote, or one for the pair under any other name, was put there by hand, and the
+fetch is refused before anything is downloaded. The jar is written under another name first, held to
+its descriptor, and moved into place in one step, so a fetch that stops part way leaves nothing that
+is read as a backend. Two runs fetching into one directory take turns. The metadata and each pom have
+a minute to arrive; a jar has a minute for its answer to begin, and is then given as long as it
+takes, ending only where nothing more has arrived for half a minute.
+
+The jar is what Maven Central serves over HTTPS, with no checksum or key to hold it to: a backend is
+released after the Souther it is built against, so nothing about it is known to this one. The proxy is
+the one Java's `https.proxyHost` names, and `HTTPS_PROXY` where that is not set, except for a host
+`NO_PROXY` names. `-Dsouther.repository=<url>` fetches from another Maven repository in Central's
+layout, and is what the messages name in Central's place; it is reached over HTTPS, or over plain HTTP
+on this machine's loopback address, and a redirect is followed only to an address reached the same
+way. A target Maven Central does not
+release, `jvm` among them, is refused with exit status 2, as is a fetch that finds no release built
+against this Souther or cannot reach the repository, which is named with what it answered. This
+command is not held to `.souther-version`: what it fetches is for the Souther that runs it.
+
+<!-- souther-section: project-version -->
+## .souther-version
+
+A file of this name holds one line: an exact Souther version, compared as text, with no range and no
+alias. It says which Souther a project's direct use of this command line requires, and chooses none:
+under one naming another version, `compile` (whatever its target), `run`, `fmt` and `examples` are
+refused with both versions named, and exit status 2. The file is looked for from the working directory
+upwards, and the nearest one wins. `init`, `backend`, `doc`, `api`, `japi`, `tooling`, `help` and `version` are
+not held to it, nor are `lsp` and `mcp` for now, since an editor or an agent starts those and a
+refusal at start-up would show its reader nothing. A `--help` or `--version` this command line reads
+is answered before the file is. One written after an installed target's name is the backend's and is
+not read here, so a line that delegates is held to the file first, as any other `compile` is.
+
+A file that does not hold exactly one version on one line is refused as it stands, and so is one that
+cannot be read: whitespace around the version, a blank line after it, or a directory of that name is
+said so and not read as the version it resembles. A line ending is not part of the version.
+
+A Maven or Gradle build does not read the file: its build file decides which Souther it runs, and
+`souther init --build maven|gradle` writes none. One a Java project keeps constrains direct use of
+this command line and nothing else.
 
 <!-- souther-section: run -->
 ## run
@@ -370,23 +478,17 @@ diff.
 
 ```
 souther examples <file.sou>... [-cp|--class-path <path>] [--module <name>]
-                               [--behavior <name>] [--adequacy reliable-domain|classes]
-                               [--generate [--boundaries]] [--strict]
+                               [--behavior <name>] [--generate] [--strict]
 ```
 
 Reports how well the `example` rows cover the model — which partitions, boundaries and branch arms
-no row reaches. `--generate` prints commented rows for what nothing covers, `--boundaries` adds
-rows at the untried boundaries, and `--strict` exits non-zero on a gap the report names.
+no row reaches. `--generate` prints commented rows for what nothing covers, the points of a border
+among them, and `--strict` exits non-zero on a gap the report names.
 
-`--adequacy` names the bar the report is read against, and names the same bar `compile` does. Not
-the measurement words that spelling also takes on a compile: this command's whole output is the
-report, so everything is measured either way and there is nothing for `off`, `witness` or `all` to
-choose. Left unwritten the bar is `reliable-domain`.
-
-The bar is here and not on `--strict` because the two decide different things. `--strict` decides an
-exit status and nothing else — the report a reader is given is the same whether or not it was
-written — and a flag that also chose a bar would change which findings the report marks, so two runs
-differing only in the word would be reports of two different questions.
+There is no `--adequacy` here. This command's whole output is the report, so everything is measured
+and there is nothing for `off`, `witness` or `all` to choose; and what the report marks as a gap is
+every obligation the account derives, which no caller chooses either. `--strict` decides an exit
+status and nothing else — the report a reader is given is the same whether or not it was written.
 
 A generated row leaves the answer as `<?>`, and where the behavior carries an `ensures`, part of that
 answer is already written down. So the clauses are quoted over the rows of the behavior they are
@@ -405,7 +507,7 @@ where nothing that could find a gap was asked about, or one of those measures co
 measure that does not apply — the arms of a `>->` composition, which has none of its own — is neither
 asked nor missing, and does not hold the answer open. `--strict`
 refuses `not_satisfied` and nothing else, which is the same set of findings `compile --adequacy
-reliable-domain --warnings error` refuses. It decides the exit status and no more: the report is the
+all --warnings error` refuses. It decides the exit status and no more: the report is the
 same whether or not it was written.
 
 The report prints more findings than a build refuses over, and says which is which. A line under `!`
@@ -415,6 +517,27 @@ in, a position the model divides no way. The two read alike and are a sentence a
 under `adequacy` is how many are marked. In the JSON each behavior carries `findings`, where every
 one of them says its `kind` and what a build does about it under `disposition` — `refused`,
 `reported`, or `undecided` where the measure behind it came to no answer.
+
+`adequacy` does not say whether the rows hold. A row that does not hold is an error the command
+exits non-zero on, `--strict` or not, and what it reached before it stopped it reached: the arms,
+classes, points and rules it got to count as met. The report says both. Under the verdict it lists
+the rows that do not hold and where each stopped — the behavior answering otherwise, or earlier, an
+input or an expectation that could not be built. Where such rows are all that covers something
+counted as met, that line is marked `~` under its measure with the rows named: the count has it
+only through them. Correcting only the answer a row states leaves where it goes as it was, so a mark
+is what the rows contribute and not always what fixing them costs. Something another row covers as
+well is not marked, and that other row need not be one that holds: a row waiting for its answer
+counts. The last line says how many are marked, which is the one sign a report narrowed with
+`--behavior` gives that a row of a behavior it does not show is all that covers something it does.
+In the JSON each behavior carries `rowsThatDoNotHold`, each row with its `failedAt`, and an
+obligation covered only by such rows carries `onlyWitnessedBy`.
+
+A position nothing the behavior states reads — not its body and not a clause of it — is owed no row
+at any of its classes, since a row at one of them gives the answer a row at any other gives. Its
+classes stay in the count, and a `·` line says why none of them is asked for; in the JSON the
+position's `use` is `not_read`. A value the body reads without deciding anything on it, such as one
+copied into the answer, is read, and each of its classes is owed a row. So is a position whose
+reading this compiler could not settle.
 
 How many rows are waiting for a `let` is reported and never gated on:
 waiting is the normal state of a model being written, and an injected behavior's recorded row is the

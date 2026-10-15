@@ -2,11 +2,13 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.carrier.Membership;
 import souther.compiler.check.DeclaredSig;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
+import souther.compiler.check.TypeCardinality;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.query.Adequacy;
@@ -82,10 +84,12 @@ class AClassThatNarrowsStatesTheNarrowingAndNotAValueTest {
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
         assertNotNull(checked, "the model under test compiles");
         Core body = checked.behaviorBodies().get("use");
-        InputDomain domain = InputDomain.of(sigs.get("use"),
-                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES));
+        RuleReadingContext context =
+                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES);
+        InputDomain domain = InputDomain.of(sigs.get("use"), context,
+                TypeCardinality.Counts.workedOutIn(context), Membership.none());
         Partitions.Partitioning axes =
-                Partitions.of("use", domain, rules, ReadAs.THE_COMPILATION_DOES);
+                Partitions.of("use", domain.reading(rules), ReadAs.THE_COMPILATION_DOES);
         // What a body draws, where there is one. A behavior nothing implements has the classes its
         // declarations state and no lines beside them, which is the whole of what one of these
         // models is for.

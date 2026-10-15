@@ -1,5 +1,7 @@
 package souther.compiler.core;
 
+import souther.compiler.hash.KeepsTheNumberItIsAskedFor;
+import souther.compiler.hash.ValueHash;
 import souther.compiler.types.BinOp;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.CaseSelector;
@@ -16,10 +18,13 @@ import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 import souther.compiler.diag.SourcePos;
-import souther.compiler.regex.PatternMeaning;
+import net.unit8.notation199x.pattern.PatternMeaning;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
+import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -228,6 +233,230 @@ public sealed interface Core {
     record FieldAccess(Core target, String field, Type type, SourcePos pos) implements Core {}
 
     /**
+     * Fields read off {@code base} one after another, held as one node however many there are.
+     *
+     * <p>What a reading of a type's guarantees reaches a value by. That reading goes down the
+     * declarations a name at a time, and how far it goes is how long the declarations chain — a
+     * length nothing the author wrote bounds. Written as a {@link FieldAccess} per name, the tree
+     * would be as deep as the chain, and every reader that recurses over a target would answer a
+     * long chain by running out of stack. So the names are held beside the one expression they are
+     * read off, and only {@code base} is a child: a pass that rewrites what a value is read off
+     * rewrites the base and keeps the names.
+     *
+     * <p>The same reading as the accesses it stands for, and nothing else. A reader that gives a
+     * field access a meaning gives this one the meaning of its steps in order; there is no rule
+     * here that a {@link FieldAccess} does not have.
+     *
+     * <p>Never the base of another one ({@link #then}), so a chain is one node and not a chain of
+     * them. Analysis only: a run never reads a value this way, and an emitter that meets one has
+     * been handed a tree that was not built to run.
+     *
+     * @param base  what the first name is read off
+     * @param steps the names read, the last one being what this answers
+     */
+    record FieldProjection(Core base, Steps steps, SourcePos pos) implements Core {
+
+        public FieldProjection {
+            if (base instanceof FieldProjection) {
+                throw new IllegalArgumentException(
+                        "a projection reads its names off one value, not off another projection");
+            }
+            Objects.requireNonNull(base, "a projection reads its names off some value");
+            Objects.requireNonNull(steps, "a projection reads some name");
+        }
+
+        /** {@code from} with {@code field} read off it: one more step where {@code from} is already
+         *  a projection, and a projection of one step where it is not. */
+        public static FieldProjection then(Core from, String field, Type type) {
+            return then(from, field, type, from.pos());
+        }
+
+        /** The same, standing at {@code pos} — where the access it stands for would. */
+        public static FieldProjection then(Core from, String field, Type type, SourcePos pos) {
+            Step step = new Step(field, type);
+            return from instanceof FieldProjection p
+                    ? new FieldProjection(p.base(), p.steps().then(step), pos)
+                    : new FieldProjection(from, Steps.of(step), pos);
+        }
+
+        @Override
+        public Type type() {
+            return steps.last().type();
+        }
+
+        /** What the last name is read off: the base where there is one name, and this projection
+         *  short of its last name where there are more. */
+        public Core target() {
+            Steps before = steps.before();
+            return before == null ? base : new FieldProjection(base, before, pos);
+        }
+
+        /**
+         * Every projection shorter than this one, the nearest first: this with its last name taken
+         * off, then with the one before it, down to the projection of one name.
+         *
+         * <p>The subexpressions the accesses written out would have had as nodes of their own,
+         * between this one and the base. A walk that asks each node it meets what it is — a
+         * position, a subject, a term — asked each of those too, and has to ask them here: they are
+         * not children, since the base is the only one. The base is not among them for that reason;
+         * the walk reaches it as it reaches any child. Made a name at a time and never on the
+         * stack.
+         */
+        public Iterable<FieldProjection> shorter() {
+            return () -> new Iterator<>() {
+
+                private Steps next = steps.before();
+
+                @Override
+                public boolean hasNext() {
+                    return next != null;
+                }
+
+                @Override
+                public FieldProjection next() {
+                    if (next == null) {
+                        throw new NoSuchElementException();
+                    }
+                    FieldProjection here = new FieldProjection(base, next, pos);
+                    next = next.before();
+                    return here;
+                }
+            };
+        }
+
+        /**
+         * The last step as the one field access it is, read off {@link #target}.
+         *
+         * <p>As shallow as the target is, which is one node: for a reader whose question about a
+         * field access is asked of the access and its target, and never of what is under them.
+         */
+        public FieldAccess lastAccess() {
+            return new FieldAccess(target(), steps.last().field(), type(), pos);
+        }
+
+        /** What a reader of the tree that runs throws on meeting one. */
+        public IllegalStateException unexpectedIn(String reader) {
+            return new IllegalStateException(
+                    "a projection of a type's guarantees (" + base + steps + ") reached " + reader
+                            + ", at " + pos);
+        }
+
+        /** One name read, and the type of what it reads. What it is read off is the type of the step
+         *  before it, or the base's for the first. */
+        public record Step(String field, Type type) {
+
+            public Step {
+                Objects.requireNonNull(field, "a step reads some name");
+                Objects.requireNonNull(type, "and what it reads is of some type");
+            }
+        }
+
+        /**
+         * The names of a projection, the last one and the ones before it.
+         *
+         * <p>Shared rather than copied, so a reading one name further costs the same however many
+         * names came before it, and copies none of them. Compared along the names rather than by
+         * recursing, for the reason the node exists: how many names there are is not bounded by
+         * anything a stack is.
+         *
+         * <p>The number it is asked for is worked out when it is made, from the number of the chain
+         * before it and the name read last, and kept. A projection is as deep as a chain of
+         * declarations, and every value holding one — a rule as read, a finding about it — is
+         * filed by its number; worked out at each ask, the number walked the whole chain.
+         */
+        public static final class Steps implements KeepsTheNumberItIsAskedFor {
+
+            /**
+             * What a chain of names is.
+             *
+             * @param before the names before the last one, or null where the last one is the first
+             * @param last   the name this projection answers
+             */
+            public record Parts(Steps before, Step last) {
+
+                public Parts {
+                    Objects.requireNonNull(last, "a projection reads some name");
+                }
+            }
+
+            private final Parts parts;
+            private final int hash;
+
+            private Steps(Steps before, Step last) {
+                this.parts = new Parts(before, last);
+                // The chain before this one answers the number it keeps, so this is one step.
+                this.hash = ValueHash.ofOnePart(Steps.class, parts.hashCode());
+            }
+
+            public static Steps of(Step first) {
+                return new Steps(null, first);
+            }
+
+            public Steps then(Step next) {
+                return new Steps(this, next);
+            }
+
+            /** The names before the last one, or null where the last one is the first. */
+            public Steps before() {
+                return parts.before();
+            }
+
+            /** The name this projection answers. */
+            public Step last() {
+                return parts.last();
+            }
+
+            @Override
+            public Parts standsFor() {
+                return parts;
+            }
+
+            /** Every name, the first one first. */
+            public List<Step> inOrder() {
+                List<Step> out = new ArrayList<>();
+                for (Steps at = this; at != null; at = at.before()) {
+                    out.add(at.last());
+                }
+                return List.copyOf(out.reversed());
+            }
+
+            @Override
+            public boolean equals(Object o) {
+                if (!(o instanceof Steps other)) {
+                    return false;
+                }
+                Steps a = this;
+                Steps b = other;
+                while (a != null && b != null) {
+                    if (a == b) {
+                        return true;
+                    }
+                    if (a.hash != b.hash || !a.last().equals(b.last())) {
+                        return false;
+                    }
+                    a = a.before();
+                    b = b.before();
+                }
+                return a == b;
+            }
+
+            @Override
+            public int hashCode() {
+                return hash;
+            }
+
+            @Override
+            public String toString() {
+                StringBuilder sb = new StringBuilder();
+                for (Step each : inOrder()) {
+                    sb.append('.').append(each.field());
+                }
+                return sb.toString();
+            }
+        }
+    }
+
+    /**
      * {@code occurrence} is which comparison of the model this is: the construct the source wrote
      * (see {@link souther.compiler.ast.Hir.Binary}) and the copy of the body it stands in. Both,
      * because a helper spliced into two calls holds one written comparison twice, and a reader
@@ -283,6 +512,13 @@ public sealed interface Core {
                 throw new IllegalArgumentException("operands read as they stand stand as one type: "
                         + left.type() + " " + op + " " + right.type());
             }
+            if (reading instanceof BinaryReading.Opened(Type newtype, Type base)
+                    && !((left.type().equals(newtype) && right.type().equals(base))
+                        || (left.type().equals(base) && right.type().equals(newtype)))) {
+                throw new IllegalArgumentException("a newtype opened beside what it wraps is one "
+                        + "of the two: " + left.type() + " " + op + " " + right.type()
+                        + " opening " + newtype + " to " + base);
+            }
         }
 
         /** What the source wrote, for a reader whose question is about the construct alone. */
@@ -326,6 +562,12 @@ public sealed interface Core {
      * reads its numbers as they stand.
      *
      * <p>Every one of these reads the two sides alike, so a comparison turned round keeps it.
+     *
+     * <p>A reading also says how far each operand is opened before it is read, which a backend
+     * lowers and does not work out from the types. Read as they stand, the two are one type, and
+     * a newtype compares and orders as what it wraps, so opening both through every name they
+     * wear answers what comparing them unopened does. Read at their exact values, neither wears a
+     * name. Read {@link In} a type, neither is opened, and {@link Opened}, the newtype's side is.
      */
     sealed interface BinaryReading {
 
@@ -333,10 +575,14 @@ public sealed interface Core {
         record AsTheyStand() implements BinaryReading {}
 
         /**
-         * The pair as values of {@code type}, for this operator only: a literal beside the newtype it
-         * is compared with, a case beside the enumeration that orders it, two values tested for
-         * sameness across one set of cases, a value beside one that states nothing about its own
-         * type.
+         * The pair as values of {@code type}, for this operator only: a case beside the enumeration
+         * that orders it, two values tested for sameness across one set of cases, a value beside one
+         * that states nothing about its own type.
+         *
+         * <p>Each side is a value of {@code type} as it stands, and neither is opened. A newtype one
+         * of them is may be what {@code type} lists as a case: {@code Code} beside a {@code Key}
+         * listing it is that {@code Key}, and opened it would be the {@code Int} it wraps, which
+         * the {@code Key} beside it is not.
          *
          * <p>Never which side came first: what an operator reads its operands as is the same
          * written either way round, so the type is one both sides settle and not one of theirs
@@ -346,6 +592,32 @@ public sealed interface Core {
             public In {
                 if (type == null) {
                     throw new IllegalArgumentException("a pair is read in some type");
+                }
+            }
+        }
+
+        /**
+         * A newtype beside a literal of what it wraps under every name it wears: the side that is
+         * {@code newtype} is opened through each of those names, and the pair is read as
+         * {@code base}, which the literal already is. {@code amount <= 100} reads the
+         * {@code Amount} as the {@code Int} it wraps, and the {@code 100} as it stands.
+         *
+         * <p>{@code base} is what is under every name and not what the outermost one wraps: for
+         * {@code data Code = Inner} and {@code data Inner = Int} it is the {@code Int}, the base
+         * {@code TypeOps.base} answers.
+         *
+         * <p>Which side is opened is the side whose type is {@code newtype}, so the reading is the
+         * same written either way round. The literal is never a newtype, which is what lets the
+         * two be told apart.
+         */
+        record Opened(Type newtype, Type base) implements BinaryReading {
+            public Opened {
+                if (newtype == null || base == null) {
+                    throw new IllegalArgumentException("a newtype is opened to what it wraps");
+                }
+                if (newtype.equals(base)) {
+                    throw new IllegalArgumentException(
+                            "a type opened to itself is read as it stands: " + newtype);
                 }
             }
         }
@@ -889,18 +1161,28 @@ public sealed interface Core {
          * emitter and by whatever asks which classes an emitted call names, so the two do not come to
          * disagree about which of the three a function is.
          *
-         * @param theWalk what the standard library's one loop is called
+         * @param theWalk the standard library's one loop
          */
-        public FunctionArgument functionArgument(int index, ValueName theWalk) {
-            if (!(args.get(index).type() instanceof Type.FnOf fnType)) {
+        public FunctionArgument functionArgument(int index, TheWalk theWalk) {
+            if (!(args.get(index).type() instanceof Type.FnOf)) {
                 throw new IllegalArgumentException("argument " + index + " of `" + fn.rendered()
                         + "` is not a function");
             }
             if (index == 0 && stepRunWhereItStands(theWalk) != null) {
                 return FunctionArgument.RUNS_WHERE_IT_STANDS;
             }
-            return !(fn instanceof Reached.OfKernel) && neverRuns(fnType)
+            return omitsFunctionBody(index)
                     ? FunctionArgument.NEVER_APPLIED : FunctionArgument.HANDED_OVER;
+        }
+
+        /**
+         * Whether the argument at {@code index} is a function none of whose body is emitted, because
+         * it is never applied. Decided by the types alone, so a function handed a list that is only
+         * empty at run time is not one.
+         */
+        public boolean omitsFunctionBody(int index) {
+            return args.get(index).type() instanceof Type.FnOf fnType
+                    && !(fn instanceof Reached.OfKernel) && neverRuns(fnType);
         }
 
         /**
@@ -913,11 +1195,15 @@ public sealed interface Core {
          * made for it, and no method is called, so nothing comes back to be cast to the type the
          * call answers.
          *
-         * @param theWalk what the standard library's one loop is called
+         * <p>A walk is run as the loop only where it takes its arguments in the loop's order
+         * ({@link TheWalk#inTheLoopsOrder}), which is the order this reads them in.
+         *
+         * @param theWalk the standard library's one loop
          */
-        public Block stepRunWhereItStands(ValueName theWalk) {
+        public Block stepRunWhereItStands(TheWalk theWalk) {
             boolean walks = fn == Emitted.BUILD_LIST || fn == Emitted.BUILD_MAP
-                    || (fn instanceof Reached reached && theWalk.equals(reached.denotes())
+                    || (fn instanceof Reached reached
+                    && theWalk.operation().equals(reached.denotes()) && theWalk.inTheLoopsOrder()
                     && args.size() > 3 && withoutStanding(args.get(3)) instanceof Int from
                     && from.value() == 0);
             return walks ? runsWhereItStands(args.get(0)) : null;
@@ -1295,7 +1581,21 @@ public sealed interface Core {
          */
         Optional<ResolvedCase> selectedCase();
 
-        /** The cases this answers for. */
+        /**
+         * Whether a value that is the leaf {@code atom} is one this arm takes.
+         *
+         * <p>Read off what each case covers and not off the names it is written by. A case that is
+         * itself a sum takes every leaf under it, so an arm written {@code OnceKind} takes a
+         * {@code Station}, which no name in {@link #caseTypes()} is.
+         */
+        default boolean takes(TypeSymbol atom) {
+            return cases().stream().anyMatch(each -> each.atoms().contains(atom));
+        }
+
+        /**
+         * The cases this answers for, by the names they are written by — what a report or an
+         * identity quotes, and not which values the arm takes, which is {@link #takes}.
+         */
         default List<TypeSymbol> caseTypes() {
             List<TypeSymbol> out = new java.util.ArrayList<>();
             for (CaseSelector selector : selectors()) {
@@ -1597,6 +1897,44 @@ public sealed interface Core {
     }
 
     /**
+     * The subexpressions standing at {@code e} that a walk going down a tree asks one at a time:
+     * {@code e} itself, and where it is a {@link FieldProjection}, the projections shorter than it,
+     * the nearest first.
+     *
+     * <p>For a walk asking each node it meets what it is — a position, a subject, a term — and not
+     * for one asking about the tree's structure. Written out as accesses, those projections were
+     * nodes the walk met going down; held as one node, they are not children, and a walk asking only
+     * the node misses every one of them. Asked through here, such a walk meets them in the order the
+     * descent did and then goes on into the base as into any child.
+     */
+    static Iterable<Core> subexpressionsAt(Core e) {
+        if (!(e instanceof FieldProjection projection)) {
+            return List.of(e);
+        }
+        return () -> new Iterator<>() {
+
+            private Core next = projection;
+
+            private final Iterator<FieldProjection> shorter = projection.shorter().iterator();
+
+            @Override
+            public boolean hasNext() {
+                return next != null || shorter.hasNext();
+            }
+
+            @Override
+            public Core next() {
+                if (next != null) {
+                    Core here = next;
+                    next = null;
+                    return here;
+                }
+                return shorter.next();
+            }
+        };
+    }
+
+    /**
      * {@code e} as what it evaluates, with the type it stands as at its position set aside: the value
      * a {@link Widen} holds, and {@code e} itself where nothing widened it.
      *
@@ -1605,6 +1943,24 @@ public sealed interface Core {
      */
     static Core withoutStanding(Core e) {
         return e instanceof Widen w ? w.value() : e;
+    }
+
+    /**
+     * Whether two expressions are one value: one name, or one field read off one value.
+     *
+     * <p>By what they read and not by where they were written. Two reads of {@code value} in one
+     * clause are two nodes at two positions and one value, and a reader asking whether two
+     * predicates are about the same thing is asking the second question.
+     */
+    static boolean sameValue(Core one, Core other) {
+        Core left = withoutStanding(one);
+        Core right = withoutStanding(other);
+        if (left instanceof Read read && right instanceof Read there) {
+            return read.binding().equals(there.binding());
+        }
+        return left instanceof FieldAccess access && right instanceof FieldAccess there
+                && access.field().equals(there.field())
+                && sameValue(access.target(), there.target());
     }
 
     /**
@@ -1700,6 +2056,12 @@ public sealed interface Core {
                 Core target = atExpr.apply(fa.target());
                 yield target == fa.target() ? fa
                         : new FieldAccess(target, fa.field(), fa.type(), fa.pos());
+            }
+            // The base is the one expression; the names read off it are not slots. What it is
+            // rewritten to may be a projection itself, and the names are then read further on.
+            case FieldProjection p -> {
+                Core base = atExpr.apply(p.base());
+                yield base == p.base() ? p : rebased(base, p);
             }
             case Binary b -> {
                 Core left = atExpr.apply(b.left());
@@ -1800,6 +2162,19 @@ public sealed interface Core {
         });
         return values == nd.values() ? nd
                 : new Construct(nd.typeName(), values, nd.type(), nd.pos());
+    }
+
+    /** {@code p}'s names read off {@code base} instead. Where {@code base} is a projection the names
+     *  go on after its own, so a chain stays one node. */
+    private static FieldProjection rebased(Core base, FieldProjection p) {
+        if (!(base instanceof FieldProjection under)) {
+            return new FieldProjection(base, p.steps(), p.pos());
+        }
+        FieldProjection.Steps steps = under.steps();
+        for (FieldProjection.Step each : p.steps().inOrder()) {
+            steps = steps.then(each);
+        }
+        return new FieldProjection(under.base(), steps, p.pos());
     }
 
     /** {@code xs} with {@code f} applied to each, or {@code xs} itself where none of them changed. */

@@ -2,14 +2,16 @@ package souther.compiler.inputs;
 
 import souther.compiler.ast.Hir;
 import souther.compiler.check.AtomSpace;
+import souther.compiler.check.DeclarationKinds;
 import souther.compiler.check.NewtypeInners;
-import souther.compiler.check.PublishedDeclarations;
 import souther.compiler.check.Shape;
+import souther.compiler.check.SumCases;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.check.TypeView;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
+import souther.compiler.values.AdmissibleSet;
 import souther.compiler.values.Value;
 import souther.compiler.values.ValueSet;
 
@@ -45,9 +47,9 @@ public final class Distinctions {
      * <p>Nothing about the rules on the position. What its type declares and what its rules leave
      * it able to hold are two facts, and this is the first of them.
      */
-    public static List<Case> ofType(TypeView view, Symbols symbols,
-                                    PublishedDeclarations published) {
-        return switch (view.shape()) {
+    public static List<Case> ofType(Shape shape, Symbols symbols, DeclarationKinds kinds,
+                                    SumCases sums) {
+        return switch (shape) {
             // A `Bool` is two values. No other primitive has distinctions to read off its type:
             // what a number's rules leave is a range with edges — everything outside a newtype's
             // invariant is refused at construction (E1903), so there is no class on the other side
@@ -55,8 +57,9 @@ public final class Distinctions {
             // here.
             case Shape.Scalar scalar -> scalar.prim() == Type.Prim.BOOL
                     ? List.of(new Case.Truth(true), new Case.Truth(false)) : List.of();
-            case Shape.Sum sum -> casesOf(Type.ref(sum.name()), symbols, published);
-            case Shape.Cases cases -> casesOf(Type.union(cases.members()), symbols, published);
+            case Shape.Sum sum -> casesOf(sum.reaches().cases(), symbols);
+            case Shape.Cases cases -> casesOf(
+                    AtomSpace.subjectAtoms(Type.union(cases.members()), kinds, sums), symbols);
             case Shape.Optional _ ->
                     List.of(new Case.Presence(false), new Case.Presence(true));
             // Shapes whose types state no division of their own. A record is made of positions and
@@ -81,10 +84,9 @@ public final class Distinctions {
 
     /** A sum's cases as distinctions, folded to their leaves and in the order they are declared —
      *  which is the order a report names them in. */
-    private static List<Case> casesOf(Type sum, Symbols symbols,
-                                      PublishedDeclarations published) {
+    private static List<Case> casesOf(List<TypeSymbol> leaves, Symbols symbols) {
         List<Case> out = new ArrayList<>();
-        for (TypeSymbol leaf : AtomSpace.subjectAtoms(sum, published)) {
+        for (TypeSymbol leaf : leaves) {
             out.add(new Case.SumCase(leaf, oneValue(leaf, symbols)));
         }
         return List.copyOf(out);
@@ -99,6 +101,22 @@ public final class Distinctions {
      */
     private static boolean oneValue(TypeSymbol leaf, Symbols symbols) {
         return !(symbols.declaredNode(leaf) instanceof Hir.Data);
+    }
+
+    /**
+     * What a position whose rules admit {@code admitted} divides into: the distinctions its type
+     * states, less those the rules leave nothing in, and where the type states none, the values the
+     * rules name.
+     *
+     * <p>The one answer to that, for a position read with its rules and for a value built under
+     * them. Decided by each, the two part wherever a type's distinctions are held to a few of
+     * them: the builder offers one the reader knows the rules refuse, and a collection holding it
+     * is refused whole.
+     */
+    public static List<Case> leftBy(List<Case> declared, AdmissibleSet admitted, Type type,
+                                    NewtypeInners inners) {
+        return declared.isEmpty() ? ofValues(admitted.approximation(), type, inners)
+                : Crossing.admits(declared, admitted);
     }
 
     /**

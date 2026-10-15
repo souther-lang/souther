@@ -174,6 +174,7 @@ record UniversalElementFacts(Map<RuleKey, Bounds> byPath) {
             case ElementLineage.ClosureResult<DeclaredArgument> _ ->
                     throughTheClosure(call, source, at, terms);
             case ElementLineage.InsideClosureResult<DeclaredArgument> _ -> Map.of();
+            case ElementLineage.TupleComponent<DeclaredArgument> _ -> Map.of();
             case ElementLineage.OneOf<DeclaredArgument> one -> {
                 Map<RuleKey, Bounds> both = null;
                 for (ElementLineage<DeclaredArgument> alternative : one.alternatives()) {

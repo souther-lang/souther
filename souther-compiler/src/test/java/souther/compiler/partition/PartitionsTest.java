@@ -6,12 +6,14 @@ import souther.compiler.check.DeclaredSig;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
+import souther.compiler.check.TypeCardinality;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.Membership;
 import souther.compiler.numeric.Count;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
+import souther.compiler.query.ReadAs;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
 
@@ -40,9 +42,12 @@ class PartitionsTest {
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
         assertNotNull(sigs);
         RuleReadingSource rules = RuleReadings.of(compilation, module);
-        return Partitions.of(behavior, InputDomain.of(sigs.get(behavior),
-                        RuleReadingContext.unshared(rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES)),
-                rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+        RuleReadingContext reading = RuleReadingContext.unshared(rules,
+                ReadAs.THE_COMPILATION_DOES);
+        return Partitions.of(behavior, InputDomain.of(sigs.get(behavior), reading,
+                        TypeCardinality.Counts.workedOutIn(reading),
+                        souther.compiler.carrier.Membership.none())
+                .reading(rules), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
     }
 
     private static Axis axis(Partitions.Partitioning partitioning, String path) {

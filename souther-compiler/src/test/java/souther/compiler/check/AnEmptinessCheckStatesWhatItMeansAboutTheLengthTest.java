@@ -3,6 +3,7 @@ package souther.compiler.check;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.ValueTransformation;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
 import souther.compiler.types.TypeKey;
@@ -50,7 +51,8 @@ class AnEmptinessCheckStatesWhatItMeansAboutTheLengthTest {
         String[] taken = measure.split("\\.");
         return FieldDomains.of(named, RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES))
                 .leftAt(RuleKey.THE_VALUE, new NumberAt.OfWhatNumber.OfWhatAnOperationAnswers(
-                        ValueName.Stdlib.operation(taken[0], taken[1]), TakenArguments.NONE));
+                        ValueName.Stdlib.operation(taken[0], taken[1]), TakenArguments.NONE,
+                        ValueTransformation.NONE));
     }
 
     private static void assertLength(NumericDomain.Bounds bounds, long least, long most) {

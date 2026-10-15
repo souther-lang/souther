@@ -7,7 +7,7 @@
     <parent>
         <groupId>org.souther-lang</groupId>
         <artifactId>souther-parent</artifactId>
-        <version>0.3.0</version>
+        <version>0.3.1-SNAPSHOT</version>
     </parent>
 
     <artifactId>souther-program-api-test</artifactId>
@@ -22,6 +22,11 @@
         own can consume a checked Souther program — is about what a separate artifact can compile
         against, and no test living inside souther-compiler is separate from it.
     </description>
+
+    <properties>
+        <!-- Nothing ships from here; not published to Central. -->
+        <souther.publish.skip>true</souther.publish.skip>
+    </properties>
 
     <dependencies>
         <dependency>
@@ -42,22 +47,4 @@
             <scope>test</scope>
         </dependency>
     </dependencies>
-
-    <profiles>
-        <!-- Nothing ships from here; keep it out of the Central bundle. -->
-        <profile>
-            <id>release</id>
-            <build>
-                <plugins>
-                    <plugin>
-                        <groupId>org.sonatype.central</groupId>
-                        <artifactId>central-publishing-maven-plugin</artifactId>
-                        <configuration>
-                            <skipPublishing>true</skipPublishing>
-                        </configuration>
-                    </plugin>
-                </plugins>
-            </build>
-        </profile>
-    </profiles>
 </project>

@@ -23,6 +23,7 @@ import java.util.stream.Stream;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -177,7 +178,7 @@ class AdequacyLensTest {
         int line = lineOf(TRIP, "behavior submit");
         assertEquals(new Range(new Position(line, 0), new Position(line, 0)),
                 lenses.get(0).range());
-        assertEquals("1 row · out 1/2 · boundary 2/5 · branch 1/2", lenses.get(0).title());
+        assertEquals("1 row · out 1/2 · boundary 1/4 · branch 1/2", lenses.get(0).title());
     }
 
     /**
@@ -200,7 +201,7 @@ class AdequacyLensTest {
         List<CodeLens> lenses = measuring(Adequacy.Level.ALL).codeLenses(MODULE, graphOf(workspace));
 
         assertEquals(1, lenses.size());
-        assertEquals("2 rows · out 2/2 · boundary 3/5 · branch 2/2", lenses.get(0).title());
+        assertEquals("2 rows · out 2/2 · boundary 2/4 · branch 2/2", lenses.get(0).title());
     }
 
     /** Nothing has been claimed about a behavior no row names, so there is nothing to draw over it. */
@@ -451,6 +452,36 @@ class AdequacyLensTest {
                 resolving.codeActions(MODULE, TRIP, on(9), graph).get(0));
         assertEquals(eager.edit().newText(), resolving.resolve(offered, TRIP, graph).newText(),
                 "and the rows are the same rows either way");
+    }
+
+    /**
+     * The compile the rows are composed in is kept from one offer taken to the next, and what it
+     * composes is of the documents as they are when the offer is taken.
+     *
+     * <p>Kept so that taking an offer a second time pays for what changed rather than for the whole
+     * workspace again. What that must not cost is an answer about the text as it was: the document
+     * below is rewritten to another module between the two, and the rows of the second are compared
+     * against an analyzer that never saw the first.
+     */
+    @Test
+    void rowsComposedAfterAnEditAreComposedFromTheEditedText() {
+        Analyzer analyzer = measuring(Adequacy.Level.WITNESS);
+        ModuleGraph before = graphOf(Map.of(MODULE, TRIP));
+        CodeAction.Deferred first = assertInstanceOf(CodeAction.Deferred.class,
+                analyzer.codeActions(MODULE, TRIP, on(9), before).get(0));
+        String firstRows = analyzer.resolve(first, TRIP, before).newText();
+
+        ModuleGraph after = graphOf(Map.of(MODULE, A_LINE_AND_SOME_MEETINGS));
+        CodeAction.Deferred second = assertInstanceOf(CodeAction.Deferred.class,
+                analyzer.codeActions(MODULE, A_LINE_AND_SOME_MEETINGS, on(12), after).get(0));
+        String secondRows = analyzer.resolve(second, A_LINE_AND_SOME_MEETINGS, after).newText();
+
+        Analyzer fresh = measuring(Adequacy.Level.WITNESS);
+        CodeAction.Deferred unseen = assertInstanceOf(CodeAction.Deferred.class,
+                fresh.codeActions(MODULE, A_LINE_AND_SOME_MEETINGS, on(12), after).get(0));
+        assertEquals(fresh.resolve(unseen, A_LINE_AND_SOME_MEETINGS, after).newText(), secondRows,
+                "the rows are the edited document's, as a compile that never saw the first says");
+        assertNotEquals(firstRows, secondRows, "and the two documents are owed different rows");
     }
 
     /**

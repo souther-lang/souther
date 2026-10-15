@@ -1,0 +1,34 @@
+// A `match` on what a closure was handed out of a map's keys tells the keys apart, and not the
+// values the map files under them.
+//
+// `Map.keys` answers the keys of `m`, so `k` stands for a key and the `match` turns on its case: a
+// run down an arm is one application, handed one key, and the arm takes that key's case. What the
+// map files under a key is never looked at. The guard on what `List.all` answers reads what
+// `Map.keys` answers, which no position is, so what it may turn on is not bounded and the values
+// are left as every position is beside it.
+//
+// told apart at n: 2 groups of 2
+// told apart at m[key]: 2 groups of 2
+// told apart at m[*]: unread somewhere
+module example.keymatched
+
+data North
+data South
+data Region = North | South
+
+data Low
+data High
+data Level = Low | High
+
+data Ok = { n: Int }
+
+behavior judge : (n: Int, m: Map<Region, Level>) -> Ok
+    constructs Ok
+
+let judge (n, m) = {
+    guard n > 0 else Ok { n = 0 }
+    guard List.all(k -> match k with
+        | North -> true
+        | South -> false, Map.keys(m)) else Ok { n = 1 }
+    Ok { n = 2 }
+}

@@ -1,17 +1,19 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.AnalysisBody;
+import souther.compiler.check.ElementBindings;
 import souther.compiler.check.ElementProvenance;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.check.ValueTemplates;
+import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReads;
+import souther.compiler.inputs.ValueDefinitions;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 
 import java.util.List;
-import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -45,9 +47,35 @@ record ReadComparisons(List<ComparisonReadings.Reading> comparisons,
                 new AnalysisBody(checked.behaviorBodies().get(behavior), ElementProvenance.NONE,
                         ValueTemplates.NONE),
                 inputs.reading(rules), InputReads.ofParameters(inputs.parameterReads(),
-                        checked.elementBindings().get(behavior)),
-                InputReads.ofParameters(Map.of(),
-                        checked.elementBindings().get(behavior))).comparisons(),
+                        inputs.declared(rules), checked.elementBindings().get(behavior),
+                        ValueDefinitions.of(checked.analysisBodies().get(behavior),
+                                rules.newtypes()),
+                        inputs.dependencies())).comparisons(),
+                inputs, rules);
+    }
+
+    /**
+     * The same, read off the body the analysis reads, where the language's operations still stand
+     * as themselves — which is the tree a module's comparisons are read off when it is measured.
+     */
+    static ReadComparisons ofTheAnalysis(String source, String behavior) {
+        Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.answerEverything();
+        assertEquals(List.of(), compilation.errors().stream()
+                        .map(each -> each.diagnostic().code() + " "
+                                + each.diagnostic().primary()).toList(),
+                "the model under test compiles");
+        String module = compilation.modules().get(0);
+        Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
+        RuleReadingSource rules = RuleReadings.of(compilation, module);
+        InputDomain inputs =
+                compilation.db().ask(new Adequacy.Inputs(module)).value().get(behavior);
+        AnalysisBody analysis = checked.analysisBodies().get(behavior);
+        return new ReadComparisons(ComparisonReadings.of(behavior, analysis,
+                inputs.reading(rules), InputReads.ofParametersWhereCallsStand(
+                        inputs.parameterReads(), inputs.declared(rules),
+                        ElementBindings.of(analysis, rules.newtypes()), inputs.dependencies()))
+                .comparisons(),
                 inputs, rules);
     }
 

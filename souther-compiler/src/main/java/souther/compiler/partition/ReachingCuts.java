@@ -1,26 +1,39 @@
 package souther.compiler.partition;
 
 import souther.compiler.carrier.Lookup;
+import souther.compiler.check.Carrier;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.inputs.CasesLeft;
+import souther.compiler.inputs.DeclaredInput;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.PathResolution;
 import souther.compiler.inputs.Refinement;
+import souther.compiler.inputs.Requirements;
 import souther.compiler.inputs.SearchRegion;
+import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermPath;
-import souther.compiler.numeric.LinearForm;
-import souther.compiler.numeric.Rel;
-import souther.compiler.semantics.ConditionJoin;
+import souther.compiler.meaning.Proposition;
+import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.ModelOccurrence;
+import souther.compiler.types.ModelOccurrences;
+import souther.compiler.types.Type;
+import souther.compiler.types.TypeSymbol;
 
+import java.util.ArrayList;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
+import java.util.function.BiPredicate;
 
 /**
  * What a row has already had to satisfy by the time it arrives at one comparison.
@@ -57,27 +70,211 @@ import java.util.Objects;
  * the list is what lets a report say a condition is unaccounted for; it is not what the region is
  * built from.
  */
-public record ReachingCuts(Lookup<ModelOccurrence, List<OnTheWay>> byComparison) {
+public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
+                           Lookup<ALine, SaidOnTheWay> saidByLine,
+                           Lookup<ModelOccurrence, ConditionOnTheWay> byTruth,
+                           Lookup<ModelOccurrence, ConditionOnTheWay> byFork) {
 
-    public static final ReachingCuts NONE = new ReachingCuts(Lookup.built(_ -> { }));
+    public static final ReachingCuts NONE = new ReachingCuts(Lookup.built(_ -> { }),
+            Lookup.built(_ -> { }), Lookup.built(_ -> { }), Lookup.built(_ -> { }));
 
     public ReachingCuts {
-        Objects.requireNonNull(byComparison, "what a walk collected, comparison by comparison");
+        Objects.requireNonNull(byLine, "what a walk collected, line by line");
+        Objects.requireNonNull(saidByLine, "who put what on each line's way");
+        Objects.requireNonNull(byTruth, "what a walk collected, truth by truth");
+        Objects.requireNonNull(byFork, "what a walk collected, fork by fork");
     }
 
     /**
-     * How a row for a border on the rule stated at {@code states} came to be looked for where it is:
-     * the whole account of the walk to it.
+     * Which line of which comparison a row is looked for at.
+     *
+     * <p>The comparison, and which of its lines where it states several. Those are reached by one
+     * way and looked for under more than it: a line of {@code Int.max(a, b) <= g} is one the
+     * statement turns on only where the other part holds, and that is part of what a row at it has
+     * to meet — so each line has a way of its own, the way to the comparison and where the line
+     * decides after it.
+     *
+     * @param states which construct of the model the comparison is stated at
+     * @param part   which of its lines and which case of where that line decides, where it states
+     *               several; empty where it states one
+     */
+    public record ALine(ModelOccurrence states, Optional<WhereAPartDecides> part) {
+
+        public ALine {
+            Objects.requireNonNull(states, "a line is some comparison's");
+            Objects.requireNonNull(part, "a line is the comparison's one, or one of several");
+        }
+    }
+
+    /**
+     * A condition as the walk met it — a truth a fork's condition asks, or a fork's whole
+     * condition: what stood on the way to it, and what it coming out each way says
+     * ({@link #stating}).
+     *
+     * <p>Both ways said here, where the condition and the reading of the input are in hand, so that
+     * what is kept is what a row is composed against and compares as that.
+     *
+     * @param assumed what stood on the way to it
+     * @param holding what it coming out true says
+     * @param failing what it coming out false says
+     */
+    public record ConditionOnTheWay(List<OnTheWay> assumed, List<OnTheWay> holding,
+                                    List<OnTheWay> failing) {
+
+        public ConditionOnTheWay {
+            assumed = List.copyOf(assumed);
+            holding = List.copyOf(holding);
+            failing = List.copyOf(failing);
+        }
+    }
+
+    /**
+     * What brings the truth the application {@code application} answers out {@code held}, where a
+     * fork's condition asks it: every demand it coming out that way makes of a row, and the way to
+     * it with those taken in — or empty where it asks something this reading could not state, asks
+     * nothing, or no row takes the way.
+     *
+     * <p>The demands are on the way the row is held to and not only beside it. What a row has to
+     * be for a truth to come out a way is a condition a composer meets the way it meets every
+     * condition on the way to it, so the way it is held to is the way to the truth and the truth
+     * itself. All of them, because a truth asks them all at once: some element meeting a predicate
+     * and what the predicate asks of the rest of the row are one coming out.
+     *
+     * @param declarations what the declarations leave, which the way narrows
+     */
+    public Optional<HeldOutcome> heldAt(ModelOccurrence application, boolean held,
+                                        SearchRegion declarations) {
+        return held(byTruth.get(application), held, declarations);
+    }
+
+    /**
+     * What brings a run down arm {@code part} of {@code fork}: the fork's whole condition coming
+     * out the way the arm is taken on, as {@link #heldAt} answers it for an application.
+     *
+     * <p>A way past a guard names the arm where the condition has a part no construct of its own
+     * records — the arm is where a run through it is seen. A run down the arm brought the whole
+     * condition out that way, so that is what it takes of a row, whichever of its parts the way
+     * also names; and where the condition coming out that way is nothing this can state, nothing
+     * holds a row to the arm.
+     */
+    public Optional<HeldOutcome> heldAtTheArm(ModelOccurrence fork, int part,
+                                              SearchRegion declarations) {
+        return held(byFork.get(fork), part == 0, declarations);
+    }
+
+    private static Optional<HeldOutcome> held(ConditionOnTheWay met, boolean held,
+                                              SearchRegion declarations) {
+        if (met == null) {
+            return Optional.empty();
+        }
+        List<OnTheWay> asked = held ? met.holding() : met.failing();
+        List<RowDemand> demands = new ArrayList<>();
+        for (OnTheWay each : asked) {
+            switch (each) {
+                case OnTheWay.TakenIn in -> demands.add(in.demand());
+                case OnTheWay.Settled _ -> { }
+                // One of several ways is no set of demands a row is held to all of.
+                case OnTheWay.Declined _, OnTheWay.Narrowed _, OnTheWay.OneOf _ -> {
+                    return Optional.empty();
+                }
+            }
+        }
+        if (demands.isEmpty()) {
+            return Optional.empty();
+        }
+        List<OnTheWay> way = new ArrayList<>(met.assumed());
+        way.addAll(asked);
+        return Reachability.of(new WayToTheBorder(way), declarations)
+                instanceof Reachability.Reaching reaching
+                ? Optional.of(new HeldOutcome(demands, reaching))
+                : Optional.empty();
+    }
+
+    /**
+     * How a row for a border on the line {@code origin} drew came to be looked for where it is: the
+     * whole account of the walk to it, and where the line decides after it where it is one of
+     * several a comparison states.
      *
      * <p>Empty where nothing was collected there — and the answer says so, rather than leaving a
      * reader to tell a comparison at the top of a body from one this could read nothing on the way
      * to. Both leave a region as wide as the declarations and both are sound; only one of them is a
      * limit of this compiler, and an author who is told nothing has no way to find out which they
      * are looking at.
+     *
+     * <p>Nothing on the way for a line no comparison drew. An invariant is about the values and
+     * holds wherever one stands, and a clause states a relation the behavior is held to, so there
+     * is nowhere for a row to have come from.
      */
-    public WayToTheBorder wayTo(ModelOccurrence states) {
-        List<OnTheWay> found = byComparison.get(states);
+    public WayToTheBorder wayTo(LineOrigin origin) {
+        if (!(origin instanceof LineOrigin.ComparisonOrigin comparison)) {
+            return WayToTheBorder.UNTOUCHED;
+        }
+        List<OnTheWay> found =
+                byLine.get(new ALine(comparison.read().states(), comparison.part()));
         return new WayToTheBorder(found == null ? List.of() : found);
+    }
+
+    /**
+     * Whether no row is on the ways to the lines {@code one} and {@code other} at once: what the two
+     * ways ask of a row, taken together, asks one position to be two things.
+     *
+     * <p>Then a row at one of them is never at the other, and the other's place is no edge of a run
+     * beside the first. {@code month.value <= minimum(term)} draws its line at 12 where {@code term}
+     * is {@code OneYear} and at 24 where it is {@code TwoYear}; a row at the first has a month above
+     * 24 on the same side of 12 as one at 13.
+     *
+     * <p>Only a proof says so. Nothing is said where either way is one of several ways, or where the
+     * position asked twice is inside the elements or keys of a container: two comparisons inside two
+     * closures each ask that of an element of their own, which may be two elements of one row.
+     *
+     * <p>Asked of the cases and the truths the two ways ask, which are the two things a way asks a
+     * position to be ({@link Reachability.TwoAtOnce}); the region the ways leave is not worked out,
+     * since nothing here reads it.
+     */
+    public boolean neverTogether(LineOrigin one, LineOrigin other) {
+        WayToTheBorder first = wayTo(one);
+        WayToTheBorder second = wayTo(other);
+        if (first.onTheWay().isEmpty() || second.onTheWay().isEmpty()
+                || !first.severalWays().isEmpty() || !second.severalWays().isEmpty()) {
+            return false;
+        }
+        List<OnTheWay> joined = new ArrayList<>(first.onTheWay());
+        joined.addAll(second.onTheWay());
+        WayToTheBorder both = new WayToTheBorder(joined);
+        TermPath twice = switch (both.requirements()) {
+            case Requirements.Merge.Conflict conflict -> conflict.at();
+            case Requirements.Merge.Merged _ ->
+                    both.truths() instanceof TruthsAsked.Merge.Conflict(TermPath at) ? at : null;
+        };
+        return twice != null && twice.steps().stream().noneMatch(step ->
+                step instanceof TermPath.Step.Element || step instanceof TermPath.Step.Key);
+    }
+
+    /**
+     * {@link #neverTogether}, asked of each pair of lines once however many borders ask it: a
+     * border asks it of every other line on its quantity, and every line on the quantity is a
+     * border.
+     */
+    public BiPredicate<LineOrigin, LineOrigin> apart() {
+        Map<LineOrigin, Map<LineOrigin, Boolean>> asked = new IdentityHashMap<>();
+        return (one, other) -> {
+            Boolean before = asked.getOrDefault(other, Map.of()).get(one);
+            return before != null ? before : asked.computeIfAbsent(one, _ -> new IdentityHashMap<>())
+                    .computeIfAbsent(other, _ -> neverTogether(one, other));
+        };
+    }
+
+    /**
+     * Which copies of the model's code put each entry on the way to the line {@code origin} drew
+     * ({@link #wayTo}), told when the ways to it were walked and of those ways alone.
+     */
+    public SaidOnTheWay saidOnTheWayTo(LineOrigin origin) {
+        if (!(origin instanceof LineOrigin.ComparisonOrigin comparison)) {
+            return SaidOnTheWay.NONE;
+        }
+        SaidOnTheWay said =
+                saidByLine.get(new ALine(comparison.read().states(), comparison.part()));
+        return said == null ? SaidOnTheWay.NONE : said;
     }
 
     /**
@@ -102,26 +299,51 @@ public record ReachingCuts(Lookup<ModelOccurrence, List<OnTheWay>> byComparison)
      * is declined whole, at the condition rather than at an operand — neither operand is what could
      * not be carried.
      */
-    static List<OnTheWay> stating(Condition node, InputReading read, boolean holding) {
-        return switch (node) {
-            // Coming out the way that gives both halves, each of them came out that way too. The
-            // other composition says a disjunction of things, which is not a list of cuts and is
-            // not approximated into one: `A && B` being false says one of them failed and names
-            // neither, and narrowing on either would exclude rows that arrive. So the whole node is
-            // declined, at the whole node's place.
-            case Condition.Joined joined -> joined.how().under(holding) == ConditionJoin.BOTH
-                    ? and(stating(joined.left(), read, holding),
-                            stating(joined.right(), read, holding))
-                    : List.of(new OnTheWay.Declined(joined.occurrence(), joined.anchor(),
-                            new OnTheWay.Why.OneOfTwoThings()));
-            case Condition.Compares one -> List.of(of(one, read, holding));
-            // A truth is not an inequality over a form, which is what a cut is. Read as one here,
-            // the region a search looks in would be narrowed by a proposition this arithmetic
-            // cannot state, and the decision a body draws on such a value is a different question
-            // asked elsewhere.
-            case Condition.Truth truth -> List.of(new OnTheWay.Declined(
-                    truth.occurrence(), truth.anchor(), new OnTheWay.Why.NoWordsForTheShape()));
-        };
+    static Stating stating(Condition node, InputReading read, boolean holding,
+                           WhatConditionsState conditions) {
+        // What the condition asks is {@link DemandReading}'s, connectives and all, and each thing
+        // it asks is put on the way at the condition of the shape that asked it. A truth stays
+        // the truth it is: what a report names and where a run through it is seen are the
+        // condition the author wrote, and only the demand is read as the comparison it means. A
+        // disjunction of things is put at the whole node, since neither operand is what could not
+        // be carried.
+        List<OnTheWay> entries = new ArrayList<>();
+        Map<OnTheWay, ModelOccurrences> by = new LinkedHashMap<>();
+        for (DemandReading.Stated each : DemandReading.stated(node, read, holding, conditions)) {
+            entries.add(onTheWay(each.where().occurrence(), each.where().anchor(), each.read(),
+                    read, each.readOff(), by));
+        }
+        return new Stating(entries, new SaidOnTheWay(by, Map.of(), Map.of()));
+    }
+
+    /**
+     * What a condition put on the way, and which copies of the model's code each entry was read
+     * off.
+     *
+     * <p>Told where the entries are made, which is the one place the part each was read off is
+     * still known. An entry is filed under a condition of the shape, and the condition is no
+     * account of where each thing it asks was read: a comparison over what another call of a
+     * helper worked out asks what that call's fork decided, and the halves of a joined condition
+     * may stand in two calls.
+     *
+     * @param entries what was put on the way, in order
+     * @param by      which copies each entry and each entry inside an alternative of one was read
+     *                off
+     */
+    record Stating(List<OnTheWay> entries, SaidOnTheWay by) {
+
+        Stating {
+            entries = List.copyOf(entries);
+            Objects.requireNonNull(by, "which copies each entry was read off, or none");
+        }
+
+        /** {@code entries}, every one of them and of their alternatives read off
+         *  {@code readIn}. */
+        static Stating of(List<OnTheWay> entries, ModelOccurrences readIn) {
+            Map<OnTheWay, ModelOccurrences> by = new LinkedHashMap<>();
+            SaidOnTheWay.filed(entries, readIn, by);
+            return new Stating(entries, new SaidOnTheWay(by, Map.of(), Map.of()));
+        }
     }
 
     /**
@@ -134,10 +356,10 @@ public record ReachingCuts(Lookup<ModelOccurrence, List<OnTheWay>> byComparison)
      *
      * <p><b>The narrowing and never the arm.</b> What a search can compose against is a position
      * read as one of its cases; "the second arm was taken" is a fact about the text. So what is
-     * carried is the scrutinee's position with the arm's case on it, and where this reading cannot
-     * arrive at one — a scrutinee no position holds, an arm answering for several cases, an arm
-     * naming a case that is itself a sum, a case the declarations leave no position at — nothing is
-     * invented and the arm is declined.
+     * carried is the scrutinee's position with the arm's cases on it — the leaves under them where
+     * a case is itself a sum — and where this reading cannot arrive at one — a scrutinee no position
+     * holds, an arm over an optional's two carriers at once, a case the declarations leave no
+     * position at — nothing is invented and the arm is declined.
      *
      * <p>And the narrowing is the one the checker's resolution of the arm settles, taken as it is
      * rather than built again from the case's name: the name says neither whether an optional's
@@ -148,21 +370,24 @@ public record ReachingCuts(Lookup<ModelOccurrence, List<OnTheWay>> byComparison)
      * nothing and an arm nothing could be read of are the two answers a walk has to tell apart, and
      * a silence is both of them.
      */
-    static OnTheWay entering(Core.Match match, Core.Case arm, int part, InputDomain inputs,
-                             InputReads reads, RuleReadingSource ruleSource,
-                             ConditionNumbering numbering) {
+    static Stating entering(Core.Match match, Core.Case arm, int part, InputReading read,
+                            InputReads reads, ConditionNumbering numbering) {
+        InputDomain inputs = read.domain();
+        RuleReadingSource ruleSource = read.rules();
         ConditionOccurrence met = numbering.metEntering(match, part);
         ConditionReportAnchor at =
                 numbering.anchorOfArm(match.origin(), part, arm.pos(), met);
-        Refinement narrowing = arm.selectedCase().map(Refinement::of).orElse(null);
-        if (narrowing == null) {
-            return new OnTheWay.Declined(met, at,
-                    new OnTheWay.Why.ForkArmNotReadAsANarrowing());
+        // The selection whole, and not one narrowing made out of it: a case over several leaves
+        // leaves the value several, and whether it narrows the position at all is the
+        // declaration's to say below.
+        CasesLeft selected = CasesLeft.selectedBy(arm.pattern());
+        if (selected == null) {
+            return enteredWhole(match, part, read, reads, met, at);
         }
         // The arm is declined for either answer: a search composes against a position read as one
         // of its cases, and there is no position to narrow whether the scrutinee stands at none or
         // this reading did not follow it to one.
-        TermPath scrutinee = switch (reads.pathOf(match.scrutinee(), ruleSource.newtypes())) {
+        TermPath scrutinee = switch (reads.forkedOn(match.scrutinee(), ruleSource.newtypes())) {
             case PathResolution.At(var stands) -> stands;
             case PathResolution.NotAPosition _ -> null;
             // And declined for a scrutinee that only may stand at one. What a narrowing is composed
@@ -171,6 +396,17 @@ public record ReachingCuts(Lookup<ModelOccurrence, List<OnTheWay>> byComparison)
             // than the rows that arrive — the one direction that takes a coverage item away.
             case PathResolution.MayStandAt _ -> null;
         };
+        // A value this reading already knows is no narrowing of anything, and needs none: every row
+        // takes the arm or none does. Read before giving up on the position, since a scrutinee
+        // standing at none is exactly what a helper handed a case written in the source matches.
+        if (scrutinee == null) {
+            Optional<Boolean> taken = reads.whetherEveryRowTakes(arm, match.scrutinee(),
+                    ruleSource.symbols(), ruleSource.newtypes());
+            if (taken.isPresent()) {
+                return Stating.of(List.of(new OnTheWay.Settled(met, at, taken.get())),
+                        copyOf(match.occurrence()));
+            }
+        }
         // The position that is narrowed, and not the narrowed one. A case declaring no field has
         // nothing under it and this reading holds no position there, which is what it is for; what
         // has to exist is the position the case is a case of, since that is what a row writes a
@@ -178,174 +414,378 @@ public record ReachingCuts(Lookup<ModelOccurrence, List<OnTheWay>> byComparison)
         //
         // Two values and not one: where the name stands is what the environment answers, and
         // whether the input's rules hold a position there is the reading's.
-        if (scrutinee == null || inputs.at(scrutinee) == null) {
-            return new OnTheWay.Declined(met, at,
-                    new OnTheWay.Why.ForkArmNotReadAsANarrowing());
+        DeclaredInput.Taking taking = scrutinee == null ? null
+                : taking(inputs, inputs.declared(ruleSource), scrutinee,
+                        match.scrutinee().type(), selected);
+        if (taking == null) {
+            return enteredWhole(match, part, read, reads, met, at);
         }
-        return new OnTheWay.Narrowed(at, scrutinee.refine(narrowing));
+        // What the fork states of its own scrutinee, read off the copy it stands in.
+        return Stating.of(List.of(switch (taking) {
+            case DeclaredInput.Taking.Narrows(TermPath to) -> new OnTheWay.Narrowed(at, to,
+                    inputs.reach().crossings(), onItsOrder(to, read));
+            case DeclaredInput.Taking.Implied _ -> new OnTheWay.Settled(met, at, true);
+            case DeclaredInput.Taking.Excluded _ -> new OnTheWay.Settled(met, at, false);
+        }), copyOf(match.occurrence()));
     }
 
     /**
-     * What reaching arm {@code part} of {@code attempt} establishes about this input, which this
-     * reading cannot say.
+     * What entering arm {@code part} of {@code match} asks of a row where it narrows no one
+     * position: what the arm states ({@link Pullback#ofTheArms}) — which case a value a helper or
+     * another behavior answers is, under what; an optional's two carriers at once — asked as any
+     * condition is.
+     */
+    private static Stating enteredWhole(Core.Match match, int part, InputReading read,
+                                        InputReads reads, ConditionOccurrence met,
+                                        ConditionReportAnchor at) {
+        return armStated(WhatConditionsState.of(read).arm(match, part, reads), met, at, read,
+                copyOf(match.occurrence()));
+    }
+
+    /**
+     * What arriving at an arm leaving {@code selected} says of the value at {@code scrutinee}, or
+     * null where this reading cannot say.
      *
-     * <p>The arm is decided by whether the construction's invariant held of the values it was
-     * given, and what that says of the input is the invariant read over those values. That is a
-     * reading of the invariant and not of anything this walk met, so the arm is declined rather than
-     * given a narrowing the walk did not establish. Declined and not left out: a rule through the
-     * arm still turns on it, and it is named so that the success and each departure are distinctions
-     * apart.
+     * <p>The case is relative to the type the scrutinee stands as, and the value there may be
+     * narrower: what the declaration puts at the position says whether reaching the arm narrows it,
+     * or comes out one way for every row because the declaration already decided.
+     *
+     * <p><b>At a name the cases of a sum share, asked under each case.</b> The value there stands
+     * at one position under each case the row can be ({@link WhereANameIsWritten}), and what the
+     * declarations leave it may differ from one case to the next. The arm narrows the name where it
+     * narrows the value under some case, to the cases it leaves under any of them; it is settled
+     * only where it is settled the same way under every case. A case whose reading stopped before
+     * putting the name anywhere is a place whose declarations were never read, so nothing is said
+     * there rather than an answer made out of the cases that were.
+     */
+    private static DeclaredInput.Taking taking(InputDomain inputs, DeclaredInput declared,
+                                               TermPath scrutinee, Type matchedAs,
+                                               CasesLeft selected) {
+        if (held(inputs, scrutinee)) {
+            return declared.taking(scrutinee, matchedAs, selected);
+        }
+        WhereANameIsWritten under = WhereANameIsWritten.ofAName(inputs, scrutinee);
+        if (under == null) {
+            return null;
+        }
+        Set<Refinement> left = new LinkedHashSet<>();
+        boolean implied = true;
+        for (WhereANameIsWritten.Place place : under.places()) {
+            switch (declared.taking(place.position(), matchedAs, selected)) {
+                case DeclaredInput.Taking.Narrows(TermPath to) -> {
+                    left.addAll(to.narrowing().atoms());
+                    implied = false;
+                }
+                case DeclaredInput.Taking.Implied _ -> left.addAll(selected.atoms());
+                case DeclaredInput.Taking.Excluded _ -> implied = false;
+            }
+        }
+        if (implied) {
+            return new DeclaredInput.Taking.Implied();
+        }
+        CasesLeft kept = selected.keeping(left::contains);
+        return kept == null ? new DeclaredInput.Taking.Excluded()
+                : new DeclaredInput.Taking.Narrows(DeclaredInput.narrowedTo(scrutinee, kept));
+    }
+
+    /**
+     * What {@code narrowed} says on the order of the position it narrows: a hole at each case of
+     * the enumeration the narrowing leaves out, and nothing where no enumeration orders the
+     * position.
+     *
+     * <p>Asked of the reading, which is what says which order a position stands on — the same
+     * question a comparison of the position against a written case is read through, so that the
+     * places a narrowing leaves out are the places a comparison names.
+     */
+    static List<TakenConstraint.AwayFrom> onItsOrder(TermPath narrowed, InputReading read) {
+        NumericTerm.ValueOf term = new NumericTerm.ValueOf(narrowed.narrowedFrom().position());
+        TermOrders orders = read.quantities().ordersOf(term);
+        if (orders == null || !(orders.answered() instanceof Carrier.Ordinal ordinal)) {
+            return List.of();
+        }
+        Set<TypeSymbol> left = narrowed.narrowing().leavesOfASum();
+        return ordinal.placesOf(each -> !left.contains(each)).stream()
+                .map(at -> new TakenConstraint.AwayFrom(term, at))
+                .toList();
+    }
+
+    /**
+     * What the arms of {@code match} leave the scrutinee, one entry per arm that is a column.
+     *
+     * <p>The question a fork asks, as the answers it has. Two forks over one position can ask two
+     * questions — whether a visit is a {@code OnceKind} or a {@code Renkei}, and inside the first,
+     * whether it is a {@code Station} or a {@code Hospital} — and a rule through both answers each of
+     * them, so what tells the two columns apart is which answers each fork has and not the position
+     * they are about. Two forks dividing a position the same way are one question, wherever each is
+     * written.
+     *
+     * <p>Each answer is the one the arm is read as ({@link #entering}): the cases the declaration
+     * leaves of the ones the arm covers where it narrows the position, and the cases the arm covers
+     * where the declaration leaves it none of them or where no position is narrowed. An arm the
+     * declaration already decides is no column and no answer, and neither is an arm over an
+     * optional's two carriers at once.
+     */
+    static Set<CasesLeft> answersOf(Core.Match match, InputDomain inputs, InputReads reads,
+                                    RuleReadingSource ruleSource) {
+        TermPath scrutinee = reads.forkedOn(match.scrutinee(), ruleSource.newtypes())
+                instanceof PathResolution.At(var stands) ? stands : null;
+        DeclaredInput declared = scrutinee == null ? null : inputs.declared(ruleSource);
+        Set<CasesLeft> out = new LinkedHashSet<>();
+        for (Core.Case arm : match.cases()) {
+            CasesLeft selected = CasesLeft.selectedBy(arm.pattern());
+            if (selected == null) {
+                continue;
+            }
+            DeclaredInput.Taking taking = declared == null ? null
+                    : taking(inputs, declared, scrutinee, match.scrutinee().type(), selected);
+            if (taking == null) {
+                out.add(selected);
+                continue;
+            }
+            switch (taking) {
+                case DeclaredInput.Taking.Narrows(TermPath to) -> out.add(to.narrowing());
+                case DeclaredInput.Taking.Excluded _ -> out.add(selected);
+                case DeclaredInput.Taking.Implied _ -> { }
+            }
+        }
+        return out;
+    }
+
+    /** Whether the input's rules hold the position a fork on {@code scrutinee} narrows
+     *  ({@link TermPath#position}). */
+    private static boolean held(InputDomain inputs, TermPath scrutinee) {
+        return inputs.at(scrutinee.position()) != null;
+    }
+
+    /**
+     * What reaching arm {@code part} of {@code attempt} establishes about this input: what the arm
+     * states ({@link Pullback#ofTheArms}) — the clauses of the invariant it checks, read over the
+     * values the attempt hands it — asked of a row as any condition is.
      *
      * @param at where the arm is written, which is its body since an attempt writes no arm of its own
      */
-    static OnTheWay attempting(Core.IfConstructed attempt, int part, SourcePos at,
-                               ConditionNumbering numbering) {
+    static Stating attempting(Core.IfConstructed attempt, int part, SourcePos at,
+                              InputReading read, InputReads reads,
+                              ConditionNumbering numbering) {
         ConditionOccurrence met = numbering.metEntering(attempt, part);
-        return new OnTheWay.Declined(met, numbering.anchorOfArm(attempt.origin(), part, at, met),
-                new OnTheWay.Why.ForkArmNotReadAsANarrowing());
+        return armStated(WhatConditionsState.of(read).arm(attempt, part, reads), met,
+                numbering.anchorOfArm(attempt.origin(), part, at, met), read,
+                copyOf(attempt.occurrence()));
     }
 
     /**
-     * What {@code comparison} states about this input, coming out {@code holding} — or a decline
-     * where the arithmetic reads nothing here.
-     *
-     * <p>Read once, off the same {@link AffineReading} every other reader of a comparison uses. A
-     * second reading of what a comparison says is a second thing to keep in step with how a border
-     * is drawn, and the two disagreeing is a region that excludes the very level the border is at.
-     *
-     * <p><b>Three answers and not one absence.</b> A reading that ran to the end and found the
-     * quantity empty, and a reading that stopped, are opposite facts — and both used to arrive here
-     * as a {@code null}. The second is not a decline on its own: the arithmetic stopping is what a
-     * written value on a carrier that counts nothing does, and such a comparison still says where on
-     * that carrier's order the position lies. So the stopped reading is asked again as written, and
-     * only a comparison neither vocabulary carries is declined.
-     *
-     * <p>The reason the same comparison gets for drawing no line is {@link UnreadComparison}'s and
-     * answers another question: {@code 1 < 2} is a form nothing reads over there and constrains no
-     * position here, and a form this arithmetic cannot carry is a comparison between two positions
-     * over there while a relation between two positions is exactly what a cut carries here.
+     * What a run entering an arm that states what {@code arm} read asks of a row, each thing it
+     * asks put on the way at the arm, and read off the parts of what the arm states — what the
+     * fork itself states read off {@code fork}, the copy it stands in.
      */
-    private static OnTheWay of(Condition.Compares comparison, InputReading read, boolean holding) {
-        ConditionReportAnchor at = comparison.anchor();
-        return switch (AffineReading.read(comparison.comparison().stated(), read.domain(),
-                comparison.reads(), read.rules())) {
-            case AffineReading.OfAComparison.Cuts(var affine) -> {
-                // What the comparison states, in the words a domain is told things in. Taken the
-                // way the path met it: an arm reached by the condition failing has what holds
-                // exactly where the comparison does not.
-                Rel states = affine.claim().statedRelation();
-                // The form with the threshold moved into it, since what a domain is told is
-                // `f rel 0`.
-                LinearForm<NumericTerm> against =
-                        affine.form().minus(LinearForm.constant(affine.cut()));
-                Rel met = holding ? states : states.denied();
-                // And whether a region can carry it, asked of a region rather than decided from
-                // the shape of the form. That a reading reached the end of a comparison is a fact
-                // about the arithmetic's reading; whether the values it is over stand on anything
-                // a region measures them on is the region's, and the two are not each other — a
-                // difference between two positions holding records is read perfectly and is a
-                // distance on nothing.
-                yield switch (read.quantities().region().assuming(against, met)) {
-                    case SearchRegion.Assumption.Taken _ ->
-                            new OnTheWay.TakenIn(at, new TakenConstraint.Affine(against, met));
-                    case SearchRegion.Assumption.Refused(var why) ->
-                            new OnTheWay.Declined(comparison.occurrence(), at, whyDeclined(why));
-                };
-            }
-            // Read from end to end, and the quantity it cuts is nothing. `a - a > 0` constrains no
-            // position, so there is nothing for a region to be narrowed by and nothing this
-            // compiler fell short of — which is why it is not asked again as written.
-            case AffineReading.OfAComparison.CutsNothing _ ->
-                    new OnTheWay.Declined(comparison.occurrence(), at,
-                            new OnTheWay.Why.ComparisonStatesNoQuantity());
-            // The arithmetic stopped, which is what a written value on an order that counts nothing
-            // does. Asked as written, and declined only where that reading comes to nothing either.
-            case AffineReading.OfAComparison.Stopped _ -> {
-                OnTheWay.TakenIn ordered = onAnOrder(comparison, read, holding, at);
-                yield ordered != null ? ordered
-                        : new OnTheWay.Declined(comparison.occurrence(), at,
-                                new OnTheWay.Why.ComparisonNotRepresentedAsACut());
-            }
-        };
-    }
-
-    /**
-     * A region's refusal in the words an account of the way is written in.
-     *
-     * <p>Two vocabularies because they answer to two readers. What a region says is about its own
-     * algebra and names the term it has no order for; what an account of the way says is what an
-     * author is to make of a condition that narrowed nothing. Written as one, either the region
-     * would be naming conditions or the report would be reading terms.
-     */
-    private static OnTheWay.Why whyDeclined(SearchRegion.Refusal why) {
-        return switch (why) {
-            case SearchRegion.Refusal.NoOrderUnderATerm _ ->
-                    new OnTheWay.Why.QuantityStandsOnNoOrder();
-        };
-    }
-
-    /**
-     * The comparison as a bound on one position's own order, or null where it draws none.
-     *
-     * <p>Read where the arithmetic stopped and nowhere else, so a spelling never settles what the
-     * canonical form has already settled — the arrangement {@link Cutting} is under, reached here
-     * for the same reason and off the same reading ({@link ComparedLine#asWritten}). What that
-     * reading answers is which position was compared and where on its order the written value
-     * falls, which is the whole of an ordered constraint.
-     *
-     * <p>Taken the way the path met it, like the form above: an arm reached by the condition failing
-     * has what holds exactly where the comparison does not. Which is why the relation is settled
-     * before the bound is asked for and not after: {@code /= } coming out one way and {@code ==}
-     * coming out the other are the same relation, and a reading that looked at what the author
-     * wrote would carry one of them and refuse the other.
-     *
-     * <p>A bound where the relation says where the run stops and a hole where it does not, which
-     * are two shapes and not one with a flag: an end moves where a chooser looks, and a hole leaves
-     * the run where it was and takes one value out of it.
-     */
-    private static OnTheWay.TakenIn onAnOrder(Condition.Compares comparison, InputReading read,
-                                              boolean holding, ConditionReportAnchor at) {
-        ComparedLine drawn = ComparedLine.asWritten(
-                comparison.comparison().stated(), read, comparison.reads());
-        if (drawn == null) {
-            return null;
+    private static Stating armStated(Pullback.Pulled arm, ConditionOccurrence met,
+                                     ConditionReportAnchor at, InputReading read,
+                                     ModelOccurrences fork) {
+        DemandReading.Projected made =
+                DemandReading.projectedOff(arm, arm.proposition(), read, fork);
+        List<OnTheWay> entries = new ArrayList<>();
+        Map<OnTheWay, ModelOccurrences> by = new LinkedHashMap<>();
+        for (DemandReading.Read each : made.reads()) {
+            entries.add(onTheWay(met, at, each, read, made.readOff(), by));
         }
-        Rel states = drawn.claim().statedRelation();
-        Rel met = holding ? states : states.denied();
-        return new OnTheWay.TakenIn(at, TakenConstraint.Ordered.isABound(met)
-                ? new TakenConstraint.Ordered(drawn.term(), drawn.value(), met)
-                : new TakenConstraint.AwayFrom(drawn.term(), drawn.value()));
+        return new Stating(entries, new SaidOnTheWay(by, Map.of(), Map.of()));
+    }
+
+    /** The copy of the model's code {@code fork} stands in, or none where the model states
+     *  nothing there. */
+    private static ModelOccurrences copyOf(ConstructOccurrence fork) {
+        return fork.isWritten()
+                ? ModelOccurrence.statedAt(fork).map(ModelOccurrences::of)
+                        .orElse(ModelOccurrences.NONE)
+                : ModelOccurrences.NONE;
+    }
+
+    /**
+     * What a line of the comparison {@code at} asks of a row for the statement to turn on it,
+     * {@code decides}, put on the way at that comparison.
+     *
+     * <p>At the comparison, because that is where it was written: what has to hold beside a line
+     * is part of what the comparison states. A part of it this reading has no words for is
+     * declined there with whatever stopped it, as any condition on the way is — so a line looked
+     * for over rows where it may decide nothing says so, and is never taken to be one nothing
+     * reaches for it.
+     */
+    static Stating whereItDecides(Condition at, Proposition decides, InputReading read) {
+        // Read off the parts of the comparison's own statement: where a line decides is a fact of
+        // the comparison, over the values it reads.
+        List<OnTheWay> entries = new ArrayList<>();
+        Map<OnTheWay, ModelOccurrences> by = new LinkedHashMap<>();
+        for (DemandReading.Stated each
+                : DemandReading.askedAt(at, decides, read, WhatConditionsState.of(read))) {
+            entries.add(onTheWay(at.occurrence(), at.anchor(), each.read(), read, each.readOff(),
+                    by));
+        }
+        return new Stating(entries, new SaidOnTheWay(by, Map.of(), Map.of()));
+    }
+
+    /**
+     * What a condition's demand comes to on the way: taken in where there is one, and declined at
+     * the condition with the reason where there is none.
+     *
+     * <p>And which copies of the model's code it was read off, filed into {@code by} as it is
+     * made: what {@code readOff} says of the read, and of each read inside an alternative of it.
+     */
+    private static OnTheWay onTheWay(ConditionOccurrence condition, ConditionReportAnchor at,
+                                     DemandReading.Read read, InputReading input,
+                                     DemandReading.ReadOff readOff,
+                                     Map<OnTheWay, ModelOccurrences> by) {
+        OnTheWay made = switch (read) {
+            case DemandReading.Read.Demands(var demand) -> new OnTheWay.TakenIn(at, demand);
+            case DemandReading.Read.Settled(var thisWay) ->
+                    new OnTheWay.Settled(condition, at, thisWay);
+            case DemandReading.Read.Narrows(TermPath position, CasesLeft cases) ->
+                    narrowing(condition, at, position, cases, input);
+            case DemandReading.Read.OneOf oneOf -> new OnTheWay.OneOf(
+                    condition, at, oneOf.alternatives().stream().map(each -> each.stream()
+                            .map(one -> onTheWay(condition, at, one, input, readOff, by))
+                            .toList()).toList(),
+                    oneOf.stated());
+            case DemandReading.Read.Unread(var why) -> new OnTheWay.Declined(condition, at, why);
+        };
+        SaidOnTheWay.filedAlone(made, readOff.of(read), by);
+        return made;
+    }
+
+    /**
+     * The value at {@code position} read as one of {@code cases}, as what the declarations leave it
+     * says: a narrowing where they leave it more than those, and settled where they leave it only
+     * those or none of them ({@link #taking}).
+     */
+    private static OnTheWay narrowing(ConditionOccurrence condition, ConditionReportAnchor at,
+                                      TermPath position, CasesLeft cases, InputReading read) {
+        InputDomain inputs = read.domain();
+        return switch (taking(position, cases, read)) {
+            case DeclaredInput.Taking.Narrows(TermPath to) -> new OnTheWay.Narrowed(at, to,
+                    inputs.reach().crossings(), onItsOrder(to, read));
+            case DeclaredInput.Taking.Implied _ -> new OnTheWay.Settled(condition, at, true);
+            case DeclaredInput.Taking.Excluded _ -> new OnTheWay.Settled(condition, at, false);
+        };
+    }
+
+    /**
+     * What the value at {@code position} read as one of {@code cases} comes to, as what the
+     * declarations leave it says ({@link #taking(InputDomain, DeclaredInput, TermPath, Type,
+     * CasesLeft)}).
+     *
+     * <p>Asked where the value is one an element holds as much as where a way passes a fork on
+     * it: the declarations leave a position inside an element what they leave every element.
+     *
+     * <p>And there is always an answer. The statement was read off a value at a position of the
+     * input, and the reading of the input holds every position a condition names — under every
+     * case, where the name is one the cases of a sum share — so a position it holds no place for
+     * is the reading contradicting what it read, and is said as that.
+     */
+    static DeclaredInput.Taking taking(TermPath position, CasesLeft cases, InputReading read) {
+        InputDomain inputs = read.domain();
+        DeclaredInput declared = inputs.declared(read.rules());
+        DeclaredInput.Taking taking = taking(inputs, declared, position,
+                declared.matchedAs(inputs.typeAt(position, read.rules()), cases), cases);
+        if (taking == null) {
+            throw new IllegalStateException("a statement of which case the value at `" + position
+                    + "` is was read, and the reading of the input holds no place there");
+        }
+        return taking;
     }
 
     /** These conditions, with the rule stated at {@code states} reached under {@code assumed}. */
     static final class Collected {
 
-        private final Map<ModelOccurrence, List<OnTheWay>> byComparison = new LinkedHashMap<>();
+        private final Map<ALine, List<OnTheWay>> byLine = new LinkedHashMap<>();
+        private final Map<ALine, SaidOnTheWay> saidByLine = new LinkedHashMap<>();
+        private final Map<ModelOccurrence, ConditionOnTheWay> byTruth = new LinkedHashMap<>();
+        private final Map<ModelOccurrence, ConditionOnTheWay> byFork = new LinkedHashMap<>();
 
-        void reached(ModelOccurrence states, List<OnTheWay> assumed) {
-            // Once per construct of the model, because that is what the walk reads: a comparison
-            // inside a non-recursive helper is read once per call of it and each of those calls is
-            // a construct of its own. Two arriving under one would be the reading holding two
-            // comparisons the model states at one place, which is what nothing downstream could
-            // then tell apart — so it is refused here rather than resolved by keeping one of them.
-            List<OnTheWay> already = byComparison.putIfAbsent(states, List.copyOf(assumed));
-            if (already != null) {
+        /**
+         * The truth the application {@code answers} answers, met as {@code met} says.
+         *
+         * <p>Once per construct of the model, as a comparison is, and for the same reason: two
+         * arriving under one would be two truths the model states at one place.
+         */
+        void answered(ModelOccurrence answers, ConditionOnTheWay met) {
+            if (byTruth.putIfAbsent(answers, met) != null) {
                 throw new IllegalStateException(
-                        "two comparisons of one reading state one construct of the model: "
-                                + states);
+                        "two truths of one reading state one construct of the model: " + answers);
             }
         }
 
+        /**
+         * The whole condition of {@code fork}, met as {@code met} says.
+         *
+         * <p>Once per fork, since a fork has one condition. A fork inside a non-recursive helper is
+         * read once per call of it, and each of those is a fork of its own.
+         */
+        void decides(ModelOccurrence fork, ConditionOnTheWay met) {
+            if (byFork.putIfAbsent(fork, met) != null) {
+                throw new IllegalStateException(
+                        "two conditions of one reading decide one fork of the model: " + fork);
+            }
+        }
+
+        /**
+         * The comparison stated at {@code states}, reached under {@code assumed} — and each reading
+         * of each of its lines, where it states several, reached under that and then the case of
+         * where the line decides it is read in.
+         *
+         * <p>The readings a border is drawn in, which are known once the line is narrowed by what
+         * arrives at it, and are what {@link #wayTo} is asked by.
+         *
+         * <p>Each case with what it put on the way and who put each of those there, and not those
+         * of every case told together. One thing may be put on the ways to two cases by two
+         * copies, and told together it would be filed under both copies for both cases — a line
+         * told of a call a row at it never goes through.
+         *
+         * @param said who put each entry of {@code assumed} there
+         */
+        void reached(ModelOccurrence states, List<OnTheWay> assumed,
+                     Map<WhereAPartDecides, Stating> whereEachDecides,
+                     SaidOnTheWay said) {
+            // And who put each entry there, beside the entries: every way that reaches the line
+            // is one a row may come by, so what each says put an entry on it is said of the line.
+            saidByLine.merge(new ALine(states, Optional.empty()), said, SaidOnTheWay::and);
+            // A comparison inside a non-recursive helper is read once per call of it and each of
+            // those calls is a construct of its own. A comparison inside a closure is the one the
+            // author wrote, met through each copy an application of the closure makes. A run
+            // reaches the rule through any of them, so what a row owes is what every way here
+            // states — kept by neither alone, which would owe a row the conditions of a copy it
+            // does not go through.
+            byLine.merge(new ALine(states, Optional.empty()), List.copyOf(assumed),
+                    Collected::commonTo);
+            whereEachDecides.forEach((part, decides) -> {
+                List<OnTheWay> way = new ArrayList<>(assumed);
+                way.addAll(decides.entries());
+                byLine.merge(new ALine(states, Optional.of(part)), List.copyOf(way),
+                        Collected::commonTo);
+                saidByLine.merge(new ALine(states, Optional.of(part)), said.and(decides.by()),
+                        SaidOnTheWay::and);
+            });
+        }
+
+        /**
+         * What a row owes whichever of two ways it reaches one rule by: what both state, and a
+         * decline from either — a condition one way could not take in is one the account cannot say
+         * it took in, so it stays.
+         */
+        private static List<OnTheWay> commonTo(List<OnTheWay> one, List<OnTheWay> other) {
+            List<OnTheWay> common = new ArrayList<>(one);
+            common.retainAll(other);
+            for (OnTheWay each : List.of(one, other).stream().flatMap(List::stream).toList()) {
+                if (each instanceof OnTheWay.Declined && !common.contains(each)) {
+                    common.add(each);
+                }
+            }
+            return List.copyOf(common);
+        }
+
         ReachingCuts made() {
-            return new ReachingCuts(Lookup.built(put -> byComparison.forEach(put::put)));
+            return new ReachingCuts(Lookup.built(put -> byLine.forEach(put::put)),
+                    Lookup.built(put -> saidByLine.forEach(put::put)),
+                    Lookup.built(put -> byTruth.forEach(put::put)),
+                    Lookup.built(put -> byFork.forEach(put::put)));
         }
     }
-
-    /** What a caller is carrying, with more added, keeping what was already there. */
-    private static List<OnTheWay> and(List<OnTheWay> assumed, List<OnTheWay> more) {
-        List<OnTheWay> out = new java.util.ArrayList<>(assumed);
-        out.addAll(more);
-        return List.copyOf(out);
-    }
-
 }

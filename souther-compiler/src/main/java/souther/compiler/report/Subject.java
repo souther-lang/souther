@@ -5,8 +5,8 @@ import souther.compiler.inputs.PositionId;
 import souther.compiler.inputs.StandingQuestion;
 import souther.compiler.observe.RowRef;
 import souther.compiler.partition.AxisId;
-import souther.compiler.partition.Border;
 import souther.compiler.partition.BorderObligationPoint;
+import souther.compiler.partition.BoundaryLine;
 import souther.compiler.publish.MeasureWord;
 import souther.compiler.source.SourceId;
 import souther.compiler.types.SourceConstructOrigin;
@@ -88,8 +88,14 @@ public sealed interface Subject {
      * <p>The line and not a point of it. What a value at a border could not be read for is about
      * the line; what a row is owed at is one of the things that line asks for, and those are two
      * levels ({@link AtAPoint}).
+     *
+     * <p>The line as {@link BoundaryLine} tells one from another, and not the border a reading
+     * assessed. Which line a rule drew is not enough: one clause of a type is read at every position
+     * the type stands at, and the lines at two of them are two places a reader is sent to. Which
+     * reading drew it is too much: a helper read once per call draws one line several times, and a
+     * reader is sent to it once.
      */
-    record AtABorder(Border border) implements Subject {}
+    record AtABorder(BoundaryLine line) implements Subject {}
 
     /** One thing a line asks a row at. */
     record AtAPoint(BorderObligationPoint point) implements Subject {}

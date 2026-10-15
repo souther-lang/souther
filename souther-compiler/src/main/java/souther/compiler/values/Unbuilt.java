@@ -1,5 +1,7 @@
 package souther.compiler.values;
 
+import souther.compiler.regex.PatternPlan;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashSet;
@@ -48,19 +50,18 @@ public final class Unbuilt<A> {
      * @param asked the pattern whose machine was refused, which is what a rule is answerable for
      *              having written
      * @param why what a rule is answerable for, which is what {@link UnreadReason.About#A_RULE}
-     *            says of it
+     *            says of it, and the figure it was refused at
      */
-    public record RuleShortfall<A>(A at, souther.compiler.regex.PatternPlan asked,
-                                   UnreadReason why) {
+    public record RuleShortfall<A>(A at, PatternPlan asked, StoppedReading why) {
 
         public RuleShortfall {
             if (at == null || asked == null || why == null) {
                 throw new IllegalArgumentException("a shortfall about a rule says where, what was"
                         + " asked for and what it was");
             }
-            if (why.about() != UnreadReason.About.A_RULE) {
-                throw new IllegalArgumentException(
-                        "a reason about " + why.about() + " names no rule to be about: " + why);
+            if (why.why().about() != UnreadReason.About.A_RULE) {
+                throw new IllegalArgumentException("a reason about " + why.why().about()
+                        + " names no rule to be about: " + why);
             }
         }
     }
@@ -73,17 +74,16 @@ public final class Unbuilt<A> {
      * in another order would have been built, so there is nothing anybody wrote for this to be
      * about.
      */
-    public record AnswerShortfall<A>(A at, UnreadReason why) {
+    public record AnswerShortfall<A>(A at, StoppedReading why) {
 
         public AnswerShortfall {
             if (at == null || why == null) {
                 throw new IllegalArgumentException("a shortfall about an answer says where and what"
                         + " it was");
             }
-            if (why.about() != UnreadReason.About.THE_ANSWER) {
-                throw new IllegalArgumentException(
-                        "a reason about " + why.about() + " is not one the answer is short of: "
-                                + why);
+            if (why.why().about() != UnreadReason.About.THE_ANSWER) {
+                throw new IllegalArgumentException("a reason about " + why.why().about()
+                        + " is not one the answer is short of: " + why);
             }
         }
     }
@@ -108,13 +108,15 @@ public final class Unbuilt<A> {
             case Realization.Exact _ -> { }
             case Realization.OverTheMachineLimit it -> {
                 widened.add(block);
-                block.members().forEach(atom -> add(new RuleShortfall<>(atom,
-                        it.asked(), UnreadReason.PATTERN_TOO_COSTLY)));
+                StoppedReading why = StoppedReading.ofTheValues(UnreadReason.PATTERN_TOO_COSTLY,
+                        it.refused());
+                block.members().forEach(atom -> add(new RuleShortfall<>(atom, it.asked(), why)));
             }
-            case Realization.OverTheAnswerLimit _ -> {
+            case Realization.OverTheAnswerLimit it -> {
                 widened.add(block);
-                block.members().forEach(atom -> add(new AnswerShortfall<>(atom,
-                        UnreadReason.EXACT_VALUES_TOO_COSTLY)));
+                StoppedReading why = StoppedReading.ofTheValues(
+                        UnreadReason.EXACT_VALUES_TOO_COSTLY, it.refused());
+                block.members().forEach(atom -> add(new AnswerShortfall<>(atom, why)));
             }
         }
     }

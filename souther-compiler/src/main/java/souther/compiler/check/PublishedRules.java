@@ -3,6 +3,7 @@ package souther.compiler.check;
 import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -87,6 +88,13 @@ public record PublishedRules(List<ClauseMeaning> reached, boolean everyRuleReach
      * reaching anybody is that each of them says it is short — a reader of rules that were not all
      * reached has a word for it already and does not read the ones that were.
      */
+    public static PublishedRules governing(TypeSymbol.AtModule named,
+                                           PublishedDeclarations published) {
+        return governing(named, published, new HashMap<>());
+    }
+
+    /** The same, with what this walk has already worked out — see
+     *  {@link #governing(TypeSymbol.AtModule, PublishedDeclarations)}. */
     static PublishedRules governing(TypeSymbol.AtModule named, PublishedDeclarations published,
                                     Map<TypeSymbol.AtModule, PublishedRules> found) {
         return governing(named, published, found, new LinkedHashSet<>());

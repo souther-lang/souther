@@ -1,6 +1,11 @@
 package souther.compiler.inputs;
 
 import souther.compiler.check.Carrier;
+import souther.compiler.check.ScopedDeclarations;
+import souther.compiler.check.Symbols;
+import souther.compiler.types.Type;
+
+import java.util.Map;
 
 /**
  * Synthetic orders for a test that describes a term rather than reading one.
@@ -25,6 +30,12 @@ public final class TermOrdersFixtures {
         return new TermOrders(term, observed, answered);
     }
 
+    /** A term over what a walk computed of each element, which also reads the fields it names. */
+    public static TermOrders computed(NumericTerm term, Carrier observed, Carrier answered,
+                                      Map<ElementProjection, Carrier> fields) {
+        return new TermOrders(term, observed, answered, fields);
+    }
+
     /**
      * What the derivation answers for a term at a type, which is the derivation itself.
      *
@@ -33,11 +44,7 @@ public final class TermOrdersFixtures {
      * what settles which type to ask about; a test naming the type is asking the narrower question
      * of what follows from a type once one is chosen.
      */
-    public static TermOrders at(NumericTerm term, souther.compiler.types.Type positionType,
-                                souther.compiler.check.Symbols symbols) {
-        return TermOrdering.of(term, positionType,
-                souther.compiler.check.ScopedDeclarations.wrapsOf(symbols), symbols,
-                souther.compiler.check.ScopedDeclarations.kindsOf(symbols),
-                souther.compiler.check.ScopedDeclarations.of(symbols));
+    public static TermOrders at(NumericTerm term, Type positionType, Symbols symbols) {
+        return TermOrdering.of(term, positionType, symbols, ScopedDeclarations.accessOf(symbols));
     }
 }

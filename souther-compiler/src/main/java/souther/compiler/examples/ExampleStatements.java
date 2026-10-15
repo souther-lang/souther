@@ -15,6 +15,7 @@ import souther.compiler.core.Contract;
 import souther.compiler.check.Sig;
 import souther.compiler.check.BoundaryInput;
 import souther.compiler.check.BoundaryOutput;
+import souther.compiler.check.SumCases;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.diag.Diagnostic;
@@ -24,6 +25,7 @@ import souther.compiler.diag.SourcePos;
 import souther.compiler.evaluate.DepthLimitExceeded;
 import souther.compiler.evaluate.EvaluationContext;
 import souther.compiler.evaluate.StepLimitExceeded;
+import souther.runtime.Values;
 import souther.compiler.observe.FailurePhase;
 import souther.compiler.observe.FieldTypes;
 import souther.compiler.observe.RowStatements;
@@ -76,13 +78,13 @@ public final class ExampleStatements {
      */
     public record Declaring(souther.compiler.check.Prepared.ForExamples forExamples,
                             Symbols symbols,
-                            souther.compiler.check.PublishedDeclarations published,
+                            SumCases sums,
                             souther.compiler.check.DeclarationKinds kinds,
                             FieldTypes fields,
                             Map<String, Hir.FnDef> values) {
 
         public Declaring {
-            if (published == null || kinds == null) {
+            if (sums == null || kinds == null) {
                 throw new IllegalArgumentException("a statement about an example names"
                         + " declarations, so it is handed what they say and which form each of"
                         + " them is");
@@ -92,8 +94,8 @@ public final class ExampleStatements {
 
     private final souther.compiler.check.Prepared.ForExamples module;
     private final Symbols symbols;
-    /** What the declarations a statement names say about themselves. */
-    private final souther.compiler.check.PublishedDeclarations published;
+    /** What a value of each sum a statement names can be. */
+    private final SumCases sums;
     /** Which form each of those declarations was written in. */
     private final souther.compiler.check.DeclarationKinds kinds;
     /** What a value of a declaration is made of, as the check settled it. */
@@ -124,7 +126,7 @@ public final class ExampleStatements {
     private final Map<String, Declaring> declaring;
 
     private ExampleStatements(souther.compiler.check.Prepared.ForExamples module, Symbols symbols,
-                              souther.compiler.check.PublishedDeclarations published,
+                              SumCases sums,
                             souther.compiler.check.DeclarationKinds kinds,
                               FieldTypes fields,
                               Map<ValueName.Behavior, Sig> sigs,
@@ -136,7 +138,7 @@ public final class ExampleStatements {
         this.declaring = declaring;
         this.module = module;
         this.symbols = symbols;
-        this.published = published;
+        this.sums = sums;
         this.kinds = kinds;
         this.fields = fields;
         this.sigs = sigs;
@@ -144,7 +146,7 @@ public final class ExampleStatements {
         this.values = values;
         this.deadline = deadline;
         this.policy = policy;
-        this.rendering = new FixtureReader(module, symbols, published, kinds, fields, values, loader);
+        this.rendering = new FixtureReader(module, symbols, sums, kinds, fields, values, loader);
     }
 
     /**
@@ -258,7 +260,7 @@ public final class ExampleStatements {
      * this.
      */
     private FixtureReader newFixtureReader() {
-        return new FixtureReader(module, symbols, published, kinds, fields, values, loader);
+        return new FixtureReader(module, symbols, sums, kinds, fields, values, loader);
     }
 
     /**
@@ -275,12 +277,12 @@ public final class ExampleStatements {
         }
         Declaring elsewhere = declaring.get(declaredIn);
         return () -> new FixtureReader(elsewhere.forExamples(), elsewhere.symbols(),
-                elsewhere.published(), elsewhere.kinds(), elsewhere.fields(), elsewhere.values(),
+                elsewhere.sums(), elsewhere.kinds(), elsewhere.fields(), elsewhere.values(),
                 loader);
     }
 
     private Set<TypeSymbol> outCases(Type out) {
-        return TypeOps.outputCases(out, published);
+        return TypeOps.outputCases(out, kinds, sums);
     }
 
     // --- two statements about one behavior -----------------------------------------------------
@@ -299,7 +301,7 @@ public final class ExampleStatements {
      */
     public static Readings disagreements(souther.compiler.check.Prepared.ForExamples module,
                                          Symbols symbols,
-                                         souther.compiler.check.PublishedDeclarations published,
+                                         SumCases sums,
                             souther.compiler.check.DeclarationKinds kinds,
                                          FieldTypes fields,
                                          Map<ValueName.Behavior, Sig> sigs,
@@ -320,7 +322,7 @@ public final class ExampleStatements {
         if (contested.isEmpty()) {
             return Readings.NONE;
         }
-        ExampleStatements v = new ExampleStatements(module, symbols, published, kinds, fields, sigs,
+        ExampleStatements v = new ExampleStatements(module, symbols, sums, kinds, fields, sigs,
                 new MemoryClassLoader(classes, parent), values, deadline, policy, contracts,
                 declaring);
         try {
@@ -397,7 +399,7 @@ public final class ExampleStatements {
      */
     public static List<Diagnostic> fakeTables(souther.compiler.check.Prepared.ForExamples module,
                                               Symbols symbols,
-                                              souther.compiler.check.PublishedDeclarations published,
+                                              SumCases sums,
                             souther.compiler.check.DeclarationKinds kinds,
                                               FieldTypes fields,
                                               Map<ValueName.Behavior, Sig> sigs,
@@ -413,7 +415,7 @@ public final class ExampleStatements {
         }
         // Building a table reads statements written here and nothing another module wrote, so it
         // needs no reading of one.
-        ExampleStatements v = new ExampleStatements(module, symbols, published, kinds, fields, sigs,
+        ExampleStatements v = new ExampleStatements(module, symbols, sums, kinds, fields, sigs,
                 new MemoryClassLoader(classes, parent), values, deadline, policy, contracts,
                 Map.of());
         List<Diagnostic> said = new ArrayList<>();
@@ -537,10 +539,13 @@ public final class ExampleStatements {
                 // The reading spent what the policy allows. That is an answer about the statements —
                 // the same one on every host — and is told apart from a reading that stopped answering,
                 // which is an answer about the host.
-                if (cause instanceof StepLimitExceeded) {
+                // Read through the causes, as a stop reaching here through a reflective call is
+                // wrapped (EvaluationContext.overspent).
+                RuntimeException stop = EvaluationContext.overspent(cause);
+                if (stop instanceof StepLimitExceeded) {
                     return new Read.Overspent<>(FailurePhase.STEP_LIMIT, policy.stepLimit());
                 }
-                if (cause instanceof DepthLimitExceeded) {
+                if (stop instanceof DepthLimitExceeded) {
                     return new Read.Overspent<>(FailurePhase.DEPTH_LIMIT,
                             policy.recursionDepthLimit());
                 }
@@ -1019,7 +1024,7 @@ public final class ExampleStatements {
                 return false;
             }
             for (int i = 0; i < arguments.length; i++) {
-                if (!souther.runtime.Values.equal(arguments[i], key[i])) {
+                if (!Values.equal(arguments[i], key[i], EvaluationContext.checkpoint())) {
                     return false;
                 }
             }
@@ -1384,7 +1389,7 @@ public final class ExampleStatements {
             return false;
         }
         if (left instanceof Answered.Whole l && right instanceof Answered.Whole r) {
-            return !souther.runtime.Values.equal(l.fixture().value(), r.fixture().value());
+            return !Values.equal(l.fixture().value(), r.fixture().value(), EvaluationContext.checkpoint());
         }
         TypeSymbol one = caseOf(left);
         TypeSymbol other = caseOf(right);

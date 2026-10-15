@@ -7,6 +7,7 @@ import souther.compiler.check.Location;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.types.Type;
+import souther.compiler.coverage.Arrivals;
 import souther.compiler.diag.Citation;
 import souther.compiler.inputs.ClauseWithoutAnEnd;
 import souther.compiler.inputs.InputReading;
@@ -19,6 +20,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * The lines a declaration's clauses draw between two of a behavior's positions.
@@ -74,11 +76,15 @@ public final class DeclaredThresholds {
         // No answer to be read, because a declaration's clause is about the values a type admits and
         // there is nothing a behavior answered for it to be about.
         // And no arrival: a declaration's clause stands in no body for anything to be on the way
-        // to, which reads as an arrival that restricts nothing.
+        // to, which reads as an arrival that restricts nothing. Nor a dependency, which a type's
+        // values are not stood in by: a clause is read where none is ({@link
+        // InputReads#ofADeclaredClause}).
         ComparisonAssessment assessed = ComparisonAssessment.of(behavior, clause.states(),
                 Citation.of(clause.wrote()), read,
-                InputReads.ofADeclaredClause(roots), null,
-                souther.compiler.coverage.Arrivals.inTheTree(clause.readOutOf()), true);
+                InputReads.ofADeclaredClause(roots, read.declared()),
+                ClosureApplications.OUTSIDE, null,
+                Arrivals.inTheTree(clause.readOutOf()), true,
+                WhatConditionsState.of(read), Optional.empty());
         // Only the quantity that is on no position. Why this drew no line where it drew none is not
         // said here: the reading of ends already answered for this clause at each position it names,
         // and a second sentence about one rule is two answers to one question.
@@ -89,7 +95,13 @@ public final class DeclaredThresholds {
         // none of them or several — so the two are disjoint exactly as far as the two readings
         // agree about how many coordinates a quantity is over. They are two readings of one
         // question and neither is asked of the other.
-        if (assessed instanceof ComparisonAssessment.AcrossPositions over && over.drawsABorder()) {
+        //
+        // And only an order. A line a declaration draws is an end of what it admits, and a clause
+        // naming one value of the quantity, held equal or apart, keeps no end of it
+        // ({@link #originOf}). What such a clause admits is the declaration's values themselves,
+        // which is not a border a body's rule is measured against.
+        if (assessed instanceof ComparisonAssessment.AcrossPositions over
+                && over.places() == ComparisonAssessment.Places.ACROSS_THE_VALUE) {
             out.add(new LineDrawn(over.cutting(), originOf(clause, over.cutting())));
         }
     }

@@ -1,6 +1,9 @@
 package souther.compiler.generated;
 
+import souther.compiler.coverage.ArmReplacements;
 import souther.compiler.coverage.NumberingIdentity;
+
+import java.util.Objects;
 
 /**
  * Whether the classes of an artifact record where a run goes, and under what numbering.
@@ -24,14 +27,22 @@ public sealed interface ProbeImage {
     /** Classes with no probes in them: a run through these leaves nothing behind. */
     record Uninstrumented() implements ProbeImage {}
 
-    /** Classes that record where a run goes, in the numbers {@code numbering} handed out. */
-    record Instrumented(NumberingIdentity numbering) implements ProbeImage {
+    /**
+     * Classes that record where a run goes, in the numbers {@code numbering} handed out, and that
+     * carry at each of the arms {@code replacements} names the siblings a run can ask for in its
+     * place. The second travels with the first for the reason the first does: it is a fact about
+     * what the classes were emitted with, and nothing in them says it.
+     */
+    record Instrumented(NumberingIdentity numbering, ArmReplacements replacements)
+            implements ProbeImage {
 
         public Instrumented {
             if (numbering == null) {
                 throw new IllegalArgumentException(
                         "classes that record a run record it in somebody's numbers");
             }
+            Objects.requireNonNull(replacements,
+                    "classes that record a run say which arms they carry siblings at, or none");
         }
     }
 }

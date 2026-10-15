@@ -10,6 +10,7 @@ import souther.compiler.check.CrossingMapKey;
 import souther.compiler.jvm.GeneratedClass;
 import souther.compiler.jvm.GeneratedClasses;
 import souther.compiler.types.MapKeyRepresentation;
+import souther.compiler.evaluate.EvaluationContext;
 import souther.runtime.Sets;
 
 import java.lang.reflect.Method;
@@ -60,7 +61,8 @@ final class Crossing {
             case BoundaryInput.ListOf list -> elements(list.element(), neutral);
             // The set a decoded position holds, built the one way the runtime builds one — a
             // `java.util` set would be a second representation of what a `Set` is.
-            case BoundaryInput.SetOf set -> Sets.fromList(elements(set.element(), neutral));
+            case BoundaryInput.SetOf set -> Sets.fromList(elements(set.element(), neutral),
+                    EvaluationContext.checkpoint());
             case BoundaryInput.MapOf map -> entries(map, neutral);
         };
     }
@@ -124,7 +126,8 @@ final class Crossing {
             case BoundaryOutput.Scalar _ -> neutral;
             case BoundaryOutput.Nominal nominal -> decoded(nominal.name(), neutral);
             case BoundaryOutput.ListOf list -> outElements(list.element(), neutral);
-            case BoundaryOutput.SetOf set -> Sets.fromList(outElements(set.element(), neutral));
+            case BoundaryOutput.SetOf set -> Sets.fromList(outElements(set.element(), neutral),
+                    EvaluationContext.checkpoint());
             case BoundaryOutput.MapOf map -> outEntries(map, neutral);
             case BoundaryOutput.Cases _ -> throw new IllegalStateException(
                     "an answer is crossed at the case it is, not at the set of cases it may be");

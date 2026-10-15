@@ -155,11 +155,11 @@ let drop (n: Int, xs: List<'a>): List<'a> = {
 // as `groupBy`, which grows a `Map` accumulator from within `List.fold`.
 //
 // `distinctBy` is the same walk over a projection: two elements collide when their keys are equal,
-// and the first one stays. `allDistinctBy` holds when nothing would be dropped — the "this
-// projection is a unique id" invariant, written directly instead of as a
-// `length(distinct(map ...)) == length` by hand. All three share the `distinct` stem, so a reader
-// who knows one can predict the others. Deriving from the total `fold`, they may stand in an
-// invariant.
+// and the first one stays. `allDistinctBy` holds when no two keys collide — the "this projection
+// is a unique id" invariant, written directly instead of by hand: a set of the keys holds as many
+// as the list does exactly where no key is repeated. All three share the `distinct` stem, so a
+// reader who knows one can predict the others. Deriving from the total `fold`, they may stand in
+// an invariant.
 let distinct (xs: List<'a>): List<'a> = {
     let (_, out) = List.fold(
         (acc, x) -> {
@@ -185,7 +185,7 @@ let distinctBy (key: ('a) -> 'k, xs: List<'a>): List<'a> = {
 }
 
 let allDistinctBy (key: ('a) -> 'k, xs: List<'a>): Bool =
-    List.length(List.distinct(List.map(key, xs))) == List.length(xs)
+    Set.size(Set.fromList(List.map(key, xs))) == List.length(xs)
 
 // `partition` splits the list by a predicate into (kept, rest), preserving order in each (Elm's
 // List.partition). It folds a pair of empty lists `([], [])`, appending each element to one side.

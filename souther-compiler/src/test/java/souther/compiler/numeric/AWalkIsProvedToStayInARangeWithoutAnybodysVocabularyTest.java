@@ -35,7 +35,7 @@ class AWalkIsProvedToStayInARangeWithoutAnybodysVocabularyTest {
             LinearForm.atom(Atom.ACCUMULATOR);
 
     private static final LinearForm<Atom> ADDED =
-            ACCUMULATOR.plus(LinearForm.atom(Atom.ELEMENT));
+            LinearForm.sumOfAtoms(Atom.ACCUMULATOR, Atom.ELEMENT);
 
     /** A walk whose step adds, read against a domain holding the two numbers. */
     private record Adding(NumericDomain<Atom> reading, NumericDomain.Bounds element,

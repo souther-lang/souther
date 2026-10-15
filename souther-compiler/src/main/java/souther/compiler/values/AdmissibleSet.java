@@ -1,5 +1,7 @@
 package souther.compiler.values;
 
+
+import java.util.LinkedHashSet;
 import java.util.Set;
 
 /**
@@ -95,14 +97,22 @@ public record AdmissibleSet(ValueSet approximation, Completeness completeness) {
          * A rule about the position went unread, so a value the set holds may yet be refused.
          *
          * <p>Which kind of unread it was travels with it: the three are lifted by different work
-         * and a report writes its own word for each.
+         * and a report writes its own word for each. So do the figures it stopped at, where an
+         * allowance is what stopped it ({@link StoppedReading}).
+         *
+         * @param stopped what stopped the reading, with the figures beside it
          */
-        record RuleUnread(UnreadReason why) implements Widening {
+        record RuleUnread(StoppedReading stopped) implements Widening {
 
             public RuleUnread {
-                if (why == null) {
+                if (stopped == null) {
                     throw new IllegalArgumentException("a rule went unread for something");
                 }
+            }
+
+            /** What stopped the reading, the figures left aside. */
+            public UnreadReason why() {
+                return stopped.why();
             }
         }
 
@@ -142,7 +152,7 @@ public record AdmissibleSet(ValueSet approximation, Completeness completeness) {
     }
 
     /** These values, with something about the position left unread. */
-    public static AdmissibleSet partial(ValueSet values, UnreadReason why) {
+    public static AdmissibleSet partial(ValueSet values, StoppedReading why) {
         return new AdmissibleSet(values,
                 new Completeness.Wider(Set.of(new Widening.RuleUnread(why))));
     }
@@ -150,6 +160,52 @@ public record AdmissibleSet(ValueSet approximation, Completeness completeness) {
     /** These values, with {@code why} standing between them and the rules. */
     public static AdmissibleSet wider(ValueSet values, Set<Widening> why) {
         return new AdmissibleSet(values, new Completeness.Wider(why));
+    }
+
+    /**
+     * What this and {@code other} leave one position together, so far as that can be said without
+     * building anything.
+     *
+     * <p>For a caller holding two readings of one position — a record's rules about a field and
+     * another record's about the same field — and no allowance to meet them with. A finite set is
+     * kept to the values the other also has, which is exact; where neither is finite, either one
+     * is still an upper bound, and the one kept is said to be wider than what the two leave
+     * ({@link Widening.ExactValuesTooCostly}), since the set they leave together was not built.
+     */
+    public AdmissibleSet narrower(AdmissibleSet other) {
+        if (other.approximation.isAny()) {
+            return new AdmissibleSet(approximation, both(completeness, other.completeness));
+        }
+        if (approximation.isAny()) {
+            return new AdmissibleSet(other.approximation, both(completeness, other.completeness));
+        }
+        ValueSet.Finite finite = approximation instanceof ValueSet.Finite it ? it
+                : other.approximation instanceof ValueSet.Finite it ? it : null;
+        if (finite == null) {
+            Set<Widening> why = new LinkedHashSet<>(reasons(both(completeness,
+                    other.completeness)));
+            why.add(new Widening.ExactValuesTooCostly());
+            return wider(approximation, why);
+        }
+        ValueSet against = finite == approximation ? other.approximation : approximation;
+        Set<Value> kept = new LinkedHashSet<>();
+        for (Value each : finite.values()) {
+            if (against.has(each)) {
+                kept.add(each);
+            }
+        }
+        return new AdmissibleSet(ValueSet.oneOf(kept), both(completeness, other.completeness));
+    }
+
+    /** Read in full only where both were, and short of whatever either was short of. */
+    private static Completeness both(Completeness one, Completeness other) {
+        Set<Widening> why = new LinkedHashSet<>(reasons(one));
+        why.addAll(reasons(other));
+        return why.isEmpty() ? READ_IN_FULL : new Completeness.Wider(why);
+    }
+
+    private static Set<Widening> reasons(Completeness completeness) {
+        return completeness instanceof Completeness.Wider wider ? wider.why() : Set.of();
     }
 
     /**
@@ -184,14 +240,25 @@ public record AdmissibleSet(ValueSet approximation, Completeness completeness) {
      * with every rule read, and a caller asking this to find out whether the set is exact would
      * read that as a complete reading — {@link #completeness} is the question, and this is only
      * what to say about the rules.
+     *
+     * <p>The first reason recorded, at every figure any rule unread for it stopped at: two rules
+     * refused at two limits of one allowance are that reason met at both, and a reader told one of
+     * them would raise it and find the other standing.
      */
-    public UnreadReason whyPartial() {
+    public StoppedReading whyPartial() {
         if (!(completeness instanceof Completeness.Wider wider)) {
             return null;
         }
-        return wider.why().stream()
-                .filter(Widening.RuleUnread.class::isInstance)
-                .map(each -> ((Widening.RuleUnread) each).why())
-                .findFirst().orElse(null);
+        StoppedReading out = null;
+        for (Widening each : wider.why()) {
+            if (each instanceof Widening.RuleUnread(StoppedReading stopped)) {
+                if (out == null) {
+                    out = stopped;
+                } else if (out.why() == stopped.why()) {
+                    out = out.together(stopped);
+                }
+            }
+        }
+        return out;
     }
 }

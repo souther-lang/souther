@@ -7,17 +7,24 @@ more, and both existed only because develop had been made to claim a number it w
 
 ## Cutting one
 
-1. Open the release pull request, `develop` into `main`, titled `Souther <version>`. What goes in
-   the body is what changed since the last tag —
-   `git log --oneline v<previous>..develop --grep='Merge pull request' | wc -l` counts the pull
-   requests, and `docs/adr/README.md` indexes the decisions with the reasoning behind each.
+1. Write the release notes in `docs/releases/<version>.md` and land them on develop through a pull
+   request of their own, so they are reviewed like anything else a reader is handed. They are the
+   text of the GitHub Release: the release workflow refuses a tag whose commit has no notes for its
+   version before it builds anything. They are for someone using Souther, not someone reading its
+   history — what they can do now that they could not, and what they have to change. A minor
+   release opens with what it is for, one section per headline with an example of it, before
+   anything is listed. What breaks an existing model, jar or report consumer goes under
+   Compatibility. Each ADR is named where its change is.
 
-2. Merge it. develop survives the merge because a repository ruleset refuses to delete it: this
+2. Open the release pull request, `develop` into `main`, titled `Souther <version>`. The notes
+   already say what changed, so the body points at them and says what was checked.
+
+3. Merge it. develop survives the merge because a repository ruleset refuses to delete it: this
    repository deletes a head branch on merge, and the head of a release pull request is develop.
    It was deleted that way once, at `0.1.0-rc5`, and restored by pushing the commit back under the
    name.
 
-3. On `main`, set the version and commit it there:
+4. On `main`, set the version and commit it there:
 
    ```sh
    git switch main && git pull
@@ -26,33 +33,54 @@ more, and both existed only because develop had been made to claim a number it w
    git push
    ```
 
-4. Tag that commit and push the tag:
+   Setting a version that is not a snapshot records the adequacy report's schema as this release
+   ships it: the script stages it under
+   `souther-compiler/src/test/resources/souther/compiler/schema/released/<version>/`, and the commit
+   above carries it. The `schemaVersion` it writes is frozen from then on, if it was not already. A
+   copy is never rewritten, and every release adds its own, so the tests hold each frozen version to
+   accepting what every release of it accepted, and refuse a release that has no copy or ships a
+   schema other than its copy.
+
+5. Tag that commit and push the tag:
 
    ```sh
    git tag -a v<version> -m "Souther <version>"
    git push origin v<version>
    ```
 
-   The release workflow runs on the tag: it builds, and attaches `souther`, `souther.jar`,
-   `souther-lsp.jar`, `souther.tmLanguage.json` and `SHA256SUMS` to the GitHub Release. A version
+   The release workflow runs on the tag: it builds, attaches `souther`, `souther.jar`,
+   `souther-lsp.jar`, `souther.tmLanguage.json`, the Windows distributions and `SHA256SUMS` to the
+   GitHub Release, and gives the Release `docs/releases/<version>.md` as its text. A version
    with a hyphen in it is published as a prerelease, which the workflow reads off the tag rather
    than being told.
 
-5. Publish to Maven Central from the tag:
+6. Publish to Maven Central from the tag, in any checkout with nothing uncommitted:
 
    ```sh
    git switch --detach v<version>
    mvn -Prelease deploy
    ```
 
-   `autoPublish` is true, so what this uploads is released once the Portal has validated it, with
-   nothing left to do there. souther-runtime, souther-syntax, souther-compiler, souther-build-driver
-   and souther-fmt go up, and souther-parent with them, being the pom they name as their parent.
-   souther-cli, souther-lsp and souther-bench do not: the really-executable jar and the language
-   server are distributed through GitHub Releases, and the benchmarks are not an artifact anyone
-   depends on.
+   The build reads the commit from git and writes it into every jar's manifest as
+   `Implementation-Revision`, so a consumer that resolved `souther-compiler` can read the commit
+   from the jar without going through the tag. What makes that true is checked rather than
+   assumed. `-Prelease` fails on a change HEAD does not record, on a file git ignores in a place the
+   build reads (`bin/require-clean-checkout.sh`: each module's `src`, and what the root pom lists as
+   `souther.build.reads`), unless the commit is a full object id, and unless `v<version>` points at
+   it; and it cleans every module before building it, so nothing an earlier build wrote goes in.
+   An ignored file the build never reads, an editor's settings or `.DS_Store`, is no reason to
+   refuse.
 
-6. Take main into develop and move develop to the next snapshot, in one commit straight to develop:
+   A `v*` tag is protected by a repository ruleset that forbids updating and deleting it, with no
+   bypass. A tag pushed for the wrong commit is not moved: the next version is released instead.
+
+   `autoPublish` is true, so what this uploads is released once the Portal has validated it, with
+   nothing left to do there. Every module goes up except the ones whose pom sets
+   `souther.publish.skip`, each saying there why it is not a Maven artifact; souther-parent goes up
+   with them, being the pom they name as their parent. The really-executable jar and the language
+   server are distributed through GitHub Releases instead.
+
+7. Take main into develop and move develop to the next snapshot, in one commit straight to develop:
 
    ```sh
    git switch develop && git pull
@@ -76,11 +104,42 @@ more, and both existed only because develop had been made to claim a number it w
    it to review, and it is the tail of a release rather than work anyone is proposing. This is the
    one change to develop that goes straight there; anything carrying a decision still opens one.
 
-   `souther-lang/examples` names the snapshot, so it moves with this.
+## The snapshot
+
+`<version>-SNAPSHOT` on the Central Portal's snapshot repository is a commit of develop, published
+by hand like a release. CI publishes nothing, a snapshot or a release. Publish once CI has passed
+on develop's tip, from a checkout of it with nothing uncommitted:
+
+```sh
+git switch develop && git pull
+mvn -Psnapshot deploy
+```
+
+The `snapshot` profile holds the coordinate to that meaning, as the `release` profile holds a
+release to its tag. The repository keeps one coordinate per version and every publication
+overwrites it, so a publication from anywhere else would silently replace what develop published.
+The profile refuses a version that is not a snapshot, what the `release` profile refuses of the
+tree (a change HEAD does not record, or an ignored file where the build reads), and a HEAD that is
+not the commit develop points at on origin (`bin/require-develop-tip.sh`); and it cleans every
+module before building it. A plain `mvn deploy` publishes nothing: the publishing plugin is used
+only by the two profiles.
+
+A release is a build of its own, so the build CI checked and the one published resolve the same
+dependencies only because none of them can change: the `release` profile refuses a snapshot
+dependency. The `snapshot` profile allows one, because what it publishes is replaced by the next
+publication and promises nothing a dependency's moving could break.
+
+A release and a snapshot go through the same plugin and not to the same place. A release is
+uploaded to the Portal as one deployment, validated there and then published to Maven Central; a
+snapshot is deployed straight to the snapshot repository, which Maven Central does not serve. A
+build resolves a snapshot only if it declares
+`https://central.sonatype.com/repository/maven-snapshots/` as a snapshot repository. The modules
+left out are the same for both, being the ones that set `souther.publish.skip`.
 
 ## The examples
 
 `souther-lang/examples` pins the compiler in four places and has a `bin/set-version.sh` of its own.
-It tracks the snapshot rather than a release, so a release does not move it. Building it against a
-release is a check on the release, and worth doing before cutting one — but it is not a step of the
-release, and a red examples build is a thing to fix there rather than a reason to hold the tag.
+What it builds against is the version its own build names, and a snapshot only resolves there if
+its build declares the snapshot repository above. Building it against a release is a check on the
+release, and worth doing before cutting one — but it is not a step of the release, and a red
+examples build is a thing to fix there rather than a reason to hold the tag.

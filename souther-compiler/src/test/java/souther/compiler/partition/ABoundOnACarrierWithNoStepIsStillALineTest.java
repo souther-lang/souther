@@ -93,9 +93,9 @@ class ABoundOnACarrierWithNoStepIsStillALineTest {
     void aBoundOwesNothingOutsideItselfOnEitherCarrier() {
         for (String carrier : List.of("Decimal", "Int")) {
             BorderAssessment line = border(model(carrier, carrier.equals("Decimal") ? "0m" : "0"));
-            assertEquals(new ItemAssessment.NotOwed(NotOwedReason.THE_RULES_REFUSE_IT),
+            assertEquals(new ItemAssessment.NotOwed(NotOwedReason.NO_VALUE_CAN_STAND_THERE),
                     line.at(PointRole.OFF), carrier + ": nothing is just outside a bound");
-            assertEquals(new ItemAssessment.NotOwed(NotOwedReason.THE_RULES_REFUSE_IT),
+            assertEquals(new ItemAssessment.NotOwed(NotOwedReason.NO_VALUE_CAN_STAND_THERE),
                     line.at(PointRole.OUT), carrier + ": nothing is outside a bound at all");
         }
     }

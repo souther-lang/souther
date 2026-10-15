@@ -1,5 +1,9 @@
 package souther.compiler.regex;
 
+import net.unit8.notation199x.pattern.Automaton;
+import net.unit8.notation199x.pattern.Meter;
+import net.unit8.notation199x.pattern.PatternParser;
+import net.unit8.notation199x.pattern.PatternRead;
 import org.junit.jupiter.api.Test;
 import souther.runtime.Strings;
 
@@ -25,7 +29,7 @@ class TheRuntimesOrderIsWhatTheseMachinesAnswerAboutTest {
 
     /** What a language is allowed while one of these is answered. */
     private static Meter allowing() {
-        return new Meter(20000, 200000);
+        return new Meter(20000, 200000, 1_000_000_000L);
     }
 
     /** The text of these code points. */

@@ -115,4 +115,48 @@ class CompileNewtypeComparisonTest {
                 """;
         assertDoesNotThrow(() -> Compiler.compile(model));
     }
+
+    /**
+     * A newtype beside a literal is opened through every name it wears, on whichever side it is
+     * written: {@code Code} wraps {@code Inner}, which wraps the {@code Int} the literal is, and
+     * {@code Label} wraps text. Opened through only the outermost name, the {@code Code} would be an
+     * {@code Inner} pushed beside a number.
+     */
+    @Test
+    void aNewtypeBesideALiteralIsOpenedThroughEveryNameItWears() throws Exception {
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compile("""
+                module demo
+
+                data Inner = Int
+                data Code = Inner
+                data Label = String
+
+                data In = { c: Code, l: Label }
+                data Out = { left: Bool, right: Bool, other: Bool, below: Bool, above: Bool,
+                             label: Bool, labelTurned: Bool }
+
+                behavior run : (i: In) -> Out constructs Out
+
+                let run (i) = Out {
+                    left = i.c == 7,
+                    right = 7 == i.c,
+                    other = i.c /= 7,
+                    below = i.c < 8,
+                    above = 6 < i.c,
+                    label = i.l == "a",
+                    labelTurned = "a" == i.l
+                }
+                """), getClass().getClassLoader());
+        Object run = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
+
+        Map<?, ?> seven = (Map<?, ?>) Codecs.encode(loader, "demo.Out", Codecs.apply(run,
+                Codecs.decoded(loader, "demo.In", Map.of("c", 7, "l", "a"))));
+        assertEquals(Map.of("left", true, "right", true, "other", false, "below", true,
+                "above", true, "label", true, "labelTurned", true), seven);
+
+        Map<?, ?> nine = (Map<?, ?>) Codecs.encode(loader, "demo.Out", Codecs.apply(run,
+                Codecs.decoded(loader, "demo.In", Map.of("c", 9, "l", "b"))));
+        assertEquals(Map.of("left", false, "right", false, "other", true, "below", false,
+                "above", true, "label", false, "labelTurned", false), nine);
+    }
 }

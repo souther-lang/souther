@@ -2,14 +2,17 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.carrier.Membership;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
+import souther.compiler.check.TypeCardinality;
 import souther.compiler.check.DeclaredSig;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.inputs.InputDomain;
+import souther.compiler.inputs.Quantities;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 
@@ -178,13 +181,13 @@ class WhatARuleOnAStringIsMeasuredAtTest {
         GuardThresholds.Guards guards = ThresholdFixtures.guardsOf("f",
                 checked.analysisBodies().get("f"), body, plan,
                 compilation.db().ask(new souther.compiler.query.Adequacy.Inputs(module)).value().get("f"), rules);
-        InputDomain read = InputDomain.of(sigs.get("f"), RuleReadingContext.unshared(rules,
-                souther.compiler.query.ReadAs.THE_COMPILATION_DOES));
-        souther.compiler.inputs.Quantities reading = read.quantities(rules);
         RuleReadingContext ruleReading = RuleReadingContext.unshared(rules,
                 souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+        InputDomain read = InputDomain.of(sigs.get("f"), ruleReading,
+                TypeCardinality.Counts.workedOutIn(ruleReading), Membership.none());
+        Quantities reading = read.quantities(rules);
         Partitions.Partitioning p = ThresholdFixtures.withThresholds(
-                Partitions.of("f", read, rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
+                Partitions.of("f", read.reading(rules), souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
                 reading,
                 guards.thresholds(), ruleReading,
                 souther.compiler.inputs.RulesWithNoLine.NONE, guards.singled(),
@@ -198,12 +201,13 @@ class WhatARuleOnAStringIsMeasuredAtTest {
                 classes.add(each.label());
                 List<FixtureTemplate> made =
                         Partitions.standingFor(each.representatives(), ruleReading,
-                                java.util.Set.of());
+                                java.util.Set.of()).values();
                 stands.add(made.isEmpty() ? "none"
                         : made.stream().map(FixtureTemplate::text)
                                 .map(WhatARuleOnAStringIsMeasuredAtTest::bare).toList().toString());
             }
-            Partitions.bordersOf(axis, reading, reading.runsBetween(axis.term()), new LinesRead())
+            Partitions.bordersOf(axis, reading, reading.runsBetween(axis.term()), new LinesRead(),
+                            (one, other) -> false)
                     .forEach(border -> border.answers().keySet().stream()
                             .filter(DomainPoint::againstTheLine)
                             .filter(point -> border.demand(point).criterion() != null)

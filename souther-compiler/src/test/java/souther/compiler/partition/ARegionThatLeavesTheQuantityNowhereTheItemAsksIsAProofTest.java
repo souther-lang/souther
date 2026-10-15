@@ -2,24 +2,34 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.carrier.Membership;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.DeclaredSig;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
+import souther.compiler.check.TypeCardinality;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Position;
+import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.DecisionAtom;
+import souther.compiler.meaning.DecisionSubject;
+import souther.compiler.meaning.Proposition;
+import souther.compiler.meaning.Quantity;
+import souther.compiler.meaning.Relation;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.Towards;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
+import java.math.BigInteger;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -27,6 +37,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Where the region leaves the item's quantity no value the item asks for, the item is out of reach
@@ -164,6 +175,85 @@ class ARegionThatLeavesTheQuantityNowhereTheItemAsksIsAProofTest {
                 "a form stands over the positions it names");
     }
 
+    /**
+     * And what a division leaves of a form: where the values the region leaves the form have no
+     * member of the class a remainder names, the remainder is out of reach, and where they have one
+     * it is not.
+     *
+     * <p>The form is held at nought by the region, so it leaves nought and nothing else by seven.
+     * Asked for three the walk of the class is of no member and ends, which is the proof; asked for
+     * nought it finds the one.
+     */
+    @Test
+    void aRemainderOfAFormTheRegionLeavesNoMemberOfIsOutOfReach() {
+        SearchRegion holdingNought = region().assuming(form(1, 0, 0), Rel.EQ).taken()
+                .assuming(form(0, 1, 0), Rel.EQ).taken();
+
+        assertInstanceOf(Realization.Impossible.class,
+                realize(remainderAt(3), holdingNought),
+                "the form stands at nought, which leaves nought by seven and not three");
+        assertFalse(realize(remainderAt(0), holdingNought) instanceof Realization.Impossible,
+                "and nought is the remainder it does leave");
+    }
+
+    /**
+     * A hole the region holds in the distance, against the level the item asks for.
+     *
+     * <p>The run the region projects the distance onto has no hole in it, so crossing runs leaves the
+     * level reachable. The region itself holds the hole, and asked to take the level in finds the
+     * contradiction — which is also so of a form written at twice the weight, the same relation in
+     * other numbers.
+     */
+    @Test
+    void aHoleTheRegionHoldsAtTheLevelTheItemAsksForIsOutOfReach() {
+        SearchRegion apart = region().assuming(form(-1, 1, 0), Rel.NE).taken();
+        SearchRegion apartAtTwiceTheWeight = region().assuming(form(-2, 2, 0), Rel.NE).taken();
+        Criterion atNought = new Criterion.AtTheLevel(Level.OfTheQuantity.of(0));
+
+        assertInstanceOf(Realization.Impossible.class, realize(pairAt(atNought), apart),
+                "the region keeps `y - x` away from nought, and the item asks for nought");
+        assertInstanceOf(Realization.Impossible.class,
+                realize(pairAt(atNought), apartAtTwiceTheWeight),
+                "and the relation is the same in whatever weight it is written");
+        assertInstanceOf(Realization.Impossible.class, realize(formAt(atNought), apart),
+                "and of the same line handed over as a form");
+    }
+
+    /**
+     * An item of two runs is out of reach only where each of them is.
+     *
+     * <p>Minus two to two with nought taken out is the run below nought and the run above it. A
+     * region keeping the distance above nought holds nothing of the first and something of the
+     * second, and an item with one run out of reach is not out of reach; a region holding the
+     * distance at nought holds nothing of either.
+     */
+    @Test
+    void anItemOfTwoRunsIsOutOfReachOnlyWhereEveryRunIs() {
+        Criterion eitherSideOfNought = new Criterion.Within(
+                new Band(Band.endAt(null, Bound.at(Level.OfTheQuantity.of(-2), true), Towards.ABOVE),
+                        Band.endAt(null, Bound.at(Level.OfTheQuantity.of(2), true), Towards.BELOW)),
+                Level.OfTheQuantity.of(0), Towards.ABOVE);
+
+        assertFalse(realize(pairAt(eitherSideOfNought),
+                        region().assuming(form(-1, 1, 0), Rel.GT).taken())
+                        instanceof Realization.Impossible,
+                "the region leaves the distance above nought, which the second run asks for");
+        assertInstanceOf(Realization.Impossible.class,
+                realize(pairAt(eitherSideOfNought),
+                        region().assuming(form(-1, 1, 0), Rel.EQ).taken()),
+                "and with the distance held at nought neither run has a value");
+    }
+
+    /** A remainder of {@code x + y} by seven, at one of the remainders. */
+    private static Standing remainderAt(long remainder) {
+        Map<NumericTerm, Carrier> on = new LinkedHashMap<>();
+        on.put(term("x"), Carrier.WHOLE);
+        on.put(term("y"), Carrier.WHOLE);
+        return new Standing.OfARemainder(form(1, 1, 0), on, LevelSpace.steppingBy(ExactRatio.ONE),
+                BigInteger.valueOf(7),
+                new Criterion.AtTheLevel(Level.OfTheQuantity.of(remainder)));
+    }
+
     /** And where nothing narrowed the region at all, which is every item of a border nothing is on
      *  the way to. */
     @Test
@@ -171,6 +261,71 @@ class ARegionThatLeavesTheQuantityNowhereTheItemAsksIsAProofTest {
         assertFalse(realize(pairAt(new Criterion.AtTheLevel(Level.OfTheQuantity.of(1))), region())
                         instanceof Realization.Impossible,
                 "the declarations leave the distance every value it has");
+    }
+
+    /**
+     * A region that leaves the elements of a container nowhere proves no count out of reach.
+     *
+     * <p>Where no value is an element, the container holds none, and a container holding none has
+     * none of its elements meeting a statement: a count of none is reached. The elements' numbers
+     * are chosen by the composing and asked nowhere, so what the region leaves them settles
+     * nothing.
+     */
+    @Test
+    void aContainerHoldingNothingIsACountOfNone() {
+        Quantities measuring = COUNTED.input().quantities(COUNTED.rules());
+        SearchRegion holdingNothing = measuring.region();
+        TermPath xs = pathIn(COUNTED, "xs");
+        NumericTerm element = new NumericTerm.ValueOf(xs.element());
+        // An element above the limit: `limit - x >= 0` failing, written facing the way a relation
+        // over the two faces.
+        Map<Quantity, ExactRatio> atMost = new LinkedHashMap<>();
+        atMost.put(new DecisionAtom.OfTheInput(new NumericTerm.ValueOf(pathIn(COUNTED, "limit"))),
+                ExactRatio.ONE);
+        atMost.put(new DecisionAtom.OfTheInput(element), ExactRatio.ONE.negated());
+        CountedElements counted = CountedElements.of("counted", new Quantity.HowManyMeet(
+                new DecisionSubject.AnInput(xs),
+                new Proposition.Compared(new Relation.Affine(
+                        new LinearForm<>(ExactRatio.ZERO, atMost), Rel.GE), false)), measuring,
+                AnElementMeeting.UNREAD);
+        assertTrue(holdingNothing.emptiness().isEmpty(),
+                () -> "the region admits rows: " + holdingNothing.emptiness());
+        assertInstanceOf(NumericDomain.FormProjection.NothingIsLeft.class,
+                holdingNothing.projectionOf(element), "and leaves an element of `xs` nowhere");
+        Standing none = new Standing.OfACount(counted, counted.numbers(),
+                new Criterion.AtTheLevel(Level.OfTheQuantity.of(0)));
+        assertFalse(realize(none, holdingNothing) instanceof Realization.Impossible,
+                "a container holding nothing has none of its elements above the limit");
+    }
+
+    /**
+     * And the same count with a number added to it: the elements are the composing's to choose and
+     * the number is placed beside them, so a region that leaves the elements nowhere proves nothing
+     * about where the sum can come to.
+     */
+    @Test
+    void aContainerHoldingNothingIsACountOfNoneWithANumberAddedToIt() {
+        Quantities measuring = COUNTED.input().quantities(COUNTED.rules());
+        SearchRegion holdingNothing = measuring.region();
+        TermPath xs = pathIn(COUNTED, "xs");
+        NumericTerm element = new NumericTerm.ValueOf(xs.element());
+        NumericTerm limit = new NumericTerm.ValueOf(pathIn(COUNTED, "limit"));
+        Map<Quantity, ExactRatio> atMost = new LinkedHashMap<>();
+        atMost.put(new DecisionAtom.OfTheInput(limit), ExactRatio.ONE);
+        atMost.put(new DecisionAtom.OfTheInput(element), ExactRatio.ONE.negated());
+        CountedElements counted = CountedElements.of("counted", new Quantity.HowManyMeet(
+                new DecisionSubject.AnInput(xs),
+                new Proposition.Compared(new Relation.Affine(
+                        new LinearForm<>(ExactRatio.ZERO, atMost), Rel.GE), false)), measuring,
+                AnElementMeeting.UNREAD);
+        Map<NumericTerm, ExactRatio> added = new LinkedHashMap<>();
+        added.put(limit, ExactRatio.ONE.negated());
+        Standing none = new Standing.OfACountAndAForm(counted,
+                new LinearForm<>(ExactRatio.ZERO, added), Map.of(limit, Carrier.WHOLE),
+                LevelSpace.steppingBy(ExactRatio.ONE),
+                new Criterion.AtTheLevel(Level.OfTheQuantity.of(0)));
+        assertFalse(realize(none, holdingNothing) instanceof Realization.Impossible,
+                "a container holding nothing has none of its elements above the limit");
     }
 
     /** The item's line, as far as a row for it is concerned. */
@@ -202,7 +357,7 @@ class ARegionThatLeavesTheQuantityNowhereTheItemAsksIsAProofTest {
      *  asks for. */
     private static Criterion above(Level line) {
         LevelSpace space = LevelSpace.steppingBy(ExactRatio.ONE);
-        Seam parted = Seam.of(space, line, Towards.BELOW);
+        Seam parted = HeldSeams.of(space, line, Towards.BELOW);
         return new Criterion.Within(
                 new Band(Band.endAt(parted, null, Towards.ABOVE),
                         Band.endAt(null, null, Towards.BELOW)),
@@ -236,7 +391,21 @@ class ARegionThatLeavesTheQuantityNowhereTheItemAsksIsAProofTest {
         return new LinearForm<>(ExactRatio.of(k), coefs);
     }
 
-    private static final Read READ = read();
+    private static final Read READ = read(PAIR, "read");
+
+    /**
+     * A container whose elements no value is — so it holds none — and a number beside them.
+     */
+    private static final Read COUNTED = read("""
+            module g
+
+            data Ok
+
+            data Never = Int
+                invariant value >= 1 && value <= 0
+
+            behavior counted : (xs: List<Never>, limit: Int) -> Ok
+            """, "counted");
 
     private static SearchRegion region() {
         return READ.input().quantities(READ.rules()).region();
@@ -247,24 +416,30 @@ class ARegionThatLeavesTheQuantityNowhereTheItemAsksIsAProofTest {
     }
 
     private static TermPath pathOf(String spelled) {
-        return READ.input().positions().stream().map(Position::path)
+        return pathIn(READ, spelled);
+    }
+
+    private static TermPath pathIn(Read read, String spelled) {
+        return read.input().positions().stream().map(Position::path)
                 .filter(each -> each.toString().equals(spelled))
                 .findFirst().orElseThrow(() -> new AssertionError(
-                        "no position at " + spelled + " among " + READ.input().positions().stream()
+                        "no position at " + spelled + " among " + read.input().positions().stream()
                                 .map(Position::path).toList()));
     }
 
     private record Read(InputDomain input, RuleReadingSource rules) {}
 
-    private static Read read() {
+    private static Read read(String source, String behavior) {
         Compilation compilation =
-                Compilation.ofSources(List.of(PAIR), souther.compiler.meta.ModulePath.EMPTY);
+                Compilation.ofSources(List.of(source), souther.compiler.meta.ModulePath.EMPTY);
         compilation.answerEverything();
         String module = compilation.modules().get(0);
         Map<String, DeclaredSig> sigs =
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
         RuleReadingSource rules = RuleReadings.of(compilation, module);
-        return new Read(InputDomain.of(sigs.get("read"),
-                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES)), rules);
+        RuleReadingContext reading =
+                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES);
+        return new Read(InputDomain.of(sigs.get(behavior), reading,
+                TypeCardinality.Counts.workedOutIn(reading), Membership.none()), rules);
     }
 }

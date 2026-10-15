@@ -19,8 +19,16 @@ import souther.compiler.numeric.Count;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Towards;
 import souther.compiler.observe.Incompleteness;
+import souther.compiler.observe.Limits;
+import souther.compiler.observe.ObservedValue;
+import souther.compiler.observe.RowIdentity;
+import souther.compiler.observe.RowRef;
 import souther.compiler.observe.RunSensitivity;
+import souther.compiler.observe.WorkFigure;
+import souther.compiler.source.SourceId;
 import souther.compiler.partition.Border;
+import souther.compiler.partition.DecisionRule;
+import souther.compiler.partition.Replacement;
 import souther.compiler.partition.BorderQuantity;
 import souther.compiler.partition.BoundaryTarget;
 import souther.compiler.partition.ClosureGap;
@@ -79,6 +87,7 @@ class WhatEachWeakeningSaysAboutAWiderRunTest {
         table.put("BoundaryNotDerived", "answers/UNAFFECTED");
         table.put("InputNotRead", "answers/UNAFFECTED");
         table.put("ProofContradicted", "answers/UNAFFECTED");
+        table.put("ProofOfAWayContradicted", "answers/UNAFFECTED");
         table.put("ArmsUnsettled", "answers/UNAFFECTED");
         // The one arm that is a figure the query graph hands the analysis.
         table.put("PairSpaceTruncated", "answers/MAY_CHANGE");
@@ -88,6 +97,9 @@ class WhatEachWeakeningSaysAboutAWiderRunTest {
         // A coverage item's own place on the order is a question the exact arithmetic answers or
         // does not; a wider run does not change what scale a model's decimals were written at.
         table.put("ItemsPlaceNotWorkedOut", "answers/UNAFFECTED");
+        // Which of the author's points a reading stands at is a question about how the reading
+        // was derived, and a wider run derives it the same way.
+        table.put("AReadingNotTiedToItsLine", "answers/UNAFFECTED");
         // A border nothing held against the lines beside it, which does not answer one way: a
         // strategy nobody wrote and rows all on one side are not allowances, and a run nobody
         // watched is. The row is written with the one that is, so what it shows is the answer
@@ -95,6 +107,8 @@ class WhatEachWeakeningSaysAboutAWiderRunTest {
         table.put("ABorderNotHeldAgainstTheLinesBesideIt", "asks what stood in the way/MAY_CHANGE");
         // And the same figure on the other criterion: a build allowed more walks the group.
         table.put("MeetingsNotWalked", "answers/MAY_CHANGE");
+        // A meeting the classes do not place is placed the same way however much a run allows.
+        table.put("MeetingsNotPlaced", "answers/UNAFFECTED");
         // A run this reading cannot place among the rules is not placed by allowing more.
         table.put("DecisionOfRowUnreadable", "answers/UNAFFECTED");
         // And a run nothing recorded is not recorded by allowing more either: what watched it is
@@ -104,6 +118,12 @@ class WhatEachWeakeningSaysAboutAWiderRunTest {
         table.put("DecisionReadingIncomplete", "answers/MAY_CHANGE");
         // A rule read short is short of words, which no figure gives it.
         table.put("DecisionRuleReadShort", "answers/UNAFFECTED");
+        // The rows written hold each key once, and a run allowed more writes no row that holds
+        // one twice: what is short is a capacity and not a figure.
+        table.put("KeyedOverwriteCasesUnmeasured", "answers/UNAFFECTED");
+        // A rewrite left open asks why: a search stopped at how many rows a generation writes may
+        // go further where more are allowed, and nothing else that leaves one open is an allowance.
+        table.put("RewriteUndecided", "asks why it was left open/MAY_CHANGE");
         return table;
     }
 
@@ -145,13 +165,15 @@ class WhatEachWeakeningSaysAboutAWiderRunTest {
     @Test
     void anArmThatHoldsWhatStoppedItSaysWhatThatSays() {
         for (RunSensitivity each : RunSensitivity.values()) {
-            Incompleteness.Code code = each == RunSensitivity.MAY_CHANGE
-                    ? Incompleteness.Code.VALUE_TRUNCATED : Incompleteness.Code.VALUE_UNREADABLE;
+            Incompleteness.Cause cause = each == RunSensitivity.MAY_CHANGE
+                    ? Incompleteness.Cause.at(Incompleteness.Code.VALUE_TRUNCATED,
+                            Limits.DEFAULT.nodesFigure())
+                    : Incompleteness.Cause.of(Incompleteness.Code.VALUE_UNREADABLE);
 
-            assertEquals(each, Weakening.ObservationIncomplete.of(Incompleteness.of(
-                    code, Incompleteness.Scope.BEHAVIOR, "b")).runSensitivity());
+            assertEquals(each, Weakening.ObservationIncomplete.of(Incompleteness.atPosition(
+                    cause, "b", "x")).runSensitivity());
             assertEquals(each, new Weakening.BorderValueUnreadable(
-                    border(), ReadingGap.of(code)).runSensitivity());
+                    border(), ReadingGap.of(cause)).runSensitivity());
             assertEquals(each, new Weakening.ModelReadingIncomplete(
                     new ClosureGap.PositionNotReachedInto("b", new PositionId(TermPath.of("x")),
                             each == RunSensitivity.MAY_CHANGE
@@ -218,16 +240,19 @@ class WhatEachWeakeningSaysAboutAWiderRunTest {
             // and rows all on one side are not allowances, and what a run watched is.
             case Weakening.ABorderNotHeldAgainstTheLinesBesideIt _ -> "asks what stood in the way";
             case Weakening.ModelReadingIncomplete _ -> "asks the gap";
+            case Weakening.RewriteUndecided _ -> "asks why it was left open";
             case Weakening.OutputCasesUnreadable _, Weakening.InputCasesUnreadable _,
                  Weakening.BodyNotInEvaluation _, Weakening.BoundaryNotDerived _,
                  Weakening.InputNotRead _, Weakening.PairSpaceTruncated _,
                  Weakening.BorderReadingsNotExhausted _,
-                 Weakening.ItemsPlaceNotWorkedOut _,
-                 Weakening.ProofContradicted _, Weakening.ArmsUnsettled _,
+                 Weakening.ItemsPlaceNotWorkedOut _, Weakening.AReadingNotTiedToItsLine _,
+                 Weakening.ProofContradicted _, Weakening.ProofOfAWayContradicted _,
+                 Weakening.ArmsUnsettled _,
                  Weakening.DecisionOfRowUnreadable _, Weakening.DecisionRunNotWatched _,
-                 Weakening.MeetingsNotWalked _,
+                 Weakening.MeetingsNotWalked _, Weakening.MeetingsNotPlaced _,
                  Weakening.DecisionReadingIncomplete _,
-                 Weakening.DecisionRuleReadShort _ -> "answers";
+                 Weakening.DecisionRuleReadShort _,
+                 Weakening.KeyedOverwriteCasesUnmeasured _ -> "answers";
         };
     }
 
@@ -240,10 +265,10 @@ class WhatEachWeakeningSaysAboutAWiderRunTest {
      */
     private static List<Weakening> everyWeakening() {
         List<Weakening> out = new ArrayList<>();
-        out.add(Weakening.ObservationIncomplete.of(Incompleteness.of(
-                Incompleteness.Code.VALUE_TRUNCATED, Incompleteness.Scope.BEHAVIOR, "b")));
-        out.add(new Weakening.BorderValueUnreadable(border(),
-                ReadingGap.of(Incompleteness.Code.VALUE_TRUNCATED)));
+        Incompleteness.Cause aLimit = Incompleteness.Cause.at(Incompleteness.Code.VALUE_TRUNCATED,
+                Limits.DEFAULT.nodesFigure());
+        out.add(Weakening.ObservationIncomplete.of(Incompleteness.atPosition(aLimit, "b", "x")));
+        out.add(new Weakening.BorderValueUnreadable(border(), ReadingGap.of(aLimit)));
         out.add(new Weakening.ModelReadingIncomplete(new ClosureGap.RulesNotReached(
                 "b", new PositionId(TermPath.of("x")))));
         out.add(new Weakening.OutputCasesUnreadable("b"));
@@ -255,16 +280,22 @@ class WhatEachWeakeningSaysAboutAWiderRunTest {
                 new SourceConstructOrigin(new WrittenOwner.Body("m", "b"), 2, 0,
                         SourceConstruct.IF),
                 1, new DecidedBy.NotSaid())));
+        out.add(new Weakening.ProofOfAWayContradicted("b", new DecisionRule(Map.of())));
         out.add(new Weakening.ArmsUnsettled(
                 new SourceConstructOrigin(new WrittenOwner.Body("m", "b"), 1, 0,
                         SourceConstruct.IF)));
-        out.add(new Weakening.PairSpaceTruncated("b", 9, 4));
-        out.add(new Weakening.BorderReadingsNotExhausted(border(), 4));
+        out.add(new Weakening.PairSpaceTruncated("b", 9,
+                WorkFigure.PAIRS_OF_CLASSES_COUNTED.at(4)));
+        out.add(new Weakening.BorderReadingsNotExhausted(border(),
+                WorkFigure.READINGS_OF_A_ROW_AT_A_POINT.at(4)));
         out.add(new Weakening.ItemsPlaceNotWorkedOut(border(),
                 souther.compiler.numeric.UnheldNumber.MORE_ROOM_COULD_ANSWER));
+        out.add(new Weakening.AReadingNotTiedToItsLine(border()));
         out.add(new Weakening.ABorderNotHeldAgainstTheLinesBesideIt(border(),
                 Weakening.ABorderNotHeldAgainstTheLinesBesideIt.Why.NOTHING_WATCHED_THE_RUNS));
-        out.add(new Weakening.MeetingsNotWalked("b", 1));
+        out.add(new Weakening.MeetingsNotWalked("b", 1,
+                List.of(WorkFigure.COMBINATIONS_OF_A_GROUP_MEASURED.at(4))));
+        out.add(new Weakening.MeetingsNotPlaced("b", 1));
         out.add(new Weakening.DecisionOfRowUnreadable("b",
                 souther.compiler.partition.RulesTaken.WhichRule.Why.NO_RECOGNISABLE_RULE_MATCHES));
         out.add(new Weakening.DecisionRunNotWatched("b"));
@@ -273,6 +304,13 @@ class WhatEachWeakeningSaysAboutAWiderRunTest {
                         souther.compiler.partition.CompositionBudget
                                 .PATHS_OF_A_DECISION_READ)));
         out.add(new Weakening.DecisionRuleReadShort("b"));
+        out.add(new Weakening.KeyedOverwriteCasesUnmeasured("b"));
+        out.add(new Weakening.RewriteUndecided("b",
+                new Replacement.ByOneAnswer(new ObservedValue.Integer(0),
+                        new RowRef("b", new SourceId("m.sou"), new RowIdentity.Unnamed(1))),
+                new ReplacementEvidence.Undecided(ReplacementEvidence.Undecided.Way.atFigures(
+                        ReplacementEvidence.Undecided.Why.RUNS_SPENT,
+                        List.of(WorkFigure.RUNS_REPLACING_AN_ARM.at(4)))).why()));
         return out;
     }
 

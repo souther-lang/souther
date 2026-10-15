@@ -3,8 +3,10 @@ package souther.compiler.inputs;
 import souther.compiler.check.RuleCitation;
 import souther.compiler.check.RuleRef;
 import souther.compiler.check.RuleReportAnchor;
+import souther.compiler.types.ModelOccurrences;
 
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -47,11 +49,16 @@ import java.util.Set;
  *                  readers is one finding and each of them says how to reach it; which of them a
  *                  document writes is that document's to decide. Empty exactly where the author
  *                  named the rule, which is found by that name from anywhere
+ * @param readAt    every copy of the model's code the rule was read at here, for the reason
+ *                  {@code reachedBy} is every handle: a rule written in a helper is read once per
+ *                  call of it and found alike at each, and the calls are what tell those readings
+ *                  apart for a reader. No part of the fact, which is one however many calls found it
  */
-public record RuleWithoutALine(Fact fact, Set<RuleReportAnchor> reachedBy) {
+public record RuleWithoutALine(Fact fact, Set<RuleReportAnchor> reachedBy,
+                               ModelOccurrences readAt) {
 
     public RuleWithoutALine {
-        if (fact == null) {
+        if (fact == null || readAt == null) {
             throw new IllegalArgumentException("a rule is without a line somewhere, and for a"
                     + " reason");
         }
@@ -62,15 +69,30 @@ public record RuleWithoutALine(Fact fact, Set<RuleReportAnchor> reachedBy) {
     /** One reader's finding about the whole of a rule, as that reader produced it. */
     public static RuleWithoutALine of(RuleCitation cited, FilingCoordinate at,
                                       BlockReason.RuleWithoutLineReason why) {
-        return of(cited, at, RuleSite.theRuleItself(), why);
+        return of(cited, ModelOccurrences.NONE, at, RuleSite.theRuleItself(), why);
+    }
+
+    /** The same, of a reading made at {@code readAt}, which says which copies of the model's code
+     *  it was read at. */
+    public static RuleWithoutALine of(RuleCitation cited, ModelOccurrences readAt,
+                                      FilingCoordinate at,
+                                      BlockReason.RuleWithoutLineReason why) {
+        return of(cited, readAt, at, RuleSite.theRuleItself(), why);
     }
 
     /** The same, for a reader with a place inside the rule to send anybody to. */
     public static RuleWithoutALine of(RuleCitation cited, FilingCoordinate at,
                                       RuleSite sentTo,
                                       BlockReason.RuleWithoutLineReason why) {
+        return of(cited, ModelOccurrences.NONE, at, sentTo, why);
+    }
+
+    /** The same, read at {@code readAt}. */
+    public static RuleWithoutALine of(RuleCitation cited, ModelOccurrences readAt,
+                                      FilingCoordinate at, RuleSite sentTo,
+                                      BlockReason.RuleWithoutLineReason why) {
         return new RuleWithoutALine(new Fact(cited.rule(), at, sentTo, why),
-                RuleCitation.anchorOf(cited));
+                RuleCitation.anchorOf(cited), readAt);
     }
 
     /**
@@ -95,6 +117,15 @@ public record RuleWithoutALine(Fact fact, Set<RuleReportAnchor> reachedBy) {
                 throw new IllegalArgumentException("a rule is without a line somewhere, and for a"
                         + " reason");
             }
+        }
+
+        /**
+         * What tells two findings apart: all of this, with the figures its reason was met at left
+         * out. One rule refused at one limit by one reading and at another by the next is one
+         * finding, met at both ({@link BlockReason#factOf}).
+         */
+        public Object key() {
+            return List.of(rule, at, sentTo, BlockReason.factOf(why));
         }
     }
 
@@ -130,20 +161,22 @@ public record RuleWithoutALine(Fact fact, Set<RuleReportAnchor> reachedBy) {
     }
 
     /**
-     * Both readers' findings, as one: the rule, with every place either of them reached it at.
+     * Both readers' findings, as one: the rule, with every place either of them reached it at and
+     * every figure either met its reason at.
      *
-     * <p>Of one rule, and it says so rather than taking the caller's word. What comes out carries
-     * this one's fact, so two that are not one fact would come out as one of them reached where the
-     * other was.
+     * <p>Of one rule, and it says so rather than taking the caller's word. Two that are not one
+     * fact would come out as one of them reached where the other was.
      */
     public RuleWithoutALine mergedWith(RuleWithoutALine other) {
-        if (!fact.equals(other.fact)) {
+        if (!fact.key().equals(other.fact.key())) {
             throw new IllegalArgumentException("two findings put together are one rule with no"
                     + " line: " + fact + " and " + other.fact);
         }
         Set<RuleReportAnchor> both = new HashSet<>(reachedBy);
         both.addAll(other.reachedBy);
-        return new RuleWithoutALine(fact, both);
+        return new RuleWithoutALine(new Fact(fact.rule(), fact.at(), fact.sentTo(),
+                BlockReason.together(fact.why(), other.fact.why())), both,
+                readAt.and(other.readAt));
     }
 
 }

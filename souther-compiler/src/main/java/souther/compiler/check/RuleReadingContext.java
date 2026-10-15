@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.revision.RevisionKnowledge;
 import souther.compiler.types.TypeKey;
 import souther.compiler.values.StringMachineAnswers;
 
@@ -100,6 +101,17 @@ public final class RuleReadingContext {
      */
     DeclarationReadings readings() {
         return readings;
+    }
+
+    /**
+     * What the revision this reading is made under has worked out
+     * ({@link DeclarationReadings#revision}).
+     *
+     * <p>That one capability of the lender and not the lender: a reader outside this package that
+     * offers values has no business borrowing readings, and handed the lender it could.
+     */
+    public RevisionKnowledge revision() {
+        return readings.revision();
     }
 
     /**

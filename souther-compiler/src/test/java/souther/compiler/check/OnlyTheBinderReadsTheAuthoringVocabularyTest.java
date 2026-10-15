@@ -291,6 +291,9 @@ class OnlyTheBinderReadsTheAuthoringVocabularyTest {
                             + " names"),
             new Reader("souther.compiler.check.ElementBindings",
                     "what a call hands its closure, for the value a closure parameter is bound to"),
+            new Reader("souther.compiler.check.ClosureEntries",
+                    "which container a call applies its closure over, for what enters a closure"
+                            + " that only operations apply"),
             new Reader("souther.compiler.check.Reductions",
                     "what a call hands its closure, for a walk from a seed"),
             new Reader("souther.compiler.check.Predicates",
@@ -301,6 +304,13 @@ class OnlyTheBinderReadsTheAuthoringVocabularyTest {
             new Reader("souther.compiler.check.TotalityChecker",
                     "what a call hands its closure, for crediting an element as a sub-term of its"
                             + " container"),
+            new Reader("souther.compiler.check.LibraryUnderProof",
+                    "what a call hands its closure and which elements a kernel lists, for what a"
+                            + " proof of a library operation's body may read of the kernels it"
+                            + " calls"),
+            new Reader("souther.compiler.check.ProvingTheLibrary",
+                    "how many times a walk the library writes applies its closure, for which"
+                            + " operations a proof reads through to their own walk"),
             new Reader("souther.compiler.check.InvariantChecker",
                     "what a call hands its closure, for a construction inside the closure"),
             new Reader("souther.compiler.check.WalkElements",

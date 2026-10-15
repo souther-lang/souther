@@ -1,8 +1,10 @@
 package souther.compiler.query;
 
+import souther.compiler.observe.WorkFigure;
 import souther.compiler.partition.AdequacyPolicy;
 import souther.compiler.partition.Budgets;
 import souther.compiler.regex.PatternPlan;
+import souther.compiler.report.AdequacyReport;
 
 import org.junit.jupiter.api.Test;
 
@@ -61,6 +63,24 @@ class ASpaceTooLargeToWalkAsksForNothingInItTest {
                         + (pick == null ? "nothing was asked" : pick.composed().plan().pairsOwed()));
     }
 
+    /**
+     * And the measurement it went without names the limit the walk stopped at, at the number this
+     * run was handed rather than the one a policy usually hands.
+     */
+    @Test
+    void theWalkThatStoppedNamesTheLimitItStoppedAt() {
+        List<AdequacyReport.BehaviorReport> behaviors =
+                AdequacyReport.of(compiled(3)).modules().getFirst().behaviors();
+
+        assertEquals(List.of(List.of(WorkFigure.PAIRS_OF_CLASSES_COUNTED.at(3))),
+                behaviors.getFirst().weakenedBy().causes().stream()
+                        .filter(Weakening.PairSpaceTruncated.class::isInstance)
+                        .map(Weakening::figures)
+                        .toList(),
+                () -> "the walk stopped says what it was held to: "
+                        + behaviors.getFirst().weakenedBy());
+    }
+
     private static List<Adequacy.Finding> gapsUnder(int pairSpace) {
         List<Adequacy.Finding> findings =
                 compiled(pairSpace).db().ask(new Adequacy.Findings("example.wide")).value();
@@ -74,7 +94,8 @@ class ASpaceTooLargeToWalkAsksForNothingInItTest {
                 .withAdequacyPolicy(new AdequacyPolicy(
                         new AdequacyPolicy.OfTheMeasures(pairSpace,
                                 Budgets.measures().cellsPerGroup(),
-                                PatternPlan.Budget.OF_BEHAVIOR_DISTINCTIONS),
+                                PatternPlan.Budget.OF_BEHAVIOR_DISTINCTIONS,
+                                Budgets.measures().rewriteRuns()),
                         Budgets.generation()));
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();

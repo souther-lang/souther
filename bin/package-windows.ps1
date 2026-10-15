@@ -66,9 +66,10 @@ Write-Host "packaging souther $Version"
 $appVersion = ($Version -split '-')[0]
 
 # What the shaded jar reaches, as jdeps reports it. A compiler is among them because `souther japi`
-# reads javadoc out of a library's sources; a runtime short of one answers that command with
-# nothing, and answers every other command as if it were complete.
-$modules = 'java.base,java.compiler,java.desktop,java.sql,java.xml,jdk.compiler'
+# reads javadoc out of a library's sources, and the HTTP client because a compile for a target that
+# is not installed fetches its backend; a runtime short of one answers that command with nothing,
+# and answers every other command as if it were complete.
+$modules = 'java.base,java.compiler,java.desktop,java.net.http,java.sql,java.xml,jdk.compiler'
 
 $dist = Join-Path $target 'dist'
 if (Test-Path $dist) { Remove-Item -Recurse -Force $dist }

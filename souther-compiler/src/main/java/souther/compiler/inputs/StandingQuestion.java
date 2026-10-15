@@ -4,8 +4,10 @@ import souther.compiler.check.CoverageObligation;
 import souther.compiler.check.RuleCitation;
 import souther.compiler.check.RuleRef;
 import souther.compiler.check.RuleReportAnchor;
+import souther.compiler.types.ModelOccurrences;
 
 import java.util.HashSet;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
@@ -123,6 +125,13 @@ public sealed interface StandingQuestion {
     StandingQuestion mergedWith(StandingQuestion other);
 
     /**
+     * Every copy of the model's code the rule was read at where it raised this, which is what tells
+     * a reader apart the readings of a rule written in a helper called more than once. No part of
+     * what makes two of these one.
+     */
+    ModelOccurrences readAt();
+
+    /**
      * One question a rule of the model raises that nothing answered.
      *
      * <p>The other side of {@code check.RuleAccounting.Unanswered}, which is the same question in
@@ -178,6 +187,13 @@ public sealed interface StandingQuestion {
             return RuleCitation.handlesFor(fact.rule(), reachedBy);
         }
 
+        /** None: a question one asks of a declaration's clauses is read wherever the type is
+         *  carried, and is no copy of anybody's code. */
+        @Override
+        public ModelOccurrences readAt() {
+            return ModelOccurrences.NONE;
+        }
+
         /** What it asks and what it asks it about. */
         public InputQuestion asks() {
             return fact.asks();
@@ -205,6 +221,12 @@ public sealed interface StandingQuestion {
          * halves is no disagreement about anything the model says — there is no order there — so a
          * comparison of the joined lists would refuse a pair of accounts over a precedence neither
          * of them claimed.
+         *
+         * <p><b>Nor is a difference in the figures a reason was met at.</b> Which limit of an
+         * allowance refused is what happened on the way: two readings of one rule may be refused at
+         * different ones, and that is one reason met at both — so both agree where the reasons do
+         * with the figures left out ({@link BlockReason#factOf}), and the account they come to
+         * names every figure either met.
          */
         @Override
         public StandingQuestion mergedWith(StandingQuestion other) {
@@ -216,21 +238,23 @@ public sealed interface StandingQuestion {
                 throw new IllegalArgumentException("two accounts put together are of one question: "
                         + fact + " and " + it.fact);
             }
-            if (!stopped.itsRuleLeft().equals(it.stopped.itsRuleLeft())) {
+            if (!stopped.itsRuleLeft().sameFactAs(it.stopped.itsRuleLeft())) {
                 throw new TwoAccountsOfOneQuestion(fact, stopped, it.stopped);
             }
             Optional<BlockReason.AnswerRealizationStopped> mine = stopped.itsPositionWasShortOf();
             Optional<BlockReason.AnswerRealizationStopped> theirs =
                     it.stopped.itsPositionWasShortOf();
-            if (mine.isPresent() && theirs.isPresent() && !mine.equals(theirs)) {
+            if (mine.isPresent() && theirs.isPresent()
+                    && !BlockReason.factOf(mine.get()).equals(BlockReason.factOf(theirs.get()))) {
                 throw new TwoAccountsOfOneQuestion(fact, stopped, it.stopped);
             }
-            Optional<BlockReason.AnswerRealizationStopped> answer =
-                    mine.isPresent() ? mine : theirs;
+            Optional<BlockReason.AnswerRealizationStopped> answer = mine.isEmpty() ? theirs
+                    : theirs.isEmpty() ? mine
+                    : Optional.of(BlockReason.together(mine.get(), theirs.get()));
             Set<RuleReportAnchor> both = new HashSet<>(reachedBy);
             both.addAll(it.reachedBy);
-            return new Exact(fact, both,
-                    new WhatAQuestionStandsOn(stopped.itsRuleLeft(), answer));
+            return new Exact(fact, both, new WhatAQuestionStandsOn(
+                    stopped.itsRuleLeft().together(it.stopped.itsRuleLeft()), answer));
         }
 
         @Override
@@ -303,10 +327,11 @@ public sealed interface StandingQuestion {
      * only the measure answering it.
      */
     record NothingClassifiesIt(NothingClassifiesIt.Filed filed,
-                                  Set<RuleReportAnchor> reachedBy) implements Unclassified {
+                                  Set<RuleReportAnchor> reachedBy, ModelOccurrences readAt)
+            implements Unclassified {
 
         public NothingClassifiesIt {
-            if (filed == null) {
+            if (filed == null || readAt == null) {
                 throw new IllegalArgumentException(
                         "a rule nothing classified is one rule, filed somewhere, for a reason");
             }
@@ -314,12 +339,13 @@ public sealed interface StandingQuestion {
             RuleCitation.requireReached(filed.rule(), reachedBy);
         }
 
-        /** One reader's account of it, as that reader produced it. */
-        public static NothingClassifiesIt of(RuleCitation cited, FilingCoordinate at,
+        /** One reader's account of it, as that reader produced it, read at {@code readAt}. */
+        public static NothingClassifiesIt of(RuleCitation cited, ModelOccurrences readAt,
+                                             FilingCoordinate at,
                                              BlockReason.RuleReadingStopped why) {
             return new NothingClassifiesIt(
                     new NothingClassifiesIt.Filed(cited.rule(), at, why),
-                    RuleCitation.anchorOf(cited));
+                    RuleCitation.anchorOf(cited), readAt);
         }
 
         @Override
@@ -352,7 +378,7 @@ public sealed interface StandingQuestion {
 
         @Override
         public Object fact() {
-            return filed;
+            return filed.fact();
         }
 
         @Override
@@ -361,13 +387,16 @@ public sealed interface StandingQuestion {
                 throw new IllegalArgumentException("a rule nothing classified and " + other
                         + " are not two accounts of one thing");
             }
-            if (!filed.equals(it.filed)) {
+            if (!filed.fact().equals(it.filed.fact())) {
                 throw new IllegalArgumentException("two accounts put together are of one rule: "
                         + filed + " and " + it.filed);
             }
             Set<RuleReportAnchor> both = new HashSet<>(reachedBy);
             both.addAll(it.reachedBy);
-            return new NothingClassifiesIt(filed, both);
+            return new NothingClassifiesIt(
+                    new NothingClassifiesIt.Filed(filed.rule(), filed.at(),
+                    BlockReason.together(filed.why(), it.filed.why())),
+                    both, readAt.and(it.readAt));
         }
 
         @Override
@@ -381,7 +410,8 @@ public sealed interface StandingQuestion {
          *
          * <p>The citation is no part of it, for the reason {@link Exact.Fact} gives. The reason is:
          * two limits met at one place are two things for a reader to lift, and one rule filed under
-         * the first of them would leave the second unsaid.
+         * the first of them would leave the second unsaid. The figures the reason was met at are
+         * not ({@link #fact}): one limit met at two of them is one thing to lift.
          */
         public record Filed(RuleRef rule, FilingCoordinate at,
                             BlockReason.RuleReadingStopped why) {
@@ -391,6 +421,12 @@ public sealed interface StandingQuestion {
                     throw new IllegalArgumentException(
                             "a rule nothing classified is one rule, filed somewhere, for a reason");
                 }
+            }
+
+            /** What makes two of these one: all of it, with the figures its reason was met at
+             *  left out. */
+            Object fact() {
+                return List.of(rule, at, BlockReason.factOf(why));
             }
         }
     }
@@ -414,10 +450,11 @@ public sealed interface StandingQuestion {
      *                  author named it
      */
     record BoundaryUndetermined(BoundaryUndetermined.Filed filed,
-                                Set<RuleReportAnchor> reachedBy) implements Unclassified {
+                                Set<RuleReportAnchor> reachedBy, ModelOccurrences readAt)
+            implements Unclassified {
 
         public BoundaryUndetermined {
-            if (filed == null) {
+            if (filed == null || readAt == null) {
                 throw new IllegalArgumentException("a question nothing worked out is one question,"
                         + " of one rule, filed somewhere");
             }
@@ -425,12 +462,13 @@ public sealed interface StandingQuestion {
             RuleCitation.requireReached(filed.rule(), reachedBy);
         }
 
-        /** One reader's account of it, as that reader produced it. */
-        public static BoundaryUndetermined of(RuleCitation cited, FilingCoordinate at,
+        /** One reader's account of it, as that reader produced it, read at {@code readAt}. */
+        public static BoundaryUndetermined of(RuleCitation cited, ModelOccurrences readAt,
+                                              FilingCoordinate at,
                                               BlockReason.RuleReadingStopped why) {
             return new BoundaryUndetermined(
                     new BoundaryUndetermined.Filed(cited.rule(), at, why),
-                    RuleCitation.anchorOf(cited));
+                    RuleCitation.anchorOf(cited), readAt);
         }
 
         @Override
@@ -460,7 +498,7 @@ public sealed interface StandingQuestion {
 
         @Override
         public Object fact() {
-            return filed;
+            return filed.fact();
         }
 
         @Override
@@ -469,13 +507,16 @@ public sealed interface StandingQuestion {
                 throw new IllegalArgumentException("a question nothing worked out and " + other
                         + " are not two accounts of one thing");
             }
-            if (!filed.equals(it.filed)) {
+            if (!filed.fact().equals(it.filed.fact())) {
                 throw new IllegalArgumentException("two accounts put together are of one question: "
                         + filed + " and " + it.filed);
             }
             Set<RuleReportAnchor> both = new HashSet<>(reachedBy);
             both.addAll(it.reachedBy);
-            return new BoundaryUndetermined(filed, both);
+            return new BoundaryUndetermined(
+                    new BoundaryUndetermined.Filed(filed.rule(), filed.at(),
+                    BlockReason.together(filed.why(), it.filed.why())),
+                    both, readAt.and(it.readAt));
         }
 
         @Override
@@ -484,7 +525,8 @@ public sealed interface StandingQuestion {
         }
 
         /** Which rule, where and what stopped it — the whole of what makes two of these one, for
-         *  the reason {@link Exact.Fact} gives about the citation. */
+         *  the reason {@link Exact.Fact} gives about the citation, with the figures the reason was
+         *  met at left out for the one {@link NothingClassifiesIt.Filed} gives. */
         public record Filed(RuleRef rule, FilingCoordinate at,
                             BlockReason.RuleReadingStopped why) {
 
@@ -493,6 +535,11 @@ public sealed interface StandingQuestion {
                     throw new IllegalArgumentException("a question nothing worked out is one of"
                             + " one rule, filed somewhere, for a reason");
                 }
+            }
+
+            /** What makes two of these one, as {@link NothingClassifiesIt.Filed#fact} says. */
+            Object fact() {
+                return List.of(rule, at, BlockReason.factOf(why));
             }
         }
     }

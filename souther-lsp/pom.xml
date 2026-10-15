@@ -7,7 +7,7 @@
     <parent>
         <groupId>org.souther-lang</groupId>
         <artifactId>souther-parent</artifactId>
-        <version>0.3.0</version>
+        <version>0.3.1-SNAPSHOT</version>
     </parent>
 
     <artifactId>souther-lsp</artifactId>
@@ -18,6 +18,13 @@
         Raoh (raoh-json); outbound responses are built as Jackson trees. The analysis (diagnostics,
         document symbols, hover, definition, semantic tokens) reads the lossless CST and the compiler.
     </description>
+
+    <properties>
+        <!-- What this module ships is the shaded LSP server, a runnable binary rather than a
+             library, distributed through GitHub Releases and not published to Central. The plain
+             jar is a dependency inside this reactor and is not published either. -->
+        <souther.publish.skip>true</souther.publish.skip>
+    </properties>
 
     <dependencies>
         <dependency>
@@ -34,7 +41,7 @@
             <artifactId>souther-fmt</artifactId>
         </dependency>
         <!-- souther-runtime is `provided` in souther-compiler; the LSP bundles it so a self-contained
-             module compiled on save can load its generated classes and evaluate its `example`s (and
+             module the editor compiles can load its generated classes and evaluate its `example`s (and
              CTFE constant checks). Without it, that evaluation is skipped rather than run. -->
         <dependency>
             <groupId>org.souther-lang</groupId>
@@ -53,7 +60,6 @@
         <dependency>
             <groupId>tools.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
-            <version>3.2.2</version>
         </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>
@@ -162,24 +168,4 @@
             </plugin>
         </plugins>
     </build>
-
-    <profiles>
-        <!-- What this module ships is the shaded LSP server, a runnable binary rather than a
-             library; keep it out of the Central bundle (distribute via GitHub Releases instead).
-             The plain jar is a dependency inside this reactor and is not published either. -->
-        <profile>
-            <id>release</id>
-            <build>
-                <plugins>
-                    <plugin>
-                        <groupId>org.sonatype.central</groupId>
-                        <artifactId>central-publishing-maven-plugin</artifactId>
-                        <configuration>
-                            <skipPublishing>true</skipPublishing>
-                        </configuration>
-                    </plugin>
-                </plugins>
-            </build>
-        </profile>
-    </profiles>
 </project>

@@ -31,10 +31,6 @@ final class Meetings {
 
     private final CoverageSites.Plan plan;
 
-    /** What the body was read to arrive at, and by which ways. The walk's reading, handed in rather
-     *  than taken again: what a value is settled by is one question and is asked once. */
-    private final ValueArrivals<Outcome> reading;
-
     /** The nodes one operator's run is written as, which the walk meets again on its way down and
      *  which are no meeting of their own. Identity and not equality: two operands written the same
      *  are two places. */
@@ -42,9 +38,8 @@ final class Meetings {
 
     private final List<Interaction> found = new ArrayList<>();
 
-    Meetings(CoverageSites.Plan plan, ValueArrivals<Outcome> reading) {
+    Meetings(CoverageSites.Plan plan) {
         this.plan = plan;
-        this.reading = reading;
     }
 
     /**
@@ -52,15 +47,19 @@ final class Meetings {
      *
      * <p>A meeting reached several ways is one place in the body and as many groups, and they are
      * written down together because that is when the walk is there.
+     *
+     * @param reading what the body holding {@code node} was read to arrive at, and by which ways.
+     *                The walk's reading, handed in rather than taken again: what a value is settled
+     *                by is one question and is asked once
      */
-    void at(Core node, List<List<Decision>> reaches) {
+    void at(Core node, List<List<Decision>> reaches, ValueArrivals<Outcome> reading) {
         List<Core> meeting = absorbed.contains(node) ? null : meetingAt(node, absorbed);
         if (meeting == null) {
             return;
         }
         List<Factor> factors = new ArrayList<>();
         for (Core operand : meeting) {
-            List<Outcome> outcomes = outcomesOf(operand);
+            List<Outcome> outcomes = outcomesOf(operand, reading);
             // One outcome is no decision: the operand answers the same way however the row is
             // written, so nothing about it can be varied against the other operand.
             if (outcomes.size() > 1) {
@@ -105,12 +104,18 @@ final class Meetings {
      * combination a row is steered into, and the conditions of such a way do not say what would
      * steer one there — so it is left out, and where that leaves none the value is answered as
      * varying in no way this can compose against rather than as varying in one nobody can reach.
+     *
+     * <p>Each as what a run on it is seen doing ({@link souther.compiler.flow.Provenance#seen}),
+     * which is what a group is met by. A way into an arm a run is not seen taking one of is the arm
+     * here, which is all a run there shows: offered as itself, a run down another way into the arm
+     * would be seen meeting it.
      */
-    private List<Outcome> outcomesOf(Core e) {
+    private static List<Outcome> outcomesOf(Core e, ValueArrivals<Outcome> reading) {
         List<Outcome> out = new ArrayList<>();
         for (Arrival<Outcome> each : reading.waysAt(e).orNone()) {
-            if (each.isComplete() && !out.contains(each.path())) {
-                out.add(each.path());
+            Outcome seen = each.provenance().seen();
+            if (each.isComplete() && !out.contains(seen)) {
+                out.add(seen);
             }
         }
         return out;

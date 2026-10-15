@@ -1,11 +1,27 @@
 package souther.compiler.inputs;
 
+import souther.compiler.check.DateShifts;
+import souther.compiler.check.DefaultBoundOperationFacts;
+import souther.compiler.check.ElementAnswer;
 import souther.compiler.check.NumericMeasures;
 import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.SeededWalk;
 import souther.compiler.check.Symbols;
+import souther.compiler.check.TypeOps;
 import souther.compiler.check.WalkElements;
 import souther.compiler.core.Core;
+import souther.compiler.numeric.DateTranslation;
+import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.ValueTransformation;
+import souther.compiler.semantics.TakenAs;
+import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
+import souther.compiler.types.ValueName;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
 
 /**
  * Which number of a behavior's input an expression names, or nothing where it names none.
@@ -32,29 +48,36 @@ public final class InputNumber {
     }
 
     /**
-     * The number {@code e} names.
+     * The number {@code e} names, as one of the numbers a comparison is read of: none where it
+     * names an element of a container that another name stands for in {@code met}.
+     *
+     * <p>The way in for a reader that puts numbers into one form. A form holds a number once, so
+     * two names for two elements of one container, which are one position, would be merged into it.
+     */
+    public static NumericTerm of(Core e, InputDomain inputs, InputReads reads,
+                                 RuleReadingSource source, ElementsMet met) {
+        return met.admits(e, reads, source.newtypes())
+                ? ofAlone(e, inputs, reads, source) : null;
+    }
+
+    /**
+     * The number {@code e} names, for a reader that asks of a side by itself and combines no two
+     * numbers into one form: a line drawn on one position against a value written out.
      *
      * <p>The argument of a taking has to be a location: {@code List.length(List.map(f, xs))} counts
      * something no path names, and a boundary on it could not be looked for in a row.
      */
-    public static NumericTerm of(Core e, InputDomain inputs, InputReads reads,
-                                 RuleReadingSource source) {
+    public static NumericTerm ofAlone(Core e, InputDomain inputs, InputReads reads,
+                                      RuleReadingSource source) {
         Symbols symbols = source.symbols();
         NumericMeasures.Measured measured = NumericMeasures.takenIn(e, symbols);
         if (measured != null) {
-            // A taking is of a location, so an argument that stands at none is one there is no
-            // location to take it of.
-            TermPath of = switch (reads.pathOf(measured.of(), source.newtypes())) {
-                case PathResolution.At(var at) -> at;
-                case PathResolution.NotAPosition _ -> null;
-                // A taking is of one location, and a name that only may stand at one is no one of
-                // them. Taken of any, the number would be a size of a sequence the run it is on
-                // never walked.
-                case PathResolution.MayStandAt _ -> null;
-            };
+            // A taking is of a location, or of what a location's value was moved into, so an
+            // argument that is neither is one there is no location to take it of.
+            ObservationSource of = sourceOf(measured.of(), reads, source);
             if (of != null) {
                 return NumericTerm.TakenOf.of(measured.operation(), of, measured.arguments(),
-                        inputs.typeAt(of, source), source.inners(), symbols);
+                        inputs.typeAt(of.position(), source), source.inners(), symbols);
             }
             // A location the operation is not taken of, or a value standing at none. The second is
             // a walk's answer, and a number over the values it walked is a term of its own where
@@ -71,6 +94,66 @@ public final class InputNumber {
             // it would fall at a place the rule may say nothing about.
             case PathResolution.MayStandAt _ -> null;
         };
+    }
+
+    /**
+     * The value a taking is of: the one standing at a location, or one a chain of shifts of a date
+     * written out made of it. Null where it is neither.
+     *
+     * <p>A location is asked first and is what a taking is of wherever it is one. A call that is no
+     * location is then asked what the library says of it ({@link DateShifts}), so that a date moved
+     * by days is a value of the place it was moved from and not a place of its own: a name that
+     * only may stand at a location is still no one of them.
+     */
+    private static ObservationSource sourceOf(Core of, InputReads reads,
+                                              RuleReadingSource source) {
+        return switch (reads.pathOf(of, source.newtypes())) {
+            case PathResolution.At(var at) -> ObservationSource.asItStands(at);
+            case PathResolution.NotAPosition _ -> movedFromALocation(of, reads, source);
+            // A taking is of one location, and a name that only may stand at one is no one of
+            // them. Taken of any, the number would be a size of a container the run it is on
+            // never walked.
+            case PathResolution.MayStandAt _ -> null;
+        };
+    }
+
+    /**
+     * The location a chain of shifts of a date starts from and what the chain comes to, or null
+     * where {@code of} is no shift of a date or what it shifts is no location.
+     *
+     * <p>Each step is read where the date inside it stands, since a name given a shifted date is
+     * the shift and the binding is where its date is read.
+     */
+    private static ObservationSource movedFromALocation(Core of, InputReads reads,
+                                                        RuleReadingSource source) {
+        // A shift of a date answers a date, so anything else is no chain and the walk below, which
+        // resolves names, is not spent on it.
+        if (!Type.DATE.equals(Core.withoutStanding(of).type())) {
+            return null;
+        }
+        Symbols symbols = source.symbols();
+        List<Long> days = new ArrayList<>();
+        Denotation met = reads.denotes(of, symbols, source.newtypes());
+        for (DateShifts.Step step = DateShifts.stepOf(met.value(), symbols); step != null;
+                step = DateShifts.stepOf(met.value(), symbols)) {
+            days.add(step.days());
+            met = met.at().denotes(step.date(), symbols, source.newtypes());
+        }
+        if (days.isEmpty()
+                || !(met.at().pathOf(met.value(), source.newtypes())
+                        instanceof PathResolution.At(var from))) {
+            return null;
+        }
+        // The innermost shift first: each one is defined only at the dates the ones inside it
+        // leave, which is what the translation keeps and the days alone would not.
+        DateTranslation translation = DateTranslation.none();
+        for (Long each : days.reversed()) {
+            translation = translation.thenAddDays(each);
+            if (translation == null) {
+                return null;
+            }
+        }
+        return new ObservationSource(from, ValueTransformation.of(translation));
     }
 
     /**
@@ -97,6 +180,10 @@ public final class InputNumber {
      * which is a `let` changing what a model means. The environment the value was given in comes
      * with it, so what is read of the walk afterwards is read where the walk stands.
      *
+     * <p>Where the answer is no place of the element but something made of its fields, the run is
+     * over what was computed of each element instead ({@link #overWhatWasComputed}), and is the run
+     * over a place where what was computed is that place.
+     *
      * <p>Null wherever any of the three is missing, which is a rule this compiler did not read
      * rather than a rule the model does not state — and is reported as one. Null too where the three
      * are in hand and what they come to is not one run
@@ -118,7 +205,7 @@ public final class InputNumber {
         Denotation met = reads.denotes(measured.of(), symbols, source.newtypes());
         Core walk = met.value();
         InputReads where = met.at();
-        souther.compiler.types.BindingId element =
+        BindingId element =
                 WalkElements.elementBindingOf(walk, where, symbols, source.newtypes());
         if (element == null) {
             return null;
@@ -133,15 +220,35 @@ public final class InputNumber {
             // than one container is no one run.
             case PathResolution.MayStandAt _ -> null;
         };
-        if (answered == null || at == null) {
+        if (at == null) {
             return null;
+        }
+        ElementValue computed = null;
+        if (answered == null) {
+            computed = computedOf(measured, where, element, source);
+            if (computed == null) {
+                return null;
+            }
+            // What was computed may be the element's own field and nothing made of it, as a closure
+            // that weighs a field once and adds nothing is. That is the place, and one number has
+            // one term whichever way its closure was spelled.
+            answered = placeStanding(computed, where.answerAt(element), at, inputs, source);
+        }
+        if (answered == null) {
+            return overWhatWasComputed(measured, where.answerAt(element), computed, at, source);
         }
         TermPath under = answered.from(at);
         // Whether what is read from there is one run is the run's own question, and it is asked
-        // rather than assumed: a walk over a sequence inside another sequence is over some of the
+        // rather than assumed: a walk over a container inside another container is over some of the
         // occurrences of its path, and a term made of it would state of every one of them what the
         // model says of those.
         RunSource over = RunSource.overTheOccurrencesAt(under);
+        // A walk inside a container of containers is over some of the occurrences of its path,
+        // unless what it walked is every one of them: the lists of an outer list put end to end.
+        if (over == null && where.everyElementAt(element, source.newtypes())
+                instanceof PathResolution.At(TermPath every) && every.equals(at)) {
+            over = RunSource.overEveryOccurrenceAt(under);
+        }
         if (over == null) {
             return null;
         }
@@ -149,6 +256,145 @@ public final class InputNumber {
         return stands == null ? null
                 : NumericTerm.TakenOver.of(measured.operation(), over, stands, source.inners(),
                         symbols);
+    }
+
+    /**
+     * What a walk from a seed answers where its step only adds to the answer so far: the seed and
+     * the total of what the step adds for each element.
+     *
+     * @param seed  what the walk starts from
+     * @param total the total of what each element adds, the term {@code List.sum} of the same
+     *              values is
+     */
+    public record SeedAndTotal(ExactRatio seed, NumericTerm total) {}
+
+    /**
+     * What {@code e} is, where it is a walk from a seed ({@link SeededWalk}) whose step answers the
+     * answer so far and something of the element alone: the seed, and the total of those somethings
+     * over the elements at one position. Null where it is any other walk, or where the elements are
+     * not read from a place.
+     *
+     * <p>By induction over the walk, which visits every element of what it walks once — that is
+     * what the library's one loop does, and what the walks defined over it hand it — the answer is
+     * {@code seed + Σ w(x)} where the step is {@code 1·answer + w(x)}. That is asked of the step as
+     * a form of the answer so far and the element's fields together ({@link
+     * ElementValue#addedTo}), so a step is accepted where the arithmetic composes it that way and
+     * for every answer. {@code acc + x}, {@code x + acc} and {@code Decimal.add(acc, x)} are one
+     * step; a step that is merely right at some answers, like {@code acc * acc + x} at nought and
+     * at one, is none.
+     *
+     * <p>The total is the term {@code List.sum} of those values is, so a rule over a fold and a rule
+     * over a sum of the same numbers are about one number.
+     *
+     * @param blockOf the block a closure argument stands for, where the call stands
+     */
+    public static SeedAndTotal ofAWalkAdding(Core e, InputDomain inputs, InputReads reads,
+                                             RuleReadingSource source,
+                                             Function<Core, Core.Block> blockOf) {
+        SeededWalk walk = SeededWalk.of(e, blockOf);
+        if (walk == null) {
+            return null;
+        }
+        Denotation container =
+                reads.standing(walk.container(), source.symbols(), source.newtypes());
+        // Every occurrence of the position and each as often, which a total of what each element
+        // adds is a total of.
+        if (!(container.at().everyElementOf(container.value(), source.newtypes())
+                instanceof PathResolution.At(TermPath at))) {
+            return null;
+        }
+        BindingId element = walk.element().binding();
+        Map<BindingId, Core> held = reads.heldByTheBody();
+        ElementValue.Affine adds = ElementValue.addedTo(
+                new ElementAnswer(element, walk.step().body()), walk.accumulator().binding(), held,
+                source);
+        ElementValue.Affine seed = affine(ElementValue.read(
+                new ElementAnswer(element, walk.seed()), held, source));
+        if (adds == null || seed == null || !seed.form().coefs().isEmpty()) {
+            return null;
+        }
+        ElementProjection place = adds.asAPlace();
+        NumericTerm total;
+        if (place != null && TypeOps.base(walk.step().body().type(), source.inners()).equals(
+                TypeOps.base(inputs.typeAt(place.from(at), source), source.inners()))) {
+            RunSource over = RunSource.overEveryOccurrenceAt(place.from(at));
+            total = over == null ? null
+                    : NumericTerm.TakenOver.of(SUM, over, inputs.typeAt(place.from(at), source),
+                            source.inners(), source.symbols());
+        } else {
+            Type each = walk.step().body().type();
+            RunSource over = RunSource.computedOverTheElementsAt(at, adds, each);
+            total = over == null ? null
+                    : NumericTerm.TakenOver.of(SUM, over, each, source.inners(), source.symbols());
+        }
+        return total == null ? null : new SeedAndTotal(seed.form().constant(), total);
+    }
+
+    private static final ValueName.Stdlib.Operation SUM =
+            ValueName.Stdlib.operation("List", "sum");
+
+    private static ElementValue.Affine affine(ElementValue read) {
+        return read instanceof ElementValue.Affine form ? form : null;
+    }
+
+    /**
+     * The field {@code computed} is, where it is that field as the same kind of number, or null.
+     *
+     * <p>The same number is not the same term. What a total is counted as is part of it, and a call
+     * that changes only that — whole numbers as decimals — computes the field's number and is not
+     * the field: two lines of the largest whole number come to a decimal and to no whole number.
+     * So a form that is a field is the place only where what the closure answers stands as what the
+     * field stands as, with the names either is written under taken off, which is the account the
+     * term is made under ({@link NumericTerm.TakenOver#of}).
+     */
+    private static ElementProjection placeStanding(ElementValue computed, ElementAnswer closure,
+                                                   TermPath at, InputDomain inputs,
+                                                   RuleReadingSource source) {
+        ElementProjection place = computed.asAPlace();
+        if (place == null) {
+            return null;
+        }
+        Type fieldType = inputs.typeAt(place.from(at), source);
+        return fieldType != null && TypeOps.base(closure.body().type(), source.inners())
+                .equals(TypeOps.base(fieldType, source.inners())) ? place : null;
+    }
+
+    /**
+     * The number {@code measured} takes over what a walk computed of each of its elements, or null
+     * where the walk answered no such computation this reads.
+     *
+     * <p>For a closure whose answer is not a place of its element — arithmetic over its fields, or
+     * a choice between two of those by a flag it holds. The licence is the one a place answer has:
+     * the walk answers one value per element of what it was given, proved before the tree was
+     * rewritten, so what is asked here is only what the closure came to.
+     */
+    private static NumericTerm overWhatWasComputed(NumericMeasures.Measured measured,
+                                                   ElementAnswer closure, ElementValue computed,
+                                                   TermPath at, RuleReadingSource source) {
+        Type each = closure.body().type();
+        RunSource over = RunSource.computedOverTheElementsAt(at, computed, each);
+        return over == null ? null
+                : NumericTerm.TakenOver.of(measured.operation(), over, each, source.inners(),
+                        source.symbols());
+    }
+
+    /**
+     * What the closure the walk handed {@code element} to computed of it, or null where there is no
+     * such closure or this reads none of it.
+     *
+     * <p>Only for a total. What is read of a run computed of each element is the sum of those
+     * numbers; a count of a walk's answers is a count of the container it walked, and is read as
+     * that.
+     */
+    private static ElementValue computedOf(NumericMeasures.Measured measured, InputReads where,
+                                           BindingId element, RuleReadingSource source) {
+        if (!(DefaultBoundOperationFacts.get().takenAs(measured.operation())
+                instanceof TakenAs.TheSumOfWhatItHolds)) {
+            return null;
+        }
+        ElementAnswer closure = where.answerAt(element);
+        return closure == null ? null
+                : ElementValue.read(closure, where.heldByTheBody(), source);
     }
 
 }

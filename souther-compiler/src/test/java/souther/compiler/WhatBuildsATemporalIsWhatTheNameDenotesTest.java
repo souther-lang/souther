@@ -141,16 +141,20 @@ class WhatBuildsATemporalIsWhatTheNameDenotesTest {
                 assertInstanceOf(Core.Reached.class, call.fn()).denotes());
     }
 
-    /** The measurement says the same: a line stands where the source wrote a date, and nowhere
-     *  a behavior was asked for one. */
+    /**
+     * The measurement says the same: a line stands where the source wrote a date, and nowhere
+     * a behavior was asked for one.
+     *
+     * <p>What the rule compares {@code on} with is what a dependency answered when asked about a
+     * written string, which a row stands in: the rule is a column of the decision table, one rule
+     * each way it comes out, and no line on {@code on}.
+     */
     @Test
     void aLineIsDrawnOnlyWhereADateIsWritten() {
         assertTrue(report(CONSTRUCTED).contains("border      borders 1   obligations 0/4"),
                 report(CONSTRUCTED));
         assertFalse(report(ANSWERS_ONE).contains("obligations 0/4"), report(ANSWERS_ONE));
-        assertTrue(report(ANSWERS_ONE).contains(
-                        "written in a form this compiler does not read, about `on`"),
-                report(ANSWERS_ONE));
+        assertTrue(report(ANSWERS_ONE).contains("decision    rules 2"), report(ANSWERS_ONE));
     }
 
     private static String report(String source) {

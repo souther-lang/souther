@@ -3,6 +3,7 @@ package souther.lsp;
 import org.junit.jupiter.api.Test;
 import souther.lsp.analysis.Analyzer;
 import souther.lsp.transport.MessageConnection;
+import souther.test.OnItsOwnStack;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.io.ByteArrayInputStream;
@@ -41,7 +42,7 @@ class LspSurvivesADeepExpressionTest {
     private static final int STACK_BYTES = 256 * 1024;
 
     @Test
-    void analysisReportsRatherThanThrows() throws InterruptedException {
+    void analysisReportsRatherThanThrows() {
         AtomicReference<Object> result = new AtomicReference<>();
         onSmallStack(() -> result.set(new Analyzer().diagnostics(DEEP)));
 
@@ -51,7 +52,7 @@ class LspSurvivesADeepExpressionTest {
     }
 
     @Test
-    void theSessionOutlivesTheDocument() throws InterruptedException {
+    void theSessionOutlivesTheDocument() {
         byte[] input = frames(
                 message(1, "initialize", Map.of()),
                 message(null, "initialized", Map.of()),
@@ -69,16 +70,9 @@ class LspSurvivesADeepExpressionTest {
 
     /** Runs {@code work} on a thread with {@link #STACK_BYTES} of stack, rethrowing nothing: what is
      *  under test is what the code did with the failure, not that one happened. */
-    private static void onSmallStack(Runnable work) throws InterruptedException {
-        Thread t = new Thread(null, () -> {
-            try {
-                work.run();
-            } catch (Throwable _) {
-                // the assertions read what was produced, and a throw leaves that empty
-            }
-        }, "deep-expression", STACK_BYTES);
-        t.start();
-        t.join();
+    private static void onSmallStack(Runnable work) {
+        // the assertions read what was produced, and a throw leaves that empty
+        OnItsOwnStack.run("a session over a deep document", STACK_BYTES, work);
     }
 
     private static String message(Integer id, String method, Object params) {

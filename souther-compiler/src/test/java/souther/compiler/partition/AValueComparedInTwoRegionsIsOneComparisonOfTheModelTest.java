@@ -78,8 +78,10 @@ class AValueComparedInTwoRegionsIsOneComparisonOfTheModelTest {
 
         List<ComparisonReadings.Reading> readings = ComparisonReadings.of("f", read.analysis(),
                 read.inputs().reading(read.rules()),
-                InputReads.ofParametersWhereCallsStand(read.inputs().parameterReads(), elements),
-                InputReads.ofParametersWhereCallsStand(Map.of(), elements)).comparisons();
+                InputReads.ofParametersWhereCallsStand(read.inputs().parameterReads(),
+                        read.inputs().declared(read.rules()), elements,
+                        read.inputs().dependencies()))
+                .comparisons();
 
         long ofTheValue = readings.stream()
                 .filter(each -> each.occurrence().origin().owner() instanceof WrittenOwner.Body owner

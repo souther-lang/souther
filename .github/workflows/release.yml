@@ -25,16 +25,46 @@ permissions:
   contents: read
 
 jobs:
+  # A release says what it changed, in the notes the tagged commit holds for its version. Every job
+  # that builds waits for this one, so a tag without them is refused before anything is spent on
+  # it. On anything but a tag there are no notes to ask for and the job does nothing, so the jobs
+  # after it still run.
+  notes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        if: github.ref_type == 'tag'
+
+      - name: Find the release notes
+        if: github.ref_type == 'tag'
+        run: |
+          notes="docs/releases/${GITHUB_REF_NAME#v}.md"
+          if [ ! -s "$notes" ]; then
+            echo "::error::$GITHUB_REF_NAME has no release notes: $notes is missing or empty"
+            exit 1
+          fi
+          mkdir -p notes
+          cp "$notes" notes/release-notes.md
+
+      # Apart from the artifacts, so the notes are the release's text and not one of its assets.
+      - name: Upload the release notes to the workflow run
+        if: github.ref_type == 'tag'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: souther-release-notes
+          path: notes/release-notes.md
+
   # jpackage builds an image for the platform it runs on, so the Windows distributions are built on
   # a Windows runner and handed to the job that publishes. The tests are the CI workflow's and the
   # publishing job's; what this job checks is that the images it wrote run.
   windows:
+    needs: notes
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Set up JDK 25
-        uses: actions/setup-java@v6
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6
         with:
           distribution: temurin
           java-version: '25'
@@ -180,7 +210,7 @@ jobs:
           if ($entries -notcontains $control) { throw "the uninstall took $control off PATH" }
 
       - name: Upload the distributions to the workflow run
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: souther-windows
           path: souther-cli/target/dist/*.zip
@@ -190,12 +220,12 @@ jobs:
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: read
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Set up JDK 25
-        uses: actions/setup-java@v6
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6
         with:
           distribution: temurin
           java-version: '25'
@@ -220,7 +250,7 @@ jobs:
       # The Windows distributions are built on a runner of their own, and the checksums below cover
       # whatever this directory holds, so they are fetched into it before those are written.
       - name: Collect the Windows distributions
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: souther-windows
           path: artifacts/
@@ -235,16 +265,45 @@ jobs:
           mv SHA256SUMS artifacts/
 
       - name: Upload the artifacts to the workflow run
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: souther-release
           path: artifacts/*
 
+  # The only job holding a write token. It runs no repository code: it takes what `release` built
+  # and attaches it, so a branch run of this workflow cannot publish and a build step cannot use
+  # the token.
+  publish:
+    needs: release
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - name: Fetch the artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: souther-release
+          path: artifacts/
+
+      - name: Fetch the release notes
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: souther-release-notes
+          path: notes/
+
+      - name: Attest the provenance of the artifacts
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3
+        with:
+          subject-path: artifacts/*
+
       - name: Attach the artifacts to the GitHub Release
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3
         with:
           files: artifacts/*
+          body_path: notes/release-notes.md
           # A tag carrying a pre-release identifier is not what a reader arriving at the repository
           # should be handed as the current release. Semantic versioning puts that identifier after a
           # hyphen and a final version has none, so the tag answers this itself and nothing has to be

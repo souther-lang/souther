@@ -233,7 +233,7 @@ public final class AbortSites {
             case Core.Int _, Core.Decimal _, Core.Str _, Core.Bool _,
                     Core.Temporal _, Core.Read _, Core.UnitValue _,
                     Core.MaterialisedValue _, Core.OptionNone _,
-                    Core.FieldAccess _, Core.PreservedCall _, Core.Apply _,
+                    Core.FieldAccess _, Core.FieldProjection _, Core.PreservedCall _, Core.Apply _,
                     Core.If _, Core.IfConstructed _, Core.LetIn _,
                     Core.Block _, Core.ListLit _, Core.OptionSome _,
                     Core.Tuple _, Core.TupleGet _, Core.Match _, Core.Widen _ ->

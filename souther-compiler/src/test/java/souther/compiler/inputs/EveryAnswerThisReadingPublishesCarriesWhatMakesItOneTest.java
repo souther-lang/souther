@@ -8,6 +8,7 @@ import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.Type;
+import souther.compiler.types.ValueName;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
@@ -168,6 +169,9 @@ class EveryAnswerThisReadingPublishesCarriesWhatMakesItOneTest {
         if (type == TermPath.class) {
             return TermPath.of("x");
         }
+        if (type == AnEvaluation.class) {
+            return Evaluations.of(new ValueName.Behavior("example", "f"), 0);
+        }
         if (type == Core.class) {
             return SOMETHING;
         }
@@ -180,6 +184,18 @@ class EveryAnswerThisReadingPublishesCarriesWhatMakesItOneTest {
         if (type == BindingId.class) {
             return new BindingId(new BindingOwner.OfValue("example", "f"), 0);
         }
+        if (type == InputReads.ContainerOf.class) {
+            return new InputReads.ContainerOf.AtAPosition(TermPath.of("x"));
+        }
+        if (type == InputReads.EntryLookedUp.class) {
+            return new InputReads.EntryLookedUp(TermPath.of("x"), SOMETHING);
+        }
+        if (type == InputReads.WhatItHolds.class) {
+            return new InputReads.WhatItHolds.Unsaid();
+        }
+        if (type.isEnum()) {
+            return type.getEnumConstants()[0];
+        }
         throw new IllegalStateException("nothing here makes a " + type.getName()
                 + ", so an answer carrying one would be held to nothing");
     }
@@ -188,5 +204,6 @@ class EveryAnswerThisReadingPublishesCarriesWhatMakesItOneTest {
             new Core.Int(0, Type.INT, new SourcePos(0, 0));
 
     private static final InputReads NOWHERE =
-            InputReads.ofParameters(Map.of(), ElementBindings.NONE);
+            InputReads.ofParameters(Map.of(), DeclaredInput.NONE, ElementBindings.NONE,
+                    ValueDefinitions.NONE, souther.compiler.carrier.Membership.none());
 }

@@ -64,6 +64,7 @@ class TwoFactsCalledOneThingAreTwoEntriesInTheDocumentsOrderTest {
 
             example take
                 | (Draft { cost = Amount(7), flag = Yes }) -> Ok { n = 7 }
+                | (Draft { cost = Amount(8), flag = Yes }) -> Ok { n = 8 }
             """, """
             examples for example.split
 

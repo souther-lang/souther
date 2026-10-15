@@ -71,7 +71,7 @@ class WhichModuleDeclaredAHelperIsAskedOfTheDeclarationTest {
     private static void check(String module, Map<String, Hir.FnDef> declared,
                               Map<String, Hir.FnDef> takenOn) {
         HelperTable table =
-                HelperTable.of(module, declared, takenOn, Map.of(), InliningPolicy.FULL, DefaultStdlib.get());
+                HelperTable.of(module, declared, takenOn, InliningPolicy.FULL, DefaultStdlib.get());
         TotalityChecker.check(
                 HelperInliner.over(table, HelperGraph.of(table), ValueAtAReference.COPIED));
     }
@@ -155,7 +155,7 @@ class WhichModuleDeclaredAHelperIsAskedOfTheDeclarationTest {
         takenOn.put(spin.name(), spin);
         takenOn.put(wrapped.name(), wrapped);
         HelperTable table = HelperTable.of("order", HelperInliner.helpersOf(order), takenOn,
-                Map.of(), InliningPolicy.FULL, DefaultStdlib.get());
+                InliningPolicy.FULL, DefaultStdlib.get());
         PartialReachability reachability =
                 PartialReachability.of(
                         HelperInliner.over(table, HelperGraph.of(table), ValueAtAReference.COPIED));
@@ -221,7 +221,7 @@ class WhichModuleDeclaredAHelperIsAskedOfTheDeclarationTest {
         takenOn.put(spin.name(), spin);
         takenOn.put(hands.name(), hands);
         HelperTable table = HelperTable.of("order", HelperInliner.helpersOf(order), takenOn,
-                Map.of(), InliningPolicy.FULL, DefaultStdlib.get());
+                InliningPolicy.FULL, DefaultStdlib.get());
         PartialReachability reachability =
                 PartialReachability.of(
                         HelperInliner.over(table, HelperGraph.of(table), ValueAtAReference.COPIED));

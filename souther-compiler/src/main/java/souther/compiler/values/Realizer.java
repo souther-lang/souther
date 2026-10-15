@@ -1,7 +1,8 @@
 package souther.compiler.values;
 
 import souther.compiler.regex.Language;
-import souther.compiler.regex.Meter;
+import souther.compiler.regex.PatternPlan;
+import net.unit8.notation199x.pattern.Meter;
 
 import java.util.ArrayList;
 import java.util.function.BiConsumer;
@@ -33,6 +34,8 @@ import java.util.Map;
  */
 final class Realizer {
 
+    /** What {@link #meter} was made from, so a refusal says which numbers it was refused at. */
+    private final PatternPlan.Budget budget;
     private final Meter meter;
     /**
      * What another question of this position built, or nothing.
@@ -49,8 +52,9 @@ final class Realizer {
     private final BiConsumer<AdmittedPlan, Realization> noting;
     private final Map<AdmittedPlan, Realization> done = new LinkedHashMap<>();
 
-    Realizer(Meter meter, Function<AdmittedPlan, ValueSet> borrowed,
+    Realizer(PatternPlan.Budget budget, Meter meter, Function<AdmittedPlan, ValueSet> borrowed,
              BiConsumer<AdmittedPlan, Realization> noting) {
+        this.budget = budget;
         this.meter = meter;
         this.borrowed = borrowed;
         this.noting = noting;
@@ -123,9 +127,10 @@ final class Realizer {
         // The one place the machine limit is about a rule. What was being built is a pattern
         // somebody wrote, so a machine larger than a machine may be is that pattern's size — the
         // same one asked for first, out of a full allowance, would have been refused the same way.
-        return meter.stoppedBy() == Meter.Stopped.ONE_MACHINE
-                ? new Realization.OverTheMachineLimit(plan.plan())
-                : new Realization.OverTheAnswerLimit();
+        PatternPlan.Refused refused = budget.refusedBy(meter);
+        return refused.by() == Meter.Stopped.ONE_MACHINE
+                ? new Realization.OverTheMachineLimit(plan.plan(), refused)
+                : new Realization.OverTheAnswerLimit(refused);
     }
 
     /**
@@ -200,11 +205,15 @@ final class Realizer {
         return new Realization.Exact(out);
     }
 
+    // Each told the meter it is starting, so that a refusal read off it afterwards is this
+    // construction's and not one that came back with nothing earlier out of the same allowance.
     private Realization both(ValueSet one, ValueSet other) {
+        meter.starting();
         return outcome(Sets.metUnder(one, other, meter));
     }
 
     private Realization either(ValueSet one, ValueSet other) {
+        meter.starting();
         return outcome(Sets.joinedUnder(one, other, meter));
     }
 
@@ -218,6 +227,7 @@ final class Realizer {
      * author to rewrite something that is not why.
      */
     private Realization outcome(ValueSet made) {
-        return made == null ? new Realization.OverTheAnswerLimit() : new Realization.Exact(made);
+        return made == null ? new Realization.OverTheAnswerLimit(budget.refusedBy(meter))
+                : new Realization.Exact(made);
     }
 }

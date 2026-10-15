@@ -88,7 +88,7 @@ class AProvedEmptyWayTravelsAsTheModelsWordTest {
     void noRowIsHandedOverForAWayTheRulesLeaveNothingOn() {
         Generator.BoundaryAttempt attempt = composing(NothingTheRulesLeave.REGION, CUT);
 
-        assertEquals(Generator.UnresolvedCombination.Reason.THE_RULES_LEAVE_NOTHING_THERE,
+        assertEquals(Generator.UnresolvedCombination.Reason.NO_VALUE_CAN_STAND_THERE,
                 assertInstanceOf(Generator.BoundaryAttempt.Unresolved.class, attempt,
                         "a way that leaves nothing standing is a way no row arrives by").why()
                         .reason(),
@@ -160,7 +160,7 @@ class AProvedEmptyWayTravelsAsTheModelsWordTest {
     /** Which question a report about the condition under test would put. */
     private static final ConditionReportAnchor WHERE =
             new ConditionReportAnchor.WhereTheReadingMetIt("m",
-                    new ConditionOccurrence("b", 0));
+                    new ConditionOccurrence("b", ConditionOccurrence.Reading.DIVIDING, 0));
 
     private static final OnTheWay.TakenIn CUT = cutOver(
             new NumericTerm.ValueOf(souther.compiler.inputs.TermPath.of("r").then("cost")));
@@ -171,7 +171,7 @@ class AProvedEmptyWayTravelsAsTheModelsWordTest {
 
     private static OnTheWay.TakenIn cutOver(NumericTerm over) {
         return new OnTheWay.TakenIn(WHERE,
-                new TakenConstraint.Affine(LinearForm.atom(over), Rel.GE));
+                new RowDemand.Relational(new TakenConstraint.Affine(LinearForm.atom(over), Rel.GE)));
     }
 
     /** A row composed inside {@code within}, with {@code cut} on the way to it. */
@@ -180,7 +180,8 @@ class AProvedEmptyWayTravelsAsTheModelsWordTest {
                 Map.of(new RealizationTarget.AtOnePosition(costAxis().term()), Count.of(100)),
                 NumbersAskedFor.of(LevelRegion.point(
                         new Level.OnACarrier(Carrier.WHOLE, Count.of(100)))),
-                new Reachability.Reaching(within, Requirements.NONE, List.of(cut)),
+                new Reachability.Reaching(within, Requirements.NONE, TruthsAsked.NONE,
+                        List.of(cut), Reachability.Ways.ONE, List.of()),
                 Generator.CandidateCheck.ANY);
     }
 
@@ -216,13 +217,13 @@ class AProvedEmptyWayTravelsAsTheModelsWordTest {
     }
 
     private static Axis costAxis() {
-        return Partitions.of(spec().name(), domain(), rules(), ReadAs.THE_COMPILATION_DOES)
+        return Partitions.of(spec().name(), domain().reading(rules()), ReadAs.THE_COMPILATION_DOES)
                 .axes().stream()
                 .filter(each -> each.path().toString().equals("r.cost")).findFirst().orElseThrow();
     }
 
     private static MeasuredInput subject() {
         return MeasuredInput.of(spec().name(), domain().reading(rules()),
-                Partitions.of(spec().name(), domain(), rules(), ReadAs.THE_COMPILATION_DOES));
+                Partitions.of(spec().name(), domain().reading(rules()), ReadAs.THE_COMPILATION_DOES));
     }
 }

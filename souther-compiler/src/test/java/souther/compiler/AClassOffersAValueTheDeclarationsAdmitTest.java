@@ -62,7 +62,9 @@ class AClassOffersAValueTheDeclarationsAdmitTest {
     void theClassAwayFromASingledStringIsOfferedARowThatBuilds() {
         String rows = rowsFor(AT_LEAST_ONE);
 
-        assertTrue(rows.contains("\"voucher=/= spring\""),
+        // Over the row rather than as its name: the row is for the decision rule the class is
+        // reached by as well, and a row for two things is named for neither.
+        assertTrue(rows.contains("// fills voucher=/= spring"),
                 () -> "the class away from the singled value is offered a row:\n" + rows);
         // The note is what a class offered a value the declarations refuse comes to: the row is
         // composed, the construction fails, and a reader is told the combination was not reached.

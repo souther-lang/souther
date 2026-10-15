@@ -11,6 +11,7 @@ import souther.compiler.frontend.CstFrontend;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.Place;
 import souther.compiler.types.Type;
 
 import java.util.List;
@@ -43,19 +44,24 @@ class TheNegationOfTheLeastIntIsNoFormAndNoLiteralTest {
 
     @Test
     void theLeastIntIsALiteral() {
-        assertEquals(Count.of(Long.MIN_VALUE), Carrier.WHOLE.literalOf(number(Long.MIN_VALUE), SYMBOLS));
+        assertEquals(Count.of(Long.MIN_VALUE), literalOf(number(Long.MIN_VALUE)));
     }
 
     @Test
     void itsNegationIsNoLiteral() {
-        assertNull(Carrier.WHOLE.literalOf(negated(number(Long.MIN_VALUE)), SYMBOLS));
+        assertNull(literalOf(negated(number(Long.MIN_VALUE))));
     }
 
     @Test
     void anyOtherNegationIsALiteral() {
-        assertEquals(Count.of(-5L), Carrier.WHOLE.literalOf(negated(number(5)), SYMBOLS));
-        assertEquals(Count.of(Long.MAX_VALUE),
-                Carrier.WHOLE.literalOf(negated(number(Long.MIN_VALUE + 1)), SYMBOLS));
+        assertEquals(Count.of(-5L), literalOf(negated(number(5))));
+        assertEquals(Count.of(Long.MAX_VALUE), literalOf(negated(number(Long.MIN_VALUE + 1))));
+    }
+
+    /** What the carrier of a whole number reads {@code e} as, where no name stands for anything. */
+    private static Place literalOf(Core e) {
+        return Carrier.WHOLE.literalOf(new ValueStanding.Standing<>(e, "nowhere", reading()),
+                SYMBOLS);
     }
 
     @Test
@@ -86,18 +92,8 @@ class TheNegationOfTheLeastIntIsNoFormAndNoLiteralTest {
             }
 
             @Override
-            public PublishedDeclarations published() {
-                return PublishedDeclarations.NONE;
-            }
-
-            @Override
-            public DeclarationKinds kinds() {
-                return DeclarationKinds.NONE;
-            }
-
-            @Override
-            public NewtypeInners inners() {
-                return NewtypeInners.NONE;
+            public DeclarationAccess declarations() {
+                return DeclarationAccess.NONE;
             }
 
             @Override
@@ -111,12 +107,12 @@ class TheNegationOfTheLeastIntIsNoFormAndNoLiteralTest {
             }
 
             @Override
-            public AffineForms.ReadThrough<String> readThrough(Core.Read read, String at) {
+            public ValueStanding.ReadThrough<String> readThrough(Core.Read read, String at) {
                 return null;
             }
 
             @Override
-            public List<AffineForms.ReadThrough<String>> alternativesOf(Core.Read read, String at) {
+            public List<ValueStanding.ReadThrough<String>> alternativesOf(Core.Read read, String at) {
                 return null;
             }
 

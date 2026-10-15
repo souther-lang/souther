@@ -7,6 +7,9 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermOrdersFixtures;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
+import souther.compiler.observe.Incompleteness;
+import souther.compiler.observe.Limits;
+import souther.compiler.partition.AuthoredPlacement;
 import souther.compiler.partition.BorderQuantity;
 import souther.compiler.partition.BoundaryTarget;
 import souther.compiler.partition.Criterion;
@@ -17,7 +20,9 @@ import souther.compiler.query.BorderObligationPointAssessment.Reading;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.SequencedMap;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -185,8 +190,8 @@ class WhichReadingComposesTheRowALineIsOwedTest {
      */
     @Test
     void twoReadingsInOneBehaviorAreTwoReadings() {
-        Reading first = new Reading(aLineAt("one", "x.a"));
-        Reading second = new Reading(aLineAt("one", "x.b"));
+        Reading first = new Reading(aLineAt("one", "x.a"), ITS_OWN);
+        Reading second = new Reading(aLineAt("one", "x.b"), ITS_OWN);
         SearchCoverage coverage = coverageOf(Map.of(
                         first, new SearchCoverage.ReadingSearch.Attempted(nothingThere()),
                         second, new SearchCoverage.ReadingSearch.Attempted(refused())),
@@ -275,9 +280,11 @@ class WhichReadingComposesTheRowALineIsOwedTest {
     @Test
     void aPointARowAlreadyStandsAtIsNotSearchedFor() {
         PointResolution resolved = PointResolver.resolveAt(
-                new ObligationAssessment(new Criterion.AtTheLevel(Level.OfTheQuantity.of(1)),
-                        new ObligationCoverage.Witnessed(),
-                        ItemAssessment.WritabilityProjection.PROVEN, SearchOutcomes.none()),
+                new ObligationAssessment(
+                        Optional.of(new Criterion.AtTheLevel(Level.OfTheQuantity.of(1))),
+                        new ObligationCoverage.Witnessed(RowWitnesses.ANOTHER_ROW),
+                        ItemAssessment.WritabilityProjection.PROVEN, SearchOutcomes.none(),
+                        ObligationDisposition.openOn(List.of())),
                 List.of(at("anywhere")), _ -> {
                     throw new AssertionError("nothing is searched at a point a row stands at");
                 });
@@ -299,8 +306,11 @@ class WhichReadingComposesTheRowALineIsOwedTest {
 
     /** A reading of the line: one behavior at its one position carrying the type. */
     private static Reading at(String behavior) {
-        return new Reading(aLineAt(behavior, behavior + ".value"));
+        return new Reading(aLineAt(behavior, behavior + ".value"), ITS_OWN);
     }
+
+    /** How a reading of a declaration's line stands to it: at the line's own points. */
+    private static final AuthoredPlacement ITS_OWN = new AuthoredPlacement.ItsOwn();
 
     /** Where a line was read: one position of one behavior, cut at one value. */
     private static BoundaryTarget aLineAt(String behavior, String path) {
@@ -314,9 +324,11 @@ class WhichReadingComposesTheRowALineIsOwedTest {
     /** A point a row is owed at, measured and missed, so a search of it would tell somebody
      *  something. */
     private static ObligationAssessment owed() {
-        return new ObligationAssessment(new Criterion.AtTheLevel(Level.OfTheQuantity.of(1)),
+        return new ObligationAssessment(
+                Optional.of(new Criterion.AtTheLevel(Level.OfTheQuantity.of(1))),
                 new ObligationCoverage.Missed(),
-                ItemAssessment.WritabilityProjection.PROVEN, SearchOutcomes.none());
+                ItemAssessment.WritabilityProjection.PROVEN, SearchOutcomes.none(),
+                ObligationDisposition.openOn(List.of()));
     }
 
     private static PointResolver.ReadingEvidence searched(ItemAssessment.Attempt attempt) {
@@ -333,9 +345,8 @@ class WhichReadingComposesTheRowALineIsOwedTest {
         return new ItemAssessment.Attempt.Unverified(new Generator.GeneratedRow(
                 new Generator.Purpose.ForAPoint(carrier + ": " + SAID), List.of()), null,
                 souther.compiler.partition.CompositionAccount.NOTHING,
-                EstablishmentGap.Observation.of(
-                        java.util.Set.of(souther.compiler.observe.Incompleteness.Code
-                                .VALUE_TRUNCATED)));
+                EstablishmentGap.Observation.of(Set.of(Incompleteness.Cause.at(
+                        Incompleteness.Code.VALUE_TRUNCATED, Limits.DEFAULT.nodesFigure()))));
     }
 
     /** The same, as what a reading holds at the point. */
@@ -353,6 +364,6 @@ class WhichReadingComposesTheRowALineIsOwedTest {
      *  answer a reader may act on (ADR-0091). */
     private static Generator.UnresolvedCombination nothingThere() {
         return new Generator.UnresolvedCombination(List.of(SAID),
-                Generator.UnresolvedCombination.Reason.THE_RULES_LEAVE_NOTHING_THERE);
+                Generator.UnresolvedCombination.Reason.NO_VALUE_CAN_STAND_THERE);
     }
 }

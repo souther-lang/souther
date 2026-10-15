@@ -9,10 +9,10 @@ import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.PlacesApart;
 import souther.compiler.numeric.Text;
-import souther.compiler.regex.CodePoints;
-import souther.compiler.regex.Meter;
+import net.unit8.notation199x.pattern.CodePoints;
+import net.unit8.notation199x.pattern.Meter;
 import souther.compiler.regex.PatternPlan;
-import souther.compiler.regex.PatternMeaning;
+import net.unit8.notation199x.pattern.PatternMeaning;
 import souther.compiler.values.Value;
 import souther.compiler.values.ValueSet;
 

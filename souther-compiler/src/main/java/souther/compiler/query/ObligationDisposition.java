@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import souther.compiler.partition.ReadingGap;
 import souther.compiler.partition.StandingAtAPoint;
+import souther.compiler.partition.WhereNothingIsAnswered;
 import souther.compiler.publish.CanonicalSelection;
 import souther.compiler.publish.PublicationOrders;
 
@@ -226,7 +227,62 @@ public sealed interface ObligationDisposition {
              * second account of the same searches.
              */
             record NothingShowedIt() implements WhetherARowCanBeWritten {}
+
+            /**
+             * Every row that would meet the obligation reaches an {@code unreachable}, and nothing
+             * here proves the inputs there do not arise.
+             *
+             * <p>The model's own body says no row can be written — a row there is refused (E1911)
+             * — and says it as a statement, not a proof. So the obligation is not taken away, which
+             * would make the statement the one thing no row is asked to test, and not a gap either,
+             * which would ask an author for a row the compiler refuses. It stays open on the
+             * premises named until one is proved or the body answers.
+             *
+             * <p>Nothing a measurement went without: the rows were read and the obligation counted
+             * in full. What is open is whether a row can be written, which is this family's question.
+             *
+             * @param premises the parts of the body a row there may reach, each once. Never empty
+             */
+            record EveryRowReachesAnUnreachable(List<WhereNothingIsAnswered.Premise> premises)
+                    implements WhetherARowCanBeWritten {
+
+                public EveryRowReachesAnUnreachable {
+                    premises = List.copyOf(premises);
+                    if (premises.isEmpty()) {
+                        throw new IllegalArgumentException(
+                                "a row that reaches an unreachable reaches some premise");
+                    }
+                }
+            }
         }
+    }
+
+    /**
+     * What is open about an obligation every row of which rests on {@code premises}: nothing where
+     * there are none.
+     *
+     * <p>The one crossing from where a body answers nothing to what is open about an obligation, for
+     * every account that has one. What decides is the rows the obligation asks for and the parts of
+     * the body that answer nothing ({@link WhereNothingIsAnswered#everyRowIn}); this is how the answer
+     * is said, once.
+     */
+    static CanonicalSelection<Uncertainty> openOn(List<WhereNothingIsAnswered.Premise> premises) {
+        return PublicationOrders.OPEN_QUESTIONS.keep(premises.isEmpty() ? List.of()
+                : List.of(new Uncertainty.WhetherARowCanBeWritten.EveryRowReachesAnUnreachable(
+                        premises)));
+    }
+
+    /** The parts of the body every row of an obligation open as {@code open} would reach, where that
+     *  is what keeps it open; empty otherwise. */
+    static List<WhereNothingIsAnswered.Premise> premisesIn(
+            CanonicalSelection<Uncertainty> open) {
+        for (Uncertainty each : open.written()) {
+            if (each instanceof Uncertainty.WhetherARowCanBeWritten
+                    .EveryRowReachesAnUnreachable(var premises)) {
+                return premises;
+            }
+        }
+        return List.of();
     }
 
     /**
@@ -258,7 +314,7 @@ public sealed interface ObligationDisposition {
     private static StandingAtAPoint.ReadingsTried readingsTriedIn(WeakeningSet by) {
         for (Weakening each : by.causes()) {
             if (each instanceof Weakening.BorderReadingsNotExhausted it) {
-                return new StandingAtAPoint.ReadingsTried.StoppedAtTheLimit(it.limit());
+                return new StandingAtAPoint.ReadingsTried.StoppedAtTheLimit(it.limits());
             }
         }
         return StandingAtAPoint.ReadingsTried.EVERY_ONE;
@@ -288,6 +344,9 @@ public sealed interface ObligationDisposition {
                      // on before any reading of one could be asked for — a question this sentence's
                      // reading never reached, and not a gap in the reading itself.
                      Weakening.ItemsPlaceNotWorkedOut _,
+                     // And a reading of the line that could not be tied to the point: what it came
+                     // to is about the line, and this sentence's reading is not short of it.
+                     Weakening.AReadingNotTiedToItsLine _,
                      Weakening.ModelReadingIncomplete _,
                      // A body this image does not carry says nothing about a point of a line
                      // either: whether a row stands at one is not what it is short of.
@@ -296,6 +355,9 @@ public sealed interface ObligationDisposition {
                      Weakening.InputNotRead _,
                      Weakening.PairSpaceTruncated _,
                      Weakening.ProofContradicted _,
+                     // A way of the decision a row went down against its proof is about which rules
+                     // a body has, and not where a value stands against a line.
+                     Weakening.ProofOfAWayContradicted _,
                      Weakening.ArmsUnsettled _,
                      // A run this compiler could not place among the rules of a decision says
                      // nothing about a point of a line: which rule a row took and where its value
@@ -308,11 +370,19 @@ public sealed interface ObligationDisposition {
                      // which is short of one criterion's universe and says nothing about where a
                      // value stands against a line.
                      Weakening.MeetingsNotWalked _,
+                     // And one the classes do not place, for the same reason.
+                     Weakening.MeetingsNotPlaced _,
                      // And a decision whose ways could not all be written down, which is about
                      // what obligations there are and not about a point of a line.
                      Weakening.DecisionReadingIncomplete _,
                      // And a rule of a decision read short, which is about what that rule is.
                      Weakening.DecisionRuleReadShort _,
+                     // And the order a map's repeated keys were filed in, which is about the rows
+                     // this compiler writes and not about where a value stands against a line.
+                     Weakening.KeyedOverwriteCasesUnmeasured _,
+                     // And a rewrite of the body nothing decided about, which is whether the rows
+                     // depend on what the body says and not where a value stands.
+                     Weakening.RewriteUndecided _,
                      // And the readings nobody made, which is read beside these rather than among
                      // them ({@link #readingsTriedIn}): the reasons here are what a reading met,
                      // and there was no reading of those to meet anything.
@@ -342,7 +412,38 @@ public sealed interface ObligationDisposition {
      * compiler's, and one where nothing was composed at all, and one nobody read against, are three
      * things this compiler did or did not do — and none of them is the model taking a row back.
      */
-    static ObligationDisposition of(ObligationCoverage coverage, WritabilityKnowledge knowledge) {
+    static ObligationDisposition of(ObligationCoverage coverage, WritabilityKnowledge knowledge,
+                                    CanonicalSelection<Uncertainty> open) {
+        // What is open about the obligation itself refines a point no row is at, and nothing else.
+        // A row seen at the point is met whatever the body says about the rest, and a proof that no
+        // value is there settles it whatever the body says; a gap is a point nothing showed a row
+        // can be written at only where the body does not say every such row aborts.
+        //
+        // And it answers whether a row can be written, which a search may have left open too. The
+        // body saying every such row aborts is the answer to that question and the search finding
+        // nothing is what that answer predicts, so the one is said in place of the other.
+        ObligationDisposition read = of(coverage, knowledge);
+        if (open.isEmpty()) {
+            return read;
+        }
+        return switch (read) {
+            case Met _, Refuted _ -> read;
+            case Unmet _ -> new Undecided(open);
+            case Undecided it -> {
+                List<Uncertainty> both = new ArrayList<>();
+                for (Uncertainty each : it.because().written()) {
+                    if (!(each instanceof Uncertainty.WhetherARowCanBeWritten)) {
+                        both.add(each);
+                    }
+                }
+                both.addAll(open.written());
+                yield Undecided.about(both);
+            }
+        };
+    }
+
+    private static ObligationDisposition of(ObligationCoverage coverage,
+                                            WritabilityKnowledge knowledge) {
         // And a point no row can be written at is settled whatever the readings came to, which is
         // the one answer that outranks them. Reading more rows cannot put a row where no value is,
         // so a reading that stopped leaves nothing open here.
@@ -353,7 +454,7 @@ public sealed interface ObligationDisposition {
         if (knowledge instanceof WritabilityKnowledge.Refuted) {
             if (coverage instanceof ObligationCoverage.Witnessed) {
                 throw new IllegalStateException(
-                        "a row was read at a point the rules leave no value at: " + coverage);
+                        "a row was read at a point no value can stand at: " + coverage);
             }
             return new Refuted();
         }
@@ -372,7 +473,7 @@ public sealed interface ObligationDisposition {
                 // bears on a point no value can be at. Named all the same, so that the arm is one
                 // somebody has to decide about rather than one a `default` decides for them.
                 case WritabilityKnowledge.Refuted _ -> throw new IllegalStateException(
-                        "a point the rules leave no value at is settled before the rows are read");
+                        "a point no value can stand at is settled before the rows are read");
                 // The rows are read out and no row is at the point, and what would have shown a row
                 // can be written did not arrive. No finding is made of it, because nothing here can
                 // say the row an author would write is one that exists — and the obligation stays,
@@ -406,7 +507,7 @@ public sealed interface ObligationDisposition {
             // The same point as the arm above: a proof about the model is not a question left
             // open, so nothing here is open to say beside the rows.
             case WritabilityKnowledge.Refuted _ -> throw new IllegalStateException(
-                    "a point the rules leave no value at is settled before the rows are read");
+                    "a point no value can stand at is settled before the rows are read");
             case WritabilityKnowledge.Prevented stopped ->
                     open.add(new Uncertainty.WhetherARowCanBeWritten.Stopped(stopped));
             case WritabilityKnowledge.NoEvidence _ ->

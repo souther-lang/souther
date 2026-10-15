@@ -31,7 +31,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>Which is a different question from whether a row can be written. Where a value of the quantity
  * has to become a value on a carrier, a third is none — and that is the edge {@link CutPosition}
- * and {@link souther.compiler.numeric.Count#at} answer at, not this one.
+ * and {@link souther.compiler.numeric.Count#written} answer at, not this one.
  */
 class AnOrderWhoseOwnStepIsNoDecimalStillHasItsValuesTest {
 

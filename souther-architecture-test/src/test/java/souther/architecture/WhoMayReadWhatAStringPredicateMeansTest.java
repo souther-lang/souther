@@ -69,10 +69,10 @@ class WhoMayReadWhatAStringPredicateMeansTest {
      * minimum does, and which of them the whole of the rules admits is settled elsewhere.
      *
      * <p>{@code Partitions} is licensed for the reading it takes and for nothing else, which is
-     * what keeps the two apart: {@code statedByWritten} answers what a rule accepts as written, and
-     * a witness is what that is for. The reading the analysis takes is the other entry point, and a
-     * row saying {@code Partitions} names it would be a second reader of what a rule means about a
-     * position.
+     * what keeps the two apart: {@code statedOn} answers what each rule a declaration publishes
+     * accepts, and a witness is what that is for. The reading the analysis takes is the other entry
+     * point, and a row saying {@code Partitions} names it would be a second reader of what a rule
+     * means about a position.
      *
      * <p>A row for a class in {@code inputs} or {@code report} is the edge this exists to refuse:
      * those name what a position came to, and a rule's meaning reaching them except through the
@@ -88,6 +88,18 @@ class WhoMayReadWhatAStringPredicateMeansTest {
     private static final String READS = "souther/compiler/check/AdmissibleReading -> " + OWNER;
 
     private static final String WITNESS = "souther/compiler/partition/Partitions -> " + OWNER;
+
+    /** The producer of a stated pattern's machine, inside the reading that offers a value. */
+    private static final String A_PATTERNS_PRODUCER =
+            "souther/compiler/partition/Partitions$PatternForAWitness -> " + OWNER;
+
+    /** What the rules about a position's strings came to, as that reading holds it. */
+    private static final String THE_PATTERNS_STATED =
+            "souther/compiler/partition/Partitions$PatternsStated -> " + OWNER;
+
+    /** One of those rules, with the pattern it states. */
+    private static final String ONE_STATED_RULE =
+            "souther/compiler/partition/Partitions$Stated -> " + OWNER;
 
     /**
      * The walk of a body reads one, because a rule about the strings at a position can be written
@@ -149,6 +161,19 @@ class WhoMayReadWhatAStringPredicateMeansTest {
     private static final String A_CLAUSES_RULE =
             "souther/compiler/partition/ClauseStatements$Statement$TellsStringsApart -> " + OWNER;
 
+    /**
+     * The reading of a condition, asking which argument of a pattern matched against one character
+     * of a string is the character.
+     *
+     * <p>Not a reader of what a rule means about a position. What the pattern accepts is the
+     * checker's, carried on the call; this asks the table only where the subject stands, so that a
+     * pattern applied to a character — a piece of a string, standing at no position — is read as
+     * which code point that character is. No rule about a position is read here, and what the
+     * table says a rule about one does is still said once.
+     */
+    private static final String A_CHARACTER_MATCHED =
+            "souther/compiler/partition/Pullback$ALawRead -> " + OWNER;
+
     private static final String IN_A_DESCRIPTOR = " (in a descriptor)";
 
     private static final List<String> READING_ONE = List.of(
@@ -159,8 +184,7 @@ class WhoMayReadWhatAStringPredicateMeansTest {
                     + "Lsouther/compiler/check/Denotations;)L" + OWNER + "$Stated;",
             READS + "$Reading",
             READS + "$Reading$Accepting",
-            READS + "$Reading$Accepting#accepts()Lsouther/compiler/regex/PatternMeaning;",
-            READS + "$Reading$PatternNotRead",
+            READS + "$Reading$Accepting#accepts()Lnet/unit8/notation199x/pattern/PatternMeaning;",
             READS + "$Reading$WrittenArgumentNotKnown",
             READS + "$Stated",
             READS + "$Stated#reading()L" + OWNER + "$Reading;",
@@ -170,8 +194,7 @@ class WhoMayReadWhatAStringPredicateMeansTest {
             WHAT_A_RULE_STATES + "$Reading",
             WHAT_A_RULE_STATES + "$Reading$Accepting",
             WHAT_A_RULE_STATES
-                    + "$Reading$Accepting#accepts()Lsouther/compiler/regex/PatternMeaning;",
-            WHAT_A_RULE_STATES + "$Reading$PatternNotRead",
+                    + "$Reading$Accepting#accepts()Lnet/unit8/notation199x/pattern/PatternMeaning;",
             WHAT_A_RULE_STATES + "$Reading$WrittenArgumentNotKnown",
             WHAT_A_CLAUSE_STATES,
             WHAT_A_CLAUSE_STATES + IN_A_DESCRIPTOR,
@@ -185,19 +208,44 @@ class WhoMayReadWhatAStringPredicateMeansTest {
             A_CLAUSES_RULE + "$Stated",
             WITNESS,
             WITNESS + IN_A_DESCRIPTOR,
-            WITNESS + "#statedByWritten(Lsouther/compiler/ast/Hir$Expr;"
-                    + "Lsouther/compiler/check/Symbols;)L" + OWNER + "$Reading;",
+            WITNESS + "#statedOn(Lsouther/compiler/types/TypeSymbol$AtModule;"
+                    + "Lsouther/compiler/check/RuleReadingSource;)L" + OWNER + "$StatedOn;",
             WITNESS + "$Reading",
             WITNESS + "$Reading$Accepting",
-            WITNESS + "$Reading$Accepting#accepts()Lsouther/compiler/regex/PatternMeaning;",
-            // And the outcomes a witness was not composed from, which is not a second answer about
+            // And the outcome a witness was not composed from, which is not a second answer about
             // the position. What is taken here is that this reading yielded no pattern to compose
             // out of — so the value offered came from the rules beside it, and a search that had
             // every one of those refused may not report that as the model refusing what it states.
             // The strings such a rule admits stay unasked: nothing here reads one, and what the
             // position is left admitting is settled where the row above says it is.
-            WITNESS + "$Reading$PatternNotRead",
             WITNESS + "$Reading$WrittenArgumentNotKnown",
+            WITNESS + "$StatedOn",
+            WITNESS + "$StatedOn#of(Lsouther/compiler/check/PartId;)L" + OWNER + "$Reading;",
+            // The pattern a part states, as the reading of the rule hands it out, which is what a
+            // value is composed out of and what a pattern's producer builds.
+            WITNESS + "$StatedOn#patternOf(Lsouther/compiler/check/PartId;)L"
+                    + OWNER + "$StatedPattern;",
+            // And why the clause a part is of went untyped, which is the same outcome reached
+            // before any predicate is: a clause with no form composes nothing either, and what it
+            // is said with is decided there and only carried here.
+            WITNESS + "$StatedOn#whyNotTyped(Lsouther/compiler/check/PartId;)"
+                    + "Lsouther/compiler/inputs/BlockReason$RuleOfferShortfallReason;",
+            WITNESS + "$StatedPattern",
+            // The producer of a stated pattern's machine, which takes the pattern as the rule's
+            // reading handed it out and asks it the strings it accepts.
+            A_PATTERNS_PRODUCER,
+            A_PATTERNS_PRODUCER + IN_A_DESCRIPTOR,
+            A_PATTERNS_PRODUCER + "$StatedPattern",
+            A_PATTERNS_PRODUCER
+                    + "$StatedPattern#meaning()Lnet/unit8/notation199x/pattern/PatternMeaning;",
+            // And what carries the stated patterns from the reading to the offer, naming the type
+            // and asking it nothing.
+            THE_PATTERNS_STATED,
+            THE_PATTERNS_STATED + IN_A_DESCRIPTOR,
+            THE_PATTERNS_STATED + "$StatedPattern",
+            ONE_STATED_RULE,
+            ONE_STATED_RULE + IN_A_DESCRIPTOR,
+            ONE_STATED_RULE + "$StatedPattern",
             A_BODYS_RULES,
             A_BODYS_RULES + IN_A_DESCRIPTOR,
             A_BODYS_RULES + "#statedBy(Lsouther/compiler/core/Core;"
@@ -214,7 +262,11 @@ class WhoMayReadWhatAStringPredicateMeansTest {
             // value the reading came in and never worked out again: a name for a class derived a
             // second time would be one that agrees with the rule until one of the two changes.
             A_BODYS_RULE + "$Stated#statement()Lsouther/compiler/check/PredicateStatement;",
-            A_BODYS_RULE + "$Stated#subject()Lsouther/compiler/core/Core;");
+            A_BODYS_RULE + "$Stated#subject()Lsouther/compiler/core/Core;",
+            A_CHARACTER_MATCHED,
+            A_CHARACTER_MATCHED + IN_A_DESCRIPTOR,
+            A_CHARACTER_MATCHED + "#of(Lsouther/compiler/core/Kernel;)L" + OWNER + ";",
+            A_CHARACTER_MATCHED + "#subject()I");
 
     @Test
     void everyClassThatReadsOneIsWrittenDownWithWhatItReadsItFor() {

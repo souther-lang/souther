@@ -8,8 +8,10 @@ import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
 import souther.compiler.core.Core;
+import souther.compiler.coverage.Runs;
 import souther.compiler.coverage.SiteNumbering;
 import souther.compiler.inputs.InputDomain;
+import souther.compiler.observe.AnswerObservation;
 import souther.compiler.reading.CoverageRead;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
@@ -45,9 +47,12 @@ class ASearchThatStoppedSaysSoRatherThanNamingItsLastRefusalTest {
     /** Two decisions and a position free of both, which is eight rows in all. */
     private static final String ONE_FREE = shipping("rush: Bool");
 
-    /** The same with a second position free of both, which is more values than a reading may run
-     *  for. */
-    private static final String TWO_FREE = shipping("rush: Bool, gift: Bool");
+    /**
+     * The same with three positions free of both, which is more values than a reading may run for
+     * even beside the rows the searches for each class ran before it: a row run already costs a
+     * reading nothing, so values another search watched are not the ones it stops in front of.
+     */
+    private static final String THREE_FREE = shipping("rush: Bool, gift: Bool, wrap: Bool");
 
     private static String shipping(String free) {
         return """
@@ -81,14 +86,14 @@ class ASearchThatStoppedSaysSoRatherThanNamingItsLastRefusalTest {
     /**
      * A combination the bound stopped in front of an unrun candidate says the search stopped.
      *
-     * <p>Two positions left to choose is four values, and a reading may be run for three. The fourth
-     * is a set of values nothing has been watched at: what the three that were run came to is those
-     * candidates' news, and offered as the combination's answer it stands for a space this search
-     * never entered.
+     * <p>Three positions left to choose is eight values, and a reading may be run for three beside
+     * whatever was run already. What is left is a set of values nothing has been watched at: what
+     * the ones that were run came to is those candidates' news, and offered as the combination's
+     * answer it stands for a space this search never entered.
      */
     @Test
     void aCombinationLeftWithAnUnrunCandidateSaysTheSearchStopped() {
-        Model model = Model.of(TWO_FREE, "shippingFee");
+        Model model = Model.of(THREE_FREE, "shippingFee");
         FillResult filled = fill(model, _ -> missed(model));
 
         assertEquals(Generator.UnresolvedCombination.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED,
@@ -158,8 +163,9 @@ class ASearchThatStoppedSaysSoRatherThanNamingItsLastRefusalTest {
     /** A run that did nothing at all, which is a run that missed every combination. Of the
      *  model's own numbering: a run is a run of somewhere, and one of nowhere could be asked about
      *  any place at all and answer. */
-    private static Generator.Watched missed(Model model) {
-        return new Generator.Watched.Ran(souther.compiler.coverage.Runs.nowhere(model.numbering()));
+    private static Generator.ObservedRun missed(Model model) {
+        return new Generator.ObservedRun(new Generator.Watched.Ran(Runs.nowhere(model.numbering())),
+                new AnswerObservation.NotAnswered());
     }
 
     /** What the search made of the one combination named by {@code classes}. */
@@ -202,11 +208,11 @@ class ASearchThatStoppedSaysSoRatherThanNamingItsLastRefusalTest {
             Core body = checked.behaviorBodies().get(behavior);
             assertNotNull(body, "the behavior under test has a body");
             return new Model(MeasuredInput.of(spec.name(), inputs.reading(rules),
-                    Partitions.of(spec.name(), inputs, rules,
+                    Partitions.of(spec.name(), inputs.reading(rules),
                             souther.compiler.query.ReadAs.THE_COMPILATION_DOES)),
-                    CoverageRead.of(spec.name(), body,
-                            checked.plan(), inputs,
-                            rules), checked.plan().numbering());
+                    CoverageRead.of(spec.name(),
+                            checked.run(spec.name()), inputs.reading(rules)),
+                    checked.plan().numbering());
         }
     }
 }

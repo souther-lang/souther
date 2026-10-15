@@ -5,6 +5,7 @@ import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -90,8 +91,69 @@ public final class TypeCardinality {
         /** What {@code name} came to, nothing being known of a name nobody answers for. */
         Cardinality of(TypeSymbol name);
 
+        /**
+         * What opening {@code name} found beneath it when it was answered, or null where that was
+         * not worked out — which leaves a reading reaching the name to open it itself.
+         */
+        default Unwrapping unwrappingOf(TypeSymbol name) {
+            return null;
+        }
+
         /** Nowhere to ask, for a count that holds every declaration it reads. */
         Counts NONE = _ -> null;
+
+        /**
+         * The counts worked out here, each declaration answered with everything it reaches the
+         * first time a reading asks for it, for a caller with nowhere to ask.
+         *
+         * <p>The same answers a compilation hands out one component at a time, which is what
+         * {@link #overTheWholeGraph} is kept to say. Every declaration a walk from one name
+         * reached is kept, so a name reached again from another is not counted again.
+         */
+        static Counts workedOutIn(RuleReadingContext reading) {
+            Premises premises = Premises.read(reading);
+            Map<TypeSymbol, Cardinality> counted = new HashMap<>();
+            return name -> {
+                if (!counted.containsKey(name)) {
+                    counted.putAll(overTheWholeGraph(List.of(name), reading, premises).all());
+                    counted.putIfAbsent(name, Cardinality.UNKNOWN);
+                }
+                return counted.get(name);
+            };
+        }
+    }
+
+    /**
+     * How many a value of {@code type} holds at most where it is a set or a map, or -1 where it is
+     * neither or nothing bounds what it holds apart.
+     *
+     * <p>A set holds each of its element's values once and a map each of its keys once, which is
+     * the fact a set too large for its element is refused by, read here as an end of how many it
+     * holds.
+     * Nought where there is no value to hold, since the empty one is a set or a map of anything. An
+     * upper bound and no more: that one of every size below it can be built is a question about the
+     * rules it and what it holds are under, and asked of those.
+     *
+     * <p>Asked of the element or the key as a value no rule of the container's was written about,
+     * which is how a count reads what a collection holds; a name it reaches is asked of
+     * {@code counted}.
+     */
+    public static long mostItHoldsApart(Type type, RuleReadingSource source, Counts counted) {
+        Type apart = switch (TypeOps.base(type, source.inners())) {
+            case Type.SetOf set -> set.element();
+            case Type.MapOf map -> map.key();
+            // What these hold may repeat, or they hold nothing at all.
+            case Type.ListOf _, Type.OptionOf _, Type.TupleOf _, Type.FnOf _, Type.Prim _,
+                 Type.Ref _, Type.Open _, Type.Nothing _, Type.Never _, Type.Erroneous _,
+                 Type.Union _ -> null;
+        };
+        if (apart == null) {
+            return -1;
+        }
+        return switch (CardinalityTransfer.held(apart, source, Answers.over(counted))) {
+            case Cardinality.None _ -> 0;
+            case Cardinality.Standing each -> each.boundOr(-1);
+        };
     }
 
     /**
@@ -116,7 +178,7 @@ public final class TypeCardinality {
         CardinalityCuts cuts = CardinalityCuts.keeping(read.counts());
         List<List<TypeSymbol>> components = TypeComponents.of(edges);
         return new Cardinalities(
-                Map.copyOf(pass(components, declared, edges, cuts, reading, Set.of())),
+                Map.copyOf(pass(components, declared, edges, cuts, reading, Supposing.NOTHING)),
                 components, declared, edges, cuts, reading, read.everyRuleReached());
     }
 
@@ -137,18 +199,48 @@ public final class TypeCardinality {
      * the names they are written in terms of, so an author changing what a rule allows leaves this
      * where it was.
      */
-    public static Map<TypeSymbol, List<TypeSymbol>> componentsOf(List<? extends TypeSymbol> roots,
-                                                                 RuleReadingSource source) {
+    public static Components componentsOf(List<? extends TypeSymbol> roots,
+                                          RuleReadingSource source) {
         Symbols symbols = source.symbols();
         Map<TypeSymbol, Hir.Def> declared = reached(roots, symbols);
         Map<TypeSymbol, Set<TypeSymbol>> edges = new LinkedHashMap<>();
         declared.forEach((name, def) -> edges.put(name, read(def, symbols, declared.keySet())));
-        Map<TypeSymbol, List<TypeSymbol>> of = new LinkedHashMap<>();
-        for (List<TypeSymbol> component : TypeComponents.of(edges)) {
-            List<TypeSymbol> members = component.stream().sorted().toList();
-            members.forEach(each -> of.put(each, members));
+        return Components.of(TypeComponents.of(edges));
+    }
+
+    /**
+     * The declarations that have to be answered together, each group after every group it reads.
+     *
+     * <p>The order is part of the answer and not a way of writing it down. A count of one group is
+     * handed what the groups it reads came to, so answering them front to back hands every count
+     * what it reads as an answer already made; answered as each happens to be reached, a count would
+     * wait on the one it reads, and that one on the next, as deep as the declarations chain.
+     *
+     * @param inOrder  every group, each after every group it reads, its members under their names
+     * @param byMember the group each declaration is answered with, which is {@code inOrder} read
+     *                 by member and nothing beside it
+     */
+    public record Components(List<List<TypeSymbol>> inOrder,
+                             Map<TypeSymbol, List<TypeSymbol>> byMember) {
+
+        public Components {
+            inOrder = List.copyOf(inOrder);
+            byMember = Map.copyOf(byMember);
         }
-        return of;
+
+        /** The groups {@code inOrder} holds, each read by its members. */
+        static Components of(List<List<TypeSymbol>> inOrder) {
+            Map<TypeSymbol, List<TypeSymbol>> by = new HashMap<>();
+            for (List<TypeSymbol> component : inOrder) {
+                component.forEach(each -> by.put(each, component));
+            }
+            return new Components(inOrder, by);
+        }
+
+        /** The group {@code named} is answered with, or null where it was not reached. */
+        public List<TypeSymbol> of(TypeSymbol named) {
+            return byMember.get(named);
+        }
     }
 
     /**
@@ -188,10 +280,8 @@ public final class TypeCardinality {
      * Nothing is rounded where a component is read once, so a component that reads no declaration
      * written in terms of it asks no declaration what counts its rules turn on.
      */
-    public static Map<TypeSymbol, Cardinality> ofComponent(List<TypeSymbol> component,
-                                                           RuleReadingContext reading,
-                                                           Premises premises,
-                                                           Counts outside) {
+    public static Counted ofComponent(List<TypeSymbol> component, RuleReadingContext reading,
+                                      Premises premises, Counts outside) {
         Symbols symbols = reading.source().symbols();
         Map<TypeSymbol, Hir.Def> declared = new LinkedHashMap<>();
         for (TypeSymbol each : component) {
@@ -200,7 +290,7 @@ public final class TypeCardinality {
             }
         }
         if (declared.isEmpty()) {
-            return Map.of();
+            return new Counted(Map.of(), Map.of());
         }
         Map<TypeSymbol, Set<TypeSymbol>> edges = new LinkedHashMap<>();
         declared.forEach((name, def) -> edges.put(name, read(def, symbols, declared.keySet())));
@@ -210,8 +300,28 @@ public final class TypeCardinality {
                         ofTheDeclarations(reached(members, symbols).keySet(), premises).counts())
                 : CardinalityCuts.keeping(Set.of());
         Answers answers = Answers.over(outside);
-        settle(members, declared, edges, cuts, reading, Set.of(), answers);
-        return answers.everySettled();
+        settle(members, declared, edges, cuts, reading, Supposing.NOTHING, answers);
+        return new Counted(answers.everySettled(), answers.everyUnwrapping());
+    }
+
+    /**
+     * What the declarations of one component came to, and what opening each of them finds.
+     *
+     * <p>The second is here for the counts that read this component afterwards. A count reaching a
+     * name worn over a value opens it, and what is beneath is the same whoever opens it — so it is
+     * worked out where the name is answered and handed on with the count, and a chain of such names
+     * is opened one link at a time rather than all the way down at every link.
+     *
+     * @param counts     what every declaration of the component came to
+     * @param unwrapping what opening each declaration finds, for the ones it was worked out for
+     */
+    public record Counted(Map<TypeSymbol, Cardinality> counts,
+                          Map<TypeSymbol, Unwrapping> unwrapping) {
+
+        public Counted {
+            counts = Map.copyOf(counts);
+            unwrapping = Map.copyOf(unwrapping);
+        }
     }
 
     /**
@@ -262,6 +372,8 @@ public final class TypeCardinality {
          *  first pass borrowed from, because it is the same declarations. */
         private final RuleReadingContext reading;
         private final boolean everyRuleReached;
+        /** What every supposing made of these answers shares; made when the first one is. */
+        private Supposing.Across supposings;
 
         private Cardinalities(Map<TypeSymbol, Cardinality> upper, List<List<TypeSymbol>> components,
                               Map<TypeSymbol, Hir.Def> declared,
@@ -335,21 +447,32 @@ public final class TypeCardinality {
         Map<TypeSymbol, Cardinality> granting(List<? extends TypeSymbol> these,
                                               Set<TypeSymbol> granted) {
             Set<TypeSymbol> reach = reaching(these);
-            List<List<TypeSymbol>> within = new ArrayList<>();
-            for (List<TypeSymbol> component : components) {
-                // A component is reached or it is not: its members read each other, so one of them
-                // being reached is all of them being reached.
-                if (component.stream().anyMatch(reach::contains)) {
-                    within.add(component);
-                }
-            }
             Set<TypeSymbol> supposed = new LinkedHashSet<>(granted);
             supposed.retainAll(reach);
+            // A name granted a value reads nothing: it is answered without being read, and every
+            // reading that reaches it stops there. So the declarations that have to be answered
+            // together under this supposing are found over what is still read, and a ring with one
+            // of its names granted is a chain answered link by link rather than a ring risen
+            // through.
+            Map<TypeSymbol, Set<TypeSymbol>> stillRead = new LinkedHashMap<>();
+            for (TypeSymbol each : reach) {
+                if (edges.containsKey(each)) {
+                    Set<TypeSymbol> read = new LinkedHashSet<>(edges.get(each));
+                    read.retainAll(reach);
+                    stillRead.put(each, supposed.contains(each) ? Set.of() : read);
+                }
+            }
+            List<List<TypeSymbol>> within = TypeComponents.of(stillRead);
             // The readings are made afresh — what is asked here is what a declaration would hold if
             // another had values, and no reading with something supposed is a declaration's own —
             // but what has already been made of the declarations is borrowed all the same: what a
             // rule's strings come to is settled by the rule and not by what is supposed beside it.
-            return pass(within, declared, edges, cuts, reading, supposed);
+            // Made once for this supposing, and kept for as long as it is answered.
+            if (supposings == null) {
+                supposings = new Supposing.Across(reading.source());
+            }
+            return pass(within, declared, stillRead, cuts, reading,
+                    Supposing.of(supposed, supposings));
         }
 
         /** {@code these} and every declaration they read, at whatever remove. */
@@ -381,7 +504,7 @@ public final class TypeCardinality {
                                                    Map<TypeSymbol, Hir.Def> declared,
                                                    Map<TypeSymbol, Set<TypeSymbol>> edges,
                                                    CardinalityCuts cuts, RuleReadingContext reading,
-                                                   Set<TypeSymbol> granted) {
+                                                   Supposing granted) {
         Answers answers = Answers.empty();
         for (List<TypeSymbol> component : components) {
             settle(component, declared, edges, cuts, reading, granted, answers);
@@ -399,12 +522,14 @@ public final class TypeCardinality {
      */
     private static void settle(List<TypeSymbol> component, Map<TypeSymbol, Hir.Def> declared,
                                Map<TypeSymbol, Set<TypeSymbol>> edges, CardinalityCuts cuts,
-                               RuleReadingContext reading, Set<TypeSymbol> granted,
+                               RuleReadingContext reading, Supposing granted,
                                Answers answers) {
         List<TypeSymbol> asked = new ArrayList<>();
         for (TypeSymbol each : component) {
             if (granted.contains(each)) {
                 answers.settle(each, Cardinality.UNKNOWN);
+                answers.unwrapsTo(each, CardinalityTransfer.unwrappingOf(
+                        each, declared.get(each), reading.source(), answers, granted));
             } else {
                 asked.add(each);
             }
@@ -412,9 +537,14 @@ public final class TypeCardinality {
         if (asked.isEmpty()) {
             return;
         }
+        // Worked out for a declaration that settles alone and for no other. Where declarations are
+        // risen through together, what is beneath one of them is the others, which are still
+        // moving while it is read.
         if (asked.size() == 1 && !TypeComponents.recurses(component, edges)) {
             TypeSymbol one = asked.get(0);
             answers.settle(one, transfer(one, declared.get(one), reading, answers, granted));
+            answers.unwrapsTo(one, CardinalityTransfer.unwrappingOf(
+                    one, declared.get(one), reading.source(), answers, granted));
             return;
         }
         rise(asked, declared, reading, cuts, answers, granted);
@@ -429,7 +559,7 @@ public final class TypeCardinality {
      */
     private static void rise(List<TypeSymbol> component, Map<TypeSymbol, Hir.Def> declared,
                              RuleReadingContext reading, CardinalityCuts cuts,
-                             Answers answers, Set<TypeSymbol> granted) {
+                             Answers answers, Supposing granted) {
         component.forEach(answers::atBottom);
         boolean moved = true;
         while (moved) {
@@ -470,7 +600,7 @@ public final class TypeCardinality {
     private static void settleUnrounded(List<TypeSymbol> component,
                                         Map<TypeSymbol, Hir.Def> declared,
                                         RuleReadingContext reading, Answers answers,
-                                        Set<TypeSymbol> granted) {
+                                        Supposing granted) {
         Map<TypeSymbol, Cardinality> found = new LinkedHashMap<>();
         for (TypeSymbol each : component) {
             found.put(each, transfer(each, declared.get(each), reading, answers, granted));
@@ -493,7 +623,7 @@ public final class TypeCardinality {
      * are the same spending.
      */
     private static Cardinality transfer(TypeSymbol named, Hir.Def def, RuleReadingContext reading,
-                                        Answers answers, Set<TypeSymbol> granted) {
+                                        Answers answers, Supposing granted) {
         TRANSFERS.incrementAndGet();
         return CardinalityTransfer.upperOf(named, def, reading, answers, granted);
     }
@@ -517,6 +647,19 @@ public final class TypeCardinality {
     }
 
     private static final AtomicLong TRANSFERS = new AtomicLong();
+
+    /**
+     * How many times a count has opened a name worn over a value to read what it wraps, for a test
+     * holding a caller to what a chain of such names costs.
+     *
+     * <p>Beside {@link #transfersMade()} because a transfer is not where a chain is paid for. A
+     * declaration wrapping a name is asked once, and what asking it opens is the rest: a count that
+     * opened every name beneath the one it reached would make one transfer per declaration and open
+     * the whole chain beneath each.
+     */
+    public static long namesOpened() {
+        return CardinalityTransfer.namesOpened();
+    }
 
     private static Cardinality round(CardinalityCuts cuts, Cardinality of) {
         return of instanceof Cardinality.Standing standing ? cuts.round(standing) : of;

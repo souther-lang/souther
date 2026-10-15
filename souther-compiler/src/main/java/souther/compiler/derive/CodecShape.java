@@ -4,7 +4,7 @@ import souther.compiler.ast.Hir;
 import souther.compiler.check.CrossingMapKey;
 import souther.compiler.check.CrossingNominal;
 import souther.compiler.check.DeclarationKinds;
-import souther.compiler.check.PublishedDeclarations;
+import souther.compiler.check.SumCases;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.diag.CompileException;
@@ -85,15 +85,15 @@ public sealed interface CodecShape {
      * @param pos    where the field is written, for the caret
      */
     static CodecShape of(Type t, Hir.Data d, String field, SourcePos pos, Symbols symbols,
-                         DeclarationKinds kinds, PublishedDeclarations published) {
+                         DeclarationKinds kinds, SumCases sums) {
         return switch (t) {
             case Type.Prim p -> scalar(p, t, d, field, pos);
             case Type.Ref r -> new Named(nominal(r.name(), d, field, pos, symbols));
-            case Type.ListOf l -> new ListOf(of(l.element(), d, field, pos, symbols, kinds, published));
-            case Type.SetOf s -> new SetOf(of(s.element(), d, field, pos, symbols, kinds, published));
-            case Type.MapOf m -> new MapOf(mapKey(m, d, field, pos, symbols, kinds, published),
-                    of(m.value(), d, field, pos, symbols, kinds, published));
-            case Type.OptionOf o -> new OptionOf(present(o, d, field, pos, symbols, kinds, published));
+            case Type.ListOf l -> new ListOf(of(l.element(), d, field, pos, symbols, kinds, sums));
+            case Type.SetOf s -> new SetOf(of(s.element(), d, field, pos, symbols, kinds, sums));
+            case Type.MapOf m -> new MapOf(mapKey(m, d, field, pos, symbols, kinds, sums),
+                    of(m.value(), d, field, pos, symbols, kinds, sums));
+            case Type.OptionOf o -> new OptionOf(present(o, d, field, pos, symbols, kinds, sums));
             case Type.TupleOf _ -> throw aTuple(t, d, field, pos);
             // Not a refusal: a type nobody could name was reported where the name is written, and
             // a shape cannot be built over it. Met here and not before the walk, so that what stands
@@ -122,10 +122,10 @@ public sealed interface CodecShape {
     /** What an optional holds, which is not another optional. */
     private static Bare present(Type.OptionOf o, Hir.Data d, String field, SourcePos pos,
                                 Symbols symbols, DeclarationKinds kinds,
-                                PublishedDeclarations published) {
+                                SumCases sums) {
         // The inner type is read before it is judged, so a tuple under an optional is reported as
         // the tuple it is rather than as the optional carrying one.
-        if (of(o.element(), d, field, pos, symbols, kinds, published) instanceof Bare b) {
+        if (of(o.element(), d, field, pos, symbols, kinds, sums) instanceof Bare b) {
             return b;
         }
         throw noRepresentation(o, d, field, pos);
@@ -168,9 +168,9 @@ public sealed interface CodecShape {
      */
     private static CrossingMapKey mapKey(Type.MapOf m, Hir.Data d, String field, SourcePos pos,
                                          Symbols symbols, DeclarationKinds kinds,
-                                         PublishedDeclarations published) {
+                                         SumCases sums) {
         MapKeyRepresentation key =
-                TypeOps.classifyConcreteMapKey(m.key(), symbols, kinds, published);
+                TypeOps.classifyConcreteMapKey(m.key(), symbols, kinds, sums);
         if (key == null) {
             throw badMapKey(m.key(), d, field, pos);
         }

@@ -134,6 +134,32 @@ class ModuleReadbackTest {
     }
 
     /**
+     * A name holding a character past the basic plane is one word, and the import it needs comes
+     * back.
+     *
+     * <p>U+10330 is a letter a name may carry. Read a UTF-16 unit at a time, neither half of it is
+     * a letter, so the name was cut into {@code Amount} and the import of {@code Amount𐌰} left out
+     * of what was published, and a module importing this one could not read its declarations.
+     */
+    @Test
+    void aNameHoldingACharacterPastTheBasicPlaneIsOneWord() {
+        String gothic = new String(Character.toChars(0x10330));
+        Map<String, ClassFileImage> classes = Compiler.compileModules(List.of("""
+                module shared.money exposing ( Amount%1$s )
+                data Amount%1$s = Int
+                """.formatted(gothic), """
+                module shared.billing exposing ( Invoice )
+                import shared.money ( Amount%1$s )
+                data Invoice = { total: Amount%1$s }
+                """.formatted(gothic)));
+
+        ReadableModule read = readBack("shared.billing", classes);
+
+        assertEquals(List.of("shared.money"),
+                read.module().imports().stream().map(Ast.Import::module).toList());
+    }
+
+    /**
      * The parameter names a composition's signature is written with to reach the parser are no word
      * of any declaration, so an import that only such a name spells is not needed — and the same word
      * written in a declaration still is.

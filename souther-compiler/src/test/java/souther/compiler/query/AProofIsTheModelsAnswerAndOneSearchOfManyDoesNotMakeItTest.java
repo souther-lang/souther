@@ -112,13 +112,15 @@ class AProofIsTheModelsAnswerAndOneSearchOfManyDoesNotMakeItTest {
     void theObligationStandsAndIsAnswered() {
         assertEquals(new ObligationDisposition.Refuted(),
                 ObligationDisposition.of(new ObligationCoverage.Missed(),
-                        new WritabilityKnowledge.Refuted()),
+                        new WritabilityKnowledge.Refuted(),
+                        ObligationDisposition.openOn(List.of())),
                 "the rows ran out and no row can be written there, which is answered and not open");
         assertEquals(new ObligationDisposition.Refuted(),
                 ObligationDisposition.of(
                         new ObligationCoverage.NotMeasured(
                                 UnaskedReasons.of(ItemAssessment.Coverage.NotAsked.NO_ROWS)),
-                        new WritabilityKnowledge.Refuted()),
+                        new WritabilityKnowledge.Refuted(),
+                        ObligationDisposition.openOn(List.of())),
                 "nobody wrote a row for the behavior, and reading one would not put a value where"
                         + " the rules leave none");
     }
@@ -129,7 +131,7 @@ class AProofIsTheModelsAnswerAndOneSearchOfManyDoesNotMakeItTest {
     }
 
     private static ItemAssessment.Attempt proof() {
-        return came(Generator.UnresolvedCombination.Reason.THE_RULES_LEAVE_NOTHING_THERE);
+        return came(Generator.UnresolvedCombination.Reason.NO_VALUE_CAN_STAND_THERE);
     }
 
     private static ItemAssessment.Attempt came(Generator.UnresolvedCombination.Reason to) {

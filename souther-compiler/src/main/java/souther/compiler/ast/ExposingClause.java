@@ -1,6 +1,9 @@
 package souther.compiler.ast;
 
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
+import java.util.function.Predicate;
 
 /**
  * What a module's header says about its {@code exposing} clause: that it writes none, or the entries
@@ -12,8 +15,8 @@ import java.util.List;
  * value, and every reader has to decide for itself which of them an empty list was.
  *
  * <p>This is what was written, and it is not what the module publishes. What it publishes is
- * {@link Ast.Module#published}: the module's own declarations that may be published, each asked
- * whether this clause {@link #admits} it. Asked one declaration at a time and never answered as a
+ * {@link Ast.Module#published}: the module's own declarations that may be published, each put to
+ * the question {@link #admitting} makes. Asked one declaration at a time and never answered as a
  * set of names, so that nothing the clause writes can publish a name the module does not have to
  * publish — an entry naming an import, a value an attached file declares or a core module's
  * {@code private let} admits nothing, because nothing asks about it (spec
@@ -27,13 +30,17 @@ import java.util.List;
 public sealed interface ExposingClause {
 
     /**
-     * Whether this clause lets the module publish {@code declaration}, one of the module's own
+     * Whether this clause lets the module publish a declaration, asked of one of the module's own
      * declarations that may be published at all.
      *
      * <p>A clause names types at type granularity, so an entry written {@code Amount.decoder}
      * admits {@code Amount}.
+     *
+     * <p>A question to ask of each declaration rather than a single answer, because it is asked of
+     * every one the module makes: what the entries name is read once, where the question is made,
+     * and not again for each declaration.
      */
-    boolean admits(String declaration);
+    Predicate<String> admitting();
 
     /** The module writes no {@code exposing} clause. */
     record Omitted() implements ExposingClause {
@@ -43,8 +50,8 @@ public sealed interface ExposingClause {
         public static final Omitted INSTANCE = new Omitted();
 
         @Override
-        public boolean admits(String declaration) {
-            return true;
+        public Predicate<String> admitting() {
+            return _ -> true;
         }
     }
 
@@ -56,14 +63,13 @@ public sealed interface ExposingClause {
         }
 
         @Override
-        public boolean admits(String declaration) {
+        public Predicate<String> admitting() {
+            Set<String> named = new HashSet<>();
             for (String entry : entries) {
                 int dot = entry.indexOf('.');
-                if ((dot < 0 ? entry : entry.substring(0, dot)).equals(declaration)) {
-                    return true;
-                }
+                named.add(dot < 0 ? entry : entry.substring(0, dot));
             }
-            return false;
+            return named::contains;
         }
     }
 

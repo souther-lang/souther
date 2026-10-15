@@ -64,7 +64,8 @@ class WhatATypeIsMadeOfIsAnsweredInOnePlaceTest {
     private final Hir.Module module = resolved(MODULE);
     private final Symbols symbols = TypeChecker.symbols(module, DefaultStdlib.get());
 
-    private final PublishedDeclarations said = ScopedDeclarations.of(symbols);
+    private final DeclarationKinds kinds = ScopedDeclarations.kindsOf(symbols);
+    private final SumCases sums = ScopedDeclarations.sumsOf(symbols);
 
     @Test
     void aCaseThatIsASumIsTheLeavesUnderIt() {
@@ -106,7 +107,9 @@ class WhatATypeIsMadeOfIsAnsweredInOnePlaceTest {
                 """);
         assertEquals(List.of("R", "T", "P", "Q"),
                 shown(AtomSpace.subjectAtoms(Type.ref(named(shared, "Top")),
-                        ScopedDeclarations.of(TypeChecker.symbols(shared, DefaultStdlib.get())))));
+                        ScopedDeclarations.kindsOf(
+                                TypeChecker.symbols(shared, DefaultStdlib.get())),
+                        ScopedDeclarations.sumsOf(TypeChecker.symbols(shared, DefaultStdlib.get())))));
     }
 
     @Test
@@ -129,9 +132,9 @@ class WhatATypeIsMadeOfIsAnsweredInOnePlaceTest {
         List<String> expected = List.of("Station", "Hospital", "Renkei");
 
         assertEquals(expected, shown(AtomSpace.subjectAtoms(
-                Type.union(new java.util.LinkedHashSet<>(List.of(once, renkei))), said)));
+                Type.union(new java.util.LinkedHashSet<>(List.of(once, renkei))), kinds, sums)));
         assertEquals(expected, shown(AtomSpace.subjectAtoms(
-                Type.union(new java.util.LinkedHashSet<>(List.of(renkei, once))), said)),
+                Type.union(new java.util.LinkedHashSet<>(List.of(renkei, once))), kinds, sums)),
                 "the union written the other way round is the same union");
     }
 
@@ -146,7 +149,9 @@ class WhatATypeIsMadeOfIsAnsweredInOnePlaceTest {
                 """);
         assertEquals(List.of("A"),
                 shown(AtomSpace.subjectAtoms(Type.ref(named(itself, "S")),
-                        ScopedDeclarations.of(TypeChecker.symbols(itself, DefaultStdlib.get())))));
+                        ScopedDeclarations.kindsOf(
+                                TypeChecker.symbols(itself, DefaultStdlib.get())),
+                        ScopedDeclarations.sumsOf(TypeChecker.symbols(itself, DefaultStdlib.get())))));
     }
 
     /** What a sum declares, asked of the declaration — the same leaves, and its own name is not one. */
@@ -154,7 +159,7 @@ class WhatATypeIsMadeOfIsAnsweredInOnePlaceTest {
     void aSumsOwnDeclarationAnswersWithTheSameLeaves() {
         Hir.SumData both = (Hir.SumData) declaration("Both");
         assertEquals(shown(leavesOf("Both")),
-                shown(AtomSpace.subjectAtoms(Type.ref(both.declares()), said)));
+                shown(AtomSpace.subjectAtoms(Type.ref(both.declares()), kinds, sums)));
     }
 
     // --- what each reader answers about a type that is no sum ------------------------------------
@@ -183,7 +188,8 @@ class WhatATypeIsMadeOfIsAnsweredInOnePlaceTest {
 
     @Test
     void aLeafSetAnswersForATypeThatIsNoSum() {
-        assertEquals(List.of("Station"), shown(AtomSpace.subjectAtoms(Type.ref(named("Station")), said)));
+        assertEquals(List.of("Station"),
+                shown(AtomSpace.subjectAtoms(Type.ref(named("Station")), kinds, sums)));
     }
 
     /**
@@ -216,13 +222,13 @@ class WhatATypeIsMadeOfIsAnsweredInOnePlaceTest {
      */
     @Test
     void aPrimitiveIsOneAtomAndAnOptionalHasNone() {
-        assertEquals(List.of("Int"), shown(AtomSpace.subjectAtoms(Type.INT, said)));
-        assertEquals(List.of(), shown(AtomSpace.subjectAtoms(Type.option(Type.INT), said)));
+        assertEquals(List.of("Int"), shown(AtomSpace.subjectAtoms(Type.INT, kinds, sums)));
+        assertEquals(List.of(), shown(AtomSpace.subjectAtoms(Type.option(Type.INT), kinds, sums)));
     }
 
     @Test
     void anOutputsCasesAreEmptyWhereTheOutputNamesNoCase() {
-        assertEquals(Set.of(), TypeOps.outputCases(Type.INT, said),
+        assertEquals(Set.of(), TypeOps.outputCases(Type.INT, kinds, sums),
                 "a primitive output is not a case list, whatever leaf its name would be");
     }
 
@@ -230,27 +236,22 @@ class WhatATypeIsMadeOfIsAnsweredInOnePlaceTest {
     // --- who can build a case closure at all -----------------------------------------------------
 
     /**
-     * A sum's own case list is read at four call sites, all of them in the package that declares it.
+     * A sum's own case list is read off its declaration at one call site, {@link ListedCases}, and
+     * every other reader of one layer asks that.
      *
      * <p>What a second closure would be built out of is one layer of a sum plus the declarations:
      * hold both and a loop away is a descent. The declarations are everywhere, so the layer is the
      * part that can be held down, and {@code TypeOps.caseNames} is package-private for that reason.
-     * That is where most of this rule lives — no code outside {@code check} can write a second
-     * closure at all, and javac says so rather than a scan guessing at spellings.
+     * A reader outside {@code check} reaches a layer only through {@link ListedCases}, and the one
+     * closure over its answers is {@link SumCases#asWritten}.
      *
      * <p>What is left for a scan is the package itself, and it counts <em>calls</em> rather than
      * files. A file already reading one layer is where a second reading is cheapest to add, so a
-     * check that stops at the file name would see nothing: the reader most likely to grow a descent
-     * is one of the four already listed.
+     * check that stops at the file name would see nothing.
      *
      * <p>Called out by file and not by line. A line number moves whenever anything above it is
      * edited, and a tripwire that goes red on an unrelated edit is one that gets deleted. The name
      * repeated is what a second call site in an existing reader shows up as.
-     *
-     * <p>Three of the four are not the descent and read one layer on purpose: a {@code match} is
-     * decided over the cases the sum declared and not over what they reach (spec
-     * §an-or-pattern-binds-the-sum-and-opens-nothing), which is #966 itself. When that changes they
-     * ask {@link AtomSpace} and this list gets shorter, never longer.
      *
      * <p><b>What this does not see.</b> A descent written around a call that is already here. Both
      * halves are about who can reach the material — the visibility bounds who may, and this bounds
@@ -277,9 +278,9 @@ class WhatATypeIsMadeOfIsAnsweredInOnePlaceTest {
                 calls.add(source.getFileName().toString());
             }
         }
-        assertEquals(List.of("TypeOps.java"), calls,
-                "what a sum's cases are is asked of what the declaration says, so the tree it was"
-                        + " written in is read in one place and by nothing that answers about kind");
+        assertEquals(List.of("ListedCases.java"), calls,
+                "what a sum lists is read off the tree it was written in at one place, which every"
+                        + " reader of one layer asks");
     }
 
     /** The file that declares the case list, whose own calls to it carry no class name. */
@@ -371,7 +372,7 @@ class WhatATypeIsMadeOfIsAnsweredInOnePlaceTest {
 
 
     private List<TypeSymbol> leavesOf(String type) {
-        return AtomSpace.subjectAtoms(Type.ref(named(type)), said);
+        return AtomSpace.subjectAtoms(Type.ref(named(type)), kinds, sums);
     }
 
     private TypeSymbol named(String type) {

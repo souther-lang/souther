@@ -1,7 +1,7 @@
 package souther.runtime;
 
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
-import souther.unicode.Normalization;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -77,12 +77,19 @@ class WhatABuiltStringHoldsIsMeasuredInCodePointsTest {
                 () -> Strings.padRight("x", Strings.LONGEST_TEXT + 1, "0"));
     }
 
+    /** What text arriving with room for {@code longest} code points is canonicalized to, or null
+     *  where it has no place. */
+    private static @Nullable String canonicalWithin(String text, long longest) {
+        return Strings.admission(text, longest) instanceof TextAdmission.Admitted admitted
+                ? admitted.text() : null;
+    }
+
     @Test
     void theBoundIsInCodePointsWhereTextIsCanonicalized() {
-        assertNotNull(Normalization.nfcWithin(YOSHI.repeat(5), 5));
-        assertNull(Normalization.nfcWithin(YOSHI.repeat(6), 5));
-        assertNotNull(Normalization.nfcWithin(YOSHI.repeat(4) + "é", 5));
-        assertNull(Normalization.nfcWithin(YOSHI.repeat(5) + "é", 5));
+        assertNotNull(canonicalWithin(YOSHI.repeat(5), 5));
+        assertNull(canonicalWithin(YOSHI.repeat(6), 5));
+        assertNotNull(canonicalWithin(YOSHI.repeat(4) + "é", 5));
+        assertNull(canonicalWithin(YOSHI.repeat(5) + "é", 5));
     }
 
     @Test

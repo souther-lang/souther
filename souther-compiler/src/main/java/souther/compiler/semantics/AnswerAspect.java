@@ -14,10 +14,13 @@ package souther.compiler.semantics;
  * about emptiness would credit that key with deciding a fork on {@code List.isEmpty}, which it does
  * not.
  *
- * <p><b>Not every side an answer has.</b> How many it holds is a third, whether an optional is
- * present is a fourth, and both are deliberately absent: nothing asks them yet, and a word here that
- * nothing reads would be one a later reader takes for an answer somebody worked out. An aspect is
- * added when a question needs it.
+ * <p>And whether an optional holds a value, which is what {@code List.filterMap} keeps an element
+ * for: it is the closure's answer being there, not the closure's answer holding, that decides
+ * whether anything is kept.
+ *
+ * <p><b>Not every side an answer has.</b> How many it holds is another, and it is deliberately
+ * absent: nothing asks it, and a word here that nothing reads would be one a later reader takes for
+ * an answer somebody worked out. An aspect is added when a question needs it.
  */
 public enum AnswerAspect {
 
@@ -25,5 +28,8 @@ public enum AnswerAspect {
     TRUTH,
 
     /** Whether what the operation answers holds anything at all. */
-    EMPTINESS
+    EMPTINESS,
+
+    /** Whether the optional the operation answers holds a value. */
+    PRESENCE
 }

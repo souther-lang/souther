@@ -1,7 +1,9 @@
 package souther.compiler.codegen;
 
 import souther.compiler.check.Boundary;
+import souther.compiler.codegen.BodyGen.Places;
 import souther.compiler.check.DerivedSymbols;
+import souther.compiler.check.EnumerationListings;
 import souther.compiler.ast.Hir;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
@@ -115,14 +117,14 @@ final class ValueClassGen {
             cb.withSuperclass(CD_Record);
             cb.with(recordComponents(fields));
             List<ClassDesc> ifaces = new ArrayList<>(List.of(caseInterfaces(data.name())));
-            boolean ordered = isOrderedNewtype(data, fields);
-            if (ordered) {
+            Ordering ordered = orderOfNewtype(data, fields);
+            if (ordered != null) {
                 ifaces.add(CD_Comparable);
             }
             if (!ifaces.isEmpty()) {
                 cb.withInterfaceSymbols(ifaces);
             }
-            if (ordered) {
+            if (ordered != null) {
                 cb.with(SignatureAttribute.of(ClassSignature.parseFrom(classSignature(cdName, ifaces))));
             }
             for (Map.Entry<String, Type> f : fields.entrySet()) {
@@ -131,8 +133,8 @@ final class ValueClassGen {
             emitCtor(cb, cdName, fields);
             emitValueEquality(cb, cdName, fields);
             emitToString(cb, cdName, data.name(), fields);
-            if (ordered) {
-                emitCompareTo(cb, cdName, fields.entrySet().iterator().next());
+            if (ordered != null) {
+                emitCompareTo(cb, cdName, fields.entrySet().iterator().next(), ordered);
             }
             emitConstructMethod(cb, cdName, data, fields);
             emitAccessors(cb, cdName, fields);
@@ -198,7 +200,7 @@ final class ValueClassGen {
                                  SequencedMap<String, Type> fields, List<ValueShape.Invariant> clauses) {
         cb.withMethodBody(method, MethodTypeDesc.of(ConstantDescs.CD_boolean, fieldDescs(fields)),
                 ClassFile.ACC_STATIC | ClassFile.ACC_PUBLIC, code -> {
-                    BodyGen gen = new BodyGen(ctx, code, data, cdName, 0);
+                    BodyGen gen = new BodyGen(ctx, code, data, cdName, 0, Places.NUMBERED_NOWHERE);
                     bindFields(gen, data);
                     for (ValueShape.Invariant clause : clauses) {
                         gen.genExpr(clause.condition());   // the same boolean __construct checks
@@ -226,7 +228,7 @@ final class ValueClassGen {
         // that generates from it. Each of them holding the type and the symbols instead would be
         // each of them able to work the form and the tag out again, which is what five of them did.
         Boundary.Alternatives alternatives =
-                Boundary.of(Type.ref(sum.declares()), ctx.kinds, ctx.published);
+                Boundary.of(Type.ref(sum.declares()), ctx.kinds, ctx.sums);
         boolean enumeration = alternatives.representation() instanceof Boundary.Representation.Enumeration;
         out.put(valueOf(sum), build(cdX, cb -> {
             cb.withFlags(pub(sum.name()) | ClassFile.ACC_INTERFACE | ClassFile.ACC_ABSTRACT);
@@ -251,16 +253,15 @@ final class ValueClassGen {
             if (enumeration) {
                 emitTagMethod(cb, alternatives.wireCases());
             }
-            // Where a case stands in the declaration is the language's order (ADR-0069) and not how
-            // a value is written, so it is gated on what answers that — the same `Ordering` every
-            // reader of a comparison asks, which is what sends them to this class's `__order`. The
-            // two gates hold of the same sums today. Written as one, a wire form that stopped being
-            // a bare tag would take the ordering methods with it and leave a comparison calling a
-            // method nothing emitted.
-            if (Ordering.of(Type.ref(sum.declares()), ctx.inners, symbols, ctx.kinds,
-                    ctx.published)
-                    instanceof Ordering.Places places
-                    && places.enumeration().equals(sum.declares())) {
+            // Where a case stands in the declaration is the language's order and not how a value is
+            // written, so it is gated on what this sum offers as its order — what a class elsewhere
+            // that calls `__order` is built against — and not on the wire form. The two gates hold
+            // of the same sums today. Written as one, a wire form that stopped being a bare tag would
+            // take the ordering methods with it and leave a comparison calling a method nothing
+            // emitted. A sum that is ordered at all is ordered by itself, which its projection holds.
+            // Which place each case takes is the class's own and not offered: it is read off the
+            // cases the sum reaches, nested sums opened.
+            if (ctx.declaredType(sum.declaredKey()).order().isPresent()) {
                 emitOrderMethods(cb, cdX, alternatives.atoms());
             }
             codec.emitCodecFactory(cb, "decoder", CD_RDecoder, cd(new GeneratedClass.Decoder(valueOf(sum), DecoderKind.VALUE)),
@@ -455,7 +456,7 @@ final class ValueClassGen {
                                 // What a field's sameness means is the runtime's to say (spec §equality):
                                 // an amount ignores its scale wherever it sits, including inside a
                                 // collection this field holds.
-                                emitValueEquals(code, t == Type.DECIMAL);
+                                emitValueEquals(ctx, code, t == Type.DECIMAL);
                                 code.ifeq(differs);
                             }
                         }
@@ -486,7 +487,7 @@ final class ValueClassGen {
                             // whose equality ignores a scale and whose hash did not would land 1.0
                             // and 1.00 in different buckets, and a Map keyed by this data would stop
                             // working. Groovy changed `==` and left hashCode alone; that bug is open.
-                            emitValueHash(code, t == Type.DECIMAL);
+                            emitValueHash(ctx, code, t == Type.DECIMAL);
                         }
                         code.iadd();
                     }
@@ -494,21 +495,51 @@ final class ValueClassGen {
                 });
     }
 
-    /** A single-value newtype over an ordered type — ordered by the value it wraps (ADR-0047), which
-     * the class carries as {@link Comparable} so {@code sort} / {@code max} / {@code min} compare it
-     * by natural order, and a Java reader can put it in a {@code TreeSet}. The order it carries is
-     * {@link #orderOfWrapped}: claiming one here that the {@code compareTo} below cannot emit is
-     * what left {@code data StageN = Stage} declaring {@code Comparable} and throwing on the first
-     * Java reader that compared two (issue #856). */
-    private boolean isOrderedNewtype(Hir.Data data, SequencedMap<String, Type> fields) {
-        return data.newtype() && fields.size() == 1
-                && orderOfWrapped(fields.values().iterator().next()) != null;
+    /**
+     * How the value a single-value newtype wraps is compared, where the newtype is ordered by it,
+     * or null where it is not ordered. An ordered newtype's class carries {@link Comparable} so
+     * {@code sort} / {@code max} / {@code min} compare it by natural order, and a Java reader can put
+     * it in a {@code TreeSet}.
+     *
+     * <p>Two projections say this, and they are held to each other before anything is written. The
+     * newtype's own says whether its class is {@code Comparable}, which is what a class elsewhere
+     * that compares one is built against. The one of what it wraps says how that value is compared,
+     * which is what its {@code compareTo} is emitted from. Were they to disagree, the class would
+     * declare {@code Comparable} with no {@code compareTo} to honour it and throw on the first Java
+     * reader that compared two, or carry one that nothing elsewhere was told of.
+     */
+    private Ordering orderOfNewtype(Hir.Data data, SequencedMap<String, Type> fields) {
+        boolean comparable = ctx.declaredType(data.declaredKey()).order().isPresent();
+        Ordering wrapped = data.newtype() && fields.size() == 1
+                ? orderOfWrapped(fields.values().iterator().next()) : null;
+        if (comparable != (wrapped != null)) {
+            throw new IllegalStateException("`" + data.name() + "` offers itself as "
+                    + (comparable ? "" : "not ") + "Comparable, and what it wraps is "
+                    + (wrapped == null ? "compared by nothing" : "compared as " + wrapped));
+        }
+        return wrapped;
     }
 
-    /** How the value a newtype wraps compares, as the newtype's own field holds it. */
+    /**
+     * How the value a newtype wraps is compared, as the newtype's own field holds it, or null where
+     * it is not compared.
+     *
+     * <p>A declared type is read off its projection, and only that one: a newtype over it hands the
+     * comparison to whatever that projection says — its own {@code compareTo}, or the
+     * {@code __order} of the enumeration that places it — and is built against no declaration under
+     * it. Anything else wears no name a module declares, and is answered by what it is.
+     */
     private Ordering orderOfWrapped(Type value) {
-        Ordering how = Ordering.of(value, ctx.inners, symbols, ctx.kinds, ctx.published);
-        return how == null ? null : how.asHeld();
+        if (value instanceof Type.Ref(TypeSymbol.AtModule at) && !at.isDeclaredByLanguage()) {
+            return switch (ctx.declaredType(at.key()).order().orElse(null)) {
+                case LinkageProjection.HeldOrder.Natural _ -> new Ordering.Natural(value);
+                case LinkageProjection.HeldOrder.Places places ->
+                        new Ordering.Places(places.enumeration());
+                case null -> null;
+            };
+        }
+        return Ordering.ofBare(value, ctx.kinds, ctx.sums,
+                EnumerationListings.asWritten(symbols, ctx.kinds, ctx.sums));
     }
 
     /** {@code Record} plus each interface, with {@code Comparable} bound to the class itself, so a
@@ -581,9 +612,9 @@ final class ValueClassGen {
      * declaring an interface it could not honour. The erased {@code compareTo(Object)} bridge is what
      * the runtime's natural-order compare calls.
      */
-    private void emitCompareTo(ClassBuilder cb, ClassDesc cdName, Map.Entry<String, Type> value) {
+    private void emitCompareTo(ClassBuilder cb, ClassDesc cdName, Map.Entry<String, Type> value,
+                               Ordering how) {
         ClassDesc fd = jvmType(value.getValue());
-        Ordering how = orderOfWrapped(value.getValue());
         cb.withMethodBody("compareTo", MethodTypeDesc.of(ConstantDescs.CD_int, cdName),
                 ClassFile.ACC_PUBLIC | ClassFile.ACC_FINAL, code -> {
                     code.aload(0);
@@ -596,20 +627,29 @@ final class ValueClassGen {
                     switch (how) {
                         case Ordering.Longs _ ->
                                 code.lcmp();   // -1 / 0 / 1, which is compareTo's contract
-                        case Ordering.Natural _ ->
+                        // compareTo is the JDK's signature and takes no checkpoint, so a class an
+                        // evaluation runs asks for the evaluation's own once a comparison.
+                        case Ordering.Natural _ -> {
+                            if (ctx.counting()) {
+                                ctx.pushCheckpoint(code);
+                                code.invokestatic(CD_Values, "compare", MTD_Values_compare);
+                            } else {
                                 code.invokeinterface(CD_Comparable, "compareTo", MTD_compareTo_Object);
+                            }
+                        }
                         case Ordering.Strings _ ->
-                                code.invokestatic(CD_Strings, "compare", MTD_Strings_compare);
+                                ctx.callRuntime(code, CD_Strings, "compare", MTD_Strings_compare,
+                                        Work.CHECKPOINTED);
                         case Ordering.Places places -> {
                             code.invokestatic(cd(places.enumeration()), ORDER_METHOD, MTD_order, true);
                             code.invokestatic(CD_Integer, "compare", MTD_Integer_compare, false);
                         }
-                        // asHeld answers for the newtype as its own class holds it, and a newtype is
-                        // Comparable, so nothing reaches here.
+                        // A newtype wrapped is compared by the compareTo its own class carries, so
+                        // nothing reaches here.
                         case Ordering.Wrapped _ -> throw new IllegalStateException(
                                 "a wrapped order is never what a value is held as: " + value.getValue());
                         case null -> throw new IllegalStateException(
-                                "compareTo is emitted only where isOrderedNewtype found an order: "
+                                "compareTo is emitted only where orderOfNewtype found an order: "
                                         + value.getValue());
                     }
                     code.ireturn();
@@ -725,7 +765,7 @@ final class ValueClassGen {
             for (Map.Entry<String, Type> f : fields.entrySet()) {
                 code.aload(0);
                 load(code, slot, f.getValue());
-                CanonicalizeAtCrossing.emit(code, f.getValue());
+                CanonicalizeAtCrossing.emit(ctx, code, f.getValue());
                 code.putfield(cdName, f.getKey(), jvmType(f.getValue()));
                 slot += width(f.getValue());
             }
@@ -751,7 +791,8 @@ final class ValueClassGen {
                     mb.with(SignatureAttribute.of(
                             MethodSignature.parseFrom(constructSignature(fields, cdName))));
                     mb.withCode(code -> {
-                        BodyGen gen = new BodyGen(ctx, code, data, cdName, 0);
+                        BodyGen gen = new BodyGen(ctx, code, data, cdName, 0,
+                                Places.NUMBERED_NOWHERE);
 
                         // Canonicalized in the argument slots themselves, before a clause below reads
                         // any of them by the binding bindFields is about to install: a public
@@ -763,7 +804,7 @@ final class ValueClassGen {
                         for (Type t : fields.values()) {
                             if (CanonicalizeAtCrossing.reachesString(t)) {
                                 load(code, argSlot, t);
-                                CanonicalizeAtCrossing.emit(code, t);
+                                CanonicalizeAtCrossing.emit(ctx, code, t);
                                 store(code, argSlot, t);
                             }
                             argSlot += width(t);

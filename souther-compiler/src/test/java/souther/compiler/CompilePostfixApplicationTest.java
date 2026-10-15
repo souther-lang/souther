@@ -372,7 +372,7 @@ class CompilePostfixApplicationTest {
         return Hir.Apply.read(new Ast.Apply(callee, java.util.List.of(),
                         SourceConstructOrigin.written(new souther.compiler.types.WrittenOwner.Body("m", "f"),
                                 0, SourceConstruct.CALL), at, null),
-                new Hir.AppliedCallee(applied, callee.reportedAt()),
+                new Hir.AppliedCallee(applied, callee.reportedAt(), Hir.Shadowing.NOTHING),
                 new Hir.Var.Unanswered(applied, null, applied.region()), java.util.List.of());
     }
 }

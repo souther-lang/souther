@@ -1,0 +1,27 @@
+// A `match` on an element of what another operation answered is about no position of the input.
+//
+// The list `List.all` ranges over is what `List.filterMap` made, so `r` is a value made from an
+// element of `xs` and not an element of `xs`. Nothing says which element of the input it stands
+// for, so the `match` is about none of them, and the element is left as every position is beside a
+// decision no position is named for.
+//
+// told apart at n: 2 groups of 2
+// told apart at xs[*]: unread somewhere
+module example.derivedmatched
+
+data North
+data South
+data Region = North | South
+
+data Ok = { n: Int }
+
+behavior judge : (n: Int, xs: List<Region>) -> Ok
+    constructs Ok
+
+let judge (n, xs) = {
+    guard n > 0 else Ok { n = 0 }
+    guard List.all(r -> match r with
+        | North -> true
+        | South -> false, List.filterMap(x -> List.get(0, [x]), xs)) else Ok { n = 1 }
+    Ok { n = 2 }
+}

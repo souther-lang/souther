@@ -172,12 +172,12 @@ class ANumberIsWrittenWhereTheReadingAnsweredForThePlaceTest {
     /** Which question a report about the condition under test would put. */
     private static final ConditionReportAnchor WHERE =
             new ConditionReportAnchor.WhereTheReadingMetIt("m",
-                    new ConditionOccurrence("b", 0));
+                    new ConditionOccurrence("b", ConditionOccurrence.Reading.DIVIDING, 0));
 
     /** The condition the row is composed under, which a report about it would be the subject of. */
     private static OnTheWay.TakenIn onTheWayOver(TermPath at) {
-        return new OnTheWay.TakenIn(WHERE, new TakenConstraint.Affine(
-                LinearForm.atom(new NumericTerm.ValueOf(at)), Rel.GE));
+        return new OnTheWay.TakenIn(WHERE, new RowDemand.Relational(new TakenConstraint.Affine(
+                LinearForm.atom(new NumericTerm.ValueOf(at)), Rel.GE)));
     }
 
     /** A row composed with the plain position fixed, and a condition over {@code at} on the way to
@@ -191,7 +191,8 @@ class ANumberIsWrittenWhereTheReadingAnsweredForThePlaceTest {
                 NumbersAskedFor.of(LevelRegion.point(new Level.OnACarrier(
                         quantities(source).ordersOf(fixed.term()).answered(), four))),
                 new Reachability.Reaching(quantities(source).region(), Requirements.NONE,
-                        List.of(onTheWayOver(at))),
+                        TruthsAsked.NONE, List.of(onTheWayOver(at)), Reachability.Ways.ONE,
+                        List.of()),
                 Generator.CandidateCheck.ANY);
     }
 

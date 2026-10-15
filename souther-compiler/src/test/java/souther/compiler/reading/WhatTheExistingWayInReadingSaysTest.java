@@ -3,7 +3,6 @@ package souther.compiler.reading;
 import org.junit.jupiter.api.Test;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
-import souther.compiler.coverage.CoverageSites;
 import souther.compiler.diag.Severity;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.query.Adequacy;
@@ -117,7 +116,7 @@ class WhatTheExistingWayInReadingSaysTest {
                 .findFirst().orElseThrow(() -> new AssertionError("no way reads both: " + ways));
         assertEquals(both.get(0).at(), both.get(1).at(),
                 () -> "one helper on one argument is one number: " + both);
-        assertNotEquals(both.get(0).comparison(), both.get(1).comparison(),
+        assertNotEquals(both.get(0).statedAt(), both.get(1).statedAt(),
                 () -> "and the two readings of it are told apart by where each is written: " + both);
     }
 
@@ -217,12 +216,11 @@ class WhatTheExistingWayInReadingSaysTest {
                 "a model that did not compile answers every question with nothing");
         String module = compilation.modules().get(0);
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
-        CoverageSites.Plan plan = checked.plan();
         InputDomain inputs =
                 compilation.db().ask(new Adequacy.Inputs(module)).value().get(behavior);
         RuleReadingSource rules = RuleReadings.of(compilation, module);
-        CoverageRead.Read read = CoverageRead.of(behavior, checked.behaviorBodies().get(behavior),
-                plan, inputs, rules);
+        CoverageRead.Read read = CoverageRead.of(behavior, checked.run(behavior),
+                inputs.reading(rules));
         return List.copyOf(read.arms().values());
     }
 }

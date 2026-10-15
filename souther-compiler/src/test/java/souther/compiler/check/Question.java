@@ -1,9 +1,11 @@
 package souther.compiler.check;
 
+import souther.compiler.semantics.OperationLaw;
 import souther.compiler.stdlib.Stdlib;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -206,7 +208,8 @@ enum Question {
             // is a reason about what a shape can say, not about the operation being uninteresting.
             //
             // They answer something other than what they read. A map's keys and its entry pairs
-            // are not its values, `fromList` takes the values out of pairs, `groupBy` answers lists
+            // are not its values, `Set.fromList` is the same elements in a container of another kind
+            // and `groupBy` answers lists
             // of the elements rather than the elements, `concat` reads the lists inside its
             // argument, `zipShortest` pairs two lists, and `flatMap` makes any number of elements
             // from each.
@@ -217,7 +220,7 @@ enum Question {
             // They answer the same elements in a container of another kind. That is true and
             // unsayable: every statement names the kind it is about, so nothing said of a list is
             // a statement about a set, and a rule between them would carry nothing.
-            return Set.of(op("Map", "keys"), op("Map", "toList"), op("Map", "fromList"),
+            return Set.of(op("Map", "keys"), op("Map", "toList"),
                     op("List", "groupBy"), op("List", "concat"), op("List", "zipShortest"),
                     op("List", "flatMap"), op("Map", "insert"), op("Set", "insert"),
                     op("Map", "union"), op("Set", "union"), op("List", "append"),
@@ -282,6 +285,112 @@ enum Question {
         @Override
         Set<ValueName> deliberatelyUnanswered() {
             return Set.of();
+        }
+    },
+
+    /**
+     * What its answer holding anything comes to over its arguments ({@link
+     * BoundOperationFacts#settled}). Asked of an operation answering a container or a string: that
+     * is what holding something is asked of, and a reading of a condition carrying the question
+     * across a call has to find it answered — by a law, declared or read off what the operation
+     * builds, or by a closing that names what the domain has no words for.
+     */
+    HOLDING_SOMETHING("what its answer holding anything comes to") {
+        @Override
+        boolean asksOf(Stdlib stdlib, Stdlib.Signature signature) {
+            return signature.result() != null && hasASize(signature.result());
+        }
+
+        @Override
+        boolean answeredFor(Stdlib stdlib, ValueName operation) {
+            return byALaw(operation, OperationLaw.Observed.EMPTINESS);
+        }
+
+        @Override
+        Set<ValueName> answeredOperations() {
+            return settledBy(OperationLaw.Observed.EMPTINESS, true);
+        }
+
+        @Override
+        Set<ValueName> deliberatelyUnanswered() {
+            return settledBy(OperationLaw.Observed.EMPTINESS, false);
+        }
+    },
+
+    /**
+     * How many its answer holds, as a number of its arguments. Asked of what {@link
+     * #HOLDING_SOMETHING} is asked of, and settled as it is: whether an answer holds anything and how
+     * many it holds are two observations, and an operation whose answer is empty exactly where its
+     * container is may still answer any number of elements from it.
+     */
+    HOW_MANY_IT_HOLDS("how many its answer holds") {
+        @Override
+        boolean asksOf(Stdlib stdlib, Stdlib.Signature signature) {
+            return signature.result() != null && hasASize(signature.result());
+        }
+
+        @Override
+        boolean answeredFor(Stdlib stdlib, ValueName operation) {
+            return byALaw(operation, OperationLaw.Observed.SIZE);
+        }
+
+        @Override
+        Set<ValueName> answeredOperations() {
+            return settledBy(OperationLaw.Observed.SIZE, true);
+        }
+
+        @Override
+        Set<ValueName> deliberatelyUnanswered() {
+            return settledBy(OperationLaw.Observed.SIZE, false);
+        }
+    },
+
+    /** What its answer holding a value comes to over its arguments. Asked of an operation answering
+     *  an optional, and settled as {@link #HOLDING_SOMETHING} is. */
+    HOLDING_A_VALUE("what its answer holding a value comes to") {
+        @Override
+        boolean asksOf(Stdlib stdlib, Stdlib.Signature signature) {
+            return signature.result() instanceof Type.OptionOf;
+        }
+
+        @Override
+        boolean answeredFor(Stdlib stdlib, ValueName operation) {
+            return byALaw(operation, OperationLaw.Observed.PRESENCE);
+        }
+
+        @Override
+        Set<ValueName> answeredOperations() {
+            return settledBy(OperationLaw.Observed.PRESENCE, true);
+        }
+
+        @Override
+        Set<ValueName> deliberatelyUnanswered() {
+            return settledBy(OperationLaw.Observed.PRESENCE, false);
+        }
+    },
+
+    /** What its answer coming out true comes to over its arguments. Asked of every operation
+     *  answering a truth, whatever it is handed: a walk with a closure, a predicate over a
+     *  container or a string, a denial. Settled as {@link #HOLDING_SOMETHING} is. */
+    TRUTH("what its answer coming out true comes to") {
+        @Override
+        boolean asksOf(Stdlib stdlib, Stdlib.Signature signature) {
+            return signature.result() == Type.Prim.BOOL;
+        }
+
+        @Override
+        boolean answeredFor(Stdlib stdlib, ValueName operation) {
+            return byALaw(operation, OperationLaw.Observed.TRUTH);
+        }
+
+        @Override
+        Set<ValueName> answeredOperations() {
+            return settledBy(OperationLaw.Observed.TRUTH, true);
+        }
+
+        @Override
+        Set<ValueName> deliberatelyUnanswered() {
+            return settledBy(OperationLaw.Observed.TRUTH, false);
         }
     },
 
@@ -497,11 +606,12 @@ enum Question {
     },
 
     /**
-     * Whether it answers one of the values it was given, and in which cases
-     * ({@link DischargeRules#chosenBy}). Asked of an operation answering a number from a number: what
-     * such an operation answers may be one of its arguments, decided by the arguments.
+     * Whether what it answers is written case by case over the values it was given, and in which
+     * cases ({@link DischargeRules#chosenBy}). Asked of an operation answering a number from a
+     * number: what such an operation answers may be one of its arguments, or arithmetic over them,
+     * decided by the arguments.
      */
-    CHOICE("whether it answers one of its arguments, and in which cases") {
+    CHOICE("whether it answers its arguments case by case, and in which cases") {
         @Override
         boolean asksOf(Stdlib stdlib, Stdlib.Signature signature) {
             return NumericAnswers.isANumber(signature.result())
@@ -510,26 +620,26 @@ enum Question {
 
         @Override
         boolean answeredFor(Stdlib stdlib, ValueName operation) {
-            return DischargeRules.choosingOperations().contains(operation);
+            return DischargeRules.definedByCases().contains(operation);
         }
 
         @Override
         Set<ValueName> answeredOperations() {
-            return DischargeRules.choosingOperations();
+            return DischargeRules.definedByCases();
         }
 
         @Override
         Set<ValueName> deliberatelyUnanswered() {
-            // They compute a new number rather than answering one they were given: what `a + b`
-            // answers is neither `a` nor `b`, `compare` answers a sign, `floorMod` a remainder,
-            // `abs` a distance, `toInt` a whole number, `round` and `Rational.toDecimal` a value at
-            // another scale. `Decimal.fromInt` answers the number it was given unconditionally,
-            // which is a statement of its own rather than a case.
+            // They compute a new number in one way rather than case by case: what `a + b` answers
+            // is a sum of the two, `compare` answers a sign, `floorMod` a remainder, `toInt` a
+            // whole number, `round` and `Rational.toDecimal` a value at another scale.
+            // `Decimal.fromInt` answers the number it was given unconditionally, which is a
+            // statement of its own rather than a case.
             return Set.of(op("Int", "add"), op("Int", "subtract"), op("Int", "multiply"),
                     op("Decimal", "add"), op("Decimal", "subtract"), op("Decimal", "multiply"),
                     op("Int", "compare"), op("Decimal", "compare"), op("Int", "floorMod"),
-                    op("Int", "abs"), op("Decimal", "abs"), op("Decimal", "toInt"),
-                    op("Decimal", "round"), op("Decimal", "fromInt"), op("Rational", "toDecimal"));
+                    op("Decimal", "toInt"), op("Decimal", "round"), op("Decimal", "fromInt"),
+                    op("Rational", "toDecimal"));
         }
     },
 
@@ -637,7 +747,7 @@ enum Question {
             // They answer one of the values they were given, which is which case they are in and
             // not arithmetic of their own.
             return Set.of(op("Int", "min"), op("Int", "max"), op("Int", "clamp"),
-                    op("Int", "floorMod"), op("Int", "compare"), op("Decimal", "min"),
+                    op("Int", "compare"), op("Decimal", "min"),
                     op("Decimal", "max"), op("Decimal", "clamp"));
         }
     },
@@ -745,10 +855,12 @@ enum Question {
     /**
      * The operations this is asked of and answers nothing for, each named with the reason.
      *
-     * <p>Held by the question and not by the facts the compiler reads. What a name here records is
-     * that the question was considered for that operation and closed; the reason is about the
-     * operation, but nothing in the compiler reads a closed question as a proposition, and what
-     * would have to be true for one of these to gain a rule is argued in the comment beside it.
+     * <p>Held by the question and not by the facts the compiler reads, where nothing in the
+     * compiler reads the closing. What a name here records is that the question was considered for
+     * that operation and closed, and what would have to be true for one of these to gain a rule is
+     * argued in the comment beside it. The questions about an observation of an answer are the
+     * exception, and read their closings off the facts: the reading of a condition stops on one
+     * with the proposition it names, so the closing is a statement the compiler reads.
      */
     abstract Set<ValueName> deliberatelyUnanswered();
 
@@ -812,6 +924,30 @@ enum Question {
 
     private static ValueName op(String alias, String name) {
         return ValueName.Stdlib.operation(alias, name);
+    }
+
+    /** Whether {@code observed} of {@code operation}'s answer is settled by a law. */
+    private static boolean byALaw(ValueName operation, OperationLaw.Observed observed) {
+        return DefaultBoundOperationFacts.get().settled(operation, observed)
+                instanceof BoundOperationFacts.Settled.ByALaw;
+    }
+
+    /**
+     * The operations {@code observed} of whose answer is settled by a law, where {@code byALaw}, or
+     * closed with what the domain has no words for. A closing is held by the facts the compiler
+     * reads and not here, since the reading of a condition stops on it with its reason. What is
+     * stated and not proved is neither: it is open, and settles nothing.
+     */
+    private static Set<ValueName> settledBy(OperationLaw.Observed observed, boolean byALaw) {
+        Set<ValueName> out = new LinkedHashSet<>();
+        DefaultBoundOperationFacts.get().settled().forEach((operation, settled) -> {
+            switch (settled.get(observed)) {
+                case BoundOperationFacts.Settled.ByALaw _ when byALaw -> out.add(operation);
+                case BoundOperationFacts.Settled.Unsaid _ when !byALaw -> out.add(operation);
+                case null, default -> { }
+            }
+        });
+        return out;
     }
 
     @Override

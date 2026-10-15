@@ -6,7 +6,7 @@
 
     <groupId>org.souther-lang</groupId>
     <artifactId>souther-parent</artifactId>
-    <version>0.3.0</version>
+    <version>0.3.1-SNAPSHOT</version>
     <packaging>pom</packaging>
 
     <name>Souther</name>
@@ -47,7 +47,6 @@
         <connection>scm:git:https://github.com/souther-lang/souther.git</connection>
         <developerConnection>scm:git:git@github.com:souther-lang/souther.git</developerConnection>
         <url>https://github.com/souther-lang/souther</url>
-        <tag>HEAD</tag>
     </scm>
 
     <properties>
@@ -60,7 +59,14 @@
         <souther.java.minimum>25</souther.java.minimum>
         <souther.jvm.stack>4m</souther.jvm.stack>
         <maven.compiler.release>${souther.java.minimum}</maven.compiler.release>
-        <raoh.version>0.8.0</raoh.version>
+        <raoh.version>0.9.0</raoh.version>
+        <!-- Raoh takes Jackson as provided, so the version on every classpath is this one. -->
+        <jackson.version>3.2.3</jackson.version>
+        <!-- The text rules the language shares with Raoh: case conversion, normalization, white
+             space, the temporal grammar and the pattern language. Which strings these accept is a
+             rule of the specification, so a version that changes an answer is a change to the
+             language and is taken by hand, never by a dependency update. -->
+        <notation199x.version>0.2.0</notation199x.version>
         <jspecify.version>1.0.1</jspecify.version>
         <!-- Where compiled classes go, named so the `m2e` profile below can send the editor's
              somewhere else. A build outside the editor uses the Maven defaults. -->
@@ -72,8 +78,8 @@
              into. A build that is not the hook leaves it at the root module's sources, which do
              not exist, so the goal has nothing to read. -->
         <checkstyle.staged.dir>${project.basedir}/src/main/java</checkstyle.staged.dir>
-        <checkstyle.version>14.1.0</checkstyle.version>
-        <nullaway.version>0.14.1</nullaway.version>
+        <checkstyle.version>14.3.0</checkstyle.version>
+        <nullaway.version>0.14.2</nullaway.version>
         <!-- What NullAway is asked for, written once. The gate below and the `lint` profile both
              ask, and a gate configured differently in each is a gate whose answer depends on which
              build asked. -->
@@ -145,7 +151,35 @@
              real work has room, and reached in milliseconds by one that loops. Named here so
              -Dtest.example.step.limit=N reaches it. -->
         <test.example.step.limit>1000000</test.example.step.limit>
+        <!-- Whether this module is left out of what is published to Central. A module that is not
+             a Maven artifact anyone depends on sets it in its own pom, so it is left out of a
+             release and of a snapshot alike. -->
+        <souther.publish.skip>false</souther.publish.skip>
+        <!-- The Enforcer the release and snapshot profiles check with. -->
+        <enforcer.version>3.5.0</enforcer.version>
+        <!-- What the build copies into an artifact from outside every module's own src, as paths
+             from the root. A publication refuses an ignored file in any of them, as each module
+             refuses one in its src (bin/require-clean-checkout.sh), because a copy would carry it
+             into a jar though git never sees it. WhatACleanCheckoutAsksIsWhatTheBuildReadsTest holds
+             this to what the poms copy from. -->
+        <souther.build.reads>syntax specification.adoc</souther.build.reads>
     </properties>
+
+    <!-- Where a dependency pinned at a snapshot version is resolved from: the Central Portal's
+         snapshot repository, which is where the libraries this build takes publish theirs. Read
+         for snapshots and for nothing else, so every release still comes from Central. -->
+    <repositories>
+        <repository>
+            <id>central-portal-snapshots</id>
+            <url>https://central.sonatype.com/repository/maven-snapshots/</url>
+            <releases>
+                <enabled>false</enabled>
+            </releases>
+            <snapshots>
+                <enabled>true</enabled>
+            </snapshots>
+        </repository>
+    </repositories>
 
     <dependencyManagement>
         <dependencies>
@@ -163,6 +197,25 @@
                 <groupId>net.unit8.raoh</groupId>
                 <artifactId>raoh-jooq</artifactId>
                 <version>${raoh.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>tools.jackson.core</groupId>
+                <artifactId>jackson-databind</artifactId>
+                <version>${jackson.version}</version>
+            </dependency>
+            <!-- Without its JSpecify, which it declares at compile scope: souther-runtime keeps the
+                 annotations off every downstream classpath (see its pom), and this is how they
+                 would reach one. Declared here so that every module taking it takes it so. -->
+            <dependency>
+                <groupId>net.unit8.199x</groupId>
+                <artifactId>notation-199x</artifactId>
+                <version>${notation199x.version}</version>
+                <exclusions>
+                    <exclusion>
+                        <groupId>org.jspecify</groupId>
+                        <artifactId>jspecify</artifactId>
+                    </exclusion>
+                </exclusions>
             </dependency>
             <dependency>
                 <groupId>org.jspecify</groupId>
@@ -230,6 +283,11 @@
         <testOutputDirectory>${build.test.classes}</testOutputDirectory>
         <pluginManagement>
             <plugins>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-resources-plugin</artifactId>
+                    <version>3.5.0</version>
+                </plugin>
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-surefire-plugin</artifactId>
@@ -313,6 +371,20 @@
                         </dependency>
                     </dependencies>
                 </plugin>
+                <!-- What publishes to the Sonatype Central Portal, and only from the `release`
+                     and `snapshot` profiles, each of which holds the tree to the source its
+                     coordinate names before anything goes up. A plain `deploy` has nowhere to
+                     go. A module that is not a Maven artifact sets `souther.publish.skip`. -->
+                <plugin>
+                    <groupId>org.sonatype.central</groupId>
+                    <artifactId>central-publishing-maven-plugin</artifactId>
+                    <version>0.11.0</version>
+                    <configuration>
+                        <publishingServerId>central</publishingServerId>
+                        <autoPublish>true</autoPublish>
+                        <skipPublishing>${souther.publish.skip}</skipPublishing>
+                    </configuration>
+                </plugin>
             </plugins>
         </pluginManagement>
         <plugins>
@@ -344,11 +416,55 @@
                         <arg>100000</arg>
                     </compilerArgs>
                 </configuration>
+                <executions>
+                    <!-- What ships keeps the lines a stack trace names and drops the names of local
+                         variables, which only a debugger reads: the table of them is the largest
+                         part of a class file that is not its code, and the CLI jar carries every
+                         class this reactor compiles. The tests keep them, since a test is what
+                         gets stepped through. -->
+                    <execution>
+                        <id>default-compile</id>
+                        <configuration>
+                            <debuglevel>lines,source</debuglevel>
+                        </configuration>
+                    </execution>
+                </executions>
             </plugin>
-            <!-- Implementation-Version in every jar's manifest. A compiled Souther module records
-                 the compiler that produced it, and this is where that string comes from: Maven
-                 fills it from the project version, so the root pom stays the one place the version
-                 is written. -->
+            <!-- The commit being built, read from git by the build rather than passed in. Only the
+                 full id is taken: branch, user and time would differ between two builds of the
+                 same commit. -->
+            <plugin>
+                <groupId>io.github.git-commit-id</groupId>
+                <artifactId>git-commit-id-maven-plugin</artifactId>
+                <version>9.0.1</version>
+                <executions>
+                    <execution>
+                        <id>read-revision</id>
+                        <phase>initialize</phase>
+                        <goals>
+                            <goal>revision</goal>
+                        </goals>
+                    </execution>
+                </executions>
+                <configuration>
+                    <skipPoms>false</skipPoms>
+                    <runOnlyOnce>true</runOnlyOnce>
+                    <injectAllReactorProjects>true</injectAllReactorProjects>
+                    <failOnNoGitDirectory>false</failOnNoGitDirectory>
+                    <generateGitPropertiesFile>false</generateGitPropertiesFile>
+                    <commitIdGenerationMode>full</commitIdGenerationMode>
+                    <includeOnlyProperties>
+                        <includeOnlyProperty>^git\.commit\.id\.full$</includeOnlyProperty>
+                        <includeOnlyProperty>^git\.tags$</includeOnlyProperty>
+                    </includeOnlyProperties>
+                </configuration>
+            </plugin>
+            <!-- Implementation-Version and Implementation-Revision in every jar's manifest. A
+                 compiled Souther module records the compiler that produced it, and the version
+                 string comes from here: Maven fills it from the project version, so the root pom
+                 stays the one place the version is written. The revision is the commit the jar was
+                 built from, so a consumer that resolved the jar can place it against a commit
+                 without going through a tag. -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-jar-plugin</artifactId>
@@ -358,6 +474,9 @@
                         <manifest>
                             <addDefaultImplementationEntries>true</addDefaultImplementationEntries>
                         </manifest>
+                        <manifestEntries>
+                            <Implementation-Revision>${git.commit.id.full}</Implementation-Revision>
+                        </manifestEntries>
                     </archive>
                 </configuration>
             </plugin>
@@ -614,14 +733,118 @@
                 <build.test.classes>${project.basedir}/target/jdt-test-classes</build.test.classes>
             </properties>
         </profile>
-        <!-- Activate for a Central release: `mvn -Prelease deploy`. Attaches sources and
-             javadoc, GPG-signs every artifact, and publishes the reactor to the Sonatype
-             Central Portal (autoPublish=true, so a validated bundle is released without a further
-             step in the Portal). Normal build/test is untouched. -->
+        <!-- Activate for a Central release: `mvn -Prelease deploy`. Holds the build to what the
+             tag for its version records and to dependencies that are releases, cleans every module
+             before building it, attaches sources and javadoc, GPG-signs every artifact, and uploads
+             them to the Central Portal as one deployment, which is published once the Portal has
+             validated it (autoPublish). A snapshot is the `snapshot` profile's. Normal build/test
+             is untouched. -->
         <profile>
             <id>release</id>
             <build>
                 <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-enforcer-plugin</artifactId>
+                        <version>${enforcer.version}</version>
+                        <executions>
+                            <execution>
+                                <id>a-release-depends-on-releases</id>
+                                <phase>initialize</phase>
+                                <goals>
+                                    <goal>enforce</goal>
+                                </goals>
+                                <configuration>
+                                    <rules>
+                                        <requireReleaseDeps>
+                                            <message>A release is what its tag builds, and a snapshot dependency builds to whatever was published under it last.</message>
+                                        </requireReleaseDeps>
+                                    </rules>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <!-- A release is built from the commit tagged for its version and nothing else.
+                         The revision written into the manifest names a commit, which describes the
+                         jar only if nothing that commit does not record went into it. Asked of git
+                         in the tree being built: the git-commit-id plugin's own `git.dirty` ignores
+                         untracked files and, in a linked worktree, answers for the main checkout.
+                         The tree as a whole, and what the build reads from outside every module's
+                         src, are asked once; each module asks of its own src; and each module is
+                         cleaned before it is built, so nothing an earlier build wrote is in it. -->
+                    <plugin>
+                        <groupId>org.codehaus.mojo</groupId>
+                        <artifactId>exec-maven-plugin</artifactId>
+                        <version>3.5.1</version>
+                        <executions>
+                            <execution>
+                                <id>require-clean-checkout</id>
+                                <phase>initialize</phase>
+                                <inherited>false</inherited>
+                                <goals>
+                                    <goal>exec</goal>
+                                </goals>
+                                <configuration>
+                                    <executable>${project.basedir}/bin/require-clean-checkout.sh</executable>
+                                    <commandlineArgs>${souther.build.reads}</commandlineArgs>
+                                </configuration>
+                            </execution>
+                            <execution>
+                                <id>require-recorded-sources</id>
+                                <phase>initialize</phase>
+                                <goals>
+                                    <goal>exec</goal>
+                                </goals>
+                                <configuration>
+                                    <executable>${maven.multiModuleProjectDirectory}/bin/require-clean-checkout.sh</executable>
+                                    <arguments>
+                                        <argument>${project.basedir}/src</argument>
+                                    </arguments>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-clean-plugin</artifactId>
+                        <version>3.5.0</version>
+                        <executions>
+                            <execution>
+                                <id>clean-before-building</id>
+                                <phase>initialize</phase>
+                                <goals>
+                                    <goal>clean</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>io.github.git-commit-id</groupId>
+                        <artifactId>git-commit-id-maven-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>validate-release-source</id>
+                                <phase>initialize</phase>
+                                <goals>
+                                    <goal>validateRevision</goal>
+                                </goals>
+                                <configuration>
+                                    <validationProperties>
+                                        <validationProperty>
+                                            <name>revision is a commit</name>
+                                            <value>${git.commit.id.full}</value>
+                                            <shouldMatchTo>^[0-9a-f]{40}$</shouldMatchTo>
+                                        </validationProperty>
+                                        <validationProperty>
+                                            <name>HEAD is tagged for this version</name>
+                                            <value>${git.tags}</value>
+                                            <shouldMatchTo>(^|,)v${project.version}(,|$)</shouldMatchTo>
+                                        </validationProperty>
+                                    </validationProperties>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
                     <plugin>
                         <groupId>org.apache.maven.plugins</groupId>
                         <artifactId>maven-source-plugin</artifactId>
@@ -670,12 +893,106 @@
                     <plugin>
                         <groupId>org.sonatype.central</groupId>
                         <artifactId>central-publishing-maven-plugin</artifactId>
-                        <version>0.11.0</version>
                         <extensions>true</extensions>
-                        <configuration>
-                            <publishingServerId>central</publishingServerId>
-                            <autoPublish>true</autoPublish>
-                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+        <!-- Activate to publish develop's snapshot: `mvn -Psnapshot deploy`, run by hand from a
+             checkout of develop, as a release is from its tag; CI publishes nothing. The snapshot
+             repository keeps one coordinate per version and every publication overwrites it, so
+             what the coordinate holds is whatever was published last; this profile is what makes
+             that the tip of develop. It refuses a version that is not a snapshot, a change HEAD
+             does not record, an ignored file where the build reads, and a HEAD that is not the
+             commit develop points at on origin, and it cleans every module before building it. A
+             snapshot may depend on snapshots: it is overwritten by the next publication anyway. Sources, javadoc and signatures are a
+             release's and are not made. -->
+        <profile>
+            <id>snapshot</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-enforcer-plugin</artifactId>
+                        <version>${enforcer.version}</version>
+                        <executions>
+                            <execution>
+                                <id>a-snapshot-version-built-from-releases</id>
+                                <phase>initialize</phase>
+                                <goals>
+                                    <goal>enforce</goal>
+                                </goals>
+                                <configuration>
+                                    <rules>
+                                        <requireSnapshotVersion>
+                                            <message>The snapshot profile publishes develop's snapshot, and ${project.version} is not one. develop never carries a release version.</message>
+                                        </requireSnapshotVersion>
+                                    </rules>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.codehaus.mojo</groupId>
+                        <artifactId>exec-maven-plugin</artifactId>
+                        <version>3.5.1</version>
+                        <executions>
+                            <execution>
+                                <id>require-clean-checkout</id>
+                                <phase>initialize</phase>
+                                <inherited>false</inherited>
+                                <goals>
+                                    <goal>exec</goal>
+                                </goals>
+                                <configuration>
+                                    <executable>${project.basedir}/bin/require-clean-checkout.sh</executable>
+                                    <commandlineArgs>${souther.build.reads}</commandlineArgs>
+                                </configuration>
+                            </execution>
+                            <execution>
+                                <id>require-recorded-sources</id>
+                                <phase>initialize</phase>
+                                <goals>
+                                    <goal>exec</goal>
+                                </goals>
+                                <configuration>
+                                    <executable>${maven.multiModuleProjectDirectory}/bin/require-clean-checkout.sh</executable>
+                                    <arguments>
+                                        <argument>${project.basedir}/src</argument>
+                                    </arguments>
+                                </configuration>
+                            </execution>
+                            <execution>
+                                <id>require-develop-tip</id>
+                                <phase>initialize</phase>
+                                <inherited>false</inherited>
+                                <goals>
+                                    <goal>exec</goal>
+                                </goals>
+                                <configuration>
+                                    <executable>${project.basedir}/bin/require-develop-tip.sh</executable>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-clean-plugin</artifactId>
+                        <version>3.5.0</version>
+                        <executions>
+                            <execution>
+                                <id>clean-before-building</id>
+                                <phase>initialize</phase>
+                                <goals>
+                                    <goal>clean</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.sonatype.central</groupId>
+                        <artifactId>central-publishing-maven-plugin</artifactId>
+                        <extensions>true</extensions>
                     </plugin>
                 </plugins>
             </build>

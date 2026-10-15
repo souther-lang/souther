@@ -1,12 +1,14 @@
 package souther.compiler.inputs;
 
 import souther.compiler.check.Carrier;
+import souther.compiler.check.DeclarationAccess;
 import souther.compiler.check.NewtypeInners;
 import souther.compiler.check.NumericAnswers;
-import souther.compiler.check.DeclarationKinds;
-import souther.compiler.check.PublishedDeclarations;
 import souther.compiler.check.Symbols;
 import souther.compiler.types.Type;
+
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 /**
  * Both orders a term stands on, worked out from what stands where its number comes from.
@@ -29,19 +31,38 @@ final class TermOrdering {
      * safe to stand in for. A term that is what a location holds has one order twice, and says so
      * here rather than by two readings that happen to agree.
      */
-    static TermOrders of(NumericTerm term, Type positionType, NewtypeInners inners,
-                         Symbols symbols,
-                         DeclarationKinds kinds, PublishedDeclarations published) {
-        Carrier observed = observedOn(positionType, inners, symbols, kinds, published);
+    static TermOrders of(NumericTerm term, Type positionType, Symbols symbols,
+                         DeclarationAccess declarations) {
+        return of(term, positionType, Map.of(), symbols, declarations);
+    }
+
+    /**
+     * The same, for a term over what a walk computed of each element, whose value is read on the
+     * type the computation stands as and whose fields are read on their own.
+     *
+     * @param fieldTypes what stands at each field the computation reads
+     */
+    static TermOrders of(NumericTerm term, Type positionType,
+                         Map<ElementProjection, Type> fieldTypes, Symbols symbols,
+                         DeclarationAccess declarations) {
+        Carrier observed = observedOn(positionType, declarations);
         // One construction and not one per arm. A term that is a location's own content answers on
         // the order its value is read on, which is that order twice rather than a second way of
         // making a pair — and a second way is a second place a pair can come from.
         Carrier answered = switch (term) {
             case NumericTerm.ValueOf _ -> observed;
-            case NumericTerm.TakenOf _, NumericTerm.TakenOver _ ->
-                    answeredOn(term, positionType, inners, symbols, kinds, published);
+            case NumericTerm.TakenOf _, NumericTerm.CodePointClassCount _,
+                 NumericTerm.Multiplicity _, NumericTerm.TakenOver _ ->
+                    answeredOn(term, positionType, symbols, declarations);
         };
-        return new TermOrders(term, observed, answered);
+        Map<ElementProjection, Carrier> fields = new LinkedHashMap<>();
+        fieldTypes.forEach((field, type) -> {
+            Carrier on = observedOn(type, declarations);
+            if (on != null) {
+                fields.put(field, on);
+            }
+        });
+        return new TermOrders(term, observed, answered, fields);
     }
 
     /**
@@ -58,18 +79,22 @@ final class TermOrdering {
      * what it answers all the same. What is null there is a term measured by its own values, which
      * is the one case the position was the answer to.
      */
-    private static Carrier answeredOn(NumericTerm term, Type positionType, NewtypeInners inners,
-                                      Symbols symbols,
-                                      DeclarationKinds kinds, PublishedDeclarations published) {
+    private static Carrier answeredOn(NumericTerm term, Type positionType, Symbols symbols,
+                                      DeclarationAccess declarations) {
+        NewtypeInners inners = declarations.inners();
         return switch (term) {
             case NumericTerm.ValueOf _ -> positionType == null ? null
-                    : Carrier.ofValue(positionType, inners, symbols, kinds, published);
+                    : Carrier.ofValue(positionType, declarations);
             case NumericTerm.TakenOf taken -> {
                 Type answers =
                         NumericAnswers.typeOf(taken.operation(), positionType, inners, symbols);
-                yield answers == null ? null
-                        : Carrier.ofValue(answers, inners, symbols, kinds, published);
+                yield answers == null ? null : Carrier.ofValue(answers, declarations);
             }
+            // How many code points there are is a whole number whatever they are code points of,
+            // as how many a container holds is.
+            case NumericTerm.CodePointClassCount _ -> Carrier.ofValue(Type.Prim.INT, declarations);
+            // How often a value occurs is a whole number whatever the value is.
+            case NumericTerm.Multiplicity _ -> Carrier.ofValue(Type.Prim.INT, declarations);
             // Asked of the operation as a taking is, and asked of what it was given: a run is a
             // container of the values standing at the place it is read from, so what the operation
             // answers of one is what it answers of a container of them. Written out here as the
@@ -79,8 +104,7 @@ final class TermOrdering {
             case NumericTerm.TakenOver over -> {
                 Type answers = positionType == null ? null : NumericAnswers.typeOf(
                         over.operation(), new Type.ListOf(positionType), inners, symbols);
-                yield answers == null ? null
-                        : Carrier.ofValue(answers, inners, symbols, kinds, published);
+                yield answers == null ? null : Carrier.ofValue(answers, declarations);
             }
         };
     }
@@ -94,10 +118,7 @@ final class TermOrdering {
      * refused is silently reading the value on the order its answer is measured on, which is right
      * for every operation whose two ends agree and wrong without a word for the first that does not.
      */
-    private static Carrier observedOn(Type positionType, NewtypeInners inners, Symbols symbols,
-                                      DeclarationKinds kinds,
-                                      PublishedDeclarations published) {
-        return positionType == null ? null
-                : Carrier.ofValue(positionType, inners, symbols, kinds, published);
+    private static Carrier observedOn(Type positionType, DeclarationAccess declarations) {
+        return positionType == null ? null : Carrier.ofValue(positionType, declarations);
     }
 }

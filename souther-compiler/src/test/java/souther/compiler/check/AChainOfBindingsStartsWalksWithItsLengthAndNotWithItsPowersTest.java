@@ -11,9 +11,11 @@ import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.Type;
 
 import org.junit.jupiter.api.Test;
+import souther.test.Growth;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.SequencedMap;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -91,13 +93,11 @@ class AChainOfBindingsStartsWalksWithItsLengthAndNotWithItsPowersTest {
      */
     @Test
     void doublingTheDepthAboutDoublesTheWalks() {
-        Map<Integer, Long> walks = new LinkedHashMap<>();
+        SequencedMap<Integer, Long> walks = new LinkedHashMap<>();
         for (int depth : new int[] {20, 40, 80, 160}) {
             walks.put(depth, walksOver(depth));
         }
-        assertTrue(walks.get(40) <= walks.get(20) * 3, "depth 40: " + walks);
-        assertTrue(walks.get(80) <= walks.get(40) * 3, "depth 80: " + walks);
-        assertTrue(walks.get(160) <= walks.get(80) * 3, "depth 160: " + walks);
+        Growth.eachAtMost(walks, 3, 1);
     }
 
     /**
@@ -110,9 +110,16 @@ class AChainOfBindingsStartsWalksWithItsLengthAndNotWithItsPowersTest {
         for (int depth : new int[] {20, 40, 60, 80}) {
             walks.put(depth, walksOver(depth));
         }
-        long first = walks.get(40) - walks.get(20);
-        long second = walks.get(60) - walks.get(40);
-        long third = walks.get(80) - walks.get(60);
+        // What is compared is what each step of depth adds, so that is what has to have been
+        // counted: totals that each counted something can add nothing from one depth to the next.
+        Map<Integer, Long> added = new LinkedHashMap<>();
+        added.put(40, walks.get(40) - walks.get(20));
+        added.put(60, walks.get(60) - walks.get(40));
+        added.put(80, walks.get(80) - walks.get(60));
+        Growth.counted(added);
+        long first = added.get(40);
+        long second = added.get(60);
+        long third = added.get(80);
         assertTrue(Math.abs(second - first) <= first / 4 + 2, "steps 1,2: " + walks);
         assertTrue(Math.abs(third - second) <= second / 4 + 2, "steps 2,3: " + walks);
     }

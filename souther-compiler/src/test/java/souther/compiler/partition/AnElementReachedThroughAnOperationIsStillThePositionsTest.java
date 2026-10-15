@@ -93,15 +93,27 @@ class AnElementReachedThroughAnOperationIsStillThePositionsTest {
     }
 
     /**
-     * But not through one whose answer holds what a closure made.
+     * And through one answering its closure's answer on each element, which is that answer: an
+     * element of {@code List.map(p -> p.age, people)} is {@code p.age} on one of the people.
+     */
+    @Test
+    void andThroughOneAnsweringItsClosureOnEachElement() {
+        assertEquals(List.of("people[*].age"),
+                axesOf("List.filter(n -> n >= 18, List.map(p -> p.age, people))"));
+    }
+
+    /**
+     * But not through one whose answer holds what a closure made and no answer per element.
      *
      * <p>Nothing is claimed. The value the rule is about came from {@code people[*].age} and is not
-     * it, and what a rule about a value derived from a position comes to is a question nothing here
-     * answers — so no line is drawn, and none is drawn in the wrong place either.
+     * the closure's answer on any one element, and what a rule about such a value comes to is a
+     * question nothing here answers — so no line is drawn, and none is drawn in the wrong place
+     * either.
      */
     @Test
     void butNotThroughOneWhoseAnswerHoldsWhatAClosureMade() {
         assertEquals(List.of(),
-                axesOf("List.filter(n -> n >= 18, List.map(p -> p.age, people))"));
+                axesOf("List.filter(n -> n >= 18,"
+                        + " List.filterMap(p -> List.get(0, [p.age]), people))"));
     }
 }

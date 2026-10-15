@@ -24,8 +24,7 @@ class ADomainHoldingNothingHoldsNothingFurtherTest {
     private static final Map<String, Granularity> COUNTS = Map.of("n", Granularity.DISCRETE);
 
     private static LinearForm<String> nMinus(long count) {
-        return LinearForm.<String>atom("n")
-                .minus(LinearForm.<String>constant(ExactRatio.of(count)));
+        return LinearForm.atomMinusConstant("n", ExactRatio.of(count));
     }
 
     private static NumericDomain<String> atLeastTwo() {

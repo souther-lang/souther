@@ -1,6 +1,7 @@
 package souther.compiler.diag.msg;
 
 import souther.compiler.diag.DiagnosticCode;
+import souther.compiler.diag.Localizable;
 
 /** What an example row, the file it is written in, and the fakes it runs against are told. */
 public sealed interface ExampleMessage extends Message {
@@ -350,17 +351,66 @@ public sealed interface ExampleMessage extends Message {
     record WriteARowAtThatInput(String input) implements ExampleMessage, Supporting {}
 
     /**
-     * One condition of that rule: a comparison the author wrote, which the rule takes holding.
+     * No row of the behavior would come out differently if one arm of the fork pointed at answered
+     * as another.
      *
-     * <p>Carries nothing. Which comparison it is is where the label is put, so a reader reads the
-     * comparison they wrote rather than one this compiler spelled from the proposition its account
+     * <p>Both arms, in the phrases an arm is said in elsewhere. Where the fork is, is where this is
+     * pointed, and a fork has more than one arm there: which arm was rewritten and which it answered
+     * as is what tells this rewrite from the others at the same fork.
+     */
+    @Code(DiagnosticCode.E1939)
+    record NoRowTellsTheArmFromItsSibling(Localizable arm, Localizable sibling, String behavior)
+            implements ExampleMessage, Reported {}
+
+    /**
+     * No row of the behavior would come out differently if one arm of a fork it reaches in code
+     * this build holds no source of answered as another.
+     *
+     * <p>Pointed at the behavior, since there is no fork here to point at, so the sentence says
+     * which arms it is about and which definition wrote the fork: two forks out of sight are told
+     * apart by that and by nothing a reader here could be sent to.
+     */
+    @Code(DiagnosticCode.E1939)
+    record NoRowTellsAnArmOutOfSightFromItsSibling(Localizable arm, Localizable sibling,
+                                                   String definition, String behavior)
+            implements ExampleMessage, Reported {}
+
+    /**
+     * No row of the behavior would come out differently if its body answered, whatever it was
+     * given, the value one of its rows came to.
+     *
+     * <p>The row and not the value. Two of these at one behavior are two values, and the row that
+     * came to each is how a reader is sent to it without the value written out in a form of its
+     * own.
+     */
+    @Code(DiagnosticCode.E1939)
+    record NoRowTellsTheBodyFromOneAnswer(String row, String behavior)
+            implements ExampleMessage, Reported {}
+
+    /**
+     * Marked at the row that came to the value, beside the sentence about it. A row written without
+     * a name is numbered within its source, so the number alone can be another source's row; where
+     * it is written is what this mark adds.
+     */
+    record TheValueIsTheOneThisRowCameTo() implements ExampleMessage, Supporting {}
+
+    /** What to do where a written row shows the rewrite answering differently: write down the
+     *  answer it gives. */
+    record WriteDownTheAnswerOfThatRow(String row) implements ExampleMessage, Supporting {}
+
+    /**
+     * One condition of that rule: a truth the author wrote — a comparison, or an application of
+     * one of the language's operations — which the rule takes holding.
+     *
+     * <p>Carries nothing. Which construct it is is where the label is put, so a reader reads the
+     * code they wrote rather than a condition this compiler spelled from the proposition its account
      * keys on — {@code n > 100} in a body is held there as {@code n <= 100} denied.
      */
-    record TheRuleTakesThisComparisonHolding() implements ExampleMessage, Supporting {}
+    record TheRuleTakesThisConditionHolding() implements ExampleMessage, Supporting {}
 
     /** The same, where the rule takes it failing. Two entries and not one that selects a word: a
      *  wording that turns on a value is two messages. */
-    record TheRuleTakesThisComparisonFailing() implements ExampleMessage, Supporting {}
+    record TheRuleTakesThisConditionFailing() implements ExampleMessage, Supporting {}
 
     /** One condition of that rule: a fork of the body, and which of its arms the rule goes down. */
     record TheRuleGoesThroughThisArm(souther.compiler.diag.Localizable arm)
@@ -369,6 +419,50 @@ public sealed interface ExampleMessage extends Message {
     /** A condition of the rule with nothing to send a reader to, so that a rule is never described
      *  by fewer conditions than it turns on. */
     record OneConditionOfTheRuleIsNotShown() implements ExampleMessage, Supporting {}
+
+    /**
+     * The call of a helper a condition of that rule is written in, where the rule takes the
+     * condition holding in the copy this call made.
+     *
+     * <p>Put at the call and not at the condition. A helper called more than once is one place in
+     * the source, and the conditions of its copies marked there alike are conditions a reader
+     * cannot tell apart; the call is what each copy was made at.
+     *
+     * @param called what was called
+     */
+    record TheRuleTakesItHoldingInThisCall(String called) implements ExampleMessage, Supporting {}
+
+    /** The same, where the rule takes it failing. */
+    record TheRuleTakesItFailingInThisCall(String called) implements ExampleMessage, Supporting {}
+
+    /** The same, of an arm of a fork the helper writes. */
+    record TheRuleGoesThroughItsArmInThisCall(Localizable arm, String called)
+            implements ExampleMessage, Supporting {}
+
+    /** A call the copy a condition of that rule stands in was made through, further out than the
+     *  call of the helper that writes the condition — or that call, where the condition has
+     *  nothing to say of its own. */
+    record TheRuleGoesThroughThisCall(String called) implements ExampleMessage, Supporting {}
+
+    /**
+     * That the report says which way the rule takes each condition in each call, and every call it
+     * was reached through, said once where a call's mark said less than that.
+     *
+     * <p>Only there. A call whose conditions of the rule go different ways is marked only as one
+     * the rule goes through, and the conditions are marked alike at the helper; a warning whose
+     * marks said everything they were told has nothing left for the report to add.
+     */
+    record TheReportSaysWhatTheRuleTakesInEachCall() implements ExampleMessage, Supporting {}
+
+    /**
+     * The call of a helper a reading of that line was made in, where the helper writes the
+     * comparison that draws it.
+     *
+     * @param read   which reading, in the words the reading's note says it in
+     * @param called what was called
+     */
+    record TheLineIsReadInThisCall(String read, String called)
+            implements ExampleMessage, Supporting {}
 
     /**
      * No row is at one of the points a border owes, the rule that drew it having a name.

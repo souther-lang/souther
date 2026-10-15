@@ -8,6 +8,7 @@ import souther.compiler.types.Type;
 import souther.compiler.values.AdmittedPlan;
 import souther.compiler.values.Allowance;
 import souther.compiler.values.PlannedValues;
+import souther.compiler.values.StoppedReading;
 import souther.compiler.values.UnreadReason;
 import souther.compiler.values.Value;
 import souther.compiler.values.ValueSet;
@@ -54,10 +55,12 @@ final class AdmissibleReading {
      * whether or not it is a number: which values a boolean has is as much an answer as which
      * values an integer has, and the reading that asked the carrier had no word for the first. */
     private final Map<FactSubject, Type> byName;
+    /** The same positions as chains of names, for asking which subexpression of a clause is one. */
+    private final Term.Chains chains;
     private final Symbols symbols;
-    /** What the declarations a position names say about themselves. Beside {@link #symbols} and not
-     *  read off it: what a declaration states is not what this module's world holds. */
-    private final PublishedDeclarations published;
+    /** What a value of each sum a position names can be. Beside {@link #symbols} and not read off
+     *  it: what a declaration states is not what this module's world holds. */
+    private final SumCases sums;
     /**
      * What puts two sets together, and what it is allowed to build doing it.
      *
@@ -93,13 +96,14 @@ final class AdmissibleReading {
      * which is what an alternative holding it turns on.
      */
     private final Set<Core> gaveUp = Collections.newSetFromMap(new IdentityHashMap<>());
-    private AdmissibleReading(Terms terms, Map<FactSubject, Type> byName,
-                              Symbols symbols, PublishedDeclarations published,
+    private AdmissibleReading(Terms terms, Map<FactSubject, Type> byName, Term.Chains chains,
+                              Symbols symbols, SumCases sums,
                               Allowance<FactSubject> allowed) {
         this.terms = terms;
         this.byName = byName;
+        this.chains = chains;
         this.symbols = symbols;
-        this.published = published;
+        this.sums = sums;
         this.allowed = allowed;
     }
 
@@ -108,10 +112,10 @@ final class AdmissibleReading {
      *  <p>No environment is held. A leaf is read at where it stands, which the fold hands down; a
      *  reading holding the environment the clause began in would read a rule under a binding at
      *  names that mean nothing there, and every such rule came out as a form nothing reads. */
-    static AdmissibleReading of(Terms terms, Map<FactSubject, Type> byName,
-                                Symbols symbols, PublishedDeclarations published,
+    static AdmissibleReading of(Terms terms, Map<FactSubject, Type> byName, Term.Chains chains,
+                                Symbols symbols, SumCases sums,
                                 Allowance<FactSubject> allowed) {
-        return new AdmissibleReading(terms, byName, symbols, published, allowed);
+        return new AdmissibleReading(terms, byName, chains, symbols, sums, allowed);
     }
 
     /** What this reading is spending, for whoever meets its answer with the next rule's. */
@@ -196,13 +200,10 @@ final class AdmissibleReading {
             case StringPredicates.Reading.Accepting it -> asking(part, position,
                     new AdmittedPlan.Pattern(states ? PatternPlan.of(it.accepts())
                             : PatternPlan.notMatching(it.accepts())));
-            // A rule whose text this could not work out, or whose text is no pattern the compiler
-            // reads, is a rule this did not read, and what that costs is the leaf's to say — over
-            // every position the clause names, which is more than this one wherever the text is
-            // written out of another. The second is a compile error where the call is checked, and
-            // this is what a reading of a module with that error in it says.
-            case StringPredicates.Reading.PatternNotRead _,
-                 StringPredicates.Reading.WrittenArgumentNotKnown _ -> null;
+            // A rule whose text this could not work out is a rule this did not read, and what that
+            // costs is the leaf's to say — over every position the clause names, which is more
+            // than this one wherever the text is written out of another.
+            case StringPredicates.Reading.WrittenArgumentNotKnown _ -> null;
         };
     }
 
@@ -274,8 +275,31 @@ final class AdmissibleReading {
      */
     private PlannedValues<FactSubject> unreadable(ClauseExpr.Part part, Denotations at) {
         Core e = part.of();
-        return shortOf(part, names(e, at), relatesTwoPositions(e, at)
-                ? UnreadReason.RELATES_TWO_POSITIONS : UnreadReason.FORM_NOT_READ);
+        UnreadReason why = relatesElements(part, at) ? UnreadReason.RELATES_ELEMENTS_OF_A_CONTAINER
+                : relatesTwoPositions(e, at) ? UnreadReason.RELATES_TWO_POSITIONS
+                : UnreadReason.FORM_NOT_READ;
+        return shortOf(part, names(e, at), why);
+    }
+
+    /**
+     * Whether {@code part} states that no two elements of a position come to one answer of a
+     * closure this compiler reads ({@link ElementsApart#stated}), of a container the builders of
+     * that position are told about ({@link ElementsApart#readsAPlace}).
+     *
+     * <p>Stated and not denied. Denied it says some two elements are alike, which nothing here
+     * builds for, and a closure this does not read is a form this did not read whatever it is
+     * handed — so both stay {@link UnreadReason#FORM_NOT_READ}. So does a container written any
+     * other way: a rule this calls one about how the elements stand is one a container composed
+     * for the position keeps.
+     */
+    private boolean relatesElements(ClauseExpr.Part part, Denotations at) {
+        if (!part.positive()
+                || !(Core.withoutStanding(part.of()) instanceof Core.PreservedCall call)) {
+            return false;
+        }
+        ElementsApart.Stated stated = ElementsApart.stated(call);
+        return stated != null && ElementsApart.readsAPlace(stated.container())
+                && positionIn(stated.container(), at) != null;
     }
 
     /**
@@ -313,7 +337,7 @@ final class AdmissibleReading {
             // was shown one. Where a reader goes about it is another question and is the whole rule
             // either way ({@code RuleAccounting.Why}); this is what tells two of them apart.
             ReadingShortfall one = new ReadingShortfall(part.at(), wroteIt(part.of()),
-                    RuleShortfall.Kind.LEAF, why, each);
+                    RuleShortfall.Kind.LEAF, StoppedReading.of(why), each);
             if (!mine.contains(one)) {
                 mine.add(one);
             }
@@ -464,8 +488,6 @@ final class AdmissibleReading {
         return Map.of(position, switch (stated.reading()) {
             case StringPredicates.Reading.Accepting _ ->
                     new StringRestriction.Admitting(said.at(position));
-            case StringPredicates.Reading.PatternNotRead _ ->
-                    new StringRestriction.NotKnown(BlockReason.forAPatternNotRead());
             case StringPredicates.Reading.WrittenArgumentNotKnown _ ->
                     new StringRestriction.NotKnown(new BlockReason.UnreadValueRule());
         });
@@ -506,7 +528,7 @@ final class AdmissibleReading {
             return ValueSet.just(value);
         }
         List<Value> every =
-                ValueUniverse.of(type, terms.newtypeInners(), terms.kinds(), published);
+                ValueUniverse.of(type, terms.newtypeInners(), terms.kinds(), sums);
         if (every == null) {
             return ValueSet.allBut(value);
         }
@@ -520,10 +542,12 @@ final class AdmissibleReading {
      *
      * <p>Read through the one fold there is, so a value written as an expression of values — two
      * strings joined — is the value it comes to. A case of an enumeration holds nothing and is not
-     * folded to anything; what it is is which declaration it is.
+     * folded to anything; what it is is which declaration it is, and a name given one is that case
+     * ({@link Terms#writtenValue}), as a name given a number is the number it folds to.
      */
     private Value valueOf(Core e, Denotations at) {
-        if (Core.withoutStanding(e) instanceof Core.UnitValue unit) {
+        Core written = terms.writtenValue(e, at);
+        if (Core.withoutStanding(written != null ? written : e) instanceof Core.UnitValue unit) {
             return Value.of(unit.data());
         }
         Object folded = Terms.folded(e, symbols, at);
@@ -560,8 +584,10 @@ final class AdmissibleReading {
             gather(li.body(), found, terms.inside(li, at));
             return;
         }
-        FactSubject here = terms.subjectOf(e, at);
-        if (here != null && byName.containsKey(here)) {
+        // Every subexpression standing here, and not only the node: a projection's shorter
+        // projections are not children, and each may be the position the clause names.
+        FactSubject here = terms.heldAt(e, at, chains);
+        if (here != null) {
             found.add(here);
             return;   // a position names itself, and nothing under it is a position of its own
         }

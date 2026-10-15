@@ -29,20 +29,21 @@ class WhoMayReadPatternTextTest {
 
     private static final CompiledOutputs COMPILED = CompiledOutputs.ofWhatThisRepositoryPublishes();
 
-    private static final String READER = "souther/compiler/regex/PatternParser";
+    /** The language's reader of pattern text, which is the shared text rules' and not in what this
+     *  repository publishes, so every call of it counted is a call from here. */
+    private static final String READER = "net/unit8/notation199x/pattern/PatternParser";
 
     /**
      * The places that read a pattern's text.
      *
      * <p>{@code CallElaborator} is where a call's pattern is settled. {@code ConstantAlgebra} folds
-     * the written tree, which is evaluated before any call in it is settled. {@code StringPredicates}
-     * reads a declaration's rules off the written tree for the same reason. Nothing in an output is
-     * here.
+     * the written tree, which is evaluated before any call in it is settled. Nothing in an output is
+     * here, and neither is a reader of a declaration's rules: those are read off the clauses the
+     * checker typed, where the pattern is already the meaning it settled.
      */
     private static final List<String> READS_PATTERN_TEXT = List.of(
             "souther/compiler/check/CallElaborator",
-            "souther/compiler/check/ConstantAlgebra",
-            "souther/compiler/check/StringPredicates");
+            "souther/compiler/check/ConstantAlgebra");
 
     @Test
     void everyPlaceThatReadsPatternTextIsWrittenDownHere() {
@@ -64,10 +65,6 @@ class WhoMayReadPatternTextTest {
         for (Path module : COMPILED.modules()) {
             for (ClassModel each : COMPILED.classesOf(module)) {
                 String reader = each.thisClass().asInternalName();
-                // The reader's own package is the reader: what it names of itself is not a reading.
-                if (reader.startsWith("souther/compiler/regex/")) {
-                    continue;
-                }
                 for (PoolEntry entry : each.constantPool()) {
                     if (entry instanceof MemberRefEntry member
                             && member.owner().name().stringValue().equals(READER)

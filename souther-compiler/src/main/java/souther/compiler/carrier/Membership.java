@@ -49,6 +49,11 @@ public final class Membership<E> {
         return new Membership<>(Set.copyOf(in));
     }
 
+    /** Nothing in. */
+    public static <E> Membership<E> none() {
+        return built(_ -> { });
+    }
+
     /** How {@link #built} is filled: an element to state, and nothing this can be asked to do
      *  besides state one. */
     public interface Members<E> {
@@ -58,6 +63,11 @@ public final class Membership<E> {
     /** Whether {@code element} is in. */
     public boolean contains(E element) {
         return in.contains(Objects.requireNonNull(element, "an element"));
+    }
+
+    /** Whether nothing is in, which is the same answer whatever order anything was handed in. */
+    public boolean isEmpty() {
+        return in.isEmpty();
     }
 
     @Override

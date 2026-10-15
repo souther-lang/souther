@@ -1,5 +1,10 @@
 package souther.compiler.inputs;
 
+import souther.compiler.types.Type;
+
+import java.util.Objects;
+import java.util.function.UnaryOperator;
+
 /**
  * Where the values an operation walked came from, for a number taken over a run of them.
  *
@@ -26,6 +31,42 @@ public sealed interface RunSource {
     TermPath subjectPath();
 
     /**
+     * The same run, over the values read from where {@code moved} puts this one's — or null where
+     * what stands there is no one run, as a run inside an element of another container is not.
+     */
+    default RunSource movedTo(UnaryOperator<TermPath> moved) {
+        TermPath at = moved.apply(subjectPath());
+        return switch (this) {
+            case ProjectedOccurrences _ -> overTheOccurrencesAt(at);
+            // Moved inside another container the run would be over some of the occurrences of the
+            // path it was over every one of, so it keeps the containers it was in.
+            case FlattenedOccurrences flat -> at != null
+                    && at.containersHoldingIt().size() == flat.subjectPath().containersHoldingIt().size()
+                    ? new FlattenedOccurrences(at) : null;
+            case ComputedOccurrences computed ->
+                    computedOverTheElementsAt(at, computed.computation(), computed.each());
+        };
+    }
+
+    /**
+     * Every value standing at {@code where}, where the walk was shown to be over every occurrence
+     * of it — or null where {@code where} is no position inside a container.
+     *
+     * <p>Asked of a position some reader certified, and not of any position ({@link
+     * InputReads#everyElementOf}): a path inside more than one container is the path of every
+     * list's elements in every element of the outer one, and a walk over one of those lists is over
+     * some of them. {@link #overTheOccurrencesAt} stays the question about a position that is not
+     * certified, and refuses what this accepts.
+     */
+    static RunSource overEveryOccurrenceAt(TermPath where) {
+        if (where == null || !where.insideAContainer()) {
+            return null;
+        }
+        return where.containersHoldingIt().size() == 1 ? new ProjectedOccurrences(where)
+                : new FlattenedOccurrences(where);
+    }
+
+    /**
      * The values a walk over {@code where} was taken of, or null where what is read from there is
      * not one run.
      *
@@ -41,7 +82,7 @@ public sealed interface RunSource {
      * Whether every occurrence of {@code where} is in one run, which is what
      * {@link ProjectedOccurrences} says of the path it holds.
      *
-     * <p>One sequence, and the two ways of not being one are one question. None of them is a run at
+     * <p>One container, and the two ways of not being one are one question. None of them is a run at
      * all — a position holding one value is one value. Two of them is a run this cannot name:
      * {@code groups[*].lines[*].amount} says every line of every group, a walk over one group's
      * lines is over some of them, and the path is the whole of what a {@link ProjectedOccurrences}
@@ -53,7 +94,7 @@ public sealed interface RunSource {
      * does, so the gap is one reading short and never a line drawn wrong.
      */
     private static boolean namesOneRun(TermPath where) {
-        return where.sequencesContainingIt().size() == 1;
+        return where.containersHoldingIt().size() == 1;
     }
 
     /**
@@ -72,24 +113,107 @@ public sealed interface RunSource {
     record ProjectedOccurrences(TermPath subjectPath) implements RunSource {
 
         public ProjectedOccurrences {
-            java.util.Objects.requireNonNull(subjectPath, "a run is read from somewhere");
-            // One invariant, and the two ways of failing it are two sentences about it rather than
-            // two guards: a reader with a third thing to say about the path says it in the question.
-            if (!namesOneRun(subjectPath)) {
-                throw new IllegalArgumentException(subjectPath.insideASequence()
-                        ? "a run is over every occurrence of the path it is read from, and `"
-                                + subjectPath + "` stands inside "
-                                + subjectPath.sequencesContainingIt().size()
-                                + " sequences, so which of its occurrences a walk was over is not"
-                                + " said by it"
-                        : "a run stands inside a sequence, and `" + subjectPath + "` is one position"
-                                + " holding one value");
+            requireOneRun(subjectPath);
+        }
+
+        @Override
+        public String toString() {
+            return subjectPath.toString();
+        }
+    }
+
+    /**
+     * The values standing at one position inside more than one container, every occurrence of it:
+     * what each of the lists of an outer list holds, put end to end.
+     *
+     * <p>As many values as the position has in all, each of the walk's elements one of them. That
+     * is the whole of what is claimed, and it is made only where the walk was shown to be over every
+     * occurrence ({@link #overEveryOccurrenceAt}). The path alone says no such thing — a walk over
+     * one element's list stands at the same path — so what makes this a run is where it was
+     * made and not the path it holds, and a run made anywhere else would total some of the values
+     * a rule is about the whole of.
+     */
+    record FlattenedOccurrences(TermPath subjectPath) implements RunSource {
+
+        public FlattenedOccurrences {
+            Objects.requireNonNull(subjectPath, "a run is read from somewhere");
+            if (subjectPath.containersHoldingIt().size() < 2) {
+                throw new IllegalArgumentException("`" + subjectPath + "` stands inside "
+                        + subjectPath.containersHoldingIt().size()
+                        + " containers, and a run over one is a ProjectedOccurrences");
             }
         }
 
         @Override
         public String toString() {
             return subjectPath.toString();
+        }
+    }
+
+    /**
+     * The values a walk computed of each element standing at one position.
+     *
+     * <p>As many values as there are elements, each made of that element by {@code computation}.
+     * What is claimed is the same as of {@link ProjectedOccurrences} — one value per element, every
+     * element in it — with the value no longer a place of the element but what the closure made of
+     * it. The elements stand at {@code elements}; what is added up is not at any position, which is
+     * why this is a source of its own and not a path with something written on it. A path says where
+     * an input's values are, and a multiplicity or an operation in one would make two spellings of a
+     * location.
+     *
+     * <p>Two runs over the same elements are two runs when they compute different things: the total
+     * of {@code q * 2} is not the total of {@code q}, and what makes them different is the
+     * computation, so it is part of what these are equal by.
+     *
+     * @param elements    where each element of the walked container stands
+     * @param computation what the closure made of one of them
+     * @param each        what one computed value stands as, with the names it is written under
+     *                    taken off
+     */
+    record ComputedOccurrences(TermPath elements, ElementValue computation, Type each)
+            implements RunSource {
+
+        public ComputedOccurrences {
+            requireOneRun(elements);
+            Objects.requireNonNull(computation, "a computed run is computed by something");
+            Objects.requireNonNull(each, "and what it computes stands as some type");
+        }
+
+        @Override
+        public TermPath subjectPath() {
+            return elements;
+        }
+
+        @Override
+        public String toString() {
+            return "{" + computation + " | " + elements + "}";
+        }
+    }
+
+    /**
+     * The values computed of each element of the walk over {@code elements}, or null where those
+     * elements are not one run.
+     */
+    static RunSource computedOverTheElementsAt(TermPath elements, ElementValue computation,
+                                               Type each) {
+        return elements != null && computation != null && each != null && namesOneRun(elements)
+                ? new ComputedOccurrences(elements, computation, each) : null;
+    }
+
+    /** The one invariant of every run, said as a refusal for a run made without asking. */
+    private static void requireOneRun(TermPath where) {
+        Objects.requireNonNull(where, "a run is read from somewhere");
+        // One invariant, and the two ways of failing it are two sentences about it rather than
+        // two guards: a reader with a third thing to say about the path says it in the question.
+        if (!namesOneRun(where)) {
+            throw new IllegalArgumentException(where.insideAContainer()
+                    ? "a run is over every occurrence of the path it is read from, and `"
+                            + where + "` stands inside "
+                            + where.containersHoldingIt().size()
+                            + " containers, so which of its occurrences a walk was over is not"
+                            + " said by it"
+                    : "a run stands inside a container, and `" + where + "` is one"
+                            + " position holding one value");
         }
     }
 }

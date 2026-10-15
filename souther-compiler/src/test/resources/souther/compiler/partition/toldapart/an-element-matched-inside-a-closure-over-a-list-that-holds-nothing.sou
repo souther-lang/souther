@@ -1,0 +1,27 @@
+// Nor a `match` on an element inside a closure applied to a list that holds nothing there.
+//
+// Past the first guard the list is empty, so `List.all` answers true and never applies the closure.
+// No run reaches the `match`, so the body tells no element apart there. The guard on what
+// `List.all` answers still reads the elements, and which class goes which way through it is not
+// read into classes.
+//
+// told apart at List.length(xs): 2 groups of 2
+// told apart at xs[*]: unread here
+module example.elementmatchedinnothing
+
+data North
+data South
+data Region = North | South
+
+data Ok = { n: Int }
+
+behavior judge : (xs: List<Region>) -> Ok
+    constructs Ok
+
+let judge (xs) = {
+    guard List.length(xs) == 0 else Ok { n = 0 }
+    guard List.all(r -> match r with
+        | North -> true
+        | South -> false, xs) else Ok { n = 1 }
+    Ok { n = 2 }
+}

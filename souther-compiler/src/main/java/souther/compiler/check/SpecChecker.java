@@ -98,11 +98,16 @@ public final class SpecChecker {
             }
             edges.put(new ValueName.Behavior(module.name(), b.name()), out);
         }
+        // Which behaviors lie on a cycle, worked out once over the whole graph; the way round is
+        // found for the one that is reported.
+        Set<ValueName.Behavior> onACycle = Cycles.groups(edges).keySet();
         for (Hir.BehaviorDef b : module.behaviors()) {
             ValueName.Behavior self = new ValueName.Behavior(module.name(), b.name());
-            List<ValueName.Behavior> path = new ArrayList<>();
-            if (reaches(self, self, edges, path, new HashSet<>())) {
-                path.add(self);
+            if (!onACycle.contains(self)) {
+                continue;
+            }
+            List<ValueName.Behavior> path = Cycles.roundFrom(self, edges);
+            if (!path.isEmpty()) {
                 List<String> written = new ArrayList<>();
                 for (ValueName.Behavior each : path) {
                     written.add(each.name());
@@ -112,25 +117,6 @@ public final class SpecChecker {
                                 .hint(new DeclarationMessage.ABehaviorDoesNotRecurse()).say(new DeclarationMessage.ABehaviorReachesItself(b.name(), String.join(" -> ", written))).build());
             }
         }
-    }
-
-    /** Whether {@code target} is reachable from {@code from}, recording the way there in
-     *  {@code path}. {@code path} starts with {@code from} and ends at the last step before
-     *  {@code target}. */
-    private static boolean reaches(ValueName.Behavior from, ValueName.Behavior target,
-                                   Map<ValueName.Behavior, List<ValueName.Behavior>> edges,
-                                   List<ValueName.Behavior> path, Set<ValueName.Behavior> seen) {
-        if (!seen.add(from)) {
-            return false;
-        }
-        path.add(from);
-        for (ValueName.Behavior next : edges.getOrDefault(from, List.of())) {
-            if (next.equals(target) || reaches(next, target, edges, path, seen)) {
-                return true;
-            }
-        }
-        path.remove(path.size() - 1);
-        return false;
     }
 
     /**
@@ -202,7 +188,7 @@ public final class SpecChecker {
      * definition, so a signature on one is rejected.
      */
     static void checkExposedPipeOutputs(Hir.Module module, Map<String, Sig> sigs,
-            PublishedDeclarations published) {
+            DeclarationKinds kinds, SumCases sums) {
         Set<String> named = Set.copyOf(module.exposing().named());
         Set<String> pipeNames = new HashSet<>();
         for (Hir.BehaviorDef b : module.behaviors()) {
@@ -229,7 +215,7 @@ public final class SpecChecker {
                 continue;
             }
             Set<TypeSymbol> inferred =
-                    new LinkedHashSet<>(AtomSpace.subjectAtoms(sig.outputType(), published));
+                    new LinkedHashSet<>(AtomSpace.subjectAtoms(sig.outputType(), kinds, sums));
             Hir.RetType declared = module.exposedOutputs().get(pipe.name());
             if (declared == null) {
                 throw CompileException.of(Diagnostic.at(pipe.pos())
@@ -245,7 +231,7 @@ public final class SpecChecker {
                 throw new Unanswerable(declared.pos());
             }
             Set<TypeSymbol> declaredCases =
-                    new LinkedHashSet<>(AtomSpace.subjectAtoms(declaredOut, published));
+                    new LinkedHashSet<>(AtomSpace.subjectAtoms(declaredOut, kinds, sums));
             if (!inferred.equals(declaredCases)) {
                 throw CompileException.of(Diagnostic.at(pipe.pos())
                                 
@@ -268,13 +254,14 @@ public final class SpecChecker {
     static Checked checkSpecFn(Hir.SpecBehavior spec, Hir.FnDef fn, Hir.Expr inlinedBody,
                                     InvariantChecker.Source discharge,
                                     Symbols symbols, DeclarationAccess declarations,
+                                    ReachedValueLocations reachedLocations,
                                     ReadingPolicy policy,
                                     Map<ValueName.Behavior, ReqSig> calleeSigs,
                                     Map<ValueName.Behavior, ReqSig> reqSigs, HelperInliner inliner,
-                                    Map<String, Type> recursiveHelperFns,
+                                    Map<String, StandingSignature> recursiveHelperFns,
                                     Map<String, DataChecker.Constructs> recHelperConstructs,
                                     Preserved.SettledValues settledValues) {
-        PublishedDeclarations published = declarations.published();
+        SumCases sums = declarations.sums();
         DeclarationKinds kinds = declarations.kinds();
         if (fn.declaredReturn() != null) {
             throw CompileException.of(Diagnostic
@@ -345,11 +332,10 @@ public final class SpecChecker {
         // A parameter of the same name wins: a binding in force wins over the declaration it shadows
         // (spec §fn-rules), so an input written `depth` is the input and not the helper spelled that way.
         Scope tenv = env.reaching(recursiveHelperFns);
-        // Check functions passed to helper parameters (e.g. a combinator's predicate) against their
-        // declared types first, so a mismatch names the parameter, not the derivation it expands to.
-        // A nested fold reaches `List.foldFrom` inside a block, so its signature must be in scope here.
-        HelperTyping.checkFunctionArgs(fn.writtenBody(), tenv, symbols, published, kinds, reqSigs,
-                inliner);
+        CheckContext typing = new CheckContext(symbols, declarations, reachedLocations, null, reqSigs)
+                .withCallees(calleeSigs)
+                .withDependencies(dependsOn)
+                .preserving(Preserved.valuesAlreadySettled(settledValues));
         // The body arrives with helper calls already expanded (the Lower stage, ADR-0021): it is
         // checked as one expression, so a helper's constructions and injected calls count toward this
         // behavior's permission and dependencies — exactly as if the code had been written inline (§blocks).
@@ -357,13 +343,9 @@ public final class SpecChecker {
 
         // push the declared output type into the body so a body that is directly an empty collection
         // (or a construction whose field is one) takes the declared type rather than a bottom
-        Core answered = Elaborator.elaborate(body, tenv,
-                new CheckContext(symbols, declarations, null, reqSigs)
-                        .withCallees(calleeSigs)
-                        .withDependencies(dependsOn)
-                        .preserving(Preserved.valuesAlreadySettled(settledValues)), output);
+        Core answered = Elaborator.elaborate(body, tenv, typing, output);
         Type rt = answered.type();
-        if (!TypeOps.assignable(rt, output, published)) {
+        if (!TypeOps.assignable(rt, output, kinds, sums)) {
             throw CompileException.of(Diagnostic
                             .at(body.pos())
                             .diff(Type.show(rt, output), Type.show(output, rt)).say(new BehaviorMessage.TheBodyIsNotWhatTheBehaviorReturns(spec.name(), Type.show(output), Type.show(rt))).build());
@@ -473,7 +455,7 @@ public final class SpecChecker {
         // representation there is none of is not analyzed at all, rather than analyzed over the
         // emitted tree, whose operations are no longer operations.
         CheckContext dischargeContext = discharge == null ? null
-                : new CheckContext(symbols, declarations, null, reqSigs)
+                : new CheckContext(symbols, declarations, reachedLocations, null, reqSigs)
                         .withCallees(calleeSigs)
                         .withDependencies(dependsOn).forDischarge(settledValues);
         Core dischargeBody = discharge == null ? null
@@ -549,13 +531,15 @@ public final class SpecChecker {
      * well: two stages may depart cases of one spelling from two modules.
      */
     static void checkUnionMemberNames(Hir.Module module, Map<String, Sig> sigs,
-                                      PublishedDeclarations published) {
+                                      DeclarationKinds kinds,
+                                      SumCases sums) {
         for (Hir.BehaviorDef b : module.behaviors()) {
             Sig sig = sigs.get(b.name());
             if (sig == null) {
                 continue;
             }
-            TypeSymbol.AtModule[] clash = TypeOps.ambiguousMembers(sig.outputType(), published);
+            TypeSymbol.AtModule[] clash = TypeOps.ambiguousMembers(sig.outputType(), kinds,
+                    sums);
             if (clash == null) {
                 continue;
             }
@@ -573,7 +557,7 @@ public final class SpecChecker {
      */
     static void checkUnionMemberFields(Hir.Module module, Map<String, Sig> sigs, Symbols symbols,
                                        DeclarationKinds kinds,
-                                       PublishedDeclarations published) {
+                                       SumCases sums) {
         for (Hir.BehaviorDef b : module.behaviors()) {
             Sig sig = sigs.get(b.name());
             if (sig == null || !(sig.outputType() instanceof Type.Union)) {
@@ -582,12 +566,13 @@ public final class SpecChecker {
             // The key is the settled representation's, the same one a named sum's cases are held to
             // (`DataChecker`). Written here as a constant of its own, this checker and the codec that
             // writes the key were two places the language's own spelling was kept.
-            if (!(Boundary.of(sig.outputType(), kinds, published).representation()
+            if (!(Boundary.of(sig.outputType(), kinds, sums).representation()
                     instanceof Boundary.Representation.Discriminated(String tagKey, String _))) {
                 continue;
             }
             TypeSymbol carrying =
-                    TypeOps.memberCarryingField(sig.outputType(), tagKey, symbols, published);
+                    TypeOps.memberCarryingField(sig.outputType(), tagKey, symbols, kinds,
+                            sums);
             if (carrying == null) {
                 continue;
             }

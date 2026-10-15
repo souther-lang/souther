@@ -6,9 +6,11 @@ import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.types.TypeSymbol;
+import souther.compiler.values.AdmissibleSet;
+import souther.compiler.values.ValueSet;
 
 import java.math.BigDecimal;
-import java.util.Set;
+import java.util.Optional;
 
 /**
  * How many values the value at a name may take, which is not how much it holds.
@@ -43,21 +45,15 @@ public final class OccurrenceValues {
 
     /** What the declaration {@code named} is leaves the values at each of its names. */
     public static OccurrenceValues of(TypeSymbol.AtModule named, RuleReadingContext reading) {
-        return of(named, reading, Set.of());
+        return new OccurrenceValues(InvariantChecker.seedFields(named, reading));
     }
 
     /**
-     * The same, with the declarations {@code granted} names supposed to hold values.
-     *
-     * <p>Read this way by whatever is asking what would be true if some declaration had values. Its
-     * rules are what say it has none — its own, and the ones under whatever it wraps — so supposing
-     * it has a value is not reading it at all.
+     * The same, off a reading somebody has already made of the declaration — the one a supposing
+     * made ({@link Supposing#readingOf}) among them.
      */
-    static OccurrenceValues of(TypeSymbol.AtModule named, RuleReadingContext reading,
-                               Set<TypeSymbol> granted) {
-        return new OccurrenceValues(
-                InvariantChecker.seedFields(named, reading, java.util.Map.of(),
-                        InvariantChecker.Reach.stoppingAt(granted)));
+    static OccurrenceValues of(InvariantChecker.Seeded seeded) {
+        return new OccurrenceValues(seeded);
     }
 
     /**
@@ -96,7 +92,13 @@ public final class OccurrenceValues {
                 || !(apart.value().plus(ExactRatio.ONE) instanceof ExactAnswer.Held<ExactRatio> held)) {
             return Cardinality.UNKNOWN;
         }
-        BigDecimal span = held.value().asWrittenDecimal();
+        // A whole number, so a decimal it is; and one the host may have no room to write out, which
+        // is a span this cannot count for the same reason as the two above.
+        if (!(held.value().writtenDecimal() instanceof ExactAnswer.Held<Optional<BigDecimal>> written)
+                || written.value().isEmpty()) {
+            return Cardinality.UNKNOWN;
+        }
+        BigDecimal span = written.value().get();
         if (span.signum() <= 0) {
             return Cardinality.none(new Emptiness.EmptyNumericInterval());
         }
@@ -105,6 +107,28 @@ public final class OccurrenceValues {
         } catch (ArithmeticException tooMany) {
             return Cardinality.UNKNOWN;
         }
+    }
+
+    /**
+     * How many values the rules name at {@code path}, or {@link Cardinality#UNKNOWN} where they
+     * name no finite set of them.
+     *
+     * <p>Off the set the reading admits there, which is an upper bound however much of the rules
+     * was read ({@link AdmissibleSet}): a rule that went unread can refuse one of the values named
+     * and never add one. So the count is good as an end whether or not the set is exact, and that
+     * every value in it can be built is a different question, which this does not answer.
+     *
+     * <p>A set naming nothing is a reading that admits nothing, and that is a proof the declaration
+     * carries and asks before this ({@link FieldDomains#holdsNothing}) — a count of none is not
+     * something to read off a size.
+     */
+    public Cardinality.Standing namedValuesAt(RuleKey path) {
+        if (seeded == null
+                || !(seeded.admitted().get(path) instanceof ValueSet.Finite finite)
+                || finite.values().isEmpty()) {
+            return Cardinality.UNKNOWN;
+        }
+        return Cardinality.atMost(finite.values().size());
     }
 
     /** The number an end stops at, or null where it stops at nothing whole. */

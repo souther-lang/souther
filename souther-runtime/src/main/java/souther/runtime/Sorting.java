@@ -32,23 +32,31 @@ final class Sorting {
     private Sorting() {}
 
     /** {@code xs} in {@code order}, stably, as a new list; {@code xs} is left as it was. */
-    @SuppressWarnings("unchecked")
     static <T> PersistentVector<T> stably(Collection<? extends T> xs, Comparator<? super T> order) {
+        return stably(xs, order, WorkCheckpoint.NONE);
+    }
+
+    /** {@link #stably(Collection, Comparator)}, passing {@code checkpoint} once for each element
+     *  moved and each comparison made. What a comparison does inside is the comparator's to pass. */
+    @SuppressWarnings("unchecked")
+    static <T> PersistentVector<T> stably(Collection<? extends T> xs, Comparator<? super T> order,
+                                          WorkCheckpoint checkpoint) {
         int n = xs.size();
         Slots from = new Slots(n);
         int at = 0;
         for (T x : xs) {
+            checkpoint.pass();
             from.set(at++, x);
         }
         for (long lo = 0; lo < n; lo += RUN) {
-            insertionSort(from, (int) lo, (int) Math.min(lo + RUN, n), (Comparator<Object>) order);
+            insertionSort(from, (int) lo, (int) Math.min(lo + RUN, n), (Comparator<Object>) order, checkpoint);
         }
         Slots to = new Slots(n);
         for (long width = RUN; width < n; width *= 2) {
             for (long lo = 0; lo < n; lo += 2 * width) {
                 int mid = (int) Math.min(lo + width, n);
                 int hi = (int) Math.min(lo + 2 * width, n);
-                merge(from, to, (int) lo, mid, hi, (Comparator<Object>) order);
+                merge(from, to, (int) lo, mid, hi, (Comparator<Object>) order, checkpoint);
             }
             Slots merged = to;
             to = from;
@@ -56,6 +64,7 @@ final class Sorting {
         }
         PersistentVector.Builder<T> out = new PersistentVector.Builder<>();
         for (int i = 0; i < n; i++) {
+            checkpoint.pass();
             out.add((T) from.get(i));
         }
         return out.build();
@@ -63,11 +72,12 @@ final class Sorting {
 
     /** Sorts {@code [lo, hi)} of {@code slots} in place; an element moves left only past one the
      *  order puts strictly after it, which is what keeps equal elements in their order. */
-    private static void insertionSort(Slots slots, int lo, int hi, Comparator<Object> order) {
+    private static void insertionSort(Slots slots, int lo, int hi, Comparator<Object> order,
+                                      WorkCheckpoint checkpoint) {
         for (int i = lo + 1; i < hi; i++) {
             Object x = slots.get(i);
             int j = i;
-            while (j > lo && order.compare(slots.get(j - 1), x) > 0) {
+            while (j > lo && compared(order, slots.get(j - 1), x, checkpoint) > 0) {
                 slots.set(j, slots.get(j - 1));
                 j--;
             }
@@ -75,12 +85,20 @@ final class Sorting {
         }
     }
 
+    /** One comparison, passed for. */
+    private static int compared(Comparator<Object> order, Object a, Object b, WorkCheckpoint checkpoint) {
+        checkpoint.pass();
+        return order.compare(a, b);
+    }
+
     /** Merges the sorted {@code [lo, mid)} and {@code [mid, hi)} of {@code from} into the same
      *  places of {@code to}, taking from the left run on a tie. */
-    private static void merge(Slots from, Slots to, int lo, int mid, int hi, Comparator<Object> order) {
+    private static void merge(Slots from, Slots to, int lo, int mid, int hi, Comparator<Object> order,
+                              WorkCheckpoint checkpoint) {
         int left = lo;
         int right = mid;
         for (int out = lo; out < hi; out++) {
+            checkpoint.pass();
             if (right >= hi || (left < mid && order.compare(from.get(left), from.get(right)) <= 0)) {
                 to.set(out, from.get(left++));
             } else {

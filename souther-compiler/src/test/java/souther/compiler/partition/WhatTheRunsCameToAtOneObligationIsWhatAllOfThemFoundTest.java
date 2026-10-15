@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -74,9 +75,11 @@ class WhatTheRunsCameToAtOneObligationIsWhatAllOfThemFoundTest {
     @Test
     void whatTheRunsMetOfThisCompilersIsEveryOneOfThem() {
         CameToNothing stoppedAtOne = new CameToNothing(NO_CANDIDATE.why(),
-                CompositionShortfall.of(List.of(CompositionBudget.NUMBERS_OF_A_SET_TRIED)));
+                CompositionShortfall.of(List.of(CompositionBudget.NUMBERS_OF_A_SET_TRIED)),
+                Set.of());
         CameToNothing stoppedAtAnother = new CameToNothing(NO_CANDIDATE.why(),
-                CompositionShortfall.of(List.of(CompositionBudget.STEPS_A_SEARCH_MAY_TAKE)));
+                CompositionShortfall.of(List.of(CompositionBudget.STEPS_A_SEARCH_MAY_TAKE)),
+                Set.of());
 
         ClassDisposition.AcrossRuns both = ClassDisposition.acrossRuns(List.of(
                 new ClassDisposition.Unresolved(stoppedAtOne),
@@ -85,7 +88,7 @@ class WhatTheRunsCameToAtOneObligationIsWhatAllOfThemFoundTest {
         assertEquals(new ClassDisposition.AcrossRuns.Unresolved(new CameToNothing(
                         NO_CANDIDATE.why(),
                         CompositionShortfall.of(List.of(CompositionBudget.NUMBERS_OF_A_SET_TRIED,
-                                CompositionBudget.STEPS_A_SEARCH_MAY_TAKE)))),
+                                CompositionBudget.STEPS_A_SEARCH_MAY_TAKE)), Set.of())),
                 both,
                 "both figures, so a reader is told everything raising would reach");
     }

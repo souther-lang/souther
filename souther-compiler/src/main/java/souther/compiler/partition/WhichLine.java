@@ -93,9 +93,9 @@ public sealed interface WhichLine {
      * A comparison written in a body, which is a rule apiece.
      *
      * <p>No number, because there is nothing below the rule to number. A condition holding three
-     * comparisons is three rules, each with a line of its own, so there is no second line of this one
-     * to tell it from; two lines of it at one value are told apart by what each says about its own
-     * value ({@link LineFacts}), the way two lines of one part are.
+     * comparisons is three rules, each with a line of its own. Where the comparison's definition
+     * writes no choice on the way to it, it is one line however many places the calls of it put
+     * it: those places are readings of the line, and none of them is a second line.
      *
      * <p>A comparison and nothing else of what a body writes. A predicate tells a set of values from
      * the rest and draws no line to be one of; a fork is a rule by having been written, and a line of
@@ -108,6 +108,25 @@ public sealed interface WhichLine {
         public OfAComparison {
             if (rule == null) {
                 throw new IllegalArgumentException("a line of a body is some comparison's");
+            }
+        }
+    }
+
+    /**
+     * One of the lines a comparison written in a body draws, where its definition writes a choice
+     * on the way to it.
+     *
+     * <p>Still one rule. {@code Int.max(a, b) > 5} is one comparison an author wrote and one rule,
+     * and the line under each arm of {@code max} is a line of it: a row at one says nothing about
+     * the other. Which of them this is, is the arms its author took ({@link PartOfAComparison}).
+     */
+    record OfAPartOfAComparison(RuleRef.Comparison rule, PartOfAComparison part)
+            implements WhichLine {
+
+        public OfAPartOfAComparison {
+            if (rule == null || part == null) {
+                throw new IllegalArgumentException(
+                        "a line of a statement of several is some line of some comparison's");
             }
         }
     }

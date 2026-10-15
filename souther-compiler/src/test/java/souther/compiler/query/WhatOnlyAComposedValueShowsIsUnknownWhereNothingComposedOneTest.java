@@ -160,6 +160,6 @@ class WhatOnlyAComposedValueShowsIsUnknownWhereNothingComposedOneTest {
                     .linesReadIn(db, module, behavior, sigs.value(), readInputs, reading)
                     .made().orElseGet(List::of));
         }
-        return BorderObligationPointAssessment.across(readings);
+        return BorderObligationPointAssessment.across(readings, _ -> List.of());
     }
 }

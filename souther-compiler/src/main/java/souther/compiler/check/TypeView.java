@@ -63,10 +63,36 @@ public record TypeView(Type declared, List<TypeSymbol> wrappers, Shape shape) {
      * where a value's base is.
      */
     public static TypeView of(Type type, NewtypeInners inners, Symbols symbols,
-                              PublishedDeclarations published) {
+                              DeclarationKinds kinds, SumCases sums) {
         TypeOps.NewtypeSpine spine = TypeOps.newtypeSpine(type, inners);
         return new TypeView(type, spine.layers().stream().map(TypeOps.Layer::named).toList(),
-                shapeOf(spine.terminal(), symbols, published));
+                shapeOf(spine.terminal(), symbols, kinds, sums));
+    }
+
+    /**
+     * What a value of {@code type} is, with every name off: {@link #of}'s {@link #shape}, for a
+     * reader that asks nothing about the names.
+     *
+     * <p>Read off the spine's terminal as {@code inners} answers it, so a reader handed the
+     * compilation's answer does not take the names off one at a time to learn what is under them.
+     */
+    public static Shape shapeOf(Type type, NewtypeInners inners, Symbols symbols,
+                                DeclarationKinds kinds, SumCases sums) {
+        return shapeOf(inners.terminal(type), symbols, kinds, sums);
+    }
+
+    /**
+     * How {@code type} is read where the step that takes a name off ({@link TypeOps#outermost})
+     * found none on it.
+     *
+     * <p>That step is the first one {@link TypeOps#newtypeSpine} takes, so a type it found no name
+     * on has an empty spine, and this is what {@link #of} answers for it. For a reader that has
+     * already taken the step: asked through {@link #of}, the same question would be put to the
+     * declarations a second time.
+     */
+    static TypeView wearingNoName(Type type, Symbols symbols, DeclarationKinds kinds,
+                                  SumCases sums) {
+        return new TypeView(type, List.of(), shapeOf(type, symbols, kinds, sums));
     }
 
     /**
@@ -77,14 +103,27 @@ public record TypeView(Type declared, List<TypeSymbol> wrappers, Shape shape) {
      * answer is kept when a declaration only moves, and read off the tree it is worked out again.
      * Every caller of this is a reader that has not been handed the first, and a test counts them.
      */
-    public static TypeView asWritten(Type type, Symbols symbols, PublishedDeclarations published) {
-        return of(type, NewtypeInners.asWritten(symbols), symbols, published);
+    public static TypeView asWritten(Type type, Symbols symbols, DeclarationKinds kinds,
+                                     SumCases sums) {
+        return of(type, NewtypeInners.asWritten(symbols), symbols, kinds, sums);
     }
 
     /** Whether any name is worn over the shape — which is a fact about how the value is written,
      *  never about what it is. */
     public boolean isWrapped() {
         return !wrappers.isEmpty();
+    }
+
+    /**
+     * The name the value is written under on the outside, or null where it wears none.
+     *
+     * <p>The one name a reader of the value's rules asks. A name reads the rules of every name
+     * beneath it as its walk reaches them ({@link DeclarationReadings#ownerOf}), so the reading of
+     * this one is the reading of the whole chain — and a reader that asked each name and met the
+     * answers would count the inner rules once per name above them.
+     */
+    public TypeSymbol outermostName() {
+        return wrappers.isEmpty() ? null : wrappers.getFirst();
     }
 
     /**
@@ -97,8 +136,8 @@ public record TypeView(Type declared, List<TypeSymbol> wrappers, Shape shape) {
      * newtype here is one whose {@code value} the walk could not reach, which is a name that
      * resolved to nothing usable rather than a shape.
      */
-    private static Shape shapeOf(Type terminal, Symbols symbols,
-                                 PublishedDeclarations published) {
+    private static Shape shapeOf(Type terminal, Symbols symbols, DeclarationKinds kinds,
+                                 SumCases sums) {
         return switch (terminal) {
             case Type.Prim prim -> new Shape.Scalar(prim);
             case Type.Never _ -> new Shape.Uninhabited();
@@ -112,7 +151,7 @@ public record TypeView(Type declared, List<TypeSymbol> wrappers, Shape shape) {
             case Type.OptionOf option -> new Shape.Optional(option.element());
             case Type.TupleOf tuple -> new Shape.Tuple(tuple.elements());
             case Type.FnOf fn -> new Shape.Function(fn.params(), fn.result());
-            case Type.Ref ref -> denoted(ref.name(), symbols, published);
+            case Type.Ref ref -> denoted(ref.name(), symbols, kinds, sums);
         };
     }
 
@@ -123,11 +162,13 @@ public record TypeView(Type declared, List<TypeSymbol> wrappers, Shape shape) {
      * <p>A newtype arriving here is one the spine stopped on — its {@code value} was not declared,
      * so there is no base to read a shape from.
      */
-    private static Shape denoted(TypeSymbol name, Symbols symbols,
-                                 PublishedDeclarations published) {
+    private static Shape denoted(TypeSymbol name, Symbols symbols, DeclarationKinds kinds,
+                                 SumCases sums) {
         return switch (symbols.declaredNode(name)) {
-            case Hir.SumData sum ->
-                    new Shape.Sum(name, TypeOps.commonSpreadOf(sum, symbols, published));
+            case Hir.SumData _ -> {
+                SumCases.Cases reaches = reached(name, kinds, sums);
+                yield new Shape.Sum(name, reaches, TypeOps.commonSpreadOf(reaches, symbols));
+            }
             case Hir.UnitData _ -> new Shape.Unit(name);
             case Hir.Data data when data.newtype() -> new Shape.Unresolved(name);
             // A product shape states an order, so the order is asked of what answers it and the
@@ -137,6 +178,18 @@ public record TypeView(Type declared, List<TypeSymbol> wrappers, Shape shape) {
                     laidOut(TypeOps.fieldLayout(data, symbols), TypeOps.fieldTypes(data, symbols)));
             case null -> new Shape.Unresolved(name);
         };
+    }
+
+    /**
+     * What a value of the sum {@code name} declares can be, as {@code sums} answers it.
+     *
+     * <p>A declaration this scope says is a sum and the declarations' forms do not answer for is one
+     * read off another world than the answers; nothing descends it, so the one leaf there is is the
+     * name itself, and nothing says every leaf is a unit.
+     */
+    private static SumCases.Cases reached(TypeSymbol name, DeclarationKinds kinds, SumCases sums) {
+        SumCases.Cases reached = AtomSpace.sumNamedBy(Type.ref(name), kinds, sums);
+        return reached != null ? reached : new SumCases.NonEnumeration(List.of(name));
     }
 
     /** {@code types} in the order {@code layout} puts them, which is what a product shape holds. */

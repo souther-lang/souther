@@ -91,7 +91,7 @@ class ARowNothingRanFillsNoCombinationTest {
     void aCombinationIsSearchedForAnArmOnTheListAndForNothingElse() {
         Model model = Model.of(SHIPPING, "shippingFee");
         InteractionCells.Offered offered =
-                InteractionCells.of(model.groups(), model.subject().axes().axes(), Budgets.generation().cellsPerGroup());
+                InteractionCells.of(model.groups(), model.subject().axes(), Budgets.generation().cellsPerGroup());
         List<InteractionCells.Group> groups = offered.groups();
         assertEquals(1, groups.size(), "the two decisions meet once");
         assertEquals(List.of(), offered.notOffered(),
@@ -118,7 +118,7 @@ class ARowNothingRanFillsNoCombinationTest {
     @Test
     void aRowIsComposedForTheArmsAndNotForWhereTheyWereFound() {
         Model model = Model.of(SHIPPING, "shippingFee");
-        CellSelection first = InteractionCells.of(model.groups(), model.subject().axes().axes(), Budgets.generation().cellsPerGroup())
+        CellSelection first = InteractionCells.of(model.groups(), model.subject().axes(), Budgets.generation().cellsPerGroup())
                 .groups().get(0).at(0);
         assertNotNull(first);
         Set<ArmProbe> takes = claimedBy(first);
@@ -352,14 +352,15 @@ class ARowNothingRanFillsNoCombinationTest {
                     .ask(new souther.compiler.query.Adequacy.Inputs(module)).value()
                     .get(behavior);
             assertNotNull(inputs, "the behavior's inputs were read");
-            Partitions.Partitioning partitioning = Partitions.of(spec.name(), inputs, rules,
+            Partitions.Partitioning partitioning = Partitions.of(spec.name(), inputs.reading(rules),
                     souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
             Core body = checked.behaviorBodies().get(behavior);
             assertNotNull(body, "the behavior under test has a body");
             CoverageSites.Plan plan = checked.plan();
             return new Model(MeasuredInput.of(spec.name(), inputs.reading(rules),
                     partitioning),
-                    CoverageRead.of(spec.name(), body, plan, inputs, rules), plan.numbering());
+                    CoverageRead.of(spec.name(), checked.run(spec.name()), inputs.reading(rules)),
+                    plan.numbering());
         }
     }
 }

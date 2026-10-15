@@ -7,6 +7,7 @@ import souther.compiler.inputs.RuleSite;
 import souther.compiler.publish.SourceOrdered;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -42,6 +43,18 @@ public final class ReportedReason {
      *               about the whole of it
      */
     public record Stop(UndividedPosition.Reason reason, RuleSite about, RuleSite sentTo) {
+
+        /**
+         * These in a steady order, which two of them are equal in only where they are equal: the
+         * word in the vocabulary's own order, then what it is about, then where it sends a reader.
+         *
+         * <p>The vocabulary's order is a set of words and says nothing about a model. What an author
+         * wrote is asked of the places.
+         */
+        public static final Comparator<Stop> IN_A_STEADY_ORDER =
+                Comparator.comparing(Stop::reason)
+                        .thenComparing(Stop::about, RuleSite.IN_A_STEADY_ORDER)
+                        .thenComparing(Stop::sentTo, RuleSite.IN_A_STEADY_ORDER);
 
         public Stop {
             if (reason == null || about == null || sentTo == null) {
@@ -186,13 +199,32 @@ public final class ReportedReason {
         return switch (reason) {
             case BlockReason.RuleAboutADerivedValue _ ->
                     UndividedPosition.Reason.RULE_ABOUT_A_DERIVED_VALUE;
-            case BlockReason.RuleAboutAnElementOfSeveralSequences _ ->
-                    UndividedPosition.Reason.RULE_ABOUT_AN_ELEMENT_OF_SEVERAL_SEQUENCES;
+            // What the rule states, read off the statement: the word for a number no position
+            // holds, one for a part not read — whatever stopped the reading of it, a figure or
+            // not, which is told apart by the sensitivity beside the word — and for a statement
+            // that is no relation of numbers the word for values that carry no order to draw a
+            // line on.
+            case BlockReason.WhatItStatesIsNoLine(var why) -> switch (why) {
+                case MORE_READINGS_THAN_ARE_MADE, MORE_TOTAL_READINGS_THAN_ARE_MADE,
+                     MORE_PARTS_THAN_ARE_CONCLUDED, MORE_ELEMENTS_THAN_ARE_WRITTEN_OUT,
+                     A_PART_NOT_READ ->
+                        UndividedPosition.Reason.RULE_MEANING_NOT_READ;
+                case A_NUMBER_NO_POSITION_HOLDS ->
+                        UndividedPosition.Reason.RULE_ABOUT_A_DERIVED_VALUE;
+                case NO_RELATION_OF_NUMBERS -> UndividedPosition.Reason.UNSUPPORTED_DOMAIN;
+            };
+            case BlockReason.NonAffineArithmetic(var operation) -> switch (operation) {
+                case PRODUCT_OF_NON_CONSTANT_VALUES -> UndividedPosition.Reason.NON_AFFINE_PRODUCT;
+                case DIVISION_BY_NON_CONSTANT_VALUE ->
+                        UndividedPosition.Reason.NON_CONSTANT_DIVISOR;
+                case REMAINDER_BY_NON_CONSTANT_VALUE ->
+                        UndividedPosition.Reason.NON_CONSTANT_REMAINDER_DIVISOR;
+            };
+            case BlockReason.RuleAboutAnElementOfSeveralContainers _ ->
+                    UndividedPosition.Reason.RULE_ABOUT_AN_ELEMENT_OF_SEVERAL_CONTAINERS;
             case BlockReason.TypeUnresolved _ -> UndividedPosition.Reason.TYPE_UNRESOLVED;
             case BlockReason.RecursiveExpansion _ ->
                     UndividedPosition.Reason.RETURNS_TO_A_DECLARATION_ALREADY_READ;
-            case BlockReason.UnsupportedTraversal _ ->
-                    UndividedPosition.Reason.UNSUPPORTED_TRAVERSAL;
             case BlockReason.UnreadComparisonForm _ ->
                     UndividedPosition.Reason.UNSUPPORTED_SYNTAX;
             case BlockReason.UnreadValueRule _ -> UndividedPosition.Reason.UNSUPPORTED_SYNTAX;
@@ -243,31 +275,60 @@ public final class ReportedReason {
                     UndividedPosition.Reason.RULES_NOT_READ_AT_ALL;
             case BlockReason.UnreadComparisonDomain _ ->
                     UndividedPosition.Reason.UNSUPPORTED_DOMAIN;
+            // Its own word, and not the one above. The values carry an order and the line is
+            // written; what has no place is the number it falls at, and a reader acts on the
+            // constants of the rule and not on the type of the position.
+            case BlockReason.LineAtANumberNoRatioHolds _ ->
+                    UndividedPosition.Reason.LINE_AT_A_NUMBER_NO_RATIO_HOLDS;
+            // Its own word, and not the one above. The line is placed and what stands beside it was
+            // not written down, whichever way the arithmetic left it unheld: the host had no room for
+            // a count, or the number has no representation on the carrier. Said as the line having
+            // no place, an author would be sent to the constants of a rule whose line is fine.
+            case BlockReason.LineSideNotWorkedOut _ ->
+                    UndividedPosition.Reason.LINE_SIDE_NOT_WORKED_OUT;
             // Its own word, and not the shape one below. Both sides of this line are read and
             // ordered and a line is drawn on them; what is missing is which positions the line runs
             // between, which is a question about the model and not about the form it was written in.
             case BlockReason.CasePairingNotDetermined _ ->
                     UndividedPosition.Reason.UNRESOLVED_CASE_PAIRING;
-            case BlockReason.ComparisonBetweenPositions _ ->
-                    UndividedPosition.Reason.UNSUPPORTED_PARTITION_SHAPE;
+            // One word for a rule of several lines whose lines are not drawn, whether nothing could
+            // hold where they decide or where one decides was not worked out. Which of the two it
+            // was is told apart by the sensitivity and the figure beside the word.
+            case BlockReason.SeveralLinesInOneRule _,
+                 BlockReason.WhereALineDecidesNotWorkedOut _ ->
+                    UndividedPosition.Reason.SEVERAL_LINES_IN_ONE_RULE;
+            case BlockReason.RelationNotShownToReachEveryValue _ ->
+                    UndividedPosition.Reason.RELATION_NOT_SHOWN_TO_REACH_EVERY_VALUE;
+            case BlockReason.ComparisonRelatingTwoValues _ ->
+                    UndividedPosition.Reason.RULE_RELATING_TWO_VALUES;
             // Its own word, because what a reader does about it is different. A rule between two
             // positions is waiting on a class about the pair; a rule about what a run comes to has
             // nothing to wait for — the model divides no position by it, and its border is already
             // drawn.
             case BlockReason.ComparisonOverARun _ ->
                     UndividedPosition.Reason.RULE_ABOUT_A_RUN;
+            // Its own word again: the rule's line is drawn on a remainder, a number of its own that
+            // neither relates two positions nor is read over a run.
+            case BlockReason.ComparisonOnARemainder _ ->
+                    UndividedPosition.Reason.RULE_ABOUT_A_REMAINDER;
             // Its own word again, and the one furthest from the two above. Those two are rules
             // that leave the position where they found it; this one holds it to what the rule
             // admits, which is a fact a reader acts on — the value written here is one of those.
             case BlockReason.RuleRestrictingToAdmittedValues _ ->
                     UndividedPosition.Reason.POSITION_RESTRICTED_TO_WHAT_A_RULE_ADMITS;
-            // The same word, from the other reading of the same rule. What a document promises its
-            // reader is which kind of thing stopped the derivation, and a relation between two
-            // positions is one kind of thing whether the reading that met it was drawing a line or
-            // gathering values — so the split this compiler needs between the two is a split it
-            // keeps to itself, and the two vocabularies still come to one word for one rule.
+            // The word for a relation nothing showed reaches every value here, from the other
+            // reading of the same rule. What a document promises its reader is which kind of thing
+            // stopped the derivation, and a relation between two positions is one kind of thing
+            // whether the reading that met it was drawing a line or gathering values. A reading of
+            // values shows nothing of what the other position reaches, and is said where the
+            // reading of lines took the rule in no further — so where it showed the relation
+            // divides nothing, this word is not met beside that one.
             case BlockReason.ValueRuleRelatingTwoPositions _ ->
-                    UndividedPosition.Reason.UNSUPPORTED_PARTITION_SHAPE;
+                    UndividedPosition.Reason.RELATION_NOT_SHOWN_TO_REACH_EVERY_VALUE;
+            // Its own word and not the one above: the relation is between elements of the one
+            // container here, and there is no other value to wait on for it.
+            case BlockReason.ValueRuleRelatingElements _ ->
+                    UndividedPosition.Reason.RULE_RELATING_ELEMENTS;
             // Its own word and not the one above. Both are rules this read to the end that divide
             // nothing, and what a reader may go on to do about them differs: one is waiting on a
             // class about two positions, and the other has nothing to wait for.
@@ -301,6 +362,11 @@ public final class ReportedReason {
             // a reader of this one looks at the guards above it.
             case BlockReason.ComparisonNothingArrivesAtItsLine _ ->
                     UndividedPosition.Reason.NOTHING_ARRIVES_AT_THE_RULES_LINE;
+            // And its own word beside that one. Rows arrive at this line; it is the rest of the
+            // statement that leaves it nothing to turn, and a reader of the word above would look
+            // at the guards above the rule for what is inside it.
+            case BlockReason.ComparisonLineTurningNothing _ ->
+                    UndividedPosition.Reason.RULE_NEVER_TURNS_ON_THIS_LINE;
         };
     }
 

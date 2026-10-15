@@ -1,0 +1,30 @@
+// A `match` on what a closure was handed out of a list tells the list's elements apart.
+//
+// The closure handed to `List.all` takes each element of `xs` as `r`, so the `match` turns on the
+// case of an element. A run down an arm is one application, handed one element, and the arm takes
+// that element's case; a different case is a different application down the other arm, and an
+// empty list takes neither. So each case of the element goes its own way.
+//
+// The guard on what `List.all` answers reads the elements too, which nothing puts to classes; the
+// arms already tell every class apart, which nothing further refines.
+//
+// told apart at n: 2 groups of 2
+// told apart at xs[*]: 2 groups of 2
+module example.elementmatched
+
+data North
+data South
+data Region = North | South
+
+data Ok = { n: Int }
+
+behavior judge : (n: Int, xs: List<Region>) -> Ok
+    constructs Ok
+
+let judge (n, xs) = {
+    guard n > 0 else Ok { n = 0 }
+    guard List.all(r -> match r with
+        | North -> true
+        | South -> false, xs) else Ok { n = 1 }
+    Ok { n = 2 }
+}

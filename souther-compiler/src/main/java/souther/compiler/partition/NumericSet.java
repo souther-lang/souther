@@ -5,6 +5,7 @@ import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -31,9 +32,10 @@ import java.util.List;
  * int holds would be a number nothing offers.
  *
  * <p>Closed, with an arm per shape the rules leave. A rule that singles a value out leaves that
- * value and everything else; a rule that draws a line leaves the runs between the lines. A shape
- * added is an arm here, and everything that reads one of these stops compiling until it says what
- * it does about the new shape.
+ * value and everything else; a rule that draws a line leaves the runs between the lines; and the
+ * two on one position leave a run with the values singled out of it taken out. A shape added is an
+ * arm here, and everything that reads one of these stops compiling until it says what it does
+ * about the new shape.
  */
 public sealed interface NumericSet {
 
@@ -49,6 +51,21 @@ public sealed interface NumericSet {
         public NumericDomain.Bounds extent() {
             return new NumericDomain.Bounds(new Endpoint(value, true), new Endpoint(value, true));
         }
+
+        @Override
+        public NumericDomain.Bounds asOneRun() {
+            return extent();
+        }
+
+        @Override
+        public LevelRegion region(Carrier on) {
+            return LevelRegion.point(new Level.OnACarrier(on, value));
+        }
+
+        @Override
+        public List<Place> turnsAt() {
+            return List.of(value);
+        }
     }
 
     /**
@@ -62,6 +79,11 @@ public sealed interface NumericSet {
 
         public AwayFrom {
             values = List.copyOf(values);
+            if (values.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "away from no values is the whole order, which no rule singling one out"
+                                + " leaves");
+            }
         }
 
         @Override
@@ -74,6 +96,25 @@ public sealed interface NumericSet {
         @Override
         public NumericDomain.Bounds extent() {
             return new NumericDomain.Bounds(null, null);
+        }
+
+        @Override
+        public NumericDomain.Bounds asOneRun() {
+            return null;
+        }
+
+        @Override
+        public LevelRegion region(Carrier on) {
+            LevelRegion left = LevelRegion.EVERYTHING;
+            for (Place value : values) {
+                left = left.without(new Level.OnACarrier(on, value));
+            }
+            return left;
+        }
+
+        @Override
+        public List<Place> turnsAt() {
+            return values;
         }
     }
 
@@ -88,6 +129,111 @@ public sealed interface NumericSet {
         @Override
         public NumericDomain.Bounds extent() {
             return new NumericDomain.Bounds(run.lineBelow(null), run.lineAbove(null));
+        }
+
+        @Override
+        public NumericDomain.Bounds asOneRun() {
+            return extent();
+        }
+
+        @Override
+        public LevelRegion region(Carrier on) {
+            return run.region();
+        }
+
+        @Override
+        public List<Place> turnsAt() {
+            return endsOf(extent());
+        }
+    }
+
+    /**
+     * Inside one of the runs the lines cut the position into, and none of the values singled out
+     * of that run.
+     *
+     * <p>What a value singled out beside a line leaves of the run it falls in. The run is not cut
+     * at the value: the values below it and above it are ones the rules treat alike, and two
+     * classes there would ask the rows for a distinction nothing in the model makes.
+     *
+     * @param excluded the values singled out that fall inside {@code run}, none of them twice
+     */
+    record InARunExcept(Band run, List<Place> excluded) implements NumericSet {
+
+        public InARunExcept {
+            excluded = List.copyOf(excluded);
+            if (excluded.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "a run with nothing taken out of it is the run, which is InARun");
+            }
+        }
+
+        @Override
+        public boolean holds(Place at, Carrier carrier) {
+            return run.holds(new Level.OnACarrier(carrier, at))
+                    && excluded.stream().noneMatch(at::sameAs);
+        }
+
+        /** The run's own ends: what is taken out is holes inside it and not where it stops. */
+        @Override
+        public NumericDomain.Bounds extent() {
+            return new NumericDomain.Bounds(run.lineBelow(null), run.lineAbove(null));
+        }
+
+        /** The run's ends moved past the values taken out at them, where those are all there are;
+         *  a value taken out inside the run is a hole no pair of ends leaves out. */
+        @Override
+        public NumericDomain.Bounds asOneRun() {
+            Trimmed ends = trimmed(run.lineBelow(null), run.lineAbove(null), excluded);
+            return ends.holes().isEmpty() ? new NumericDomain.Bounds(ends.low(), ends.high())
+                    : null;
+        }
+
+        /**
+         * The ends {@code low} and {@code high} leave with {@code taken} taken out: a value at an
+         * end the run keeps moves that end past it, and the rest are holes between them.
+         *
+         * <p>One reading, for the set's own ends and for the words a report names the class by. Read
+         * twice, a class could be named {@code 10 < x} while its ends said ten was in it.
+         */
+        static Trimmed trimmed(Endpoint low, Endpoint high, List<Place> taken) {
+            List<Place> holes = new ArrayList<>();
+            for (Place each : taken) {
+                Endpoint below = low == null ? null : low.without(each);
+                Endpoint above = high == null ? null : high.without(each);
+                if (below != null) {
+                    low = below;
+                } else if (above != null) {
+                    high = above;
+                } else {
+                    holes.add(each);
+                }
+            }
+            return new Trimmed(low, high, holes);
+        }
+
+        /** The ends a run is left with, and the values taken out between them. */
+        record Trimmed(Endpoint low, Endpoint high, List<Place> holes) {
+
+            Trimmed {
+                holes = List.copyOf(holes);
+            }
+        }
+
+        @Override
+        public LevelRegion region(Carrier on) {
+            LevelRegion left = run.region();
+            for (Place value : excluded) {
+                left = left.without(new Level.OnACarrier(on, value));
+            }
+            return left;
+        }
+
+        /** The run's ends, and each value taken out of it. */
+        @Override
+        public List<Place> turnsAt() {
+            List<Place> out = new ArrayList<>(endsOf(extent()));
+            out.addAll(excluded);
+            return List.copyOf(out);
         }
     }
 
@@ -115,4 +261,55 @@ public sealed interface NumericSet {
      * the shapes they knew.
      */
     NumericDomain.Bounds extent();
+
+    /**
+     * Ends that hold exactly these numbers — every number between them is one of these and none
+     * outside them is — or null where this set gives none.
+     *
+     * <p>Not {@link #extent()}, and the difference is what a walk's bound rests on. The extent says
+     * nothing lies outside it; this says nothing between the ends is left out. A walk whose figure
+     * counts the numbers it admits spends nothing on a number it steps over and turns down, so it
+     * is bounded only where it is handed ends that hold nothing to turn down — and where the ends
+     * are carried onto another number first, one hole in these becomes as many numbers as the
+     * carrying spreads it over.
+     *
+     * <p><b>One way only.</b> Ends given are the set; null is no claim that the set has holes.
+     * Worked out of the ends and the values taken out, and not of what the order holds between
+     * them: on the whole numbers the run above two and a half without three is the run from four,
+     * and it gives none. That is the side that claims less — a reader handed nothing composes
+     * nothing out of these ends, and a reader handed ends that held a hole would walk it
+     * unbounded.
+     */
+    NumericDomain.Bounds asOneRun();
+
+    /**
+     * These numbers as the runs of {@code on}'s order they make up.
+     *
+     * <p>What a search for a value walks, which is the same set {@link #holds} answers about and
+     * is said beside it for the same reason: a reader turning the shapes into runs itself would be
+     * a second account of what each shape means.
+     */
+    LevelRegion region(Carrier on);
+
+    /**
+     * Every place whether a value is one of these can change at: the ends of a run and each value
+     * singled out or taken out.
+     *
+     * <p>Not {@link #extent()}. The extent says nothing lies outside it, and a value taken out of a
+     * run is inside the extent and still a place a value stops being one of these. A reader choosing
+     * a value either side of each place where membership turns, from the extent alone, would offer
+     * the hole as a member and never the values around it.
+     */
+    List<Place> turnsAt();
+
+    /** The places of the ends {@code bounds} has. */
+    private static List<Place> endsOf(NumericDomain.Bounds bounds) {
+        List<Place> out = new ArrayList<>();
+        for (Endpoint end : new Endpoint[] {bounds.min(), bounds.max()}) {
+            if (end != null) {
+                out.add(end.at());
+            }
+        }
+        return List.copyOf(out);
+    }
 }

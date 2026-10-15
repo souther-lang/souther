@@ -44,6 +44,8 @@ public interface ConstantArguments<A> {
             case ResultBound.Provided.Always<A> _ -> true;
             case ResultBound.Provided.ConstantAboveZero<A> above ->
                     at(above.argument()).filter(read -> read.signum() > 0).isPresent();
+            case ResultBound.Provided.ConstantBelowZero<A> below ->
+                    at(below.argument()).filter(read -> read.signum() < 0).isPresent();
         };
     }
 }

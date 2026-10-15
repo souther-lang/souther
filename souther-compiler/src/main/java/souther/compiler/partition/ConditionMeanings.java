@@ -5,10 +5,13 @@ import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReads;
 
-import java.util.List;
+import souther.compiler.meaning.Proposition;
+
+import java.util.Set;
 
 /**
  * What the conditions of one behavior's body state, against the reading of its input.
@@ -50,9 +53,26 @@ record ConditionMeanings(souther.compiler.inputs.InputReading read) {
         return rules().newtypes();
     }
 
-    /** What {@code condition} coming out {@code held} states, and where it states nothing, that. */
-    List<OnTheWay> stating(Condition condition, boolean held) {
-        return ReachingCuts.stating(condition, read, held);
+    /** What {@code condition} coming out {@code held} states, and where it states nothing, that —
+     *  with which copies of the model's code each thing it states was read off. */
+    ReachingCuts.Stating stating(Condition condition, boolean held) {
+        return ReachingCuts.stating(condition, read, held, WhatConditionsState.of(read));
+    }
+
+    /** What holds exactly where {@code stated} does not, the one denial of it every reader of
+     *  this reading is handed ({@link WhatConditionsState#denied}). */
+    Proposition denied(Proposition stated) {
+        return WhatConditionsState.of(read).denied(stated);
+    }
+
+    /** What {@code condition} coming out true states, whole ({@link DemandReading#statedBy}). */
+    Proposition statedBy(Condition condition) {
+        return DemandReading.statedBy(condition, read, WhatConditionsState.of(read));
+    }
+
+    /** What a run entering arm {@code part} of {@code fork} states ({@link Pullback#ofTheArms}). */
+    Proposition entered(Core fork, int part, InputReads reads) {
+        return WhatConditionsState.of(read).arm(fork, part, reads).proposition();
     }
 
     /**
@@ -61,14 +81,20 @@ record ConditionMeanings(souther.compiler.inputs.InputReading read) {
      * <p>The environment is handed in rather than held, because it is a function of the program
      * point and this is not.
      */
-    OnTheWay entering(Core.Match match, int part, InputReads reads, ConditionNumbering numbering) {
-        return ReachingCuts.entering(match, match.cases().get(part), part, inputs(), reads, rules(),
-                numbering);
+    ReachingCuts.Stating entering(Core.Match match, int part, InputReads reads,
+                                  ConditionNumbering numbering) {
+        return ReachingCuts.entering(match, match.cases().get(part), part, read, reads, numbering);
+    }
+
+    /** What the arms of {@code match} leave its scrutinee, one answer per arm that narrows it
+     *  ({@link ReachingCuts#answersOf}). */
+    Set<CasesLeft> answersOf(Core.Match match, InputReads reads) {
+        return ReachingCuts.answersOf(match, inputs(), reads, rules());
     }
 
     /** What taking arm {@code part} of {@code attempt}, written at {@code at}, says of the input. */
-    OnTheWay attempting(Core.IfConstructed attempt, int part, SourcePos at,
-                        ConditionNumbering numbering) {
-        return ReachingCuts.attempting(attempt, part, at, numbering);
+    ReachingCuts.Stating attempting(Core.IfConstructed attempt, int part, SourcePos at,
+                                    InputReads reads, ConditionNumbering numbering) {
+        return ReachingCuts.attempting(attempt, part, at, read, reads, numbering);
     }
 }

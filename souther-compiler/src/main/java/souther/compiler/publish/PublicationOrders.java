@@ -15,6 +15,7 @@ import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.query.EstablishmentGap;
 import souther.compiler.query.ItemAssessment;
 import souther.compiler.query.ObligationDisposition;
+import souther.compiler.query.ReplacementEvidence;
 
 import tools.jackson.databind.node.ObjectNode;
 
@@ -239,21 +240,50 @@ public final class PublicationOrders {
      * that was refused is nearer than a row that never came.
      */
     public static final CanonicalSelection.Order<ReadingGap> READING_GAPS =
-            CanonicalSelection.Order.overValues(everyReadingGap());
+            CanonicalSelection.Order.overPlaces(everyPlaceOfAReadingGap(),
+                    PublicationOrders::placeOf);
 
-    private static List<ReadingGap> everyReadingGap() {
-        List<ReadingGap> out = new ArrayList<>();
-        for (Incompleteness.Code code : OBSERVATION_CODES_IN_ORDER) {
-            out.add(ReadingGap.of(code));
-        }
+    /**
+     * Where a reading gap sits: an observation at its code, since the figures it carries are what
+     * it was met at and not a reason of their own, and every other gap at itself.
+     */
+    private static Object placeOf(ReadingGap gap) {
+        return gap instanceof ReadingGap.Observation it ? it.code() : gap;
+    }
+
+    private static List<Object> everyPlaceOfAReadingGap() {
+        List<Object> out = new ArrayList<>(OBSERVATION_CODES_IN_ORDER);
         for (UnheldNumber why : UnheldNumber.values()) {
             out.add(ReadingGap.of(why));
         }
         out.add(ReadingGap.NO_VALUE);
         out.add(ReadingGap.COULD_NOT_WALK);
         out.add(ReadingGap.COULD_NOT_READ_ROW);
+        for (ReadingGap.ReachNotRead.Why why : ReadingGap.ReachNotRead.Why.values()) {
+            out.add(new ReadingGap.ReachNotRead(why));
+        }
         return out;
     }
+
+    /**
+     * Why a rewrite of a body was left open, from what a wider run could go past to what it could
+     * not.
+     *
+     * <p>The figures first, since raising one is a thing a reader can do and the rest are not: the
+     * fork the classes could not carry, the runs one rewrite may take, the composing, and a run that
+     * did not come back. Then what the rows came to — a statement that could not be read — and last
+     * how a search that ran to its end ended.
+     */
+    public static final CanonicalSelection.Order<ReplacementEvidence.Undecided.Why>
+            REWRITE_UNDECIDED_REASONS = CanonicalSelection.Order.overValues(List.of(
+                    ReplacementEvidence.Undecided.Why.TOO_LARGE,
+                    ReplacementEvidence.Undecided.Why.RUNS_SPENT,
+                    ReplacementEvidence.Undecided.Why.A_COMPOSING_FIGURE_REACHED,
+                    ReplacementEvidence.Undecided.Why.A_RUN_DID_NOT_COME_BACK,
+                    ReplacementEvidence.Undecided.Why.A_STATEMENT_WAS_NOT_READ,
+                    ReplacementEvidence.Undecided.Why.NO_ROW_ANSWERED_DIFFERENTLY,
+                    ReplacementEvidence.Undecided.Why.NOTHING_WAS_COMPOSED,
+                    ReplacementEvidence.Undecided.Why.NOTHING_RAN));
 
     /**
      * What this compiler declined to do, from what bounds one value to what bounds a whole search.
@@ -272,7 +302,15 @@ public final class PublicationOrders {
                     CompositionBudget.PAIRINGS_BUILT_AT_ONCE,
                     CompositionBudget.ELEMENTS_A_TOTAL_IS_SPREAD_OVER,
                     CompositionBudget.SHAPES_OF_A_TOTAL_OFFERED,
+                    CompositionBudget.ELEMENTS_A_COUNT_IS_COMPOSED_WITH,
+                    CompositionBudget.CONTAINERS_A_COUNT_IS_OFFERED,
+                    CompositionBudget.SHARES_A_COUNT_IS_TRIED_AT,
+                    CompositionBudget.VALUES_AN_ELEMENT_IS_CHOSEN_AMONG,
                     CompositionBudget.WAYS_DOWN_TO_A_TOTAL_TRIED,
+                    CompositionBudget.WAYS_UNDER_THE_CASES_TRIED,
+                    CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG,
+                    CompositionBudget.PAIRS_OF_INPUT_NUMBERS_AND_AN_ANSWER_TRIED,
+                    CompositionBudget.CHOICES_OF_INPUT_NUMBERS_LOOKED_AT,
                     CompositionBudget.VALUES_OF_AN_UNBOUNDED_PROGRESSION_TRIED,
                     CompositionBudget.PLACES_A_PAIR_IS_TRIED_AT,
                     CompositionBudget.VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT,
@@ -282,15 +320,35 @@ public final class PublicationOrders {
                     // stopped the search. Each sits by the trying figure it was split from.
                     CompositionBudget.PLACES_A_PAIR_IS_LOOKED_AT,
                     CompositionBudget.PLACES_A_POSITION_ON_THE_WAY_IS_LOOKED_AT,
+                    CompositionBudget.ASSIGNMENTS_ON_THE_WAY_COMPOSED_FOR,
+                    CompositionBudget.CHOICES_ON_A_WAY_LOOKED_AT,
                     // Beside the one above it, and for the same reason: both bound how many times
                     // the thing a reader asked about is tried, where the ones before them bound
                     // what building one value is worth.
                     CompositionBudget.NUMBERS_OF_A_SET_TRIED,
+                    CompositionBudget.CODE_POINTS_A_STRING_IS_SEARCHED_IN_FULL,
+                    CompositionBudget.CODE_POINTS_BEYOND_A_COUNT_A_STRING_IS_LOOKED_FOR,
                     CompositionBudget.LEVELS_A_SIDE_IS_ASKED_AT,
                     CompositionBudget.ASSIGNMENTS_A_SEARCH_COMPOSES,
                     CompositionBudget.TIMES_THE_RULES_ARE_ASKED_AGAIN,
                     CompositionBudget.STEPS_A_SEARCH_MAY_TAKE,
+                    // After every figure a search for the value stops at, because what this one
+                    // stops is the looking for a row that goes further than one already found.
+                    CompositionBudget.RUNS_REPAIRING_A_ROW,
                     CompositionBudget.PATHS_OF_A_DECISION_READ,
+                    CompositionBudget.CONDITIONS_A_DECISION_TAKES_IN_TO_PROVE,
+                    CompositionBudget.READINGS_OF_ONE_CONDITION,
+                    // Beside it: one way down, then every way together, then what a step states of
+                    // them, then what a path takes in of what the reading made.
+                    CompositionBudget.TOTAL_READINGS_OF_ONE_CONDITION,
+                    CompositionBudget.PARTS_A_DERIVATION_CONCLUDES,
+                    CompositionBudget.ALTERNATIVES_A_PATH_TRIES,
+                    // After the reading of a condition, as the reading of where one line of a
+                    // statement it made decides: the statement read, the cases taken apart, then
+                    // each of them asked.
+                    CompositionBudget.STEPS_A_STATEMENT_IS_READ_IN,
+                    CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO,
+                    CompositionBudget.CASES_A_LINE_IS_ASKED_IN,
                     CompositionBudget.DEPTH_A_CONSTRUCTION_PLAN_DESCENDS));
 
     /**
@@ -307,6 +365,8 @@ public final class PublicationOrders {
                             // what one value holds, where the three below are about which value out
                             // of a range, a line or a group of numbers this compiler names at all.
                             CompositionRepertoire.VALUES_THAT_ANSWER_SEVERAL_OF_THEIR_NUMBERS,
+                            CompositionRepertoire.ELEMENTS_CHOSEN_FOR_A_COUNT,
+                            CompositionRepertoire.ELEMENTS_A_COMPUTED_TOTAL_IS_SOLVED_FOR,
                             CompositionRepertoire.PLACES_IN_A_RUN_THAT_ARE_NAMED,
                             CompositionRepertoire.PLACES_A_PAIR_IS_TRIED_AT_ON_A_LINE));
 
@@ -387,6 +447,7 @@ public final class PublicationOrders {
                 WeakeningWord.NO_REACHABLE_DISTINGUISHER_FOR_A_BORDER,
                 WeakeningWord.A_BORDERS_FAULT_FAMILY_NOT_WORKED_OUT,
                 WeakeningWord.ITEMS_PLACE_NOT_WORKED_OUT,
+                WeakeningWord.A_READING_NOT_TIED_TO_ITS_LINE,
                 WeakeningWord.BODY_NOT_IN_EVALUATION,
                 WeakeningWord.BEHAVIOR_INPUT_NOT_READ,
                 WeakeningWord.BEHAVIOR_BOUNDARY_NOT_DERIVED,
@@ -396,12 +457,15 @@ public final class PublicationOrders {
                 WeakeningWord.QUESTION_UNANSWERED,
                 WeakeningWord.PAIR_SPACE_TRUNCATED,
                 WeakeningWord.MEETINGS_NOT_WALKED,
+                WeakeningWord.MEETINGS_NOT_PLACED,
                 WeakeningWord.PROOF_CONTRADICTED,
                 WeakeningWord.ARMS_UNSETTLED,
                 WeakeningWord.DECISION_NOT_FULLY_READ,
                 WeakeningWord.DECISION_RULE_READ_SHORT,
+                WeakeningWord.KEYED_OVERWRITE_CASES_UNMEASURED,
                 WeakeningWord.DECISION_OF_ROW_UNREADABLE,
-                WeakeningWord.DECISION_RUN_NOT_WATCHED)) {
+                WeakeningWord.DECISION_RUN_NOT_WATCHED,
+                WeakeningWord.REWRITE_UNDECIDED)) {
             out.add(new WeakeningVocabulary.AWordOfThisDocuments(word));
         }
         return out;
@@ -421,7 +485,8 @@ public final class PublicationOrders {
                     AdequacyOpeningWord.NOT_MEASURED,
                     AdequacyOpeningWord.SHOWING_STOPPED,
                     AdequacyOpeningWord.NOTHING_WAS_COMPOSED,
-                    AdequacyOpeningWord.NOTHING_SHOWED_IT));
+                    AdequacyOpeningWord.NOTHING_SHOWED_IT,
+                    AdequacyOpeningWord.EVERY_ROW_REACHES_AN_UNREACHABLE));
 
     /**
      * Why a measure the verdict rests on was never made, from what an author can do about it to
@@ -496,7 +561,7 @@ public final class PublicationOrders {
      */
     public static final CanonicalSelection.Order<ItemAssessment.WritabilityEvidence.Ground>
             WRITABILITY_GROUNDS = CanonicalSelection.Order.overValues(List.of(
-                    ItemAssessment.WritabilityEvidence.Ground.THE_RULES_PROVE_IT,
+                    ItemAssessment.WritabilityEvidence.Ground.IT_IS_PROVED,
                     ItemAssessment.WritabilityEvidence.Ground.A_ROW_IS_AT_IT,
                     ItemAssessment.WritabilityEvidence.Ground.A_VALUE_WAS_BUILT));
 
@@ -533,23 +598,27 @@ public final class PublicationOrders {
             // reading about the same refusals: these were refused too, and what they were is not
             // everything the position had.
             case NOT_ALL_CANDIDATES_COULD_BE_OFFERED -> 1;
-            case THE_RULES_LEAVE_NOTHING_THERE -> 2;
+            case NO_VALUE_CAN_STAND_THERE -> 2;
             case ONE_POSITION_CANNOT_BE_BOTH -> 3;
-            case NOTHING_COMPOSES_ONE -> 4;
-            case NOTHING_STANDS_IN_FOR_A_DEPENDENCY -> 5;
-            case A_TABLE_IS_WHAT_THIS_NEEDS -> 6;
-            case NOTHING_TO_BUILD_AGAINST -> 7;
-            case THE_WAY_IN_PLACES_AT_NO_CLASS -> 8;
-            case THE_SEARCH_LEFT_SOMETHING_UNTRIED -> 9;
-            case THE_BLOCK_IS_AS_LONG_AS_IT_MAY_BE -> 10;
-            case THE_GROUP_WAS_NOT_OFFERED -> 11;
-            case THE_POSITION_WAS_WITHHELD -> 12;
-            case NO_VALUES_WERE_ASKED_FOR -> 13;
-            case NO_CANDIDATE_WAS_OFFERED -> 14;
-            case NO_CERTIFIED_WITNESS -> 15;
-            case NO_READING_OF_THE_LINE_COULD_BE_SEARCHED -> 16;
-            case THE_ROWS_WERE_NOT_READ -> 17;
-            case LINKAGE_FAILED -> 18;
+            case A_CONDITION_NEVER_COMES_OUT_THAT_WAY -> 4;
+            // After what the model settles and before what this compiler fell short of: it is what
+            // the body says, and nothing has settled whether it holds.
+            case EVERY_ROW_THERE_REACHES_AN_UNREACHABLE -> 5;
+            case NOTHING_COMPOSES_ONE -> 6;
+            case NOTHING_STANDS_IN_FOR_A_DEPENDENCY -> 7;
+            case A_TABLE_IS_WHAT_THIS_NEEDS -> 8;
+            case NOTHING_TO_BUILD_AGAINST -> 9;
+            case THE_WAY_IN_PLACES_AT_NO_CLASS -> 10;
+            case THE_SEARCH_LEFT_SOMETHING_UNTRIED -> 11;
+            case THE_BLOCK_IS_AS_LONG_AS_IT_MAY_BE -> 12;
+            case THE_GROUP_WAS_NOT_OFFERED -> 13;
+            case THE_POSITION_WAS_WITHHELD -> 14;
+            case NO_VALUES_WERE_ASKED_FOR -> 15;
+            case NO_CANDIDATE_WAS_OFFERED -> 16;
+            case NO_CERTIFIED_WITNESS -> 17;
+            case NO_READING_OF_THE_LINE_COULD_BE_SEARCHED -> 18;
+            case THE_ROWS_WERE_NOT_READ -> 19;
+            case LINKAGE_FAILED -> 20;
         };
     }
 
@@ -557,14 +626,17 @@ public final class PublicationOrders {
      * Where one of the ways a run's rule could not be told is said among the others.
      *
      * <p>From the reading having nothing to recognise a run by, through a run it recognised and no
-     * rule matched, to one that matched more than one. The same decision as the order above and
-     * held the same way.
+     * rule matched, to one that went down more than one path at a condition and one that matched
+     * more than one rule, and last one that went down a way the reading proved no input takes. The
+     * same decision as the order above and held the same way.
      */
     public static int positionOf(RulesTaken.WhichRule.Why why) {
         return switch (why) {
             case NO_RULE_IS_RECOGNISABLE -> 0;
             case NO_RECOGNISABLE_RULE_MATCHES -> 1;
-            case MORE_THAN_ONE_RULE_MATCHES -> 2;
+            case A_CONDITION_CAME_OUT_BOTH_WAYS -> 2;
+            case MORE_THAN_ONE_RULE_MATCHES -> 3;
+            case ITS_WAY_IS_PROVED_TO_BE_TAKEN_BY_NO_INPUT -> 4;
         };
     }
 }

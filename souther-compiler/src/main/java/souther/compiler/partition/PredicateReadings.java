@@ -16,6 +16,7 @@ import souther.compiler.inputs.InputReads;
 
 import souther.compiler.types.ApplicationOrigin;
 import souther.compiler.types.BindingId;
+import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.SourceConstructOrigin;
 
 import java.util.ArrayList;
@@ -146,16 +147,18 @@ record PredicateReadings(List<Reading> predicates, Set<Core> statedAt,
                 Collections.newSetFromMap(new IdentityHashMap<>());
         if (body != null) {
             Builds builds = new Builds(body.templates());
-            walk(body.core(), behavior, read,
-                    InputReads.ofParametersWhereCallsStand(parameters, elements),
+            InputReads reads = InputReads.ofParametersWhereCallsStand(parameters,
+                    read.declared(), elements, read.domain().dependencies());
+            walk(body.core(), behavior, read, reads,
                     LiveFlow.of(body.core()), true, predicates, reaches, statedAt, builds);
-            // What each value the body builds states, read once and where nothing of the
-            // behavior's inputs is in force: a value takes none and names none.
+            // What each value the body builds states, read once and where a definition is read,
+            // where nothing of the behavior's inputs is in force: a value takes none, names none
+            // and stands nothing in.
+            InputReads defined = reads.whereValuesAreDefined();
             for (Core template : body.templatesAfterTheirBuilders()) {
                 Boolean live = builds.read().get(template);
                 if (live != null) {
-                    walk(template, behavior, read,
-                            InputReads.ofParametersWhereCallsStand(Map.of(), elements),
+                    walk(template, behavior, read, defined,
                             LiveFlow.of(template), live, predicates, reaches, statedAt, builds);
                 }
             }
@@ -171,7 +174,7 @@ record PredicateReadings(List<Reading> predicates, Set<Core> statedAt,
         // once ({@link ClauseStatements}), so what this walk does is read each of them.
         if (stated != null && !stated.isEmpty()) {
             InputReads reads = InputReads.ofWhatIsDeclared(
-                    EnsuresThresholds.rootsOf(stated.params()));
+                    EnsuresThresholds.rootsOf(stated.params()), read.declared());
             for (StatedContract.StatedRule rule : stated.rules()) {
                 for (StatedContract.Conjunct conjunct : rule.conjuncts()) {
                     Core one = conjunct.stated().orNull();
@@ -256,7 +259,8 @@ record PredicateReadings(List<Reading> predicates, Set<Core> statedAt,
         out.add(new Reading(
                 new PredicateOrigin(new PredicateOccurrence(out.size()),
                         new RuleRef.Predicate(behavior, written),
-                        reaches.anchorOf(written, Citation.of(call.pos()))),
+                        reaches.anchorOf(written, Citation.of(call.pos())),
+                        ModelOccurrence.statedAt(call.occurrence())),
                 states, reads));
     }
 

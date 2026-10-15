@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.check.NonAffineOperation;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.core.Core;
@@ -32,6 +33,10 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
  * it would be an obligation nobody could meet.
  */
 class AComparisonThisDoesNotReadIsStillNoticedTest {
+
+    /** What the arithmetic says of the product every comparison here is over. */
+    private static final BlockReason PRODUCT = new BlockReason.NonAffineArithmetic(
+            NonAffineOperation.PRODUCT_OF_NON_CONSTANT_VALUES);
 
     private static GuardThresholds.Guards read(String condition) {
         return read("n: Count", condition);
@@ -184,8 +189,8 @@ class AComparisonThisDoesNotReadIsStillNoticedTest {
         List<souther.compiler.inputs.StandingQuestion.Unclassified> unread =
                 guards.noLine().unclassified();
 
-        assertEquals(List.of(new Said(TermPath.of("at"), new BlockReason.UnreadComparisonForm()),
-                        new Said(TermPath.of("at"), new BlockReason.UnreadComparisonForm())),
+        assertEquals(List.of(new Said(TermPath.of("at"), PRODUCT),
+                        new Said(TermPath.of("at"), PRODUCT)),
                 said(guards));
         assertEquals(2, unread.stream()
                         .map(souther.compiler.inputs.StandingQuestion
@@ -247,7 +252,7 @@ class AComparisonThisDoesNotReadIsStillNoticedTest {
     @Test
     void aPositionNamedInsideAnExpressionIsStillNoticed() {
         assertEquals(List.of(new Said(TermPath.of("p").then("x"),
-                        new BlockReason.UnreadComparisonForm())),
+                        PRODUCT)),
                 said(read("p: Pair", "Int.multiply(p.x, p.x) < 10")));
     }
 
@@ -263,9 +268,9 @@ class AComparisonThisDoesNotReadIsStillNoticedTest {
         // Both sides name a position by itself, so the reading named a term for each.
         assertEquals(List.of(
                         Said.named(TermPath.of("p").then("x"),
-                                new BlockReason.ComparisonBetweenPositions()),
+                                new BlockReason.ComparisonRelatingTwoValues()),
                         Said.named(TermPath.of("p").then("y"),
-                                new BlockReason.ComparisonBetweenPositions())),
+                                new BlockReason.ComparisonRelatingTwoValues())),
                 said(read("p: Pair", "p.x < p.y")));
     }
 
@@ -284,7 +289,7 @@ class AComparisonThisDoesNotReadIsStillNoticedTest {
 
         assertEquals(1, guards.thresholds().size(), guards.thresholds().toString());
         assertEquals(List.of(new Said(TermPath.of("p").then("x"),
-                        new BlockReason.UnreadComparisonForm())),
+                        PRODUCT)),
                 said(guards));
     }
 
@@ -312,25 +317,25 @@ class AComparisonThisDoesNotReadIsStillNoticedTest {
         // product rather than a number the rule was read for.
         assertEquals(List.of(
                         Said.named(TermPath.of("p").then("x"),
-                                new BlockReason.UnreadComparisonForm()),
+                                PRODUCT),
                         new Said(TermPath.of("p").then("y"),
-                                new BlockReason.UnreadComparisonForm())),
+                                PRODUCT)),
                 said(read("p: Pair", "p.x < Int.multiply(p.y, p.y)")));
     }
 
     /**
      * A position whose carrier is fine, against a right-hand side this does not read.
      *
-     * <p>`+Int.min(1, 2)+` is not a form a threshold is read out of, and that is the whole of what
-     * stopped the line. Nothing is wrong with `+p.x+`: it is an `+Int+`, a carrier lines are drawn
-     * on all through this file. Read off the side that did name a position, the answer becomes the
-     * carrier and sends a reader after a domain that is already there.
+     * <p>`+Int.multiply(p.x, p.x)+` is not a form a threshold is read out of, and that is the whole
+     * of what stopped the line. Nothing is wrong with `+p.x+`: it is an `+Int+`, a carrier lines are
+     * drawn on all through this file. Read off the side that did name a position, the answer becomes
+     * the carrier and sends a reader after a domain that is already there.
      */
     @Test
     void aReadableCarrierAgainstAnUnreadableSideIsNotACarrierProblem() {
         assertEquals(List.of(Said.named(TermPath.of("p").then("x"),
-                        new BlockReason.UnreadComparisonForm())),
-                said(read("p: Pair", "p.x < Int.min(1, 2)")));
+                        PRODUCT)),
+                said(read("p: Pair", "p.x < Int.multiply(p.x, p.x)")));
     }
 
     /**

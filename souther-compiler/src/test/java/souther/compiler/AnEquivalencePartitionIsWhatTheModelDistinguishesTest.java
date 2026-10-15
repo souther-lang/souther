@@ -210,7 +210,9 @@ class AnEquivalencePartitionIsWhatTheModelDistinguishesTest {
         String rows = souther.compiler.report.GeneratedRows.of(compilation, "example.between", "f",
                 souther.compiler.diag.SourceRendering.namedByIdentity(compilation.texts())).text();
 
-        assertTrue(rows.contains("\"n=1 < 3 * x <= 2\""),
+        // Over the row rather than as its name: the row is the one handed for the points of the
+        // two lines as well, and a row for several things is named for none.
+        assertTrue(rows.contains("// fills n=1 < 3 * x <= 2"),
                 "the class between the two lines is offered a row:\n" + rows);
         assertFalse(rows.contains("no row for `n=1 < 3 * x <= 2`"),
                 "and is not reported as one nothing can be written in:\n" + rows);

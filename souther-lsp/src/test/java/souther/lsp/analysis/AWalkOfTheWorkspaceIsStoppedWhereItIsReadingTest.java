@@ -43,6 +43,23 @@ class AWalkOfTheWorkspaceIsStoppedWhereItIsReadingTest {
                 "and looking for what a build left is the same walk over the same paths");
     }
 
+    @Test
+    void aStopAskedForWhileReadingFilesIsHeardBeforeTheNextDirectory() throws IOException {
+        Path root = Files.createTempDirectory("workspace-walk");
+        for (int i = 0; i < 20; i++) {
+            Files.writeString(root.resolve("file" + i + ".txt"), "not a source\n");
+        }
+        Workspace workspace = new Workspace();
+        workspace.setRoots(List.of(root.toUri().toString()));
+        // Not yet at the root, and from the first file on: a root of files alone has no second
+        // directory, so a stop asked only at directories is never heard.
+        int[] asked = {0};
+        workspace.abandonWhen(new Abandonment(() -> ++asked[0] > 1));
+
+        assertThrows(Abandoned.class, workspace::modulesOnThePath,
+                "the files of a flat root are each a step of the walk");
+    }
+
     /** A workspace over {@code root} that has already been told to stop. */
     private static Workspace readingOnly(Path root) {
         Workspace workspace = new Workspace();

@@ -2,13 +2,16 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.carrier.Membership;
 import souther.compiler.check.DeclaredSig;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
+import souther.compiler.check.TypeCardinality;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
+import souther.compiler.query.ReadAs;
 
 import java.util.List;
 import java.util.Map;
@@ -103,7 +106,8 @@ class ACarrierNothingReadsUnmeasuresItsSiblingsTest {
         String standing = read.partitioning().edgeIsKnownWritable(axis.term())
                 ? " writable" : " not known to be writable";
         return Partitions.bordersOf(axis, read.reading(),
-                        read.reading().runsBetween(axis.term()), new LinesRead()).stream()
+                        read.reading().runsBetween(axis.term()), new LinesRead(),
+                        (one, other) -> false).stream()
                 .flatMap(border -> java.util.stream.Stream.of(PointRole.ON, PointRole.OFF)
                         .filter(role -> border.demand(role).criterion() != null)
                         .map(role -> role + " "
@@ -122,9 +126,11 @@ class ACarrierNothingReadsUnmeasuresItsSiblingsTest {
         Map<String, DeclaredSig> sigs =
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
         assertNotNull(sigs.get(behavior), "the model under test compiles");
-        InputDomain domain = InputDomain.of(sigs.get(behavior), RuleReadingContext.unshared(rules,
-                souther.compiler.query.ReadAs.THE_COMPILATION_DOES));
-        return new Read(Partitions.of(behavior, domain, rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
+        RuleReadingContext reading = RuleReadingContext.unshared(rules,
+                ReadAs.THE_COMPILATION_DOES);
+        InputDomain domain = InputDomain.of(sigs.get(behavior), reading,
+                TypeCardinality.Counts.workedOutIn(reading), Membership.none());
+        return new Read(Partitions.of(behavior, domain.reading(rules), souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
                 domain.quantities(rules), rules);
     }
 }

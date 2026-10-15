@@ -135,11 +135,34 @@ class AModuleHasOnePlanAndOneMakerOfItTest {
             // Which comparisons the bodies hold, and what this plan did about each.
             "method comparisons() : souther.compiler.coverage.ComparisonCatalog",
             "method instruments(souther.compiler.types.ConstructOccurrence) : boolean",
+            // Whether a behavior's run makes one call of a helper once, which says whose a run
+            // recorded in the helper's method is: a yes or no, and nothing of where the call stands.
+            "method runsOnce(souther.compiler.types.ValueName$Helper,souther.compiler.core.Core)"
+                    + " : boolean",
             "method emissionSiteOf(souther.compiler.types.ConstructOccurrence) :"
-                    + " java.util.Optional<souther.compiler.coverage.ComparisonEmissionSite>",
+                    + " java.util.Optional<souther.compiler.coverage.ConditionOutcomeSite>",
             "method outcomeOf(souther.compiler.types.ConstructOccurrence,boolean) :"
                     + " java.util.Optional<"
                     + "souther.compiler.coverage.ControlPlace$Outcome>",
+            // Where the applications of the language's operations the model states answer. Values
+            // like the sites: an answer site says where its code is written and which application
+            // it is, and carries no way into the tree it was numbered in.
+            "method answers() :"
+                    + " java.util.List<souther.compiler.coverage.CoverageSites$AnswerSite>",
+            "method answers(java.lang.String) :"
+                    + " java.util.List<souther.compiler.coverage.CoverageSites$AnswerSite>",
+            // Which siblings each numbered arm carries: asked of a node the way its probes are, and
+            // answered as a value a run can be told.
+            "method carriedAt(souther.compiler.core.Core,int) : int[]",
+            "method replacements() : souther.compiler.coverage.ArmReplacements",
+            // Where a body could answer other than one value, asked by its name and answered with
+            // the places of the arms on each way.
+            "method fromOneValue(java.lang.String) :"
+                    + " souther.compiler.coverage.ArmReplacements$Differs",
+            // What an arm means, asked by the construct and the part a source wrote and answered
+            // with an outcome: a value about the source, measured or not.
+            "method outcomeOf(souther.compiler.coverage.CoverageSites$AsWritten) :"
+                    + " souther.compiler.coverage.SourceOutcome$Arm",
             // What a number means, which is the half of a plan that outlives the graph.
             "method numbering() : souther.compiler.coverage.SiteNumbering",
             "method identity() : souther.compiler.coverage.NumberingIdentity",
@@ -148,6 +171,10 @@ class AModuleHasOnePlanAndOneMakerOfItTest {
             "method armsOf(souther.compiler.core.Core) :"
                     + " souther.compiler.coverage.ControlPlace$Arm[]",
             "method probesOf(souther.compiler.core.Core) : int[]",
+            "method answerSiteOf(souther.compiler.core.Core) :"
+                    + " java.util.Optional<souther.compiler.coverage.ConditionOutcomeSite>",
+            "method applicationAnsweringAt(souther.compiler.core.Core) :"
+                    + " java.util.Optional<souther.compiler.types.ConstructOccurrence>",
             // Where the fork of each place this plan reached is written.
             "method whereEachArmsForkIsWritten() :"
                     + " java.util.Map<java.lang.Integer, souther.compiler.diag.Citation>");

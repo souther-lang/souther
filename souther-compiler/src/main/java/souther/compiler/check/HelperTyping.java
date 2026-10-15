@@ -48,17 +48,23 @@ public final class HelperTyping {
      * repeated here.
      */
     static void checkHelpers(HelperInliner inliner, Map<String, Hir.FnDef> toCheck, Symbols symbols,
-                                     PublishedDeclarations published, DeclarationKinds kinds,
-                                     Map<ValueName.Behavior, ReqSig> reqSigs, Map<String, Type> recursiveHelperFns,
+                                     DeclarationAccess declarations,
+                                     ReachedValueLocations reachedLocations,
+                                     Map<ValueName.Behavior, ReqSig> reqSigs,
+                                     Map<String, StandingSignature> recursiveHelperFns,
                                      Map<String, Hir.Expr> loweredBodies,
                                      Set<String> valuesWithAnEntry,
                                      TypeChecker.Elaborated elaborated) {
+        SumCases sums = declarations.sums();
         // What each value of this module was settled as, filled in as they are checked. A value is
         // checked against these rather than against a copy of the body each of them stands for,
         // which is the same answer worked out once instead of once per name that reaches it.
         Preserved.Settling settledSignatures = elaborated.settledValues;
         Map<ValueName, Object> settledConstants = new HashMap<>();
         Preserved standing = Preserved.valuesAlreadySettled(settledSignatures);
+        // Every helper's scope reaches the same recursions. Fixed once here, so Scope.reaching keeps
+        // this map for each helper rather than copying it.
+        Map<String, StandingSignature> standingCalls = Map.copyOf(recursiveHelperFns);
         for (Hir.FnDef h : valuesBeforeTheValuesThatNameThem(inliner, symbols.library(), toCheck)) {
             boolean recursive = recursiveHelperFns.containsKey(h.name());
             // What it runs as, settled once where this module was lowered and read here rather than
@@ -102,7 +108,14 @@ public final class HelperTyping {
             //
             // What settles one is a value of this module: it has an answer to read. A value another
             // module declares was settled by that module's check, and a helper settles nothing.
-            ValueName settled = role instanceof LoweringRole.ValueHome home ? home.value() : null;
+            ValueName settled = switch (role) {
+                case LoweringRole.ValueHome home -> home.value();
+                case LoweringRole.Helper _, LoweringRole.RowValue _,
+                     LoweringRole.PublishedValueEntry _, LoweringRole.FixtureValueEntry _ -> null;
+                case LoweringRole.Behavior _, LoweringRole.ValueDeclaredElsewhere _ ->
+                        throw new IllegalStateException("`" + h.name() + "` is checked standalone as"
+                                + " `" + inliner.moduleName() + "`'s own, and its role is " + role);
+            };
             Scope env = Scope.NONE;
             List<Integer> inferred = new ArrayList<>();
             for (int i = 0; i < h.params().size(); i++) {
@@ -181,22 +194,19 @@ public final class HelperTyping {
                 // Complete the env from the body, then run the same standalone check an annotated
                 // helper gets — so a mis-declared return type or a mis-passed function argument in the
                 // body is caught here, at the helper, not only where it is later inlined.
-                typeFromBody(h, inferred, env, body, symbols, published, kinds, reachable,
-                        recursiveHelperFns);
+                typeFromBody(h, inferred, env, body, symbols, declarations, reachedLocations,
+                        reachable, standingCalls);
             }
             // A recursive helper is lowered to a method, so a self- or mutual call is left standing
             // rather than expanded; its signature is what a call to it is typed against, so it goes
-            // into the environment before anything reads the body (spec §fn-declaration). Every reader of the
-            // body needs it, not just the elaboration below: a call to a method-lowered helper can sit
-            // in a lambda handed to a combinator, and the check of that lambda reads the environment
-            // it is given. A parameter of the same name wins: a binding in force wins over the
+            // into the environment before anything reads the body (spec §fn-declaration). A parameter
+            // of the same name wins: a binding in force wins over the
             // declaration it shadows (spec §fn-rules), so `let use (depth: Int)` reads its `depth` as
             // the Int it declares and not as the helper it is spelled like.
-            Scope tenv = env.reaching(recursiveHelperFns);
-            // a helper that returns a function (e.g. `let adder (n) = (x) -> x + n`) has no application
-            // here to infer the lambda's parameter types from; it is checked where it is inlined and
-            // applied (spec §blocks).
-            checkFunctionArgs(h.writtenBody(), tenv, symbols, published, kinds, reachable, inliner);
+            Scope tenv = env.reaching(standingCalls);
+            CheckContext typing = new CheckContext(symbols, declarations, reachedLocations, null,
+                    reachable)
+                    .preserving(emitted != null || reading ? standing : Preserved.NONE);
             // push a declared return type into the body so an empty-collection body (Map.empty, [])
             // takes the declared element/value type rather than a bottom
             Type declaredReturn = h.declaredReturn() == null ? null : TypeOps.successType(h.declaredReturn());
@@ -225,12 +235,7 @@ public final class HelperTyping {
                 // cannot reach an injected behavior — put the effect in the behavior that calls it.
                 rejectInjectedCalls(body, h.name(), reqSigs.keySet());
             }
-            Core elaboratedBody = Elaborator.elaborate(body, tenv,
-                    new CheckContext(symbols,
-                            DeclarationAccess.asWritten(symbols, published, kinds), null,
-                            reachable)
-                            .preserving(emitted != null || reading ? standing : Preserved.NONE),
-                    declaredReturn);
+            Core elaboratedBody = Elaborator.elaborate(body, tenv, typing, declaredReturn);
             Type bodyType = elaboratedBody.type();
             // A definition standing at a row's position computes what the row writes there, and a
             // position holds a value. One that answers none — `unreachable` on its own — is refused
@@ -261,7 +266,7 @@ public final class HelperTyping {
             Core definition = elaboratedBody;
             if (declaredReturn != null && (standsAt == null || standsAt.required() != null)) {
                 Type declared = declaredReturn;
-                if (!TypeOps.assignable(bodyType, declared, published)) {
+                if (!TypeOps.assignable(bodyType, declared, declarations.kinds(), sums)) {
                     // A definition standing at a position carries a claim the position made, so
                     // what is said leans on the place and quotes no name the author never wrote.
                     // A definition is named, whoever wrote it: one this module took on is another
@@ -400,10 +405,10 @@ public final class HelperTyping {
      * it again is what turns "not settled" into a report that names the use that named no type.
      */
     private static void typeFromBody(Hir.FnDef h, List<Integer> open, Scope env,
-            Hir.Expr body, Symbols symbols, PublishedDeclarations published,
-            DeclarationKinds kinds,
+            Hir.Expr body, Symbols symbols, DeclarationAccess declarations,
+            ReachedValueLocations reachedLocations,
             Map<ValueName.Behavior, ReqSig> reqSigs,
-            Map<String, Type> recursiveHelperFns) {
+            Map<String, StandingSignature> recursiveHelperFns) {
         // A parameter used as a function is one, and neither applying it nor handing it to a
         // combinator determines its type; the inliner also needs the annotation to tell a function
         // parameter from a value one when it expands the call (spec §fn-declaration). The expanded body is what
@@ -419,14 +424,14 @@ public final class HelperTyping {
             }
         }
         Map<Integer, HelperParams.OpenUse> openUses = new HashMap<>();
-        HelperParams.determine(h, open, env, body, symbols, published, kinds, reqSigs,
-                recursiveHelperFns, openUses);
+        HelperParams.determine(h, open, env, body, symbols, declarations, reachedLocations,
+                reqSigs, recursiveHelperFns, openUses);
         // What the body reaches for decides whether an annotation is what is missing. A helper does
         // not reach a behavior at all, and the type of an argument to a call that cannot be written is
         // nothing for the author to supply, so that call is what is reported.
         if (open.stream().anyMatch(idx -> !env.holds(h.params().get(idx).binder().id()))) {
             callToABehavior(body).ifPresent(call -> {
-                throw CallElaborator.noCallee(call, symbols);
+                throw CallElaborator.noCallee(call, symbols, reachedLocations);
             });
         }
         for (int idx : open) {
@@ -465,8 +470,9 @@ public final class HelperTyping {
      * @throws CompileException where the body settles no type for a parameter
      */
     static Scope parameterScope(Hir.FnDef h, Hir.Expr body, Symbols symbols,
-                                PublishedDeclarations published, DeclarationKinds kinds,
-                                Map<String, Type> recursiveHelperFns) {
+                                DeclarationAccess declarations,
+                                ReachedValueLocations reachedLocations,
+                                Map<String, StandingSignature> recursiveHelperFns) {
         Scope env = Scope.NONE;
         List<Integer> open = new ArrayList<>();
         for (int i = 0; i < h.params().size(); i++) {
@@ -478,7 +484,7 @@ public final class HelperTyping {
             env = env.with(p.binder(), TypeOps.resolveParamType(p.type()));
         }
         if (!open.isEmpty()) {
-            typeFromBody(h, open, env, body, symbols, published, kinds, Map.of(),
+            typeFromBody(h, open, env, body, symbols, declarations, reachedLocations, Map.of(),
                     recursiveHelperFns);
         }
         return env;
@@ -504,12 +510,13 @@ public final class HelperTyping {
      * same either way, so it is worked out once here rather than beside each question — two readings
      * of one declaration would agree only until one of them was edited.
      */
-    static Map<String, Type> recursiveCallSigs(HelperInliner inliner, Symbols symbols) {
+    static Map<String, StandingSignature> recursiveCallSigs(HelperInliner inliner,
+                                                            Symbols symbols) {
         return sigsOf(inliner.recursiveInReach(), inliner::helper, inliner.moduleName());
     }
 
     /** The same, read off a table rather than off an inliner over it. */
-    static Map<String, Type> recursiveCallSigs(
+    static Map<String, StandingSignature> recursiveCallSigs(
             HelperTable table, java.util.Collection<souther.compiler.types.ReachName.Declaration> references,
             Symbols symbols) {
         return sigsOf(references, table::reached, table.module());
@@ -523,12 +530,12 @@ public final class HelperTyping {
      *     compile does not own. A call that needed it fails where the call is written, which is in
      *     this module and is a place its author can act on.
      */
-    private static Map<String, Type> sigsOf(
+    private static Map<String, StandingSignature> sigsOf(
             java.util.Collection<souther.compiler.types.ReachName.Declaration> references,
             java.util.function.Function<souther.compiler.types.ReachName.Declaration, Hir.FnDef>
                     declaring,
             String ownModule) {
-        Map<String, Type> sigs = new HashMap<>();
+        Map<String, StandingSignature> sigs = new HashMap<>();
         for (souther.compiler.types.ReachName.Declaration reference : references) {
             // Which declaration each is, the reference answers. What comes out is a scope — the
             // names a body may write for a call this representation kept standing — so it is keyed
@@ -562,7 +569,12 @@ public final class HelperTyping {
             if (!readable) {
                 continue;
             }
-            sigs.put(name, Type.fn(params, TypeOps.successType(h.declaredReturn())));
+            List<String> names = new ArrayList<>();
+            for (Hir.FnParam p : h.params()) {
+                names.add(p.name());
+            }
+            sigs.put(name, new StandingSignature(names,
+                    new Type.FnOf(params, TypeOps.successType(h.declaredReturn()))));
         }
         return sigs;
     }
@@ -732,171 +744,6 @@ public final class HelperTyping {
                             .at(call.appliedAt()).say(new NameMessage.ARecursiveHelperIsPure(helper, call.written())).build());
         }
         TypeChecker.forEachChild(e, c -> rejectInjectedCalls(c, helper, injected));
-    }
-
-    /**
-     * Checks each function passed to a helper's function-typed parameter against that parameter's
-     * declared type, at the call site — before the helper is expanded inline. Without this, a bad
-     * function argument to a combinator surfaces deep inside the {@code fold} it derives from (a
-     * non-{@code Bool} {@code filter} predicate as the {@code if} the derivation expands to), which
-     * names the derivation, not the mistake. Here the error names the parameter and the combinator.
-     *
-     * <p>It walks the un-inlined body. Every helper call binds its signature's type variables from
-     * its collection arguments ({@code 'a} from a {@code List<'a>}), then checks each function
-     * argument against the resulting concrete function type. The check is best-effort: when an
-     * argument's type cannot be determined in the available scope (a value bound further out), it is
-     * skipped and the ordinary inlined check still applies.
-     */
-    static void checkFunctionArgs(Hir.Expr e, Scope env, Symbols symbols,
-                                          PublishedDeclarations published, DeclarationKinds kinds,
-                                          Map<ValueName.Behavior, ReqSig> reqs, HelperInliner inliner) {
-        if (e instanceof Hir.Apply call) {
-            checkHelperCallFnArgs(call, env, symbols, published, kinds, reqs, inliner);
-        }
-        TypeChecker.forEachChild(e, sub ->
-                checkFunctionArgs(sub, env, symbols, published, kinds, reqs, inliner));
-    }
-
-    private static void checkHelperCallFnArgs(Hir.Apply call, Scope env, Symbols symbols,
-                                              PublishedDeclarations published,
-                                              DeclarationKinds kinds,
-                                              Map<ValueName.Behavior, ReqSig> reqs, HelperInliner inliner) {
-        // what the call applies, which a binding of a helper's spelling is not: applying a
-        // function-typed parameter is not a call to the helper it happens to be named after
-        Hir.FnDef h = inliner.applied(call);
-        if (h == null || call.args().size() != h.params().size()) {
-            return;   // applies no body, or an arity mismatch the inliner reports
-        }
-        List<Type> declared = new ArrayList<>();
-        boolean hasFn = false;
-        for (Hir.FnParam p : h.params()) {
-            // an unannotated parameter takes its type from the helper's body (spec §fn-declaration); it is never a
-            // function parameter, so leave its slot null and treat it as a non-function argument here.
-            Type pt = p.type() == null ? null : TypeOps.resolveParamType(p.type());
-            declared.add(pt);
-            hasFn |= pt instanceof Type.FnOf;
-        }
-        if (!hasFn) {
-            return;
-        }
-        // the collection (non-function) arguments bind the signature's type variables — `'a` from a
-        // `List<'a>` collection — so the function parameters become concrete before the check.
-        Map<String, Type> bind = new HashMap<>();
-        for (int i = 0; i < declared.size(); i++) {
-            if (declared.get(i) == null || declared.get(i) instanceof Type.FnOf) {
-                continue;
-            }
-            try {
-                Type at = Elaborator.typeOf(inliner.inline(call.args().get(i), inliner.bodyOf(h.name())),
-                        env, new CheckContext(symbols,
-                                DeclarationAccess.asWritten(symbols, published, kinds), null,
-                                reqs));
-                if (TypeOps.unify(declared.get(i), at, bind, published) instanceof Fit.Disagrees) {
-                    return;   // the argument does not fit; leave it to the inlined check
-                }
-            } catch (CompileException _) {
-                return;   // can't type the argument here; leave it to the inlined check
-            }
-        }
-        for (int i = 0; i < declared.size(); i++) {
-            if (declared.get(i) instanceof Type.FnOf fn0) {
-                Type.FnOf want = (Type.FnOf) TypeOps.substitute(fn0, bind);
-                if (carriesBottom(want)) {
-                    // An empty-collection seed ([], Map.empty) binds the accumulator to a bottom, and
-                    // the step is what grows it to the concrete type — exactly the shape a fold over
-                    // an empty seed has (`Map.fold(step, [], m)`). Nothing concrete to check against
-                    // here; the inlined check, which sees the expected type pushed down, decides.
-                    continue;
-                }
-                checkFunctionArg(h, h.params().get(i).name(), want,
-                        call.args().get(i), env, symbols, published, kinds, reqs, inliner, bind);
-            }
-        }
-    }
-
-    /** Whether a step's signature still carries an empty-collection bottom in a parameter or in its
-     * result — the accumulator of a fold seeded with {@code []} / {@code Map.empty}, which only the
-     * step itself grows to a concrete type. */
-    private static boolean carriesBottom(Type.FnOf fn) {
-        if (Type.mentions(fn.result(), BottomInfer::isBottom)) {
-            return true;
-        }
-        for (Type p : fn.params()) {
-            if (Type.mentions(p, BottomInfer::isBottom)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    /** The block a combinator was handed answers with the wrong type, in written types on both sides
-     * (`'b?` / `String`), not in the checker's own spelling. It takes the block rather than a
-     * position, so where the report is drawn is decided here from the value being refused and not by
-     * whichever position a caller had to hand. */
-    private static CompileException blockReturnMismatch(Hir.FnDef h, String paramName, Type want,
-                                                        Type got, Hir.Expr block) {
-        return CompileException.of(Diagnostic.at(Elaborator.answerRegion(block))
-                .say(new HelperMessage.TheBlockAnswersAnotherType(paramName, h.name(),
-                        Type.show(want), Type.show(got)))
-                .build());
-    }
-
-    /** Whether a type still holds a type variable, so nothing concrete can be checked against it yet.
-     * A bare {@code 'b} is the common case (`map`'s result); a variable can also sit inside a
-     * constructor — {@code filterMap}'s step answers {@code 'b?} — and that is just as open. */
-    private static boolean isOpen(Type t) {
-        return Type.mentions(t, x -> x instanceof Type.Var);
-    }
-
-    private static void checkFunctionArg(Hir.FnDef h, String paramName, Type.FnOf want, Hir.Expr arg,
-                                         Scope env, Symbols symbols,
-                                         PublishedDeclarations published, DeclarationKinds kinds,
-                                         Map<ValueName.Behavior, ReqSig> reqs, HelperInliner inliner,
-                                         Map<String, Type> bind) {
-        if (arg instanceof Hir.Block lambda) {
-            if (lambda.params().size() != want.params().size()) {
-                throw CompileException.of(Diagnostic.at(arg.pos())
-                        .say(new HelperMessage.TheBlockTakesAnotherNumberOfArguments(paramName,
-                                h.name(), String.valueOf(want.params().size()),
-                                String.valueOf(lambda.params().size())))
-                        .build());
-            }
-            Scope lenv = env;
-            for (int j = 0; j < lambda.params().size(); j++) {
-                if (isOpen(want.params().get(j))) {
-                    return;   // the parameter type is still open; nothing concrete to check
-                }
-                lenv = lenv.with(lambda.params().get(j), want.params().get(j));
-            }
-            Type got;
-            try {
-                got = Elaborator.typeOf(inliner.inline(lambda.body(), inliner.bodyOf(h.name())), lenv,
-                        new CheckContext(symbols,
-                                DeclarationAccess.asWritten(symbols, published, kinds), null,
-                                reqs));
-            } catch (CompileException _) {
-                return;   // best-effort; the inlined check reports a genuine error with full context
-            }
-            if (isOpen(want.result())) {
-                // The declared result still has a variable in it, so the shape around the variable is
-                // what there is to check: `'b?` accepts a block answering with an optional and rejects
-                // one answering with a plain value. Unifying also pins `'b` for the arguments after
-                // this one. A failure is reported as the mismatch it is, in written types.
-                if (TypeOps.unify(want.result(), got, bind, published) instanceof Fit.Disagrees) {
-                    throw blockReturnMismatch(h, paramName, want.result(), got, lambda);
-                }
-                return;
-            }
-            if (!TypeOps.assignable(got, want.result(), published)) {
-                throw blockReturnMismatch(h, paramName, want.result(), got, lambda);
-            }
-        } else if (arg instanceof Hir.Var.Denoting v
-                && env.of(v.denotes(), v.name()) instanceof Type vt && !(vt instanceof Type.FnOf)) {
-            throw CompileException.of(Diagnostic.at(arg.pos())
-                    .say(new HelperMessage.AValueWhereAFunctionIsTaken(paramName, h.name(),
-                            v.name()))
-                    .build());
-        }
     }
 
     /**

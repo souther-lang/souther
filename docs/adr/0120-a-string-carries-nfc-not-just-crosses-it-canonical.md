@@ -3,7 +3,15 @@
 Status: Accepted. Supersedes ADR-0096 in one respect only — that ADR canonicalizes text where it
 crosses in from outside and states nothing about `String`-producing operations inside the domain,
 and this makes every one of them hold NFC too. Its decisions about code-point counting, the two
-original boundary doors, and NFC over NFKC stand unchanged.
+original boundary doors, and NFC over NFKC stand unchanged. Revised 2026-10-01 — see *Revision*.
+
+## Revision (2026-10-01, normalization is 199x-notation's)
+
+The decision stands; where it is implemented moved. `souther.unicode.Normalization`, its tables and
+the programs that generate and verify them are in
+[199x-notation](https://github.com/raoh-project/199x-notation), which Raoh uses too. Every door and
+every `String`-producing operation asks its `Normalization.normalizeWithin` for NFC within the
+length a `String` holds, as they asked `nfcWithin` before; the bound is Souther's and is handed in.
 
 ## Context
 

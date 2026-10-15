@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.Reserved;
 import souther.compiler.stdlib.Stdlib;
 import souther.compiler.source.SourceId;
 
@@ -11,6 +12,7 @@ import souther.compiler.check.DeclarationReads;
 import souther.compiler.check.DeclarationRefusals;
 import souther.compiler.check.Derived;
 import souther.compiler.check.DerivedSymbols;
+import souther.compiler.check.ListedCases;
 import souther.compiler.check.Normalized;
 import souther.compiler.check.ResolvedSymbols;
 import souther.compiler.check.Denoting;
@@ -28,12 +30,15 @@ import souther.compiler.examples.ExampleStatements;
 import souther.compiler.diag.msg.DataMessage;
 import souther.compiler.diag.msg.ModuleMessage;
 import souther.compiler.diag.msg.ImportMessage;
+import souther.compiler.diag.DiagnosticPlace;
 import souther.compiler.diag.Region;
 import souther.compiler.diag.QuotedFrom;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.diag.SourceProvenance;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.Denotation;
+import souther.compiler.types.ReachName;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
@@ -345,6 +350,37 @@ public final class Names {
     }
 
     /**
+     * The names a module declares, in the order it declares them, whoever wrote them: the
+     * library's for a module of the language's namespace, and the module's own declarations for any
+     * other.
+     *
+     * <p>For a reader walking every declaration of a module to answer something about all of them.
+     * {@link Declarations} is what this compilation's sources and the class path declare, and the
+     * language is written in neither, so a walk over it alone answers as if the language's modules
+     * declared nothing. Which of the two a module is read from is decided here, the way the scope a
+     * module is checked in decides it, and not by each walk.
+     */
+    public record NamesDeclaredIn(String name) implements Key<List<String>> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<List<String>> compute(Db db) {
+            if (Reserved.isNamespace(name)) {
+                Answer<Stdlib> library = db.ask(new Front.Library());
+                return library.present()
+                        ? Answer.of(List.copyOf(
+                                library.value().languageDeclarationsIn(name).keySet()))
+                        : Answer.absent();
+            }
+            Answer<DeclaredNames.Index<Ast.Def>> declared = db.ask(new Declarations(name));
+            return declared.present() ? Answer.of(declared.value().asDeclared()) : Answer.absent();
+        }
+    }
+
+    /**
      * Whether a module takes part in an import cycle — absent, with the error, when it does.
      *
      * <p>{@link Cycles} finds them all in one walk; this is where one module's share of that is
@@ -465,6 +501,43 @@ public final class Names {
     }
 
     /**
+     * The cases the sum at {@code named} lists, one layer, in the order it writes them.
+     *
+     * <p>Read off the declaration as its names resolved, which is where a sum's cases are settled:
+     * nothing below resolution writes a sum again. What the declaration says is worked out further
+     * up, out of its module with every clause settled, and asking that would make a reader of a
+     * sum's cases wait on the clauses of every product beside it — and be unable to ask while one
+     * of those clauses is being settled.
+     *
+     * <p>An answer of its own and not the resolved declaration handed on, so a reader of it is told
+     * only when the list changes: the declaration carries where it is written, and moves with every
+     * line above it.
+     *
+     * <p>Absent where nothing declares a sum at {@code named}.
+     */
+    public record CasesListedBy(TypeKey named) implements Key<List<TypeSymbol>> {
+        @Override
+        public String module() {
+            return named.module();
+        }
+
+        @Override
+        public Answer<List<TypeSymbol>> compute(Db db) {
+            List<TypeSymbol> listed = ListedCases.readOff(address -> {
+                Answer<Hir.Def> mine = db.ask(new ResolvedDeclaration(address));
+                if (mine.present()) {
+                    return mine.value();
+                }
+                // What the language declares, which no module of this compilation wrote: its sums
+                // list cases like any other, and a reader asking one is asking about a declaration.
+                Answer<Stdlib> library = db.ask(new Front.Library());
+                return library.present() ? library.value().languageDeclaration(address) : null;
+            }).of(named);
+            return listed == null ? Answer.absent() : Answer.of(listed);
+        }
+    }
+
+    /**
      * Whether the declaration at {@code named} is written as one value wearing a name.
      *
      * <p>Beside the form and not part of it. A product written over again as a sum changes which
@@ -551,6 +624,12 @@ public final class Names {
      *
      * <p>Every import is validated here and nowhere else — that it names a module this compilation
      * has, that the module exposes what is asked for, that no two imports bring in the same name.
+     *
+     * <p>Nothing is said about the imports of a module on the path that reaches one compiled here.
+     * That is refused as what it is ({@link Front.NeedsThisCompilation}), and what its names would
+     * mean against the module here is not what its classes run with: every report about that would
+     * be the same refusal said again. The scope is still answered, so a module reading this one
+     * still knows what it declares.
      */
     public record ModuleScope(String name) implements Key<Scoping.Scoped> {
 
@@ -566,6 +645,12 @@ public final class Names {
                 return Answer.absent();
             }
             Scoping.Scoped scoped = Scoping.of(CompilationUniverse.over(db), subject);
+            // A module here is asked nothing of the path: the path is walked from what its scope
+            // brings in, so asking would go round.
+            if (!Front.declaredHere(db, name) && !scoped.refused().isEmpty()
+                    && !db.ask(new Front.NeedsThisCompilation(name)).present()) {
+                return Answer.of(scoped);
+            }
             List<Report> reports = new ArrayList<>();
             for (Scoping.Refusal refusal : scoped.refused()) {
                 reports.add(said(refusal));
@@ -1038,8 +1123,7 @@ public final class Names {
             // asked as well as the reports.
             if (Boolean.TRUE.equals(db.ask(new Nameless(name)).value())) {
                 return Answer.of(Boolean.FALSE);
-            }
-            Ast.Module m = db.ask(new Front.Available(name)).value();
+            }            Ast.Module m = db.ask(new Front.Available(name)).value();
             if (m != null) {
                 for (Ast.Import imp : m.imports()) {
                     // An import that could not be followed at all — the module is not here, or the
@@ -1678,6 +1762,68 @@ public final class Names {
         public Answer<WrittenName> compute(Db db) {
             Answer<List<WrittenName>> written = db.ask(new ValueDeclarationsOf(denoted));
             return written.present() ? Answer.of(written.value().get(0)) : Answer.absent();
+        }
+    }
+
+    /**
+     * Where a report points at what {@code reached} reaches.
+     *
+     * <p>Beside {@link ValueDeclaredAt} rather than in place of it. That one sends an editor to an
+     * occurrence it can open, and has nothing to say about code this compilation holds no text for;
+     * a report has something to say about everything a name reaches, and for what is out of sight
+     * it says where the code came from instead of pointing.
+     *
+     * <p>A module's helper or behavior is the occurrence {@link ValueDeclaredAt} finds, whether the
+     * module is in this compilation or read back off the path, and whether the reader can be sent
+     * there is read off where that occurrence is written. A library operation the library declares
+     * is the occurrence its entry holds, which was parsed as code the library ships. A library
+     * operation the library rewrites into another call has no declaration, and is the library
+     * module its qualifier names: the declaration it rewrites to is another name, and pointing there
+     * would say that name is what was reached. Out of sight, each is named by the reference that
+     * reaches it.
+     */
+    public record ReachedValueLocation(ReachName.Declaration reached)
+            implements Key<DiagnosticPlace> {
+        @Override
+        public String module() {
+            return switch (reached) {
+                case ReachName.Own own -> own.denotes().module();
+                case ReachName.OfModule other -> other.denotes().module();
+                case ReachName.OfLibrary _ -> null;
+            };
+        }
+
+        @Override
+        public Answer<DiagnosticPlace> compute(Db db) {
+            WrittenName written = switch (reached) {
+                case ReachName.Own own -> db.ask(new ValueDeclaredAt(own.denotes())).value();
+                case ReachName.OfModule other ->
+                        db.ask(new ValueDeclaredAt(other.denotes())).value();
+                case ReachName.OfLibrary library -> {
+                    Stdlib.Entry entry =
+                            db.ask(new Front.Library()).value().entry(library.denotes());
+                    yield entry == null ? null : entry.declaration().written();
+                }
+            };
+            if (written != null) {
+                return Answer.of(switch (DiagnosticPlace.of(written.reportedAt())) {
+                    case DiagnosticPlace.InSource in -> in;
+                    case DiagnosticPlace.Unavailable out -> new DiagnosticPlace.Unavailable(
+                            out.provenance().reachedBy(reached.rendered()));
+                });
+            }
+            if (reached instanceof ReachName.OfLibrary library
+                    && db.ask(new Front.Library()).value().sugared(library.denotes())) {
+                String alias = library.denotes().alias();
+                for (Reserved.StdlibModule published : Reserved.MODULES) {
+                    if (published.qualifier().equals(alias)) {
+                        return Answer.of(new DiagnosticPlace.Unavailable(
+                                new SourceProvenance.TheStandardLibrary(published.moduleName(),
+                                        reached.rendered())));
+                    }
+                }
+            }
+            return Answer.absent();
         }
     }
 

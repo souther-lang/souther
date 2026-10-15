@@ -4,6 +4,7 @@ import org.jspecify.annotations.Nullable;
 
 import java.math.BigInteger;
 import java.math.RoundingMode;
+import java.util.function.LongConsumer;
 
 import static souther.exact.ExactOrder.BRACKET_BITS;
 
@@ -45,18 +46,18 @@ final class ExactRounding {
      * @throws IllegalArgumentException where the value is not a whole number at that scale and the policy
      *         is {@link RoundingMode#UNNECESSARY}, which names no rounding
      */
-    static BigInteger roundedTimesTenTo(ExactParts of, int scale, RoundingMode towards) {
+    static BigInteger roundedTimesTenTo(ExactParts of, int scale, RoundingMode towards, LongConsumer widened) {
         if (of.isZero()) {
             return BigInteger.ZERO;
         }
         try {
-            return rounded(of, scale, towards);
+            return rounded(of, scale, towards, widened);
         } catch (ArithmeticException e) {
             throw ExactPowers.hostLimit(e);
         }
     }
 
-    private static BigInteger rounded(ExactParts of, int scale, RoundingMode towards) {
+    private static BigInteger rounded(ExactParts of, int scale, RoundingMode towards, LongConsumer widened) {
         BigInteger byTwos = atTenTo(of.twos(), scale);
         BigInteger byFives = atTenTo(of.fives(), scale);
         BigInteger magnitude = of.numerator().abs();
@@ -87,7 +88,7 @@ final class ExactRounding {
         // and that is an order, so it is refined by what refines the order and for the same reason.
         return ExactOrder.asWideAsItTakes(
                 width -> roundedFromBracketsAt(of, byTwiceTheTwos, byFives, towards, width),
-                () -> "round a value");
+                () -> "round a value", widened);
     }
 
     /**

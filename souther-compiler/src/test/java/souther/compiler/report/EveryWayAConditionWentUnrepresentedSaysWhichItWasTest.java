@@ -1,20 +1,23 @@
 package souther.compiler.report;
 
+import souther.compiler.inputs.Evaluations;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.DecisionAtom;
+import souther.compiler.meaning.DecisionSubject;
+import souther.compiler.meaning.InjectedAnswer;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 import souther.compiler.partition.AnswerDemand;
 import souther.compiler.partition.CompositionBudget;
+import souther.compiler.partition.CompositionShortfall;
 import souther.compiler.partition.ConditionGap;
 import souther.compiler.partition.ConditionOccurrence;
 import souther.compiler.partition.ConditionReportAnchor;
-import souther.compiler.partition.DecisionAtom;
-import souther.compiler.partition.DecisionSubject;
 import souther.compiler.partition.DemandGap;
-import souther.compiler.partition.InjectedAnswer;
 import souther.compiler.partition.OnTheWay;
 import souther.compiler.partition.ReachabilityGap;
+import souther.compiler.partition.RowDemand;
 import souther.compiler.partition.TakenConstraint;
 import souther.compiler.types.ValueName;
 
@@ -114,15 +117,20 @@ class EveryWayAConditionWentUnrepresentedSaysWhichItWasTest {
                 ofTheInput(new ReachabilityGap.Why.NoValueComposedForItsPositions()));
         out.put(ReachabilityGap.Why.TheWalkForItsPositionsWasStopped.class,
                 ofTheInput(ReachabilityGap.Why.TheWalkForItsPositionsWasStopped.by(
-                        Set.of(CompositionBudget.NUMBERS_OF_A_SET_TRIED), Set.of())));
+                        CompositionShortfall.of(Set.of(CompositionBudget.NUMBERS_OF_A_SET_TRIED)))));
         out.put(ReachabilityGap.Why.TwoNumbersAtOneLocation.class,
                 ofTheInput(new ReachabilityGap.Why.TwoNumbersAtOneLocation()));
-        out.put(DemandGap.WhyNotStated.ATruthOfAPlaceInsideTheAnswer.class,
-                notStated(new DemandGap.WhyNotStated.ATruthOfAPlaceInsideTheAnswer()));
+        out.put(ReachabilityGap.Why.NoComposerWritesIt.class,
+                ofTheInput(new ReachabilityGap.Why.NoComposerWritesIt(
+                        RowDemand.NoComposer.A_VALUE_THE_BODY_WORKS_OUT, List.of())));
+        out.put(ReachabilityGap.Why.ElementsWrittenAlike.class,
+                ofTheInput(new ReachabilityGap.Why.ElementsWrittenAlike()));
         out.put(DemandGap.WhyNotStated.AFormOverMoreThanOneAnswer.class,
                 notStated(new DemandGap.WhyNotStated.AFormOverMoreThanOneAnswer()));
         out.put(DemandGap.WhyNotStated.APlaceOnTheAnswersOwnOrder.class,
                 notStated(new DemandGap.WhyNotStated.APlaceOnTheAnswersOwnOrder()));
+        out.put(DemandGap.WhyNotStated.AStatementOfSeveralParts.class,
+                notStated(new DemandGap.WhyNotStated.AStatementOfSeveralParts()));
         out.put(DemandGap.WhyNotComposed.NoOrderUnderATermOfTheAnswer.class,
                 notComposed(new DemandGap.WhyNotComposed.NoOrderUnderATermOfTheAnswer(
                         new NumericTerm.ValueOf(TermPath.of("x").then("id")))));
@@ -132,6 +140,12 @@ class EveryWayAConditionWentUnrepresentedSaysWhichItWasTest {
                 notComposed(new DemandGap.WhyNotComposed.NothingComposedAValueOfTheAnswer()));
         out.put(DemandGap.WhyNotComposed.OneValueAnswersEveryCall.class,
                 notComposed(new DemandGap.WhyNotComposed.OneValueAnswersEveryCall()));
+        out.put(DemandGap.WhyNotComposed.NoPairComposedBeforeAFigureEnded.class,
+                notComposed(DemandGap.WhyNotComposed.NoPairComposedBeforeAFigureEnded.by(
+                        Set.of(CompositionBudget.PAIRS_OF_INPUT_NUMBERS_AND_AN_ANSWER_TRIED))));
+        out.put(DemandGap.WhyNotComposed.NoWayComposedBeforeAFigureEnded.class,
+                notComposed(DemandGap.WhyNotComposed.NoWayComposedBeforeAFigureEnded.by(
+                        Set.of(CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG))));
         return out;
     }
 
@@ -149,26 +163,25 @@ class EveryWayAConditionWentUnrepresentedSaysWhichItWasTest {
 
     /** A demand to hang a way on, which these sentences say nothing about. */
     private static AnswerDemand demand() {
-        return new AnswerDemand.AComparison(
-                new InjectedAnswer(new ValueName.Behavior("m", "look"), List.of()),
-                where(),
-                LinearForm.atom(new DecisionAtom.OfAnAnswer(new DecisionSubject.AnAnswer(
-                        new InjectedAnswer(new ValueName.Behavior("m", "look"), List.of()),
-                        List.of()))),
+        InjectedAnswer look = new InjectedAnswer(
+                Evaluations.of(new ValueName.Behavior("m", "look"), 0), List.of());
+        return new AnswerDemand.AComparison(look, where(),
+                LinearForm.atom(new DecisionAtom.OfAnAnswer(
+                        new DecisionSubject.AnAnswer(look, List.of()))),
                 Rel.GE);
     }
 
     /** A condition to hang a way on, which these sentences say nothing about. */
     private static OnTheWay.TakenIn cut() {
-        return new OnTheWay.TakenIn(where(),
+        return new OnTheWay.TakenIn(where(), new RowDemand.Relational(
                 new TakenConstraint.Affine(
-                        LinearForm.atom(new NumericTerm.ValueOf(TermPath.of("x"))), Rel.GE));
+                        LinearForm.atom(new NumericTerm.ValueOf(TermPath.of("x"))), Rel.GE)));
     }
 
     /** Which question a report about the condition under test would put. */
     private static ConditionReportAnchor where() {
         return new ConditionReportAnchor.WhereTheReadingMetIt("m",
-                new ConditionOccurrence("f", 0));
+                new ConditionOccurrence("f", ConditionOccurrence.Reading.DIVIDING, 0));
     }
 
     /** The leaves of a seal, which is what its ways are. */

@@ -40,7 +40,7 @@ class ARecursionIsACycleOfCallsAndNotOfReadsTest {
         Ast.Module parsed = CstFrontend.parse(source);
         Hir.Module resolved = Resolve.module(parsed, SyntaxSymbols.of(parsed, DefaultStdlib.get()));
         return HelperTable.of(resolved.name(), HelperInliner.helpersOf(resolved),
-                Map.of(), Map.of(), InliningPolicy.FULL, DefaultStdlib.get());
+                Map.of(), InliningPolicy.FULL, DefaultStdlib.get());
     }
 
     private static ReachName.Declaration own(String name) {
@@ -74,7 +74,7 @@ class ARecursionIsACycleOfCallsAndNotOfReadsTest {
 
         assertFalse(graph.recurses(own("f")));
         assertFalse(graph.recurses(own("seed")));
-        assertEquals(List.of(), graph.callCycleOf(own("f")));
+        assertFalse(graph.callCycles().containsKey(own("f")));
     }
 
     /** A helper that takes arguments, written where a value goes, becomes a function there. Nothing
@@ -104,8 +104,8 @@ class ARecursionIsACycleOfCallsAndNotOfReadsTest {
                 let pong (n: Int) : Int = ping(n)
                 """));
 
-        assertEquals(List.of(own("ping"), own("pong")), graph.callCycleOf(own("ping")));
-        assertEquals(List.of(own("ping"), own("pong")), graph.callCycleOf(own("pong")));
+        assertEquals(List.of(own("ping"), own("pong")), graph.callCycles().get(own("ping")));
+        assertEquals(List.of(own("ping"), own("pong")), graph.callCycles().get(own("pong")));
     }
 
     /** Reaching a cycle is not being on it. */
@@ -120,7 +120,7 @@ class ARecursionIsACycleOfCallsAndNotOfReadsTest {
                 """));
 
         assertFalse(graph.recurses(own("caller")));
-        assertEquals(List.of(), graph.callCycleOf(own("caller")));
+        assertFalse(graph.callCycles().containsKey(own("caller")));
         assertTrue(graph.recurses(own("ping")));
     }
 }

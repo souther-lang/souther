@@ -5,6 +5,8 @@ import souther.compiler.check.NarrowedBounds;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Requirements;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.numeric.ValueTransformation;
+import souther.compiler.semantics.TakenAs;
 
 import java.util.List;
 
@@ -43,7 +45,7 @@ import java.util.List;
  * @param term    the number this axis is of: a location's own content, or something taken of it.
  *                Answered by one input position and held as such, because that is what an axis is:
  *                a run of classes over the values of a number a row can be asked for somewhere. A
- *                number read from a run of a sequence has no such place, so it draws a line without
+ *                number read from a run of a container has no such place, so it draws a line without
  *                dividing anything and never arrives here
  * @param classes exclusive and exhaustive over the term's values, or empty where the model does
  *                not divide them
@@ -59,9 +61,10 @@ import java.util.List;
  * @param parted  where the rules part this position's values, which is not the same list. A cut is
  *                a value a row can be written against and a bound has one without parting
  *                anything; a rule that wrote a multiple of the position parts its values where the
- *                position may hold none, and has no cut. What every border on this position owes
- *                away from its line is a run of what these leave together, and the cuts alone are
- *                short of the lines that have no value
+ *                position may hold none, and has no cut. What a comparison's border on this
+ *                position owes away from its line is a run of what these leave together, and the
+ *                cuts alone are short of the lines that have no value. A bound's border reads none
+ *                of them: its run is what the rules leave
  */
 public record Axis(AxisId id, NumericTerm.FromOnePosition term,
                    List<PartitionClass> classes, List<RuleEvidenceOrigin> divides,
@@ -177,7 +180,10 @@ public record Axis(AxisId id, NumericTerm.FromOnePosition term,
         return switch (term) {
             case NumericTerm.ValueOf it -> NumberAt.valueOf(it.position());
             case NumericTerm.TakenOf it ->
-                    NumberAt.takenOf(it.position(), it.operation(), it.arguments());
+                    NumberAt.takenOf(it.position(), it.operation(), it.arguments(),
+                            it.transformation());
+            case NumericTerm.CodePointClassCount it ->
+                    NumberAt.countOf(it.position(), it.counted());
         };
     }
 
@@ -202,6 +208,18 @@ public record Axis(AxisId id, NumericTerm.FromOnePosition term,
      */
     public Requirements requiring(PartitionClass cls) {
         return requirements().and(path(), cls == null ? null : cls.selects());
+    }
+
+    /**
+     * Whether this is how many the container at {@link #path()} holds, as it stands.
+     *
+     * <p>Of the container itself and not of something made from it: a count of a value made from the
+     * container is a count of another value, and says nothing about how many this one holds.
+     */
+    public boolean countsWhatItsPathHolds() {
+        return term instanceof NumericTerm.TakenOf taken
+                && taken.takenAs() instanceof TakenAs.HowManyItHolds
+                && taken.transformation().equals(ValueTransformation.NONE);
     }
 
     /** Whether the model divides this position into classes to cover. */

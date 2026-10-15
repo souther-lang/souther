@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.observe.ArmObservation;
 import souther.compiler.observe.Incompleteness;
+import souther.compiler.observe.Limits;
 import souther.compiler.observe.MeasureReason;
 import souther.compiler.partition.ReadingGap;
 
@@ -119,9 +120,9 @@ class FoldingOneReadingsSearchesDoesNotMoveTheDebtTest {
         // way of saying it and not something read off the reading here. What a search then comes to
         // is a row at the point or none, read to the end or as far as it got.
         return List.of(
-                new Measurement.Complete<>(new ItemAssessment.Coverage.Hit()),
+                new Measurement.Complete<>(new ItemAssessment.Coverage.Hit(RowWitnesses.ANOTHER_ROW)),
                 new Measurement.Complete<>(new ItemAssessment.Coverage.NoHit()),
-                new Measurement.Partial<>(new ItemAssessment.Coverage.Hit(), truncated()),
+                new Measurement.Partial<>(new ItemAssessment.Coverage.Hit(RowWitnesses.ANOTHER_ROW), truncated()),
                 new Measurement.Partial<>(new ItemAssessment.Coverage.NoHit(), truncated()),
                 new Measurement.Partial<>(new ItemAssessment.Coverage.NoHit(), unreadable()));
     }
@@ -345,14 +346,14 @@ class FoldingOneReadingsSearchesDoesNotMoveTheDebtTest {
     @Test
     void aRowSeenByOneSearchKeepsWhatEitherOfThemWentWithout() {
         Measurement<ItemAssessment.Coverage> seen =
-                new Measurement.Partial<>(new ItemAssessment.Coverage.Hit(), truncated());
+                new Measurement.Partial<>(new ItemAssessment.Coverage.Hit(RowWitnesses.ANOTHER_ROW), truncated());
         Measurement<ItemAssessment.Coverage> elsewhere =
                 new Measurement.Partial<>(new ItemAssessment.Coverage.NoHit(), unreadable());
 
         Measurement<ItemAssessment.Coverage> folded =
                 ObligationCoverage.acrossOneReadingsSearches(seen, elsewhere);
 
-        assertEquals(new Measurement.Partial<>(new ItemAssessment.Coverage.Hit(),
+        assertEquals(new Measurement.Partial<>(new ItemAssessment.Coverage.Hit(RowWitnesses.ANOTHER_ROW),
                         truncated().union(unreadable())),
                 folded,
                 "the row stands, and what either search could not read is what the reading"
@@ -411,11 +412,12 @@ class FoldingOneReadingsSearchesDoesNotMoveTheDebtTest {
 
     private static WeakeningSet truncated() {
         return WeakeningSet.of(new Weakening.BorderValueUnreadable(null,
-                ReadingGap.of(Incompleteness.Code.VALUE_TRUNCATED)));
+                ReadingGap.of(Incompleteness.Cause.at(Incompleteness.Code.VALUE_TRUNCATED,
+                        Limits.DEFAULT.nodesFigure()))));
     }
 
     private static WeakeningSet unreadable() {
         return WeakeningSet.of(new Weakening.BorderValueUnreadable(null,
-                ReadingGap.of(Incompleteness.Code.VALUE_UNREADABLE)));
+                ReadingGap.of(Incompleteness.Cause.of(Incompleteness.Code.VALUE_UNREADABLE))));
     }
 }

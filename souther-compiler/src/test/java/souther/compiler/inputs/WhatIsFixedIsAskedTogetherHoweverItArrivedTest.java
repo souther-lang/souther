@@ -7,6 +7,7 @@ import souther.compiler.check.InvariantChecker;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
+import souther.compiler.check.TypeCardinality;
 import souther.compiler.check.Emptiness;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.ExactRatio;
@@ -337,9 +338,13 @@ class WhatIsFixedIsAskedTogetherHoweverItArrivedTest {
      */
     @Test
     void settlingAPositionDoesNotReadTheDeclarationsAgain() {
+        long beforeReading = InvariantChecker.readingsMade();
         Read read = read(SOURCE, "take");
         Quantities asked = read.inputs().quantities(read.rules());
         long before = InvariantChecker.readingsMade();
+        // The count is kept on the path the source is read by, so settling that reads nothing is
+        // a count that stood still and not a count nobody kept.
+        assertTrue(before > beforeReading, "reading the source made no reading");
 
         Quantities twice = asked.given(X, count(1)).given(Y, count(1));
         twice.runsBetween(sum());
@@ -353,47 +358,33 @@ class WhatIsFixedIsAskedTogetherHoweverItArrivedTest {
      * And what it answers is what reading them again with the same thing settled would answer.
      *
      * <p>Which is why not reading them again is allowed. The two are one statement or they are two,
-     * and stating a settling in two places is how they would come apart — so what the cheap way says
-     * is held against what the reading itself says, at a position and over a form and about whether
-     * anything is left.
+     * and stating a settling in two places is how they would come apart — so what fixing a position
+     * of the input says is held against what the reading of the declaration says with the same
+     * position settled in it, at the other position and about whether anything is left.
      */
     @Test
     void whatASettlingLeavesIsWhatReadingItInWouldLeave() {
         Read read = read(SOURCE, "take");
+        Quantities asked = read.inputs().quantities(read.rules());
         souther.compiler.types.TypeSymbol.AtModule name =
                 souther.compiler.types.TypeSymbols.declared(
                 new souther.compiler.types.TypeKey(read.rules().symbols().module(), "P"));
-        souther.compiler.check.FieldDomains whole = souther.compiler.check.FieldDomains.of(
-                name, RuleReadingContext.unshared(read.rules(), ReadAs.THE_COMPILATION_DOES));
 
-        for (int at = 0; at <= 5; at++) {
+        for (int at = -1; at <= 6; at++) {
             Map<souther.compiler.check.RuleKey, Count> settled =
                     Map.of(souther.compiler.check.RuleKey.of("x"), count(at));
             souther.compiler.check.FieldDomains readIn = souther.compiler.check.FieldDomains.of(
                     name, RuleReadingContext.unshared(read.rules(), ReadAs.THE_COMPILATION_DOES),
                     settled);
-            souther.compiler.check.FieldDomains.Carried<String> taken = whole.given(Map.of(
-                    souther.compiler.check.NumberAt
-                            .valueOf(souther.compiler.check.RuleKey.of("x")), count(at)))
-                    .constraintsOver(claim -> claim.of()
-                                    instanceof souther.compiler.check.NumberAt
-                                            .OfWhatNumber.OfWhatAnOperationAnswers
-                                    ? "#" + claim.position() : claim.position().toString(),
-                            subject -> "?" + subject,
-                            souther.compiler.numeric.CanonicalOrder.asTheyAreSpelled());
-            java.util.SequencedMap<String, Emptiness.AtAField.Where> where =
-                    new LinkedHashMap<>();
-            taken.named().forEach((subject, spelled) ->
-                    where.put(subject, new Emptiness.AtAField.Where.In(subject)));
+            Quantities fixed = asked.given(X, count(at));
 
-            assertEquals(readIn.holdsNothing().isPresent(),
-                    taken.constraints().holdsNothing(where).isPresent(),
+            assertEquals(readIn.holdsNothing().isPresent(), fixed.emptiness().isPresent(),
                     "whether anything is left, with x at " + at);
-            assertEquals(readIn.leftAt(souther.compiler.check.RuleKey.of("y"),
-                            new souther.compiler.check.NumberAt.OfWhatNumber.OfItsOwnValue()),
-                    taken.constraints().numbers().boundsOf(
-                            LinearForm.<String>atom("y")),
-                    "where y runs, with x at " + at);
+            if (readIn.holdsNothing().isEmpty()) {
+                assertEquals(readIn.leftAt(souther.compiler.check.RuleKey.of("y"),
+                                new souther.compiler.check.NumberAt.OfWhatNumber.OfItsOwnValue()),
+                        fixed.runsBetween(Y), "where y runs, with x at " + at);
+            }
         }
     }
 
@@ -411,7 +402,7 @@ class WhatIsFixedIsAskedTogetherHoweverItArrivedTest {
 
         EmptyInput why = read.inputs().quantities(read.rules()).emptiness().orElseThrow();
 
-        assertEquals(new EmptyInput.ProvedByTheRules(
+        assertEquals(new EmptyInput.ProvedByTheDeclarations(
                         new Emptiness.AtAField(new Emptiness.AtAField.Where.In("p.x"),
                                 new Emptiness.EmptyOrderedInterval())),
                 why);
@@ -433,7 +424,7 @@ class WhatIsFixedIsAskedTogetherHoweverItArrivedTest {
         EmptyInput why = read.inputs().quantities(read.rules())
                 .given(fixing(X, 4, Y, 4)).emptiness().orElseThrow();
 
-        assertEquals(new EmptyInput.ProvedByTheRules(new Emptiness.ConflictingRules()), why);
+        assertEquals(new EmptyInput.ProvedByTheDeclarations(new Emptiness.ConflictingRules()), why);
     }
 
     /** A field whose own type the rules leave no value of, so the proof names that field. */
@@ -490,7 +481,7 @@ class WhatIsFixedIsAskedTogetherHoweverItArrivedTest {
      *  builds one: through the factory that holds the operation to what is there. */
     private static NumericTerm takenOfWhatIsThere(Read read, TermPath at) {
         souther.compiler.types.Type type = read.inputs().at(at).type();
-        NumericTerm.TakenOf made = NumericTerm.TakenOf.of(
+        NumericTerm.TakenOf made = NumericTerm.TakenOf.asItStands(
                 souther.compiler.check.NumericMeasures.takenOf(type, read.rules().inners()),
                 at, type, read.rules().inners(), read.rules().symbols());
         assertNotNull(made, at + " is counted by what its type is counted by");
@@ -523,7 +514,10 @@ class WhatIsFixedIsAskedTogetherHoweverItArrivedTest {
         Map<String, DeclaredSig> sigs =
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
         RuleReadingSource rules = RuleReadings.of(compilation, module);
-        return new Read(InputDomain.of(sigs.get(behavior),
-                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES)), rules);
+        RuleReadingContext reading =
+                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES);
+        return new Read(InputDomain.of(sigs.get(behavior), reading,
+                TypeCardinality.Counts.workedOutIn(reading),
+                souther.compiler.carrier.Membership.none()), rules);
     }
 }

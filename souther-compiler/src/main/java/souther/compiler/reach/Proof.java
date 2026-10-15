@@ -22,7 +22,9 @@ import java.util.List;
  * fall into whichever branch a switch happened to end with.
  */
 public sealed interface Proof
-        permits ConditionsThatCannotAllHold, OutsideInputDomain, EveryCaseRefused {
+        permits ConditionsThatCannotAllHold, OutsideInputDomain, EveryCaseRefused,
+        NoCaseTheValueCanBeIsTaken, TheDeclarationHoldsNoneOf, TheDeclarationHoldsNothingElse,
+        EveryWayInIsRuledOut, ItsClosureIsAppliedToNothing {
 
     /**
      * The sentences a proof can come to, one per arm.
@@ -53,11 +55,20 @@ public sealed interface Proof
          * author reading the general form would be sent to look at the guards above, and there is
          * nothing there to find.
          *
+         * <p>What the position holds is said two ways, because the rules say it two ways: where its
+         * value runs between, and which values they name or refuse. A branch written between two
+         * values a rule names is inside the range and outside the values, and one written at the
+         * value a rule refuses is inside a range with no end at all — so the range alone would tell
+         * an author the branch asks for something the range plainly holds.
+         *
          * @param position  where the value the branch turns on sits
-         * @param admits    what the rules leave that position
+         * @param admits    where the rules leave that position's value running, or null where they
+         *                  leave it no range
+         * @param named     the values the rules leave that position or the ones they refuse it, or
+         *                  null where they name neither; never null where {@code admits} is
          * @param departure the condition, and the way this branch takes it
          */
-        T outsideInputDomain(TermPath position, NumericDomain.Bounds admits,
+        T outsideInputDomain(TermPath position, NumericDomain.Bounds admits, ValuesNamed named,
                              PathDecision departure);
 
         /**
@@ -70,6 +81,74 @@ public sealed interface Proof
          * @param cases    the cases the arm names, every one of them refused there
          */
         T everyCaseRefused(String position, List<TypeSymbol> cases);
+
+        /**
+         * What the arm matches on is a value the source wrote, and none of the cases it can be is
+         * one the arm takes.
+         *
+         * <p>About what the {@code match} is handed and not about any position: a helper handed a
+         * case at its call takes the arm for that case and no other, whatever the rules of the input
+         * leave.
+         *
+         * @param canBe the cases the value matched on can be
+         * @param cases the cases the arm names
+         */
+        T noCaseTheValueCanBeIsTaken(List<TypeSymbol> canBe, List<TypeSymbol> cases);
+
+        /**
+         * The position matched on is declared as a sum none of whose cases is one the arm is for.
+         *
+         * <p>About the type the input declares at the position and not about any rule: what a
+         * shared helper matches on can be wider than what the behavior calling it takes, and the
+         * cases the behavior's input leaves out are ones no value of it is.
+         *
+         * @param position how the position is spelled
+         * @param declared every case the position's type holds
+         * @param cases    the cases the arm needs a value to be, none of them among {@code declared}
+         */
+        T theDeclarationHoldsNoneOf(String position, List<TypeSymbol> declared,
+                                    List<TypeSymbol> cases);
+
+        /**
+         * The position matched on is declared as a sum every case of which this arm needs a value
+         * not to be.
+         *
+         * <p>The other side of the same fact: the arms before this one take every case the input
+         * declares at the position, so what is left for this one is a case no value of it is.
+         *
+         * @param position how the position is spelled
+         * @param declared every case the position's type holds
+         * @param cases    the cases the arm needs a value not to be, {@code declared} among them
+         */
+        T theDeclarationHoldsNothingElse(String position, List<TypeSymbol> declared,
+                                         List<TypeSymbol> cases);
+
+        /**
+         * The arm is entered by one of several ways, and each of them was shown not to be.
+         *
+         * <p>A value the body works out is of a case by whichever helper arm answers it, and the
+         * arm matched on that case is entered where any of them is: so it is ruled out where all of
+         * them are, each for its own reason.
+         *
+         * @param each why each way in is not one, in the order the ways are read; at least two
+         */
+        T everyWayInIsRuledOut(List<Proof> each);
+
+        /**
+         * The place is in a closure applied to the elements of containers that what holds on the
+         * way to it leaves holding none, so the closure is never applied.
+         *
+         * <p>About the closure and not about the place: nothing inside the closure is refused, and
+         * the place is no different from the rest of its body. What leaves the containers empty is
+         * the rules of the input, with the conditions taken in on the way to the closure where
+         * there are any.
+         *
+         * @param containers how each container the closure is applied over is spelled, in the order
+         *                   it is handed them
+         * @param decisions  the conditions taken in on the way to the closure, in the order they
+         *                   were assumed; none where the rules alone leave the containers empty
+         */
+        T itsClosureIsAppliedToNothing(List<String> containers, List<PathDecision> decisions);
     }
 
     /** What this proof comes to, in {@code words}. */
@@ -84,13 +163,131 @@ public sealed interface Proof
     /** The position would have to hold a value its input domain does not admit; see
      *  {@link Words#outsideInputDomain}. */
     static Proof outsideInputDomain(TermPath position, NumericDomain.Bounds admits,
-                                    PathDecision departure) {
-        return new OutsideInputDomain(position, admits, departure);
+                                    ValuesNamed named, PathDecision departure) {
+        return new OutsideInputDomain(position, admits, named, departure);
     }
 
     /** Every case the position could hold was refused; see {@link Words#everyCaseRefused}. */
     static Proof everyCaseRefused(String position, List<TypeSymbol> cases) {
         return new EveryCaseRefused(position, cases);
+    }
+
+    /** The value matched on is never a case the arm takes; see
+     *  {@link Words#noCaseTheValueCanBeIsTaken}. */
+    static Proof noCaseTheValueCanBeIsTaken(List<TypeSymbol> canBe, List<TypeSymbol> cases) {
+        return new NoCaseTheValueCanBeIsTaken(canBe, cases);
+    }
+
+    /**
+     * The position's declared cases are none of the ones the arm needs a value to be, where
+     * {@code among}, or all among the ones it needs a value not to be, where not; see
+     * {@link Words#theDeclarationHoldsNoneOf} and {@link Words#theDeclarationHoldsNothingElse}.
+     */
+    static Proof theDeclarationLeavesNoCase(String position, List<TypeSymbol> declared,
+                                            List<TypeSymbol> cases, boolean among) {
+        return among ? new TheDeclarationHoldsNoneOf(position, declared, cases)
+                : new TheDeclarationHoldsNothingElse(position, declared, cases);
+    }
+
+    /** Each of several ways into the arm was ruled out; see {@link Words#everyWayInIsRuledOut}.
+     *  One way is that way's own proof. */
+    static Proof everyAlternativeRuledOut(List<Proof> each) {
+        return each.size() == 1 ? each.getFirst() : new EveryWayInIsRuledOut(each);
+    }
+
+    /** The closure the place is in is applied over containers holding none; see
+     *  {@link Words#itsClosureIsAppliedToNothing}. */
+    static Proof itsClosureIsAppliedToNothing(List<String> containers,
+                                              List<PathDecision> decisions) {
+        return new ItsClosureIsAppliedToNothing(containers, decisions);
+    }
+}
+
+record ItsClosureIsAppliedToNothing(List<String> containers, List<PathDecision> decisions)
+        implements Proof {
+
+    ItsClosureIsAppliedToNothing {
+        containers = List.copyOf(containers);
+        decisions = List.copyOf(decisions);
+        if (containers.isEmpty()) {
+            throw new IllegalArgumentException("a closure applied to nothing, over no container");
+        }
+    }
+
+    @Override
+    public <T> T said(Words<T> words) {
+        return words.itsClosureIsAppliedToNothing(containers, decisions);
+    }
+}
+
+record EveryWayInIsRuledOut(List<Proof> each) implements Proof {
+
+    EveryWayInIsRuledOut {
+        each = List.copyOf(each);
+        if (each.size() < 2) {
+            throw new IllegalArgumentException(
+                    "every way in ruled out, of fewer than two ways: one way is its own proof");
+        }
+    }
+
+    @Override
+    public <T> T said(Words<T> words) {
+        return words.everyWayInIsRuledOut(each);
+    }
+}
+
+record TheDeclarationHoldsNoneOf(String position, List<TypeSymbol> declared,
+                                 List<TypeSymbol> cases) implements Proof {
+
+    TheDeclarationHoldsNoneOf {
+        declared = List.copyOf(declared);
+        cases = List.copyOf(cases);
+        if (declared.isEmpty() || cases.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "a declaration holding none of an arm's cases, with no case either way");
+        }
+    }
+
+    @Override
+    public <T> T said(Words<T> words) {
+        return words.theDeclarationHoldsNoneOf(position, declared, cases);
+    }
+}
+
+record TheDeclarationHoldsNothingElse(String position, List<TypeSymbol> declared,
+                                      List<TypeSymbol> cases) implements Proof {
+
+    TheDeclarationHoldsNothingElse {
+        declared = List.copyOf(declared);
+        cases = List.copyOf(cases);
+        if (declared.isEmpty() || cases.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "a declaration holding nothing but what an arm is past, with no case either"
+                            + " way");
+        }
+    }
+
+    @Override
+    public <T> T said(Words<T> words) {
+        return words.theDeclarationHoldsNothingElse(position, declared, cases);
+    }
+}
+
+record NoCaseTheValueCanBeIsTaken(List<TypeSymbol> canBe, List<TypeSymbol> cases)
+        implements Proof {
+
+    NoCaseTheValueCanBeIsTaken {
+        canBe = List.copyOf(canBe);
+        cases = List.copyOf(cases);
+        if (canBe.isEmpty() || cases.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "a value never a case an arm takes, with no case either way");
+        }
+    }
+
+    @Override
+    public <T> T said(Words<T> words) {
+        return words.noCaseTheValueCanBeIsTaken(canBe, cases);
     }
 }
 
@@ -110,19 +307,20 @@ record ConditionsThatCannotAllHold(List<PathDecision> decisions) implements Proo
     }
 }
 
-record OutsideInputDomain(TermPath position, NumericDomain.Bounds admits, PathDecision departure)
+record OutsideInputDomain(TermPath position, NumericDomain.Bounds admits, ValuesNamed named,
+                          PathDecision departure)
         implements Proof {
 
     OutsideInputDomain {
-        if (position == null || admits == null || departure == null) {
-            throw new IllegalArgumentException(
-                    "a position outside what it holds, with no position, no bounds or no branch");
+        if (position == null || departure == null || (admits == null && named == null)) {
+            throw new IllegalArgumentException("a position outside what it holds, with no"
+                    + " position, nothing said of what it holds, or no branch");
         }
     }
 
     @Override
     public <T> T said(Words<T> words) {
-        return words.outsideInputDomain(position, admits, departure);
+        return words.outsideInputDomain(position, admits, named, departure);
     }
 }
 

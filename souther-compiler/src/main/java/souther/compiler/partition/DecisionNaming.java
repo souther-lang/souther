@@ -1,12 +1,25 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.Choice;
+import souther.compiler.check.Comparison;
 import souther.compiler.check.ScopeStep;
+import souther.compiler.core.ACopyOfAnApplication;
 import souther.compiler.core.Core;
+import souther.compiler.flow.Arrival;
 import souther.compiler.flow.Naming;
+import souther.compiler.flow.Paths;
+import souther.compiler.flow.Truth;
+import souther.compiler.flow.WayWritten;
 import souther.compiler.inputs.InputReads;
+import souther.compiler.inputs.WhatAConditionRuns;
 import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.ModelOccurrence;
+
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Optional;
+import java.util.Set;
 
 /**
  * How the decision a body states writes down what got a run to an answer.
@@ -55,12 +68,16 @@ final class DecisionNaming implements Naming<DecisionPath> {
 
     private final int mostArrivals;
 
+    /** The ways this reading proved no input takes, shared down every scope as the names are. */
+    private final WaysNoInputTakes proved;
+
     DecisionNaming(DecisionMeanings meanings, InputReads reads, ConditionNumbering numbering,
-                   int mostArrivals) {
+                   int mostArrivals, WaysNoInputTakes proved) {
         this.meanings = meanings;
         this.reads = reads;
         this.numbering = numbering;
         this.mostArrivals = mostArrivals;
+        this.proved = proved;
     }
 
     @Override
@@ -68,9 +85,91 @@ final class DecisionNaming implements Naming<DecisionPath> {
         return DecisionPath.NOWHERE;
     }
 
+    /**
+     * The two as one way, or null where no run takes both.
+     *
+     * <p>Two things show that. One condition answered two ways ({@link DecisionPath#and}); and
+     * conditions that each come out as the way took them, but that what the declarations hold leave
+     * no input to bring out all at once — a remainder past one cap is a number every later cap of
+     * nought or more holds, so a way that went past it and then stopped under the next is no way a
+     * run takes. Asked of the way with its numbers taken in as it is walked
+     * ({@link WayToTheBorder#takenByNoInput}), and only a proof drops a way: what the region
+     * cannot take in, or a walk stopped at a figure, is a way kept.
+     *
+     * <p>A proof never drops every way out of a node. Those ways are one for each way the node's own
+     * conditions come out, so between them they take every input the declarations hold, and a body
+     * naming a type with no value is refused before it is read. Which is what lets a node this
+     * leaves no way out of read as one the naming would not hold apart ({@link Paths.Beyond}) and
+     * not as one no input takes.
+     */
     @Override
     public DecisionPath join(DecisionPath held, DecisionPath more) {
-        return held.and(more);
+        DecisionPath joined = held.and(more);
+        // Asked of every way joined, even one that consults nothing either of the two did not: a
+        // way can come to several conditions without being joined ({@link #takenByNoInput}), and
+        // what is asked is answered once for what it consulted
+        // ({@link WaysNoInputTakes#whyNoInputTakes}).
+        if (joined == null) {
+            return null;
+        }
+        Optional<NoInputTakesIt> none = noInputTakes(joined);
+        if (none.isEmpty()) {
+            return joined;
+        }
+        proveWithLess(joined, none.get());
+        return null;
+    }
+
+    /**
+     * That no input takes {@code path}, said of as few of its conditions as still prove it.
+     *
+     * <p>A way is joined from what comes after a condition before the condition itself, so the
+     * first way two clashing conditions are on is one with every condition after them on it too.
+     * Each condition the proof is had without is taken off, one at a time: what is left is the way
+     * that stands for every rule past it, and two rules past one clash come to one way.
+     */
+    private void proveWithLess(DecisionPath path, NoInputTakesIt why) {
+        DecisionPath least = path;
+        NoInputTakesIt leastWhy = why;
+        for (DecisionPath.Consulted each : path.consulted()) {
+            List<DecisionPath.Consulted> without = new ArrayList<>(least.consulted());
+            without.remove(each);
+            if (without.isEmpty()) {
+                continue;
+            }
+            DecisionPath less = new DecisionPath(without);
+            Optional<NoInputTakesIt> still = noInputTakes(less);
+            if (still.isPresent()) {
+                least = less;
+                leastWhy = still.get();
+            }
+        }
+        proved.add(least, leastWhy);
+    }
+
+    /**
+     * Whether no input takes {@code path}, a way the reading arrived at the end of the body by,
+     * held with the ways joined where it is proved. A way can come to every condition it consulted
+     * without one join that put them together — both sides of an operator that stops when its
+     * answer is settled are one side of it, and a body of one fork is never joined to more — and it
+     * is asked here, where every way ends.
+     */
+    boolean takenByNoInput(DecisionPath path) {
+        Optional<NoInputTakesIt> none = noInputTakes(path);
+        none.ifPresent(why -> proveWithLess(path, why));
+        return none.isPresent();
+    }
+
+    /** Why no input brings out every condition {@code path} consulted as it did, where that is
+     *  proved. */
+    private Optional<NoInputTakesIt> noInputTakes(DecisionPath path) {
+        return proved.whyNoInputTakes(path.rule(), () -> {
+            List<OnTheWay> stated = new ArrayList<>();
+            path.consulted().forEach(each -> stated.addAll(each.states()));
+            return new WayToTheBorder(stated)
+                    .takenByNoInput(meanings.states().read().quantities().region(),
+                            proved::takesIn);
+        });
     }
 
     @Override
@@ -78,7 +177,7 @@ final class DecisionNaming implements Naming<DecisionPath> {
         InputReads inside =
                 reads.entering(step, meanings.states().symbols(), meanings.states().newtypes());
         return inside == reads ? this
-                : new DecisionNaming(meanings, inside, numbering, mostArrivals);
+                : new DecisionNaming(meanings, inside, numbering, mostArrivals, proved);
     }
 
     /**
@@ -97,10 +196,19 @@ final class DecisionNaming implements Naming<DecisionPath> {
     public DecisionPath side(Core value, boolean held) {
         Condition condition = Condition.of(value, reads, meanings.states().symbols(),
                 meanings.states().newtypes(), numbering);
+        List<DecisionMeanings.Read> decided = meanings.deciding(condition, held);
+        // A side the reading of the ways let through and this reading sees no row take. Both ask
+        // which answers a value can give of the same reading, so they part only where it was read
+        // under different names — and then this naming has no words for the side, which is what
+        // null is ({@link Naming#side}): the way stays, short of whole, and is not dropped on the
+        // word of one of two readings that disagree.
+        if (decided == null) {
+            return null;
+        }
         DecisionPath path = DecisionPath.NOWHERE;
-        for (DecisionMeanings.Read each : meanings.deciding(condition, held)) {
+        for (DecisionMeanings.Read each : decided) {
             path = path.and(each.answer(), shownBy(each.answer(), condition, held),
-                    each.onTheWay());
+                    each.onTheWay(), each.said());
             if (path == null) {
                 return null;
             }
@@ -110,7 +218,10 @@ final class DecisionNaming implements Naming<DecisionPath> {
 
     @Override
     public DecisionPath matchCase(Core.Match match, int part) {
-        return atAnArm(meanings.entering(match, part, reads, numbering), match.occurrence(), part);
+        // Nothing, for an arm every row at the fork takes, which decides nothing.
+        return meanings.entering(match, part, reads, numbering)
+                .map(read -> atAnArm(read, match.occurrence(), part))
+                .orElse(DecisionPath.NOWHERE);
     }
 
     /**
@@ -126,6 +237,10 @@ final class DecisionNaming implements Naming<DecisionPath> {
      * minted here instead would be a second name for one condition, and the two accounts of it would
      * agree about nothing.
      *
+     * <p>Seen at the arm. Whatever the condition coming out that way states, a run down the arm is
+     * a run that brought it out that way, so a column of it nothing else records is seen there —
+     * the way {@link #seenAtTheArm} sees a way the condition's ways could be written down as.
+     *
      * <p>For an attempt, the arm itself. Whether the invariant held is a condition no expression of
      * the body states, so there is no condition to ask for; the arm is a column this reading names
      * and says it cannot read, and a run through it is seen at the arm the way a run through a case
@@ -134,12 +249,15 @@ final class DecisionNaming implements Naming<DecisionPath> {
     @Override
     public DecisionPath forkArm(Core fork, int part) {
         return switch (Choice.decidingArm(fork, part)) {
-            case Choice.Decides.ACondition(Core cond, boolean holding) -> side(cond, holding);
+            case Choice.Decides.ACondition(Core.If iff, boolean holding) -> {
+                DecisionPath stated = side(iff.cond(), holding);
+                yield stated == null ? null : atTheArm(iff, part, stated);
+            }
             case Choice.Decides.ItWasBuilt(Core.IfConstructed attempt) -> atAnArm(
-                    meanings.attempting(attempt, part, attempt.then().pos(), numbering),
+                    meanings.attempting(attempt, part, attempt.then().pos(), reads, numbering),
                     attempt.occurrence(), part);
             case Choice.Decides.ItDeparted(Core.IfConstructed attempt, Core.ElseArm on) -> atAnArm(
-                    meanings.attempting(attempt, part, on.body().pos(), numbering),
+                    meanings.attempting(attempt, part, on.body().pos(), reads, numbering),
                     attempt.occurrence(), part);
             // Named by matchCase, which is asked of the match and not of a fork in general.
             case Choice.Decides.ACase _ -> throw new IllegalStateException(
@@ -148,6 +266,190 @@ final class DecisionNaming implements Naming<DecisionPath> {
                     "an operation the library defines by cases at " + fork.pos()
                             + " was asked of as an arm of a fork, and no walk enters one");
         };
+    }
+
+    /**
+     * The way, with each condition on it that nothing records seen at the arm.
+     *
+     * <p>A truth the body was handed is a column this reading states in full and no construct of
+     * the model answers, so a rule through it is one no run is recognised at — until the fork that
+     * takes it is one the way is the only way into. A run at the arm then took the way, and so
+     * every condition on it came out the way the rule says.
+     *
+     * <p>A way whose value the reading could not work out says nothing of the condition, and the
+     * condition coming out the arm's way is put on it: the column {@link #forkArm} names, which is
+     * the one the arm is taken on.
+     *
+     * <p>Nothing, for a way this reading could not write down whole: the column it has no words for
+     * is not on the path, and the arm would be seen standing for a rule that turns on less than the
+     * way does. And the way as it is, for a fork the model does not state — one inside the
+     * language's own operations has no arm a run is recorded at.
+     */
+    @Override
+    public DecisionPath seenAtTheArm(Core.If fork, int part, Arrival<DecisionPath> onlyWay) {
+        if (!onlyWay.isComplete()) {
+            return null;
+        }
+        DecisionPath way = onlyWay.path();
+        if (onlyWay.value() == Truth.UNREAD) {
+            DecisionPath stated = side(fork.cond(), part == 0);
+            way = stated == null ? null : way.and(stated);
+        }
+        return way == null ? null : atTheArm(fork, part, way);
+    }
+
+    /**
+     * Told apart, because every way this writes into an arm among others is one it wrote down whole
+     * where it went ({@link #oneOfTheWaysIn}): two of them part where one condition both ran came
+     * out two ways, and each records that where the condition is stated. A condition this sees at
+     * the arm is seen there short of an operand the other ways ran ({@link ShownBy.AtAnArmShortOf}),
+     * which is not what a run on another way is seen doing.
+     */
+    @Override
+    public boolean toldApart(List<DecisionPath> ways) {
+        return true;
+    }
+
+    /**
+     * The way, with each condition settled short of an operand seen at the arm taken without that
+     * operand having run — where every run down the arm ran the operator.
+     *
+     * <p>Only then does a run down the arm that did not reach the operand say the left settled.
+     * Under {@code x > 0 && (flag && n > 0)} the inner {@code &&} runs only where {@code x > 0}
+     * held, and a run down the {@code else} arm with {@code n > 0} not run may have stopped at
+     * {@code x > 0} and never asked {@code flag}.
+     *
+     * <p>Nothing, for a way this reading could not write down whole or could not value, as for
+     * {@link #seenAtTheArm}: and here the arm is not even the one way's, so it says less still.
+     */
+    @Override
+    public WayWritten<DecisionPath> oneOfTheWaysIn(Core.If fork, int part,
+                                                   Arrival<DecisionPath> taken) {
+        if (taken.value() == Truth.UNREAD || !taken.isComplete()) {
+            return new WayWritten.NoWords<>();
+        }
+        DecisionPath way = taken.path();
+        ModelOccurrence stated = forkStated(fork);
+        if (stated == null) {
+            return new WayWritten.As<>(way);
+        }
+        // Worked out at the first condition settled short of an operand, which most ways have none
+        // of, and not once for every way into the arm.
+        List<Set<ModelOccurrence>> alwaysRun = new ArrayList<>(1);
+        return new WayWritten.As<>(way.seenAgain(shown -> {
+            if (!(shown instanceof ShownBy.ShortOf(var _, var notReached))) {
+                return shown;
+            }
+            if (alwaysRun.isEmpty()) {
+                alwaysRun.add(alwaysRun(fork, part));
+            }
+            return alwaysRun.getFirst().contains(notReached)
+                    ? new ShownBy.AtAnArmShortOf(stated, part, notReached) : shown;
+        }));
+    }
+
+    /** The operands every run down arm {@code part} of {@code fork} ran, where a run through one
+     *  is recorded at the operand itself. */
+    private Set<ModelOccurrence> alwaysRun(Core.If fork, int part) {
+        Set<ModelOccurrence> out = new LinkedHashSet<>();
+        for (Core right : WhatAConditionRuns.whenItCameOut(fork.cond(), part == 0, reads,
+                meanings.states().symbols(), meanings.states().newtypes()).mayNotRun()) {
+            recordedAsItself(right).ifPresent(out::add);
+        }
+        return out;
+    }
+
+    /**
+     * The left's one way of going on, with what nothing records on it seen where the right is: a
+     * run recorded at the right ran it, which is what the left going on is.
+     *
+     * <p>Only where the right is itself the construct a run through it is recorded at. A right that
+     * is a name for a truth worked out before the operator ran is recorded where it was worked out,
+     * whichever way the left came out.
+     */
+    @Override
+    public DecisionPath wentOn(Core.Binary operator, DecisionPath left,
+                               Arrival<DecisionPath> right) {
+        Optional<ModelOccurrence> recorded = recordedAsItself(operator.right());
+        if (recorded.isEmpty() || right.value() == Truth.UNREAD) {
+            return left;
+        }
+        ShownBy seen = new ShownBy.AtAnOutcome(recorded.get(), right.value() == Truth.TRUE);
+        return left.seenAgain(shown -> switch (shown) {
+            case ShownBy.NothingIsRecorded _, ShownBy.ShortOf _ -> seen;
+            case ShownBy.AtAnOutcome _, ShownBy.AtAnArm _, ShownBy.AtAnArmShortOf _ -> shown;
+        });
+    }
+
+    /**
+     * The left's one way of settling the answer, with what nothing records on it said to have been
+     * settled short of the right — which a fork whose condition always runs the operator turns
+     * into a place to be seen at ({@link #oneOfTheWaysIn}).
+     *
+     * <p>A condition already settled short of an operand further in keeps that one: the operand
+     * nearest it is the one whose not having run says how it came out.
+     */
+    @Override
+    public DecisionPath stoppedShort(Core.Binary operator, DecisionPath left) {
+        Optional<ModelOccurrence> recorded = recordedAsItself(operator.right());
+        if (recorded.isEmpty()) {
+            return left;
+        }
+        return left.seenAgain(shown -> shown instanceof ShownBy.NothingIsRecorded(var condition)
+                ? new ShownBy.ShortOf(condition, recorded.get()) : shown);
+    }
+
+    /**
+     * {@code path} with every condition nothing records seen at arm {@code part} of {@code fork},
+     * or as it is where the model states no such fork.
+     *
+     * <p>Every one of them, settled short of an operand or not: the path is the only way into the
+     * arm, so the arm alone says each came out the way the path says.
+     */
+    private static DecisionPath atTheArm(Core.If fork, int part, DecisionPath path) {
+        ModelOccurrence stated = forkStated(fork);
+        if (stated == null) {
+            return path;
+        }
+        ShownBy arm = new ShownBy.AtAnArm(stated, part);
+        return path.seenAgain(shown -> switch (shown) {
+            case ShownBy.NothingIsRecorded _, ShownBy.ShortOf _ -> arm;
+            case ShownBy.AtAnOutcome _, ShownBy.AtAnArm _, ShownBy.AtAnArmShortOf _ -> shown;
+        });
+    }
+
+    /** The fork of the model {@code fork} is, or null for one the model does not state — one inside
+     *  the language's own operations, or one this compiler composed, which has no place at all. */
+    private static ModelOccurrence forkStated(Core.If fork) {
+        return Optional.ofNullable(fork.occurrence()).flatMap(ModelOccurrence::statedAt)
+                .orElse(null);
+    }
+
+    /**
+     * The construct of the model {@code value} itself is, where a run through it is recorded there:
+     * a comparison, or an application of one of the language's operations, written where it stands
+     * and not reached through a name.
+     *
+     * <p>An application the library writes in the language is met as the copy of it the body was
+     * given, and the reading of the ways takes no truth of that copy's code but the one its answer
+     * comes out as, at the node it is entered at; what a run answered there is recorded as the
+     * application's ({@link ACopyOfAnApplication}).
+     */
+    private static Optional<ModelOccurrence> recordedAsItself(Core value) {
+        Core e = Core.withoutStanding(value);
+        Optional<ModelOccurrence> itself = switch (e) {
+            case Core.Binary binary when Comparison.of(binary).isPresent()
+                    && binary.occurrence() != null ->
+                    ModelOccurrence.statedAt(binary.occurrence());
+            case Core.PreservedCall applied when applied.occurrence().isWritten() ->
+                    ModelOccurrence.statedAt(applied.occurrence());
+            default -> Optional.empty();
+        };
+        if (itself.isPresent()) {
+            return itself;
+        }
+        ACopyOfAnApplication copy = ACopyOfAnApplication.of(e);
+        return copy == null ? Optional.empty() : ModelOccurrence.statedAt(copy.application());
     }
 
     /**
@@ -161,7 +463,7 @@ final class DecisionNaming implements Naming<DecisionPath> {
         ModelOccurrence stated = ModelOccurrence.statedAt(fork).orElse(null);
         return DecisionPath.NOWHERE.and(read.answer(), stated == null
                 ? new ShownBy.NothingIsRecorded(read.answer().condition())
-                : new ShownBy.AtAnArm(stated, part), read.onTheWay());
+                : new ShownBy.AtAnArm(stated, part), read.onTheWay(), read.said());
     }
 
     @Override
@@ -172,13 +474,23 @@ final class DecisionNaming implements Naming<DecisionPath> {
     /**
      * Where a run through one condition is recorded, said in the model's words.
      *
-     * <p>The comparison's own construct of the model, which is what the tree the rules are read off
-     * and the tree that runs agree about. A condition of any other shape has none to be seen at, and
-     * says so rather than being left off the path.
+     * <p>The construct of the model that answers the truth, which is what the tree the rules are
+     * read off and the tree that runs agree about: a comparison, or an application of one of the
+     * language's operations. A condition with no such construct — a truth asked of a name the body
+     * was handed — has none to be seen at, and says so rather than being left off the path.
      */
     private static ShownBy shownBy(DecidedCondition answer, Condition condition, boolean held) {
-        return condition instanceof Condition.Compares one && one.states().isPresent()
-                ? new ShownBy.AtAComparison(one.states().orElseThrow(), held)
+        Optional<ModelOccurrence> answered = answeredAt(condition);
+        return answered.isPresent() ? new ShownBy.AtAnOutcome(answered.get(), held)
                 : new ShownBy.NothingIsRecorded(answer.condition());
+    }
+
+    /** The construct of the model {@code condition}'s truth is answered by, where it is one. */
+    static Optional<ModelOccurrence> answeredAt(Condition condition) {
+        return switch (condition) {
+            case Condition.Compares one -> one.states();
+            case Condition.Truth truth -> recordedAsItself(truth.value());
+            case Condition.Joined _ -> Optional.empty();
+        };
     }
 }

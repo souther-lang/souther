@@ -56,7 +56,7 @@ public final class SiteNumbering {
      * The place {@code raw} was issued for, as an arm.
      *
      * <p>Refused where this numbering handed out no such number, and refused where it handed it out
-     * for a comparison. Both are the same mistake seen from two sides — a number read as addressing
+     * for a condition. Both are the same mistake seen from two sides — a number read as addressing
      * a place it was not issued for — and neither can be told from a right answer afterwards.
      */
     public ArmProbe arm(int raw) {
@@ -67,13 +67,13 @@ public final class SiteNumbering {
         return new ArmProbe(identity, raw);
     }
 
-    /** The same, for a comparison. */
-    public ComparisonEmissionSite comparison(int raw) {
-        if (!(at(raw) instanceof SiteAddress.Comparison)) {
+    /** The same, for a place a condition's outcome is recorded at. */
+    public ConditionOutcomeSite outcome(int raw) {
+        if (!(at(raw) instanceof SiteAddress.ConditionOutcome)) {
             throw new IllegalArgumentException(
-                    raw + " was issued for " + at(raw) + ", which is not a comparison");
+                    raw + " was issued for " + at(raw) + ", which is not a condition");
         }
-        return new ComparisonEmissionSite(identity, raw);
+        return new ConditionOutcomeSite(identity, raw);
     }
 
     /**
@@ -100,9 +100,9 @@ public final class SiteNumbering {
         for (int raw : seen.arms()) {
             arms.add(arm(raw));
         }
-        Set<SeenComparison> ways = new LinkedHashSet<>();
-        for (ComparisonOutcome way : seen.comparisons()) {
-            ways.add(new SeenComparison(comparison(way.at()), way.held()));
+        Set<SeenConditionOutcome> ways = new LinkedHashSet<>();
+        for (RecordedConditionOutcome way : seen.outcomes()) {
+            ways.add(new SeenConditionOutcome(outcome(way.at()), way.held()));
         }
         return new AlignedObservation(identity, arms, ways);
     }

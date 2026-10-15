@@ -81,7 +81,7 @@ public enum WeakeningWord {
      * value that could not be read and a place that holds none are answers a reading came to; this
      * is a reading nobody made. A consumer acts on it differently for the same reason it acts on
      * {@link #PAIR_SPACE_TRUNCATED} differently: what it is short of is a figure of this compiler's,
-     * so running again allowing more is the thing to do about it.
+     * so a wider run of this compiler may answer it, and a row written at the point does.
      */
     BORDER_READINGS_NOT_EXHAUSTED,
 
@@ -148,6 +148,13 @@ public enum WeakeningWord {
      */
     ITEMS_PLACE_NOT_WORKED_OUT,
 
+    /**
+     * A reading of a comparison a body wrote that could not be tied to the line its author drew:
+     * the comparison turns there because a caller's choice does, and what rows came to there is not
+     * counted for or against a point of the author's line.
+     */
+    A_READING_NOT_TIED_TO_ITS_LINE,
+
     /** A rule of the model that a reader set aside. */
     RULE_UNREAD,
 
@@ -204,6 +211,15 @@ public enum WeakeningWord {
      */
     MEETINGS_NOT_WALKED,
 
+    /**
+     * A meeting of the body's decisions whose combinations the classes of the input do not place,
+     * so which of them the rows make was never established.
+     *
+     * <p>Its own word beside the one above, because a consumer acts on them differently: a wider
+     * limit walks a meeting held back by one, and places nothing more of these.
+     */
+    MEETINGS_NOT_PLACED,
+
     /** A row went through an arm this compiler had proven nothing arrives at. */
     PROOF_CONTRADICTED,
 
@@ -245,5 +261,23 @@ public enum WeakeningWord {
      * <p>Apart from the word above, which is the rules not being in hand. What this takes away is
      * whether a rule read short is taken by a row or owed one, and it bears on that rule alone.
      */
-    DECISION_RULE_READ_SHORT
+    DECISION_RULE_READ_SHORT,
+
+    /**
+     * The overwrite order of a repeated key in a map the body files from a list may bear on a
+     * condition's boundary or branch, and what that decides has not been measured.
+     *
+     * <p>The last value for a key is read as the last one. What is missing is the rows: the ones
+     * written hold each key once, so a distinction only a repeated key makes — an earlier element
+     * meeting a condition the last does not, and the other way round — has no row. Apart from
+     * {@link #DECISION_RULE_READ_SHORT}, which is a rule read with fewer of its distinctions: the
+     * rules here are read whole, and a capacity to write rows is what is short.
+     */
+    KEYED_OVERWRITE_CASES_UNMEASURED,
+
+    /**
+     * A rewrite of a body nothing here could decide about: whether a row tells it from the body is
+     * not known. Which of the ways that happens it was is the reason the rewrite's own entry gives.
+     */
+    REWRITE_UNDECIDED
 }

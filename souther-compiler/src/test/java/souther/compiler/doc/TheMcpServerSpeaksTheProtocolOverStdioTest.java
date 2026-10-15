@@ -117,7 +117,8 @@ class TheMcpServerSpeaksTheProtocolOverStdioTest {
 
     @Test
     void aToolThatBlowsUpIsAnsweredAndTheServerKeepsServing() throws Exception {
-        java.nio.file.Path notAJar = java.nio.file.Files.createTempFile("not-a", ".jar");
+        java.nio.file.Path notAJar = java.nio.file.Files.createTempFile(
+                java.nio.file.Path.of("target"), "not-a", ".jar");
         java.nio.file.Files.writeString(notAJar, "this is not a zip archive");
 
         List<JsonNode> answers = serve(
@@ -129,6 +130,31 @@ class TheMcpServerSpeaksTheProtocolOverStdioTest {
         assertTrue(answers.getFirst().get("result").get("isError").asBoolean(),
                 "the failure is the tool call's, not the server's");
         assertTrue(answers.get(1).get("result").has("tools"), "the next request is served as usual");
+    }
+
+    @Test
+    void aClassPathOutsideTheWorkingDirectoryIsRefusedAndNothingUnderItIsRead() throws Exception {
+        java.nio.file.Path outside = java.nio.file.Files.createTempDirectory("outside");
+
+        List<JsonNode> answers = serve(
+                "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"jar_api\","
+                        + "\"arguments\":{\"name\":\"acme.Thing\",\"classpath\":\""
+                        + outside.toString().replace("\\", "\\\\") + "\"}}}");
+
+        JsonNode result = answers.getFirst().get("result");
+        assertTrue(result.get("isError").asBoolean());
+        assertTrue(result.toString().contains("is not under"), result.toString());
+    }
+
+    @Test
+    void aRequestLineLongerThanTheLimitIsAnsweredAsAParseErrorAndTheServerKeepsServing() {
+        String tooLong = "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"" + "x".repeat(17 * 1024 * 1024) + "\"}";
+
+        List<JsonNode> answers = serve(tooLong, "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/list\"}");
+
+        assertEquals(2, answers.size());
+        assertEquals(-32700, answers.getFirst().get("error").get("code").asInt());
+        assertTrue(answers.get(1).get("result").has("tools"));
     }
 
     /**

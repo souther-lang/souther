@@ -49,8 +49,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class APlanIsMadeWhereItsRequirementsArePutTogetherTest {
 
     /** The rules counting nothing, which is what every model here leaves them saying. */
-    private static final ConstructionPlan.HowManyItHolds ANY =
-            (_, _) -> new DeclaredBounds.CountRange(0, Integer.MAX_VALUE);
+    private static final ConstructionPlan.WhatItMayHold ANY = (_, _) ->
+            ConstructionPlan.ItMayHold.counting(new DeclaredBounds.CountRange(0, Integer.MAX_VALUE));
 
     private static final String FILTER = """
             module g
@@ -116,8 +116,10 @@ class APlanIsMadeWhereItsRequirementsArePutTogetherTest {
 
         ConstructionPlan.Result asked = ConstructionPlan.of(typeOf(), TermPath.of("query"),
                 ScopedDeclarations.wrapsOf(symbols()),
-                symbols(), ScopedDeclarations.of(symbols()), Set.of(tag.refine(caseOf("Tag"))),
-                Requirements.NONE.and(tag, caseOf("NoTag")), ANY);
+                symbols(), ScopedDeclarations.kindsOf(symbols()), ScopedDeclarations.sumsOf(symbols()),
+                Set.of(tag.refine(caseOf("Tag"))),
+                Requirements.NONE.and(tag, caseOf("NoTag")),
+                ConstructionPlan.ContentsComposed.NONE, ANY);
 
         ConstructionPlan.ModelRefusal.Conflict against = assertInstanceOf(
                 ConstructionPlan.ModelRefusal.Conflict.class,
@@ -149,8 +151,10 @@ class APlanIsMadeWhereItsRequirementsArePutTogetherTest {
         IllegalStateException said = assertThrows(IllegalStateException.class,
                 () -> ConstructionPlan.of(typeOf(), TermPath.of("query"),
                         ScopedDeclarations.wrapsOf(symbols()), symbols(),
-                        ScopedDeclarations.of(symbols()), Set.of(tag),
-                        Requirements.NONE.and(tag, caseOf("Tag")), ANY));
+                        ScopedDeclarations.kindsOf(symbols()), ScopedDeclarations.sumsOf(symbols()),
+                        Set.of(tag),
+                        Requirements.NONE.and(tag, caseOf("Tag")),
+                        ConstructionPlan.ContentsComposed.NONE, ANY));
 
         assertTrue(said.getMessage().contains("query.tag") && said.getMessage().contains("Tag"),
                 "the answer names the position said twice: " + said.getMessage());
@@ -184,10 +188,11 @@ class APlanIsMadeWhereItsRequirementsArePutTogetherTest {
         IllegalStateException said = assertThrows(IllegalStateException.class,
                 () -> ConstructionPlan.of(heldType(), TermPath.of("query"),
                         ScopedDeclarations.wrapsOf(heldSymbols()), heldSymbols(),
-                        ScopedDeclarations.of(heldSymbols()), Set.of(),
+                        ScopedDeclarations.kindsOf(heldSymbols()),
+                        ScopedDeclarations.sumsOf(heldSymbols()), Set.of(),
                         Requirements.NONE.and(tag, Refinement.of(new Case.Presence(false)))
                                 .and(absent, caseOf("Tag")),
-                        ANY));
+                        ConstructionPlan.ContentsComposed.NONE, ANY));
 
         assertTrue(said.getMessage().contains("query.tag@None"),
                 "the answer names the position that holds no value: " + said.getMessage());
@@ -208,9 +213,10 @@ class APlanIsMadeWhereItsRequirementsArePutTogetherTest {
         IllegalStateException said = assertThrows(IllegalStateException.class,
                 () -> ConstructionPlan.of(heldType(), TermPath.of("query"),
                         ScopedDeclarations.wrapsOf(heldSymbols()), heldSymbols(),
-                        ScopedDeclarations.of(heldSymbols()), Set.of(absent.then("value")),
+                        ScopedDeclarations.kindsOf(heldSymbols()),
+                        ScopedDeclarations.sumsOf(heldSymbols()), Set.of(absent.then("value")),
                         Requirements.NONE.and(tag, Refinement.of(new Case.Presence(false))),
-                        ANY));
+                        ConstructionPlan.ContentsComposed.NONE, ANY));
 
         assertTrue(said.getMessage().contains("query.tag@None.value"),
                 "the answer names the value fixed where nothing stands: " + said.getMessage());
@@ -228,7 +234,8 @@ class APlanIsMadeWhereItsRequirementsArePutTogetherTest {
         return assertInstanceOf(ConstructionPlan.Result.Planned.class,
                 ConstructionPlan.of(typeOf(), TermPath.of("query"),
                         ScopedDeclarations.wrapsOf(symbols()), symbols(),
-                        ScopedDeclarations.of(symbols()), decided, additional, ANY),
+                        ScopedDeclarations.kindsOf(symbols()), ScopedDeclarations.sumsOf(symbols()),
+                        decided, additional, ConstructionPlan.ContentsComposed.NONE, ANY),
                 "nothing here asks one position to be two things").plan();
     }
 
@@ -236,8 +243,8 @@ class APlanIsMadeWhereItsRequirementsArePutTogetherTest {
      *  leaf is a case that covers itself, so selecting it narrows to that one distinction. */
     private static Refinement caseOf(String leaf) {
         souther.compiler.types.TypeSymbol named = TypeSymbols.declared(new TypeKey("g", leaf));
-        return Refinement.of(souther.compiler.types.ResolvedCase.of(
-                CaseSelector.direct(named), java.util.List.of(named)));
+        return Refinement.allOf(souther.compiler.types.ResolvedCase.of(
+                CaseSelector.direct(named), java.util.List.of(named))).getFirst();
     }
 
     /** The behavior's one parameter type, and the names it is read against. */

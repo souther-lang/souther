@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.meaning.WhyNotTaken;
 import souther.compiler.sites.WrittenCondition;
 import souther.compiler.types.SourceConstruct;
 import souther.compiler.types.SourceConstructOrigin;
@@ -33,8 +34,10 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 class ADeclineIsAnsweredForByTheConditionAndNotByWhereItIsWrittenTest {
 
     /** Two conditions of one body, written in one place and told apart by the reading's name. */
-    private static final ConditionOccurrence ONE = new ConditionOccurrence("decides", 0);
-    private static final ConditionOccurrence THE_OTHER = new ConditionOccurrence("decides", 1);
+    private static final ConditionOccurrence ONE =
+            new ConditionOccurrence("decides", ConditionOccurrence.Reading.DIVIDING, 0);
+    private static final ConditionOccurrence THE_OTHER =
+            new ConditionOccurrence("decides", ConditionOccurrence.Reading.DIVIDING, 1);
 
     @Test
     void theDeclineTheAnswerSideDidNotNameIsStillInTheAccount() {
@@ -61,7 +64,8 @@ class ADeclineIsAnsweredForByTheConditionAndNotByWhereItIsWrittenTest {
 
     /** A condition the walk had no words for, written where the one written condition is. */
     private static OnTheWay.Declined declined(ConditionOccurrence condition) {
-        return new OnTheWay.Declined(condition, where(), new OnTheWay.Why.NoWordsForTheShape());
+        return new OnTheWay.Declined(condition, where(),
+                new WhyNotTaken.OutsideDomain(WhyNotTaken.DomainLimit.A_QUANTITY_ON_NO_ORDER));
     }
 
     /** Where the one condition both of these came from is written. */

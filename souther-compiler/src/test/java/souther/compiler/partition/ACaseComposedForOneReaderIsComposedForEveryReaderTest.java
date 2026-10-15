@@ -79,7 +79,7 @@ class ACaseComposedForOneReaderIsComposedForEveryReaderTest {
                 .filter(each -> each.id().equals("Some")).findFirst().orElseThrow();
 
         List<FixtureTemplate> stands =
-                Partitions.standingFor(some.representatives(), reading, Set.of());
+                Partitions.standingFor(some.representatives(), reading, Set.of()).values();
 
         assertTrue(stands.stream().anyMatch(each -> each.text().startsWith("Boxed {")),
                 () -> "`Some` stands for a case of the element: " + stands);
@@ -90,8 +90,8 @@ class ACaseComposedForOneReaderIsComposedForEveryReaderTest {
     void aCollectionRequiredToHoldOneOfASumOfRecordsIsBuilt() {
         List<FixtureTemplate> held =
                 Witnesses.holding(TypeView.asWritten(new Type.ListOf(sum()), rules.symbols(),
-                                rules.published()),
-                        1, reading, Set.of());
+                                rules.kinds(), rules.sums()),
+                        1, List.of(), reading, Set.of()).values();
 
         assertFalse(held.isEmpty(), "a list of one is built from a case of the sum");
     }
@@ -102,8 +102,8 @@ class ACaseComposedForOneReaderIsComposedForEveryReaderTest {
     void aSetOfTwoIsBuiltFromTwoCasesOfASumOfRecords() {
         List<FixtureTemplate> held =
                 Witnesses.holding(TypeView.asWritten(new Type.SetOf(sum()), rules.symbols(),
-                                rules.published()),
-                        2, reading, Set.of());
+                                rules.kinds(), rules.sums()),
+                        2, List.of(), reading, Set.of()).values();
 
         assertFalse(held.isEmpty(), "the two cases are two distinct values");
     }
@@ -111,7 +111,8 @@ class ACaseComposedForOneReaderIsComposedForEveryReaderTest {
     /** A name round the sum is a name round what stands for it. */
     @Test
     void aNewtypeOverASumOfRecordsHasARepresentative() {
-        List<FixtureTemplate> stands = Partitions.representativesOf(named("Wrapped"), reading);
+        List<FixtureTemplate> stands =
+                Partitions.representativesOf(named("Wrapped"), reading).values();
 
         assertTrue(stands.stream().anyMatch(each -> each.text().startsWith("Wrapped(")),
                 () -> "written under the name the position wears: " + stands);
@@ -140,7 +141,8 @@ class ACaseComposedForOneReaderIsComposedForEveryReaderTest {
      */
     @Test
     void aCaseWhoseFieldsConstrainEachOtherIsComposedAgainstThatRule() {
-        List<FixtureTemplate> stands = Partitions.representativesOf(named("Boxed"), reading);
+        List<FixtureTemplate> stands =
+                Partitions.representativesOf(named("Boxed"), reading).values();
 
         assertTrue(stands.stream().anyMatch(each -> each.text().equals("Boxed { a = 0, b = 1 }")),
                 () -> "each field against what the rules leave it: " + stands);
@@ -156,7 +158,8 @@ class ACaseComposedForOneReaderIsComposedForEveryReaderTest {
      */
     @Test
     void aComposedRecordHoldsWhatItsOwnRuleAsksFor() {
-        List<FixtureTemplate> stands = Partitions.representativesOf(named("Bag"), reading);
+        List<FixtureTemplate> stands =
+                Partitions.representativesOf(named("Bag"), reading).values();
 
         assertTrue(stands.stream().anyMatch(each -> each.text().contains("xs = [")
                         && !each.text().contains("xs = []")),

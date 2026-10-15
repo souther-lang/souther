@@ -12,7 +12,10 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Enumeration;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 import java.util.jar.JarEntry;
 import java.util.jar.JarOutputStream;
 
@@ -49,6 +52,12 @@ class ASessionReadsItsDocumentsOnceTest {
 
         private final AtomicInteger asked = new AtomicInteger();
 
+        /**
+         * Every doc file opened, by name. {@code getResourceAsStream} finds what it opens through
+         * {@code getResource}, so this is every way a file of a doc set is read.
+         */
+        private final Map<String, Integer> opened = new ConcurrentHashMap<>();
+
         private Counting(ClassLoader parent) {
             super(parent);
         }
@@ -57,6 +66,14 @@ class ASessionReadsItsDocumentsOnceTest {
         public Enumeration<URL> getResources(String name) throws IOException {
             asked.incrementAndGet();
             return super.getResources(name);
+        }
+
+        @Override
+        public URL getResource(String name) {
+            if (name.startsWith("META-INF/souther-docs/")) {
+                opened.merge(name, 1, Integer::sum);
+            }
+            return super.getResource(name);
         }
     }
 
@@ -86,6 +103,41 @@ class ASessionReadsItsDocumentsOnceTest {
                 "the session answered every question, so this is not counting a session that stopped");
         assertEquals(1, loader.asked.get(),
                 "the doc sets were looked for once per question rather than once per session");
+    }
+
+    /**
+     * Finding the doc sets once is not reading them once: a set that kept only where each file is
+     * would open every file again for each search that ranks it and each read that prints it.
+     */
+    @Test
+    void andEveryFileOfADocSetIsOpenedOnceHoweverOftenItIsSearchedOrRead() {
+        Counting loader = new Counting(ASessionReadsItsDocumentsOnceTest.class.getClassLoader());
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        StringBuilder asked = new StringBuilder();
+        String[] calls = {
+            "\"name\":\"doc_search\",\"arguments\":{\"term\":\"decoder\"}",
+            "\"name\":\"doc_search\",\"arguments\":{\"term\":\"raoh tutorial setup\"}",
+            "\"name\":\"doc_read\",\"arguments\":{\"name\":\"raoh/tutorial/setup\"}",
+            "\"name\":\"doc_read\",\"arguments\":{\"name\":\"cli/commands/japi\"}",
+        };
+        for (int round = 0; round < 3; round++) {
+            for (int i = 0; i < calls.length; i++) {
+                asked.append("{\"jsonrpc\":\"2.0\",\"id\":").append(round * calls.length + i + 1)
+                        .append(",\"method\":\"tools/call\",\"params\":{").append(calls[i]).append("}}\n");
+            }
+        }
+
+        McpServer.serve(new ByteArrayInputStream(asked.toString().getBytes(StandardCharsets.UTF_8)),
+                out, loader);
+
+        assertEquals(3 * calls.length, answered(out.toString(StandardCharsets.UTF_8)));
+        assertTrue(loader.opened.keySet().stream().anyMatch(name -> name.endsWith(".md")),
+                "the doc files were opened, so this is not counting a set that read nothing: "
+                        + loader.opened);
+        assertEquals(Map.of(), loader.opened.entrySet().stream()
+                        .filter(e -> e.getValue() > 1)
+                        .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue)),
+                "a doc file was opened again for a question rather than once for the session");
     }
 
     @Test

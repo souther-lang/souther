@@ -37,9 +37,11 @@ class ADiagnoseIsWhatTheServerDoesWithAnIdleMomentTest {
         try (Session session = new Session()) {
             session.send(opening(dir, uri));
             session.await(publishedFor(uri), "the diagnostics of the document as it was opened");
-            // One document is open, and a diagnose publishes once for each open document: what has
-            // been published when the first is seen is all of that diagnose, so nothing is waited
-            // for before counting.
+            // One document is open, and a diagnose publishes at most once for each open document:
+            // what has been published when the first is seen is all of that diagnose, so nothing is
+            // waited for before counting. A diagnose that finds what the client already holds sends
+            // nothing, which is why the last of the edits below leaves the document with
+            // diagnostics other than the ones it was opened with.
             long published = session.count(publishedFor(uri));
 
             session.send(

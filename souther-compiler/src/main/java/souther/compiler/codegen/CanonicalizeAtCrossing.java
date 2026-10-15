@@ -6,9 +6,7 @@ import souther.compiler.types.TypeSymbol;
 import java.lang.classfile.CodeBuilder;
 import java.lang.classfile.Label;
 import java.lang.constant.ClassDesc;
-import java.lang.constant.DirectMethodHandleDesc;
 import java.lang.constant.DynamicCallSiteDesc;
-import java.lang.constant.MethodHandleDesc;
 import java.lang.constant.MethodTypeDesc;
 
 import static souther.compiler.codegen.Descriptors.*;
@@ -48,11 +46,10 @@ final class CanonicalizeAtCrossing {
     private CanonicalizeAtCrossing() {}
 
     /** {@code Strings::admit} as a {@code Function}, for a container's element. */
-    private static final DynamicCallSiteDesc STRINGS_ADMIT = Lambdas.callSite(
-            Lambdas.Sam.FUNCTION,
-            MethodHandleDesc.ofMethod(DirectMethodHandleDesc.Kind.STATIC, CD_Strings, "admit",
-                    MTD_admit),
-            MTD_admit);
+    private static DynamicCallSiteDesc admitting(CodegenContext ctx) {
+        return Lambdas.callSite(Lambdas.Sam.FUNCTION,
+                ctx.boundRuntime(CD_Strings, "admit", MTD_admit, Work.CHECKPOINTED), MTD_admit);
+    }
 
     /** Whether {@code type} is {@code String}, reaches one through a container this recurses into,
      *  or is a union naming {@code String} as a bare member — the same structural test the
@@ -82,29 +79,30 @@ final class CanonicalizeAtCrossing {
     /** Canonicalizes the {@code Object} on top of the stack in place, leaving the canonicalized
      *  {@code Object} on top of the stack — a no-op, structurally, wherever {@link #reachesString}
      *  says {@code type} does not reach one. */
-    static void emit(CodeBuilder code, Type type) {
+    static void emit(CodegenContext ctx, CodeBuilder code, Type type) {
         switch (type) {
             case Type.Prim p when p == Type.STRING -> {
                 code.checkcast(CD_String);
-                code.invokestatic(CD_Strings, "admit", MTD_admit);
+                ctx.callRuntime(code, CD_Strings, "admit", MTD_admit, Work.CHECKPOINTED);
             }
             case Type.ListOf t when reachesString(t.element()) -> {
                 code.checkcast(CD_List);
-                emitAsFunction(code, t.element());
+                emitAsFunction(ctx, code, t.element());
                 code.swap();   // Lists.map(Function, List): pushed [list, fn], the call wants [fn, list]
-                code.invokestatic(CD_Lists, "map", MTD_Lists_map);
+                ctx.callRuntime(code, CD_Lists, "map", MTD_Lists_map, Work.CHECKPOINTED);
             }
             case Type.SetOf t when reachesString(t.element()) -> {
                 code.checkcast(CD_Set);
-                emitAsFunction(code, t.element());
+                emitAsFunction(ctx, code, t.element());
                 code.swap();
-                code.invokestatic(CD_Sets, "map", MTD_Sets_map);
+                ctx.callRuntime(code, CD_Sets, "map", MTD_Sets_map, Work.CHECKPOINTED);
             }
             case Type.OptionOf t when reachesString(t.element()) -> {
                 code.checkcast(CD_Option);
-                emitAsFunction(code, t.element());
+                emitAsFunction(ctx, code, t.element());
                 code.swap();
-                code.invokestatic(CD_Options, "mapWith", MTD_optionMapWith);
+                // One value through the function, which counts what it does itself.
+                ctx.callRuntime(code, CD_Options, "mapWith", MTD_optionMapWith, Work.FIXED);
             }
             case Type.MapOf t when reachesString(t.key()) || reachesString(t.value()) -> {
                 // Pushed in this order, [map, keyFn, valueFn] is already the call's own parameter
@@ -112,9 +110,9 @@ final class CanonicalizeAtCrossing {
                 // above, each of which pushes its element function after a container that was
                 // already on the stack before this method's own single Function parameter.
                 code.checkcast(CD_Map);
-                emitFunctionOrIdentity(code, t.key());
-                emitFunctionOrIdentity(code, t.value());
-                code.invokestatic(CD_Maps, "canonicalizeWith", MTD_mapsCanonicalizeWith);
+                emitFunctionOrIdentity(ctx, code, t.key());
+                emitFunctionOrIdentity(ctx, code, t.value());
+                ctx.callRuntime(code, CD_Maps, "canonicalizeWith", MTD_mapsCanonicalizeWith, Work.CHECKPOINTED);
             }
             case Type.Union u when unionHasBareStringMember(u) -> {
                 Label notString = code.newLabel();
@@ -123,7 +121,7 @@ final class CanonicalizeAtCrossing {
                 code.instanceOf(CD_String);
                 code.ifeq(notString);
                 code.checkcast(CD_String);
-                code.invokestatic(CD_Strings, "admit", MTD_admit);
+                ctx.callRuntime(code, CD_Strings, "admit", MTD_admit, Work.CHECKPOINTED);
                 code.goto_(end);
                 code.labelBinding(notString);
                 code.labelBinding(end);
@@ -135,9 +133,9 @@ final class CanonicalizeAtCrossing {
     /** Pushes {@link #emitAsFunction} for {@code element}, or {@code Function.identity()} where
      *  {@link #reachesString} says there is nothing to canonicalize — a {@code Map}'s key and value
      *  are asked for independently, and only one of the two may reach a {@code String}. */
-    private static void emitFunctionOrIdentity(CodeBuilder code, Type element) {
+    private static void emitFunctionOrIdentity(CodegenContext ctx, CodeBuilder code, Type element) {
         if (reachesString(element)) {
-            emitAsFunction(code, element);
+            emitAsFunction(ctx, code, element);
         } else {
             code.invokestatic(CD_Function, "identity", MTD_functionIdentity, true);
         }
@@ -153,17 +151,17 @@ final class CanonicalizeAtCrossing {
      *  Does not handle {@code Type.Union}: a union's own member is read at run time by {@link #emit},
      *  which this recursion has no call site for — a {@code List<String | Missing>} is a narrower
      *  gap than {@code List<String>} for that reason. */
-    private static void emitAsFunction(CodeBuilder code, Type type) {
+    private static void emitAsFunction(CodegenContext ctx, CodeBuilder code, Type type) {
         if (type instanceof Type.Prim p && p == Type.STRING) {
-            code.invokedynamic(STRINGS_ADMIT);
+            code.invokedynamic(admitting(ctx));
             return;
         }
         if (type instanceof Type.MapOf t) {
-            emitFunctionOrIdentity(code, t.key());
-            emitFunctionOrIdentity(code, t.value());
+            emitFunctionOrIdentity(ctx, code, t.key());
+            emitFunctionOrIdentity(ctx, code, t.value());
             code.invokedynamic(Lambdas.callSite(Lambdas.Sam.FUNCTION,
-                    MethodHandleDesc.ofMethod(DirectMethodHandleDesc.Kind.STATIC, CD_Maps,
-                            "canonicalizeWithCaptured", MTD_mapsCanonicalizeWithCaptured),
+                    ctx.boundRuntime(CD_Maps, "canonicalizeWithCaptured", MTD_mapsCanonicalizeWithCaptured,
+                            Work.CHECKPOINTED),
                     MethodTypeDesc.of(CD_Map, CD_Map),
                     CD_Function, CD_Function));                                // captures key, value
             return;
@@ -176,29 +174,33 @@ final class CanonicalizeAtCrossing {
                     "canonicalizeAtCrossing does not compose a Function for " + type
                             + " as a container's element");
         };
-        emitAsFunction(code, element);
+        emitAsFunction(ctx, code, element);
         ClassDesc runtime;
         String method;
         MethodTypeDesc mtd;
         ClassDesc container;
+        Work work;
         if (type instanceof Type.ListOf) {
             runtime = CD_Lists;
             method = "map";
             mtd = MTD_Lists_map;
             container = CD_List;
+            work = Work.CHECKPOINTED;
         } else if (type instanceof Type.SetOf) {
             runtime = CD_Sets;
             method = "map";
             mtd = MTD_Sets_map;
             container = CD_Set;
+            work = Work.CHECKPOINTED;
         } else {
             runtime = CD_Options;
             method = "mapWith";
             mtd = MTD_optionMapWith;
             container = CD_Option;
+            work = Work.FIXED;
         }
         code.invokedynamic(Lambdas.callSite(Lambdas.Sam.FUNCTION,
-                MethodHandleDesc.ofMethod(DirectMethodHandleDesc.Kind.STATIC, runtime, method, mtd),
+                ctx.boundRuntime(runtime, method, mtd, work),
                 MethodTypeDesc.of(container, container),
                 CD_Function));                                                // captures the element Function
     }

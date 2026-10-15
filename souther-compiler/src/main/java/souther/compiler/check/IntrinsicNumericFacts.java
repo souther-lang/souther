@@ -1,9 +1,14 @@
 package souther.compiler.check;
 
+import souther.compiler.semantics.AnswerAspect;
 import souther.compiler.semantics.ConstantArguments;
+import souther.compiler.semantics.LawProposition;
+import souther.compiler.semantics.LawSubject;
 import souther.compiler.semantics.ResultBound;
+import souther.compiler.semantics.SideAnswered;
 import souther.compiler.semantics.SizeAgainstItsSource;
 import souther.compiler.core.Core;
+import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
@@ -12,6 +17,7 @@ import souther.compiler.types.ValueName;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.function.Function;
 
 /**
@@ -85,26 +91,111 @@ final class IntrinsicNumericFacts {
         // name more than one — `a ++ b` is as long as either half — so this is a loop where the
         // building below is one answer.
         for (Core added : DischargeRules.noSmallerThan(container)) {
-            standing(size, atom, added, Rel.GE, at, terms, out);
+            standing(atom, added, Rel.GE, at, terms, out);
         }
         if (Core.withoutStanding(container) instanceof Core.PreservedCall call) {
             DischargeRules.Source built = DischargeRules.builtFrom(call);
             Rel rel = built == null ? null : relationOf(built.size());
             if (rel != null) {
-                standing(size, atom, built.container(), rel, at, terms, out);
+                standing(atom, built.container(), rel, at, terms, out);
             }
         }
         return out;
     }
 
+    /**
+     * How many {@code container} holds, where the law of the operation that answered it says
+     * whether it holds anything by whether its arguments do — or null where no operation answered
+     * it, no law says that, or the law reads something of an argument other than whether it holds
+     * anything.
+     *
+     * <p>The whole law or nothing. It says when the answer holds something and, by the same
+     * statement, when it holds nothing, so a part of it left out would answer the second wrong.
+     */
+    static Derivation heldWhereItsLawSays(Core container, Denotations at, Terms terms) {
+        AnOperationApplied applied = AnOperationApplied.of(container);
+        LawProposition<DeclaredArgument> law = applied == null ? null
+                : DischargeRules.whereItHoldsSomething(applied.operation());
+        Derivation.HoldsSomethingWhere.Holding holds = law == null ? null
+                : holding(law, applied, at, terms);
+        return holds == null ? null : new Derivation.HoldsSomethingWhere(holds);
+    }
+
+    /** {@code law} over the counts of what {@code applied} hands it, or null where a part of it is
+     *  about something else. */
+    private static Derivation.HoldsSomethingWhere.Holding holding(
+            LawProposition<DeclaredArgument> law, AnOperationApplied applied, Denotations at,
+            Terms terms) {
+        return switch (law) {
+            case LawProposition.Always<DeclaredArgument>(boolean holds) -> holds
+                    ? new Derivation.HoldsSomethingWhere.Holding.AllOf(List.of())
+                    : new Derivation.HoldsSomethingWhere.Holding.AnyOf(List.of());
+            case LawProposition.All<DeclaredArgument>(var parts) -> {
+                List<Derivation.HoldsSomethingWhere.Holding> ways = holdings(parts, applied, at,
+                        terms);
+                yield ways == null ? null : new Derivation.HoldsSomethingWhere.Holding.AllOf(ways);
+            }
+            case LawProposition.Any<DeclaredArgument>(var parts) -> {
+                List<Derivation.HoldsSomethingWhere.Holding> ways = holdings(parts, applied, at,
+                        terms);
+                yield ways == null ? null : new Derivation.HoldsSomethingWhere.Holding.AnyOf(ways);
+            }
+            case LawProposition.Observed<DeclaredArgument>(
+                    LawSubject.Argument<DeclaredArgument>(DeclaredArgument which),
+                    SideAnswered(AnswerAspect aspect, boolean holds))
+                    when aspect == AnswerAspect.EMPTINESS -> {
+                FactSubject count = countOf(applied.argument(which), at, terms);
+                if (count == null) {
+                    yield null;
+                }
+                Derivation.HoldsSomethingWhere.Holding something =
+                        new Derivation.HoldsSomethingWhere.Holding.Something(LinearForm.atom(count));
+                yield holds ? something : new Derivation.HoldsSomethingWhere.Holding.Not(something);
+            }
+            case LawProposition.Observed<DeclaredArgument> _,
+                 LawProposition.Compared<DeclaredArgument> _,
+                 LawProposition.SomeElement<DeclaredArgument> _,
+                 LawProposition.Same<DeclaredArgument> _ -> null;
+        };
+    }
+
+    private static List<Derivation.HoldsSomethingWhere.Holding> holdings(
+            List<LawProposition<DeclaredArgument>> parts, AnOperationApplied applied,
+            Denotations at, Terms terms) {
+        List<Derivation.HoldsSomethingWhere.Holding> out = new ArrayList<>();
+        for (LawProposition<DeclaredArgument> part : parts) {
+            Derivation.HoldsSomethingWhere.Holding one = holding(part, applied, at, terms);
+            if (one == null) {
+                return null;
+            }
+            out.add(one);
+        }
+        return out;
+    }
+
+    /** The count of what {@code argument} is, by the measure its type is counted by, or null where
+     *  there is no argument there, nothing counts it, or this cannot name the count. */
+    private static FactSubject countOf(Core argument, Denotations at, Terms terms) {
+        if (argument == null) {
+            return null;
+        }
+        ValueName counts = NumericMeasures.takenOf(Core.withoutStanding(argument).type(),
+                terms.newtypeInners());
+        return counts == null ? null : terms.sizeAtomFor(counts, argument, at);
+    }
+
     /** States how {@code atom} stands to the size of {@code source}, where that size is one this can
      * name. A container nothing names is one nothing is stated about, which leaves the size bounded
      * by what else is known of it rather than by half a rule. */
-    private static void standing(ValueName size, FactSubject atom, Core source, Rel rel,
+    private static void standing(FactSubject atom, Core source, Rel rel,
                                  Denotations at, Terms terms, List<NumericConstraint> out) {
-        FactSubject there = terms.sizeAtomFor(size, source, at);
+        // Counted the way the source is counted, which is not the way the answer is where a
+        // construction answers a container of another kind: a map made of a list holds no more
+        // than the list's length.
+        ValueName counting = NumericMeasures.takenOf(source.type(), terms.newtypeInners());
+        FactSubject there = counting == null ? null : terms.sizeAtomFor(counting, source, at);
         if (there != null && !there.equals(atom)) {
-            out.add(new NumericConstraint(LinearForm.atom(atom).minus(LinearForm.atom(there)), rel));
+            out.add(new NumericConstraint(LinearForm.difference(atom, there), rel));
         }
     }
 
@@ -156,8 +247,10 @@ final class IntrinsicNumericFacts {
             LinearForm<FactSubject> stands = bound.against() == null
                     ? LinearForm.constant(offset)
                     : addTo(against.apply(bound.against()), offset);
-            if (stands != null) {
-                out.add(new NumericConstraint(LinearForm.atom(atom).minus(stands), bound.rel()));
+            // A bound whose form no ratio holds is a bound not stated.
+            if (stands != null && LinearForm.atom(atom).minus(stands)
+                    instanceof ExactAnswer.Held<LinearForm<FactSubject>> held) {
+                out.add(new NumericConstraint(held.value(), bound.rel()));
             }
         }
     }
@@ -191,11 +284,11 @@ final class IntrinsicNumericFacts {
             return;
         }
         LinearForm<FactSubject> amount = terms.affineOf(CallArguments.of(shift.amount(), moved), at);
-        if (amount != null) {
-            out.add(new NumericConstraint(
-                    LinearForm.atom(atom).minus(
-                            amount.times(ExactRatio.of(shift.per()))),
-                    Rel.EQ));
+        // A shift whose form no ratio holds is a relation not stated.
+        if (amount != null && amount.times(ExactRatio.of(shift.per()))
+                .flatMap(shifted -> LinearForm.atom(atom).minus(shifted))
+                instanceof ExactAnswer.Held<LinearForm<FactSubject>> held) {
+            out.add(new NumericConstraint(held.value(), Rel.EQ));
         }
     }
 
@@ -206,10 +299,11 @@ final class IntrinsicNumericFacts {
         return one != null && one.equals(terms.bodyKey(b, at));
     }
 
-    /** {@code form} with {@code offset} added, or null where the form could not be read. */
+    /** {@code form} with {@code offset} added, or null where the form could not be read or the sum
+     *  has no representation. */
     private static LinearForm<FactSubject> addTo(LinearForm<FactSubject> form,
                                                  ExactRatio offset) {
-        return form == null ? null : form.plus(LinearForm.constant(offset));
+        return form == null ? null : form.plus(LinearForm.constant(offset)).orNull();
     }
 
     /**
@@ -222,7 +316,15 @@ final class IntrinsicNumericFacts {
      */
     private static BigDecimal constantOf(Core e, Denotations at, Terms terms) {
         LinearForm<FactSubject> form = terms.affineOf(e, at);
-        return form == null || !form.coefs().isEmpty() ? null
-                : form.constant().asWrittenDecimal();
+        if (form == null || !form.coefs().isEmpty()) {
+            return null;
+        }
+        // Nothing where the host has no room to write the constant out, as where no decimal is it:
+        // a bound this hands over is a written constant or no fact, and no fact is the fact a
+        // library's own arithmetic can always be given.
+        return switch (form.constant().writtenDecimal()) {
+            case ExactAnswer.Held<Optional<BigDecimal>> held -> held.value().orElse(null);
+            case ExactAnswer.Unheld<Optional<BigDecimal>> _ -> null;
+        };
     }
 }

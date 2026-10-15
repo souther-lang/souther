@@ -12,13 +12,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
-import souther.compiler.regex.PatternMeaning;
-import souther.compiler.regex.PatternParser;
+import net.unit8.notation199x.pattern.PatternMeaning;
+import net.unit8.notation199x.pattern.PatternParser;
 import souther.compiler.regex.PatternPlan;
-import souther.compiler.regex.PatternRead;
+import net.unit8.notation199x.pattern.PatternRead;
 import souther.compiler.regex.Recognizer;
-import souther.unicode.Normalization;
-import souther.unicode.ScalarValues;
+import net.unit8.notation199x.Normalization;
+import net.unit8.notation199x.ScalarValues;
 
 /**
  * What an expression comes to where the values under it are already known.
@@ -219,10 +219,9 @@ final class ConstantAlgebra {
      * The quotient of two written numbers, or empty where this is not the one to answer it.
      *
      * <p>The quotient is exact, so what it folds to is a ratio and not a number of either operand's
-     * type (ADR-0116). There is no pair of whole numbers whose exact quotient is out of range and
-     * none whose fraction is dropped, so the two refusals the truncating quotient needed are gone
-     * with it; what is left is the divisor of nought, which the run time aborts on and which no value
-     * handed back would be about.
+     * type (ADR-0116). No fraction is dropped, so the refusal the truncating quotient needed for that is
+     * gone; what is left is the divisor of nought, which the run time aborts on and which no value
+     * handed back would be about, and a quotient whose exponents no ratio holds.
      *
      * <p>Two decimals go through the same reading, their quotient being exact as well. What the fold
      * answers is the ratio, so a written {@code 1.0m / 3.0m} comes to a third here and not to the
@@ -234,7 +233,10 @@ final class ConstantAlgebra {
         if (x == null || y == null || y.isZero()) {
             return Optional.empty();
         }
-        return Optional.of(x.dividedBy(y));
+        // A quotient whose exponents pass what a ratio holds is not folded, for the reason a sum
+        // that cannot be held is not: no value handed back would be the one the run time computes.
+        return x.dividedBy(y) instanceof ExactAnswer.Held<ExactRatio> held
+                ? Optional.of(held.value()) : Optional.empty();
     }
 
     /**
@@ -275,11 +277,12 @@ final class ConstantAlgebra {
             // sum and the difference carry an operational bound") is that the operation aborts there
             // rather than answering — never that it answers a different, rounded number. So the fold
             // answers nothing rather than embed a value the run time would not compute: a constant
-            // this cannot hold is not a reason to fold to one the model never asked for.
+            // this cannot hold is not a reason to fold to one the model never asked for. A product
+            // whose exponents pass what a ratio holds is answered the same way.
             ExactAnswer<ExactRatio> summed = switch (op) {
                 case ADD -> x.plus(y);
                 case SUB -> x.minus(y);
-                case MUL -> ExactAnswer.held(x.times(y));
+                case MUL -> x.times(y);
                 default -> throw new IllegalStateException();
             };
             return summed instanceof ExactAnswer.Held<ExactRatio> held
@@ -348,11 +351,13 @@ final class ConstantAlgebra {
 
     /**
      * Whether {@code s} is one of the strings {@code meaning} denotes, or empty where the machine for
-     * it is more than a fold may build — which leaves the match to the run time.
+     * it is more than a fold may build, or walking {@code s} over it more than a fold may look at —
+     * either of which leaves the match to the run time.
      */
     static Optional<Object> matching(PatternMeaning meaning, String s) {
         return RECOGNIZERS.computeIfAbsent(meaning, ConstantAlgebra::recognizerOf)
-                .map(recognizer -> recognizer.accepts(s));
+                .flatMap(recognizer -> recognizer.accepts(s, PatternPlan.Budget.OF_A_FOLD.meter()))
+                .map(Object.class::cast);
     }
 
     private static Optional<Recognizer> recognizerOf(PatternMeaning meaning) {

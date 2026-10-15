@@ -135,7 +135,19 @@ public sealed interface GenerationOutcome {
              *  can supply. */
             A_ROW_HERE_IS_WAITING_FOR_ITS_ANSWER(
                     "a row already stands here with its answer owed, and composing a second one"
-                            + " would offer a question that is already written down");
+                            + " would offer a question that is already written down"),
+
+            /**
+             * Every row here reaches an {@code unreachable} the body states, so a row composed here
+             * is one the compiler refuses.
+             *
+             * <p>Not {@link #A_FACT_ABOUT_THE_MODEL}: nothing proves the premise, and the obligation
+             * stays open until something does or the body answers. What is not applicable is a
+             * row, because the one thing a row here would do is fail to compile.
+             */
+            EVERY_ROW_HERE_REACHES_AN_UNREACHABLE(
+                    "the body answers nothing here and a row would reach its `unreachable`, which"
+                            + " the compiler refuses; what is open is whether that premise holds");
 
             private final String said;
 
@@ -230,6 +242,14 @@ public sealed interface GenerationOutcome {
                             + " the ways to this one could not all be written down — some of them"
                             + " would say a row arrives where it may not"),
 
+            /** The ways into this arm were written down, and no run is seen taking one rather than
+             *  another. */
+            THE_WAYS_INTO_THIS_ARM_ARE_NOT_TOLD_APART(
+                    "a row is steered into an arm by the decisions that hold on the way there, and"
+                            + " what a run is seen doing does not tell the ways into this one"
+                            + " apart — a row through it would be credited with ways it did not"
+                            + " take"),
+
             /** More ways into this arm than the reading of the body holds at once. */
             MORE_WAYS_IN_THAN_THE_READING_HOLDS(
                     "the ways into this arm run past what one reading of the body holds at once, so"
@@ -249,8 +269,9 @@ public sealed interface GenerationOutcome {
 
             /** Nothing searches for an input by the output it produces. */
             NO_STRATEGY_FOR_AN_OUTPUT_CASE(
-                    "rows here are composed from what the input positions divide into, and nothing"
-                            + " searches for one by the case it would answer with"),
+                    "rows here are composed for what the input positions divide into and not for"
+                            + " the case they answer with, so which of them answers with it is what"
+                            + " their runs say"),
 
             /** The position the case belongs to is not one any axis was derived at. */
             NO_AXIS_AT_THIS_POSITION("no axis was derived at the position this case belongs to, so"

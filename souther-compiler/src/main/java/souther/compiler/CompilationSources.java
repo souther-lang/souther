@@ -5,12 +5,18 @@ import souther.compiler.diag.SourceContext;
 import souther.compiler.diag.SourceContextResolver;
 import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.diag.SourceNames;
+import souther.compiler.io.BoundedRead;
+import souther.compiler.io.ConfinedTree;
+import souther.compiler.io.LimitExceededException;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Compilation;
 import souther.compiler.source.SourceId;
 
+import java.io.IOException;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -42,6 +48,46 @@ public final class CompilationSources {
      * @param text what the file says
      */
     public record SourceFile(String path, String text) {}
+
+    /**
+     * Every {@code .sou} under {@code root}, read, path-sorted.
+     *
+     * <p>The root is the caller's own. What is found below it is not, so it is read only if it is a
+     * regular file of a bounded size: a link found under the root is an error and is not followed,
+     * because what it points at may be something that was never meant to be a source, and a report
+     * quotes the source it is about. A {@code .sou} that is not a regular file at all — a directory,
+     * a pipe — is an error for the same reason.
+     *
+     * <p>Every one, or an error: a directory under the root that cannot be opened, or a tree larger
+     * than the walk will look at, is an error rather than fewer sources, since a program compiled
+     * from part of what it was named is a program nobody wrote.
+     *
+     * @throws java.nio.file.NoSuchFileException when the root is not there, or is a link to nothing
+     * @throws java.nio.file.NotDirectoryException when the root is not a directory
+     * @throws ConfinementException when a {@code .sou} under the root is a link or not a file
+     * @throws LimitExceededException when the tree holds more entries than are looked at
+     */
+    public static List<SourceFile> readTree(Path root) throws IOException {
+        ConfinedTree tree = ConfinedTree.at(root);
+        List<String> found = new ArrayList<>();
+        // A source is what is named one, whatever it turns out to be on disk: an entry of any kind
+        // but a regular file is kept so that reading it refuses it, with the name of what was
+        // refused, rather than passed over as though it were not there.
+        tree.walk(BoundedRead.MOST_ENTRIES, entry -> {
+            if (entry.relative().endsWith(SUFFIX)) {
+                found.add(entry.relative());
+            }
+        });
+        found.sort(Comparator.comparing(Path::of));
+        List<SourceFile> sources = new ArrayList<>();
+        for (String relative : found) {
+            sources.add(new SourceFile(root.resolve(relative).toString(),
+                    tree.readString(relative, BoundedRead.SOURCE_FILE_BYTES)));
+        }
+        return sources;
+    }
+
+    private static final String SUFFIX = ".sou";
 
     private final List<String> texts;
 

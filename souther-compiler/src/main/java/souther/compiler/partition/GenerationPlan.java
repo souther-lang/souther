@@ -55,8 +55,12 @@ public final class GenerationPlan {
     private final MeasuredInput subject;
     private final List<GenerationObligation> obligations;
     private final Map<ArmProbe, GenerationObligation.Arm> arms;
+    /** How the rewrites asked about are looked for, or null where none is. */
+    private final RewriteSearch rewrites;
 
     /**
+     * A plan asking about no rewrite of the body.
+     *
      * @param subject     the behavior a row would be written for
      * @param obligations every class, arm, combination of two classes and meeting of the body's
      *                    decisions this run is asked for, in the order gathered — classes, then
@@ -65,9 +69,27 @@ public final class GenerationPlan {
      *                    them back
      */
     public GenerationPlan(MeasuredInput subject, List<GenerationObligation> obligations) {
+        this(subject, obligations, null);
+    }
+
+    /**
+     * A plan that may ask about rewrites of the body, and says how they are looked for.
+     *
+     * @param rewrites how the rewrites among {@code obligations} are looked for; required exactly
+     *                 where there are any, since who a row is for decides what stops the search
+     */
+    public GenerationPlan(MeasuredInput subject, List<GenerationObligation> obligations,
+                          RewriteSearch rewrites) {
         obligations = List.copyOf(obligations);
         if (subject == null) {
             throw new IllegalArgumentException("a generation is asked for on behalf of a subject");
+        }
+        boolean asksARewrite = obligations.stream()
+                .anyMatch(GenerationObligation.Replacement.class::isInstance);
+        if (asksARewrite != (rewrites != null)) {
+            throw new IllegalArgumentException(asksARewrite
+                    ? "a plan asking about a rewrite says how it is looked for"
+                    : "a plan asking about no rewrite has no way of looking for one");
         }
         Set<GenerationObligation> seen = new LinkedHashSet<>(obligations);
         if (seen.size() != obligations.size()) {
@@ -101,6 +123,12 @@ public final class GenerationPlan {
         this.subject = subject;
         this.obligations = obligations;
         this.arms = Map.copyOf(armAtPlace);
+        this.rewrites = rewrites;
+    }
+
+    /** How the rewrites this plan asks about are looked for, or null where it asks about none. */
+    public RewriteSearch rewrites() {
+        return rewrites;
     }
 
     /** The behavior a row would be written for. */
@@ -121,17 +149,19 @@ public final class GenerationPlan {
     @Override
     public boolean equals(Object other) {
         return other instanceof GenerationPlan that
-                && subject.equals(that.subject) && obligations.equals(that.obligations);
+                && subject.equals(that.subject) && obligations.equals(that.obligations)
+                && Objects.equals(rewrites, that.rewrites);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(subject, obligations);
+        return Objects.hash(subject, obligations, rewrites);
     }
 
     @Override
     public String toString() {
-        return "GenerationPlan[subject=" + subject + ", obligations=" + obligations + "]";
+        return "GenerationPlan[subject=" + subject + ", obligations=" + obligations
+                + ", rewrites=" + rewrites + "]";
     }
 
     /**
@@ -146,13 +176,25 @@ public final class GenerationPlan {
                                     List<Generator.ArmOwed> armsOwed,
                                     List<ObligationIdentity.OfAFallbackPairCell> pairsOwed,
                                     List<ObligationIdentity.OfACombinationOfDecisions>
-                                            meetingsOwed) {
+                                            meetingsOwed,
+                                    List<ReplacementOwed> replacementsOwed,
+                                    RewriteSearch rewrites) {
         List<GenerationObligation> out = new ArrayList<>();
         classesOwed.forEach(each -> out.add(new GenerationObligation.Class(each)));
         armsOwed.forEach(each -> out.add(new GenerationObligation.Arm(each)));
         pairsOwed.forEach(each -> out.add(new GenerationObligation.Pair(each)));
         meetingsOwed.forEach(each -> out.add(new GenerationObligation.Meeting(each)));
-        return new GenerationPlan(subject, out);
+        replacementsOwed.forEach(each -> out.add(new GenerationObligation.Replacement(each)));
+        return new GenerationPlan(subject, out, replacementsOwed.isEmpty() ? null : rewrites);
+    }
+
+    /** The same, asking about no rewrite of the body. */
+    public static GenerationPlan of(MeasuredInput subject, List<ClassOfAPosition> classesOwed,
+                                    List<Generator.ArmOwed> armsOwed,
+                                    List<ObligationIdentity.OfAFallbackPairCell> pairsOwed,
+                                    List<ObligationIdentity.OfACombinationOfDecisions>
+                                            meetingsOwed) {
+        return of(subject, classesOwed, armsOwed, pairsOwed, meetingsOwed, List.of(), null);
     }
 
     /** Whether anything at all is owed, which is what a run with nothing to do looks like. */
@@ -208,6 +250,21 @@ public final class GenerationPlan {
         List<ObligationIdentity.OfACombinationOfDecisions> out = new ArrayList<>();
         for (GenerationObligation each : obligations) {
             if (each instanceof GenerationObligation.Meeting(var target)) {
+                out.add(target);
+            }
+        }
+        return List.copyOf(out);
+    }
+
+    /**
+     * One rewrite of the body apiece that no row was seen to tell from it. Beside the arms and
+     * not among them: a row through every arm can answer every rewrite of them alike, which is the
+     * whole reason it is asked about.
+     */
+    public List<ReplacementOwed> replacementsOwed() {
+        List<ReplacementOwed> out = new ArrayList<>();
+        for (GenerationObligation each : obligations) {
+            if (each instanceof GenerationObligation.Replacement(var target)) {
                 out.add(target);
             }
         }

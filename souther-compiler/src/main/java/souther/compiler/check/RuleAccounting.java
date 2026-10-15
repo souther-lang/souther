@@ -349,8 +349,8 @@ public final class RuleAccounting {
             public List<UnreadReason> why() {
                 List<UnreadReason> out = new ArrayList<>();
                 shortfalls.forEach(each -> {
-                    if (!out.contains(each.why())) {
-                        out.add(each.why());
+                    if (!out.contains(each.why().why())) {
+                        out.add(each.why().why());
                     }
                 });
                 return List.copyOf(out);

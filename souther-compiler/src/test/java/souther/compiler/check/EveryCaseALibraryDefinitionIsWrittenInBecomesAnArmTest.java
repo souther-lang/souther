@@ -29,7 +29,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Every case an operation of the library is defined in comes out of {@link Choice} as an arm, with
- * the argument that case answers and every relation it is reached under.
+ * the argument that case answers and every relation it is reached under — where every case of it
+ * answers one of the values the call was given, chosen by how two of them stand. An operation one of
+ * whose cases answers arithmetic over them, or is reached by one standing against a constant, is no
+ * choice between the values at the call, and comes out as none.
  *
  * <p>Row by row and not operation by operation. What a reader downstream needs of a case is the
  * value and the conditions together: the value alone says {@code Int.clamp(lo, hi, n)} may answer
@@ -52,13 +55,21 @@ class EveryCaseALibraryDefinitionIsWrittenInBecomesAnArmTest {
 
     @Test
     void everyRowOfTheTableIsAnArmAnsweringItsArgumentUnderAllOfItsRelations() {
-        assertFalse(DischargeRules.choosingOperations().isEmpty(),
+        assertFalse(DischargeRules.definedByCases().isEmpty(),
                 "no operation is defined by cases at all, so this read nothing rather than reading"
                         + " that nothing was wrong");
-        for (ValueName operation : DischargeRules.choosingOperations()) {
+        int choices = 0;
+        int noChoices = 0;
+        for (ValueName operation : DischargeRules.definedByCases()) {
             Core.PreservedCall call = callTo(operation);
             List<DefinitionCase<DeclaredArgument>> defined = DischargeRules.chosenBy(call);
             Choice choice = Choice.of(call);
+            if (!defined.stream().allMatch(DefinitionCase::choosesAnArgument)) {
+                assertNull(choice, operation + " answers what is no value at the call");
+                noChoices++;
+                continue;
+            }
+            choices++;
 
             assertNotNull(choice, operation + " is defined in cases and answers no choice");
             assertEquals(Choice.Kind.THE_ARGUMENTS, choice.kind(),
@@ -71,7 +82,8 @@ class EveryCaseALibraryDefinitionIsWrittenInBecomesAnArmTest {
                 Choice.Arm arm = choice.arms().get(i);
                 String where = operation + " case " + (i + 1);
 
-                assertSame(CallArguments.of(row.answers(), call), arm.answers(),
+                assertSame(CallArguments.of(ArgumentsStand.theArgument(row.answers()), call),
+                        arm.answers(),
                         where + " answers the argument the case answers, as the value itself");
                 assertTrue(arm.decidedBy() instanceof Choice.Decides.ByArgumentRelations,
                         where + " is decided by how the arguments stand");
@@ -83,6 +95,8 @@ class EveryCaseALibraryDefinitionIsWrittenInBecomesAnArmTest {
                                 + " reachable wherever the call stands");
             }
         }
+        assertTrue(choices > 0 && noChoices > 0, "both kinds are read here, " + choices
+                + " choices and " + noChoices + " operations defined in other cases");
     }
 
     /** A call to an operation the library does not define by cases is not one of these. The
@@ -99,8 +113,10 @@ class EveryCaseALibraryDefinitionIsWrittenInBecomesAnArmTest {
                                                           Core.PreservedCall call) {
         List<Choice.ArgumentRelation> out = new ArrayList<>(row.given().size());
         for (ArgumentsStand<DeclaredArgument> stands : row.given()) {
-            out.add(new Choice.ArgumentRelation(CallArguments.of(stands.left(), call), stands.rel(),
-                    CallArguments.of(stands.right(), call)));
+            out.add(new Choice.ArgumentRelation(
+                    CallArguments.of(ArgumentsStand.theArgument(stands.left()), call),
+                    stands.rel(),
+                    CallArguments.of(ArgumentsStand.theArgument(stands.right()), call)));
         }
         return out;
     }

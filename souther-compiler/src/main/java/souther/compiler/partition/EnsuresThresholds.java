@@ -12,11 +12,13 @@ import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.FilingCoordinate;
 import souther.compiler.inputs.RulesWithNoLine;
 import souther.compiler.types.BindingId;
+import souther.compiler.types.ModelOccurrences;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * The values a behavior's own {@code ensures} compares its inputs against.
@@ -73,7 +75,7 @@ public final class EnsuresThresholds {
      *                is a sentence about the model, and the model says otherwise in its own
      *                declaration
      */
-    public record Clauses(List<RuleEvidence> evidence,
+    public record Clauses(List<LineEvidence> evidence,
                           List<LineDrawn> between, RulesWithNoLine noLine) {
 
         public static final Clauses NONE =
@@ -87,12 +89,12 @@ public final class EnsuresThresholds {
         /** The lines, read off what the walk said. Not a list of their own, for the reason
          *  {@link GuardThresholds.Guards#thresholds} is not one. */
         public List<Threshold> thresholds() {
-            return RuleEvidence.linesIn(evidence);
+            return RuleEvidence.linesIn(LineEvidence.statedIn(evidence));
         }
 
         /** The values singled out, likewise. */
         public List<GuardThresholds.Guards.Singled> singled() {
-            return RuleEvidence.pointsIn(evidence);
+            return RuleEvidence.pointsIn(LineEvidence.statedIn(evidence));
         }
     }
 
@@ -113,7 +115,8 @@ public final class EnsuresThresholds {
         if (stated == null || stated.isEmpty()) {
             return Clauses.NONE;
         }
-        InputReads reads = InputReads.ofWhatIsDeclared(rootsOf(stated.params()));
+        InputReads reads = InputReads.ofWhatIsDeclared(rootsOf(stated.params()),
+                read.declared());
         Drawn drawn = new Drawn(stated.behavior().name(), new ArrayList<>(), new ArrayList<>(),
                 new RulesWithNoLine.Gathered());
         for (StatedContract.StatedRule rule : stated.rules()) {
@@ -158,7 +161,7 @@ public final class EnsuresThresholds {
 
     /** What the walk has found so far, and the behavior a line between two positions is named
      *  after. Together because they are filled together and are one answer. */
-    private record Drawn(String behavior, List<RuleEvidence> evidence,
+    private record Drawn(String behavior, List<LineEvidence> evidence,
                          List<LineDrawn> between,
                          RulesWithNoLine.Gathered noLine) {}
 
@@ -176,7 +179,7 @@ public final class EnsuresThresholds {
                                 InputReading read,
                                 souther.compiler.coverage.Arrivals answering, Drawn out) {
         reportRuleWithoutLine(rule.ref(), it.stated(), rule.value(),
-                ComparisonAssessment.atEachOf(
+                ComparisonAssessment.leftAtEachOf(
                         GuardThresholds.mentionedIn(it.stated(), it.reads(), read.symbols(),
                                         read.newtypes(), answering).stream()
                                 .map(FilingCoordinate::at).toList(),
@@ -207,11 +210,20 @@ public final class EnsuresThresholds {
         // draw one line and raise one question, and neither is worked out beside the other.
         // No arrival either: a clause stands in no body, it is checked whenever the behavior
         // answers, so there is nothing on the way to it and what arrives is the declarations'
-        // whole domain — which is what an arrival that restricts nothing reads as.
-        ComparisonAssessment assessed = ComparisonAssessment.of(out.behavior(), comparison.stated(),
+        // whole domain — which is what an arrival that restricts nothing reads as. And no
+        // dependency: a clause is written against the declaration, and no row stands anything in
+        // for it, so it is read where none is ({@link InputReads#ofWhatIsDeclared}).
+        ComparisonAssessment whole = ComparisonAssessment.of(out.behavior(), comparison.stated(),
                 Citation.of(e.pos()), read,
-                reads, rule.value(),
-                answering, false);
+                reads, ClosureApplications.OUTSIDE, rule.value(), answering, false,
+                WhatConditionsState.of(read), Optional.empty());
+        // A statement of several relations holds a line for each only where the statement turns
+        // on it, and a clause has nowhere to hold that: no way leads to it for a condition to be
+        // carried on. So its lines are said not to be drawn, rather than drawn and owed rows the
+        // clause answers alike on both sides.
+        ComparisonAssessment assessed =
+                whole instanceof ComparisonAssessment.Several several
+                        ? several.withNoWayForItsParts() : whole;
         // What the positions this names are left with, where the reading of lines drew none. Asked
         // of the assessment and not worked out per arm here: the same table stood in the guard
         // reader, and a case added to an assessment had to be answered in both.
@@ -220,7 +232,8 @@ public final class EnsuresThresholds {
         // And the geometry. Read the same way a guard reads it ({@link ComparisonGeometry}); only
         // where a line's origin comes from is this reader's own — a clause's is which conjunct
         // stated it, not a place a run met.
-        ComparisonGeometry geometry = ComparisonGeometry.of(assessed, cutting -> originOf(said, cutting));
+        ComparisonGeometry geometry = ComparisonGeometry.of(assessed,
+                (cutting, _, _) -> originOf(said, cutting));
         out.evidence().addAll(geometry.evidence());
         out.between().addAll(geometry.between());
     }
@@ -252,8 +265,7 @@ public final class EnsuresThresholds {
      * form is what stopped it: the one reason that does not turn on what two sides name.
      */
     private static void reportRuleWithoutLine(RuleRef.Ensures rule, Core statement, BindingId answer,
-                                     java.util.SequencedMap<FilingCoordinate,
-                                             BlockReason.RuleWithoutLineReason> left,
+                                     List<ComparisonAssessment.LeftAt> left,
                                      RulesWithNoLine.Gathered withoutALine) {
         if (ComparisonAssessment.readsAnswer(statement, answer)) {
             return;
@@ -264,11 +276,11 @@ public final class EnsuresThresholds {
         // reading finished. Nothing works out what such a clause raises about an input — what it
         // states is a relation the behavior is held to — so where the reading stopped there is
         // nothing that was determined.
-        left.forEach((named, why) -> {
-            if (why instanceof BlockReason.RuleReadingStopped stopped) {
-                withoutALine.unclassified(cited, named, stopped);
+        left.forEach(each -> {
+            if (each.why() instanceof BlockReason.RuleReadingStopped stopped) {
+                withoutALine.unclassified(cited, ModelOccurrences.NONE, each.at(), stopped);
             } else {
-                withoutALine.add(cited, named, why);
+                withoutALine.add(cited, each.at(), each.why());
             }
         });
     }

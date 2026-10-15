@@ -2,17 +2,20 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.carrier.Membership;
 import souther.compiler.check.DeclaredSig;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
+import souther.compiler.check.TypeCardinality;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
+import souther.compiler.query.ReadAs;
 
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Towards;
@@ -59,10 +62,12 @@ class ThresholdNormalizationTest {
                 checked.analysisBodies().get(behavior), body, plan,
                 compilation.db().ask(new souther.compiler.query.Adequacy.Inputs(module)).value().get(behavior), rules);
         List<Threshold> thresholds = guards.thresholds();
-        InputDomain domain = InputDomain.of(sigs.get(behavior), RuleReadingContext.unshared(rules,
-                souther.compiler.query.ReadAs.THE_COMPILATION_DOES));
+        RuleReadingContext ruleReading = RuleReadingContext.unshared(rules,
+                ReadAs.THE_COMPILATION_DOES);
+        InputDomain domain = InputDomain.of(sigs.get(behavior), ruleReading,
+                TypeCardinality.Counts.workedOutIn(ruleReading), Membership.none());
         souther.compiler.inputs.Quantities reading = domain.quantities(rules);
-        Partitions.Partitioning base = Partitions.of(behavior, domain, rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+        Partitions.Partitioning base = Partitions.of(behavior, domain.reading(rules), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         return new Read(ThresholdFixtures.withThresholds(base, reading, thresholds,
                 RuleReadingContext.unshared(rules,
                         souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
@@ -315,7 +320,8 @@ class ThresholdNormalizationTest {
     private static List<String> pointsAgainstTheLines(Axis axis,
                                                       souther.compiler.inputs.Quantities reading,
                                                       NumericDomain.Bounds within) {
-        return Partitions.bordersOf(axis, reading, within, new LinesRead()).stream()
+        return Partitions.bordersOf(axis, reading, within, new LinesRead(), (one, other) -> false)
+                .stream()
                 .flatMap(border -> java.util.stream.Stream.of(PointRole.ON, PointRole.OFF)
                         .filter(role -> border.demand(role).criterion() != null)
                         .map(role -> role + " "

@@ -9,6 +9,7 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermOrdersFixtures;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.WhyNotTaken;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
@@ -25,6 +26,7 @@ import souther.compiler.partition.Level;
 import souther.compiler.partition.LineFacts;
 import souther.compiler.partition.LineOrigin;
 import souther.compiler.partition.OnTheWay;
+import souther.compiler.partition.RowDemand;
 import souther.compiler.partition.TakenConstraint;
 import souther.compiler.partition.WayToTheBorder;
 import souther.compiler.partition.WhichLine;
@@ -61,6 +63,12 @@ final class TheLinesBesideABorder {
         return over(ordered(), form());
     }
 
+    /** {@code y >= 2 * x}: the same quantity kept on the other side, so that what is further along
+     *  it runs the other way. */
+    static Border aLineOverTwoPositionsKeptAbove() {
+        return over(new LineFacts(new ComparisonClaim.Cut(Towards.ABOVE, true)), form());
+    }
+
     /** The same quantity, cut by a rule that names a value instead of ordering the values. */
     static Border aBorderThatNamesAValue() {
         return over(new LineFacts(new ComparisonClaim.Singled(true)), form());
@@ -84,12 +92,12 @@ final class TheLinesBesideABorder {
         Map<NumericTerm, ExactRatio> onlyX = new LinkedHashMap<>();
         onlyX.put(X, ExactRatio.ONE);
         return new WayToTheBorder(List.of(
-                new OnTheWay.TakenIn(anchor(),
+                new OnTheWay.TakenIn(anchor(), new RowDemand.Relational(
                         new TakenConstraint.Affine(
-                                new LinearForm<>(ExactRatio.ZERO, onlyX), Rel.LE)),
-                new OnTheWay.TakenIn(anchor(),
+                                new LinearForm<>(ExactRatio.ZERO, onlyX), Rel.LE))),
+                new OnTheWay.TakenIn(anchor(), new RowDemand.Relational(
                         new TakenConstraint.Affine(
-                                new LinearForm<>(ExactRatio.ZERO, onlyX), Rel.GE))));
+                                new LinearForm<>(ExactRatio.ZERO, onlyX), Rel.GE)))));
     }
 
     /**
@@ -106,21 +114,24 @@ final class TheLinesBesideABorder {
         xAndZ.put(X, ExactRatio.ONE);
         xAndZ.put(new NumericTerm.ValueOf(TermPath.of("z")), ExactRatio.ONE);
         return new WayToTheBorder(List.of(
-                new OnTheWay.TakenIn(anchor(),
+                new OnTheWay.TakenIn(anchor(), new RowDemand.Relational(
                         new TakenConstraint.Affine(
-                                new LinearForm<>(ExactRatio.of(-10), xAndZ), Rel.LE))));
+                                new LinearForm<>(ExactRatio.of(-10), xAndZ), Rel.LE)))));
     }
 
     /** And one holding a condition nothing turned into something a row can be held against. */
     static WayToTheBorder aWayWithAConditionNobodyRead() {
         return new WayToTheBorder(List.of(
-                new OnTheWay.Declined(new ConditionOccurrence("f", 0), anchor(),
-                        new OnTheWay.Why.NoWordsForTheShape())));
+                new OnTheWay.Declined(
+                        new ConditionOccurrence("f", ConditionOccurrence.Reading.DIVIDING, 0),
+                        anchor(),
+                        new WhyNotTaken.OutsideDomain(
+                                WhyNotTaken.DomainLimit.A_QUANTITY_ON_NO_ORDER))));
     }
 
     private static ConditionReportAnchor anchor() {
         return new ConditionReportAnchor.WhereTheReadingMetIt("m",
-                new ConditionOccurrence("f", 0));
+                new ConditionOccurrence("f", ConditionOccurrence.Reading.DIVIDING, 0));
     }
 
     /** What the rows are weighed by: {@code x} at minus two and {@code y} at one. */

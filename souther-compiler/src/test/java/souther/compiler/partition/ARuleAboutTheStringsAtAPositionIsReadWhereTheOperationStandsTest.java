@@ -10,7 +10,7 @@ import souther.compiler.inputs.InputDomain;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
-import souther.compiler.regex.PatternMeaning;
+import net.unit8.notation199x.pattern.PatternMeaning;
 
 import java.util.List;
 

@@ -8,6 +8,7 @@ import souther.compiler.core.Kernel;
 import souther.compiler.core.KernelSignature;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.DiagnosticPlace;
 import souther.compiler.diag.Region;
 import souther.compiler.diag.msg.DeclarationMessage;
 import souther.compiler.diag.msg.DataMessage;
@@ -23,9 +24,9 @@ import souther.compiler.types.ReachName;
 import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
-import souther.compiler.regex.PatternParser;
-import souther.compiler.regex.PatternRead;
-import souther.temporal.TemporalText;
+import net.unit8.notation199x.pattern.PatternParser;
+import net.unit8.notation199x.pattern.PatternRead;
+import souther.temporal.TemporalForms;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -85,8 +86,7 @@ public final class CallElaborator {
         if (element instanceof Type.Nothing) {
             return OrderingRequirement.overNothingToOrder(element);
         }
-        Ordering how = Ordering.of(element, ctx.inners(), ctx.symbols(), ctx.kinds(),
-                ctx.published());
+        Ordering how = Ordering.of(element, ctx.declarations());
         if (how != null) {
             return OrderingRequirement.orderedBy(element, how);
         }
@@ -114,8 +114,7 @@ public final class CallElaborator {
         if (BottomInfer.isBottom(answered) || answered instanceof Type.Var) {
             return OrderingRequirement.overNothingToOrder(answered);
         }
-        Ordering how = Ordering.of(answered, ctx.inners(), ctx.symbols(), ctx.kinds(),
-                ctx.published());
+        Ordering how = Ordering.of(answered, ctx.declarations());
         if (how != null) {
             return OrderingRequirement.orderedBy(answered, how);
         }
@@ -166,7 +165,7 @@ public final class CallElaborator {
         }
         Type declared = entry.signature().result();
         Map<String, Type> bindings = new HashMap<>();
-        BottomInfer.pinResultTypeVars(declared, expected, bindings, ctx.published());
+        BottomInfer.pinResultTypeVars(declared, expected, bindings, ctx.kinds(), ctx.sums());
         // A name written where a value goes, and no call written anywhere: reading a value's name
         // is running its body, so the call is this compiler's and there is none to send anybody to.
         //
@@ -312,7 +311,7 @@ public final class CallElaborator {
             arity(call, params.size());
         }
         Map<String, Type> bind = SignatureApplication.settledByValues(
-                params, kept.result(), expected, ca::type, ctx.published());
+                params, kept.result(), expected, ca::type, ctx.kinds(), ctx.sums());
         requireValueArgs(call, params, ca, bind);
         for (int i = 0; i < params.size(); i++) {
             if (params.get(i) instanceof Type.FnOf declared) {
@@ -326,7 +325,7 @@ public final class CallElaborator {
                 // Refused here rather than inside the walk, and by the sentence a value argument is
                 // refused by: both kinds of argument are one rule, and this is the reader that
                 // still has the argument to point at.
-                if (TypeOps.unify(declared.result(), answered, bind, ctx.published())
+                if (TypeOps.unify(declared.result(), answered, bind, ctx.kinds(), ctx.sums())
                         instanceof Fit.Disagrees d) {
                     throw Elaborator.doesNotFit(call.args().get(i), d.actual(), d.expected(),
                             "argument " + (i + 1) + " of " + call.written());
@@ -336,7 +335,7 @@ public final class CallElaborator {
         // Every argument stands as what the signature settled it to be taken as, which is known once
         // every argument has been read.
         Applied applied = new Applied(new Type.FnOf(params, kept.result()), bind);
-        List<Core> placed = materialized(call, applied, ca);
+        List<Core> placed = materialized(call, applied, null, ca);
         // The operation as the signature that just typed this call says it: what was applied and
         // what it takes are one answer, and asking anything a second time for the name would be
         // reaching for a declaration this already has in hand.
@@ -428,7 +427,7 @@ public final class CallElaborator {
          *  does, and handed to the call standing as {@code expected}. */
         void require(int i, Type expected, String what) {
             cores[i] = Elaborator.standing(args.get(i), Elaborator.elaborate(args.get(i), env, ctx),
-                    expected, ctx.published(), what);
+                    expected, ctx.kinds(), ctx.sums(), what);
         }
 
         /** Argument {@code i}, elaborated once by {@link #type}, required to fit {@code required}
@@ -439,7 +438,8 @@ public final class CallElaborator {
                 throw new IllegalStateException(
                         "argument " + (i + 1) + " required before it was typed");
             }
-            Elaborator.requireType(args.get(i), cores[i].type(), required, ctx.published(), what);
+            Elaborator.requireType(args.get(i), cores[i].type(), required, ctx.kinds(),
+                    ctx.sums(), what);
         }
 
         /** Argument {@code i}, elaborated once by {@link #type}, required to fit {@code required}
@@ -451,14 +451,15 @@ public final class CallElaborator {
                 throw new IllegalStateException(
                         "argument " + (i + 1) + " required before it was typed");
             }
-            cores[i] = Elaborator.standing(args.get(i), cores[i], required, ctx.published(), what);
+            cores[i] = Elaborator.standing(args.get(i), cores[i], required, ctx.kinds(),
+                    ctx.sums(), what);
         }
 
         /** Argument {@code i} as a block (or a function value standing in for one), returning the
          * result type the block yields at what {@code takes} says it takes. What {@code takes}
          * says it answers is what a body that is itself a function is read against. */
         Type block(int i, String fnName, Type.FnOf takes) {
-            Core c = Elaborator.elaborateBlockArg(fnName, args.get(i), takes, env, ctx);
+            Core c = Elaborator.elaborateBlockArg(fnName, null, args.get(i), takes, env, ctx);
             cores[i] = c;
             return ((Type.FnOf) c.type()).result();
         }
@@ -483,18 +484,27 @@ public final class CallElaborator {
          * checker decided the one type may stand as the other, and it is placed here, so this is
          * where that is decided: a settlement that stopped short of what the function answers would
          * otherwise have its answer stand as something narrower.
+         *
+         * <p>{@code handover} is the parameter the function was handed to, where the callee names
+         * one, and null for a kernel; a function answering something else is reported against it.
          */
-        void settledAs(int i, String fnName, Type.FnOf takes, String what) {
+        void settledAs(int i, String fnName, Hir.FunctionHandover handover, Type.FnOf takes,
+                       String what) {
             Core read = cores[i];
             if (!((Type.FnOf) read.type()).params().equals(takes.params())) {
-                read = Elaborator.elaborateBlockArg(fnName, args.get(i), takes, env, ctx);
+                read = Elaborator.elaborateBlockArg(fnName, handover, args.get(i), takes, env,
+                        ctx);
             }
             if (takes.result() instanceof Type.Var) {
                 cores[i] = read;
                 return;
             }
             Type answered = ((Type.FnOf) read.type()).result();
-            if (!TypeOps.assignable(answered, takes.result(), ctx.published())) {
+            if (!TypeOps.assignable(answered, takes.result(), ctx.kinds(), ctx.sums())) {
+                if (handover != null) {
+                    throw Elaborator.theBlockAnswersAnotherType(handover, takes.result(),
+                            answered, Elaborator.answerRegion(args.get(i)));
+                }
                 throw Elaborator.doesNotFit(args.get(i), answered, takes.result(), what);
             }
             cores[i] = Elaborator.answering(read, takes.result());
@@ -529,7 +539,8 @@ public final class CallElaborator {
      * expanded, substituted or rewritten before the check ran, which is this compiler disagreeing
      * with itself and not something an author can act on.
      */
-    static RuntimeException noCallee(Hir.Apply call, Symbols symbols) {
+    static RuntimeException noCallee(Hir.Apply call, Symbols symbols,
+                                     ReachedValueLocations locations) {
         if (call.answered() == null) {
             return new IllegalStateException("`" + call.written()
                     + "` applies something that is not a name, at " + call.pos());
@@ -559,8 +570,9 @@ public final class CallElaborator {
             // probe sees when it types a body before the binding it asks about has one and reads the
             // report to find out. The same sentence answers both: at the point of the report, this
             // name is not a function here.
-            case ValueName.Local _ -> CompileException.of(Diagnostic
-                            .at(call.appliedAt()).say(new NameMessage.ItIsNotAFunctionHere(call.written())).build());
+            case ValueName.Local _ -> CompileException.of(hidden(Diagnostic.at(call.appliedAt())
+                            .say(new NameMessage.ItIsNotAFunctionHere(call.written())),
+                    call, locations).build());
             case ValueName.Helper _ -> unelaborated("a helper", call);
             case ValueName.Stdlib _ -> unelaborated("a standard-library function", call);
             // A name the language itself gives (`None`), applied. `Some`/`None` applications are
@@ -568,6 +580,34 @@ public final class CallElaborator {
             case ValueName.Builtin b -> CompileException.of(Diagnostic
                             .at(call.appliedAt()).say(new NameMessage.ANameTheLanguageGivesIsNotAFunction(b.name())).build());
             case null -> unelaborated("nothing", call);
+        };
+    }
+
+    /**
+     * {@code said}, pointing as well at what the applied binding hid, where it hid something and
+     * the reading holds somewhere to ask where that is.
+     *
+     * <p>What was hidden is what resolution said when it chose the binding, and nothing here looks
+     * the spelling up again. The label says it is hidden and no more: whether it could be applied
+     * here is another question, and a behavior a helper cannot reach is hidden all the same.
+     */
+    private static Diagnostic.Builder hidden(Diagnostic.Builder said, Hir.Apply call,
+                                             ReachedValueLocations locations) {
+        if (!(call.applied().shadowing() instanceof Hir.Shadowing.Hides(
+                ReachName.Declaration reached))) {
+            return said;
+        }
+        return switch (locations) {
+            case ReachedValueLocations.NotHeld _ -> said;
+            case ReachedValueLocations.Held(ReachedValueLocations.Where where) -> {
+                NameMessage.ABindingInScopeHidesIt label =
+                        new NameMessage.ABindingInScopeHidesIt(call.written(), reached.rendered());
+                yield switch (where.of(reached)) {
+                    case DiagnosticPlace.InSource in -> said.secondary(in, label);
+                    case DiagnosticPlace.Unavailable out ->
+                            said.secondaryOutOfSight(out.provenance(), label);
+                };
+            }
         };
     }
 
@@ -648,8 +688,12 @@ public final class CallElaborator {
      *
      * <p>Arity is the caller's to check first, in its own words; this throws where the two
      * disagree rather than walking off the shorter list.
+     *
+     * <p>{@code declared} is the declaration standing behind the signature, which names the
+     * parameters a function argument is reported against, and null for a kernel, which names none.
      */
-    private static Applied applySignature(Hir.Apply call, Type.FnOf signature, CallArgs ca,
+    private static Applied applySignature(Hir.Apply call, Type.FnOf signature,
+                                          StandingSignature declared, CallArgs ca,
                                           Type expected, Scope env, CheckContext ctx) {
         List<Hir.Expr> args = call.args();
         if (args.size() != signature.params().size()) {
@@ -657,13 +701,15 @@ public final class CallElaborator {
                     + " with " + args.size() + " argument(s) against " + signature.params().size());
         }
         Map<String, Type> bind = SignatureApplication.settledByValues(
-                signature.params(), signature.result(), expected, ca::type, ctx.published());
+                signature.params(), signature.result(), expected, ca::type, ctx.kinds(),
+                ctx.sums());
         requireValueArgs(call, signature.params(), ca, bind);
         try {
             for (int i = 0; i < args.size(); i++) {
                 if (signature.params().get(i) instanceof Type.FnOf declaredStep) {
-                    ca.put(i, Elaborator.resolveStepBinding(call.written(), declaredStep,
-                            args.get(i), bind, env, ctx));
+                    ca.put(i, Elaborator.resolveStepBinding(call.written(),
+                            handedTo(call, declared, i), declaredStep, args.get(i), bind, env,
+                            ctx));
                 }
             }
         } catch (CompileException stepError) {
@@ -711,19 +757,34 @@ public final class CallElaborator {
      * own rule, may have settled further a variable an earlier argument was read against. A value
      * stands as what its parameter settled to, and a function is read again where it was read
      * taking something else ({@link CallArgs#settledAs}).
+     *
+     * <p>{@code standing} is as {@link #applySignature} has it.
      */
-    private static List<Core> materialized(Hir.Apply call, Applied applied, CallArgs ca) {
+    private static List<Core> materialized(Hir.Apply call, Applied applied,
+                                           StandingSignature standing, CallArgs ca) {
         List<Type> declared = applied.signature().params();
         List<Type> takes = applied.takes();
         for (int i = 0; i < declared.size(); i++) {
             String what = "argument " + (i + 1) + " of " + call.written();
-            if (declared.get(i) instanceof Type.FnOf) {
-                ca.settledAs(i, call.written(), (Type.FnOf) takes.get(i), what);
+            if (declared.get(i) instanceof Type.FnOf step) {
+                // A step declared to answer a variable answers an accumulator, which is no
+                // parameter's to report (Elaborator#resolveStepBinding).
+                ca.settledAs(i, call.written(),
+                        step.result() instanceof Type.Var ? null : handedTo(call, standing, i),
+                        (Type.FnOf) takes.get(i), what);
             } else {
                 ca.requireTyped(i, takes.get(i), what);
             }
         }
         return ca.cores();
+    }
+
+    /** What argument {@code i} of {@code call} was handed to, where {@code declared} names the
+     *  parameters, and null where nothing does. */
+    private static Hir.FunctionHandover handedTo(Hir.Apply call, StandingSignature declared,
+                                                 int i) {
+        return declared == null ? null
+                : new Hir.FunctionHandover(declared.parameters().get(i), call.written());
     }
 
     /**
@@ -796,7 +857,8 @@ public final class CallElaborator {
                                 .say(new DeclarationMessage.AppliedToAnotherNumberOfArguments(call.written(), String.valueOf(intrinsic.parameters().size()), String.valueOf(args.size()))).build());
             }
             Applied applied = applySignature(call,
-                    new Type.FnOf(intrinsic.parameters(), intrinsic.result()), ca, expected, env, ctx);
+                    new Type.FnOf(intrinsic.parameters(), intrinsic.result()), null, ca, expected,
+                    env, ctx);
             // What remains is the kernel's own: constraints the kernel places on the outcome the
             // signature could not state, and the emitter's special cases. They read the settled
             // substitution and result — they are checks on what the application became, not part
@@ -825,7 +887,7 @@ public final class CallElaborator {
             } else {
                 fact = Core.KernelFact.None.INSTANCE;
             }
-            return new TypedCall(materialized(call, applied, ca), applied.result(),
+            return new TypedCall(materialized(call, applied, null, ca), applied.result(),
                     new Core.CallSettlement.AtKernel(applied.takes(), fact));
         }
         // a function-typed value in scope (a helper's function parameter) applied to
@@ -844,8 +906,11 @@ public final class CallElaborator {
                                 .at(call.appliedAt())
                                 .say(new DeclarationMessage.AppliedToAnotherNumberOfArguments(call.written(), String.valueOf(fn.params().size()), String.valueOf(args.size()))).build());
             }
-            Applied applied = applySignature(call, fn, ca, expected, env, ctx);
-            return new TypedCall(materialized(call, applied, ca), applied.result());
+            // A recursive helper's declaration names its parameters, which a function value in
+            // force does not.
+            StandingSignature declared = env.standingOn(callee.denotes(), callee.reaches());
+            Applied applied = applySignature(call, fn, declared, ca, expected, env, ctx);
+            return new TypedCall(materialized(call, applied, declared, ca), applied.result());
         }
         // A library name that matched no builtin or intrinsic above. Which of the two it is the
         // library says, and the two are not one report. A name it declares reached here without
@@ -896,13 +961,9 @@ public final class CallElaborator {
         }
         if (required == null) {
             Elaborator.optionCaseWritten(call.written(), call.pos());
-            CompileException bareLibraryName = StdlibNames.writtenBare(
-                    ctx.symbols().library().names(), call.written(), call.written(),
-                    call.applied().reportedAt());
-            if (bareLibraryName != null) {
-                throw bareLibraryName;
-            }
-            throw noCallee(call, ctx.symbols());
+            // The name answered to something here, so the report is about what it answered to,
+            // whatever the library publishes under the same spelling.
+            throw noCallee(call, ctx.symbols(), ctx.reachedLocations());
         }
         arity(call, required.params().size());
         for (int i = 0; i < required.params().size(); i++) {
@@ -964,9 +1025,25 @@ public final class CallElaborator {
                      A_QUOTATION, A_CLASS_OF_CLASSES, A_POSSESSIVE_REPETITION ->
                         new TypeMessage.ThePatternWritesWhatNoPatternHas(refused.construct());
             });
-            case PatternRead.TooDeep deep ->
-                    throw refusedAt(e, new TypeMessage.ThePatternNestsDeeperThanIsRead(deep.deepest()));
+            case PatternRead.Beyond beyond -> throw pastALimit(e, pattern, beyond);
         };
+    }
+
+    /** A pattern past one of the limits every implementation holds a pattern to, which is a
+     *  pattern of the language and one no implementation is asked to run. */
+    private static CompileException pastALimit(BoundExpr e, String pattern, PatternRead.Beyond beyond) {
+        String most = String.valueOf(beyond.limit().most());
+        Diagnostic.Builder at = Diagnostic.at(e.expr().pos());
+        Diagnostic.Builder said = switch (beyond.limit()) {
+            case REPETITION_COUNT -> at.say(
+                    new TypeMessage.ThePatternCountsMoreThanAPatternMay(beyond.construct(), most));
+            case NESTING_DEPTH -> at.say(
+                    new TypeMessage.ThePatternNestsDeeperThanAPatternMay(beyond.construct(), most));
+            case MACHINE_STATES -> at.say(
+                    new TypeMessage.ThePatternComesToMoreStatesThanAPatternMay(pattern, most))
+                    .hint(new DeclarationMessage.WriteTheRepetitionsOfAPatternSmaller());
+        };
+        return CompileException.of(said.build());
     }
 
     private static <M extends TypeMessage & Reported> CompileException refusedAt(BoundExpr e,
@@ -1073,21 +1150,21 @@ public final class CallElaborator {
      * Returns the parsed value so the backend and the example verifier share this one reading of
      * the text.
      *
-     * <p>Which text a temporal may be written as is {@link TemporalText#inSource}'s, asked before
+     * <p>Which text a temporal may be written as is {@link TemporalForms#inSource}'s, asked before
      * anything is parsed: what {@code java.time} would take is wider, and the difference is not
      * the checker's to decide. {@code kind} decides which value is built and {@code fn} is only what
      * a report quotes. They were one value, and the caller that had a name for a temporal it had not
      * resolved got the parse the name spelled. */
     public static Object parseTemporal(Type.Prim kind, String fn, String text, Region at) {
-        TemporalText.Kind form = switch (kind) {
-            case DATE -> TemporalText.Kind.DATE;
-            case TIME -> TemporalText.Kind.TIME;
-            case DATETIME -> TemporalText.Kind.DATETIME;
-            case INSTANT -> TemporalText.Kind.INSTANT;
+        TemporalForms.Kind form = switch (kind) {
+            case DATE -> TemporalForms.Kind.DATE;
+            case TIME -> TemporalForms.Kind.TIME;
+            case DATETIME -> TemporalForms.Kind.DATETIME;
+            case INSTANT -> TemporalForms.Kind.INSTANT;
             case INT, STRING, BOOL, DECIMAL, RATIONAL ->
                     throw new IllegalStateException("`" + fn + "` names no temporal");
         };
-        TemporalText.inSource(form, text).ifPresent(refusal -> {
+        TemporalForms.inSource(form, text).ifPresent(refusal -> {
             throw CompileException.of(Diagnostic.at(at).say(switch (refusal) {
                 case MALFORMED -> new TypeMessage.ThatIsNotATemporalOfThatKind(fn, text);
                 case SUB_SECOND -> new TypeMessage.ATimeOfDayIsWrittenToTheSecond(fn, text);

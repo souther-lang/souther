@@ -1,25 +1,32 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.AffineForms;
+import souther.compiler.check.ValueStanding;
 import souther.compiler.check.StatedComparison;
 import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.Location;
-import souther.compiler.check.DeclarationKinds;
-import souther.compiler.check.PublishedDeclarations;
-import souther.compiler.check.NewtypeInners;
+import souther.compiler.check.DeclarationAccess;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
+import souther.compiler.inputs.ElementsMet;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputNumber;
+import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.NumericTerms;
 import souther.compiler.inputs.PathResolution;
+import souther.compiler.inputs.ReadMeaning;
+import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.Rel;
 
+import java.util.LinkedHashSet;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 
 /**
  * A comparison read as one statement: {@code Σ coef·position REL threshold}.
@@ -56,8 +63,15 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
      */
     sealed interface OfAComparison {
 
-        /** The line the comparison draws. */
-        record Cuts(AffineReading read) implements OfAComparison {
+        /**
+         * The line the comparison draws.
+         *
+         * @param mirrored whether the form is the right side less the left rather than the left
+         *                 less the right, which is how the line is faced to the position the left
+         *                 names first ({@link #facesTheOtherWay}) and is what tells which of the two
+         *                 written sides is above on either side of the line
+         */
+        record Cuts(AffineReading read, boolean mirrored) implements OfAComparison {
 
             public Cuts {
                 java.util.Objects.requireNonNull(read, "a comparison that cuts has a line");
@@ -79,45 +93,124 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
          * them in is not carried here and is not the order they were met in: that is how the rule
          * was spelled, and it is settled where the coordinates are made
          * ({@link AffineReading#filedAt}).
+         *
+         * <p>{@code difference} is what the left side exceeds the right by, which is the same for
+         * every row — so which way the comparison comes out is settled by it and the relation, and
+         * a reader asking that is not sent back to the operands to fold them a second way.
          */
-        record CutsNothing(java.util.Set<NumericTerm> read) implements OfAComparison {
+        record CutsNothing(java.util.Set<NumericTerm> read, ExactRatio difference)
+                implements OfAComparison {
 
             public CutsNothing {
                 read = java.util.Set.copyOf(read);
+                Objects.requireNonNull(difference,
+                        "a comparison that cuts nothing still has its two sides' difference");
+            }
+
+            /** Whether a comparison stating {@code rel} of its left side against its right comes
+             *  out holding, which is the same for every row. */
+            boolean holds(Rel rel) {
+                return rel.holds(difference.signum());
             }
         }
 
-        /** The reading stopped, at this expression and in the environment it was being read in. */
-        record Stopped(Core node, InputReads at) implements OfAComparison {
+        /**
+         * Read to the end, each side as a form, and the difference of the two has no representation.
+         *
+         * <p>Its own answer beside {@link CutsNothing} and {@link Stopped}. Nothing cancelled, so
+         * the quantity is not empty; the reading did not stop on an expression it could not read,
+         * so the rule is a form it reads.
+         * What is missing is a number to say what the difference is, and a reader told either of the
+         * others would be told something about the rule that is not so. A rule the model wrote in
+         * good faith — a coefficient at one end of the range weighed against one at the other —
+         * arrives here.
+         *
+         * <p>{@code read} is every number of the input this reading named on the way, for the same
+         * reason {@link CutsNothing} carries it.
+         */
+        record NotHeld(Set<NumericTerm> read) implements OfAComparison {
+
+            public NotHeld {
+                read = Set.copyOf(read);
+            }
+        }
+
+        /**
+         * The reading stopped: where, in what environment, and for the reason the arithmetic gave.
+         * The reason is the arithmetic's own, so a reader of this takes it as it is.
+         */
+        record Stopped(AffineForms.Outcome.StoppedAt<NumericTerm, InputReads> failure)
+                implements OfAComparison {
 
             public Stopped {
-                java.util.Objects.requireNonNull(node, "a reading that stopped stopped somewhere");
-                java.util.Objects.requireNonNull(at, "and was reading it in something");
+                java.util.Objects.requireNonNull(failure, "a reading that stopped stopped somewhere");
+            }
+
+            /** The expression the reading stopped at. */
+            public Core node() {
+                return failure.node();
+            }
+
+            /** The environment it was being read in. */
+            public InputReads at() {
+                return failure.at();
             }
         }
     }
 
-    /** The same, saying which of the three it is. */
-    static OfAComparison read(StatedComparison comparison, InputDomain inputs, InputReads reads,
-                              RuleReadingSource ruleSource) {
+    /**
+     * One expression as a form of the input's numbers, or null where the arithmetic stops on it.
+     *
+     * <p>The reading a side of a comparison gets ({@link #read}), asked of a part of one: a
+     * dividend is read as a side is, so the same expression is the same form wherever it stands.
+     */
+    static LinearForm<NumericTerm> formOf(Core expression, InputReads reads, InputReading read) {
+        AffineForms.Outcome<NumericTerm, InputReads> outcome = AffineForms.outcome(expression,
+                reads, reading(read.domain(), read.rules(), KeptTruths.readIn(read),
+                        new LinkedHashSet<>(), new ElementsMet()));
+        return outcome instanceof AffineForms.Outcome.Composed<NumericTerm, InputReads> composed
+                ? composed.form() : null;
+    }
+
+    /**
+     * The same, of the input {@code ofTheInput} reads, with the names as {@code reads} has them, saying
+     * which of the four it is.
+     */
+    static OfAComparison read(StatedComparison comparison, InputReads reads,
+                              InputReading ofTheInput) {
+        InputDomain inputs = ofTheInput.domain();
+        RuleReadingSource ruleSource = ofTheInput.rules();
+        ReadMeaning.WhereKept kept = KeptTruths.readIn(ofTheInput);
         // What this reading names as it goes, kept so that a reading which ran to the end can say
         // what it was about without anybody reading the comparison again.
         java.util.Set<NumericTerm> named = new java.util.LinkedHashSet<>();
+        // One element of each container for the whole comparison, whichever side names it.
+        ElementsMet met = new ElementsMet();
         // The left first where both stop, which is the side a threshold would be read off.
         LinearForm<NumericTerm> left = null;
         for (Core side : java.util.List.of(comparison.left(), comparison.right())) {
             AffineForms.Outcome<NumericTerm, InputReads> read =
-                    AffineForms.outcome(side, reads, reading(inputs, ruleSource, named));
+                    AffineForms.outcome(side, reads,
+                            reading(inputs, ruleSource, kept, named, met));
             if (read instanceof AffineForms.Outcome.StoppedAt<NumericTerm, InputReads> stopped) {
-                return new OfAComparison.Stopped(stopped.node(), stopped.at());
+                return new OfAComparison.Stopped(stopped);
             }
             if (left == null) {
                 left = ((AffineForms.Outcome.Composed<NumericTerm, InputReads>) read).form();
             } else {
-                LinearForm<NumericTerm> whole = left.minus(
-                        ((AffineForms.Outcome.Composed<NumericTerm, InputReads>) read).form());
+                // Each side was read as a form, and the difference of the two is what the rule is
+                // about. Two forms held one by one can have a difference no ratio holds — a
+                // coefficient at one end of the exponents against one at the other — and that is a
+                // reading that ran to the end and could not write down what it found, which is
+                // neither a rule with no line nor a form the arithmetic did not read.
+                if (!(left.minus(
+                        ((AffineForms.Outcome.Composed<NumericTerm, InputReads>) read).form())
+                        instanceof ExactAnswer.Held<LinearForm<NumericTerm>> difference)) {
+                    return new OfAComparison.NotHeld(named);
+                }
+                LinearForm<NumericTerm> whole = difference.value();
                 if (whole.coefs().isEmpty()) {
-                    return new OfAComparison.CutsNothing(named);
+                    return new OfAComparison.CutsNothing(named, whole.constant());
                 }
                 AffineReading here = new AffineReading(
                         new LinearForm<>(ExactRatio.ZERO, whole.coefs()),
@@ -126,12 +219,31 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 // rule, and a reader that met the first without turning it round drew its border on
                 // `-3a - 6b` — the same four points under a name no author wrote, and a different
                 // line from the rule written the other way.
-                return new OfAComparison.Cuts(
-                        here.facesTheOtherWay(subjectOf(comparison.left(), left, reads, ruleSource))
-                                ? here.mirrored() : here);
+                boolean mirrored =
+                        here.facesTheOtherWay(subjectOf(comparison.left(), left, reads, ruleSource));
+                return new OfAComparison.Cuts(mirrored ? here.mirrored() : here, mirrored);
             }
         }
         throw new IllegalStateException("a comparison has two sides");
+    }
+
+    /**
+     * The line {@code form stated 0} draws, where {@code form} is over the input's numbers alone.
+     *
+     * <p>What a comparison states is read once ({@link Pullback#ofAComparison}), and this is that
+     * statement put on the input space: the constant moved to the threshold, and the form faced the
+     * way the comparison's left side names ({@link #facesTheOtherWay}). The facing is how the line is
+     * named in a report and not what it is: the two ways are one statement.
+     *
+     * @param leftSide the comparison's left side as written, which is only asked which position it
+     *                 names first
+     */
+    static AffineReading stating(LinearForm<NumericTerm> form, Rel stated, Core leftSide,
+                                 InputReads reads, RuleReadingSource ruleSource) {
+        AffineReading here = new AffineReading(new LinearForm<>(ExactRatio.ZERO, form.coefs()),
+                form.constant().negated(), ComparisonClaim.stating(stated));
+        return here.facesTheOtherWay(subjectOf(leftSide, form, reads, ruleSource))
+                ? here.mirrored() : here;
     }
 
     /**
@@ -184,7 +296,8 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
      * for the whole reading of one comparison, and this reader lives exactly that long.
      */
     private static AffineForms.Reading<NumericTerm, InputReads> reading(
-            InputDomain inputs, RuleReadingSource ruleSource, java.util.Set<NumericTerm> named) {
+            InputDomain inputs, RuleReadingSource ruleSource, ReadMeaning.WhereKept kept,
+            Set<NumericTerm> named, ElementsMet met) {
         return new AffineForms.Reading<NumericTerm, InputReads>() {
 
             @Override
@@ -193,23 +306,13 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             }
 
             @Override
-            public PublishedDeclarations published() {
-                return ruleSource.published();
-            }
-
-            @Override
-            public DeclarationKinds kinds() {
-                return ruleSource.kinds();
-            }
-
-            @Override
-            public NewtypeInners inners() {
-                return ruleSource.inners();
+            public DeclarationAccess declarations() {
+                return ruleSource.declarations();
             }
 
             @Override
             public LinearForm<NumericTerm> leafOf(Core node, InputReads at) {
-                NumericTerm term = InputNumber.of(node, inputs, at, ruleSource);
+                NumericTerm term = InputNumber.of(node, inputs, at, ruleSource, met);
                 if (term == null) {
                     return null;
                 }
@@ -234,7 +337,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
              * ({@link InputReads#meaningOf}), read here rather than worked out again.
              */
             @Override
-            public AffineForms.ReadThrough<InputReads> readThrough(Core.Read read, InputReads at) {
+            public ValueStanding.ReadThrough<InputReads> readThrough(Core.Read read, InputReads at) {
                 return NameAnswers.denoting(read, at, ruleSource.symbols(),
                         ruleSource.newtypes());
             }
@@ -245,10 +348,20 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
              * positions a rule is about, so the two meet a plurality with the same knowledge.
              */
             @Override
-            public java.util.List<AffineForms.ReadThrough<InputReads>> alternativesOf(
+            public java.util.List<ValueStanding.ReadThrough<InputReads>> alternativesOf(
                     Core.Read read, InputReads at) {
                 return NameAnswers.alternativesOf(read, at, ruleSource.symbols(),
-                        ruleSource.newtypes());
+                        ruleSource.newtypes(), kept);
+            }
+
+            @Override
+            public ValueStanding.ReadThrough<InputReads> taken(Core node, InputReads at) {
+                return NameAnswers.taken(node, at);
+            }
+
+            @Override
+            public LinearForm<Core> takenAsAForm(Core node, InputReads at) {
+                return NameAnswers.takenAsAForm(node, at);
             }
 
             @Override
@@ -289,6 +402,15 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
      * b} is not how far two positions stand apart, it is an arithmetic form over both of them.
      */
     NumericTerm[] twoCoordinates() {
+        return twoCoordinates(form);
+    }
+
+    /**
+     * The same of any form of the input's numbers, for every reader that asks which two positions
+     * a form holds apart: the line a comparison draws and the quantity a row is read at are one
+     * question about the form.
+     */
+    static NumericTerm[] twoCoordinates(LinearForm<NumericTerm> form) {
         if (form.coefs().size() != 2) {
             return null;
         }
@@ -332,8 +454,9 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         return (first != null ? first : ordered(form).getFirst().getValue()).signum() < 0;
     }
 
-    /** The position the comparison's left side names first, or null where it names none. Handed the
-     *  reading of that side rather than walking it again: one comparison is read once. */
+    /** The position the comparison's left side names first among the terms of {@code left}, or null
+     *  where it names none of them. Handed what was read rather than walking it again: one
+     *  comparison is read once. */
     private static NumericTerm subjectOf(Core leftSide, LinearForm<NumericTerm> left,
                                          InputReads reads, RuleReadingSource ruleSource) {
         if (left == null || left.coefs().isEmpty()) {

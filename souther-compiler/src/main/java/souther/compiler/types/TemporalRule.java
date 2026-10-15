@@ -1,13 +1,13 @@
 package souther.compiler.types;
 
-import souther.temporal.TemporalText;
-import souther.temporal.TemporalText.Kind;
-import souther.temporal.TemporalText.Refusal;
+import souther.temporal.TemporalForms;
+import souther.temporal.TemporalForms.Kind;
+import souther.temporal.TemporalForms.Refusal;
 
 /**
  * What a temporal's value has to satisfy once it is built, said once for every reader of it.
  *
- * <p>Which text is a temporal at all is not here. That is the language's, {@link TemporalText}
+ * <p>Which text is a temporal at all is not here. That is the language's, {@link TemporalForms}
  * states it (spec §temporal-text), and every path a text arrives by asks it before a parser sees
  * the text, so the parser only builds the value. What is left is a rule about the value: a
  * {@code Time} and a {@code DateTime} hold no fraction of a second wherever they come from
@@ -28,7 +28,7 @@ public record TemporalRule(boolean guardsValue) {
     public static final String REFUSED = "invalid_format";
 
     /** What a value with a fraction of a second says, worded as the text that carries one is. */
-    public static final String SUB_SECOND = TemporalText.says(Kind.TIME, Refusal.SUB_SECOND);
+    public static final String SUB_SECOND = TemporalForms.says(Kind.TIME, Refusal.SUB_SECOND);
 
     /**
      * The rule for a temporal, or null where the primitive is not one.

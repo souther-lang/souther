@@ -231,8 +231,8 @@ public sealed interface PlannedValues<A> {
         // it as an alternative is offering nothing that can be counted on.
         return new Settled<>(new Settled.Parts<>(
                 PlannedHeld.one(PlannedHeld.Alternative.at(Map.of())), Map.of(),
-                Standing.of(named, why), Map.of(), AdmittedPlan.NONE, true, Set.of(),
-                Set.of()));
+                Standing.of(named, StoppedReading.of(why)), Map.of(), AdmittedPlan.NONE, true,
+                Set.of(), Set.of()));
     }
 
     /**

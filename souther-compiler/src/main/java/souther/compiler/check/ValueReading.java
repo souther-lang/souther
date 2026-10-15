@@ -106,22 +106,27 @@ sealed interface ValueReading {
 
     /** What the model writes where a value of {@code type} stands. */
     static ValueReading of(Type type, NewtypeInners inners, DeclarationKinds kinds, Symbols symbols,
-                           PublishedDeclarations published) {
-        TypeView view = TypeView.of(type, inners, symbols, published);
-        if (view.isWrapped() && view.wrappers().getFirst() instanceof TypeSymbol.AtModule worn) {
+                           SumCases sums) {
+        // The outermost name and nothing under it. What stands under the name is read where a walk
+        // reaches it, so the rest of the names are not this reading's to take off.
+        TypeOps.Unwrapped outer = TypeOps.outermost(type, inners);
+        if (outer != null && outer.layer().named() instanceof TypeSymbol.AtModule worn) {
             // The one name a value written under a name makes readable, which is what that name
-            // wraps. A name is worn here only because the walk that took the names off found
-            // something under it, so there is something to write down; reading the declaration for
-            // it would be deciding how far a newtype reaches a second time in a method that has
-            // already been told.
+            // wraps. A name is worn here only because the step that takes names off found something
+            // under it, so there is something to write down; reading the declaration for it would be
+            // deciding how far a newtype reaches a second time.
             return new UnderAName(worn, owning(worn, kinds),
-                    Map.of(NewtypeInners.THE_ONE_VALUE, inners.of(worn.key())));
+                    Map.of(NewtypeInners.THE_ONE_VALUE, outer.inner()));
         }
+        // Where the step found no name, the spine is empty and the step is not asked again.
+        Shape shape = outer == null
+                ? TypeView.wearingNoName(type, symbols, kinds, sums).shape()
+                : TypeView.shapeOf(type, inners, symbols, kinds, sums);
         // What a field access may write here is one question with one owner, asked once for every
         // shape. What is left for the switch is which declarations state something of every value
         // here and what stands below that this does not take in.
-        ReadableFields readable = ReadableFields.of(view.shape());
-        return switch (view.shape()) {
+        ReadableFields readable = ReadableFields.of(shape);
+        return switch (shape) {
             case Shape.Product product ->
                     new AtAValue(product.name(), owning(readable.declaredBy(), kinds), readable,
                             List.of());
@@ -130,7 +135,7 @@ sealed interface ValueReading {
             // case, and a reading of it is opened where a match opens the case.
             case Shape.Sum sum ->
                     new AtAValue(sum.name(), owning(readable.declaredBy(), kinds), readable,
-                            cases(sum.name(), published));
+                            cases(sum));
             // A unit data holds nothing and may write no rule about it (spec §unit-data), and a
             // primitive is written under no declaration of its own.
             case Shape.Unit unit -> new AtAValue(unit.name(), List.of(), readable, List.of());
@@ -162,10 +167,20 @@ sealed interface ValueReading {
         return out;
     }
 
-    /** A sum's cases, as the one closure over them answers. */
-    private static List<Type> cases(TypeSymbol sum, PublishedDeclarations published) {
+    /**
+     * A sum's cases, as the answer the shape was made from holds them.
+     *
+     * <p>None for an enumeration. Every case of one is a unit, and a unit holds nothing and may
+     * write no rule about it (spec §unit-data), so a reading opened at any of them would take in
+     * nothing — and handing them on has every reader of a value of the enumeration open each case
+     * to find that out.
+     */
+    private static List<Type> cases(Shape.Sum sum) {
+        if (sum.reaches() instanceof SumCases.Enumeration) {
+            return List.of();
+        }
         List<Type> out = new ArrayList<>();
-        for (TypeSymbol leaf : AtomSpace.subjectAtoms(Type.ref(sum), published)) {
+        for (TypeSymbol leaf : sum.reaches().cases()) {
             out.add(Type.ref(leaf));
         }
         return out;

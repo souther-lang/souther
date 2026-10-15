@@ -9,6 +9,7 @@ import souther.compiler.query.NotMeasuredReason;
 import souther.compiler.query.NothingWasAsked;
 import souther.compiler.query.OutputCaseEvidence;
 import souther.compiler.query.PartitionEvidence;
+import souther.compiler.query.ReplacementEvidence;
 
 /**
  * What a document calls the thing a measure nobody made was waiting for.
@@ -68,6 +69,10 @@ public enum NotMeasuredWord {
             };
             case InteractionEvidence.NotAsked it -> switch (it) {
                 case NOT_ASKED -> NOT_ASKED;
+            };
+            case ReplacementEvidence.NotAsked it -> switch (it) {
+                case NOT_ASKED -> NOT_ASKED;
+                case NO_ROWS -> NO_ROWS;
             };
             case NothingWasAsked _ -> NOT_ASKED;
             case Adequacy.SignatureEvidence.NoRows _ -> NO_ROWS;

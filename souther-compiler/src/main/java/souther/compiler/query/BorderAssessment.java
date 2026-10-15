@@ -2,16 +2,24 @@ package souther.compiler.query;
 
 import souther.compiler.check.RuleCitation;
 import souther.compiler.check.RuleCitations;
+import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.TermPath;
+import souther.compiler.observe.Figure;
 import souther.compiler.partition.Border;
 import souther.compiler.partition.Demand;
 import souther.compiler.partition.BoundaryTarget;
 import souther.compiler.partition.DomainPoint;
 import souther.compiler.partition.LineOrigin;
 import souther.compiler.partition.PointRole;
+import souther.compiler.partition.SaidOnTheWay;
+import souther.compiler.partition.WhereAPartDecides;
 import souther.compiler.publish.PublishedRuleHandle;
 import souther.compiler.publish.PublishedSentence;
+import souther.compiler.types.ModelOccurrences;
 
+import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -44,9 +52,17 @@ import java.util.Set;
  * ({@link Border#roleOf}) and is asked of it rather than kept here: a role is what a point is and
  * two points of one border can be the same one, so a measure keyed on the role would hold one entry
  * where there are two.
+ *
+ * @param readAt the copies of the comparison that drew the line this was read at, in the order they
+ *               were read. One per call of a helper that writes it, and what a reader is shown to
+ *               tell those calls apart by — the comparison is one place for every call of it, and
+ *               {@link #border} is the first copy's alone where two copies were read as one line
+ * @param saidOnTheWay which copies put each entry on the way the line's points were searched along,
+ *               of that way alone; nobody where no search was made
  */
 public record BorderAssessment(Border border, Map<DomainPoint, ItemAssessment> items,
-                               AnotherLineTheRowsAllow beside, ARowTellingTheLinesApart toldApart)
+                               AnotherLineTheRowsAllow beside, ARowTellingTheLinesApart toldApart,
+                               ModelOccurrences readAt, SaidOnTheWay saidOnTheWay)
         implements RuleCitations {
 
     /** One reading of a line, before anybody asked for a row that would tell it from the lines
@@ -54,6 +70,18 @@ public record BorderAssessment(Border border, Map<DomainPoint, ItemAssessment> i
     public BorderAssessment(Border border, Map<DomainPoint, ItemAssessment> items,
                             AnotherLineTheRowsAllow beside) {
         this(border, items, beside, ARowTellingTheLinesApart.notAsked());
+    }
+
+    /**
+     * One reading of a line, read at the copy of the comparison {@code border} was drawn by.
+     *
+     * <p>Every reading starts as one copy's. Two of them are one line only where they cut one
+     * quantity at one place, and a line read at two calls of a helper is then read at both copies
+     * ({@link #readAt}).
+     */
+    public BorderAssessment(Border border, Map<DomainPoint, ItemAssessment> items,
+                            AnotherLineTheRowsAllow beside, ARowTellingTheLinesApart toldApart) {
+        this(border, items, beside, toldApart, border.origin().readAt(), SaidOnTheWay.NONE);
     }
 
     /**
@@ -92,7 +120,8 @@ public record BorderAssessment(Border border, Map<DomainPoint, ItemAssessment> i
     }
 
     /**
-     * What holding this line against the lines beside it went without, where it came back unsettled.
+     * What holding this line against the lines beside it went without, where it or one line of its
+     * family came back unsettled.
      *
      * <p>Empty for every settled answer, whichever way it settled and however few rows it took. A
      * walk short of a row that left no line standing has established that, because reading more
@@ -105,9 +134,25 @@ public record BorderAssessment(Border border, Map<DomainPoint, ItemAssessment> i
      * questions over these rows went without them.
      */
     public WeakeningSet besideWeakening() {
-        if (!(beside instanceof AnotherLineTheRowsAllow.CouldNotTell(var why))) {
-            return WeakeningSet.none();
-        }
+        return switch (beside) {
+            case AnotherLineTheRowsAllow.CouldNotTell(var why) -> weakeningOf(why);
+            // Each line of the family left undecided, which is as much a question that came back
+            // unsettled as the border's own: a line ruled out beside it settles nothing about it.
+            case AnotherLineTheRowsAllow.ByDirection lines -> {
+                WeakeningSet out = WeakeningSet.none();
+                for (AnotherLineTheRowsAllow.Undecided line : lines.undecided()) {
+                    out = out.union(weakeningOf(line.why()));
+                }
+                yield out;
+            }
+            case AnotherLineTheRowsAllow.NotDueYet _, AnotherLineTheRowsAllow.NoSuchQuestion _,
+                 AnotherLineTheRowsAllow.NotApplicable _ -> WeakeningSet.none();
+        };
+    }
+
+    /** What a question about the lines beside this one went without, in the words a reader is
+     *  told it in. */
+    private WeakeningSet weakeningOf(AnotherLineTheRowsAllow.Unsettled why) {
         return switch (why) {
             case AnotherLineTheRowsAllow.Unsettled.RowsIncomplete(ReadingReasons met) -> {
                 WeakeningSet out = WeakeningSet.none();
@@ -116,9 +161,9 @@ public record BorderAssessment(Border border, Map<DomainPoint, ItemAssessment> i
                             WeakeningSet.of(new Weakening.BorderValueUnreadable(border, gap)));
                 }
                 yield met.tried() instanceof souther.compiler.partition.StandingAtAPoint
-                        .ReadingsTried.StoppedAtTheLimit(int limit)
+                        .ReadingsTried.StoppedAtTheLimit(List<Figure> limits)
                         ? out.union(WeakeningSet.of(
-                                new Weakening.BorderReadingsNotExhausted(border, limit)))
+                                new Weakening.BorderReadingsNotExhausted(border, limits)))
                         : out;
             }
             // The reading's own, which is what a measure over these lines is worth.
@@ -147,6 +192,10 @@ public record BorderAssessment(Border border, Map<DomainPoint, ItemAssessment> i
                     WeakeningSet.of(new Weakening.ABorderNotHeldAgainstTheLinesBesideIt(border,
                             Weakening.ABorderNotHeldAgainstTheLinesBesideIt.Why
                                     .ARITHMETIC_COULD_NOT_HOLD_A_FAMILY_MEMBER));
+            // What the border's own points already say: the exact arithmetic gave out on the
+            // numbers beside its line, so where a row is owed there is undecided.
+            case AnotherLineTheRowsAllow.Unsettled.TheLineWasNotWorkedOut(var not) ->
+                    WeakeningSet.of(new Weakening.ItemsPlaceNotWorkedOut(border, not));
         };
     }
 
@@ -172,6 +221,8 @@ public record BorderAssessment(Border border, Map<DomainPoint, ItemAssessment> i
             agrees(border, point, items.get(point));
         }
         items = java.util.Collections.unmodifiableMap(new java.util.LinkedHashMap<>(items));
+        Objects.requireNonNull(readAt, "the copies it was read at, or none");
+        Objects.requireNonNull(saidOnTheWay, "who put what on the way, or nobody");
     }
 
     /**
@@ -311,6 +362,18 @@ public record BorderAssessment(Border border, Map<DomainPoint, ItemAssessment> i
         return against(border.theOne(role));
     }
 
+    /**
+     * The cases of the input's values the line decides in, as a report says them
+     * ({@link WhereAPartDecides#said}) — or null where the position the line is read at already
+     * names all of them: always for a line that is the whole of what its rule states.
+     */
+    public String decidesWhere() {
+        List<TermPath> readAt = border.cut().of().numbers().stream()
+                .map(NumericTerm::subjectPath).toList();
+        return border.origin() instanceof LineOrigin.ComparisonOrigin read
+                ? read.part().map(part -> part.said(readAt)).orElse(null) : null;
+    }
+
     /** The left of the {@code left = right} a report names this line by. */
     public String left() {
         return border.cut().left();
@@ -344,10 +407,16 @@ public record BorderAssessment(Border border, Map<DomainPoint, ItemAssessment> i
             return border.label(at);
         }
 
-        /** What this asks of a row, as a report writes it, or null where none is owed. */
+        /** What this asks of a row, as a report writes it, or null where none is owed: the values,
+         *  and the cases of the input the line decides in where the position does not name
+         *  them. */
         public String asked() {
-            return border.operator(at) == null ? null
-                    : border.operator(at) + " " + border.against(at);
+            if (border.operator(at) == null) {
+                return null;
+            }
+            String where = border.decidesWhere();
+            return border.operator(at) + " " + border.against(at)
+                    + (where == null ? "" : " where " + where);
         }
 
         /** What the point is against, or null where none is owed. */

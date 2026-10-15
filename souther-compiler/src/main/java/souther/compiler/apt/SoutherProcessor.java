@@ -2,6 +2,7 @@ package souther.compiler.apt;
 
 import souther.compiler.CompilationSources;
 import souther.compiler.CompilationSources.SourceFile;
+import souther.compiler.io.BoundedRead;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.DiagnosticRenderer;
 import souther.compiler.diag.HumanRenderer;
@@ -31,7 +32,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.Stream;
 
 /**
  * A javac annotation processor that compiles Souther {@code .sou} sources to {@code .class} as a side effect
@@ -156,7 +156,7 @@ public final class SoutherProcessor extends AbstractProcessor {
             String simple = binaryName.substring(lastDot + 1) + ".class";
             try (InputStream in = filer.getResource(StandardLocation.CLASS_PATH, pkg, simple)
                     .openInputStream()) {
-                return in.readAllBytes();
+                return BoundedRead.bytes(in, BoundedRead.CLASS_FILE_BYTES);
             } catch (IOException | IllegalArgumentException | UnsupportedOperationException _) {
                 return null;
             }
@@ -166,14 +166,7 @@ public final class SoutherProcessor extends AbstractProcessor {
     /** Reads a single {@code .sou} file, or every {@code .sou} under a directory (path-sorted). */
     private static CompilationSources readSources(Path path) throws IOException {
         if (Files.isDirectory(path)) {
-            try (Stream<Path> walk = Files.walk(path)) {
-                List<Path> files = walk.filter(p -> p.toString().endsWith(".sou")).sorted().toList();
-                List<SourceFile> sources = new ArrayList<>();
-                for (Path file : files) {
-                    sources.add(new SourceFile(file.toString(), Files.readString(file)));
-                }
-                return CompilationSources.files(sources);
-            }
+            return CompilationSources.files(CompilationSources.readTree(path));
         }
         return CompilationSources.files(
                 List.of(new SourceFile(path.toString(), Files.readString(path))));

@@ -1,5 +1,6 @@
 package souther.compiler.codegen;
 
+import souther.compiler.codegen.BodyGen.Places;
 import souther.compiler.core.Contract;
 import souther.compiler.core.Contract.Guard;
 import souther.compiler.core.Contract.Param;
@@ -121,7 +122,8 @@ final class EnsuresGen {
      * the same argument positions. What follows them differs and this does not.
      */
     private BodyGen bindParams(CodeBuilder code, ClassDesc cd, Contract contract) {
-        BodyGen gen = new BodyGen(ctx, code, null, cd, contract.params().size() + 1);
+        BodyGen gen = new BodyGen(ctx, code, null, cd, contract.params().size() + 1,
+                Places.NUMBERED_NOWHERE);
         // The ith parameter arrives in the ith argument, which is this method's convention and not
         // something the declaration says: every argument here is a reference and takes one slot.
         for (int i = 0; i < contract.params().size(); i++) {

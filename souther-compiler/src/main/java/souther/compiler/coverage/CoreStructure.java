@@ -118,6 +118,9 @@ public final class CoreStructure {
                  Core.MaterialisedValue _ -> { }
             case Core.Neg n -> out.add(new Child(new Edge.NegOperand(), n.operand()));
             case Core.FieldAccess fa -> out.add(new Child(new Edge.FieldTarget(), fa.target()));
+            // What reading a type's guarantees reaches a value by, and in no body: a body reads a
+            // field an access at a time, and there is no place in one for this to be addressed at.
+            case Core.FieldProjection p -> throw p.unexpectedIn("the addressing of a body");
             case Core.Binary b -> {
                 out.add(new Child(new Edge.BinaryLeft(), b.left()));
                 out.add(new Child(new Edge.BinaryRight(), b.right()));

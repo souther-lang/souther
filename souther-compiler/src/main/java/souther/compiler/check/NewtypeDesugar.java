@@ -132,8 +132,9 @@ public final class NewtypeDesugar {
                 for (Hir.Bound b : ex.bound()) {
                     bound.add(b.with(go(b.value(), newtypes)));
                 }
-                yield new Hir.Expansion(ex.callee(), ex.application(), ex.at(), bound, ex.given(),
-                        ex.declaredReturn(), go(ex.body(), newtypes), ex.pos(), ex.region());
+                yield new Hir.Expansion(ex.callee(), ex.handover(), ex.application(), ex.at(),
+                        bound, ex.given(), ex.declaredReturn(), go(ex.body(), newtypes), ex.pos(),
+                        ex.region());
             }
             case Hir.If iff ->
                     new Hir.If(go(iff.cond(), newtypes), go(iff.then(), newtypes), go(iff.els(), newtypes),

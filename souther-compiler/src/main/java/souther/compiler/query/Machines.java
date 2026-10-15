@@ -6,6 +6,7 @@ import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.values.StringMachineAnswers;
 import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeSymbols;
 import souther.compiler.values.StringFacts;
 
@@ -29,7 +30,7 @@ import souther.compiler.values.StringFacts;
  * <p>Which is about what a store keeps and not about what a walk may be spared. Where a set's
  * strings stop is settled by the set, under an allowance minted for that set, so it is the same
  * answer wherever it is met — and what the revision has worked out about sets is held for the
- * revision and dropped with it ({@link souther.compiler.check.DeclarationReadings#extents}).
+ * revision and dropped with it ({@link souther.compiler.check.DeclarationReadings#revision}).
  * Nothing there is an answer of anything, and nothing there outlives the world it was worked out
  * in.
  *
@@ -58,16 +59,24 @@ public final class Machines {
 
         @Override
         public Answer<StringFacts> compute(Db db) {
+            // A declaration whose reading is a name beneath it has that name's machines: the
+            // reading that builds them is the one reading of both. Made here again, it would read
+            // the owner's rules into a recorder nothing of the owner's reading writes to.
+            TypeSymbol.AtModule declared = TypeSymbols.declared(named);
+            TypeSymbol.AtModule owner = db.readings().ownerOf(declared);
+            if (!owner.equals(declared)) {
+                return db.ask(new OfDeclaration(owner.key()));
+            }
             Answer<RuleReadingSource> source = Shapes.ruleReading(db, named.module());
             Answer<ReadingPolicy> policy = db.ask(new Front.Reading());
             if (!source.present() || !policy.present()) {
                 return Answer.absent();
             }
             StringMachineAnswers recorder =
-                    StringMachineAnswers.unborrowed(db.readings().extents());
+                    StringMachineAnswers.unborrowed(db.readings().revision());
             RuleReadingContext reading =
                     RuleReadingContext.of(source.value(), policy.value(), db.readings());
-            FieldDomains domains = FieldDomains.of(TypeSymbols.declared(named),
+            FieldDomains domains = FieldDomains.of(declared,
                     reading.whileTheAnswerIsMade(named, recorder));
             // And whether the rules leave a value at all, which is the question every reading of
             // an input puts to the declaration and the one that meets each language with the

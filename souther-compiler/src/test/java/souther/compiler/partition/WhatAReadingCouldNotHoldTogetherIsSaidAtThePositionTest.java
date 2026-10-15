@@ -2,15 +2,18 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.carrier.Membership;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
+import souther.compiler.check.TypeCardinality;
 import souther.compiler.check.DeclaredSig;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.PositionValuesNotSeparated;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
+import souther.compiler.query.ReadAs;
 
 import java.util.List;
 import java.util.Map;
@@ -41,8 +44,12 @@ class WhatAReadingCouldNotHoldTogetherIsSaidAtThePositionTest {
         Map<String, DeclaredSig> sigs =
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
         RuleReadingSource rules = RuleReadings.of(compilation, module);
+        RuleReadingContext reading = RuleReadingContext.unshared(rules,
+                ReadAs.MERGING_WHAT_A_CHOICE_LEAVES);
         return Partitions.of(behavior,
-                InputDomain.of(sigs.get(behavior), RuleReadingContext.unshared(rules, souther.compiler.query.ReadAs.MERGING_WHAT_A_CHOICE_LEAVES)), rules, souther.compiler.query.ReadAs.MERGING_WHAT_A_CHOICE_LEAVES);
+                InputDomain.of(sigs.get(behavior), reading,
+                        TypeCardinality.Counts.workedOutIn(reading),
+                        Membership.none()).reading(rules), souther.compiler.query.ReadAs.MERGING_WHAT_A_CHOICE_LEAVES);
     }
 
     /** The witness of issue #877: two invariants, each a choice reaching across both fields. */

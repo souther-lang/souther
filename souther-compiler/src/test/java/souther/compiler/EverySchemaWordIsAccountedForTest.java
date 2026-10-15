@@ -24,20 +24,34 @@ import souther.compiler.query.Compilation;
 import souther.compiler.query.EstablishmentGap;
 import souther.compiler.query.PartitionEvidence;
 import souther.compiler.query.ReadingReasons;
+import souther.compiler.query.ReplacementEvidence;
 import souther.compiler.query.RowDisposition;
 import souther.compiler.query.UnaskedReasons;
 import souther.compiler.query.WritabilityKnowledge;
+import souther.compiler.numeric.UnheldNumber;
+import souther.compiler.partition.CompositionBudget;
+import souther.compiler.partition.CompositionCapacity;
+import souther.compiler.partition.CompositionRepertoire;
+import souther.compiler.partition.NoInputTakesIt;
+import souther.compiler.partition.Generator;
 import souther.compiler.partition.ReadingGap;
+import souther.compiler.partition.ReportedShortfall;
 import souther.compiler.partition.StandingAtAPoint;
 import souther.compiler.check.BehaviorContract;
 import souther.compiler.check.BehaviorImplementation;
 import souther.compiler.check.Clause;
 import souther.compiler.check.RuleRef;
+import souther.compiler.reading.PathAccess;
 import souther.compiler.report.AdequacyReport;
+import souther.compiler.report.RowFailure;
+import souther.compiler.semantics.HowAClosureIsApplied;
+import souther.compiler.types.ModelOccurrences;
 import souther.compiler.types.SourceConstruct;
 import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.types.RuleOrigin;
+import souther.compiler.publish.InputUseWord;
 import souther.compiler.publish.MaterialisationRegionWord;
+import souther.compiler.publish.ReachProofWord;
 import souther.compiler.publish.RegionSlotWord;
 import souther.compiler.publish.ThroughStepWord;
 import souther.compiler.types.TypeKey;
@@ -58,6 +72,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -225,6 +240,7 @@ class EverySchemaWordIsAccountedForTest {
         spelling.put("AnOrderedComparison", "comparison");
         spelling.put("ATruth", "truth");
         spelling.put("ACase", "case");
+        spelling.put("AStatement", "statement");
         spelling.put("AConditionNotRead", "not_read");
         Set<String> words = new LinkedHashSet<>();
         for (Class<?> shape
@@ -279,11 +295,27 @@ class EverySchemaWordIsAccountedForTest {
      * be given a word. What the composing fell short on is not among them: that is the other axis
      * and has a field of its own, whose words are an enum's.
      */
+    private static Set<String> noInputTakesItWords() {
+        Map<String, String> spelling = new LinkedHashMap<>();
+        spelling.put("TheConditionsClash", "the_conditions_on_the_way_clash");
+        spelling.put("TheNumbersLeaveNone", "the_numbers_on_the_way_leave_none");
+        Set<String> words = new LinkedHashSet<>();
+        for (Class<?> kind : armsOf(NoInputTakesIt.class)) {
+            assertTrue(spelling.containsKey(kind.getSimpleName()),
+                    kind.getSimpleName() + " is a proof that no input takes a way and this"
+                            + " document has no word for it");
+            words.add(spelling.get(kind.getSimpleName()));
+        }
+        return words;
+    }
+
     private static Set<String> requirementBecauseWords() {
         Map<String, String> spelling = new LinkedHashMap<>();
         spelling.put("OnePositionCannotBeBoth", "the_way_needs_one_position_to_be_two");
         spelling.put("AnArmNothingReaches", "an_arm_nothing_reaches");
-        spelling.put("TheRulesLeaveNoValueForIt", "the_rules_leave_no_value_for_it");
+        spelling.put("AComparisonOutcomeNothingReaches", "a_comparison_outcome_nothing_reaches");
+        spelling.put("AConditionNeverComesOutThatWay", "a_condition_never_comes_out_that_way");
+        spelling.put("NoValueCanTakeIt", "no_value_can_take_it");
         spelling.put("AComposedRowWentElsewhere", "a_composed_row_went_elsewhere");
         spelling.put("AComposedRowWasShortOfTheWay", "a_composed_row_was_short_of_the_way");
         spelling.put("CouldNotTellWhereTheRowWent", "the_rule_the_row_took_could_not_be_told");
@@ -384,6 +416,14 @@ class EverySchemaWordIsAccountedForTest {
                             "properties", "construct", "properties", "through", "items",
                             "properties", "kind"),
                     ThroughStepWord.class),
+            // Which kind of place a proof that nothing arrives was about, where a row went there.
+            new Vocabulary("reachProof.kind",
+                    List.of("$defs", "reachProof", "properties", "kind"),
+                    ReachProofWord.class),
+            // Where a row that does not hold stopped, which only the places a row fails at spell.
+            new Vocabulary("aRowThatDoesNotHold.failedAt",
+                    List.of("$defs", "aRowThatDoesNotHold", "properties", "failedAt"),
+                    RowFailure.class),
             new Vocabulary("materialisationRegion.kind",
                     List.of("$defs", "materialisationRegion", "properties", "kind"),
                     MaterialisationRegionWord.class),
@@ -452,6 +492,32 @@ class EverySchemaWordIsAccountedForTest {
                     List.of("$defs", "interaction", "properties", "coverage", "properties",
                             "reason"),
                     souther.compiler.query.InteractionEvidence.class),
+            // Why nobody put the rewrites of a body to the rows. Its own field beside the arms',
+            // because what this falls short of is a rewrite and not a place a run goes.
+            Vocabulary.of("replacement.reason",
+                    List.of("$defs", "replacement", "properties", "reason"),
+                    ReplacementEvidence.class),
+            // What a way that kept a combination holds and the reading has no words for.
+            new Vocabulary("whyKept.shortOf",
+                    List.of("$defs", "whyKept", "properties", "shortOf"),
+                    PathAccess.Unsupported.Why.class),
+            // How far an operation that falls short applies a function: the enum's words, less
+            // applying it to every element, which is no shortfall and which one refuses to be
+            // made of.
+            new Vocabulary("whyKept.shortfalls[].applied",
+                    List.of("$defs", "whyKept", "properties", "shortfalls", "items",
+                            "properties", "applied"),
+                    List.of(HowAClosureIsApplied.class),
+                    Arrays.stream(HowAClosureIsApplied.values())
+                            .filter(each -> each != HowAClosureIsApplied.TO_EVERY_ELEMENT)
+                            .map(AdequacyReport::word)
+                            .collect(Collectors.toSet()),
+                    Set.of()),
+            // And why one rewrite was left open, which is the entry's own word.
+            new Vocabulary("replacement.obligations[].undecidedBecause",
+                    List.of("$defs", "replacement", "properties", "obligations", "items",
+                            "properties", "undecidedBecause", "items"),
+                    ReplacementEvidence.Undecided.Why.class),
             // Whether a row is owed at one rule at all, which is a different question from whether
             // one took it. Spelled here and held against the answers a search may come to, so an
             // answer added to that vocabulary is one somebody gives a word rather than one a
@@ -463,33 +529,69 @@ class EverySchemaWordIsAccountedForTest {
             // And which answer it was. Its own field beside that one because the two are different
             // questions: whether a row is owed is what a bar and a count act on, and what the
             // search came to is what a page groups the rules it is not asking for by.
-            new Vocabulary("decision.obligations[].because",
+            new Vocabulary("decision.obligations[].because[]",
                     List.of("$defs", "decision", "properties", "obligations", "items",
-                            "properties", "because"),
+                            "properties", "because", "items"),
                     requirementBecauseWords()),
+            // And what a way no input takes was proved from, held against the kinds of proof so a
+            // kind added is one somebody gives a word.
+            new Vocabulary("decision.waysNoInputTakes[].because",
+                    List.of("$defs", "decision", "properties", "waysNoInputTakes", "items",
+                            "properties", "because"),
+                    noInputTakesItWords()),
             // And what the composing fell short on, which is the other axis. Held against the
             // vocabulary every search of this compiler answers in, so a reason added there is
             // carried without anybody editing the schema by hand.
-            new Vocabulary("decision.obligations[].synthesisShortfall",
+            new Vocabulary("decision.obligations[].synthesisShortfalls[].reason",
                     List.of("$defs", "decision", "properties", "obligations", "items",
-                            "properties", "synthesisShortfall"),
-                    souther.compiler.partition.Generator.UnresolvedCombination.Reason.class),
+                            "properties", "synthesisShortfalls", "items", "properties", "reason"),
+                    Generator.UnresolvedCombination.Reason.class),
+            // And what each word's searches met of this compiler's, in the three vocabularies a
+            // search meets things in. Held against the types themselves, so a figure added to this
+            // compiler is one the document admits without anybody editing the schema by hand.
+            new Vocabulary("$defs.compositionBudget", List.of("$defs", "compositionBudget"),
+                    CompositionBudget.class),
+            new Vocabulary("decision.obligations[].synthesisShortfalls[].figures[]",
+                    List.of("$defs", "decision", "properties", "obligations", "items",
+                            "properties", "synthesisShortfalls", "items", "properties", "figures",
+                            "items"),
+                    CompositionBudget.class),
+            new Vocabulary("decision.obligations[].synthesisShortfalls[].planCut[]",
+                    List.of("$defs", "decision", "properties", "obligations", "items",
+                            "properties", "synthesisShortfalls", "items", "properties", "planCut",
+                            "items"),
+                    CompositionBudget.class),
+            new Vocabulary("decision.obligations[].synthesisShortfalls[].populations[]",
+                    List.of("$defs", "decision", "properties", "obligations", "items",
+                            "properties", "synthesisShortfalls", "items", "properties",
+                            "populations", "items"),
+                    CompositionRepertoire.class),
+            new Vocabulary("decision.obligations[].synthesisShortfalls[].unheld[].where",
+                    List.of("$defs", "decision", "properties", "obligations", "items",
+                            "properties", "synthesisShortfalls", "items", "properties", "unheld",
+                            "items", "properties", "where"),
+                    CompositionCapacity.Where.class),
+            new Vocabulary("decision.obligations[].synthesisShortfalls[].unheld[].why",
+                    List.of("$defs", "decision", "properties", "obligations", "items",
+                            "properties", "synthesisShortfalls", "items", "properties", "unheld",
+                            "items", "properties", "why"),
+                    UnheldNumber.class),
             // What the shortfall is attributed to, which is the axis the word above is not. Held
             // against the document's own vocabulary rather than against the shapes this compiler
             // records: what a consumer keys on is where an author goes about it, and how those are
             // arranged here is nothing a consumer was promised.
-            new Vocabulary("decision.obligations[].synthesisShortfallCauses[].attribution",
+            new Vocabulary("decision.obligations[].synthesisShortfalls[].causes[].attribution",
                     List.of("$defs", "decision", "properties", "obligations", "items",
-                            "properties", "synthesisShortfallCauses", "items",
-                            "properties", "attribution"),
-                    souther.compiler.partition.ReportedShortfall.Attribution.class),
+                            "properties", "synthesisShortfalls", "items", "properties", "causes",
+                            "items", "properties", "attribution"),
+                    ReportedShortfall.Attribution.class),
             // And which limit refused it, where one did. Apart from the reasons a reading stops,
             // which the entry beside this writes in the vocabulary `notRead` already has.
-            new Vocabulary("decision.obligations[].synthesisShortfallCauses[].limit",
+            new Vocabulary("decision.obligations[].synthesisShortfalls[].causes[].limit",
                     List.of("$defs", "decision", "properties", "obligations", "items",
-                            "properties", "synthesisShortfallCauses", "items",
-                            "properties", "limit"),
-                    souther.compiler.partition.ReportedShortfall.Limit.class),
+                            "properties", "synthesisShortfalls", "items", "properties", "causes",
+                            "items", "properties", "limit"),
+                    ReportedShortfall.Limit.class),
             new Vocabulary("findings[].kind",
                     List.of("$defs", "findings", "items", "properties", "kind"),
                     Adequacy.Kind.class),
@@ -606,6 +708,10 @@ class EverySchemaWordIsAccountedForTest {
                             "reason"),
                     PartitionEvidence.AxisCoverage.class,
                     souther.compiler.query.NothingWasAsked.class),
+            new Vocabulary("partition.axes[].use",
+                    List.of("$defs", "partition", "properties", "axes", "items", "properties",
+                            "use"),
+                    InputUseWord.class),
             new Vocabulary("partition.axes[].unprovenClaims[].why",
                     List.of("$defs", "partition", "properties", "axes", "items", "properties",
                             "unprovenClaims", "items", "properties", "why"),
@@ -622,9 +728,30 @@ class EverySchemaWordIsAccountedForTest {
                     List.of("$defs", "partition", "properties", "boundaries", "items", "properties",
                             "items", "items", "properties", "notOwed"),
                     souther.compiler.partition.NotOwedReason.class),
+            new Vocabulary("module.declarations[].excluded[].point",
+                    List.of("$defs", "module", "properties", "declarations", "items",
+                            "properties", "excluded", "items", "properties", "point"),
+                    souther.compiler.partition.PointRole.class),
+            new Vocabulary("module.declarations[].excluded[].notOwed",
+                    List.of("$defs", "module", "properties", "declarations", "items",
+                            "properties", "excluded", "items", "properties", "notOwed"),
+                    souther.compiler.partition.NotOwedReason.class),
+            new Vocabulary("module.declarations[].lines[].noPoint[].point",
+                    List.of("$defs", "module", "properties", "declarations", "items",
+                            "properties", "lines", "items", "properties", "noPoint", "items",
+                            "properties", "point"),
+                    souther.compiler.partition.PointRole.class),
+            new Vocabulary("module.declarations[].lines[].noPoint[].why",
+                    List.of("$defs", "module", "properties", "declarations", "items",
+                            "properties", "lines", "items", "properties", "noPoint", "items",
+                            "properties", "why"),
+                    souther.compiler.partition.RoleAnswer.Reason.class),
             new Vocabulary("partition.boundaries[].kind",
                     List.of("$defs", "partition", "properties", "boundaries", "items", "properties",
                             "kind"),
+                    souther.compiler.partition.BoundaryTarget.Shape.class),
+            new Vocabulary("quantityId.shape",
+                    List.of("$defs", "quantityId", "properties", "shape"),
                     souther.compiler.partition.BoundaryTarget.Shape.class),
             // `no_arm_witnesses_it` was what a guard's line came back as where the arms could not
             // separate the rows that reached its comparison from the rows that did not. The
@@ -732,6 +859,14 @@ class EverySchemaWordIsAccountedForTest {
             new Vocabulary("location.side",
                     List.of("$defs", "location", "properties", "side"),
                     souther.compiler.numeric.Towards.class),
+            // How a reading's points are the points of the line its author wrote. One word per
+            // arm a body comparison's line can stand in; a declaration's line is read in its own
+            // values and writes no placement.
+            new Vocabulary("boundaryLineId.placement.kind",
+                    List.of("$defs", "boundaryLineId", "properties", "placement", "properties",
+                            "kind"),
+                    List.of(souther.compiler.partition.AuthoredPlacement.class),
+                    Set.of("placed", "no_place_of_the_line", "not_shown"), Set.of()),
             new Vocabulary("obligationId.stops.kind",
                     List.of("$defs", "obligationId", "properties", "stops", "properties", "kind"),
                     List.of(souther.compiler.partition.FarEnd.class),
@@ -776,7 +911,8 @@ class EverySchemaWordIsAccountedForTest {
                 ObligationDisposition.Undecided.about(List.of(
                         new ObligationDisposition.Uncertainty.WhetherARowCanBeWritten.Stopped(
                                 WritabilityKnowledge.Prevented.by(EstablishmentGap.Observation.of(
-                                        Set.of(Incompleteness.Code.VALUE_UNREADABLE)))))),
+                                        Set.of(Incompleteness.Code.VALUE_UNREADABLE),
+                                        List.of()))))),
                 ObligationDisposition.Undecided.about(List.of(
                         new ObligationDisposition.Uncertainty
                                 .WhetherARowCanBeWritten.NothingShowedIt())));
@@ -1091,6 +1227,7 @@ class EverySchemaWordIsAccountedForTest {
                                         new WrittenOwner.Body("m", "b"), 0, 0,
                                         SourceConstruct.IF)),
                         new souther.compiler.check.RuleReportAnchor.ByTheModuleThatWroteIt()),
+                ModelOccurrences.NONE,
                 souther.compiler.inputs.FilingCoordinate.at(
                         souther.compiler.inputs.TermPath.of("x")),
                 new souther.compiler.inputs.BlockReason.UnreadComparisonForm());
@@ -1105,6 +1242,7 @@ class EverySchemaWordIsAccountedForTest {
                                         new WrittenOwner.Body("m", "b"), 0, 0,
                                         SourceConstruct.IF)),
                         new souther.compiler.check.RuleReportAnchor.ByTheModuleThatWroteIt()),
+                ModelOccurrences.NONE,
                 souther.compiler.inputs.FilingCoordinate.at(
                         souther.compiler.inputs.TermPath.of("x")),
                 new souther.compiler.inputs.BlockReason.UnreadComparisonForm());
@@ -1216,7 +1354,11 @@ class EverySchemaWordIsAccountedForTest {
             // document carries for this is `items_place_not_worked_out`, a `weakening` word held as
             // one above; this reason is `weakeningSource()`'s own, for a reader asking one point's
             // status directly rather than reading a border's weakening set.
-            souther.compiler.query.ItemAssessment.PlaceCouldNotBeWorkedOut.class);
+            souther.compiler.query.ItemAssessment.PlaceCouldNotBeWorkedOut.class,
+            // A reading of a point's line that could not be tied to the point. What a document
+            // carries for this is `a_reading_not_tied_to_its_line`, a `weakening` word held as one
+            // above; this reason is `weakeningSource()`'s own.
+            souther.compiler.query.ItemAssessment.NotTiedToTheAuthorsLine.class);
     }
 
     /**
@@ -1367,6 +1509,7 @@ class EverySchemaWordIsAccountedForTest {
         // `WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnce`. What decides them is which reasons
         // reach the surface, and a list of words here would say the same thing without saying why.
         held.add("/$defs/ruleStoppedReadingReason");
+        held.add("/$defs/ruleOfferShortfallReason/anyOf/1");
         held.add("/$defs/answerRealizationStoppedReason");
         held.add("/$defs/notReadReason/anyOf/1");
         held.add("/$defs/behavior/properties/implementation");
@@ -1382,37 +1525,37 @@ class EverySchemaWordIsAccountedForTest {
         // keys an object has where its measure produced a value, so what has to be true of them is
         // that they name the states that did — not that a reader knows the words.
         held.add("/$defs/branch/if/properties/status");
+        held.add("/$defs/replacement/if/properties/status");
         held.add("/$defs/partition/properties/boundaries/items/properties/items/items/if"
                 + "/properties/status");
+        // Which rewrite an identity names and what the rows came to about it. Both are written by a
+        // switch over a sealed type's arms rather than off an enum's names, so an arm added there
+        // does not compile without its word, and the schema validation of the corpus documents is
+        // what holds the word to the enum here.
+        held.add("/$defs/replacementObligationId/properties/rewrite");
+        held.add("/$defs/replacement/properties/obligations/items/properties/disposition");
+        // Where a line of a border's family stands, written by a switch over the sealed answers
+        // about it for the same reason.
+        held.add("/$defs/partition/properties/boundaries/items/properties/besides/items"
+                + "/properties/standing");
+        // Why a condition nothing read was not, by kind and by the word within it. Written by a
+        // switch over the sealed reasons and the enums under them, for the reason the two above
+        // are, and held to the schema by the same validation of the corpus documents.
+        held.add("/$defs/conditionNotReadReason/properties/kind");
+        held.add("/$defs/conditionNotReadReason/allOf/0/then/properties/reason");
+        held.add("/$defs/conditionNotReadReason/allOf/1/then/properties/reason");
+        held.add("/$defs/conditionNotReadReason/allOf/2/then/properties/reason");
+        // What kept a combination, by kind. Written by a switch over the sealed reasons, so an arm
+        // added there does not compile without its word, and held to the schema by the same
+        // validation of the corpus documents.
+        held.add("/$defs/whyKept/properties/reason");
+        // And which use of a function fell short, by kind. Written by a switch over the sealed
+        // shortfalls, for the reason the one above is.
+        held.add("/$defs/whyKept/properties/shortfalls/items/properties/kind");
 
         List<String> unaccounted = paths.stream().filter(p -> !held.contains(p)).toList();
         assertEquals(List.of(), unaccounted,
                 "an enumerated field nothing says where the words come from");
-    }
-
-    /**
-     * A key added since is optional, which is what keeps an older document a document of this version.
-     *
-     * <p>The schema says so in its own description: a change that removes or renames anything raises
-     * the number, and something added does not, so a report written before a key existed is still one
-     * of this version. Requiring an added key breaks that in the file that states it — every earlier
-     * document is refused by the schema it was written against.
-     *
-     * <p>Held as the keys a boundary written before {@code kind} carried, which is the shape the
-     * defect took. A key added later and required would fail here rather than on somebody's stored
-     * report, and the word test beside this one cannot see it: the words were right, and the document
-     * carrying none of them was the one refused.
-     */
-    @Test
-    void aBoundaryWrittenBeforeAKeyExistedIsStillOfThisVersion() {
-        Set<String> required = new LinkedHashSet<>();
-        for (JsonNode each : nodeAt(schema(),
-                List.of("$defs", "partition", "properties", "boundaries", "items", "required"))) {
-            required.add(each.asString());
-        }
-
-        assertEquals(Set.of("axis", "origin", "value", "items"),
-                required, "a boundary object written before `kind` existed carries these and no more");
     }
 
     /**
@@ -1529,10 +1672,8 @@ class EverySchemaWordIsAccountedForTest {
             }
         }
         if (node.has("$ref")) {
-            String ref = node.get("$ref").asString();
-            assertTrue(ref.startsWith("#/"), "a reference this cannot follow: " + ref);
             out.addAll(wordsOf(schema,
-                    nodeAt(schema, List.of(ref.substring(2).split("/")))));
+                    SchemaReference.resolve(schema, node.get("$ref").asString())));
         }
         return out;
     }

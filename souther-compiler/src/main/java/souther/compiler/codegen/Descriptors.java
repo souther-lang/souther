@@ -8,6 +8,7 @@ import java.lang.classfile.attribute.RuntimeVisibleAnnotationsAttribute;
 import java.lang.classfile.attribute.SourceFileAttribute;
 import java.lang.constant.ClassDesc;
 import java.lang.constant.ConstantDescs;
+import java.lang.constant.DirectMethodHandleDesc;
 import java.lang.constant.MethodTypeDesc;
 import java.util.function.Consumer;
 
@@ -119,10 +120,18 @@ final class Descriptors {
     /** {@code Probe.hit(int)}: records one arm and leaves the stack as it was. */
     static final MethodTypeDesc MTD_Probe_hit =
             MethodTypeDesc.of(ConstantDescs.CD_void, ConstantDescs.CD_int);
-    /** {@code Probe.compared(boolean, int)}: records one comparison and the value it answered,
+    /** {@code Probe.condition(boolean, int)}: records one condition and the value it answered,
      * taking a copy of that value off the stack and leaving the original where it was. */
-    static final MethodTypeDesc MTD_Probe_compared = MethodTypeDesc.of(ConstantDescs.CD_void,
+    static final MethodTypeDesc MTD_Probe_condition = MethodTypeDesc.of(ConstantDescs.CD_void,
             ConstantDescs.CD_boolean, ConstantDescs.CD_int);
+    /**
+     * What a run of the measuring classes is asked to answer with at an arm that carries its
+     * siblings. Reached the way {@link #CD_Probe} is, and for the same reason.
+     */
+    static final ClassDesc CD_Intervention = ClassDesc.of("souther.compiler.coverage.Intervention");
+    /** {@code Intervention.replacementAt(int)}: the part to answer with at a site, or {@code -1}. */
+    static final MethodTypeDesc MTD_Intervention_replacementAt =
+            MethodTypeDesc.of(ConstantDescs.CD_int, ConstantDescs.CD_int);
     /**
      * What an evaluation is allowed, called by classes generated for evaluating and by nothing that
      * ships. Reached the way {@link #CD_Probe} is, and for the same reason.
@@ -133,6 +142,15 @@ final class Descriptors {
      * the stack as it was, throwing where the budget is gone. */
     static final MethodTypeDesc MTD_EvaluationContext_count =
             MethodTypeDesc.of(ConstantDescs.CD_void);
+    /** What a runtime operation an evaluated class calls is handed, as its last argument, to pass
+     *  as it works. */
+    static final ClassDesc CD_WorkCheckpoint = ClassDesc.of("souther.runtime.WorkCheckpoint");
+    /** {@code EvaluationContext.checkpoint()}: the evaluation's checkpoint, asked once a call. */
+    static final MethodTypeDesc MTD_EvaluationContext_checkpoint = MethodTypeDesc.of(CD_WorkCheckpoint);
+    /** The runtime operations a class generated for evaluating binds as a function, each under the
+     *  name and type of the runtime's own: what {@link CodegenContext#boundRuntime} binds there. */
+    static final ClassDesc CD_BoundUnderEvaluation =
+            ClassDesc.of("souther.compiler.evaluate.BoundUnderEvaluation");
     /** {@code UnreachableReached.reached(String)}: aborts, typed as answering the position's value. */
     static final MethodTypeDesc MTD_reached = MethodTypeDesc.of(CD_Object, CD_String);
     /** The failure side of {@code __construct}: which clause of which type did not hold. */
@@ -207,10 +225,22 @@ final class Descriptors {
     static final ClassDesc CD_Instant = ClassDesc.of("java.time.Instant");
     static final ClassDesc CD_Lists = ClassDesc.of("souther.runtime.Lists");
     static final ClassDesc CD_Strings = ClassDesc.of("souther.runtime.Strings");
-    /** {@code Strings.matches(String subject, String pattern)}: whether the whole of the subject
-     *  matches a pattern the compiler wrote. */
-    static final MethodTypeDesc MTD_strings_matches =
-            MethodTypeDesc.of(ConstantDescs.CD_boolean, ConstantDescs.CD_String, ConstantDescs.CD_String);
+    static final ClassDesc CD_Predicate = ClassDesc.of("java.util.function.Predicate");
+    /** {@code Predicate.test(Object)}: whether the whole of a subject is one of the strings a
+     *  pattern's machine accepts, asked of the constant {@link #BSM_pattern} loads. */
+    static final MethodTypeDesc MTD_predicate_test =
+            MethodTypeDesc.of(ConstantDescs.CD_boolean, ConstantDescs.CD_Object);
+    static final ClassDesc CD_Patterns = ClassDesc.of("souther.runtime.Patterns");
+    /** {@code Patterns.matches(Predicate, String)} as an evaluated class reaches it: the machine's
+     *  walk, given the checkpoint {@link CodegenContext#callRuntime} adds. No class that ships calls
+     *  it, so there is no entry without the checkpoint to call. */
+    static final MethodTypeDesc MTD_Patterns_matches =
+            MethodTypeDesc.of(ConstantDescs.CD_boolean, CD_Predicate, CD_String);
+    /** {@code Patterns.read(Lookup, String, Class, String...)}: the bootstrap of the constant a
+     *  pattern's machine is loaded as, handed the strings its image was cut into. The constant is a
+     *  {@code Predicate}, so a class names this runtime and the JDK and nothing of what runs it. */
+    static final DirectMethodHandleDesc BSM_pattern = ConstantDescs.ofConstantBootstrap(
+            CD_Patterns, "read", CD_Predicate, ConstantDescs.CD_String.arrayType());
     static final ClassDesc CD_Maps = ClassDesc.of("souther.runtime.Maps");
     static final ClassDesc CD_Sets = ClassDesc.of("souther.runtime.Sets");
     static final ClassDesc CD_Representations = ClassDesc.of("souther.runtime.Representations");
@@ -344,6 +374,9 @@ final class Descriptors {
      *  into a {@link CD_StringDecoder} so the fluent constraint methods after it (following
      *  {@code Strings.admission}, not {@code StringDecoder.normalize()}) still resolve. */
     static final MethodTypeDesc MTD_stringDecoderFrom = MethodTypeDesc.of(CD_StringDecoder, CD_RDecoder);
+    /** {@code StringDecoder.oneOf(String...)}: Raoh's constraint that a string is one of these. */
+    static final MethodTypeDesc MTD_stringOneOf =
+            MethodTypeDesc.of(CD_StringDecoder, CD_String.arrayType());
     static final MethodTypeDesc MTD_leafLong = MethodTypeDesc.of(CD_LongDecoder);
     /** {@code new LongDecoder(Decoder)} and its siblings, over a decoder that asks the language
      *  first. */
@@ -442,13 +475,9 @@ final class Descriptors {
      * array and a Map's object are put in the order their own external representations give. */
     static final MethodTypeDesc MTD_Rencoder_andThen = MethodTypeDesc.of(CD_REncoder, CD_REncoder);
     static final MethodTypeDesc MTD_Sets_toList = MethodTypeDesc.of(CD_List, CD_Set);
-    /** {@code Sets.empty()} / {@code Sets.insert(Object, Set)} / {@code Sets.contains(Object, Set)} —
-     *  the membership {@link RaohListUnique} walks a list with, Raoh-free like the rest of {@code
-     *  Sets} (souther.runtime.Sets). */
-    static final MethodTypeDesc MTD_Sets_empty = MethodTypeDesc.of(CD_Set);
-    static final MethodTypeDesc MTD_Sets_insert = MethodTypeDesc.of(CD_Set, CD_Object, CD_Set);
-    static final MethodTypeDesc MTD_Sets_contains =
-            MethodTypeDesc.of(ConstantDescs.CD_boolean, CD_Object, CD_Set);
+    /** {@code Sets.repeated(List)}: the repeats {@link RaohListUnique} reports, found by the
+     *  language's equality, Raoh-free like the rest of {@code Sets} (souther.runtime.Sets). */
+    static final MethodTypeDesc MTD_Sets_repeated = MethodTypeDesc.of(CD_List, CD_List);
     /** {@code Representations.sortedArray/sortedObject}: an encoded collection, put in order. */
     static final MethodTypeDesc MTD_Representations_sorted = MethodTypeDesc.of(CD_Object, CD_Object);
     /** {@code Representations.canonicalNumber}: an amount, written the one way an amount is. */
@@ -458,7 +487,6 @@ final class Descriptors {
     // A newtype's invariant as Raoh constraints on its leaf decoder (issue #83): the recognised
     // shapes call the typed decoder's own constraint, and what is left calls `refine` with the
     // invariant as a predicate.
-    static final ClassDesc CD_Predicate = ClassDesc.of("java.util.function.Predicate");
     /** {@code TemporalDecoder.refine(Predicate, code, message)}: the temporal leaf narrowed to what
      *  the language can hold — a {@code Time} and a {@code DateTime} to the second. Returns the
      *  temporal decoder itself, so a chain stays one. */
@@ -469,11 +497,7 @@ final class Descriptors {
      *  decoder itself, so the parse still chains off it. */
     static final MethodTypeDesc MTD_refineString =
             MethodTypeDesc.of(CD_StringDecoder, CD_Predicate, CD_String, CD_String);
-    static final ClassDesc CD_Pattern = ClassDesc.of("java.util.regex.Pattern");
-    static final MethodTypeDesc MTD_patternCompile = MethodTypeDesc.of(CD_Pattern, CD_String);
     static final MethodTypeDesc MTD_strLengthBound = MethodTypeDesc.of(CD_StringDecoder, ConstantDescs.CD_int);
-    /** {@code Pattern.asMatchPredicate()}: whether the whole of a string matches. */
-    static final MethodTypeDesc MTD_asMatchPredicate = MethodTypeDesc.of(CD_Predicate);
     /** {@code StringDecoder.refine(Predicate, BiFunction)}: the failure built by the caller, and the
      *  string decoder itself back so the chain of string constraints goes on. */
     static final MethodTypeDesc MTD_refineStringFailing =
@@ -542,6 +566,10 @@ final class Descriptors {
             MethodTypeDesc.of(ConstantDescs.CD_int, CD_Object);
     static final MethodTypeDesc MTD_Values_hashDecimal =
             MethodTypeDesc.of(ConstantDescs.CD_int, CD_BigDecimal);
+    /** {@code Values.compare(Object, Object, WorkCheckpoint)}: the order an evaluated class reads off
+     *  two values whose own {@code compareTo} is the order. */
+    static final MethodTypeDesc MTD_Values_compare =
+            MethodTypeDesc.of(ConstantDescs.CD_int, CD_Object, CD_Object, CD_WorkCheckpoint);
     /** {@code Object.equals(Object)} — a constant receiver compares against a value that may be null. */
     static final MethodTypeDesc MTD_equalsObject =
             MethodTypeDesc.of(ConstantDescs.CD_boolean, CD_Object);

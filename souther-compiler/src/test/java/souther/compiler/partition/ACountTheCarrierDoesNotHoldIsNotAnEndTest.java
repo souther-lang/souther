@@ -2,17 +2,20 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.carrier.Membership;
 import souther.compiler.check.DeclaredSig;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
+import souther.compiler.check.TypeCardinality;
 import souther.compiler.check.Carrier;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.DateTimes;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
+import souther.compiler.query.ReadAs;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -159,13 +162,13 @@ class ACountTheCarrierDoesNotHoldIsNotAnEndTest {
         // What the type wraps still stands for it — a candidate is a proposal the decoder answers,
         // and this one is refused there. What is gone is the value from inside the range, which is
         // where a count past the calendar was being written from.
-        assertEquals(List.of("PastMoment(DateTime(\"2000-01-01T00:00:00\"))"), representatives("""
+        assertEquals(List.of("PastMoment(DateTime(\"1970-01-01T00:00:00\"))"), representatives("""
                 module example.pastmoment
 
                 data PastMoment = DateTime
                     invariant value > DateTime("+999999999-12-31T23:59:59.999999999")
                 """, "PastMoment"));
-        assertEquals(List.of("BeforeMoment(DateTime(\"2000-01-01T00:00:00\"))"), representatives("""
+        assertEquals(List.of("BeforeMoment(DateTime(\"1970-01-01T00:00:00\"))"), representatives("""
                 module example.beforemoment
 
                 data BeforeMoment = DateTime
@@ -178,7 +181,7 @@ class ACountTheCarrierDoesNotHoldIsNotAnEndTest {
     @Test
     void aRuleInsideTheCalendarStillOffersAValueFromInsideIt() {
         assertEquals(List.of("Ordinary(DateTime(\"2026-01-01T00:00:00\"))",
-                        "Ordinary(DateTime(\"2000-01-01T00:00:00\"))"),
+                        "Ordinary(DateTime(\"1970-01-01T00:00:00\"))"),
                 representatives("""
                         module example.ordinary
 
@@ -198,7 +201,7 @@ class ACountTheCarrierDoesNotHoldIsNotAnEndTest {
                                 souther.compiler.types.TypeSymbols.declared(new souther.compiler.types.TypeKey(module, name))),
                         RuleReadingContext.unshared(rules,
                                 souther.compiler.query.ReadAs.THE_COMPILATION_DOES))
-                .stream().map(FixtureTemplate::text).toList();
+                .values().stream().map(FixtureTemplate::text).toList();
     }
 
     /** Every obligation the one position of {@code source}'s behavior owes, written. */
@@ -211,14 +214,17 @@ class ACountTheCarrierDoesNotHoldIsNotAnEndTest {
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
         assertFalse(sigs.isEmpty(), "the model under test compiles");
         Map.Entry<String, DeclaredSig> declared = sigs.entrySet().iterator().next();
-        InputDomain domain = InputDomain.of(declared.getValue(), RuleReadingContext.unshared(rules,
-                souther.compiler.query.ReadAs.THE_COMPILATION_DOES));
+        RuleReadingContext context = RuleReadingContext.unshared(rules,
+                ReadAs.THE_COMPILATION_DOES);
+        InputDomain domain = InputDomain.of(declared.getValue(), context,
+                TypeCardinality.Counts.workedOutIn(context), Membership.none());
         souther.compiler.inputs.Quantities reading = domain.quantities(rules);
-        Partitions.Partitioning p = Partitions.of(declared.getKey(), domain, rules,
+        Partitions.Partitioning p = Partitions.of(declared.getKey(), domain.reading(rules),
                 souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         return p.axes().stream()
                 .flatMap(axis -> Partitions.bordersOf(axis, reading,
-                        reading.runsBetween(axis.term()), new LinesRead()).stream())
+                        reading.runsBetween(axis.term()), new LinesRead(),
+                        (one, other) -> false).stream())
                 .flatMap(border -> java.util.stream.Stream.of(PointRole.ON, PointRole.OFF)
                         .filter(role -> border.demand(role).criterion() != null)
                         .map(role -> role + " "

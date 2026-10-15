@@ -4,7 +4,8 @@ import souther.compiler.check.Emptiness;
 import souther.compiler.numeric.Place;
 
 /**
- * Why the rules of a behavior's input leave no value, in the words a caller here already has.
+ * Why the declarations of a behavior's input leave no value, in the words a caller here already
+ * has.
  *
  * <p><b>A proof, and the absence of one is not the opposite.</b> Nothing here says a value exists:
  * where no proof is held, none was found, which is what a search that has not finished looks like as
@@ -12,12 +13,14 @@ import souther.compiler.numeric.Place;
  * value" would be reading a fact about this compiler as a fact about the model.
  *
  * <p><b>Two kinds of fact and not two proofs of one.</b> A caller may fix a position at something no
- * value of it is, which is about the assignment and reads nothing; and the rules taken together may
- * leave no value at all, which is about the rules and reads them. Keeping them apart is the point of
- * this type: put into one proof, a reader could not tell a model that cannot be satisfied from a
- * model that can be, asked about somewhere nothing stands.
+ * value of it is, which is about the assignment and reads nothing; and the declarations taken
+ * together — the types and every rule written on them — may leave no value at all, which is about
+ * the model and reads it. Keeping them apart is the point of this type: put into one proof, a reader
+ * could not tell a model that cannot be satisfied from a model that can be, asked about somewhere
+ * nothing stands. Which declaration did it is not said: a {@code Set<Bool>} asked for three values is
+ * refused by its element with no rule written.
  *
- * <p>Nothing here translates. What the rules leave is proved over this input's own subjects, and the
+ * <p>Nothing here translates. What the declarations leave is proved over this input's own subjects, and the
  * places that proof names are this input's places, so it crosses no boundary and is carried as it
  * was written. This was once the seam where a proof about one value's positions was re-spelled into
  * a path of the input — which is a thing to get wrong once per proof, and a thing nobody has to do
@@ -46,7 +49,7 @@ public sealed interface EmptyInput {
      * of one kind ({@link Refinement}) — read as cases, the same contradiction under an optional
      * would arrive as a shape of its own with nothing to be an instance of.
      */
-    record TwoRefinementsAtOnePosition(TermPath at, Refinement one, Refinement other)
+    record TwoRefinementsAtOnePosition(TermPath at, CasesLeft one, CasesLeft other)
             implements EmptyInput {}
 
     /**
@@ -56,7 +59,7 @@ public sealed interface EmptyInput {
      * whole of what fixing settles without reading anything. A count is never negative and no clause
      * writes that down, so this is what refuses a count fixed below none — and everything the
      * declarations refuse is theirs to refuse, where they are read, which is why a value outside a
-     * declared bound arrives as {@link ProvedByTheRules} instead.
+     * declared bound arrives as {@link ProvedByTheDeclarations} instead.
      *
      * <p>The place is the term's own and is not said again beside it. A term is a position, so a
      * proof carrying a path of its own here would be one fact in two spellings, free to disagree.
@@ -75,7 +78,24 @@ public sealed interface EmptyInput {
     record WhereARuleHoldsThePositionApart(NumericTerm term, Place fixed) implements EmptyInput {}
 
     /**
-     * The rules of every parameter and everything a caller took in, said together, leave no value.
+     * Two positions a rule on the way holds against each other were fixed at places that do not
+     * stand to each other the way it says.
+     *
+     * <p>The same kind of fact as the one above, said of a pair: the two values are held against
+     * what was said about them, and the declarations were never asked. Its own arm because what
+     * contradicts is neither value alone — each of them is a place its own position admits.
+     *
+     * @param one        the position on the left of the rule
+     * @param oneFixed   where it was fixed
+     * @param other      the position on the right of the rule
+     * @param otherFixed where that was fixed
+     */
+    record HeldAgainstAnotherWhereItIsNot(NumericTerm one, Place oneFixed, NumericTerm other,
+                                          Place otherFixed) implements EmptyInput {}
+
+    /**
+     * The declarations of every parameter and everything a caller took in, said together, leave no
+     * value.
      *
      * <p>One proof and one prover. Every parameter's reading is in the space this was proved over,
      * so there is no second reading with an answer of its own to compare against — which is what
@@ -85,9 +105,9 @@ public sealed interface EmptyInput {
      *            was proved: the subjects it is about are this input's, so its places are already
      *            spelled the way a caller here spells them
      */
-    record ProvedByTheRules(Emptiness why) implements EmptyInput {
+    record ProvedByTheDeclarations(Emptiness why) implements EmptyInput {
 
-        public ProvedByTheRules {
+        public ProvedByTheDeclarations {
             if (why == null) {
                 throw new IllegalArgumentException("an emptiness is the proof of one");
             }

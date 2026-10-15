@@ -7,6 +7,7 @@ import souther.compiler.check.Emptiness;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
+import souther.compiler.check.TypeCardinality;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
@@ -317,7 +318,7 @@ class AnInputIsEmptyOnlyWhereTheRulesLeaveItNothingTest {
         Optional<EmptyInput> why = emptinessOf(EVERY_CASE_REFUSED);
 
         assertTrue(why.isPresent(), "no value of Q is left, so no value of the input is");
-        Emptiness proof = ((EmptyInput.ProvedByTheRules) why.orElseThrow()).why();
+        Emptiness proof = ((EmptyInput.ProvedByTheDeclarations) why.orElseThrow()).why();
         Emptiness.AtAField at = assertInstanceOf(Emptiness.AtAField.class, proof,
                 "the lack is at the sum, which is the place a reader is sent to");
         assertEquals(new Emptiness.AtAField.Where.In("h.q"), at.where());
@@ -380,7 +381,7 @@ class AnInputIsEmptyOnlyWhereTheRulesLeaveItNothingTest {
         Optional<EmptyInput> why = emptinessOf(HOLDS_AT_LEAST_ONE);
 
         assertTrue(why.isPresent(), "the list holds an Item and there is no Item to hold");
-        Emptiness proof = ((EmptyInput.ProvedByTheRules) why.orElseThrow()).why();
+        Emptiness proof = ((EmptyInput.ProvedByTheDeclarations) why.orElseThrow()).why();
         Emptiness.AtAField at = assertInstanceOf(Emptiness.AtAField.class, proof,
                 "the lack is at the container, which is the place a reader is sent to");
         assertEquals(new Emptiness.AtAField.Where.In("h.items"), at.where());
@@ -453,7 +454,10 @@ class AnInputIsEmptyOnlyWhereTheRulesLeaveItNothingTest {
         Map<String, DeclaredSig> sigs =
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
         RuleReadingSource rules = RuleReadings.of(compilation, module);
-        return InputDomain.of(sigs.get(behavior),
-                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES));
+        RuleReadingContext reading =
+                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES);
+        return InputDomain.of(sigs.get(behavior), reading,
+                TypeCardinality.Counts.workedOutIn(reading),
+                souther.compiler.carrier.Membership.none());
     }
 }

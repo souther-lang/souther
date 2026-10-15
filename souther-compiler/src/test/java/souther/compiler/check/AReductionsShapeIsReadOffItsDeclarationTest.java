@@ -6,6 +6,7 @@ import souther.compiler.types.ValueName;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -63,6 +64,15 @@ class AReductionsShapeIsReadOffItsDeclarationTest {
         assertNull(Reductions.of(op("List", "all")));
         assertNotNull(Combinators.of(op("List", "map")),
                 "which is not the same as its handing its closure nothing");
+    }
+
+    /** The library's walk ends by its body and the law of reading an element, and a walk built on
+     *  it ends by its own being a call of that one, which is not this question. */
+    @Test
+    void theWalkIsProvedToEndAndNothingElseOfTheLibrarysIs() {
+        assertTrue(Reductions.endsWhereverItStarts(DefaultStdlib.get().walk().operation()));
+        assertFalse(Reductions.endsWhereverItStarts(
+                ValueName.Stdlib.operation("List", "foldRight")));
     }
 
     /** Every operation with a rule is one the question is asked of, which is what keeps a rule from

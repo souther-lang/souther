@@ -3,6 +3,15 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.AReadingOfAPosition;
+import souther.compiler.meaning.AuthoredPointMapping;
+import souther.compiler.meaning.Derivation;
+import souther.compiler.meaning.WrittenLine;
+import souther.compiler.check.RuleReportAnchor;
+import souther.compiler.coverage.Numberings;
+import souther.compiler.types.ExpansionLineage;
+import souther.compiler.types.ModelOccurrence;
+import souther.compiler.types.SourceConstruct;
+import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.types.WrittenOwner;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.Clause;
@@ -19,14 +28,20 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.EndSide;
 import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Towards;
+import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -48,29 +63,46 @@ class OneBorderReadTwiceIsOneReadingTest {
     private static final Carrier WHOLE = new Carrier.Whole();
 
     /**
-     * A run stopping where the rules leave the quantity and one stopping there at a line as well are
-     * two readings.
+     * A comparison's run stopping where the rules leave the quantity and one stopping there at a
+     * line as well are one reading.
      *
      * <p>The values are the same values — the line is where the rules already stop it — so what a
-     * row has to do is the same, and a reader comparing the demands alone would call them one. What
-     * differs is what a row inside is owed to: with the line there, it answers for that rule as well
-     * as for the end, and those are two things to be told about.
+     * row has to do is the same. What differs is what else a row inside answers for, and for a
+     * comparison a body wrote, where the run beside its line stops is the reading's and no part of
+     * the author's point: the two issue the same points, and are one reading of the line.
      */
     @Test
-    void arunOwedToMoreThingsIsAnotherReading() {
-        Border rulesOnly = bound(List.of());
-        Border andALine = bound(List.of(Parting.by(
-                Seam.of(space(), at(1000), Towards.BELOW), aComparison())));
+    void aComparisonsRunOwedToMoreThingsIsTheSameReading() {
+        Border rulesOnly = compared(List.of());
+        Border andALine = compared(List.of(Parting.by(
+                HeldSeams.of(space(), at(1000), Towards.BELOW), aComparison())));
 
         assertTrue(rulesOnly.demand(PointRole.IN).sameAs(andALine.demand(PointRole.IN)),
                 "the run holds the same values either way");
         assertNotEquals(rulesOnly.answer(PointRole.IN).bases(),
                 andALine.answer(PointRole.IN).bases(),
                 "and a row inside it answers for more once the line is there");
-        assertFalse(rulesOnly.sameReadingAs(andALine),
-                "so the two are not one reading of one line");
-        assertTrue(rulesOnly.sameReadingAs(bound(List.of())),
-                "while a reading against itself is one reading");
+        assertTrue(rulesOnly.sameReadingAs(andALine),
+                "which is no part of the comparison's point, so the two are one reading");
+        assertTheReadingIsItsPoints(rulesOnly, andALine);
+    }
+
+    /**
+     * A bound's run is what the rules leave, whatever lines a body draws inside it.
+     *
+     * <p>Nothing outside a bound can be constructed, so what a row beside its line is asked for is a
+     * question about what the rules leave the position, and a comparison inside that divides it
+     * without moving it. Told about a line at five hundred, the bound's reading is the reading it
+     * is without it.
+     */
+    @Test
+    void aBoundIsTheSameReadingWhateverLinesABodyDrawsInsideIt() {
+        Border bare = bound(List.of());
+        Border besideALine = bound(List.of(Parting.by(
+                HeldSeams.of(space(), at(500), Towards.BELOW), aComparison())));
+
+        assertEquals(bare.answer(PointRole.IN), besideALine.answer(PointRole.IN));
+        assertTrue(bare.sameReadingAs(besideALine));
     }
 
     /**
@@ -123,14 +155,89 @@ class OneBorderReadTwiceIsOneReadingTest {
      */
     @Test
     void theOrderWhatStopsARunWasFoundInIsNoPartOfTheReading() {
-        Border one = bound(List.of(Parting.by(
-                Seam.of(space(), at(1000), Towards.BELOW), aComparison())));
+        Border one = compared(List.of(Parting.by(
+                HeldSeams.of(space(), at(1000), Towards.BELOW), aComparison())));
         Border other = reversed(one);
 
         assertNotEquals(one.answer(PointRole.IN).bases(), other.answer(PointRole.IN).bases(),
                 "the two list what stops the run in opposite orders");
         assertTrue(one.sameReadingAs(other),
                 "and are owed to the same things, so they are one reading of one line");
+    }
+
+    /**
+     * A point no row is owed at, settled in another place, is another reading.
+     *
+     * <p>The position holds a hundred and nothing else, so the run above the bound is empty and no
+     * row is owed in it — settled by where the values stop. The same answer settled by the end of
+     * the order instead owes no row for the same reason and is another point no row is owed at, as
+     * a run owed to two different things is two points a row is owed at. Compared by the demands
+     * alone, the two were one reading, and the second of them was dropped where one reading's lines
+     * are kept from holding one line twice.
+     */
+    @Test
+    void aPointNoRowIsOwedAtSettledElsewhereIsAnotherReading() {
+        Border settled = onlyAHundred(NarrowedBounds.NOTHING);
+        Border elsewhere = settledBy(settled, new DomainPoint.InTheRegion(Towards.ABOVE),
+                List.of(new RegionClaim(new FarEnd.AtTheOrderEnd(Towards.ABOVE),
+                        PointContributions.none())));
+
+        assertTrue(settled.answer(new DomainPoint.InTheRegion(Towards.ABOVE))
+                        instanceof PointAnswer.NotOwed,
+                () -> "nothing stands above a hundred: " + settled.answers());
+        assertFalse(settled.sameReadingAs(elsewhere),
+                "the two owe no row there for one reason, and were settled in two places");
+        assertTheReadingIsItsPoints(settled, elsewhere);
+    }
+
+    /**
+     * And who settled it there is no part of which reading this is, for a point no row is owed at
+     * as for one a row is.
+     */
+    @Test
+    void whoSettledAPointNoRowIsOwedAtIsNoPartOfTheReading() {
+        Border bare = onlyAHundred(NarrowedBounds.NOTHING);
+        Border narrowed = onlyAHundred(AReadingOfAPosition.withAnUpperEndAt(
+                Endpoint.inclusive(Count.of(100)), aDeclaration()));
+
+        assertNotEquals(bare, narrowed,
+                "a declaration took the end in at one of them, and this is what they differ in");
+        assertTrue(bare.sameReadingAs(narrowed),
+                "and the run above stops in the one place at both, so it is one reading");
+        assertTheReadingIsItsPoints(bare, narrowed);
+    }
+
+    /**
+     * That two readings are one exactly where the points they issue are the same: the points a row
+     * is owed at and the points no row is owed at, as the accounts read them.
+     */
+    private static void assertTheReadingIsItsPoints(Border one, Border other) {
+        boolean samePoints = Set.copyOf(one.owes().stream().map(OwedPoint::point).toList())
+                .equals(Set.copyOf(other.owes().stream().map(OwedPoint::point).toList()))
+                && Set.copyOf(one.leavesOut().stream().map(LeftOutPoint::point).toList())
+                .equals(Set.copyOf(other.leavesOut().stream().map(LeftOutPoint::point).toList()));
+        assertEquals(samePoints, one.sameReadingAs(other),
+                () -> "one reading is one set of points: " + one.leavesOut() + " / "
+                        + other.leavesOut());
+    }
+
+    /** A bound at a hundred on a position that holds a hundred and nothing else. */
+    private static Border onlyAHundred(NarrowedBounds narrowed) {
+        return Border.at(aLineAt("w.a", 100), aBound(),
+                new NumericDomain.Bounds(Endpoint.inclusive(Count.of(100)),
+                        Endpoint.inclusive(Count.of(100))),
+                List.of(), narrowed);
+    }
+
+    /** The same border with the point at {@code point} settled by {@code claims} instead. */
+    private static Border settledBy(Border border, DomainPoint point, List<RegionClaim> claims) {
+        Map<DomainPoint, PointAnswer> answers = new LinkedHashMap<>(border.answers());
+        if (!(answers.get(point) instanceof PointAnswer.NotOwed was)) {
+            throw new IllegalArgumentException("no row is owed at " + point + " to settle again: "
+                    + answers);
+        }
+        answers.put(point, new PointAnswer.NotOwed(was.reason(), claims));
+        return new Border(border.cut(), border.origin(), answers, border.leftNothing());
     }
 
     /** The same border with what stops each of its runs listed the other way round. */
@@ -143,7 +250,7 @@ class OneBorderReadTwiceIsOneReadingTest {
                     ? new PointAnswer.InRegion(in.criterion(), reversed(in.claims()))
                     : answer);
         }
-        return new Border(border.cut(), border.origin(), answers);
+        return new Border(border.cut(), border.origin(), answers, border.leftNothing());
     }
 
     private static List<RegionClaim> reversed(List<RegionClaim> claims) {
@@ -162,6 +269,29 @@ class OneBorderReadTwiceIsOneReadingTest {
                 "the same rule met at another position is another reading of it");
     }
 
+    /**
+     * A place another rule parts the quantity at that was not worked out leaves the run not worked
+     * out, and not wider.
+     *
+     * <p>The runs of an arrangement lie between its places, so with one missing none of them is
+     * known to be the run it looks like. Left out, the run would read to the next place that is
+     * known and a row written in it would be owed to a line it may not be inside.
+     */
+    @Test
+    void aPlaceThatWasNotWorkedOutLeavesTheRunNotWorkedOut() {
+        UnheldNumber why = UnheldNumber.MORE_ROOM_COULD_ANSWER;
+
+        Border border = Border.at(aLineAt("w.a", 100), aComparisonOrigin(),
+                new NumericDomain.Bounds(Endpoint.inclusive(Count.of(100)),
+                        Endpoint.inclusive(Count.of(1000))),
+                ExactAnswer.unheld(why), NarrowedBounds.NOTHING);
+
+        assertEquals(new PointAnswer.NotWorkedOut(why), border.answer(PointRole.IN),
+                "the run beside the line is one of the runs that lie between the places");
+        assertTrue(border.answer(PointRole.ON) instanceof PointAnswer.AtLine,
+                "and the point at the line, which the order alone answers, is asked as it always is");
+    }
+
     /** A bound at a hundred, leaving everything up to a thousand, told about {@code parted}. */
     private static Border bound(List<Parting> parted) {
         return bound(parted, NarrowedBounds.NOTHING);
@@ -173,6 +303,14 @@ class OneBorderReadTwiceIsOneReadingTest {
                 new NumericDomain.Bounds(Endpoint.inclusive(Count.of(100)),
                         Endpoint.inclusive(Count.of(1000))),
                 parted, narrowed);
+    }
+
+    /** A comparison at a hundred, kept above, over the same range, told about {@code parted}. */
+    private static Border compared(List<Parting> parted) {
+        return Border.at(aLineAt("w.a", 100), aComparisonOrigin(),
+                new NumericDomain.Bounds(Endpoint.inclusive(Count.of(100)),
+                        Endpoint.inclusive(Count.of(1000))),
+                parted, NarrowedBounds.NOTHING);
     }
 
     /** The same bound, with its line written as {@code at}. */
@@ -222,12 +360,34 @@ class OneBorderReadTwiceIsOneReadingTest {
                 EndSide.LOWER, true);
     }
 
-    /** A line of a body, for a place to be parted by something other than the bound. */
-    private static AuthoredLine aComparison() {
-        return new AuthoredLine(new WhichLine.OfAComparison(new RuleRef.Comparison("weigh",
-                new souther.compiler.types.SourceConstructOrigin(
-                        new WrittenOwner.Body("example.weigh", "weigh"), 2, 0,
-                        souther.compiler.types.SourceConstruct.BINARY))),
-                new LineFacts(new ComparisonClaim.Cut(Towards.BELOW, true)), List.of());
+    /** A body's comparison keeping the values from a hundred up, which is what the readings whose
+     *  runs other lines stop are read off. */
+    private static LineOrigin aComparisonOrigin() {
+        return aComparisonKeeping(1, Towards.ABOVE);
+    }
+
+    /** A reading of another line of the body, for a place to be parted by something other than the
+     *  line read. */
+    private static LineOrigin aComparison() {
+        return aComparisonKeeping(2, Towards.BELOW);
+    }
+
+    /** The comparison written {@code ordinal}th in the body, keeping the values {@code kept} of
+     *  its number. */
+    private static LineOrigin aComparisonKeeping(int ordinal, Towards kept) {
+        SourceConstructOrigin wrote = new SourceConstructOrigin(
+                new WrittenOwner.Body("example.weigh", "weigh"), ordinal, 0,
+                SourceConstruct.BINARY);
+        return new LineOrigin.ComparisonOrigin(
+                new LineOrigin.ComparisonOrigin.Read(
+                        new RuleRef.Comparison("weigh", wrote),
+                        new ModelOccurrence(wrote, ExpansionLineage.ORIGINAL),
+                        new RuleReportAnchor.ByTheModuleThatWroteIt(),
+                        List.of(Numberings.comparison(ordinal, 0)), ElementsMetOn.EVERY),
+                Optional.empty(),
+                new LineFacts(new ComparisonClaim.Cut(kept, true)),
+                new AuthoredPointMapping.Proven(WrittenLine.THE_COMPARISON,
+                        new ComparisonClaim.Cut(kept, true),
+                        Derivation.AComparisonRead.Facing.NOTHING_WRITTEN, true));
     }
 }

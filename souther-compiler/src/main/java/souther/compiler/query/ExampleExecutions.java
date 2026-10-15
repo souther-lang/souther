@@ -97,7 +97,7 @@ public final class ExampleExecutions {
         // reaches none by name, which is a module rather than an unanswered question.
         Map<String, Hir.FnDef> values = db.ask(new Bodies.ModuleDefinitions(module)).value();
         return new ExampleExecution(prepared.value(), scope.value(),
-                Shapes.publishedDeclarations(db), Shapes.declarationKinds(db),
+                Shapes.sumCases(db), Shapes.declarationKinds(db),
                 checkedFieldTypes(db), sigs.value(),
                 requirements, values == null ? Map.of() : values, contracts,
                 Output.policyOf(db),
@@ -119,7 +119,7 @@ public final class ExampleExecutions {
      * module's shapes say what a value of it is made of. So there is no order in which one module's
      * declarations are tried before another's, and nothing is gathered into a table beforehand.
      */
-    private static FieldTypes checkedFieldTypes(Db db) {
+    static FieldTypes checkedFieldTypes(Db db) {
         return FieldTypes.over(new CheckedDeclarations(Shapes.publishedDeclarations(db), declared -> {
             Map<TypeSymbol.AtModule, ValueShape> shapes =
                     db.ask(new Shapes.ValueShapes(declared.module())).value();

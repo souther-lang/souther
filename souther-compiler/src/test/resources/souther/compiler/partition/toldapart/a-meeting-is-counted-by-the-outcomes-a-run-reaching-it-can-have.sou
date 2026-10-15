@@ -1,0 +1,33 @@
+// A value meeting another is counted by the outcomes a run reaching the meeting can have.
+//
+// The sum inside the arm for C or D is a meeting of two values, one of them settled by a `match` on
+// `k`. That value's outcomes through A and B are ruled out by the arm, and counted they would tell
+// the two apart.
+//
+// told apart at k: 3 groups of 4
+// told apart at n: 3 groups of 3
+module example.meeting
+
+data A
+data B
+data C
+data D
+data Kind = A | B | C | D
+
+data Ok = { n: Int }
+
+behavior judge : (k: Kind, n: Int) -> Ok
+    constructs Ok
+
+let judge (k, n) = {
+    guard n > 10 else Ok { n = 0 }
+    match k with
+        | A | B -> Ok { n = 1 }
+        | C | D ->
+            Ok { n = (match k with
+                        | A -> 1
+                        | B -> 2
+                        | C -> 3
+                        | D -> 4)
+                    + (if n > 20 then 10 else 0) }
+}

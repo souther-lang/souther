@@ -8,12 +8,12 @@ import souther.compiler.query.Compilation;
 import souther.compiler.query.Shapes;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
@@ -202,7 +202,7 @@ class CheckSurfaceOffersEveryValueTheModuleStatesAsATypedFixtureValueTest {
                 .ask(new Shapes.CheckSurface("example.member")).value();
         assertNotNull(surface, "the module under test does not get as far as being assembled");
 
-        TypeSymbol customer = customerType(compilation, "example.member");
+        Type customer = customerType(compilation, "example.member");
         assertEquals(List.of(new ReachName.OfModule(new ValueName.Helper("example.other", "vip"))),
                 surface.typedFixtureValues().getOrDefault(customer, List.of()));
     }
@@ -293,6 +293,66 @@ class CheckSurfaceOffersEveryValueTheModuleStatesAsATypedFixtureValueTest {
         }
     }
 
+    private static final String TAKES_A_LIST = """
+            module example.member
+
+            data Bronze
+            data Gold
+            data Grade = Bronze | Gold
+
+            data Customer = { grade: Grade }
+
+            data Accepted = { at: String }
+
+            behavior admitAll : (customers: List<Customer>) -> Accepted
+                constructs Accepted
+
+            let admitAll (customers) = Accepted { at = "now" }
+
+            let vip = Customer { grade = Gold }
+
+            """;
+
+    /**
+     * A value written at the list type a parameter takes is a candidate for that parameter. What
+     * makes it one is that its type is the parameter's, and a type with no name of its own is a
+     * type a parameter is declared at as much as a record is.
+     */
+    @Test
+    void aValueWrittenAtAParametersListTypeIsACandidate() {
+        Compilation compilation = Compilation.ofSource(TAKES_A_LIST + """
+                let regulars: List<Customer> = [ vip, vip ]
+                """, "Main");
+        compilation.answerEverything();
+        CheckSurface surface = compilation.db()
+                .ask(new Shapes.CheckSurface("example.member")).value();
+        assertNotNull(surface, "the module under test does not get as far as being assembled");
+        Type taken = parameterType(compilation, "example.member", "admitAll");
+        assertInstanceOf(Type.ListOf.class, taken, "the parameter is a list");
+
+        assertEquals(List.of(new ReachName.Own(new ValueName.Helper("example.member", "regulars"))),
+                surface.typedFixtureValues().getOrDefault(taken, List.of()));
+    }
+
+    /**
+     * And not where the type is left to the elements. A list written out is the join of what it
+     * holds, which no declaration states, so a value whose declaration names no type has none to
+     * be offered under.
+     */
+    @Test
+    void aListWhoseDeclarationNamesNoTypeIsNotACandidate() {
+        Compilation compilation = Compilation.ofSource(TAKES_A_LIST + """
+                let regulars = [ vip, vip ]
+                """, "Main");
+        compilation.answerEverything();
+        CheckSurface surface = compilation.db()
+                .ask(new Shapes.CheckSurface("example.member")).value();
+        assertNotNull(surface, "the module under test does not get as far as being assembled");
+
+        assertEquals(List.of(), surface.typedFixtureValues().getOrDefault(
+                parameterType(compilation, "example.member", "admitAll"), List.of()));
+    }
+
     private static final String STAGE = """
             module example.stage exposing ( Raw, Mid, first )
 
@@ -370,12 +430,18 @@ class CheckSurfaceOffersEveryValueTheModuleStatesAsATypedFixtureValueTest {
     }
 
     /** The behavior under test's own parameter type, read the way {@code Adequacy} reads it. */
-    private static TypeSymbol customerType(Compilation compilation, String module) {
-        Sig sig = compilation.db().ask(new Bodies.Signatures(module)).value().get("admit");
-        assertNotNull(sig, "the behavior under test has a signature");
-        if (sig.inputTypes().get(0) instanceof Type.Ref(TypeSymbol of)) {
-            return of;
+    private static Type customerType(Compilation compilation, String module) {
+        Type taken = parameterType(compilation, module, "admit");
+        if (taken instanceof Type.Ref) {
+            return taken;
         }
-        throw new AssertionError("`admit` takes a resolved `Customer`: " + sig.inputTypes());
+        throw new AssertionError("`admit` takes a resolved `Customer`: " + taken);
+    }
+
+    /** The first parameter type of {@code behavior}, as its signature declares it. */
+    private static Type parameterType(Compilation compilation, String module, String behavior) {
+        Sig sig = compilation.db().ask(new Bodies.Signatures(module)).value().get(behavior);
+        assertNotNull(sig, "the behavior under test has a signature");
+        return sig.inputTypes().get(0);
     }
 }

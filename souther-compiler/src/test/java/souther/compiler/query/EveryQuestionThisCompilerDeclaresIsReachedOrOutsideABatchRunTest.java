@@ -75,8 +75,6 @@ class EveryQuestionThisCompilerDeclaresIsReachedOrOutsideABatchRunTest {
             "souther.compiler.query.Names$TypeAt",
             "souther.compiler.query.Names$UsesOf",
             "souther.compiler.query.Names$ValueAt",
-            "souther.compiler.query.Names$ValueDeclarationsOf",
-            "souther.compiler.query.Names$ValueDeclaredAt",
             "souther.compiler.query.Names$ValueDenotedAt",
             "souther.compiler.query.Names$ValueUsesOf",
             "souther.compiler.query.Shapes$InvariantCapabilities");
@@ -219,7 +217,35 @@ class EveryQuestionThisCompilerDeclaresIsReachedOrOutsideABatchRunTest {
         into(readingWhatIsPublished(), out);
         // And over a model stating a rule this compiler cannot carry whole, which is the third.
         into(readingARuleThisCannotCarry(), out);
+        // And over a model with a mistake in it, which is what a compile reports on.
+        into(readingAModelWithAMistakeInIt(), out);
         return out;
+    }
+
+    /**
+     * Compiling a model with a mistake in it, and reporting it.
+     *
+     * <p><b>A world and not a stimulus.</b> Every source of the corpus compiles, so what a report
+     * reaches for when it has to tell an author what is wrong is outside every run above. The
+     * mistake is an ordinary one: a parameter named like a helper above it, applied as if it were
+     * the helper. Saying so points at the helper, and where the helper is written is asked only by
+     * a report that points there.
+     */
+    private static Compilation readingAModelWithAMistakeInIt() {
+        Compilation compilation = Compilation.ofSource("""
+                module mistaken
+
+                behavior run : (n: Int) -> Int
+                partial let count (k: Int): Int = if k <= 0 then 0 else count(k - 1)
+                let use (count: Int): Int = count(2)
+                let run (n) = use(n)
+                """, "Main");
+        compilation.answerEverything();
+        if (compilation.errors().isEmpty()) {
+            throw new IllegalStateException("the mistake was not reported, so nothing that reports"
+                    + " one was reached");
+        }
+        return compilation;
     }
 
     /**

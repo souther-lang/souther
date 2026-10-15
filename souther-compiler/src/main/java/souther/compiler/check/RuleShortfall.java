@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import souther.compiler.inputs.RuleSite;
 import souther.compiler.types.ConstructOccurrence;
+import souther.compiler.values.StoppedReading;
 import souther.compiler.values.UnreadReason;
 
 /**
@@ -55,11 +56,12 @@ import souther.compiler.values.UnreadReason;
  * @param kind       what kind of decision it was, which is what a reader is sent by and not what
  *                   tells two of these apart
  * @param why        what it was short of, which a rule is answerable for
- *                   ({@link UnreadReason.About#A_RULE})
+ *                   ({@link UnreadReason.About#A_RULE}), and the figure it stopped at where one
+ *                   did
  * @param position   what the reading was left unable to say the values of
  */
 record RuleShortfall(ConstructOccurrence occurrence, RuleSite site, RuleShortfall.Kind kind,
-                     UnreadReason why, FactSubject position) {
+                     StoppedReading why, FactSubject position) {
 
     RuleShortfall {
         if (occurrence == null || site == null || kind == null || why == null
@@ -73,9 +75,9 @@ record RuleShortfall(ConstructOccurrence occurrence, RuleSite site, RuleShortfal
                     "a reading decides about something somebody wrote, and the whole of a rule is"
                             + " where a reader is sent rather than what was decided");
         }
-        if (why.about() != UnreadReason.About.A_RULE) {
+        if (why.why().about() != UnreadReason.About.A_RULE) {
             throw new IllegalArgumentException(
-                    "a reason about " + why.about() + " names no rule to be about: " + why);
+                    "a reason about " + why.why().about() + " names no rule to be about: " + why);
         }
     }
 

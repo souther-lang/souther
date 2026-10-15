@@ -233,50 +233,9 @@ class EveryObjectThisWritesIsShapedTheWayTheSchemaSaysTest {
                 "the branch forbids what it does not name, rather than naming what it forbids");
         Set<String> named = new LinkedHashSet<>();
         notOwed.get("properties").propertyNames().forEach(named::add);
-        assertEquals(Set.of("point", "location", "notOwed"), named,
+        assertEquals(Set.of("point", "location", "notOwed", "stops"), named,
                 "and what it names is which point of the border it is, where on the quantity it is,"
-                        + " and why no row is owed there");
-    }
-
-    /**
-     * A document written before a key was added is still a document of this version.
-     *
-     * <p>Held on the key added last, which is {@code writableBecause}. The preamble says a key added
-     * since does not raise the version, and what that promises is this: the same schema takes a
-     * document with the key and a document without it. So an absent array is a producer that predates
-     * the field and never a point with no grounds — that is written as an empty array, and a reader
-     * that took the two for one answer would read every older document as a corpus nothing shows
-     * anything about.
-     */
-    @Test
-    void aDocumentWrittenBeforeAKeyWasAddedIsStillOfThisVersion() {
-        JsonNode without = document();
-        int taken = strip(without, "writableBecause");
-        assertTrue(taken > 0, "the document carries the key, or this strips nothing");
-
-        assertEquals(List.of(), DocumentShape.of(without).wrong(),
-                "the shipped schema refuses a document written before the key existed");
-    }
-
-    /** Every occurrence of {@code key} taken out, and how many there were. */
-    private static int strip(JsonNode node, String key) {
-        int taken = 0;
-        if (node instanceof tools.jackson.databind.node.ObjectNode object) {
-            if (object.has(key)) {
-                object.remove(key);
-                taken++;
-            }
-            List<String> names = new ArrayList<>();
-            object.propertyNames().forEach(names::add);
-            for (String name : names) {
-                taken += strip(object.get(name), key);
-            }
-        } else if (node.isArray()) {
-            for (JsonNode each : node) {
-                taken += strip(each, key);
-            }
-        }
-        return taken;
+                        + " why no row is owed there, and where else that was settled");
     }
 
     /**

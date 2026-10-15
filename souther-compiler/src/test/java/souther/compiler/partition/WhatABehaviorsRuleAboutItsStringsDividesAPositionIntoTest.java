@@ -9,6 +9,7 @@ import souther.compiler.check.StatedContract;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.observe.WorkFigure;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
@@ -46,7 +47,7 @@ class WhatABehaviorsRuleAboutItsStringsDividesAPositionIntoTest {
 
     /** Enough for the two sides of one of the rules written below, and not for two of them. The
      *  two assertions that say so are beside the one test this is for. */
-    private static final PatternPlan.Budget ONE_RULE = new PatternPlan.Budget(1000, 60);
+    private static final PatternPlan.Budget ONE_RULE = new PatternPlan.Budget(1000, 60, 1_000_000_000L);
 
     @Test
     void aRuleAboutTheStringsDividesThePositionIntoWhatItAdmitsAndTheRest() {
@@ -170,10 +171,16 @@ class WhatABehaviorsRuleAboutItsStringsDividesAPositionIntoTest {
                 "and the body's rule on its own");
 
         assertEquals(List.of(), read.statements(), "neither rule divides the position");
-        assertEquals(List.of(new BlockReason.BehaviorDistinctionsTooCostly(),
-                        new BlockReason.BehaviorDistinctionsTooCostly()),
+        // Every machine of the group is smaller than one may be, and what they come to together
+        // is more than the group may make: the figure is the group's, at the numbers it was given.
+        BlockReason.BehaviorDistinctionsTooCostly spent =
+                new BlockReason.BehaviorDistinctionsTooCostly(
+                        WorkFigure.BEHAVIOR_DISTINCTIONS_IN_ALL.at(
+                                "60 states built and 1000000000 looked at"));
+        assertEquals(List.of(spent, spent),
                 read.blocked().stream().map(ClassingBlocker::why).toList(),
-                "and both are answered for as the position's distinctions not being built");
+                "and both are answered for as the position's distinctions not being built, at"
+                        + " the figure this run held them to");
     }
 
 
@@ -250,11 +257,16 @@ class WhatABehaviorsRuleAboutItsStringsDividesAPositionIntoTest {
                 """,
                 // One state is fewer than the smallest of these rules needs, so the group is
                 // refused where reading each of them was fine.
-                new PatternPlan.Budget(1, 1));
+                new PatternPlan.Budget(1, 1, 1_000_000_000L));
 
         assertEquals(List.of(), read.statements(), "neither rule divides the position");
-        assertEquals(List.of(new BlockReason.BehaviorDistinctionsTooCostly(),
-                        new BlockReason.BehaviorDistinctionsTooCostly()),
+        // A machine of one state is smaller than any of these rules', so the first machine past it
+        // is refused as a machine, at the one state this run allowed.
+        BlockReason.BehaviorDistinctionsTooCostly refused =
+                new BlockReason.BehaviorDistinctionsTooCostly(
+                        WorkFigure.BEHAVIOR_DISTINCTIONS_ONE_MACHINE
+                                .at("1 states or 1000000000 looked at"));
+        assertEquals(List.of(refused, refused),
                 read.blocked().stream().map(ClassingBlocker::why).toList(),
                 "and both are answered for as the position's distinctions not being built");
     }
@@ -279,13 +291,13 @@ class WhatABehaviorsRuleAboutItsStringsDividesAPositionIntoTest {
         BehaviorSetStatements.Read read = readingsOf("""
                 behavior f : (code: String) -> Answer
                 let f (code) = if String.matches("[a-z]+", code) then Yes else No
-                """, new PatternPlan.Budget(100, 100));
+                """, new PatternPlan.Budget(100, 100, 1_000_000_000L));
         assertEquals(1, read.statements().size(), "the rule was read and both its sides were built");
         assertEquals(List.of(), read.blocked(), "so nothing was held open before this point");
 
         // And composed under one that does not afford meeting them with what the position holds.
         Allowance<NumericTerm.FromOnePosition> spent =
-                Allowance.of(new PatternPlan.Budget(1, 1));
+                Allowance.of(new PatternPlan.Budget(1, 1, 1_000_000_000L));
         Classing.Result answered = Classing.of(read.statements().get(0).at(), read.statements(),
                 List.of(), new souther.compiler.check.Carrier.Text(),
                 // A position whose own declarations leave it a language, which is what an
@@ -339,7 +351,8 @@ class WhatABehaviorsRuleAboutItsStringsDividesAPositionIntoTest {
                 inputs.parameterReads(), checked.elementBindings().get("f"),
                 new RuleReachNumbering(module, "f"));
         Allowance<NumericTerm.FromOnePosition> allowance = Allowance.of(budget);
-        return BehaviorSetStatements.of("f", read, rules.symbols(), rules.newtypes(), allowance,
-                List.of(), new RuleReachNumbering(rules.symbols().module(), "f"));
+        return BehaviorSetStatements.of("f", read, inputs.reading(rules), allowance,
+                List.of(), new RuleReachNumbering(rules.symbols().module(), "f"),
+                WhatAnAnswerTakesUp.of(inputs.reading(rules)));
     }
 }

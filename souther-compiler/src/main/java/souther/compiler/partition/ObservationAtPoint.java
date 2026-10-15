@@ -39,7 +39,7 @@ public sealed interface ObservationAtPoint {
     /**
      * The row's values here were reached through elements this reading did not choose.
      *
-     * <p>A row inside a sequence has as many values at a position as it wrote, and standing at a
+     * <p>A row inside a container has as many values at a position as it wrote, and standing at a
      * point is one element standing there — so a reading names an element per step, and a position
      * whose values are all under other elements holds none under this one. Another reading of the
      * same row is where they are.

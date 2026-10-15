@@ -69,6 +69,7 @@ class NoQuestionAboutAShapeIsAnsweredOutOfAnothersAnswerTest {
             "souther.compiler.check.FieldRead",
             "souther.compiler.check.ValueReading",
             "souther.compiler.codegen.LinkageProjections",
+            "souther.compiler.inputs.DeclaredInput",
             "souther.compiler.inputs.InputDomain",
             "souther.compiler.partition.BehaviorInputs$Standing");
 
@@ -102,9 +103,10 @@ class NoQuestionAboutAShapeIsAnsweredOutOfAnothersAnswerTest {
             List.of("souther.compiler.partition.ConstructionPlan");
 
     /** Who asks which positions stand under one. The derivation of a partition, which is what walks
-     *  them; a second asker is a reader that wanted one of the other three. */
+     *  them, and what the declarations put at one path, which a body is spelled by before there is
+     *  a partition to ask; a further asker is a reader that wanted one of the other three. */
     private static final List<String> ASK_WHAT_STANDS_UNDER =
-            List.of("souther.compiler.inputs.InputDomain");
+            List.of("souther.compiler.inputs.DeclaredInput", "souther.compiler.inputs.InputDomain");
 
     /** Who asks what a written value has under a step. Nobody outside the class that answers it — a
      *  reader working it out again turns a row's own path into a second reading of the declarations.

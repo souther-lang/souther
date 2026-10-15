@@ -31,7 +31,7 @@ public sealed interface Realization {
      *
      * <p><b>Demands and not assignments.</b> An entry says that this number is to answer this place,
      * and the key says which value a row rebuilds to make it do so — which for a number one position
-     * answers is that position, and for a number taken over a run is the sequence its values are
+     * answers is that position, and for a number taken over a run is the container its values are
      * read from. The place is what the term answers and never what is written at the root: no total
      * is written at a list.
      *
@@ -49,22 +49,35 @@ public sealed interface Realization {
         /**
          * Held in the terms' own order, so that a reader walking it meets the demands in the same
          * order in every run. Two demands of one term are told apart by where they write, compared
-         * by every part of the path and not by how it is spelled.
+         * by every part of the path and not by how it is spelled. A count, and a statement the
+         * elements meet together, come after the numbers, ordered by the container and then by
+         * what they say, which is what makes two of them two.
          */
         public Found {
             Map<NumericTerm, List<RealizationTarget>> byTerm = new HashMap<>();
+            List<RealizationTarget> counts = new ArrayList<>();
             for (RealizationTarget each : fixing.keySet()) {
-                byTerm.computeIfAbsent(each.term(), _ -> new ArrayList<>()).add(each);
+                switch (each) {
+                    case RealizationTarget.OfANumber number -> byTerm.computeIfAbsent(
+                            number.term(), _ -> new ArrayList<>()).add(each);
+                    case RealizationTarget.ACount _,
+                         RealizationTarget.ElementsMeetingTogether _ -> counts.add(each);
+                }
             }
-            Map<RealizationTarget, Place> inOrder = new LinkedHashMap<>();
+            List<RealizationTarget> ordered = new ArrayList<>();
             for (NumericTerm term : NumericTerms.inOrder(byTerm.keySet())) {
                 List<RealizationTarget> ofOne = byTerm.get(term);
                 ofOne.sort(Comparator.comparing(RealizationTarget::writeRoot,
                         TermPath.structuralOrder()));
-                for (RealizationTarget each : ofOne) {
-                    inOrder.put(each, Objects.requireNonNull(fixing.get(each),
-                            "a target the search fixed stands somewhere: " + each));
-                }
+                ordered.addAll(ofOne);
+            }
+            counts.sort(Comparator.comparing(RealizationTarget::writeRoot,
+                    TermPath.structuralOrder()).thenComparing(RealizationTarget::toString));
+            ordered.addAll(counts);
+            Map<RealizationTarget, Place> inOrder = new LinkedHashMap<>();
+            for (RealizationTarget each : ordered) {
+                inOrder.put(each, Objects.requireNonNull(fixing.get(each),
+                        "a target the search fixed stands somewhere: " + each));
             }
             fixing = Collections.unmodifiableMap(inOrder);
         }

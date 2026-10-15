@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.partition.ReportedReason;
 import souther.compiler.partition.UndividedPosition;
+import souther.compiler.values.StoppedReading;
 import souther.compiler.values.UnreadReason;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -27,17 +28,19 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
  *
  * <p>The word is not what was ever shared. A document promises its reader which kind of thing
  * stopped the derivation, and both of these are one kind of thing out there: the projection sends
- * them to one word, which is asserted here beside the split so that the two cannot drift.
+ * the value reading's stop to the word the line reading has where it showed nothing of what the
+ * other position reaches, which is asserted here beside the split so that the two cannot drift.
  */
 class OneRuleReadTwoWaysIsTwoAnswersAndOneWordTest {
 
     /** What the reading of lines makes of it: read to the end, and no line either side. */
-    private static final BlockReason.ComparisonBetweenPositions THE_LINE_READING =
-            new BlockReason.ComparisonBetweenPositions();
+    private static final BlockReason.ComparisonRelatingTwoValues THE_LINE_READING =
+            new BlockReason.ComparisonRelatingTwoValues();
 
     /** And what the reading of values makes of the same rule. */
     private static final BlockReason.RuleReadingStopped THE_VALUE_READING =
-            BlockReason.ofARuleTheValueReadingLeft(UnreadReason.RELATES_TWO_POSITIONS);
+            BlockReason.ofARuleTheValueReadingLeft(
+                    StoppedReading.of(UnreadReason.RELATES_TWO_POSITIONS));
 
     /**
      * The line reading finished, so nothing is owed on its account.
@@ -68,12 +71,19 @@ class OneRuleReadTwoWaysIsTwoAnswersAndOneWordTest {
         assertInstanceOf(BlockReason.ReadingStopReason.class, THE_VALUE_READING);
     }
 
-    /** And a reader of the document meets one word, which is what the two were made one for. */
+    /**
+     * And a reader of the document meets one word for the value reading's stop and the line
+     * reading's where it, too, showed nothing of what the other position reaches.
+     *
+     * <p>The value reading never shows that; the line reading does where the other position takes
+     * every value its type holds, and says the relation divides nothing — the rule is then taken
+     * in, and the value reading's stop is not one a document says.
+     */
     @Test
     void theDocumentWritesOneWordForBoth() {
-        assertEquals(UndividedPosition.Reason.UNSUPPORTED_PARTITION_SHAPE,
+        assertEquals(UndividedPosition.Reason.RULE_RELATING_TWO_VALUES,
                 ReportedReason.of(THE_LINE_READING));
-        assertEquals(UndividedPosition.Reason.UNSUPPORTED_PARTITION_SHAPE,
+        assertEquals(ReportedReason.of(new BlockReason.RelationNotShownToReachEveryValue()),
                 ReportedReason.of(THE_VALUE_READING));
     }
 
@@ -86,8 +96,9 @@ class OneRuleReadTwoWaysIsTwoAnswersAndOneWordTest {
     @Test
     void aReadingThatReachedNoRuleNamesNone() {
         assertInstanceOf(BlockReason.AboutThePosition.class,
-                BlockReason.of(UnreadReason.NOT_REACHED));
+                BlockReason.of(StoppedReading.of(UnreadReason.NOT_REACHED)));
+        StoppedReading notReached = StoppedReading.of(UnreadReason.NOT_REACHED);
         assertThrows(IllegalArgumentException.class,
-                () -> BlockReason.ofARuleTheValueReadingLeft(UnreadReason.NOT_REACHED));
+                () -> BlockReason.ofARuleTheValueReadingLeft(notReached));
     }
 }

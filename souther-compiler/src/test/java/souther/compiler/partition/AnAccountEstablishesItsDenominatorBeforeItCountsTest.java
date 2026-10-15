@@ -1,7 +1,11 @@
 package souther.compiler.partition;
 
-import souther.compiler.coverage.ComparisonEmissionSite;
+import souther.compiler.check.ComparisonClaim;
+import souther.compiler.coverage.ConditionOutcomeSite;
 import souther.compiler.coverage.Numberings;
+import souther.compiler.meaning.AuthoredPointMapping;
+import souther.compiler.meaning.Derivation;
+import souther.compiler.meaning.WrittenLine;
 import souther.compiler.types.ExpansionLineage;
 import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.SourceConstruct;
@@ -19,6 +23,7 @@ import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Towards;
 
 import java.util.List;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -92,7 +97,7 @@ class AnAccountEstablishesItsDenominatorBeforeItCountsTest {
 
     private static RuleEvidence dividing(String at) {
         return new RuleEvidence.Divides(new Threshold(AT,
-                Seam.of(LevelSpace.onACarrier(new Carrier.Whole()),
+                HeldSeams.of(LevelSpace.onACarrier(new Carrier.Whole()),
                         new Level.OnACarrier(new Carrier.Whole(),
                                 new Count(new java.math.BigDecimal(at))),
                         Towards.BELOW),
@@ -101,7 +106,7 @@ class AnAccountEstablishesItsDenominatorBeforeItCountsTest {
 
     /** The numbering this fixture's places are of. One of them, so that two origins built here
      *  address one place rather than the same number of two numberings. */
-    private static final ComparisonEmissionSite WHERE = Numberings.comparison(1, 0);
+    private static final ConditionOutcomeSite WHERE = Numberings.comparison(1, 0);
 
     /** One rule, written in one place. Two lines of it are told apart by where they part the
      *  values, which is what the account may not be asked to do by name alone. */
@@ -113,7 +118,11 @@ class AnAccountEstablishesItsDenominatorBeforeItCountsTest {
                         new RuleRef.Comparison("f", wrote),
                         new ModelOccurrence(wrote, ExpansionLineage.ORIGINAL),
                         new RuleReportAnchor.ByTheModuleThatWroteIt(),
-                        List.of(WHERE)),
-                new LineFacts(new souther.compiler.check.ComparisonClaim.Cut(Towards.BELOW, true)));
+                        List.of(WHERE), ElementsMetOn.EVERY),
+                Optional.empty(),
+                new LineFacts(new ComparisonClaim.Cut(Towards.BELOW, true)),
+                new AuthoredPointMapping.Proven(WrittenLine.THE_COMPARISON,
+                        new ComparisonClaim.Cut(Towards.BELOW, true),
+                        Derivation.AComparisonRead.Facing.NOTHING_WRITTEN, true));
     }
 }

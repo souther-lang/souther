@@ -5,7 +5,7 @@ import souther.compiler.partition.DecisionRule;
 import souther.compiler.partition.GenerationAnswer;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
-import souther.compiler.query.RuleSettlement;
+import souther.compiler.query.SettledAcross;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -119,13 +119,14 @@ class WhatTheSearchAnswersForDoesNotTurnOnHowCaseNamesCompareTest {
                             out.put(behavior + " class " + obligation.target(), kindOf(disposition));
                     case GenerationAnswer.Arm(var obligation, var disposition) ->
                             out.put(behavior + " arm " + obligation.target(), kindOf(disposition));
-                    case GenerationAnswer.Pair _, GenerationAnswer.Meeting _ -> { }
+                    case GenerationAnswer.Pair _, GenerationAnswer.Meeting _,
+                         GenerationAnswer.Replacement _ -> { }
                 }
             });
             // And what searching each rule of the decision established, which is the other half of
             // what a search answers for. A rule names the cases its way turns on, so the key is
             // said in the names the model under test is written in.
-            Map<DecisionRule, RuleSettlement> rules =
+            Map<DecisionRule, SettledAcross> rules =
                     compilation.db().ask(new Adequacy.DecisionSearch(module, behavior)).value();
             if (rules != null) {
                 rules.forEach((rule, settled) -> out.put(
@@ -136,13 +137,14 @@ class WhatTheSearchAnswersForDoesNotTurnOnHowCaseNamesCompareTest {
         return out;
     }
 
-    /** A key said in the names the model this is compared with uses. */
+    /** A key said in the names the model this is compared with uses, with the sets in it in one
+     *  order ({@link SpelledSets}). */
     private static String spelledBefore(String said, Map<String, String> back) {
         String out = said;
         for (Map.Entry<String, String> each : back.entrySet()) {
             out = out.replace(each.getValue(), each.getKey());
         }
-        return out;
+        return SpelledSets.inOneOrder(out);
     }
 
     /** What kind of answer it is, which is what a reader of the account acts on. */

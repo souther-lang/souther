@@ -6,6 +6,7 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ItemAssessment;
+import souther.compiler.query.RowWitnesses;
 
 import java.util.List;
 import java.util.Map;
@@ -120,7 +121,8 @@ at.get(0).owed().coverage().made().orElseThrow(),
     @Test
     void aRowHoldingAnItemAtTheThresholdReachesThePoint() {
         Compilation compilation = Compilation.ofSource(MODEL.replace("OP", ">=")
-                .replace("Item { charge = 1000 }", "Item { charge = 21000 }"), "Main");
+                .replace("Item { charge = 1000 }", "Item { charge = 21000 }")
+                .replace("-> Total(1)", "-> Total(2)"), "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         List<BorderAssessment> lines = compilation.db()
@@ -129,7 +131,7 @@ at.get(0).owed().coverage().made().orElseThrow(),
                 .filter(point -> point.role().againstTheLine()).filter(point -> point.owed() != null)
                 .filter(point -> "21000".equals(point.against())).findFirst().orElseThrow();
 
-        assertEquals(new ItemAssessment.Coverage.Hit(),
+        assertEquals(new ItemAssessment.Coverage.Hit(RowWitnesses.ANOTHER_ROW),
 at.owed().coverage().made().orElseThrow(),
                 "the row holds an item at the threshold, among others");
     }

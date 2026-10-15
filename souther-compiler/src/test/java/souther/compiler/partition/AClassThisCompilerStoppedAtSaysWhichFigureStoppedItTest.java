@@ -28,22 +28,23 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class AClassThisCompilerStoppedAtSaysWhichFigureStoppedItTest {
 
     /**
-     * A class of counts higher than the position holds any of.
+     * A class of counts of whole numbers, from one past how many elements a proposed collection
+     * holds.
      *
-     * <p>A set of truths holds two at most, so the counts this class admits run past what this
-     * compiler tries and none of the ones it tried built. Which is this compiler giving up at a
-     * figure, and the figure is one somebody can raise.
+     * <p>There are sets of whole numbers of every size, and this compiler builds none larger than
+     * that figure, so the counts this class admits run past what it tries and none of the ones it
+     * tried built. Which is this compiler giving up at a figure.
      */
     private static final String MORE_THAN_IT_HOLDS = """
             module example.stopped
 
-            behavior h : (s: Set<Bool>) -> Bool
+            behavior h : (s: Set<Int>) -> Bool
             let h (s) = {
-                guard Set.size(s) >= 3 else false
+                guard Set.size(s) >= %d else false
 
                 true
             }
-            """;
+            """.formatted(CompositionBudget.ELEMENTS_A_PROPOSAL_HOLDS.maximum() + 1);
 
     /**
      * A class the rules leave nothing in, which no figure of this compiler's is why.
@@ -74,7 +75,7 @@ class AClassThisCompilerStoppedAtSaysWhichFigureStoppedItTest {
         String block = offered(MORE_THAN_IT_HOLDS, "h");
 
         assertTrue(block.contains(
-                        "this compiler stopped at how many of the numbers a class admits are tried"),
+                        "this compiler stopped at how many elements a proposed collection holds"),
                 block);
     }
 

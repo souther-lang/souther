@@ -26,7 +26,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class WhatSettlesACombinationOfTwoClassesIsWhereTheValuesFallTest {
 
-    /** Two positions the body tells apart, whose decisions meet nowhere. */
+    /** Two positions the body tells apart, whose decisions meet nowhere, and the cost asked under
+     *  either kind. */
     private static final String MODEL = """
             module example.values
 
@@ -47,7 +48,10 @@ class WhatSettlesACombinationOfTwoClassesIsWhereTheValuesFallTest {
                     guard request.cost.value <= 100 else Waiting { n = 1 }
                     Ok { n = 0 }
                 }
-                | Overseas -> Ok { n = 2 }
+                | Overseas -> {
+                    guard request.cost.value <= 100 else Waiting { n = 3 }
+                    Ok { n = 2 }
+                }
             """;
 
     private static final String EVERY_COMBINATION = """
@@ -55,7 +59,7 @@ class WhatSettlesACombinationOfTwoClassesIsWhereTheValuesFallTest {
                 | (Request { kind = Domestic, cost = Amount(50) })  -> Ok { n = 0 }
                 | (Request { kind = Domestic, cost = Amount(500) }) -> Waiting { n = 1 }
                 | (Request { kind = Overseas, cost = Amount(50) })  -> Ok { n = 2 }
-                | (Request { kind = Overseas, cost = Amount(500) }) -> Ok { n = 2 }
+                | (Request { kind = Overseas, cost = Amount(500) }) -> Waiting { n = 3 }
             """;
 
     /**

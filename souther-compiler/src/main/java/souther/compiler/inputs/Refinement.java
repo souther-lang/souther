@@ -27,6 +27,10 @@ import java.util.List;
  * while a position divides into the leaves, so a narrowing built from that name is a place the
  * reading has none of. Every reader below compares narrowings by equality, so a path spelled either
  * way never meets the position it was meant to be about.
+ *
+ * <p>One distinction, always. What a condition leaves a value can be several of them, and that is
+ * {@link CasesLeft}, a set of these; a reader that builds a value or walks the branch under a
+ * position asks for one.
  */
 public sealed interface Refinement {
 
@@ -51,11 +55,11 @@ public sealed interface Refinement {
      * divides into and what a position under it stands beneath are the same statement read twice —
      * a row whose value is an {@code Approved} is a row at every position {@code Approved} declares
      * — and a second relating of them would be the classes and the branches disagreeing about which
-     * is which. {@link #of(ResolvedCase)} is beside this and is not that second relating: it takes
-     * what a checked pattern was resolved to select, which is the other value that settles a
-     * narrowing, and the two are held to one answer where a type states a division a pattern can
-     * select. Resolved and not merely selected: a selector says what a value is tested and read as,
-     * which one name over several leaves says as fully as one over a single leaf.
+     * is which. {@link #allOf} is beside this and is not that second relating: it takes what a
+     * checked pattern was resolved to select, which is the other value that settles a narrowing,
+     * and the two are held to one answer where a type states a division a pattern can select.
+     * Resolved and not merely selected: a selector says what a value is tested and read as, which
+     * one name over several leaves says as fully as one over a single leaf.
      *
      * <p>Exhaustive over {@link Case}, with no {@code default}: a distinction the reading learns to
      * make later stops this compiling rather than arriving as a branch that is quietly never walked.
@@ -73,8 +77,8 @@ public sealed interface Refinement {
     }
 
     /**
-     * The narrowing {@code selected} is, or null where selecting it narrows a position to no one
-     * distinction.
+     * Every distinction of a position that selecting {@code selected} covers, in the order the
+     * selection reaches them.
      *
      * <p>The same relating of vocabularies as {@link #of(Case)} and from the other end. A position's
      * type says what it divides into; a checked pattern says which of those divisions the arm took.
@@ -88,35 +92,11 @@ public sealed interface Refinement {
      * a case that divides the position from one that is itself divided: a case that is a sum stands
      * for the leaves under it (spec §sum-data), and the reading of a position divides it into those
      * leaves ({@link Distinctions}), so an arm naming the case above them narrows to several of them
-     * and to no one of them. Read from the name, {@code @OnceKind} would be written where the
-     * reading holds {@code @Station} and {@code @Hospital}.
+     * ({@link CasesLeft}). Read from the name, {@code @OnceKind} would be written where the reading
+     * holds {@code @Station} and {@code @Hospital}.
      *
      * <p>So a narrowing is the leaf itself and not the name it was reached by. A case declared over
      * one leaf is written as that leaf here, which is how the position spells it.
-     *
-     * <p>Null and not a refusal. An arm can select a case that divides nothing at a position, the
-     * way a {@code Bool}'s two values divide none, and what a reader is owed for one is that there
-     * is no narrowing here — the same answer {@link #of(Case)} gives for the distinctions that put
-     * nothing under them.
-     *
-     * <p>Exhaustive over {@link souther.compiler.types.Refinement}, with no {@code default}: a way
-     * of selecting a case added later stops this compiling rather than arriving as whichever arm is
-     * nearest.
-     */
-    static Refinement of(ResolvedCase selected) {
-        List<Refinement> covered = allOf(selected);
-        return covered.size() == 1 ? covered.get(0) : null;
-    }
-
-    /**
-     * Every distinction of a position that selecting {@code selected} covers, in the order the
-     * selection reaches them.
-     *
-     * <p>The general reading, and {@link #of(ResolvedCase)} is the same answer asked for the one
-     * case where there is exactly one. Two readers want the two: one puts a narrowing on a path,
-     * which takes a single distinction or none, and one asks what the rules leave an arm, which is
-     * asked of every distinction the arm can arrive at. Worked out twice, an arm over two leaves
-     * would be a place to nobody and two places to somebody else.
      *
      * <p>Exhaustive over {@link souther.compiler.types.Refinement}, with no {@code default}: a way
      * of selecting a case added later stops this compiling rather than arriving as whichever arm is
@@ -143,9 +123,9 @@ public sealed interface Refinement {
      * <p>A class and not a record so that the canonical way in can be closed: nothing outside this
      * declaration may spell a narrowing, because a narrowing spelled somewhere else is a second
      * reading of which distinctions narrow a position. Compared by what it narrows to all the same —
-     * every reader that decides whether two requirements hold together does it by equality
-     * ({@link Requirements#merge}), and an identity comparison here would have no two narrowings
-     * ever agree.
+     * every reader that decides whether two requirements hold together intersects the cases they
+     * leave ({@link Requirements#merge}), which compares these by equality, and an identity
+     * comparison here would have no two narrowings ever agree.
      */
     final class SumCase implements Refinement {
 

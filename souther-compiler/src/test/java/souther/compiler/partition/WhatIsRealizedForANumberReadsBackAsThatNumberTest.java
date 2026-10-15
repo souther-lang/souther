@@ -148,7 +148,7 @@ class WhatIsRealizedForANumberReadsBackAsThatNumberTest {
             if (DefaultBoundOperationFacts.get().takenAs(operation, beside) == null) {
                 continue;
             }
-            NumericTerm.TakenOf term = NumericTerm.TakenOf.of((ValueName.Stdlib) operation, AT,
+            NumericTerm.TakenOf term = NumericTerm.TakenOf.asItStands((ValueName.Stdlib) operation, AT,
                     beside, sourceOf(operation),
                     souther.compiler.check.NewtypeInners.asWritten(SYMBOLS), SYMBOLS);
             if (term != null) {
@@ -334,7 +334,7 @@ class WhatIsRealizedForANumberReadsBackAsThatNumberTest {
     /** Every one of those numbers has a value built for it, and it reads back as that number. */
     private static void readsBackAt(String qualified, Type source, long... numbers) {
         ValueName.Stdlib operation = DefaultStdlib.get().operation(qualified);
-        NumericTerm.TakenOf term = NumericTerm.TakenOf.of(operation, AT, source,
+        NumericTerm.TakenOf term = NumericTerm.TakenOf.asItStands(operation, AT, source,
                     souther.compiler.check.ScopedDeclarations.wrapsOf(SYMBOLS), SYMBOLS);
         assertNotNull(term, qualified + " is taken of what its own signature says it takes");
         souther.compiler.inputs.TermOrders orders =
@@ -374,7 +374,7 @@ class WhatIsRealizedForANumberReadsBackAsThatNumberTest {
         assertTrue(DefaultBoundOperationFacts.get().takenAs(ValueName.Stdlib.operation("Int", "abs")) == null,
                 "the premise: what it answers is read by reading its body, so no account is"
                         + " declared of it and none may be");
-        assertNull(NumericTerm.TakenOf.of(ValueName.Stdlib.operation("Int", "abs"), AT,
+        assertNull(NumericTerm.TakenOf.asItStands(ValueName.Stdlib.operation("Int", "abs"), AT,
                         Type.Prim.INT, souther.compiler.check.ScopedDeclarations.wrapsOf(SYMBOLS), SYMBOLS),
                 "so there is no term for what it answers");
     }
@@ -391,13 +391,13 @@ class WhatIsRealizedForANumberReadsBackAsThatNumberTest {
      */
     @Test
     void aTermCannotBeBuiltWhereTheOperationIsNotTakenOfWhatIsThere() {
-        assertNull(NumericTerm.TakenOf.of(ValueName.Stdlib.operation("String", "length"), AT,
+        assertNull(NumericTerm.TakenOf.asItStands(ValueName.Stdlib.operation("String", "length"), AT,
                         Type.Prim.TIME, souther.compiler.check.ScopedDeclarations.wrapsOf(SYMBOLS), SYMBOLS),
                 "a length is taken of what holds things, and a time holds none");
-        assertNull(NumericTerm.TakenOf.of(ValueName.Stdlib.operation("Time", "hour"), AT,
+        assertNull(NumericTerm.TakenOf.asItStands(ValueName.Stdlib.operation("Time", "hour"), AT,
                         Type.STRING, souther.compiler.check.ScopedDeclarations.wrapsOf(SYMBOLS), SYMBOLS),
                 "and an hour is taken of a time");
-        assertNotNull(NumericTerm.TakenOf.of(ValueName.Stdlib.operation("String", "length"), AT,
+        assertNotNull(NumericTerm.TakenOf.asItStands(ValueName.Stdlib.operation("String", "length"), AT,
                         Type.STRING, souther.compiler.check.ScopedDeclarations.wrapsOf(SYMBOLS), SYMBOLS),
                 "while the pair the library declares goes together");
     }
@@ -421,7 +421,7 @@ class WhatIsRealizedForANumberReadsBackAsThatNumberTest {
     private static NumericTerm.FromOnePosition term(String module, String name) {
         ValueName.Stdlib operation = ValueName.Stdlib.operation(module, name);
         NumericTerm.TakenOf made =
-                NumericTerm.TakenOf.of(operation, AT, sourceOf(operation),
+                NumericTerm.TakenOf.asItStands(operation, AT, sourceOf(operation),
                         souther.compiler.check.ScopedDeclarations.wrapsOf(SYMBOLS), SYMBOLS);
         assertNotNull(made, operation + " is taken of what it takes");
         return made;

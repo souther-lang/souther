@@ -1,5 +1,10 @@
 package souther.compiler.regex;
 
+import java.util.Optional;
+import net.unit8.notation199x.pattern.Automaton;
+import net.unit8.notation199x.pattern.Meter;
+import net.unit8.notation199x.pattern.PatternMeaning;
+
 /**
  * Whether a string is one a pattern means, answered by walking the machine the meaning builds.
  *
@@ -24,8 +29,15 @@ public final class Recognizer {
         return machine == null ? null : new Recognizer(machine);
     }
 
-    /** Whether the whole of {@code value} is one of the strings. A walk that reads each symbol once. */
-    public boolean accepts(String value) {
-        return machine.accepts(value);
+    /**
+     * Whether the whole of {@code value} is one of the strings, or empty where walking it would look
+     * at more than {@code meter} allows.
+     *
+     * <p>A walk reads each symbol once and is in every state the machine may be in, so what it
+     * costs is the value's length times how many of those there are. The allowance is the
+     * question's own, since one recognizer answers many of them.
+     */
+    public Optional<Boolean> accepts(String value, Meter meter) {
+        return Optional.ofNullable(machine.accepts(value, meter));
     }
 }

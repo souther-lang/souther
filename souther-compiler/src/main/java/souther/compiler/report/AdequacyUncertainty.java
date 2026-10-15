@@ -1,9 +1,15 @@
 package souther.compiler.report;
 
+import souther.compiler.observe.Figure;
 import souther.compiler.observe.RunSensitivity;
+import souther.compiler.partition.WhereNothingIsAnswered;
 import souther.compiler.query.EstablishmentGap;
 import souther.compiler.query.NotMeasuredReason;
 import souther.compiler.query.Weakening;
+import souther.compiler.query.WritabilityKnowledge;
+import souther.compiler.types.ModelOccurrences;
+
+import java.util.List;
 
 /**
  * One thing a scope's measures did not come to an answer about.
@@ -37,6 +43,17 @@ public sealed interface AdequacyUncertainty {
     RunSensitivity runSensitivity();
 
     /**
+     * The figures this compiler compared something against and stopped at, as what stopped
+     * carried them from where it was compared: none where nothing was compared against one.
+     *
+     * <p>Beside the sensitivity and not read off it. That a wider run need not stop at the same
+     * place is not that some figure here was reached — nothing watching the runs is the one stop
+     * that answers yes to the first and has no figure to name — so a reader told a figure stopped
+     * something is told it only where one is here.
+     */
+    List<Figure> figures();
+
+    /**
      * What this is about, as a reader is sent back to it.
      *
      * <p>Answered by the arm and not worked out from the payload. One of these carries a fact that
@@ -67,6 +84,11 @@ public sealed interface AdequacyUncertainty {
         @Override
         public RunSensitivity runSensitivity() {
             return cause.runSensitivity();
+        }
+
+        @Override
+        public List<Figure> figures() {
+            return cause.figures();
         }
 
         /** The fact's own, which every weakening names for itself. */
@@ -103,6 +125,11 @@ public sealed interface AdequacyUncertainty {
         public RunSensitivity runSensitivity() {
             return RunSensitivity.UNAFFECTED;
         }
+
+        @Override
+        public List<Figure> figures() {
+            return List.of();
+        }
     }
 
     /**
@@ -117,15 +144,36 @@ public sealed interface AdequacyUncertainty {
      * read for it that did not come back, and a composing for another that never started — and what
      * a reader wants is everything that would have to give.
      */
-    record ShowingStopped(Subject subject, EstablishmentGap by) implements AdequacyUncertainty {
+    record ShowingStopped(Subject subject, EstablishmentGap by, ModelOccurrences readAt)
+            implements AdequacyUncertainty {
 
         public ShowingStopped {
             if (subject == null) {
                 throw new IllegalArgumentException("a showing that was stopped was of some point");
             }
-            if (by == null) {
+            if (by == null || readAt == null) {
                 throw new IllegalArgumentException("a showing that was stopped says what stopped it");
             }
+        }
+
+        /**
+         * What tells two of these apart: what it is about, and what stopped it with the figures
+         * and the calls left out. Two obligations of one behavior stopped alike at two figures are
+         * one thing open, met at both.
+         */
+        public Object fact() {
+            return List.of(subject, by.fact());
+        }
+
+        /** Both, as one: what stopped either, at every figure and in every copy either was. */
+        public ShowingStopped together(ShowingStopped other) {
+            if (!fact().equals(other.fact())) {
+                throw new IllegalArgumentException(
+                        "two showings put together are one: " + this + " and " + other);
+            }
+            return new ShowingStopped(subject,
+                    WritabilityKnowledge.Prevented.of(List.of(by, other.by)).by().written()
+                            .getFirst(), readAt.and(other.readAt));
         }
 
         /**
@@ -147,6 +195,12 @@ public sealed interface AdequacyUncertainty {
                         ? RunSensitivity.MAY_CHANGE : RunSensitivity.UNAFFECTED;
             };
         }
+
+        /** The gap's own: the budgets a composing stopped at, the limits an observation met. */
+        @Override
+        public List<Figure> figures() {
+            return by.figures();
+        }
     }
 
     /**
@@ -167,6 +221,43 @@ public sealed interface AdequacyUncertainty {
         @Override
         public RunSensitivity runSensitivity() {
             return RunSensitivity.UNAFFECTED;
+        }
+
+        @Override
+        public List<Figure> figures() {
+            return List.of();
+        }
+    }
+
+    /**
+     * Every row that would meet some obligation reaches an {@code unreachable} a body states, and
+     * nothing here proves the inputs there do not arise.
+     *
+     * <p>One per premise of what it is about, and not one per obligation resting on it. What a
+     * reader does is prove the premise or make the body answer, and that is one thing to do however
+     * many classes of one behavior it holds open. Nothing was compared against a figure, so no
+     * allowance changes it.
+     */
+    record EveryRowReachesAnUnreachable(Subject subject, WhereNothingIsAnswered.Premise premise)
+            implements AdequacyUncertainty {
+
+        public EveryRowReachesAnUnreachable {
+            if (subject == null) {
+                throw new IllegalArgumentException("an obligation no row can meet is some point's");
+            }
+            if (premise == null) {
+                throw new IllegalArgumentException("a row that reaches an unreachable reaches one");
+            }
+        }
+
+        @Override
+        public RunSensitivity runSensitivity() {
+            return RunSensitivity.UNAFFECTED;
+        }
+
+        @Override
+        public List<Figure> figures() {
+            return List.of();
         }
     }
 }

@@ -184,13 +184,14 @@ class EveryForkIsReadUnderWhatItsBindingCarriesTest {
         // What that answer does with a run, at the value it is made of.
         PathReachability.Answers answers =
                 c.db().ask(new Adequacy.PathReached("demo")).value().get("charge");
-        ArmProbe probe = answers.found().entrySet().stream()
+        ControlPlace.Arm shut = answers.found().entrySet().stream()
                 .filter(each -> each.getValue() instanceof Reachability.Unreachable)
                 .filter(each -> each.getKey() instanceof ControlPlace.Arm)
                 .map(each -> (ControlPlace.Arm) each.getKey())
-                .findFirst().orElseThrow().probe().orElseThrow();
-        PathReachability.Answers.AsRun ran = answers.asRunWith(Set.of(probe));
-        assertEquals(Set.of(probe), ran.provedWrong(),
+                .findFirst().orElseThrow();
+        ArmProbe probe = shut.probe().orElseThrow();
+        PathReachability.Answers.AsRun ran = answers.asRunWith(Set.of(probe), Set.of());
+        assertEquals(Set.of(shut), ran.contradicted().places(),
                 "a row through it is what takes the proof back");
         assertEquals(List.of(), ran.answers().found().entrySet().stream()
                         .filter(each -> each.getKey() instanceof ControlPlace.Arm)

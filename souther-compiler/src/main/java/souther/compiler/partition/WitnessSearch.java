@@ -1,7 +1,8 @@
 package souther.compiler.partition;
 
 import souther.compiler.inputs.NumericTerm;
-import souther.compiler.regex.Meter;
+import souther.compiler.inputs.SearchRegion;
+import net.unit8.notation199x.pattern.Meter;
 import souther.compiler.values.ValueSet;
 
 import java.util.function.Supplier;
@@ -48,18 +49,21 @@ public record WitnessSearch(AdmittedValues admitted, Supplier<Meter> allowance) 
      * — a rule about one of those numbers is what leaves the others short, which is the whole reason
      * the sets are here.
      *
-     * <p><b>And every value there is where the number is one taken of the position rather than its
-     * own.</b> {@code String.length(code)} counts a string and the place composed for it is a count;
-     * the set holds the strings. Put to it, every count would be refused for not being one of them,
-     * and a number of that kind would stop being offered a value at all.
+     * <p><b>And the numbers those values come to where the number is one taken of the position
+     * rather than its own</b>, which {@code within} answers ({@link SearchRegion#heldAt}).
+     * {@code String.length(code)} counts a string and the place composed for it is a count; the set
+     * holds the strings. Put to it as it is, every count would be refused for not being one of them;
+     * left out, a walk over the counts would try every count the range holds and could spend what
+     * it may try before reaching one a value comes to.
      *
      * <p>Here and not at each search, because it is one rule about what the sets are keyed by.
      * Written out wherever a place is composed, a search added later reads the set of a location
      * against a count and refuses every value the position has.
      */
-    private AdmittedValues.Admitted valuesAt(NumericTerm.FromOnePosition term) {
+    private AdmittedValues.Admitted valuesAt(NumericTerm.FromOnePosition term,
+                                             SearchRegion within) {
         return term instanceof NumericTerm.ValueOf ? admitted.at(term.position())
-                : new AdmittedValues.Admitted.Values(ValueSet.ANY);
+                : new AdmittedValues.Admitted.Values(within.heldAt(term));
     }
 
     /**
@@ -80,8 +84,8 @@ public record WitnessSearch(AdmittedValues admitted, Supplier<Meter> allowance) 
      * <p>{@link ValueSet#ANY} here is the identity of the crossing and never an answer about what
      * the position admits.
      */
-    public ValueSet toNarrowBy(NumericTerm.FromOnePosition term) {
-        return switch (valuesAt(term)) {
+    public ValueSet toNarrowBy(NumericTerm.FromOnePosition term, SearchRegion within) {
+        return switch (valuesAt(term, within)) {
             case AdmittedValues.Admitted.Values(ValueSet set) -> set;
             case AdmittedValues.Admitted.NotWorkedOut _,
                  AdmittedValues.Admitted.StandsUnderTheCases _ -> ValueSet.ANY;
@@ -101,8 +105,8 @@ public record WitnessSearch(AdmittedValues admitted, Supplier<Meter> allowance) 
      * were never read is one this compiler cannot stand behind. A path the reading puts no position
      * at composes from the run alone, and what becomes of the row is the construction's to say.
      */
-    public ComposingFrom toComposeFrom(NumericTerm.FromOnePosition term) {
-        return switch (valuesAt(term)) {
+    public ComposingFrom toComposeFrom(NumericTerm.FromOnePosition term, SearchRegion within) {
+        return switch (valuesAt(term, within)) {
             case AdmittedValues.Admitted.Values(ValueSet set) ->
                     new ComposingFrom.TheSetThePositionAdmits(set);
             case AdmittedValues.Admitted.NotWorkedOut _ -> new ComposingFrom.NothingWorkedItOut();

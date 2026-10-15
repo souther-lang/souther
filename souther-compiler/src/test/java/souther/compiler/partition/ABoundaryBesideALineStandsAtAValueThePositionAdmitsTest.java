@@ -10,9 +10,9 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Text;
 import souther.compiler.numeric.Towards;
-import souther.compiler.regex.PatternParser;
+import net.unit8.notation199x.pattern.PatternParser;
 import souther.compiler.regex.PatternPlan;
-import souther.compiler.regex.PatternRead;
+import net.unit8.notation199x.pattern.PatternRead;
 import souther.compiler.types.ValueName;
 import souther.compiler.values.Value;
 import souther.compiler.values.ValueSet;
@@ -34,8 +34,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * the least the order has, it is inside the run, and nothing between choosing it and building the row
  * is able to say the declarations refuse it — the rules a placement is held against are the
  * arithmetic ones, and a place that is a string is handed back unheld
- * ({@code LevelRealizer.theRulesHaveNotRefused}). So the row goes out, comes back refused where it is
- * built, and a reader is told every value was tried at a run holding all but one of them.
+ * ({@code LevelRealizer.theDeclarationsHaveNotRefused}). So the row goes out, comes back refused
+ * where it is built, and a reader is told every value was tried at a run holding all but one of
+ * them.
  *
  * <p>What the run cannot say is exactly this. {@code String.length(value) >= 1} is a rule about
  * another number of the same position, so it is nowhere in the run of the order the boundary is on —
@@ -87,7 +88,7 @@ class ABoundaryBesideALineStandsAtAValueThePositionAdmitsTest {
     private static Criterion.Within run(Towards away) {
         LevelSpace space = LevelSpace.onACarrier(TEXT);
         Level line = new Level.OnACarrier(TEXT, Text.of("spring"));
-        Seam parted = Seam.of(space, line, away.opposite());
+        Seam parted = HeldSeams.of(space, line, away.opposite());
         Band band = away == Towards.BELOW
                 ? new Band(Band.endAt(null, null, Towards.ABOVE),
                         Band.endAt(parted, null, Towards.BELOW))
@@ -122,7 +123,7 @@ class ABoundaryBesideALineStandsAtAValueThePositionAdmitsTest {
         // A distance and not a place: what a pair is held at is how far apart the two stand, which
         // is a count of the order they share.
         Level apart = Level.OfTheQuantity.of(1);
-        Seam parted = Seam.of(
+        Seam parted = HeldSeams.of(
                 LevelSpace.steppingBy(ExactRatio.ONE), apart,
                 Towards.ABOVE);
         return new Criterion.Within(
@@ -321,7 +322,7 @@ class ABoundaryBesideALineStandsAtAValueThePositionAdmitsTest {
      */
     @Test
     void aNumberTakenOfThePositionIsNotHeldToTheSetOfItsValues() {
-        NumericTerm.FromOnePosition length = NumericTerm.TakenOf.of(
+        NumericTerm.FromOnePosition length = NumericTerm.TakenOf.asItStands(
                 ValueName.Stdlib.operation("String", "length"), CODE,
                 souther.compiler.types.Type.Prim.STRING,
                 souther.compiler.check.NewtypeInners.NONE,

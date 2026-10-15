@@ -181,6 +181,14 @@ class WhoMayAskCompilerCallSitesWhatTheyCanRefuseTest {
                     "Same bounded-scale value; toPlainString has no documented throw for a value at"
                             + " an ordinary scale."),
             new Permission(
+                    "souther/compiler/query/Adequacy$DeadBranches$DeadBranchProofWords#shown("
+                            + "Lsouther/compiler/values/Value;)Ljava/lang/String; toPlainString()"
+                            + "Ljava/lang/String;",
+                    Reason.REFUSAL_IMPOSSIBLE,
+                    "A value a rule of the model names, which was written as a literal and read"
+                            + " at that literal's own scale; toPlainString has no documented throw"
+                            + " for a value at an ordinary scale."),
+            new Permission(
                     "souther/compiler/partition/FixtureTemplate#decimal(Ljava/math/BigDecimal;)"
                             + "Lsouther/compiler/partition/FixtureTemplate; toPlainString()Ljava/"
                             + "lang/String;",

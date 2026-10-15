@@ -168,13 +168,13 @@ class AQuestionAboutANumberNamesTheNumberTest {
         ValueName length = ValueName.Stdlib.operation("List", "length");
         ValueName size = ValueName.Stdlib.operation("Set", "size");
 
-        assertNotEquals(new Owed.Boundary(NumberAt.takenOf(RuleKey.of("names"), length)),
-                new Owed.Boundary(NumberAt.takenOf(RuleKey.of("names"), size)),
+        assertNotEquals(new Owed.Boundary(NumberAt.takenAsItStands(RuleKey.of("names"), length)),
+                new Owed.Boundary(NumberAt.takenAsItStands(RuleKey.of("names"), size)),
                 "a line on one operation's number is not a line on another's");
-        assertNotEquals(new Owed.Boundary(NumberAt.takenOf(RuleKey.of("names"), length)),
+        assertNotEquals(new Owed.Boundary(NumberAt.takenAsItStands(RuleKey.of("names"), length)),
                 new Owed.Boundary(NumberAt.valueOf(RuleKey.of("names"))),
                 "nor a line on what the position itself holds");
-        assertNotEquals(new Owed.Boundary(NumberAt.takenOf(RuleKey.of("names"), length)),
+        assertNotEquals(new Owed.Boundary(NumberAt.takenAsItStands(RuleKey.of("names"), length)),
                 new Owed.AdmittedValues(RuleKey.of("names")),
                 "and a question about a number is not the question about the position");
     }

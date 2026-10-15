@@ -15,6 +15,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -74,7 +75,7 @@ class TwoCopiesOfOneForkAreTwoDecisionsARowMaySettleApartTest {
     }
 
     private static Decision decision(ControlPlace.Arm arm) {
-        return new Decision(new Condition.Arm(arm.arm()),
+        return new Decision(new Condition.Arm(arm.arm(), Optional.empty()),
                 ControlClaim.of(arm).orElseThrow(
                         () -> new AssertionError("an arm with a probe can be claimed")));
     }

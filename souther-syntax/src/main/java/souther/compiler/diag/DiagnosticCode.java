@@ -109,6 +109,7 @@ public enum DiagnosticCode {
     E1508("an-imported-name-denotes-one-thing", "check.module.title"),
     E1509("a-published-module-can-be-read-back", "check.module.title"),
     E1510("a-published-module-agrees-with-what-it-was-built-against", "check.module.title"),
+    E1511("a-module-on-the-path-reaches-only-the-path", "check.module.title"),
     E1602("depends-on-names-every-requirement", "e1602.title"),
     E1603("depends-on-names-no-more", "e1603.title"),
     E1604("composition-output-agrees-with-inference", "e1604.title"),
@@ -194,6 +195,7 @@ public enum DiagnosticCode {
     E1936("every-combination-of-decisions-has-a-row", "check.example.title"),
     E1937("every-combination-of-two-classes-has-a-row", "check.example.title"),
     E1938("every-border-is-told-from-the-lines-beside-it", "check.example.title"),
+    E1939("every-rewrite-of-a-body-is-told-apart", "check.example.title"),
 
     // --- totality, invariant discharge, attempted construction ---
     E2001("helper-carries-its-termination-guarantee", "check.totality.title"),
@@ -217,6 +219,8 @@ public enum DiagnosticCode {
     E2106("a-field-does-not-collide-with-an-object-method", "check.reserved.title"),
     E2107("source-structural-complexity-is-bounded", "e2107.title"),
     E2108("running-out-of-room-is-reported", "e2108.title"),
+    E2109("a-pattern-runs-as-a-machine-a-class-holds", "e2109.title"),
+    E2110("a-pattern-is-admitted-within-three-limits", "e2110.title"),
 
     // --- the text as written ---
     E2301("declaration-syntax", "parse.title"),
@@ -271,7 +275,7 @@ public enum DiagnosticCode {
     /** The rules that are reported without failing the build. */
     private static final java.util.Set<DiagnosticCode> WARNINGS =
             java.util.EnumSet.of(E1327, E1913, E1915, E1916, E1917, E1918, E1919, E1920, E1921,
-                    E1922, E1931, E1934, E1935, E1936, E1937, E1938, E2011);
+                    E1922, E1931, E1934, E1935, E1936, E1937, E1938, E1939, E2011);
 
     /** The catalog key of the header category this code is shown under. Shared across codes. */
     public String titleKey() {

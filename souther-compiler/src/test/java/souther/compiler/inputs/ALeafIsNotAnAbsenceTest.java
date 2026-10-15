@@ -54,9 +54,11 @@ class ALeafIsNotAnAbsenceTest {
     }
 
     private StructuralInspection under(Type type) {
-        TypeView view = TypeView.asWritten(type, symbols, ScopedDeclarations.of(symbols));
+        TypeView view = TypeView.asWritten(type, symbols, ScopedDeclarations.kindsOf(symbols),
+                ScopedDeclarations.sumsOf(symbols));
         return StructuralInspection.of(ReadablePosition.of(view).shape(),
-                Distinctions.ofType(view, symbols, ScopedDeclarations.of(symbols)));
+                Distinctions.ofType(view.shape(), symbols, ScopedDeclarations.kindsOf(symbols),
+                        ScopedDeclarations.sumsOf(symbols)));
     }
 
     private static StructuralInspection retained(StructuralInspection.Continuation continuation) {
@@ -70,8 +72,9 @@ class ALeafIsNotAnAbsenceTest {
     /** The narrowing to one leaf, spelled the way the checker's resolution of an arm spells it: a
      *  leaf is a case that covers itself, so selecting it narrows to that one distinction. */
     private static Refinement toLeaf(souther.compiler.types.TypeSymbol leaf) {
-        return Refinement.of(souther.compiler.types.ResolvedCase.of(
-                souther.compiler.types.CaseSelector.direct(leaf), java.util.List.of(leaf)));
+        return Refinement.allOf(souther.compiler.types.ResolvedCase.of(
+                souther.compiler.types.CaseSelector.direct(leaf), java.util.List.of(leaf)))
+                .getFirst();
     }
 
     private Type named(String name) {
@@ -92,8 +95,10 @@ class ALeafIsNotAnAbsenceTest {
                 under(named("Stage")));
 
         assertFalse(Distinctions.ofType(
-                TypeView.asWritten(named("Stage"), symbols, ScopedDeclarations.of(symbols)),
-                symbols, ScopedDeclarations.of(symbols)).isEmpty(),
+                TypeView.asWritten(named("Stage"), symbols, ScopedDeclarations.kindsOf(symbols),
+                        ScopedDeclarations.sumsOf(symbols)).shape(),
+                symbols, ScopedDeclarations.kindsOf(symbols), ScopedDeclarations.sumsOf(symbols))
+                        .isEmpty(),
                 "the same position divides two ways, which the answer above did not deny");
     }
 
@@ -155,6 +160,9 @@ class ALeafIsNotAnAbsenceTest {
      * fields, because it states nothing of its own; a sequence carries a length that
      * {@code guard List.length(items) < 3} draws a line on, so it stays a position to be answered
      * for and what it holds is read beside it.
+     *
+     * <p>A map the same way, at its keys and at its values: a closure over it is handed both, and
+     * its size is a number a rule is written about as surely as a list's length is.
      */
     @Test
     void aSequenceHoldsAPositionAndIsStillOne() {
@@ -164,28 +172,17 @@ class ALeafIsNotAnAbsenceTest {
             assertInstanceOf(StructuralInspection.Retained.class, under(carrier),
                     () -> "and is still to be answered for: " + carrier);
         }
-    }
-
-    /**
-     * The one reaching still not made is its own, so making another does not read as making it.
-     *
-     * <p>Two of the three are made now: a sequence holds a position, and what an optional holds
-     * stands under the branch that says it holds something. What a mapping holds is not reached,
-     * and is stopped as that rather than as a shape nothing was read at.
-     */
-    @Test
-    void theReachingStillNotMadeIsToldApartFromIt() {
-        assertEquals(blocked(new BlockReason.UnsupportedTraversal(
-                        BlockReason.Traversal.MAPPING_CONTENT)),
-                under(Type.map(Type.STRING, Type.INT)));
+        assertEquals(retained(new StructuralInspection.Continuation.Entries(Type.STRING,
+                        named("Slot"))),
+                under(Type.map(Type.STRING, named("Slot"))));
     }
 
     /**
      * And whether an optional holds anything is a narrowing, so it answers with branches.
      *
-     * <p>Beside the mapping rather than instead of it. The two were one word until the optional's
-     * branches were taken, and what says they were never one question is that each answers
-     * differently now.
+     * <p>Not elements. What an optional holds is the value at the position read as present, and no
+     * walk is handed it one at a time — so it stands under a branch, where a list's or a map's
+     * values stand at a position of their own.
      */
     @Test
     void whatAnOptionalHoldsStandsUnderTheBranchThatSaysItDoes() {

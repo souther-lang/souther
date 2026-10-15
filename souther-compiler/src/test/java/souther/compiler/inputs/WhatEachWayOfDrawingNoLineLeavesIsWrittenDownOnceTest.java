@@ -1,9 +1,13 @@
 package souther.compiler.inputs;
 
+import net.unit8.notation199x.pattern.Meter;
 import org.junit.jupiter.api.Test;
 
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
+
+import souther.compiler.SchemaReference;
+import souther.compiler.check.NonAffineOperation;
 
 import souther.compiler.check.Clause;
 import souther.compiler.check.PartId;
@@ -13,13 +17,17 @@ import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
 import souther.compiler.types.WrittenOwner;
 import souther.compiler.check.RuleRef;
+import souther.compiler.observe.Figure;
 import souther.compiler.observe.RunSensitivity;
+import souther.compiler.observe.WorkFigure;
 import souther.compiler.partition.ReportedReason;
 import souther.compiler.partition.UndividedPosition;
 import souther.compiler.types.SourceConstruct;
 import souther.compiler.types.SourceConstructOrigin;
+import souther.compiler.values.StoppedReading;
 import souther.compiler.values.UnreadReason;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -74,15 +82,33 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
         // value rule in a form nothing read are met again however much a run is allowed.
         table.put("UnreadComparisonForm", "UNSUPPORTED_SYNTAX/UNAFFECTED");
         table.put("UnreadComparisonDomain", "UNSUPPORTED_DOMAIN/UNAFFECTED");
+        // A line that falls at a number no exact ratio holds. Its own word beside the one above:
+        // the values carry an order and the line is written, and what has no place is a constant of
+        // the rule. Nothing was compared against a figure, so a run allowed more meets it again.
+        table.put("LineAtANumberNoRatioHolds", "LINE_AT_A_NUMBER_NO_RATIO_HOLDS/UNAFFECTED");
+        // A line that is placed, with a value beside it that was not worked out. Its own word beside
+        // the one above, which says the line has no place: an author told that one looks at the
+        // constants of a rule whose line is fine. Nothing was compared against a figure, so a run
+        // allowed more meets it again.
+        table.put("LineSideNotWorkedOut", "LINE_SIDE_NOT_WORKED_OUT/UNAFFECTED");
         table.put("RuleAboutADerivedValue",
                 "RULE_ABOUT_A_DERIVED_VALUE/UNAFFECTED");
-        // And a rule about an element of one of several sequences, which is the same two measures
-        // short for a reason of its own: the rule was read and which of the sequences it is about
+        // And a rule about an element of one of several containers, which is the same two measures
+        // short for a reason of its own: the rule was read and which of the containers it is about
         // is what nothing here works out, so what it divides and what it bounds are unknown at
         // each of them. A run allowed more meets it again — nothing was compared against a figure.
-        table.put("RuleAboutAnElementOfSeveralSequences",
-                "RULE_ABOUT_AN_ELEMENT_OF_SEVERAL_SEQUENCES/UNAFFECTED");
+        table.put("RuleAboutAnElementOfSeveralContainers",
+                "RULE_ABOUT_AN_ELEMENT_OF_SEVERAL_CONTAINERS/UNAFFECTED");
         table.put("UnreadValueRule", "UNSUPPORTED_SYNTAX/UNAFFECTED");
+        // Arithmetic no form says, which the arithmetic named where it met it. Nothing was made of
+        // a position and nothing was compared against a figure, so a run allowed more meets it
+        // again. Which operation it was is the word, so a row for each.
+        table.put("NonAffineArithmetic:PRODUCT_OF_NON_CONSTANT_VALUES",
+                "NON_AFFINE_PRODUCT/UNAFFECTED");
+        table.put("NonAffineArithmetic:DIVISION_BY_NON_CONSTANT_VALUE",
+                "NON_CONSTANT_DIVISOR/UNAFFECTED");
+        table.put("NonAffineArithmetic:REMAINDER_BY_NON_CONSTANT_VALUE",
+                "NON_CONSTANT_REMAINDER_DIVISOR/UNAFFECTED");
         // An end a choice in the rule left open. Its own word and not the one above: the rule at
         // this position was read, and what an author acts on is the branch written beside it. A run
         // allowed more meets it again — the reading of ends stopped on a form and not at a figure.
@@ -126,16 +152,50 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
         // declaration that was never the matter. A group again, so no rule is named as the
         // expensive one, and a run allowed more may get past it.
         table.put("BehaviorDistinctionsTooCostly", "BEHAVIOR_DISTINCTIONS_TOO_COSTLY/MAY_CHANGE");
-        // One word with `ComparisonBetweenPositions` below, and on purpose: they are the two
+        // One word with `ComparisonRelatingTwoValues` below, and on purpose: they are the two
         // readings of `a < b`, opposite sentences about this compiler, and a document promises
         // its reader which kind of thing stopped a derivation rather than which reader stopped.
         table.put("ValueRuleRelatingTwoPositions",
-                "UNSUPPORTED_PARTITION_SHAPE/UNAFFECTED");
+                "RELATION_NOT_SHOWN_TO_REACH_EVERY_VALUE/UNAFFECTED");
+        // Its own word beside that one: the relation is between the elements of the container
+        // here, which a set of its values does not hold, and a run allowed more of everything
+        // meets the same relation.
+        table.put("ValueRuleRelatingElements", "RULE_RELATING_ELEMENTS/UNAFFECTED");
         // Read to the end, and placed nowhere. Its own word beside the two above: the comparison
         // was taken apart, a line came out of it and every name it is between reached positions —
         // what was not reached is which of those positions the line runs between. Both measures are
         // short, because a row either side of the line is owed and there is nowhere to ask for one.
         table.put("CasePairingNotDetermined", "UNRESOLVED_CASE_PAIRING/UNAFFECTED");
+        // Read to the end, and several lines held together. Nothing about what the rule states is
+        // unknown; what is missing is a division of the input by more than one line of one rule,
+        // and a run allowed more of everything meets the same statement.
+        table.put("SeveralLinesInOneRule", "SEVERAL_LINES_IN_ONE_RULE/UNAFFECTED");
+        // The same word, and stopped at a figure: where one line of the statement decides was
+        // taken apart and asked case by case as far as a figure lets it be, and a run allowed more
+        // may finish it.
+        table.put("WhereALineDecidesNotWorkedOut", "SEVERAL_LINES_IN_ONE_RULE/MAY_CHANGE");
+        // Read to the end, and a relation whose other side is not shown to reach every value here.
+        // What it states is known; which values here settle it on their own is what is missing,
+        // and a run allowed more of everything meets the same relation.
+        table.put("RelationNotShownToReachEveryValue",
+                "RELATION_NOT_SHOWN_TO_REACH_EVERY_VALUE/UNAFFECTED");
+        // What the rule states was taken apart, and the reason no line came of it is read off that
+        // meaning. A part declined at how many readings are made, one way down or in all, at how
+        // many parts a step states, or at how far a container is written out, is one a run
+        // allowed more may read; every other part not read, a number no position holds and a
+        // statement of which case, truth or value stands here are met again.
+        table.put("WhatItStatesIsNoLine:MORE_READINGS_THAN_ARE_MADE",
+                "RULE_MEANING_NOT_READ/MAY_CHANGE");
+        table.put("WhatItStatesIsNoLine:MORE_TOTAL_READINGS_THAN_ARE_MADE",
+                "RULE_MEANING_NOT_READ/MAY_CHANGE");
+        table.put("WhatItStatesIsNoLine:MORE_PARTS_THAN_ARE_CONCLUDED",
+                "RULE_MEANING_NOT_READ/MAY_CHANGE");
+        table.put("WhatItStatesIsNoLine:MORE_ELEMENTS_THAN_ARE_WRITTEN_OUT",
+                "RULE_MEANING_NOT_READ/MAY_CHANGE");
+        table.put("WhatItStatesIsNoLine:A_PART_NOT_READ", "RULE_MEANING_NOT_READ/UNAFFECTED");
+        table.put("WhatItStatesIsNoLine:A_NUMBER_NO_POSITION_HOLDS",
+                "RULE_ABOUT_A_DERIVED_VALUE/UNAFFECTED");
+        table.put("WhatItStatesIsNoLine:NO_RELATION_OF_NUMBERS", "UNSUPPORTED_DOMAIN/UNAFFECTED");
         // Read to the end. Whatever the rule places has been placed, and there is none to be owed —
         // and no measurement is weakened, so from here down there is no sensitivity to answer.
         table.put("ComparisonCuttingNothing", "RULE_CUTS_NOTHING/-");
@@ -147,12 +207,18 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
         // the line would make hold nothing that arrives, which is a fact about the model.
         table.put("ComparisonNothingArrivesAtItsLine",
                 "NOTHING_ARRIVES_AT_THE_RULES_LINE/-");
-        table.put("ComparisonBetweenPositions", "UNSUPPORTED_PARTITION_SHAPE/-");
+        // And its own word beside that one: rows arrive at the line, and the rest of the statement
+        // it is a line of decides the outcome wherever they do. Nothing is owed there either.
+        table.put("ComparisonLineTurningNothing", "RULE_NEVER_TURNS_ON_THIS_LINE/-");
+        table.put("ComparisonRelatingTwoValues", "RULE_RELATING_TWO_VALUES/-");
         // Its own word beside the one above, because what a reader does about it differs: a rule
         // between two positions is waiting on a class about the pair, and a rule about what the
         // values at one come to has nothing to wait for — the position has no class from it and
         // its border is drawn.
         table.put("ComparisonOverARun", "RULE_ABOUT_A_RUN/-");
+        // And its own word beside that one: the line is drawn on what a division leaves of the
+        // values, which is a number of its own and no run of any position's.
+        table.put("ComparisonOnARemainder", "RULE_ABOUT_A_REMAINDER/-");
         // A row of its own, and here is what it is for. The three above are rules that leave the
         // position where they found it: the quantity is empty, the line falls outside it, or the
         // number is over a run. This one holds the position to the values it admits, and everything
@@ -191,7 +257,6 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
         table.put("TypeUnresolved", "TYPE_UNRESOLVED/UNAFFECTED");
         table.put("RecursiveExpansion",
                 "RETURNS_TO_A_DECLARATION_ALREADY_READ/UNAFFECTED");
-        table.put("UnsupportedTraversal", "UNSUPPORTED_TRAVERSAL/UNAFFECTED");
         table.put("ValueRulesNotReached", "RULES_NOT_READ_AT_ALL/UNAFFECTED");
         // The two rows this pair is for. One word out there and two reasons in here: a document
         // promises a reader the hole under the position and not which figure this compiler stopped
@@ -240,7 +305,7 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
     void everyRuleWithNoLineSaysWhatItLeavesAndWhatItIsCalled() {
         Map<String, String> said = new LinkedHashMap<>();
         for (BlockReason.RuleWithoutLineReason each : everyRuleWithoutALine()) {
-            said.put(each.getClass().getSimpleName(),
+            said.put(rowOf(each),
                     ReportedReason.of((BlockReason) each).name()
                             + "/" + sensitivityOf((BlockReason) each));
         }
@@ -284,10 +349,10 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
     @Test
     void aReadingsAccountOfNeverReachingAPositionKeepsWhichOfThemItWas() {
         assertEquals(RunSensitivity.MAY_CHANGE,
-                BlockReason.of(UnreadReason.NOT_REACHED_PAST_DEPTH_LIMIT).runSensitivity(),
+                BlockReason.of(stopped(UnreadReason.NOT_REACHED_PAST_DEPTH_LIMIT)).runSensitivity(),
                 "a walk stopped by the depth it could afford is one a wider run reads past");
         assertEquals(RunSensitivity.UNAFFECTED,
-                BlockReason.of(UnreadReason.NOT_REACHED).runSensitivity(),
+                BlockReason.of(stopped(UnreadReason.NOT_REACHED)).runSensitivity(),
                 "and every other way of never reaching a position is met again");
     }
 
@@ -295,7 +360,7 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
      * Whether a wider run could get past {@code reason}, asked of whichever capability holds it.
      *
      * <p>Asked of the reason and never of the word a document writes for it, which is what makes
-     * the fourth column worth having. {@code UNSUPPORTED_PARTITION_SHAPE} is one word over a rule
+     * the fourth column worth having. {@code RULE_RELATING_TWO_VALUES} is one word over a rule
      * this read partway and a rule it read to the end, so a sensitivity worked out from the word
      * would have to be the same for both — and it is not; the same is now true of
      * {@code RULES_NOT_READ_AT_ALL}.
@@ -341,6 +406,23 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
     }
 
     /**
+     * A side is one word whichever way the arithmetic left it unheld, and it is not the word for a
+     * line that has no place.
+     *
+     * <p>The two ways are the run's and the number's, and a reader is told neither: what the
+     * document says is that the line is placed and the value beside it was not worked out. Sent to
+     * the word for a line with no place, that would be a sentence about a constant of the rule.
+     */
+    @Test
+    void aSideIsOneWordWhicheverWayTheArithmeticLeftItUnheldAndIsNotALineWithNoPlace() {
+        for (souther.compiler.numeric.UnheldNumber why
+                : souther.compiler.numeric.UnheldNumber.values()) {
+            assertEquals(UndividedPosition.Reason.LINE_SIDE_NOT_WORKED_OUT,
+                    ReportedReason.of(new BlockReason.LineSideNotWorkedOut(why)), why.name());
+        }
+    }
+
+    /**
      * Every member of the seal is in the lists above.
      *
      * <p>The lists are written out rather than found by reflection, because what this test is about
@@ -379,6 +461,16 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
         for (Class<?> each : seal.getPermittedSubclasses()) {
             if (each.isSealed()) {
                 out.addAll(reasons(each));
+            } else if (each == BlockReason.WhatItStatesIsNoLine.class) {
+                // A row for each reason it carries, since each is projected on its own.
+                for (BlockReason.WhatItStatesIsNoLine.Why why
+                        : BlockReason.WhatItStatesIsNoLine.Why.values()) {
+                    out.add("WhatItStatesIsNoLine:" + why);
+                }
+            } else if (each == BlockReason.NonAffineArithmetic.class) {
+                for (NonAffineOperation operation : NonAffineOperation.values()) {
+                    out.add("NonAffineArithmetic:" + operation);
+                }
             } else {
                 out.add(each.getSimpleName());
             }
@@ -397,28 +489,51 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
      * <p>That it holds every reason is not this list's word either: {@link
      * #everyReasonThereIsHasARowAbove} reads the seal.
      */
+    private static final Figure AT_A_FIGURE = WorkFigure.ADMITTED_VALUES_IN_ALL.at(
+            "200000 states built and 50000000 looked at");
+
+    /** {@code why} as a reading stopped by it says it, at a figure where it carries one. */
+    private static StoppedReading stopped(UnreadReason why) {
+        return StoppedReading.carriesAFigure(why) ? new StoppedReading(why, AT_A_FIGURE)
+                : StoppedReading.of(why);
+    }
+
     private static List<BlockReason> everyReason() {
-        return List.of(
+        List<BlockReason> every = new ArrayList<>(List.of(
                 new BlockReason.UnreadComparisonForm(),
                 new BlockReason.UnreadComparisonDomain(),
+                new BlockReason.LineAtANumberNoRatioHolds(),
+                new BlockReason.LineSideNotWorkedOut(
+                        souther.compiler.numeric.UnheldNumber.NO_REPRESENTATION_EXISTS),
                 new BlockReason.RuleAboutADerivedValue(),
-                new BlockReason.RuleAboutAnElementOfSeveralSequences(),
+                new BlockReason.RuleAboutAnElementOfSeveralContainers(),
                 new BlockReason.UnreadValueRule(),
+                new BlockReason.NonAffineArithmetic(
+                        NonAffineOperation.PRODUCT_OF_NON_CONSTANT_VALUES),
+                new BlockReason.NonAffineArithmetic(
+                        NonAffineOperation.DIVISION_BY_NON_CONSTANT_VALUE),
+                new BlockReason.NonAffineArithmetic(
+                        NonAffineOperation.REMAINDER_BY_NON_CONSTANT_VALUE),
                 new BlockReason.EndLeftOpenByAChoice(),
                 new BlockReason.ValueRuleLeftOpenByAChoice(),
-                new BlockReason.PatternTooCostly(),
-                new BlockReason.OrderedExtentTooCostly(
-                        souther.compiler.regex.Meter.Stopped.ONE_MACHINE),
-                new BlockReason.ExactValuesTooCostly(),
-                new BlockReason.BehaviorDistinctionsTooCostly(),
-                new BlockReason.RulesNotHandedOnAsSets(),
+                new BlockReason.PatternTooCostly(AT_A_FIGURE),
+                new BlockReason.OrderedExtentTooCostly(Meter.Stopped.ONE_MACHINE),
+                new BlockReason.ExactValuesTooCostly(AT_A_FIGURE),
+                new BlockReason.BehaviorDistinctionsTooCostly(AT_A_FIGURE),
+                new BlockReason.RulesNotHandedOnAsSets(List.of(AT_A_FIGURE), false),
                 new BlockReason.ValueRuleRelatingTwoPositions(),
+                new BlockReason.ValueRuleRelatingElements(),
                 new BlockReason.CasePairingNotDetermined(),
+                new BlockReason.SeveralLinesInOneRule(),
+                new BlockReason.WhereALineDecidesNotWorkedOut(AT_A_FIGURE),
+                new BlockReason.RelationNotShownToReachEveryValue(),
                 new BlockReason.ComparisonCuttingNothing(),
                 new BlockReason.ComparisonCuttingOutsideDomain(),
                 new BlockReason.ComparisonNothingArrivesAtItsLine(),
-                new BlockReason.ComparisonBetweenPositions(),
+                new BlockReason.ComparisonLineTurningNothing(),
+                new BlockReason.ComparisonRelatingTwoValues(),
                 new BlockReason.ComparisonOverARun(),
+                new BlockReason.ComparisonOnARemainder(),
                 new BlockReason.RuleRestrictingToAdmittedValues(),
                 new BlockReason.PredicateTellingNothingApart(),
                 new BlockReason.ClassesNotComposed(),
@@ -427,9 +542,13 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
                         souther.compiler.types.TypeSymbols.declared(
                                 new souther.compiler.types.TypeKey("g", "Chain")),
                         TermPath.of("c")),
-                new BlockReason.UnsupportedTraversal(BlockReason.Traversal.MAPPING_CONTENT),
                 new BlockReason.ValueRulesNotReached(),
-                new BlockReason.ValueRulesNotReachedPastDepthLimit());
+                new BlockReason.ValueRulesNotReachedPastDepthLimit()));
+        // One of each reason a statement is no line for, which a row is written for apiece.
+        for (BlockReason.WhatItStatesIsNoLine.Why why : BlockReason.WhatItStatesIsNoLine.Why.values()) {
+            every.add(new BlockReason.WhatItStatesIsNoLine(why));
+        }
+        return List.copyOf(every);
     }
 
     /** Those of them that are rules with no line, asked of each rather than listed. */
@@ -437,6 +556,16 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
         return everyReason().stream()
                 .filter(BlockReason.RuleWithoutLineReason.class::isInstance)
                 .map(BlockReason.RuleWithoutLineReason.class::cast).toList();
+    }
+
+    /** The row a reason is written under: its kind, and which of its whys where it carries one. */
+    private static String rowOf(BlockReason.RuleWithoutLineReason reason) {
+        return switch (reason) {
+            case BlockReason.WhatItStatesIsNoLine(var why) -> "WhatItStatesIsNoLine:" + why;
+            case BlockReason.NonAffineArithmetic(var operation) ->
+                    "NonAffineArithmetic:" + operation;
+            default -> reason.getClass().getSimpleName();
+        };
     }
 
     /**
@@ -473,6 +602,9 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
         assertEquals(projected(everyRuleReadingStopped()),
                 words(schema, "ruleStoppedReadingReason"),
                 "what a question's rule left admits what a reading can stop on");
+        assertEquals(projected(everyStopARuleAnOfferHeldMayCarry()),
+                words(schema, "ruleOfferShortfallReason"),
+                "what a rule an offer got nothing from is said with admits what may be said of it");
         assertEquals(projected(everyLimitAQuestionCanStandOn()),
                 words(schema, "answerRealizationStoppedReason"),
                 "and what its position was short of admits what an answer a question waited on can"
@@ -506,9 +638,11 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
 
     /** The words the schema allows at one of its definitions, following what it is written as. */
     private static java.util.Set<String> words(JsonNode schema, String def) {
+        return wordsOf(schema, SchemaReference.resolve(schema, "#/$defs/" + def));
+    }
+
+    private static java.util.Set<String> wordsOf(JsonNode schema, JsonNode node) {
         java.util.Set<String> out = new java.util.LinkedHashSet<>();
-        JsonNode node = schema.get("$defs").get(def);
-        assertNotNull(node, "the schema has no " + def);
         if (node.has("enum")) {
             node.get("enum").forEach(each -> out.add(each.asString()));
         }
@@ -516,7 +650,8 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
         // it. Read only through `anyOf`, such a surface came back with no words at all and the
         // vocabularies were held equal by both of them being empty.
         if (node.has("$ref")) {
-            out.addAll(words(schema, node.get("$ref").asString().substring("#/$defs/".length())));
+            out.addAll(wordsOf(schema,
+                    SchemaReference.resolve(schema, node.get("$ref").asString())));
         }
         if (node.has("anyOf")) {
             for (JsonNode each : node.get("anyOf")) {
@@ -527,8 +662,8 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
                     each.get("enum").forEach(word -> out.add(word.asString()));
                 }
                 if (each.has("$ref")) {
-                    out.addAll(words(schema,
-                            each.get("$ref").asString().substring("#/$defs/".length())));
+                    out.addAll(wordsOf(schema,
+                            SchemaReference.resolve(schema, each.get("$ref").asString())));
                 }
             }
         }
@@ -580,7 +715,7 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
     void whatAReasonIsAboutDecidesWhichCapabilityItArrivesIn() {
         Map<String, String> arrived = new LinkedHashMap<>();
         for (UnreadReason why : UnreadReason.values()) {
-            arrived.put(why.name(), capabilityOf(BlockReason.of(why)));
+            arrived.put(why.name(), capabilityOf(BlockReason.of(stopped(why))));
         }
 
         Map<String, String> expected = new LinkedHashMap<>();
@@ -618,10 +753,11 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
         for (UnreadReason why : UnreadReason.values()) {
             if (why.about() == UnreadReason.About.NEITHER) {
                 assertThrows(IllegalArgumentException.class,
-                        () -> BlockReason.ofAQuestionStandingOn(why),
+                        () -> BlockReason.ofAQuestionStandingOn(stopped(why)),
                         () -> why + " reached no rule, so no question of one stands on it");
             } else {
-                assertEquals(BlockReason.of(why), BlockReason.ofAQuestionStandingOn(why),
+                assertEquals(BlockReason.of(stopped(why)),
+                        BlockReason.ofAQuestionStandingOn(stopped(why)),
                         () -> why + " leaves a question standing, and says the same thing there");
             }
         }
@@ -647,7 +783,7 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
                                 new BlockReason.UnreadComparisonDomain()),
                         new RuleReasons.Said(RuleSite.at(aPart(1)), RuleSite.theRuleItself(),
                                 new BlockReason.UnreadValueRule()))),
-                Optional.of(new BlockReason.ExactValuesTooCostly()));
+                Optional.of(new BlockReason.ExactValuesTooCostly(AT_A_FIGURE)));
 
         assertEquals(List.of(UndividedPosition.Reason.UNSUPPORTED_DOMAIN,
                         UndividedPosition.Reason.UNSUPPORTED_SYNTAX),
@@ -699,6 +835,17 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
     }
 
     /**
+     * Those of them an offer of values may say of a rule it got nothing from, which is a third
+     * surface: wider than what a question's rule left by a position whose rules nothing reached,
+     * since the offer holds the rule whether or not a reading arrived at it.
+     */
+    private static List<BlockReason.RuleOfferShortfallReason> everyStopARuleAnOfferHeldMayCarry() {
+        return everyReason().stream()
+                .filter(BlockReason.RuleOfferShortfallReason.class::isInstance)
+                .map(BlockReason.RuleOfferShortfallReason.class::cast).toList();
+    }
+
+    /**
      * The other half a question stands on, which names no rule.
      *
      * <p>From what reaches the field and not from {@link BlockReason.AnswerRealizationStopped}. That
@@ -711,7 +858,7 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
         List<BlockReason.AnswerRealizationStopped> out = new java.util.ArrayList<>(
                 Arrays.stream(UnreadReason.values())
                         .filter(each -> each.about() == UnreadReason.About.THE_ANSWER)
-                        .map(BlockReason::ofAQuestionStandingOn)
+                        .map(each -> BlockReason.ofAQuestionStandingOn(stopped(each)))
                         .map(BlockReason.AnswerRealizationStopped.class::cast).toList());
         // And every other member of the capability, which is where this used to be short. The
         // surface a document writes one of these into is the capability's, so a reason that

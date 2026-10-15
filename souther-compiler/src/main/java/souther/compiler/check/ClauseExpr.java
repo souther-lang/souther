@@ -278,7 +278,7 @@ sealed interface ClauseExpr {
     private static ClauseExpr restating(Core clause, boolean positive, List<Core> spelled,
                                         ClauseOccurrence at, int[] counted) {
         Core bare = Core.withoutStanding(clause);
-        if (bare instanceof Core.PreservedCall call && call.operation().equals(DischargeRules.NOT)
+        if (bare instanceof Core.PreservedCall call && DischargeRules.denies(call.operation())
                 && call.args().size() == 1) {
             return of(call.args().get(0), !positive, spelled, at, counted);
         }

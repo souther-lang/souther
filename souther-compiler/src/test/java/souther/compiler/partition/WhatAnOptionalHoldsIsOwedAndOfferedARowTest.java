@@ -1,12 +1,10 @@
 package souther.compiler.partition;
 
-import souther.compiler.diag.SourceLayouts;
-import souther.compiler.diag.SourceRendering;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
-import souther.compiler.report.AdequacyReport;
+import souther.compiler.query.BorderAssessment;
 
 import java.util.List;
 
@@ -51,13 +49,13 @@ class WhatAnOptionalHoldsIsOwedAndOfferedARowTest {
     /** The line the type behind the `?` draws is owed where the optional holds a value. */
     @Test
     void theLineBehindTheQuestionMarkIsOwed() {
-        String report = human(TAGGED);
+        List<String> read = linesRead(TAGGED);
 
-        assertTrue(report.contains("String.length(query.tag@Some) = 1"),
+        assertTrue(read.contains("String.length(query.tag@Some) = 1"),
                 "the invariant of what the optional holds draws its line at the narrowing: "
-                        + report);
-        assertTrue(report.contains("String.length(query.other) = 1"),
-                "as it does at the field holding the same type outright: " + report);
+                        + read);
+        assertTrue(read.contains("String.length(query.other) = 1"),
+                "as it does at the field holding the same type outright: " + read);
     }
 
     /**
@@ -111,8 +109,11 @@ class WhatAnOptionalHoldsIsOwedAndOfferedARowTest {
         return compilation;
     }
 
-    private static String human(String source) {
-        return AdequacyReport.of(measured(source)).human(SourceRendering.namedByIdentity(SourceLayouts.NONE));
+    /** Where each line the behaviors' positions met is, as each reading names it. */
+    private static List<String> linesRead(String source) {
+        Compilation compilation = measured(source);
+        return Adequacy.boundariesOf(compilation.db(), compilation.modules().get(0)).values()
+                .stream().flatMap(List::stream).map(BorderAssessment::label).toList();
     }
 
     private static List<String> offeredFor(String point, String source) {

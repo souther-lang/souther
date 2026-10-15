@@ -30,6 +30,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class CompileExampleGenerateTest {
 
+    /**
+     * Two positions the body reads, so each class is owed a row of its own, and no combination of
+     * the two is: one arm takes every case of {@code kind}, so the body tells none of them apart,
+     * and both sides of {@code urgent} give the same answer.
+     */
     private static final String TRIP = """
             module example.trip
 
@@ -44,7 +49,10 @@ class CompileExampleGenerateTest {
             behavior submit : (request: Request) -> Accepted
                 constructs Accepted
 
-            let submit (request) = Accepted { at = "now" }
+            let submit (request) =
+                match request.kind with
+                    | Domestic | Overseas ->
+                        if request.urgent then Accepted { at = "now" } else Accepted { at = "now" }
 
             example submit
                 | (Request { kind = Domestic, urgent = true }) -> Accepted { at = "now" }
@@ -201,7 +209,10 @@ class CompileExampleGenerateTest {
                 behavior submit : (request: Request) -> Accepted
                     constructs Accepted
 
-                let submit (request) = Accepted { at = "now" }
+                let submit (request) =
+                    match request.kind with
+                        | Domestic -> Accepted { at = "now" }
+                        | Overseas -> Accepted { at = "now" }
                 """;
         Adequacy.Filling filling = generated(bounded).get("submit");
 
@@ -290,7 +301,10 @@ class CompileExampleGenerateTest {
                 behavior register : (office: Office) -> Ok
                     constructs Ok
 
-                let register (office) = Ok { n = 0 }
+                let register (office) =
+                    match office.kind with
+                        | Domestic -> Ok { n = 0 }
+                        | Overseas -> Ok { n = 0 }
 
                 example register
                     | (Office { id = OfficeId("12-345678"), prefecture = Prefecture("13"),
@@ -320,13 +334,16 @@ class CompileExampleGenerateTest {
                 behavior take : (request: Request) -> Ok
                     constructs Ok
 
-                let take (request) = Ok { n = 0 }
+                let take (request) =
+                    match request.flag with
+                        | Yes -> Ok { n = 0 }
+                        | No -> Ok { n = 0 }
 
                 example take
                     | (Request { on = Date("2026-08-03"), flag = Yes }) -> Ok { n = 0 }
                 """;
 
-        assertEquals(List.of("Request { on = Date(\"2000-01-01\"), flag = No }"),
+        assertEquals(List.of("Request { on = Date(\"1970-01-01\"), flag = No }"),
                 inputs(generated(dated).get("take").composed()));
     }
 
@@ -356,7 +373,10 @@ class CompileExampleGenerateTest {
                 behavior take : (note: Note) -> Ok
                     constructs Ok
 
-                let take (note) = Ok { n = 0 }
+                let take (note) =
+                    match note.flag with
+                        | Yes -> Ok { n = 0 }
+                        | No -> Ok { n = 0 }
 
                 example take
                     | (Note { text = Spaced("a\\tb"), flag = Yes }) -> Ok { n = 0 }
@@ -397,7 +417,10 @@ class CompileExampleGenerateTest {
                 behavior take : (r: Req) -> Ok
                     constructs Ok
 
-                let take (r) = Ok { n = 0 }
+                let take (r) =
+                    match r.f with
+                        | Yes -> Ok { n = 0 }
+                        | No -> Ok { n = 0 }
 
                 example take
                     | (Req { v = %s, f = Yes }) -> Ok { n = 0 }
@@ -462,7 +485,10 @@ class CompileExampleGenerateTest {
                 behavior take : (request: Req) -> Ok
                     constructs Ok
 
-                let take (request) = Ok { n = 0 }
+                let take (request) =
+                    match request.flag with
+                        | Yes -> Ok { n = 0 }
+                        | No -> Ok { n = 0 }
 
                 example take
                     | (Req { left = Left("x"), right = Right("x"), flag = Yes }) -> Ok { n = 0 }
@@ -516,7 +542,10 @@ class CompileExampleGenerateTest {
                 behavior take : (one: One, two: Two) -> Ok
                     constructs Ok
 
-                let take (one, two) = Ok { n = 0 }
+                let take (one, two) =
+                    match two.flag with
+                        | Yes -> Ok { n = 0 }
+                        | No -> Ok { n = 0 }
                 """.formatted(declarations);
 
         List<String> rows = inputs(generated(source).get("take").composed());
@@ -558,7 +587,7 @@ class CompileExampleGenerateTest {
                 behavior take : (request: R, flag: Bool) -> Ok
                     constructs Ok
 
-                let take (request, flag) = Ok { n = 0 }
+                let take (request, flag) = if flag then Ok { n = 0 } else Ok { n = 0 }
                 """;
 
         souther.compiler.partition.FillResult filled = generated(source).get("take").composed();
@@ -575,12 +604,12 @@ class CompileExampleGenerateTest {
      * the ones not reached were not refused — nothing was written and nothing built — and calling them
      * refused tells an author their model rules out a combination it does not.
      *
-     * <p>What refuses every value here is a rule this compiler cannot take apart, which nothing
-     * derives a value from. Strings clearing both rules of a field exist — {@code "2a"} is one — so
-     * what stops a row is the search rather than the model. A second format
-     * would not do: the formats a reading can take in are met with each other, and a value clearing
-     * all of them is proposed. Nor would a rule counting the field — a floor is read too, and the
-     * value built for it is one this model would accept.
+     * <p>What refuses every value here is a rule of the record this compiler cannot take apart,
+     * which nothing derives a value from. A string clearing it and the field's format exists —
+     * {@code "2a"} is one — so what stops a row is the search rather than the model. Every field
+     * offers two values its own type admits, so the assignments past the bound are ones nothing has
+     * refused: a field offering a value its type refused would leave that value out of the search,
+     * and nine such fields would come to fewer assignments than the bound.
      */
     @Test
     void whatTheSearchDidNotReachIsNotReportedAsRefused() {
@@ -589,10 +618,9 @@ class CompileExampleGenerateTest {
         for (char c = 'a'; c <= 'i'; c++) {
             declarations.append("""
                     data V%1$s = String
-                        invariant String.matches("[0-9a-z]{2,}", value)
-                        invariant %2$s
+                        invariant String.matches("[0-9a-z]+", value)
 
-                    """.formatted(Character.toUpperCase(c), ARuleNoReadingTakesIn.narrowly("value")));
+                    """.formatted(Character.toUpperCase(c)));
             fields.append(c).append(": V").append(Character.toUpperCase(c)).append(", ");
         }
         String source = """
@@ -610,9 +638,12 @@ class CompileExampleGenerateTest {
                 behavior take : (request: Req) -> Ok
                     constructs Ok
 
-                let take (request) = Ok { n = 0 }
+                let take (request) =
+                    match request.flag with
+                        | Yes -> Ok { n = 0 }
+                        | No -> Ok { n = 0 }
                 """.formatted(declarations, fields)
-                .replace("UNREAD", ARuleNoReadingTakesIn.about("a.value"));
+                .replace("UNREAD", ARuleNoReadingTakesIn.narrowly("a.value"));
 
         List<CameToNothing> left =
                 generated(source).get("take").composed().unresolved();
@@ -656,7 +687,16 @@ class CompileExampleGenerateTest {
                 behavior take : (r: Req) -> Ok
                     constructs Ok
 
-                let take (r) = Ok { n = 0 }
+                let take (r) =
+                    match r.contact with
+                        | Email ->
+                            match r.w with
+                                | NoAmount -> Ok { n = 0 }
+                                | Amount -> Ok { n = 0 }
+                        | NoContact ->
+                            match r.w with
+                                | NoAmount -> Ok { n = 0 }
+                                | Amount -> Ok { n = 0 }
 
                 example take
                     | (Req { contact = NoContact, w = NoAmount }) -> Ok { n = 0 }
@@ -810,7 +850,11 @@ class CompileExampleGenerateTest {
             behavior calc : (c: Cond) -> Out
                 constructs Out
 
-            let calc (c) = Out { n = 0 }
+            let calc (c) =
+                match c.f with
+                    | C | B ->
+                        match c.g with
+                            | G1 | G2 -> Out { n = 0 }
 
             example calc
                 | "base" : (none) -> Out { n = 0 }
@@ -1081,7 +1125,10 @@ class CompileExampleGenerateTest {
                     behavior %1$s : (r: Req) -> Ok
                         constructs Ok
 
-                    let %1$s (r) = Ok { n = 0 }
+                    let %1$s (r) =
+                        match r.flag with
+                            | Yes -> Ok { n = 0 }
+                            | No -> Ok { n = 0 }
 
                     """.formatted(name));
             rows.append("""
@@ -1179,14 +1226,15 @@ class CompileExampleGenerateTest {
 
         // One against the line and one away from it, so neither kind is answering for the other.
         assertTrue(block.contains("// no row for `s = 5` in `label`"), block);
-        assertTrue(block.contains("// no row for `1 < s < 5` in `label`"), block);
+        assertTrue(block.contains("// no row for `1 <= s < 4` in `label`"), block);
         // And what the block says about the rest of the account, beside the points rather than in
         // place of them. The arm is looked for at the classes the way into it leaves and every
         // value of them was refused, and the rule this compiler could not read is why those were
         // the values — so the sentence is the one the search can stand behind rather than the one
         // that reads as the model refusing what it states.
-        assertTrue(block.contains("// no row for `else` in `label`: every value tried was refused"
-                + " at construction, and what was tried was not everything the rules leave, and"
+        assertTrue(block.contains("// no row for `else` (13:20) in `label`: every value tried was"
+                + " refused"
+                + " at construction, but the values offered were not shown to be exhaustive, and"
                 + " invariant C #1 at `c` gave none of them"), block);
     }
 

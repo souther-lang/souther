@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.carrier.Membership;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
@@ -9,7 +10,9 @@ import souther.compiler.core.Core;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
+import souther.compiler.query.ReadAs;
 import souther.compiler.check.RuleReadings;
+import souther.compiler.check.TypeCardinality;
 
 import org.junit.jupiter.api.Test;
 
@@ -118,10 +121,12 @@ class APairIsSearchedOneWayRoundHoweverItsClassesAreStoredTest {
         assertNotNull(checked, "the model under test compiles");
         Core body = checked.behaviorBodies().get("submit");
         CoverageSites.Plan plan = checked.plan();
-        InputDomain read = InputDomain.of(sigs.get("submit"), RuleReadingContext.unshared(rules,
-                souther.compiler.query.ReadAs.THE_COMPILATION_DOES));
+        RuleReadingContext context = RuleReadingContext.unshared(rules,
+                ReadAs.THE_COMPILATION_DOES);
+        InputDomain read = InputDomain.of(sigs.get("submit"), context,
+                TypeCardinality.Counts.workedOutIn(context), Membership.none());
         Partitions.Partitioning partitioning = ThresholdFixtures.withThresholds(
-                Partitions.of("submit", read, rules,
+                Partitions.of("submit", read.reading(rules),
                         souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
                 read.quantities(rules),
                 ThresholdFixtures.guardsOf("submit", checked.analysisBodies().get("submit"), body, plan,

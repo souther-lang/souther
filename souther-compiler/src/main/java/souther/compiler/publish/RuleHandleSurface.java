@@ -62,7 +62,8 @@ public enum RuleHandleSurface {
      * naming only the position hands them every rule written there.
      */
     SYNTHESIS_SHORTFALL_RULE("/$defs/decision/properties/obligations/items/properties"
-            + "/synthesisShortfallCauses/items/properties/rule", "rule", Carries.THE_HANDLE_ALONE);
+            + "/synthesisShortfalls/items/properties/causes/items/properties/rule", "rule",
+            Carries.THE_HANDLE_ALONE);
 
     private final String schemaPath;
     private final String key;

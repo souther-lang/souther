@@ -92,27 +92,38 @@ public final class Recognitions {
      * that number's order and the class are already about one thing, and a reader that named either
      * of them here could name a different one.
      *
-     * <p>Exhaustive over {@link Recognition} with no {@code default}. A class about what stands at
-     * the position answers from where that value sits, which is written down when the class is made;
-     * one about nothing that is placed anywhere holds no place.
+     * <p>Read off the numbers the class holds ({@link Recognition#numbers}), which is the one
+     * answer to that. A class about a count is asked on the order the count is compared on; every
+     * other class holds one number or none — a value or a case of an ordered enumeration sits at the
+     * place written down when the class was built, and a set of the position's values, a truth, an
+     * absence or a case of a sum with no order sits nowhere and is asked nothing.
      */
     public static boolean holdsTheNumberAt(Recognition what, Place place) {
         return switch (what) {
             case Recognition.OfACount count -> count.is().holds(place, count.carrier());
             // The names a value is written under are how a row spells it, and a place wears none.
             case Recognition.Under under -> holdsTheNumberAt(under.inner(), place);
-            case Recognition.AtAValue one -> one.at() != null && one.at().sameAs(place);
-            case Recognition.Truth _ -> false;
-            case Recognition.Held _ -> false;
-            // A set of the position's values is no run of them, so nothing here is either side of
-            // a line. An axis carrying lines refuses such a class before this is ever asked
-            // ({@link Recognition#answersAboutAPlace}).
-            case Recognition.OfASet _ -> false;
-            // A case of an ordered enumeration sits at a place on that order, written down when the
-            // class was built; a case of a sum with no order sits nowhere and is asked nothing.
-            case Recognition.OfCase one -> one.at() != null && one.at().sameAs(place);
-            case Recognition.Nothing _ -> false;
+            case Recognition.AtAValue _, Recognition.OfCase _, Recognition.Truth _,
+                 Recognition.Held _, Recognition.OfASet _, Recognition.Nothing _ ->
+                    holdsOnlyTheNumberAt(what, place);
         };
+    }
+
+    /**
+     * Whether the number at {@code place} is the only number {@code what} holds.
+     *
+     * <p>Beside {@link #holdsTheNumberAt} and stronger. A rule naming one value tells that value
+     * from every other, and a class holding the value is the value's own class only where it holds
+     * nothing else: one holding it among others is a class the rule cuts through, and which of its
+     * values the rule admits is not something the class can say.
+     *
+     * <p>Answered from the numbers the class holds ({@link Recognition#numbers}) and never from
+     * where it sits or what it is called: a class of exactly one count, one value or one case at a
+     * place holds exactly one number ({@link NumericSet.At}). Every other kind is not one number,
+     * or is one this does not claim to know is.
+     */
+    public static boolean holdsOnlyTheNumberAt(Recognition what, Place place) {
+        return what.numbers() instanceof NumericSet.At one && one.value().sameAs(place);
     }
 
     /**
@@ -131,7 +142,7 @@ public final class Recognitions {
         return switch (count.orders().read(value)) {
             case NumericTerm.Reading.Number number -> Membership.of(
                     count.is().holds(number.value(), count.carrier()));
-            case NumericTerm.Reading.Missing missing -> new Membership.Incomplete(missing.code());
+            case NumericTerm.Reading.Missing missing -> new Membership.Incomplete(missing.cause());
             case NumericTerm.Reading.NotNumber _ -> Membership.NO_MATCH;
             case NumericTerm.Reading.NotWorkedOut(UnheldNumber why) ->
                     new Membership.NotWorkedOut(why);

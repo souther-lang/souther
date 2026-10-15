@@ -28,13 +28,35 @@ import java.util.List;
  */
 public sealed interface PointAnswer {
 
-    /** No row is asked for here, and this is what settles it. */
-    record NotOwed(NotOwedReason reason) implements PointAnswer {
+    /**
+     * No row is asked for here, and this is what settles it.
+     *
+     * <p>Why, and what else settled it, in the claims a region a row is owed in carries: where it
+     * stops and who stopped it there. Which point a row is owed at in the region beside a line is
+     * told apart by where the region stops, and so is which point none is owed at — the run above a
+     * type's bound is empty where a record's clause holds the field at the bound and holds values
+     * where nothing does, and those are two points, one owed and one not. Whose each is follows
+     * from what stopped it, whether a row is owed there or not. The line's own rule is behind every
+     * point of it and is not repeated here.
+     *
+     * <p>Kept apart from {@link #claims()}, which is the region a row is owed in and is what tells
+     * two readings of one border apart; nothing is owed here.
+     *
+     * @param reason    why no row is owed
+     * @param settledBy where else it was settled and by whom: the far end of the empty run beside
+     *                  the line, or the ends the rules leave the position at that refuse the value.
+     *                  None where the line alone settled it, where the carrier names no value
+     *                  there, and where what refused the value is a class of whole numbers or the
+     *                  values the rules name: neither is an end, and which clause it was read from
+     *                  is not carried with it
+     */
+    record NotOwed(NotOwedReason reason, List<RegionClaim> settledBy) implements PointAnswer {
 
         public NotOwed {
             if (reason == null) {
                 throw new IllegalArgumentException("a point nobody is owed a row at says why");
             }
+            settledBy = List.copyOf(settledBy);
         }
     }
 

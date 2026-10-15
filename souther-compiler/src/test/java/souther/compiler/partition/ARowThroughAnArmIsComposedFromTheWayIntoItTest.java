@@ -14,6 +14,8 @@ import souther.compiler.coverage.CoverageSites;
 import souther.compiler.coverage.SiteNumbering;
 import souther.compiler.coverage.Runs;
 import souther.compiler.inputs.InputDomain;
+import souther.compiler.observe.AnswerObservation;
+import souther.compiler.observe.ObservedValue;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
@@ -165,7 +167,8 @@ class ARowThroughAnArmIsComposedFromTheWayIntoItTest {
 
         FillResult watched = GenerationFixtures.fill(model.subject(), List.of(),
                 Generator.CandidateCheck.ANY, model.read(),
-                _ -> new Generator.Watched.Ran(everywhere),
+                _ -> new Generator.ObservedRun(new Generator.Watched.Ran(everywhere),
+                        new AnswerObservation.Answered(new ObservedValue.Integer(0))),
                 List.of(), List.of(), List.copyOf(everyArm), Budgets.generation());
 
         assertEquals(1, watched.rows().size(),
@@ -255,10 +258,11 @@ class ARowThroughAnArmIsComposedFromTheWayIntoItTest {
             assertNotNull(body, "the behavior under test has a body");
             CoverageSites.Plan plan = checked.plan();
             Partitions.Partitioning partitioning =
-                    Partitions.of(spec.name(), inputs, rules, ReadAs.THE_COMPILATION_DOES);
+                    Partitions.of(spec.name(), inputs.reading(rules), ReadAs.THE_COMPILATION_DOES);
             return new Model(MeasuredInput.of(spec.name(), inputs.reading(rules),
                     partitioning),
-                    CoverageRead.of(spec.name(), body, plan, inputs, rules), plan.numbering());
+                    CoverageRead.of(spec.name(), checked.run(spec.name()), inputs.reading(rules)),
+                    plan.numbering());
         }
     }
 }
