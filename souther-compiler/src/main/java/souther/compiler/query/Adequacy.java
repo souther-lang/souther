@@ -155,6 +155,7 @@ import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -2540,7 +2541,7 @@ public final class Adequacy {
      * reading that may be wrong anywhere along it. Both leave the rule where it was.
      */
     public record DecisionSearch(String name, String behavior)
-            implements Key<Map<DecisionRule, SettledAt>> {
+            implements Key<Map<DecisionRule, SettledAcross>> {
 
         @Override
         public String module() {
@@ -2548,7 +2549,7 @@ public final class Adequacy {
         }
 
         @Override
-        public Answer<Map<DecisionRule, SettledAt>> compute(Db db) {
+        public Answer<Map<DecisionRule, SettledAcross>> compute(Db db) {
             Map<String, DecisionEvidence> decisions = db.ask(new Decides(name)).value();
             DecisionEvidence evidence = decisions == null ? null : decisions.get(behavior);
             Answer<CheckSurface> prepared = db.ask(new Shapes.CheckSurface(name));
@@ -2602,7 +2603,7 @@ public final class Adequacy {
             // Asked once, because what it answers is one list and asking it per rule would walk the
             // rules once for every rule.
             Set<DecisionRule> toSettle = new LinkedHashSet<>(evidence.notTakenByRows());
-            Map<DecisionRule, SettledAt> out = new LinkedHashMap<>();
+            Map<DecisionRule, SettledAcross> out = new LinkedHashMap<>();
             for (souther.compiler.partition.DecisionReading.Stated stated
                     : evidence.read().stated()) {
                 if (!toSettle.contains(stated.rule())) {
@@ -2616,7 +2617,7 @@ public final class Adequacy {
                             everyRowAborts);
                     atEach.add(here == null ? null : new SettledAt(each, here));
                 }
-                SettledAt settled = acrossThePlaces(atEach);
+                SettledAcross settled = acrossThePlaces(atEach);
                 if (settled != null) {
                     out.put(stated.rule(), settled);
                 }
@@ -2629,32 +2630,40 @@ public final class Adequacy {
          *
          * <p>Excluded only where every place is. A row taking the rule at any place takes the rule,
          * so a place the model leaves no row says nothing about the others; this is the
-         * subtraction an arm is left out of the count by, and for the same reason. Otherwise the
-         * place that established the most, the first of them where two established as much, and
-         * nothing where a place was not searched for because every row of the rule aborts.
+         * subtraction an arm is left out of the count by, and for the same reason. A place
+         * something stood in is the rule's answer on its own. Otherwise every place the model
+         * leaves open, the one that established the most first and the rest in the order they are
+         * stated; and nothing where a place was not searched for because every row of the rule
+         * aborts and no place was left open.
          *
-         * <p>With the place each answer came from, which is what the answer is explained by.
+         * <p>Every open place and not the one that answered best. Each was searched along its own
+         * way, and what one met — a figure, a population written in part, a condition gone
+         * without — is not what another met; kept as the best of them, the rest reached nobody.
          *
          * @param atEach what each place came to, null for a place not searched for
          */
-        static SettledAt acrossThePlaces(List<SettledAt> atEach) {
-            SettledAt excluded = null;
-            SettledAt established = null;
+        static SettledAcross acrossThePlaces(List<SettledAt> atEach) {
+            List<SettledAt> excluded = new ArrayList<>();
+            List<SettledAt> open = new ArrayList<>();
             boolean unsearched = false;
             for (SettledAt here : atEach) {
                 if (here == null) {
                     unsearched = true;
+                } else if (here.settlement().requirement() instanceof RuleRequirement.Required) {
+                    return new SettledAcross(List.of(here));
                 } else if (here.settlement().requirement() instanceof RuleRequirement.Excluded) {
-                    excluded = excluded == null ? here : excluded;
-                } else if (established == null || establishes(here.settlement())
-                        > establishes(established.settlement())) {
-                    established = here;
+                    excluded.add(here);
+                } else {
+                    open.add(here);
                 }
             }
-            if (established != null) {
-                return established;
+            if (!open.isEmpty()) {
+                // Stable, so places that established as much keep the order they are stated in.
+                open.sort(Comparator.comparingInt(
+                        (SettledAt each) -> establishes(each.settlement())).reversed());
+                return new SettledAcross(open);
             }
-            return unsearched ? null : excluded;
+            return unsearched || excluded.isEmpty() ? null : new SettledAcross(excluded);
         }
 
         /**
@@ -5442,7 +5451,7 @@ public final class Adequacy {
                 return new RowsForRules(asked, Map.of(),
                         Generator.UnresolvedCombination.Reason.THE_ROWS_WERE_NOT_READ);
             }
-            Map<DecisionRule, SettledAt> settled =
+            Map<DecisionRule, SettledAcross> settled =
                     db.ask(new DecisionSearch(module, behavior)).value();
             if (settled == null) {
                 return new RowsForRules(asked, Map.of(), null);
@@ -5453,9 +5462,9 @@ public final class Adequacy {
             Set<DecisionRule> wasAsked = new HashSet<>(asked);
             Map<DecisionRule, Generator.GeneratedRow> out = new LinkedHashMap<>();
             boolean stopped = false;
-            for (Map.Entry<DecisionRule, SettledAt> each : settled.entrySet()) {
+            for (Map.Entry<DecisionRule, SettledAcross> each : settled.entrySet()) {
                 if (!wasAsked.contains(each.getKey())
-                        || !(each.getValue().settlement().requirement()
+                        || !(each.getValue().requirement()
                                 instanceof RuleRequirement.Required(var stoodBy))) {
                     continue;
                 }
@@ -7958,7 +7967,7 @@ public final class Adequacy {
                     || decision.notTakenByRows().isEmpty()) {
                 return;
             }
-            Map<DecisionRule, SettledAt> settled =
+            Map<DecisionRule, SettledAcross> settled =
                     db.ask(new DecisionSearch(module, behavior)).value();
             if (settled == null) {
                 return;
@@ -7976,11 +7985,11 @@ public final class Adequacy {
             // stands, and a row taking it at any of them takes it. A reader is shown the first.
             for (souther.compiler.partition.DecisionReading.Stated stated
                     : decision.read().stated()) {
-                SettledAt came = settled.get(stated.rule());
+                SettledAcross came = settled.get(stated.rule());
                 boolean owed = came == null
                         ? notTaken.contains(stated.rule())
                                 && decision.unanswered().containsKey(stated.rule())
-                        : came.settlement().requirement() instanceof RuleRequirement.Required;
+                        : came.requirement() instanceof RuleRequirement.Required;
                 if (owed) {
                     out.add(Finding.by(new FindingSubject.OfABehavior(behavior),
                             decision.at(stated),

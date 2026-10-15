@@ -136,7 +136,9 @@ class ARuleNothingCouldComposeARowForIsSaidAndNotDroppedTest {
         // says. What this compiler fell short on is the other axis: a way it writes no table for
         // may be the easiest row in the file to write by hand, and a requirement carrying that
         // reason would be the generator's failure answering whether a row is owed.
-        assertEquals("nothing_was_composed_to_try", unsettled.get("because").stringValue());
+        JsonNode because = unsettled.get("because");
+        assertEquals(1, because.size(), () -> "the rule is stated at one place: " + because);
+        assertEquals("nothing_was_composed_to_try", because.get(0).stringValue());
         JsonNode words = unsettled.get("synthesisShortfalls");
         assertEquals(1, words.size(), () -> "the ways came back with one word: " + words);
         assertEquals("a_table_is_what_this_needs", words.get(0).get("reason").stringValue());

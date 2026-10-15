@@ -49,7 +49,7 @@ class TheWaysAnElementMayMeetAStatementLeaveOutTheOnesNoElementMeetsTest {
 
         assertEquals(List.of(true, true), compilation.db()
                         .ask(new Adequacy.DecisionSearch(module, "f")).value().values().stream()
-                        .map(each -> each.settlement().requirement()
+                        .map(each -> each.requirement()
                                 instanceof RuleRequirement.Required)
                         .toList(),
                 "a row for each rule");
@@ -77,7 +77,7 @@ class TheWaysAnElementMayMeetAStatementLeaveOutTheOnesNoElementMeetsTest {
         String module = compilation.modules().getFirst();
         assertEquals(List.of(true, true), compilation.db()
                         .ask(new Adequacy.DecisionSearch(module, "f")).value().values().stream()
-                        .map(each -> each.settlement().requirement()
+                        .map(each -> each.requirement()
                                 instanceof RuleRequirement.Required)
                         .toList(),
                 "and a row for each rule along the ways that were read");
@@ -115,7 +115,7 @@ class TheWaysAnElementMayMeetAStatementLeaveOutTheOnesNoElementMeetsTest {
             assertEquals(List.of(true, true), compilation.db()
                             .ask(new Adequacy.DecisionSearch(module, "f")).value().values()
                             .stream()
-                            .map(each -> each.settlement().requirement()
+                            .map(each -> each.requirement()
                                     instanceof RuleRequirement.Required)
                             .toList(),
                     () -> "a row for each rule of " + body);

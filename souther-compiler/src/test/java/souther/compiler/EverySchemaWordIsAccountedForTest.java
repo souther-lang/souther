@@ -488,9 +488,9 @@ class EverySchemaWordIsAccountedForTest {
             // And which answer it was. Its own field beside that one because the two are different
             // questions: whether a row is owed is what a bar and a count act on, and what the
             // search came to is what a page groups the rules it is not asking for by.
-            new Vocabulary("decision.obligations[].because",
+            new Vocabulary("decision.obligations[].because[]",
                     List.of("$defs", "decision", "properties", "obligations", "items",
-                            "properties", "because"),
+                            "properties", "because", "items"),
                     requirementBecauseWords()),
             // And what the composing fell short on, which is the other axis. Held against the
             // vocabulary every search of this compiler answers in, so a reason added there is

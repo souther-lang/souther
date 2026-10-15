@@ -5,7 +5,6 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.RuleRequirement;
-import souther.compiler.query.SettledAt;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -99,7 +98,7 @@ class ACountHeldAgainstANumberOfTheRowIsNotProvedImpossibleByTheValueTriedTest {
         compilation.answerEverything();
         String module = compilation.modules().getFirst();
         return compilation.db().ask(new Adequacy.DecisionSearch(module, "f")).value().values()
-                .stream().map(SettledAt::settlement)
+                .stream().map(each -> each.answer().settlement())
                 .map(each -> each.requirement() instanceof RuleRequirement.Required
                         ? "Required" : each.requirement().getClass().getSimpleName())
                 .sorted().toList();

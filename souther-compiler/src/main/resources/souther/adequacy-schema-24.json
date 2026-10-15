@@ -4766,11 +4766,13 @@
             "additionalProperties": false,
             "allOf": [
               {
-                "description": "What the composing came to is written exactly where the search had no candidate to try the rule with, which is the one answer it is about. Beside any other answer it would be a shortfall recorded of a search that composed a row and ran it.",
+                "description": "What the composing came to is written exactly where a search of the rule had no candidate to try it with, which is the one answer it is about. Beside any other answer it would be a shortfall recorded of a search that composed a row and ran it.",
                 "if": {
                   "properties": {
                     "because": {
-                      "const": "nothing_was_composed_to_try"
+                      "contains": {
+                        "const": "nothing_was_composed_to_try"
+                      }
                     }
                   },
                   "required": [
@@ -4815,23 +4817,28 @@
                 ]
               },
               "because": {
-                "description": "How the requirement came to that answer. Present with `requirement` except where that is `required`, whose answer is the row that was seen standing in and has nothing beside it. Four are the model's: `the_way_needs_one_position_to_be_two` is a way asking a position to be two things at once, `an_arm_nothing_reaches` a way through an arm no value arrives at, `a_condition_never_comes_out_that_way` a way past a condition every row brings out the other way — a predicate that always holds, or sides whose difference is the same on every row — and `no_value_can_take_it` a search proving no value takes the way to the rule, whether a rule or a type with too few values leaves none — the one of the four a search establishes, and it takes every way of standing the dependencies in to say so. The rest are about the inquiry — a row was composed and took another rule, a row was composed against less than the way asks, a run this reading could not place, a run nothing watched, or there was nothing composed to try the rule with. `a_composed_row_was_short_of_the_way` is the one to read no negative from: the row was built and run, and a row meeting some of what the way states reaches whatever such a row reaches, so where it went says nothing about the rule. `nothing_was_composed_to_try` says only that the inquiry had no candidate; what the composing fell short on is `synthesisShortfalls`, a different question with a field of its own. A human report counts the rules under these rather than writing one line apiece, so this is what such a count is taken over.",
-                "enum": [
-                  "the_way_needs_one_position_to_be_two",
-                  "an_arm_nothing_reaches",
-                  "a_condition_never_comes_out_that_way",
-                  "no_value_can_take_it",
-                  "a_composed_row_went_elsewhere",
-                  "a_composed_row_was_short_of_the_way",
-                  "the_rule_the_row_took_could_not_be_told",
-                  "nothing_watched_the_row",
-                  "nothing_was_composed_to_try"
-                ]
+                "type": "array",
+                "minItems": 1,
+                "uniqueItems": true,
+                "description": "How the requirement came to that answer, at every place the rule is stated that answers it, each word once: a rule a helper states is searched at each call of the helper, and two calls may come to two answers. The places are every one of them where the model leaves each no row, and every one it leaves open otherwise, the one that established the most first; the first word is the requirement's own answer. Present with `requirement` except where that is `required`, whose answer is the row that was seen standing in and has nothing beside it. Four are the model's: `the_way_needs_one_position_to_be_two` is a way asking a position to be two things at once, `an_arm_nothing_reaches` a way through an arm no value arrives at, `a_condition_never_comes_out_that_way` a way past a condition every row brings out the other way — a predicate that always holds, or sides whose difference is the same on every row — and `no_value_can_take_it` a search proving no value takes the way to the rule, whether a rule or a type with too few values leaves none — the one of the four a search establishes, and it takes every way of standing the dependencies in to say so. The rest are about the inquiry — a row was composed and took another rule, a row was composed against less than the way asks, a run this reading could not place, a run nothing watched, or there was nothing composed to try the rule with. `a_composed_row_was_short_of_the_way` is the one to read no negative from: the row was built and run, and a row meeting some of what the way states reaches whatever such a row reaches, so where it went says nothing about the rule. `nothing_was_composed_to_try` says only that the inquiry had no candidate; what the composing fell short on is `synthesisShortfalls`, a different question with a field of its own. A human report counts the rules under these rather than writing one line apiece, so this is what such a count is taken over.",
+                "items": {
+                  "enum": [
+                    "the_way_needs_one_position_to_be_two",
+                    "an_arm_nothing_reaches",
+                    "a_condition_never_comes_out_that_way",
+                    "no_value_can_take_it",
+                    "a_composed_row_went_elsewhere",
+                    "a_composed_row_was_short_of_the_way",
+                    "the_rule_the_row_took_could_not_be_told",
+                    "nothing_watched_the_row",
+                    "nothing_was_composed_to_try"
+                  ]
+                }
               },
               "synthesisShortfalls": {
                 "type": "array",
                 "minItems": 1,
-                "description": "What this compiler's composings came to where none produced a candidate for the rule, one entry per word they came back with, present exactly where `because` is `nothing_was_composed_to_try`. This compiler's shortfall and never an answer about the model: a way nothing here composed a value for may be the easiest row in the file to write by hand, so whether a row is owed at the rule stays `unsettled` rather than settled by this. A rule is composed for once per way of standing its dependencies in, and every way that had nothing to try is here; two ways that came back with one word are one entry holding what both met, and two entries with one `reason` differ in their `causes`. In one order, whatever order the ways were walked in.",
+                "description": "What this compiler's composings came to where none produced a candidate for the rule, one entry per word they came back with, present exactly where `because` holds `nothing_was_composed_to_try`. Over every place of the rule that had nothing to try, since this document does not tell the places apart. This compiler's shortfall and never an answer about the model: a way nothing here composed a value for may be the easiest row in the file to write by hand, so whether a row is owed at the rule stays `unsettled` rather than settled by this. A rule is composed for once per way of standing its dependencies in, and every way that had nothing to try is here; two ways that came back with one word are one entry holding what both met, and two entries with one `reason` differ in their `causes`. In one order, whatever order the ways were walked in.",
                 "items": {
                   "type": "object",
                   "required": [

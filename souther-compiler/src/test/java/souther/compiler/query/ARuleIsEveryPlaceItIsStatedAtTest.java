@@ -16,6 +16,7 @@ import souther.compiler.partition.MeasuredInput;
 import souther.compiler.partition.SaidOnTheWay;
 import souther.compiler.partition.OnTheWay;
 import souther.compiler.partition.ReachabilityGap;
+import souther.compiler.partition.RowToRun;
 import souther.compiler.partition.RuleStep;
 import souther.compiler.partition.WhereNothingIsAnswered;
 
@@ -26,10 +27,8 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A rule of a decision is every place the body states it, and what is asked of the rule is asked of
@@ -211,29 +210,44 @@ class ARuleIsEveryPlaceItIsStatedAtTest {
                 new RuleRequirement.Unsettled.AComposedRowWentElsewhere(),
                 CompositionAccount.NOTHING));
 
-        assertInstanceOf(RuleRequirement.Unsettled.AComposedRowWentElsewhere.class,
-                Adequacy.DecisionSearch.acrossThePlaces(List.of(excluded, elsewhere))
-                        .settlement().requirement(),
-                "one place a row may take settles nothing away");
-        assertInstanceOf(RuleRequirement.Unsettled.AComposedRowWentElsewhere.class,
-                Adequacy.DecisionSearch.acrossThePlaces(List.of(elsewhere, excluded))
-                        .settlement().requirement(), "whichever place was met first");
-        assertTrue(Adequacy.DecisionSearch.acrossThePlaces(List.of(excluded, excluded))
-                .settlement().requirement() instanceof RuleRequirement.Excluded);
+        assertEquals(new SettledAcross(List.of(elsewhere)),
+                Adequacy.DecisionSearch.acrossThePlaces(List.of(excluded, elsewhere)),
+                "one place a row may take settles nothing away, and is the place that answers");
+        assertEquals(new SettledAcross(List.of(elsewhere)),
+                Adequacy.DecisionSearch.acrossThePlaces(List.of(elsewhere, excluded)),
+                "whichever place was met first");
+        assertEquals(new SettledAcross(List.of(excluded, excluded)),
+                Adequacy.DecisionSearch.acrossThePlaces(List.of(excluded, excluded)),
+                "every place the model leaves no row says what left it none");
         assertNull(Adequacy.DecisionSearch.acrossThePlaces(Arrays.asList(excluded, null)),
                 "a place not searched for is not one the model leaves no row");
     }
 
+    /** A place something stood in answers the rule on its own, wherever it was met. */
+    @Test
+    void aPlaceSomethingStoodInIsTheRulesAnswerAlone() {
+        DecisionReading.Ruled at = compiled().answering();
+        SettledAt stood = new SettledAt(at, RuleSettlement.of(
+                new RuleRequirement.Required(new RowToRun(List.of(), List.of())),
+                CompositionAccount.NOTHING));
+        SettledAt nothingTried = new SettledAt(at, RuleSettlement.nothingToTryWith(
+                cameToNothing(), CompositionAccount.NOTHING));
+
+        assertEquals(new SettledAcross(List.of(stood)),
+                Adequacy.DecisionSearch.acrossThePlaces(List.of(nothingTried, stood)),
+                "the row there settles the rule");
+    }
+
     /**
-     * The rule's answer comes with the place it was searched at, whichever place that is and in
-     * whichever order the places were met.
+     * Every place the model leaves open answers the rule, each with the place it was searched at:
+     * the one that established the most first, whichever order the places were met in.
      *
-     * <p>What the search went without is a list of that place's conditions, so an answer carried
-     * apart from its place would be explained by the place a reader is shown — the first — while it
-     * was arrived at somewhere else.
+     * <p>The one that established more is what the requirement is read off. The other is kept
+     * beside it, because what its search came to is not what the first one's did — held as the
+     * best place alone, it reached nobody.
      */
     @Test
-    void theAnswerOfARuleKeepsThePlaceItCameFrom() {
+    void everyOpenPlaceAnswersTheRuleTheBestFirst() {
         Compiled body = compiled();
         DecisionReading.Ruled first = body.answering();
         DecisionReading.Ruled second = Compiled.under(first.rule(), body.read().found().stream()
@@ -244,25 +258,24 @@ class ARuleIsEveryPlaceItIsStatedAtTest {
                 new RuleRequirement.Unsettled.AComposedRowWentElsewhere(),
                 CompositionAccount.NOTHING));
 
-        assertEquals(composed, Adequacy.DecisionSearch.acrossThePlaces(
-                        List.of(nothingTried, composed)),
-                "the place that established more is the answer, and its place with it");
-        assertEquals(composed, Adequacy.DecisionSearch.acrossThePlaces(
-                        List.of(composed, nothingTried)),
+        assertEquals(new SettledAcross(List.of(composed, nothingTried)),
+                Adequacy.DecisionSearch.acrossThePlaces(List.of(nothingTried, composed)),
+                "the place that established more first, and the other beside it");
+        assertEquals(new SettledAcross(List.of(composed, nothingTried)),
+                Adequacy.DecisionSearch.acrossThePlaces(List.of(composed, nothingTried)),
                 "whichever place was met first");
     }
 
     /**
-     * What the search of a rule went without is the place it answered from's, and nothing of the
-     * place beside it.
+     * What the search at each place went without is that place's, and nothing of the place beside
+     * it.
      *
-     * <p>Two places of one rule whose ways each decline a condition of their own. The place that
-     * established more answers for the rule, and the conditions it went without are its way's:
-     * explained by the other place's way, the rule would be said to have gone without a condition
-     * the search never met.
+     * <p>Two places of one rule whose ways each decline a condition of their own. Each answers
+     * for the rule with the conditions its own way went without: explained by the other place's
+     * way, a search would be said to have gone without a condition it never met.
      */
     @Test
-    void whatASearchWentWithoutIsThePlaceItAnsweredFrom() {
+    void whatEachSearchWentWithoutIsItsOwnPlaces() {
         Compiled body = compiled();
         DecisionReading.Ruled first = body.answering();
         OnTheWay.Declined declinedFirst = declined(0);
@@ -281,10 +294,15 @@ class ARuleIsEveryPlaceItIsStatedAtTest {
 
         for (List<SettledAt> met : List.of(List.of(nothingTried, composed),
                 List.of(composed, nothingTried))) {
+            SettledAcross rule = Adequacy.DecisionSearch.acrossThePlaces(met);
             assertEquals(List.of(new ConditionGap.OfTheInput(
                             new ReachabilityGap.Unstated(declinedSecond))),
-                    Adequacy.DecisionSearch.acrossThePlaces(met).leftOut(),
-                    "the conditions of the place that answered, and none of the other's");
+                    rule.places().get(0).leftOut(),
+                    "the conditions of the place that established more, and none of the other's");
+            assertEquals(List.of(new ConditionGap.OfTheInput(
+                            new ReachabilityGap.Unstated(declinedFirst))),
+                    rule.places().get(1).leftOut(),
+                    "and the other place's own");
         }
     }
 

@@ -9,6 +9,7 @@ import souther.compiler.partition.DecisionRule;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.RuleRequirement;
+import souther.compiler.query.SettledAcross;
 import souther.compiler.query.SettledAt;
 
 import java.util.ArrayList;
@@ -116,11 +117,12 @@ class ARuleNothingSettledIsToldByTheCallsItsWayGoesThroughTest {
     @Test
     void whatASearchWentWithoutIsSaidOnceForEachThingToSay() {
         Compilation compilation = compiled();
-        Map<DecisionRule, SettledAt> settled = compilation.db()
+        Map<DecisionRule, SettledAcross> settled = compilation.db()
                 .ask(new Adequacy.DecisionSearch("example.draw", "draw")).value();
+        // An entry per place each rule nothing settled is stated at.
         List<SettledAt> unsettled = settled.values().stream()
-                .filter(each -> each.settlement().requirement()
-                        instanceof RuleRequirement.Unsettled)
+                .filter(each -> each.requirement() instanceof RuleRequirement.Unsettled)
+                .flatMap(each -> each.places().stream())
                 .toList();
         List<Entry> entries = entries(page(compilation));
         assertEquals(unsettled.size(), entries.size());

@@ -8,7 +8,6 @@ import souther.compiler.query.Compilation;
 import souther.compiler.query.RuleRequirement;
 import souther.compiler.query.RuleSearch;
 import souther.compiler.query.RuleSettlement;
-import souther.compiler.query.SettledAt;
 import souther.compiler.report.AdequacyReport;
 
 import java.util.ArrayList;
@@ -262,7 +261,7 @@ class WhatAWayAsksOfAnAnswerAndNothingMetReachesTheReaderTest {
                 """);
 
         List<RuleSettlement> unsettled = behavior.ruleSettlements().values().stream()
-                .map(SettledAt::settlement)
+                .map(each -> each.answer().settlement())
                 .filter(each -> !(each.requirement() instanceof RuleRequirement.Required))
                 .toList();
         assertFalse(unsettled.isEmpty(), "a rule of this body is one no row was seen taking");
