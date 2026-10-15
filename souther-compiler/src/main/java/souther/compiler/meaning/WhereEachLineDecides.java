@@ -769,6 +769,75 @@ public final class WhereEachLineDecides {
     }
 
     /**
+     * {@code cases}, each of them where {@code taken} holds as well: where a line of the author's
+     * decides that is under arms a row takes only where {@code taken} holds.
+     *
+     * <p>One relation can be a place of several of the author's lines. {@code minimum(term)} with
+     * an arm for each of seventeen terms returning 12 puts one line at 12 under each arm, and the
+     * statement turns at 12 for every one of those terms; the line under the first arm turns it
+     * only for the first. A case asking a value to be cases the arms do not take is no case of the
+     * line, and is left out.
+     */
+    public static List<Proposition> takenWhere(List<Proposition> cases, Proposition taken) {
+        if (taken instanceof Proposition.Always(boolean holds) && holds) {
+            return cases;
+        }
+        List<Proposition> out = new ArrayList<>();
+        for (Proposition each : cases) {
+            Proposition both = metOverValues(Proposition.all(List.of(each, taken)));
+            if (!(both instanceof Proposition.Always(boolean holds) && !holds)) {
+                out.add(both);
+            }
+        }
+        return joinedOverAValue(out);
+    }
+
+    /**
+     * {@code stated} with the cases it asks each value of the row to be said as the cases they
+     * share, less the cases it asks the value not to be — or holding nowhere where none is left.
+     * A value it asks only not to be some cases is left asked that.
+     */
+    private static Proposition metOverValues(Proposition stated) {
+        List<Proposition> parts = stated instanceof Proposition.All all ? all.parts()
+                : List.of(stated);
+        Map<DecisionSubject, CasesLeft> met = new LinkedHashMap<>();
+        Map<DecisionSubject, List<Refinement>> outside = new LinkedHashMap<>();
+        List<Proposition> rest = new ArrayList<>();
+        for (Proposition part : parts) {
+            if (part instanceof Proposition.InCases asked && oneValueOfTheRow(asked)) {
+                CasesLeft before = met.get(asked.of());
+                CasesLeft both = before == null ? asked.cases() : before.meet(asked.cases());
+                if (both == null) {
+                    return new Proposition.Always(false);
+                }
+                met.put(asked.of(), both);
+            } else if (part instanceof Proposition.InCases denied && !denied.holds()
+                    && aValueOfTheRow(denied.of())) {
+                outside.computeIfAbsent(denied.of(), _ -> new ArrayList<>())
+                        .addAll(denied.cases().atoms());
+            } else {
+                rest.add(part);
+            }
+        }
+        for (Map.Entry<DecisionSubject, List<Refinement>> each : outside.entrySet()) {
+            if (!met.containsKey(each.getKey())) {
+                rest.add(new Proposition.InCases(each.getKey(),
+                        CasesLeft.ofEach(each.getValue()), false));
+            }
+        }
+        for (Map.Entry<DecisionSubject, CasesLeft> each : met.entrySet()) {
+            List<Refinement> left = each.getValue().atoms().stream()
+                    .filter(atom -> !outside.getOrDefault(each.getKey(), List.of()).contains(atom))
+                    .toList();
+            if (left.isEmpty()) {
+                return new Proposition.Always(false);
+            }
+            rest.add(new Proposition.InCases(each.getKey(), CasesLeft.ofEach(left), true));
+        }
+        return Proposition.all(rest);
+    }
+
+    /**
      * {@code cases}, with every two that ask one value to be two different cases and are the same
      * otherwise said as one asking it to be either: where the value is A and the rest holds, or B
      * and the rest holds, is where it is A or B and the rest holds.
@@ -816,7 +885,13 @@ public final class WhereEachLineDecides {
      * elements.
      */
     private static boolean oneValueOfTheRow(Proposition.InCases cases) {
-        return cases.holds() && cases.of() instanceof DecisionSubject.AnInput(TermPath at)
+        return cases.holds() && aValueOfTheRow(cases.of());
+    }
+
+    /** Whether {@code value} is one value of the row, and not one inside the elements or the keys
+     *  of a container. */
+    private static boolean aValueOfTheRow(DecisionSubject value) {
+        return value instanceof DecisionSubject.AnInput(TermPath at)
                 && at.steps().stream().noneMatch(step -> step instanceof TermPath.Step.Element
                         || step instanceof TermPath.Step.Key);
     }

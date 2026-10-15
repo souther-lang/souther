@@ -263,19 +263,39 @@ class AThresholdEachCaseNamesIsOwedInThatCaseTest {
     }
 
     /**
-     * A line that decides in more cases than are said one by one still says which: seventeen terms
-     * share one threshold and an eighteenth has its own, and the shared line is said under the
-     * seventeen.
+     * Seventeen arms returning one number are seventeen lines of the author's at one place, and
+     * each decides where a row takes its arm: a run beside the first is the first term's, said
+     * under it, and the eighteenth term's line at 24 bounds none of them. The statement turns at
+     * 12 in seventeen cases of the term, more than are said one by one, and is still read case by
+     * case.
+     */
+    @Test
+    void anArmOfManyAtOnePlaceDecidesWhereItsArmIsTaken() {
+        String source = ofTerms(18).replaceAll("\\| T(\\d+) -> \\d+\\n",
+                "| T$1 -> 12\n").replace("| T17 -> 12", "| T17 -> 24");
+        List<String> readings = readingsOf(source);
+        for (int i = 0; i < 17; i++) {
+            String run = "OUT in 13 < month <= 60 where term is T" + i;
+            assertTrue(readings.contains(run), () -> run + ": " + readings);
+        }
+    }
+
+    /**
+     * A line one arm draws for many cases says all of them: an arm for seventeen of the terms
+     * draws one line, which decides in the seventeen terms that arm takes.
      */
     @Test
     void aLineOfManyCasesSaysThemAll() {
-        String source = ofTerms(18).replaceAll("\\| T(\\d+) -> \\d+\\n",
-                "| T$1 -> 12\n").replace("| T17 -> 12", "| T17 -> 24");
+        String shared = String.join(" | ", IntStream.range(0, 17).mapToObj(i -> "T" + i)
+                .toList());
+        String source = ofTerms(18).replaceAll("        \\| T(\\d+) -> \\d+\\n", "")
+                .replace("match term with\n", "match term with\n        | " + shared
+                        + " -> 12\n        | T17 -> 24\n");
         List<String> readings = readingsOf(source);
         String many = String.join(" or ", IntStream.range(0, 17).mapToObj(i -> "T" + i)
                 .sorted().toList());
         assertTrue(readings.stream().anyMatch(each -> each.endsWith("where term is " + many)),
-                () -> "the shared line is said under the seventeen terms: " + readings);
+                () -> "the line is said under the seventeen terms: " + readings);
     }
 
     private static List<String> firstTermsOf(List<String> readings) {
