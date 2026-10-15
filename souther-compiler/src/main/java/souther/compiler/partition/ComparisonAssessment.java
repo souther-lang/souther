@@ -1106,8 +1106,10 @@ sealed interface ComparisonAssessment {
             // the same either side of it wherever they do.
             case TurnsNothing _ ->
                     sameAtEachPlace(new BlockReason.ComparisonLineTurningNothing());
-            // What each of its lines leaves, each in its own words — and nothing at a position
-            // another of its lines divides, since the rule divides it.
+            // What each of its lines leaves, each in its own words — and, of what a line read to
+            // the end leaves, nothing at a position another of its lines divides, since the rule
+            // divides it. A line whose reading stopped is said wherever it is: it may divide the
+            // position further, so the line that does divide it does not settle its classes.
             case Several several -> {
                 List<FilingCoordinate> divided = several.parts().stream()
                         .filter(part -> part.line() instanceof AtAPosition)
@@ -1115,7 +1117,8 @@ sealed interface ComparisonAssessment {
                         .toList();
                 yield several.parts().stream()
                         .flatMap(part -> part.line().whatEachPlaceIsLeftWith().stream())
-                        .filter(left -> !divided.contains(left.at()))
+                        .filter(left -> left.why() instanceof BlockReason.RuleReadingStopped
+                                || !divided.contains(left.at()))
                         .distinct()
                         .toList();
             }

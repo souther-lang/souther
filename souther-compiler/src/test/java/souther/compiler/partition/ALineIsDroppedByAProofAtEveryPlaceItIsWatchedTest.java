@@ -170,6 +170,15 @@ class ALineIsDroppedByAProofAtEveryPlaceItIsWatchedTest {
                 "and the cases it was read in, none of them taken for one it turns nothing in");
         assertEquals(read.parts().getLast(), narrowed.parts().getLast(),
                 "the line beside it is read as it would be alone");
+        // And the statement says so at the place, though the line beside it divides that place:
+        // a line nobody worked out may divide it further, so the place's classes are not settled
+        // by the one that was.
+        assertEquals(unread.why().entrySet().stream()
+                        .map(each -> new ComparisonAssessment.LeftAt(each.getKey(),
+                                each.getValue()))
+                        .toList(),
+                narrowed.whatEachPlaceIsLeftWith(),
+                "what the statement leaves its place is what stopped the reading there");
     }
 
     /**

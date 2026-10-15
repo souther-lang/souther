@@ -54,6 +54,34 @@ class WhetherALineTurnsTheStatementDoesNotDependOnHowManyCasesItHasTest {
     }
 
     /**
+     * What a reader is told of the four calls, with a row written: every point of the helper's
+     * line is one a row is shown to be at or not, and none is held open by how many values a point
+     * is tried with. Kept as a border, the line in the fourth call was owed rows no search could
+     * find, each point undecided at that figure, though the figure decided nothing.
+     */
+    @Test
+    void noPointOfTheLineIsHeldOpenByAFigureWhereNoRowCouldBeFound() {
+        AdequacyReport report = measured(takes(4) + """
+
+                example draw
+                    | (MB(0), Held { h0 = MB(0), h1 = MB(1), h2 = MB(0), h3 = MB(0) }) -> MB(0)
+                """);
+        String human = report.human(SourceRendering.namedByIdentity(SourceLayouts.NONE));
+        String border = human.lines()
+                .dropWhile(line -> !line.strip().startsWith("border"))
+                .takeWhile(line -> line.strip().startsWith("border") || line.startsWith("      "))
+                .reduce("", (all, line) -> all + line + "\n");
+
+        assertTrue(border.contains("obligations 1/4"), () -> "the border measure:\n" + human);
+        assertFalse(border.contains("? undecided"),
+                () -> "every point is one a row is at or is not:\n" + border);
+        assertTrue(report.whatKeepsTheVerdictOpen().stream().noneMatch(open -> open.figures()
+                        .contains(CompositionBudget.VALUES_A_POINT_IS_TRIED_WITH.figure())),
+                () -> "and nothing is held open by how many values a point is tried with:\n"
+                        + human);
+    }
+
+    /**
      * And a line that turns the statement in some of its cases is kept, said one by one or as
      * one: {@code x} compared with nought where an even number of truths hold, and nought
      * compared with it where they do not, is one statement whose line on {@code x} decides wherever
@@ -151,12 +179,16 @@ class WhetherALineTurnsTheStatementDoesNotDependOnHowManyCasesItHasTest {
     }
 
     private static JsonNode reportOf(String source) {
+        return JSON.readTree(measured(source)
+                .json(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
+    }
+
+    private static AdequacyReport measured(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         assertTrue(compilation.errors().isEmpty(), () -> "compiles: " + compilation.errors());
-        return JSON.readTree(AdequacyReport.of(compilation)
-                .json(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
+        return AdequacyReport.of(compilation);
     }
 
     /** Every border on {@code axis}. */
