@@ -2,7 +2,7 @@ package souther.compiler.query;
 
 import souther.compiler.partition.Generator;
 import souther.compiler.partition.ConditionGap;
-import souther.compiler.types.ModelOccurrence;
+import souther.compiler.types.ModelOccurrences;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -47,11 +47,11 @@ public record SearchOutcomes(List<Made> made) {
      * @param attempt what the search came to
      * @param readAt  where the reading it was made for was read; none until a reading says
      */
-    public record Made(ItemAssessment.Attempt attempt, List<ModelOccurrence> readAt) {
+    public record Made(ItemAssessment.Attempt attempt, ModelOccurrences readAt) {
 
         public Made {
             Objects.requireNonNull(attempt, "a search came to something");
-            readAt = List.copyOf(readAt);
+            Objects.requireNonNull(readAt, "where the reading was read, or nowhere yet");
         }
     }
 
@@ -67,7 +67,8 @@ public record SearchOutcomes(List<Made> made) {
 
     /** These searches, in the order they were made, by a reading nothing has said yet. */
     public static SearchOutcomes each(List<ItemAssessment.Attempt> attempts) {
-        return new SearchOutcomes(attempts.stream().map(each -> new Made(each, List.of())).toList());
+        return new SearchOutcomes(attempts.stream()
+                .map(each -> new Made(each, ModelOccurrences.NONE)).toList());
     }
 
     /** These and those, in the order they were made. */
@@ -89,7 +90,7 @@ public record SearchOutcomes(List<Made> made) {
      * reading and before readings of one line are put together — after that, the copies are every
      * reading's and no longer the one that searched.
      */
-    public SearchOutcomes readAt(List<ModelOccurrence> copies) {
+    public SearchOutcomes readAt(ModelOccurrences copies) {
         return new SearchOutcomes(made.stream()
                 .map(each -> new Made(each.attempt(), copies)).toList());
     }
@@ -147,14 +148,16 @@ public record SearchOutcomes(List<Made> made) {
      * searches are held, so a reader outside would be taking a plurality nobody has put together
      * and saying it in an order nobody chose.
      */
-    Map<EstablishmentGap, List<ModelOccurrence>> prevented() {
-        Map<EstablishmentGap, List<ModelOccurrence>> out = new LinkedHashMap<>();
+    Map<EstablishmentGap, ModelOccurrences> prevented() {
+        Map<EstablishmentGap, ModelOccurrences.Gathering> gathering = new LinkedHashMap<>();
         for (Made each : made) {
             if (each.attempt() instanceof ItemAssessment.Attempt.Prevented it) {
-                List<ModelOccurrence> copies = out.computeIfAbsent(it.by(), _ -> new ArrayList<>());
-                each.readAt().stream().filter(copy -> !copies.contains(copy)).forEach(copies::add);
+                gathering.computeIfAbsent(it.by(), _ -> new ModelOccurrences.Gathering())
+                        .add(each.readAt());
             }
         }
+        Map<EstablishmentGap, ModelOccurrences> out = new LinkedHashMap<>();
+        gathering.forEach((gap, copies) -> out.put(gap, copies.gathered()));
         return out;
     }
 

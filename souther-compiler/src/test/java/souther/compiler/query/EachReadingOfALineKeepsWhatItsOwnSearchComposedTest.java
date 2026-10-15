@@ -14,6 +14,7 @@ import souther.compiler.partition.Demand;
 import souther.compiler.partition.SaidOnTheWay;
 import souther.compiler.publish.PublicationOrders;
 import souther.compiler.types.ExpansionLineage;
+import souther.compiler.types.ModelOccurrences;
 import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.SourceConstruct;
 import souther.compiler.types.SourceConstructOrigin;
@@ -153,7 +154,8 @@ class EachReadingOfALineKeepsWhatItsOwnSearchComposedTest {
                                 Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE),
                         WayToTheBorder.UNTOUCHED))))).getFirst();
 
-        assertEquals(List.of(first, second), merged.readAt(), "one line, read at both calls");
+        assertEquals(List.of(first, second), merged.readAt().inOrder(),
+                "one line, read at both calls");
         // Through the point the line is owed at, which is where the readings of a point are put
         // together for a reader.
         List<BorderObligationPointAssessment> points =
@@ -164,7 +166,8 @@ class EachReadingOfALineKeepsWhatItsOwnSearchComposedTest {
                     WritabilityKnowledge.Prevented.class, WritabilityKnowledge.of(
                             ItemAssessment.WritabilityEvidence.of(Set.of()),
                             point.owed().searches()));
-            assertEquals(List.of(first), stopped.readAt(stopped.by().written().getFirst()),
+            assertEquals(List.of(first),
+                    stopped.readAt(stopped.by().written().getFirst()).inOrder(),
                     "stopped at the call whose search stopped, and only there");
         }
     }
@@ -181,10 +184,10 @@ class EachReadingOfALineKeepsWhatItsOwnSearchComposedTest {
                                 new Measurement.NotMeasured<>(
                                         ItemAssessment.Coverage.NotAsked.NO_ROWS),
                                 ItemAssessment.WritabilityProjection.NOT_COMPUTED,
-                                SearchOutcomes.of(attempt).readAt(List.of(copy)))));
+                                SearchOutcomes.of(attempt).readAt(ModelOccurrences.of(copy)))));
         return new BorderAssessment(line, items,
                 new AnotherLineTheRowsAllow.ByDirection(List.of(BESIDE)),
-                ARowTellingTheLinesApart.notAsked(), List.of(copy), SaidOnTheWay.NONE);
+                ARowTellingTheLinesApart.notAsked(), ModelOccurrences.of(copy), SaidOnTheWay.NONE);
     }
 
     /** The {@code n}th call of a helper, as a copy of its code. */

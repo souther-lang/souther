@@ -1,7 +1,7 @@
 package souther.compiler.inputs;
 
 import souther.compiler.check.RuleCitation;
-import souther.compiler.types.ModelOccurrence;
+import souther.compiler.types.ModelOccurrences;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -167,7 +167,7 @@ public record RulesWithNoLine(List<RuleWithoutALine> reported,
          * {@code ensures} come this way — there is no reading that says what either raises, so
          * where the reading of one stopped there is nothing to have been determined.
          */
-        public void unclassified(RuleCitation cited, List<ModelOccurrence> readAt,
+        public void unclassified(RuleCitation cited, ModelOccurrences readAt,
                                  FilingCoordinate at, BlockReason.RuleReadingStopped why) {
             asked(StandingQuestion.NothingClassifiesIt.of(cited, readAt, at, why));
         }
@@ -181,7 +181,7 @@ public record RulesWithNoLine(List<RuleWithoutALine> reported,
          * is what holds the border measure open, and the classes are settled beside it rather than
          * held open with it.
          */
-        public void boundaryUndetermined(RuleCitation cited, List<ModelOccurrence> readAt,
+        public void boundaryUndetermined(RuleCitation cited, ModelOccurrences readAt,
                                          FilingCoordinate at,
                                          BlockReason.RuleReadingStopped why) {
             add(RuleWithoutALine.of(cited, readAt, at, why));

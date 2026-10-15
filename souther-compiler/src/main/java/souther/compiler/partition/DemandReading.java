@@ -27,6 +27,7 @@ import souther.compiler.core.ACopyOfAnApplication;
 import souther.compiler.semantics.ConditionJoin;
 import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.ModelOccurrence;
+import souther.compiler.types.ModelOccurrences;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
@@ -223,25 +224,25 @@ final class DemandReading {
      */
     static final class ReadOff {
 
-        private final Map<Read, List<ModelOccurrence>> each;
-        private final List<ModelOccurrence> own;
+        private final Map<Read, ModelOccurrences> each;
+        private final ModelOccurrences own;
 
-        private ReadOff(Map<Read, List<ModelOccurrence>> each, List<ModelOccurrence> own) {
+        private ReadOff(Map<Read, ModelOccurrences> each, ModelOccurrences own) {
             this.each = each;
-            this.own = List.copyOf(own);
+            this.own = own;
         }
 
         /** The copies {@code read} was read off. */
-        List<ModelOccurrence> of(Read read) {
-            List<ModelOccurrence> copies = each.get(read);
+        ModelOccurrences of(Read read) {
+            ModelOccurrences copies = each.get(read);
             if (copies != null) {
                 return copies;
             }
             if (read instanceof Read.OneOf oneOf) {
-                Set<ModelOccurrence> out = new LinkedHashSet<>();
+                ModelOccurrences.Gathering out = new ModelOccurrences.Gathering();
                 oneOf.alternatives().forEach(alternative -> alternative.forEach(one ->
-                        out.addAll(of(one))));
-                return out.isEmpty() ? own : List.copyOf(out);
+                        out.add(of(one))));
+                return out.isEmpty() ? own : out.gathered();
             }
             return own;
         }
@@ -254,14 +255,15 @@ final class DemandReading {
          * stands for both: what the other was read off is told of it too.
          */
         static ReadOff joined(Read made, List<List<Stated>> parts) {
-            Map<Read, List<ModelOccurrence>> each = new IdentityHashMap<>();
-            List<ModelOccurrence> own = new ArrayList<>();
+            Map<Read, ModelOccurrences> each = new IdentityHashMap<>();
+            ModelOccurrences.Gathering gathering = new ModelOccurrences.Gathering();
             for (List<Stated> part : parts) {
                 for (Stated one : part) {
                     resolved(one.read(), one.readOff(), each);
-                    SaidOnTheWay.eachOnce(one.readOff().own, own);
+                    gathering.add(one.readOff().own);
                 }
             }
+            ModelOccurrences own = gathering.gathered();
             if (made instanceof Read.OneOf oneOf) {
                 ReadOff told = new ReadOff(each, own);
                 for (List<Read> kept : oneOf.alternatives()) {
@@ -275,9 +277,9 @@ final class DemandReading {
                     }
                 }
             } else {
-                Set<ModelOccurrence> settledBy = new LinkedHashSet<>();
-                parts.forEach(part -> part.forEach(one -> settledBy.addAll(each.get(one.read()))));
-                each.put(made, new ArrayList<>(settledBy));
+                ModelOccurrences.Gathering settledBy = new ModelOccurrences.Gathering();
+                parts.forEach(part -> part.forEach(one -> settledBy.add(each.get(one.read()))));
+                each.put(made, settledBy.gathered());
             }
             return new ReadOff(each, own);
         }
@@ -288,16 +290,14 @@ final class DemandReading {
          * of it told so of the read at the same place in the other.
          */
         ReadOff alike(Read kept, Read dropped, ReadOff its) {
-            Map<Read, List<ModelOccurrence>> both = new IdentityHashMap<>(each);
+            Map<Read, ModelOccurrences> both = new IdentityHashMap<>(each);
             joinedInto(kept, this, dropped, its, both);
             return new ReadOff(both, own);
         }
 
         private static void joinedInto(Read kept, ReadOff mine, Read dropped, ReadOff theirs,
-                                       Map<Read, List<ModelOccurrence>> into) {
-            List<ModelOccurrence> copies = new ArrayList<>(mine.of(kept));
-            SaidOnTheWay.eachOnce(theirs.of(dropped), copies);
-            into.put(kept, copies);
+                                       Map<Read, ModelOccurrences> into) {
+            into.put(kept, mine.of(kept).and(theirs.of(dropped)));
             if (kept instanceof Read.OneOf one && dropped instanceof Read.OneOf other) {
                 for (int alternative = 0; alternative < one.alternatives().size(); alternative++) {
                     List<Read> those = one.alternatives().get(alternative);
@@ -312,8 +312,8 @@ final class DemandReading {
         /** What {@code off} says {@code read} and every read inside an alternative of it were
          *  read off, into {@code into}: told by the half that read them. */
         private static void resolved(Read read, ReadOff off,
-                                     Map<Read, List<ModelOccurrence>> into) {
-            SaidOnTheWay.eachOnce(off.of(read), into.computeIfAbsent(read, _ -> new ArrayList<>()));
+                                     Map<Read, ModelOccurrences> into) {
+            into.merge(read, off.of(read), ModelOccurrences::and);
             if (read instanceof Read.OneOf oneOf) {
                 oneOf.alternatives().forEach(alternative ->
                         alternative.forEach(one -> resolved(one, off, into)));
@@ -333,39 +333,40 @@ final class DemandReading {
         /** What some element meeting each statement already asked, by the statement's key. */
         final Map<String, List<Read>> met = new HashMap<>();
         /** The copy each part was read off, by the part's key either way round. */
-        private final Map<String, List<ModelOccurrence>> byPart;
+        private final Map<String, ModelOccurrences> byPart;
         /** What a read of a part read off nothing else was read off: the copy of the code that
          *  states it. */
-        private final List<ModelOccurrence> own;
-        private final Map<Read, List<ModelOccurrence>> readIn = new IdentityHashMap<>();
+        private final ModelOccurrences own;
+        private final Map<Read, ModelOccurrences> readIn = new IdentityHashMap<>();
 
-        private Projection(Map<String, List<ModelOccurrence>> byPart, List<ModelOccurrence> own) {
+        private Projection(Map<String, ModelOccurrences> byPart, ModelOccurrences own) {
             this.byPart = byPart;
-            this.own = List.copyOf(own);
+            this.own = own;
         }
 
         /** A projection nothing says the parts of. */
         static Projection unplaced() {
-            return new Projection(Map.of(), List.of());
+            return new Projection(Map.of(), ModelOccurrences.NONE);
         }
 
         /** A projection of what {@code pulled} states, each part read off where it was, and what
          *  nothing else was read off read off {@code own}. */
-        static Projection over(Pullback.Pulled pulled, List<ModelOccurrence> own) {
-            Map<String, Set<ModelOccurrence>> found = new LinkedHashMap<>();
+        static Projection over(Pullback.Pulled pulled, ModelOccurrences own) {
+            Map<String, ModelOccurrences.Gathering> found = new LinkedHashMap<>();
             if (pulled != null) {
                 for (Pullback.Leaf leaf : pulled.turnsOn()) {
                     Optional<ModelOccurrence> copy = copyOf(leaf);
                     if (copy.isPresent()) {
                         for (String key : List.of(leaf.part().key(),
                                 leaf.part().denied().key())) {
-                            found.computeIfAbsent(key, _ -> new LinkedHashSet<>()).add(copy.get());
+                            found.computeIfAbsent(key, _ -> new ModelOccurrences.Gathering())
+                                    .add(copy.get());
                         }
                     }
                 }
             }
-            Map<String, List<ModelOccurrence>> byPart = new LinkedHashMap<>();
-            found.forEach((key, copies) -> byPart.put(key, List.copyOf(copies)));
+            Map<String, ModelOccurrences> byPart = new LinkedHashMap<>();
+            found.forEach((key, copies) -> byPart.put(key, copies.gathered()));
             return new Projection(byPart, own);
         }
 
@@ -420,14 +421,14 @@ final class DemandReading {
             }
             Set<String> keys = new HashSet<>();
             Pullback.Pulled.partsOf(from, keys);
-            Set<ModelOccurrence> copies = new LinkedHashSet<>();
+            ModelOccurrences.Gathering copies = new ModelOccurrences.Gathering();
             byPart.forEach((key, those) -> {
                 if (keys.contains(key)) {
-                    copies.addAll(those);
+                    copies.add(those);
                 }
             });
             if (!copies.isEmpty()) {
-                List<ModelOccurrence> readOff = List.copyOf(copies);
+                ModelOccurrences readOff = copies.gathered();
                 reads.forEach(each -> readIn.putIfAbsent(each, readOff));
             }
             return reads;
@@ -451,20 +452,17 @@ final class DemandReading {
      * statement read off nothing else was read off — the copies both halves stand in, for a joined
      * one.
      */
-    private static List<ModelOccurrence> own(Condition condition) {
+    private static ModelOccurrences own(Condition condition) {
         return switch (condition) {
-            case Condition.Joined joined -> {
-                List<ModelOccurrence> out = new ArrayList<>(own(joined.left()));
-                SaidOnTheWay.eachOnce(own(joined.right()), out);
-                yield List.copyOf(out);
-            }
-            case Condition.Compares one ->
-                    ModelOccurrence.statedAt(one.stands()).map(List::of).orElse(List.of());
+            case Condition.Joined joined -> own(joined.left()).and(own(joined.right()));
+            case Condition.Compares one -> ModelOccurrence.statedAt(one.stands())
+                    .map(ModelOccurrences::of).orElse(ModelOccurrences.NONE);
             case Condition.Truth truth -> {
                 ConstructOccurrence at = ACopyOfAnApplication.occurrenceOf(truth.value());
                 yield at != null && at.isWritten()
-                        ? ModelOccurrence.statedAt(at).map(List::of).orElse(List.of())
-                        : List.of();
+                        ? ModelOccurrence.statedAt(at).map(ModelOccurrences::of)
+                                .orElse(ModelOccurrences.NONE)
+                        : ModelOccurrences.NONE;
             }
         };
     }
@@ -592,7 +590,7 @@ final class DemandReading {
      * construct ({@link Pullback.Leaf}). What the code itself states is no such part.
      */
     static Projected projectedOff(Pullback.Pulled pulled, Proposition stated, InputReading read,
-                                  List<ModelOccurrence> own) {
+                                  ModelOccurrences own) {
         Projection projection = Projection.over(pulled, own);
         List<Read> reads = projected(stated, read, projection);
         return new Projected(reads, projection.told());

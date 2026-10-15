@@ -9,6 +9,7 @@ import souther.compiler.meaning.WhyNotTaken;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 import souther.compiler.types.ExpansionLineage;
+import souther.compiler.types.ModelOccurrences;
 import souther.compiler.types.ExpansionSite;
 import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.SourceConstruct;
@@ -73,7 +74,7 @@ class OneRuleIsOneWayHoweverTheWalkMetItsConditionsTest {
         assertEquals(List.of(atTheFirst.shown(), atTheSecond.shown()), step.seen(),
                 "seen at both places the way consulted it, the first first");
         assertEquals(atTheFirst.shown(), step.shown(), "and witnessed where it was met first");
-        assertEquals(List.of(first, second), step.said().copies(),
+        assertEquals(List.of(first, second), step.said().copies().inOrder(),
                 "and read off both calls");
     }
 
@@ -92,7 +93,7 @@ class OneRuleIsOneWayHoweverTheWalkMetItsConditionsTest {
 
         RuleStep step = way(atTheFirst, atTheSecond).steps().getFirst();
         assertEquals(List.of(first, second),
-                step.said().entries().get(step.states().getFirst()),
+                step.said().entries().get(step.states().getFirst()).inOrder(),
                 "what the way asks is read off both calls it was asked at");
     }
 
@@ -101,7 +102,8 @@ class OneRuleIsOneWayHoweverTheWalkMetItsConditionsTest {
     private static DecisionPath.Consulted seenAt(DecisionPath.Consulted consulted,
                                                  ModelOccurrence at) {
         return new DecisionPath.Consulted(consulted.answer(), new ShownBy.AtAnOutcome(at, true),
-                consulted.states(), ReachingCuts.Stating.of(consulted.states(), List.of(at)).by());
+                consulted.states(),
+                ReachingCuts.Stating.of(consulted.states(), ModelOccurrences.of(at)).by());
     }
 
     /** The comparison of the helper `positive` in its copy made at {@code made}. */

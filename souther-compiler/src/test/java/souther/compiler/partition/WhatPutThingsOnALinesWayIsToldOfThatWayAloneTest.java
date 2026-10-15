@@ -9,6 +9,7 @@ import souther.compiler.meaning.WhyNotTaken;
 import souther.compiler.meaning.WrittenLine;
 import souther.compiler.types.ExpansionLineage;
 import souther.compiler.types.ModelOccurrence;
+import souther.compiler.types.ModelOccurrences;
 import souther.compiler.types.SourceConstruct;
 import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.types.WrittenOwner;
@@ -57,11 +58,11 @@ class WhatPutThingsOnALinesWayIsToldOfThatWayAloneTest {
         OnTheWay inOne = entry(2);
         OnTheWay inTheOther = entry(3);
         OnTheWay inACaseNotRead = entry(4);
-        Map<OnTheWay, List<ModelOccurrence>> by = new LinkedHashMap<>();
-        by.put(toTheComparison, List.of(copy(11)));
-        by.put(inOne, List.of(copy(12)));
-        by.put(inTheOther, List.of(copy(13)));
-        by.put(inACaseNotRead, List.of(copy(14)));
+        Map<OnTheWay, ModelOccurrences> by = new LinkedHashMap<>();
+        by.put(toTheComparison, ModelOccurrences.of(copy(11)));
+        by.put(inOne, ModelOccurrences.of(copy(12)));
+        by.put(inTheOther, ModelOccurrences.of(copy(13)));
+        by.put(inACaseNotRead, ModelOccurrences.of(copy(14)));
         Map<WhereAPartDecides, List<OnTheWay>> cases = new LinkedHashMap<>();
         cases.put(aCase("one"), List.of(inOne));
         cases.put(aCase("other"), List.of(inTheOther));
@@ -81,6 +82,6 @@ class WhatPutThingsOnALinesWayIsToldOfThatWayAloneTest {
 
     private static List<ModelOccurrence> told(ReachingCuts made, ModelOccurrence states,
                                               Optional<WhereAPartDecides> part) {
-        return made.saidByLine().get(new ReachingCuts.ALine(states, part)).copies();
+        return made.saidByLine().get(new ReachingCuts.ALine(states, part)).copies().inOrder();
     }
 }

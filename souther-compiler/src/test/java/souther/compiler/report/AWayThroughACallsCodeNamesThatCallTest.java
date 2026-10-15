@@ -7,7 +7,7 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
 import souther.compiler.types.ExpansionLineage;
-import souther.compiler.types.ModelOccurrence;
+import souther.compiler.types.ModelOccurrences;
 
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -91,14 +91,14 @@ class AWayThroughACallsCodeNamesThatCallTest {
         assertNotNull(lines, "the model under test compiles");
         int told = 0;
         for (BorderAssessment line : lines.get("f")) {
-            for (Map.Entry<OnTheWay, List<ModelOccurrence>> each
+            for (Map.Entry<OnTheWay, ModelOccurrences> each
                     : line.saidOnTheWay().entries().entrySet()) {
                 if (each.getKey() instanceof OnTheWay.TakenIn taken
                         && taken.demand().terms().stream()
                         .anyMatch(term -> term.toString().equals("a"))) {
-                    assertEquals(1, each.getValue().size(),
+                    assertEquals(1, each.getValue().inOrder().size(),
                             () -> "read off one copy: " + each);
-                    assertTrue(each.getValue().getFirst().lineage()
+                    assertTrue(each.getValue().inOrder().getFirst().lineage()
                                     instanceof ExpansionLineage.Expansion made
                                     && made.expanded().saidIn("example.matched").equals("sign"),
                             () -> "and that copy is the call of the helper: " + each);
@@ -140,12 +140,12 @@ class AWayThroughACallsCodeNamesThatCallTest {
                     .allMatch(copy -> copy.lineage().equals(ExpansionLineage.ORIGINAL))) {
                 continue;
             }
-            for (Map.Entry<OnTheWay, List<ModelOccurrence>> each
+            for (Map.Entry<OnTheWay, ModelOccurrences> each
                     : line.saidOnTheWay().entries().entrySet()) {
                 if (each.getKey() instanceof OnTheWay.TakenIn taken
                         && taken.demand().terms().stream()
                         .anyMatch(term -> term.toString().equals("n"))) {
-                    assertEquals(2, Set.copyOf(each.getValue()).size(),
+                    assertEquals(2, each.getValue().inOrder().size(),
                             () -> "read off both halves' calls: " + each);
                     told++;
                 }

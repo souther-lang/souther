@@ -6,6 +6,7 @@ import souther.compiler.observe.Figure;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.WorkFigure;
 import souther.compiler.query.EstablishmentGap;
+import souther.compiler.types.ModelOccurrences;
 
 import java.util.List;
 
@@ -36,7 +37,8 @@ class AnEntryHeldByAFigureAndByMoreIsSentToTheMoreTest {
         ReaderDisposition.StoppedAtAFigure sent = assertInstanceOf(
                 ReaderDisposition.StoppedAtAFigure.class,
                 ReaderDisposition.of(new AdequacyUncertainty.ShowingStopped(BEHAVIOR,
-                        EstablishmentGap.Observation.of(List.of(CUT_SHORT)), List.of())));
+                        EstablishmentGap.Observation.of(List.of(CUT_SHORT)),
+                        ModelOccurrences.NONE)));
 
         assertEquals(List.of(DEPTH), sent.figures());
     }
@@ -44,7 +46,8 @@ class AnEntryHeldByAFigureAndByMoreIsSentToTheMoreTest {
     @Test
     void anEntryAFigureAndSomethingElseHoldIsSentToTheSomethingElseAndNamesTheFigure() {
         AdequacyUncertainty both = new AdequacyUncertainty.ShowingStopped(BEHAVIOR,
-                EstablishmentGap.Observation.of(List.of(CUT_SHORT, UNREADABLE)), List.of());
+                EstablishmentGap.Observation.of(List.of(CUT_SHORT, UNREADABLE)),
+                ModelOccurrences.NONE);
 
         assertInstanceOf(ReaderDisposition.LookAtWhatShowedNoRow.class,
                 ReaderDisposition.of(both));
@@ -59,11 +62,11 @@ class AnEntryHeldByAFigureAndByMoreIsSentToTheMoreTest {
     void twoShowingsStoppedAlikeButForTheFiguresAreOneEntryAtBoth() {
         Figure text = WorkFigure.OBSERVED_TEXT.at(5);
         AdequacyUncertainty.ShowingStopped one = new AdequacyUncertainty.ShowingStopped(BEHAVIOR,
-                EstablishmentGap.Observation.of(List.of(CUT_SHORT)), List.of());
+                EstablishmentGap.Observation.of(List.of(CUT_SHORT)), ModelOccurrences.NONE);
         AdequacyUncertainty.ShowingStopped other = new AdequacyUncertainty.ShowingStopped(BEHAVIOR,
                 EstablishmentGap.Observation.of(List.of(
                         Incompleteness.Cause.at(Incompleteness.Code.VALUE_TRUNCATED, text))),
-                List.of());
+                ModelOccurrences.NONE);
 
         assertEquals(one.fact(), other.fact());
         assertEquals(List.of(DEPTH, text), one.together(other).figures());

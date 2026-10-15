@@ -7,9 +7,8 @@ import souther.compiler.query.EstablishmentGap;
 import souther.compiler.query.NotMeasuredReason;
 import souther.compiler.query.Weakening;
 import souther.compiler.query.WritabilityKnowledge;
-import souther.compiler.types.ModelOccurrence;
+import souther.compiler.types.ModelOccurrences;
 
-import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -145,17 +144,16 @@ public sealed interface AdequacyUncertainty {
      * read for it that did not come back, and a composing for another that never started — and what
      * a reader wants is everything that would have to give.
      */
-    record ShowingStopped(Subject subject, EstablishmentGap by, List<ModelOccurrence> readAt)
+    record ShowingStopped(Subject subject, EstablishmentGap by, ModelOccurrences readAt)
             implements AdequacyUncertainty {
 
         public ShowingStopped {
             if (subject == null) {
                 throw new IllegalArgumentException("a showing that was stopped was of some point");
             }
-            if (by == null) {
+            if (by == null || readAt == null) {
                 throw new IllegalArgumentException("a showing that was stopped says what stopped it");
             }
-            readAt = List.copyOf(readAt);
         }
 
         /**
@@ -173,11 +171,9 @@ public sealed interface AdequacyUncertainty {
                 throw new IllegalArgumentException(
                         "two showings put together are one: " + this + " and " + other);
             }
-            List<ModelOccurrence> copies = new ArrayList<>(readAt);
-            other.readAt.stream().filter(copy -> !copies.contains(copy)).forEach(copies::add);
             return new ShowingStopped(subject,
                     WritabilityKnowledge.Prevented.of(List.of(by, other.by)).by().written()
-                            .getFirst(), copies);
+                            .getFirst(), readAt.and(other.readAt));
         }
 
         /**

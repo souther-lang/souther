@@ -9,6 +9,7 @@ import tools.jackson.databind.json.JsonMapper;
 
 import souther.compiler.check.RuleCitation;
 import souther.compiler.check.RuleReportAnchor;
+import souther.compiler.types.ModelOccurrences;
 import souther.compiler.types.WrittenOwner;
 import souther.compiler.check.RuleRef;
 import souther.compiler.inputs.BlockReason;
@@ -378,6 +379,7 @@ class WhatKeepsAnUndeterminedVerdictOpenIsSaidTest {
                                                 new WrittenOwner.Body("m", "b"), 0, 0,
                                                 SourceConstruct.IF)),
                                 new RuleReportAnchor.ByTheModuleThatWroteIt()),
-                        List.of(), new FilingCoordinate.AtPosition(TermPath.of(term)), why)));
+                        ModelOccurrences.NONE, new FilingCoordinate.AtPosition(TermPath.of(term)),
+                        why)));
     }
 }

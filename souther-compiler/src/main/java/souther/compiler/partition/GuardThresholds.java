@@ -46,6 +46,7 @@ import souther.compiler.coverage.EmittedComparisonState;
 import souther.compiler.coverage.Arrivals;
 import souther.compiler.flow.ValueArrivals;
 import souther.compiler.types.ModelOccurrence;
+import souther.compiler.types.ModelOccurrences;
 import souther.compiler.types.Type;
 
 import java.util.ArrayList;
@@ -827,7 +828,7 @@ public final class GuardThresholds {
         // And the copy of the comparison this reading was made at, beside the rule and not in it:
         // a comparison written in a helper is one rule read once per call, and the call is what a
         // reader tells those readings apart by.
-        List<ModelOccurrence> readAt = List.of(stated);
+        ModelOccurrences readAt = ModelOccurrences.of(stated);
         // What each place is left with, and which places there are, are the assessment's one
         // answer. A rule that was read is filed at its quantity's coordinates and says one thing
         // there, because the quantity is one subject; a reading that stopped has none, and each

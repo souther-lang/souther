@@ -6,6 +6,7 @@ import souther.compiler.partition.DecisionReading;
 import souther.compiler.partition.OnTheWay;
 import souther.compiler.partition.RuleStep;
 import souther.compiler.types.ExpansionLineage;
+import souther.compiler.types.ModelOccurrences;
 import souther.compiler.types.ModelOccurrence;
 
 import java.util.ArrayList;
@@ -76,7 +77,7 @@ class WhatAWayAsksIsReadOffTheCallsItCameFromTest {
             for (RuleStep step : rule.steps()) {
                 for (OnTheWay.TakenIn each : takenIn(step.states())) {
                     ModelOccurrence expected = calls.get(latestLimit(each));
-                    assertEquals(List.of(expected), step.said().entries().get(each),
+                    assertEquals(List.of(expected), step.said().entries().get(each).inOrder(),
                             () -> "read off the call whose limit it weighs: " + each);
                     parts++;
                     if (!expected.equals(step.shown().copy().orElseThrow())) {
@@ -100,10 +101,10 @@ class WhatAWayAsksIsReadOffTheCallsItCameFromTest {
                     Set<ModelOccurrence> alternatives = new LinkedHashSet<>();
                     each.alternatives().forEach(alternative -> alternative.forEach(one ->
                             alternatives.addAll(step.said().entries().getOrDefault(one,
-                                    List.of()))));
-                    List<ModelOccurrence> told = step.said().entries().get(each);
+                                    ModelOccurrences.NONE).inOrder())));
+                    ModelOccurrences told = step.said().entries().get(each);
                     assertNotNull(told, () -> "one of several things is read off something");
-                    assertEquals(alternatives, Set.copyOf(told),
+                    assertEquals(alternatives, Set.copyOf(told.inOrder()),
                             () -> "read off what its alternatives were: " + each);
                     checked++;
                 }
@@ -142,7 +143,8 @@ class WhatAWayAsksIsReadOffTheCallsItCameFromTest {
                             .map(term -> term.contains("xs") ? "xs"
                                     : term.contains("ys") ? "ys" : "n")
                             .distinct().reduce((one, other) -> one + other).orElseThrow();
-                    byList.get(about).add(step.said().entries().getOrDefault(each, List.of()));
+                    byList.get(about).add(step.said().entries()
+                            .getOrDefault(each, ModelOccurrences.NONE).inOrder());
                 }
             }
         }
@@ -183,7 +185,7 @@ class WhatAWayAsksIsReadOffTheCallsItCameFromTest {
                 Set<ModelOccurrence> seen = new LinkedHashSet<>();
                 step.seen().forEach(place -> place.copy().ifPresent(seen::add));
                 if (seen.size() == 2) {
-                    assertEquals(seen, Set.copyOf(step.said().copies()),
+                    assertEquals(seen, Set.copyOf(step.said().copies().inOrder()),
                             "read off the two calls it was seen at");
                     both = true;
                 }
@@ -217,7 +219,8 @@ class WhatAWayAsksIsReadOffTheCallsItCameFromTest {
                     if (each.demand().terms().stream()
                             .anyMatch(term -> term.toString().equals("n"))) {
                         assertEquals(seen,
-                                Set.copyOf(step.said().entries().getOrDefault(each, List.of())),
+                                Set.copyOf(step.said().entries()
+                                        .getOrDefault(each, ModelOccurrences.NONE).inOrder()),
                                 () -> "read off the calls it was consulted at: " + each);
                         both |= seen.size() == 2;
                     }
