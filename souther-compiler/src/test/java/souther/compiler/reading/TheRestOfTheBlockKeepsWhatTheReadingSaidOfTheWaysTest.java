@@ -81,7 +81,7 @@ class TheRestOfTheBlockKeepsWhatTheReadingSaidOfTheWaysTest {
     void waysTheReadingEnumeratesAreHeldAsThose() {
         Ways<List<ControlClaim>> ways = waysPast("amount > 0").getFirst();
         assertTrue(ways instanceof Ways.Known<List<ControlClaim>>(
-                        List<List<ControlClaim>> paths) && paths.size() == 1,
+                        List<List<ControlClaim>> paths, var _) && paths.size() == 1,
                 () -> "one way past the guard, written down: " + ways);
         assertEquals(List.of(false), placesOf(ways).stream()
                         .map(at -> at instanceof ControlPlace.Arm).toList(),
@@ -114,7 +114,7 @@ class TheRestOfTheBlockKeepsWhatTheReadingSaidOfTheWaysTest {
 
     /** Where each claim of the one way written down is made. */
     private static List<ControlPlace> placesOf(Ways<List<ControlClaim>> ways) {
-        if (!(ways instanceof Ways.Known<List<ControlClaim>>(List<List<ControlClaim>> paths))
+        if (!(ways instanceof Ways.Known<List<ControlClaim>>(List<List<ControlClaim>> paths, var _))
                 || paths.size() != 1) {
             throw new AssertionError("one way past the guard, written down: " + ways);
         }

@@ -3,6 +3,8 @@ package souther.compiler.flow;
 import souther.compiler.check.ScopeStep;
 import souther.compiler.core.Core;
 
+import java.util.List;
+
 /**
  * The naming with no words for anything.
  *
@@ -59,6 +61,12 @@ public final class Anonymous implements Naming<AnonymousPath> {
     public WayWritten<AnonymousPath> oneOfTheWaysIn(Core.If fork, int part,
                                                     Arrival<AnonymousPath> way) {
         return new WayWritten.As<>(way.path());
+    }
+
+    // Every way here is the same path, so there is nothing to tell two of them apart by.
+    @Override
+    public boolean toldApart(List<AnonymousPath> ways) {
+        return ways.size() < 2;
     }
 
     @Override

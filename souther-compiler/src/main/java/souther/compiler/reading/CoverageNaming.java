@@ -304,6 +304,15 @@ final class CoverageNaming implements Naming<Outcome> {
         return atTheArm(fork, part, way);
     }
 
+    /** Told apart by the claims each decision on them is made with, which are what a run is held
+     *  to ({@link ControlClaim#toldApart}). */
+    @Override
+    public boolean toldApart(List<Outcome> ways) {
+        return ControlClaim.toldApart(ways.stream()
+                .map(way -> way.holds().stream().map(Decision::claims).toList())
+                .toList());
+    }
+
     /**
      * {@code way}, one of the ways into arm {@code part} of {@code fork}, with what it left out said
      * as the arm sees it; or that the arm does not say it; or that what the way and the arm say

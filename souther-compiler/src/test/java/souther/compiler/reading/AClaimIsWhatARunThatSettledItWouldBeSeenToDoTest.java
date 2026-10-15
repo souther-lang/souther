@@ -93,6 +93,45 @@ class AClaimIsWhatARunThatSettledItWouldBeSeenToDoTest {
         }
     }
 
+    /** Two decisions consumed into one value, the first on two truths the body was handed. */
+    private static final String ON_TRUTHS = """
+            module example.truths
+
+            behavior fee : (a: Bool, b: Bool, c: Bool) -> Int
+
+            let fee (a, b, c) =
+                (if a && b then 10 else 20) + (if c then 1 else 2)
+            """;
+
+    /**
+     * A way of settling a factor is one a run is seen taking, and no run is seen taking two.
+     *
+     * <p>The arm a conjunction of two truths fails into is reached by a run that stopped at the
+     * first and by one that went on to fail the second, and the run is seen at the arm either way:
+     * nothing it does tells the two apart. Offered as two ways of settling the factor, a run down
+     * either would be seen settling it both ways, and credited with the combination it did not
+     * make. So the arm is one way of settling it here, whichever way a run came.
+     */
+    @Test
+    void noRunIsSeenSettlingAFactorTwoWays() {
+        Model model = Model.of(ON_TRUTHS, "fee");
+        List<Interaction> found = model.groups();
+        assertEquals(1, found.size(), "the two decisions meet once: " + found);
+        for (boolean a : new boolean[] {true, false}) {
+            for (boolean b : new boolean[] {true, false}) {
+                for (boolean c : new boolean[] {true, false}) {
+                    AlignedObservation seen = model.observing(a, b, c);
+                    for (Factor factor : found.get(0).factors()) {
+                        assertEquals(1, factor.outcomes().stream()
+                                        .filter(outcome -> satisfied(outcome, seen)).count(),
+                                "the row (" + a + ", " + b + ", " + c + ") is seen settling "
+                                        + "this factor one way: " + factor);
+                    }
+                }
+            }
+        }
+    }
+
     /**
      * The way in is what a run has to have done as well.
      *

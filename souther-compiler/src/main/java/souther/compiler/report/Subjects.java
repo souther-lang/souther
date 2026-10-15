@@ -77,6 +77,7 @@ final class Subjects {
             // its groups went unwalked is what the walk met, and a behavior has one reading of its
             // meetings.
             case Weakening.MeetingsNotWalked it -> new Subject.OfABehavior(it.behavior());
+            case Weakening.MeetingsNotPlaced it -> new Subject.OfABehavior(it.behavior());
             // The arm as the source wrote it, which is what the fact now carries: the number a run
             // through it was recorded at is resolved where the sites are, and nothing this far
             // along has them.

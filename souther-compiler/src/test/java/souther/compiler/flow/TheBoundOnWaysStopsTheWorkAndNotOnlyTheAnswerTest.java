@@ -200,6 +200,12 @@ class TheBoundOnWaysStopsTheWorkAndNotOnlyTheAnswerTest {
                     ? new WayWritten.As<>(way.path()) : new WayWritten.NoWords<>();
         }
 
+        // Every way this writes into an arm is written whole where it went, and nothing at the arm.
+        @Override
+        public boolean toldApart(List<Marks> ways) {
+            return true;
+        }
+
         @Override
         public Marks wentOn(Core.Binary operator, Marks left, Arrival<Marks> right) {
             return left;

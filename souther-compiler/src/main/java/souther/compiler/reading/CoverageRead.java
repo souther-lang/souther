@@ -7,7 +7,6 @@ import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.ScopeStep;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
-import souther.compiler.coverage.ControlPlace;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.coverage.NormalReturn;
 import souther.compiler.coverage.RunBodies;
@@ -819,6 +818,14 @@ public final class CoverageRead {
                     PathAccess.Unreachable.Why.THE_CONDITION_NEVER_COMES_OUT_THAT_WAY);
         }
         List<WayIn> left = waysOf(through.paths());
+        // Ways a run is not seen taking one of steer nothing into the right, and are still what a
+        // run on them decided.
+        if (!through.seenApart()) {
+            Reach into = under(reach, new Reach.Unnameable(new LinkedHashSet<>(List.of(
+                    PathAccess.Unsupported.Why.WAYS_NOT_TOLD_APART)), left));
+            takes(into, into, binary.occurrence());
+            return into;
+        }
         Reach into = under(reach, new Reach.Ways(left));
         takes(into, new Reach.Ways(left), binary.occurrence());
         return into.ways().size() > MOST_WAYS_IN
@@ -871,55 +878,11 @@ public final class CoverageRead {
             List<WayIn> ways = waysOf(known.paths());
             // Written down, and only steered by and witnessed where what a run is seen doing tells
             // them apart. Otherwise what each holds is still what a run on it read.
-            return toldApart(ways) ? new Reach.Ways(ways) : fallbackWayIn(iff, part, naming,
+            return known.seenApart() ? new Reach.Ways(ways) : fallbackWayIn(iff, part, naming,
                     PathAccess.Unsupported.Why.WAYS_NOT_TOLD_APART, ways);
         }
         return fallbackWayIn(iff, part, naming,
                 PathAccess.Unsupported.Why.WAYS_NOT_ENUMERABLE, List.of());
-    }
-
-    /**
-     * Whether what a run is seen doing tells each of {@code ways} from every other: each two claim
-     * some place a run passes once, one way on one and another way on the other.
-     *
-     * <p>The claims on a way are what a reader takes as the proof a run went that way, and a claim
-     * on one is passed by a run on another wherever the other passes that place the same way — or
-     * does not say how it passed it. A truth seen at the arm is seen there whichever way a run came;
-     * two ways told apart by nothing but such truths are one claim, and a run down either is
-     * credited with both. Two ways that passed one place two ways are never both taken by a run.
-     */
-    private static boolean toldApart(List<WayIn> ways) {
-        for (int one = 0; one < ways.size(); one++) {
-            for (int other = one + 1; other < ways.size(); other++) {
-                if (!passedOnePlaceTwoWays(ways.get(one), ways.get(other))) {
-                    return false;
-                }
-            }
-        }
-        return true;
-    }
-
-    private static boolean passedOnePlaceTwoWays(WayIn one, WayIn other) {
-        for (Decision mine : one.decisions()) {
-            for (Decision theirs : other.decisions()) {
-                if (twoWaysOfOnePlace(mine.claims().at(), theirs.claims().at())) {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
-    /** Whether a run passing {@code one} does not pass {@code other}: one comparison coming out two
-     *  ways, or two arms of one fork. */
-    private static boolean twoWaysOfOnePlace(ControlPlace one, ControlPlace other) {
-        return switch (one) {
-            case ControlPlace.Outcome came -> other instanceof ControlPlace.Outcome went
-                    && went.at().equals(came.at()) && went.held() != came.held();
-            case ControlPlace.Arm took -> other instanceof ControlPlace.Arm went
-                    && went.arm().fork().equals(took.arm().fork())
-                    && went.arm().part() != took.arm().part();
-        };
     }
 
     /**

@@ -1,5 +1,6 @@
 package souther.compiler.coverage;
 
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -59,6 +60,38 @@ public record ControlClaim(ControlPlace at) {
                     arm.probe().isPresent() && seen.lit(arm.probe().get());
             case ControlPlace.Outcome outcome -> seen.saw(outcome.at(), outcome.held());
         };
+    }
+
+    /**
+     * Whether what a run is seen doing tells each of {@code ways}, each the claims a run on it is
+     * held to, from every other: each two claim some place a run passes once, one way on one and
+     * another way on the other ({@link ControlPlace#excludes}).
+     *
+     * <p>A claim on one way is passed by a run on another wherever the other passes that place the
+     * same way — or says nothing of how it passed it. Two ways told apart by nothing else are proved
+     * by one run as well as by the other.
+     */
+    public static boolean toldApart(List<List<ControlClaim>> ways) {
+        for (int one = 0; one < ways.size(); one++) {
+            for (int other = one + 1; other < ways.size(); other++) {
+                if (!onePassedWhereTheOtherDidNot(ways.get(one), ways.get(other))) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    private static boolean onePassedWhereTheOtherDidNot(List<ControlClaim> one,
+                                                        List<ControlClaim> other) {
+        for (ControlClaim mine : one) {
+            for (ControlClaim theirs : other) {
+                if (mine.at().excludes(theirs.at())) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     @Override

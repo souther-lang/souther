@@ -212,6 +212,18 @@ final class DecisionNaming implements Naming<DecisionPath> {
     }
 
     /**
+     * Told apart, because every way this writes into an arm among others is one it wrote down whole
+     * where it went ({@link #oneOfTheWaysIn}): two of them part where one condition both ran came
+     * out two ways, and each records that where the condition is stated. A condition this sees at
+     * the arm is seen there short of an operand the other ways ran ({@link ShownBy.AtAnArmShortOf}),
+     * which is not what a run on another way is seen doing.
+     */
+    @Override
+    public boolean toldApart(List<DecisionPath> ways) {
+        return true;
+    }
+
+    /**
      * The way, with each condition settled short of an operand seen at the arm taken without that
      * operand having run — where every run down the arm ran the operator.
      *

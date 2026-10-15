@@ -4,6 +4,8 @@ import souther.compiler.check.Choice;
 import souther.compiler.check.ScopeStep;
 import souther.compiler.core.Core;
 
+import java.util.List;
+
 /**
  * How a reading writes down what got a run to a value.
  *
@@ -115,6 +117,19 @@ public interface Naming<P> {
      * naming that can is saying the reading's list had one too many.
      */
     WayWritten<P> oneOfTheWaysIn(Core.If fork, int part, Arrival<P> way);
+
+    /**
+     * Whether what a run is seen doing tells each of {@code ways}, the ways into one arm, from every
+     * other.
+     *
+     * <p>A question about the ways together, which is why it is not asked of one. Each way holds
+     * what it says; what is asked is whether a run seen on one could have been on another — which a
+     * truth written at the arm it is seen at does nothing to rule out, since the arm is passed
+     * whichever way a run came. Where they are not, every reader taking a way as the proof a run
+     * went that way is told so ({@link Ways.Known#seenApart}), and the value the arm answers is
+     * seen as the arm ({@link Provenance#seenAs}).
+     */
+    boolean toldApart(List<P> ways);
 
     /**
      * {@code left}, the one way the left of {@code operator} goes on, as a run that went on into the

@@ -95,6 +95,11 @@ public record InteractionEvidence(InteractionRequirements asked, Measure<RowsMee
                             held -> held.mightState(meeting.settled()))) {
                 continue;
             }
+            if (each instanceof Weakening.MeetingsNotPlaced
+                    && asked.notPlaced().stream().noneMatch(
+                            held -> held.mightState(meeting.settled()))) {
+                continue;
+            }
             bearing = bearing.union(WeakeningSet.of(each));
         }
         return new OfOneMeeting(bearing, ObligationDisposition.openOn(
@@ -230,6 +235,12 @@ public record InteractionEvidence(InteractionRequirements asked, Measure<RowsMee
             }
             went = went.union(WeakeningSet.of(new Weakening.MeetingsNotWalked(
                     behavior, asked.notMeasured().size(), List.copyOf(limits))));
+        }
+        // And the groups the classes do not place, which no run walks. Said on the measure for the
+        // same reason: dropped without a word, they read as combinations nobody owes.
+        if (!asked.notPlaced().isEmpty()) {
+            went = went.union(WeakeningSet.of(new Weakening.MeetingsNotPlaced(
+                    behavior, asked.notPlaced().size())));
         }
         return new InteractionEvidence(asked, went.isEmpty()
                 ? new Measurement.Complete<>(rows) : new Measurement.Partial<>(rows, went),

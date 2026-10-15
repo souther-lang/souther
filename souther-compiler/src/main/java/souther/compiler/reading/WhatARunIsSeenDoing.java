@@ -185,6 +185,11 @@ final class WhatARunIsSeenDoing implements Naming<List<ControlClaim>> {
     }
 
     @Override
+    public boolean toldApart(List<List<ControlClaim>> ways) {
+        return ControlClaim.toldApart(ways);
+    }
+
+    @Override
     public List<ControlClaim> wentOn(Core.Binary operator, List<ControlClaim> left,
                                      Arrival<List<ControlClaim>> right) {
         return left;

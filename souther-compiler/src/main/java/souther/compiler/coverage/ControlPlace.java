@@ -38,6 +38,24 @@ import java.util.Optional;
 public sealed interface ControlPlace {
 
     /**
+     * Whether a run passing here does not pass {@code other}: one condition coming out two ways, or
+     * two arms of one fork.
+     *
+     * <p>What tells two ways apart by what a run is seen doing, since a run passes a place a claim
+     * is made at once ({@link CoverageSites.Plan#mayRepeat}). Two places that are not one of these
+     * may both be passed by one run, and a run seen at one is not shown not to be at the other.
+     */
+    default boolean excludes(ControlPlace other) {
+        return switch (this) {
+            case Outcome came -> other instanceof Outcome went
+                    && went.at().equals(came.at()) && went.held() != came.held();
+            case Arm took -> other instanceof Arm went
+                    && went.arm().fork().equals(took.arm().fork())
+                    && went.arm().part() != took.arm().part();
+        };
+    }
+
+    /**
      * One arm, as it stands in the tree that runs.
      *
      * @param arm    which arm this is. Two calls of one helper are two arms: each is reached under

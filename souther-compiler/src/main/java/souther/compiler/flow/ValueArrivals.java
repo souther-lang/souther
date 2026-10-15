@@ -382,24 +382,30 @@ public final class ValueArrivals<P> {
      * <p>An empty list says the value is never settled that way, so it is only ever answered where
      * the reading of what the body does agrees. A naming that dropped every way to a truth the body
      * comes to has enumerated nothing, not established an absence.
+     *
+     * <p>Told apart where what a run is seen doing says all of every way: where one went through
+     * an arm whose ways in a run was not seen taking one of, a run seen on it may have been on
+     * another.
      */
     public Ways<P> waysTo(Core e, boolean want) {
         if (!(waysAt(e) instanceof Paths.Held<P> held)) {
             return new Ways.Unknown<>();
         }
         List<P> paths = new ArrayList<>();
+        boolean seenApart = true;
         for (Arrival<P> each : held.arrivals()) {
             if (each.value() == Truth.UNREAD || !each.isComplete()) {
                 return new Ways.Unknown<>();
             }
             if (each.value() == Truth.of(want)) {
                 paths.add(each.path());
+                seenApart &= each.provenance().isSeenWhole();
             }
         }
         if (paths.isEmpty() && comesAt(e).mayCome(want)) {
             return new Ways.Unknown<>();
         }
-        return new Ways.Known<>(paths);
+        return new Ways.Known<>(paths, seenApart);
     }
 
     /**
@@ -757,11 +763,11 @@ public final class ValueArrivals<P> {
             out.add(new Arrival<>(Truth.of(held), under.provenance().unworded(value, held)));
             return;
         }
-        P both = naming.join(under.path(), named);
+        Provenance<P> both = under.provenance().rewritten(path -> naming.join(path, named));
         if (both == null) {
             return;
         }
-        out.add(new Arrival<>(Truth.of(held), under.provenance().writtenAs(both)));
+        out.add(new Arrival<>(Truth.of(held), both));
     }
 
     /**
@@ -798,8 +804,9 @@ public final class ValueArrivals<P> {
                 }
                 if (each == onlyOn) {
                     for (Arrival<P> after : right.orNone()) {
-                        out.under(each.provenance().writtenAs(
-                                naming.wentOn(binary, each.path(), after)), List.of(after), naming);
+                        out.under(each.provenance().rewritten(
+                                path -> naming.wentOn(binary, path, after)), List.of(after),
+                                naming);
                     }
                 } else {
                     out.under(each.provenance(), right.orNone(), naming);
@@ -809,8 +816,8 @@ public final class ValueArrivals<P> {
                     out.add(each);
                 }
             } else if (each == onlyStop) {
-                out.add(new Arrival<>(each.value(), each.provenance().writtenAs(
-                        naming.stoppedShort(binary, each.path()))));
+                out.add(new Arrival<>(each.value(), each.provenance().rewritten(
+                        path -> naming.stoppedShort(binary, path))));
             } else {
                 out.add(each);
             }
@@ -872,10 +879,21 @@ public final class ValueArrivals<P> {
      * way {@link Completeness#PARTIAL} and takes no arm away.
      */
     private List<Provenance<P>> waysIn(Core.If iff, int part, Ways<P> into, Naming<P> naming) {
+        Provenance<P> arm = armWay(iff, part, naming);
         if (into instanceof Ways.Known<P> known && !known.paths().isEmpty()) {
-            return known.paths().stream().map(this::whole).toList();
+            if (known.seenApart()) {
+                return known.paths().stream().map(this::whole).toList();
+            }
+            // Each holds what it says, and a run on any of them is seen at the arm and no more
+            // closely: which is the arm, where the naming has words for it.
+            if (arm.isComplete()) {
+                return known.paths().stream()
+                        .map(each -> new Provenance<>(each, Completeness.COMPLETE, List.of(),
+                                arm.path()))
+                        .toList();
+            }
         }
-        return List.of(armWay(iff, part, naming));
+        return List.of(arm);
     }
 
     /**
@@ -899,7 +917,7 @@ public final class ValueArrivals<P> {
         if (only != null) {
             P seen = naming.seenAtTheArm(iff, part, only);
             if (seen != null) {
-                return new Ways.Known<>(List.of(seen));
+                return new Ways.Known<>(List.of(seen), only.provenance().isSeenWhole());
             }
         }
         if (!(waysAt(iff.cond()) instanceof Paths.Held<P> held)) {
@@ -907,6 +925,7 @@ public final class ValueArrivals<P> {
         }
         // Each once: two arrivals the arm writes down alike are one way into it.
         SequencedSet<P> paths = new LinkedHashSet<>();
+        boolean seenWhole = true;
         for (Arrival<P> each : held.arrivals()) {
             // A way whose value this reading could not work out may come out either, so it is one
             // of the ways here.
@@ -914,7 +933,10 @@ public final class ValueArrivals<P> {
                 continue;
             }
             switch (naming.oneOfTheWaysIn(iff, part, each)) {
-                case WayWritten.As<P>(P seen) -> paths.add(seen);
+                case WayWritten.As<P>(P seen) -> {
+                    paths.add(seen);
+                    seenWhole &= each.provenance().isSeenWhole();
+                }
                 case WayWritten.NoWords<P> _ -> {
                     return new Ways.Unknown<>();
                 }
@@ -924,7 +946,8 @@ public final class ValueArrivals<P> {
         if (paths.isEmpty() && comesAt(iff.cond()).mayCome(want)) {
             return new Ways.Unknown<>();
         }
-        return new Ways.Known<>(List.copyOf(paths));
+        List<P> ways = List.copyOf(paths);
+        return new Ways.Known<>(ways, seenWhole && naming.toldApart(ways));
     }
 
     /**
@@ -959,7 +982,8 @@ public final class ValueArrivals<P> {
     private Provenance<P> armWay(Core fork, int part, Naming<P> naming) {
         P named = naming.forkArm(fork, part);
         return named == null
-                ? new Provenance<>(naming.nowhere(), Completeness.PARTIAL, List.of()) : whole(named);
+                ? new Provenance<>(naming.nowhere(), Completeness.PARTIAL, List.of(), null)
+                : whole(named);
     }
 
     /** Whether the model states the fork that stands at {@code place}, as against one that stands
@@ -998,7 +1022,7 @@ public final class ValueArrivals<P> {
             }
             P named = naming.matchCase(match, part);
             Provenance<P> way = named == null
-                    ? new Provenance<>(naming.nowhere(), Completeness.PARTIAL, List.of())
+                    ? new Provenance<>(naming.nowhere(), Completeness.PARTIAL, List.of(), null)
                     : whole(named);
             out.under(way, body.orNone(), naming);
             if (out.isBeyond()) {
@@ -1131,9 +1155,9 @@ public final class ValueArrivals<P> {
                 if (beyond) {
                     return;
                 }
-                P both = naming.join(holds.path(), each.path());
+                Provenance<P> both = holds.then(each.provenance(), naming);
                 if (both != null) {
-                    add(new Arrival<>(each.value(), holds.then(both, each.provenance())));
+                    add(new Arrival<>(each.value(), both));
                 }
             }
         }
@@ -1166,11 +1190,9 @@ public final class ValueArrivals<P> {
         Gathered out = new Gathered();
         for (Arrival<P> one : left.orNone()) {
             for (Arrival<P> other : right.orNone()) {
-                P both = naming.join(one.path(), other.path());
+                Provenance<P> both = one.provenance().then(other.provenance(), naming);
                 if (both != null) {
-                    out.add(new Arrival<>(Truth.UNREAD, new Provenance<>(both,
-                            one.provenance().completeness()
-                                    .and(other.provenance().completeness()), List.of())));
+                    out.add(new Arrival<>(Truth.UNREAD, both.asAWay()));
                 }
                 if (out.isBeyond()) {
                     return out.paths();
@@ -1190,7 +1212,7 @@ public final class ValueArrivals<P> {
     }
 
     private Provenance<P> whole(P path) {
-        return new Provenance<>(path, Completeness.COMPLETE, List.of());
+        return new Provenance<>(path, Completeness.COMPLETE, List.of(), null);
     }
 
     // ------------------------------------------------------------------- the tree
