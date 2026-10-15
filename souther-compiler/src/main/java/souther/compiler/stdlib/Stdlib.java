@@ -302,19 +302,20 @@ public final class Stdlib {
     /**
      * The sugar an author wrote where a tree holds a call of {@code target}, which the library keeps
      * to itself: a call of a private member outside the library is one a sugar was rewritten to, and
-     * a report about it quotes what the author wrote. Empty where {@code target} is not private, or
-     * no sugar rewrites to it.
+     * a report about it quotes what the author wrote. Empty where {@code target} is not private, and
+     * where no one sugar rewrites to it: of two, the call does not say which was written.
      */
     public Optional<ValueName.Stdlib.Operation> writtenAs(ValueName.Stdlib.Operation target) {
         if (!isPrivateMember(target)) {
             return Optional.empty();
         }
+        List<ValueName.Stdlib.Operation> written = new ArrayList<>();
         for (Map.Entry<ValueName.Stdlib.Operation, Rewrite> each : sugars.entrySet()) {
             if (each.getValue().target().equals(target)) {
-                return Optional.of(each.getKey());
+                written.add(each.getKey());
             }
         }
-        return Optional.empty();
+        return written.size() == 1 ? Optional.of(written.getFirst()) : Optional.empty();
     }
 
     /** Every sugared operation, by what it rewrites to, in the order the sugars are written. */

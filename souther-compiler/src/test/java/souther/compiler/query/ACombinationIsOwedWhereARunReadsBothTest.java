@@ -988,15 +988,14 @@ class ACombinationIsOwedWhereARunReadsBothTest {
     }
 
     /**
-     * A function applied directly as well as by an operation is applied by something that needs
-     * no element, and narrows nothing: every combination stays, and no operation is named as what
-     * kept it — the fold applies it to each call and is not why.
-     *
-     * <p>The application written out is expanded where it is written, and what it decides there
-     * is about the call it was handed, which no position names.
+     * A function applied directly as well as by an operation is two things: the application
+     * written out is expanded where it is written, a copy of the body of its own, and the fold's
+     * applications are what is inside the function. Those are each one call's, and are read so; the
+     * copy decides on the call it was handed, which no position names, and that keeps every
+     * combination — said as such, and not as anything about the function.
      */
     @Test
-    void aFunctionAlsoAppliedDirectlyNarrowsNothing() {
+    void aFunctionAlsoAppliedDirectlyIsReadAsTheCopyItIsAndTheApplicationsTheFoldMakes() {
         Measured total = measured(calls("""
                 {
                     let step = (sum, c) -> sum + charge(plan, c).value
@@ -1009,10 +1008,41 @@ class ACombinationIsOwedWhereARunReadsBothTest {
                 """), "total");
 
         assertEquals(EVERY_PLAN_WITH_EVERY_DESTINATION, total.owed());
-        assertEquals(EVERY_PLAN_WITH_EVERY_DESTINATION, total.kept().keySet(),
-                "no way read whole reads any of them");
-        assertTrue(total.shortOf().stream().noneMatch("List.fold"::equals),
-                () -> "the fold is not why: " + total.kept());
+        Set<WhyKept> copied = Set.of(new WhyKept.ADecisionNothingNames());
+        assertEquals(Map.of("Free × Normal", copied, "Free × Premium", copied,
+                        "Paid × Normal", copied, "Paid × Premium", copied), total.kept(),
+                "kept by what the copy decides, and by nothing about the fold's applications");
+    }
+
+    /**
+     * A function an operation applies to each element and a helper of the author's that calls
+     * itself is handed as well is applied by that helper too, which needs no element of a position
+     * to run it, and says so — whether or not an operation applies it besides.
+     *
+     * <p>Handed to {@code List.map} as itself, and to {@code List.fold} through the block the
+     * library wraps a function handed to it by name in, which leaves no operation applying the
+     * function itself.
+     */
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "List.fold((s, n) -> s + n, 0, List.map(charged, calls))",
+            "List.fold((s, c) -> s + charged(c), 0, calls)"})
+    void aFunctionHandedToAHelperThatCallsItselfSaysSo(String applied) {
+        Measured total = measured(calls("""
+                {
+                    let charged: (Call) -> Int = c -> charge(plan, c).value
+                    Yen(%s + applyAll(charged, calls))
+                }
+
+            partial let applyAll (f: (Call) -> Int, cs: List<Call>): Int =
+                match List.get(0, cs) with
+                    | Some c -> f(c) + applyAll(f, List.drop(1, cs))
+                    | None -> 0""".formatted(applied), """
+                    | (Free, [Call { dest = Premium, seconds = 60 }]) -> Yen(120)
+                """), "total");
+
+        assertEquals(Set.of("elsewhere"), total.shortOf(),
+                () -> "kept: " + total.kept() + "\n" + total.human());
     }
 
     /**

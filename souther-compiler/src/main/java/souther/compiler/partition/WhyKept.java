@@ -97,6 +97,43 @@ public sealed interface WhyKept {
                 Objects.requireNonNull(operation, "some operation applies it");
             }
         }
+
+        /** Two lists of shortfalls in one order: a shortfall at a time, the shorter list first
+         *  where one runs out. */
+        static int inASteadyOrder(List<Shortfall> one, List<Shortfall> other) {
+            for (int at = 0; at < Math.min(one.size(), other.size()); at++) {
+                int each = ONE_IN_A_STEADY_ORDER.compare(one.get(at), other.get(at));
+                if (each != 0) {
+                    return each;
+                }
+            }
+            return Integer.compare(one.size(), other.size());
+        }
+
+        /** One shortfall against another: by kind, then by the operation and how far. */
+        Comparator<Shortfall> ONE_IN_A_STEADY_ORDER = Comparator
+                .comparingInt(Shortfall::kind)
+                .thenComparing(Shortfall::operationIfAny)
+                .thenComparingInt(each -> each instanceof ToSomeOfTheElements(var _, var applied)
+                        ? applied.ordinal() : -1);
+
+        /** Which kind this is, in the order the kinds are said. */
+        private int kind() {
+            return switch (this) {
+                case NotOnlyByOperations _ -> 0;
+                case ToSomeOfTheElements _ -> 1;
+                case OverNoPosition _ -> 2;
+            };
+        }
+
+        /** The operation this is about, or none for a use that is no operation's. */
+        private String operationIfAny() {
+            return switch (this) {
+                case NotOnlyByOperations _ -> "";
+                case ToSomeOfTheElements(var operation, var _) -> operation;
+                case OverNoPosition(var operation) -> operation;
+            };
+        }
     }
 
     /** A way of the body holds a decision whose subject the reading could not name, which may be
@@ -130,12 +167,13 @@ public sealed interface WhyKept {
                     AFunctionReadAsAWhole that = (AFunctionReadAsAWhole) other;
                     int at = SourcePos.IN_WRITTEN_ORDER.compare(function.written(),
                             that.written());
-                    yield at != 0 ? at : function.shortfalls().toString()
-                            .compareTo(that.shortfalls().toString());
+                    yield at != 0 ? at : Shortfall.inASteadyOrder(function.shortfalls(),
+                            that.shortfalls());
                 }
                 case ADecisionNothingNames _ -> 0;
-                case ARuleNoDecisionReads(var at) ->
-                        at.toString().compareTo(((ARuleNoDecisionReads) other).at().toString());
+                case ARuleNoDecisionReads(var at) -> Comparator.comparing(AxisId::behavior)
+                        .thenComparing(AxisId::term)
+                        .compare(at, ((ARuleNoDecisionReads) other).at());
             });
 
     /** Which kind this is, in the order the kinds are said. */
