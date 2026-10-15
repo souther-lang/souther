@@ -2492,6 +2492,14 @@ public final class InvariantChecker {
             relating(clause, from.clause().id().declaredOn(), at, byName, narrowers);
             return;
         }
+        // A rule read to the end whose end is past the last value of the order, said as that. It
+        // admits nothing, which is a fact about the rule and not a limit of any reading, so the
+        // finding is the one a comparison whose line falls outside its quantity gets. Unsaid, the
+        // only word left about it was the reading of values' own: that it is written in a form
+        // nothing here reads.
+        if (end instanceof InvariantBound.Read.PastWhereTheOrderStops) {
+            file(about, part, clause, new BlockReason.ComparisonCuttingOutsideDomain(), noLines);
+        }
         if (end instanceof InvariantBound.Read.AnEnd placed) {
             out.add(new Direct(about.at(), statement, placed.bound(),
                     new ReadingPlace(of.opened(), said.at())));

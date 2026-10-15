@@ -123,11 +123,14 @@ final class BoundaryReading {
              * The positions this leaf is read whole at, which is {@link #takenOf} where the range
              * holds a value and none where it does not.
              *
-             * <p>A range nothing is between is the rule saying no value satisfies it, and that is
-             * said by whoever answers whether a value exists — a refusal of the declaration, or a
-             * report naming the rule where nothing refuses it, as for a size past the greatest
-             * whole number. Taken in here, the rule would be accounted for and the one place that
-             * says it would be silent.
+             * <p>Three states, and this answers only the first. A rule this reading could not
+             * place is {@link LeftOpen}. A rule it read whose range holds a value is taken in. A
+             * rule it read whose range holds none is read and admits nothing — which is not the
+             * first state and is not taken in either: the question it raises about the position
+             * is a real one, as for a comparison whose positions cancel to something no row
+             * satisfies, and whether the input is empty is the one prover's to say. That it was
+             * read is said beside the question, by the finding that its line falls outside what
+             * its number ever holds.
              */
             Set<FactSubject> readWholeAt() {
                 return Endpoint.someValueLiesBetween(range.low(), range.high()) ? takenOf : Set.of();

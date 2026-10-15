@@ -412,6 +412,27 @@ class ARuleReadToTheEndIsNotOneThisCouldNotReadTest {
     }
 
     /**
+     * And one rule of two conjuncts is accounted for as the two written as two rules are.
+     *
+     * <p>Every conjunct read by some reading is what a conjunction needs, and not one reading that
+     * read them all. Asked the second way, {@code name == "ab"} read by the values and the
+     * equality read by the numbers an operation answers left the one rule as read by nothing while
+     * the same two clauses written apart were each read.
+     */
+    @Test
+    void aConjunctionOfTwoReadingsIsAccountedForAsTheTwoRulesWrittenApartAre() {
+        Measured together = of("    invariant name == \"ab\" && String.length(name) == 2");
+        Measured apart = of("    invariant name == \"ab\"\n"
+                + "    invariant String.length(name) == 2");
+
+        assertFalse(together.kinds().contains("rule_unaccounted"), together.human());
+        assertEquals(apart.kinds().contains("rule_unaccounted"),
+                together.kinds().contains("rule_unaccounted"));
+        assertEquals(apart.weakening().contains("question_unanswered"),
+                together.weakening().contains("question_unanswered"));
+    }
+
+    /**
      * Of any operation answering a number of a position, and not of a string's length.
      *
      * <p>The reading is of the numbers an operation answers, and the length of a list is one.

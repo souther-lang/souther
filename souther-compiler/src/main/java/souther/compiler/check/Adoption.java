@@ -234,11 +234,13 @@ record Adoption<A, L extends ReadingLanguage>(Set<A> read, Set<A> settled, Set<A
     /**
      * Either part holding, for a reading whose state has no join that keeps what a choice says.
      *
-     * <p>Every position either branch was about is one this reading missed, and a choice is a part
-     * it did not read. What such a reading makes of a choice is an envelope: two alternatives naming
-     * one length each leave every length between them, and a rule that names two lengths read as the
-     * run between them is not read whole. Taken from either branch's account instead, the choice
-     * would be credited to a reading that holds a different set from the one the rule states.
+     * <p>Every position either branch was about is one this reading missed. That is not a choice
+     * being something such a reading cannot read: what it holds of a choice is an envelope, and an
+     * envelope does not in general show the choice exact. Two alternatives naming one length each
+     * leave every length between them, and a rule that names two lengths read as the run between
+     * them is not read whole. Taken from either branch's account instead, the choice would be
+     * credited to a reading that holds a different set from the one the rule states. A join that
+     * kept what a choice says would be the place to take some of them in.
      *
      * <p>What a dead alternative settled stays settled. Such a choice is composed at {@link #both}
      * and never arrives here, and a dead branch deeper in either side still imposes nothing.
