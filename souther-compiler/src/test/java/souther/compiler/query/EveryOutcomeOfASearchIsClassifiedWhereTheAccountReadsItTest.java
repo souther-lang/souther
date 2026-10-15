@@ -14,6 +14,7 @@ import souther.compiler.partition.OnTheWay;
 import souther.compiler.partition.WayToTheBorder;
 import souther.compiler.publish.PublicationOrders;
 import souther.compiler.types.ExpansionLineage;
+import souther.compiler.types.ModelOccurrences;
 import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.SourceConstruct;
 import souther.compiler.types.SourceConstructOrigin;
@@ -216,12 +217,12 @@ class EveryOutcomeOfASearchIsClassifiedWhereTheAccountReadsItTest {
         WritabilityKnowledge.Prevented held = assertInstanceOf(
                 WritabilityKnowledge.Prevented.class,
                 WritabilityKnowledge.of(nothingShown(),
-                        SearchOutcomes.of(stopped()).readAt(List.of(oneCall))
+                        SearchOutcomes.of(stopped()).readAt(ModelOccurrences.of(oneCall))
                                 .plus(SearchOutcomes.of(unresolved())
-                                        .readAt(List.of(otherCall)))));
+                                        .readAt(ModelOccurrences.of(otherCall)))));
 
         EstablishmentGap gap = held.by().written().getFirst();
-        assertEquals(List.of(oneCall), held.readAt(gap));
+        assertEquals(List.of(oneCall), held.readAt(gap).inOrder());
     }
 
     /** A row read back is grounds, and grounds outrank nothing — they answer a different question. */

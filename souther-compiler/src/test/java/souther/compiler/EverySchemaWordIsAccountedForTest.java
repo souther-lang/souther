@@ -45,6 +45,7 @@ import souther.compiler.reading.PathAccess;
 import souther.compiler.report.AdequacyReport;
 import souther.compiler.report.RowFailure;
 import souther.compiler.semantics.HowAClosureIsApplied;
+import souther.compiler.types.ModelOccurrences;
 import souther.compiler.types.SourceConstruct;
 import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.types.RuleOrigin;
@@ -1226,7 +1227,7 @@ class EverySchemaWordIsAccountedForTest {
                                         new WrittenOwner.Body("m", "b"), 0, 0,
                                         SourceConstruct.IF)),
                         new souther.compiler.check.RuleReportAnchor.ByTheModuleThatWroteIt()),
-                List.of(),
+                ModelOccurrences.NONE,
                 souther.compiler.inputs.FilingCoordinate.at(
                         souther.compiler.inputs.TermPath.of("x")),
                 new souther.compiler.inputs.BlockReason.UnreadComparisonForm());
@@ -1241,7 +1242,7 @@ class EverySchemaWordIsAccountedForTest {
                                         new WrittenOwner.Body("m", "b"), 0, 0,
                                         SourceConstruct.IF)),
                         new souther.compiler.check.RuleReportAnchor.ByTheModuleThatWroteIt()),
-                List.of(),
+                ModelOccurrences.NONE,
                 souther.compiler.inputs.FilingCoordinate.at(
                         souther.compiler.inputs.TermPath.of("x")),
                 new souther.compiler.inputs.BlockReason.UnreadComparisonForm());

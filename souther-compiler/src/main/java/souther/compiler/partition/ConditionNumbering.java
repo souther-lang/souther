@@ -5,7 +5,7 @@ import souther.compiler.diag.Citation;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.sites.WrittenCondition;
-import souther.compiler.types.ModelOccurrence;
+import souther.compiler.types.ModelOccurrences;
 import souther.compiler.types.SourceConstructOrigin;
 
 import java.util.Collections;
@@ -90,7 +90,7 @@ final class ConditionNumbering {
     /** The copies each entry this reading put on a way was read off, by the entry itself, shared
      *  with every place this reading reads. Two equal entries are two entries here, each read off
      *  its own copies. */
-    private final Map<OnTheWay, List<ModelOccurrence>> madeBy;
+    private final Map<OnTheWay, ModelOccurrences> madeBy;
     /** How many names this reading has handed out, shared with every place it reads. */
     private final int[] next;
     /** What this reading names inside the body of each call of a recursive helper it reads, by the
@@ -104,7 +104,7 @@ final class ConditionNumbering {
 
     private ConditionNumbering(String module, String behavior, ConditionOccurrence.Reading reading,
                                Map<ConditionOccurrence, Citation> metAt,
-                               Map<OnTheWay, List<ModelOccurrence>> madeBy, int[] next,
+                               Map<OnTheWay, ModelOccurrences> madeBy, int[] next,
                                Map<CallContext, ConditionNumbering> within) {
         this.module = module;
         this.behavior = behavior;
@@ -228,7 +228,7 @@ final class ConditionNumbering {
 
     private void file(List<OnTheWay> entries, SaidOnTheWay by) {
         for (OnTheWay each : entries) {
-            List<ModelOccurrence> copies = by.entries().get(each);
+            ModelOccurrences copies = by.entries().get(each);
             if (copies != null && !copies.isEmpty()) {
                 madeBy.putIfAbsent(each, copies);
             }
@@ -245,16 +245,16 @@ final class ConditionNumbering {
      * and two equal entries on these ways made by two copies are told both.
      */
     SaidOnTheWay saidOnTheWay(List<List<OnTheWay>> ways) {
-        Map<OnTheWay, List<ModelOccurrence>> entries = new LinkedHashMap<>();
+        Map<OnTheWay, ModelOccurrences> entries = new LinkedHashMap<>();
         for (List<OnTheWay> way : ways) {
             told(way, entries);
         }
         return new SaidOnTheWay(entries, Map.of(), Map.of());
     }
 
-    private void told(List<OnTheWay> way, Map<OnTheWay, List<ModelOccurrence>> into) {
+    private void told(List<OnTheWay> way, Map<OnTheWay, ModelOccurrences> into) {
         for (OnTheWay each : way) {
-            List<ModelOccurrence> made = madeBy.get(each);
+            ModelOccurrences made = madeBy.get(each);
             if (made != null) {
                 SaidOnTheWay.filedAlone(each, made, into);
             }

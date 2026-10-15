@@ -4,8 +4,8 @@ import souther.compiler.check.RuleCitation;
 import souther.compiler.check.RuleRef;
 import souther.compiler.check.RuleReportAnchor;
 import souther.compiler.types.ModelOccurrence;
+import souther.compiler.types.ModelOccurrences;
 
-import java.util.List;
 import java.util.Optional;
 
 /**
@@ -65,7 +65,7 @@ public record PredicateOrigin(PredicateOccurrence occurrence, RuleRef.Predicate 
 
     /** The copy the application was read in, where it was read in one. */
     @Override
-    public List<ModelOccurrence> readAt() {
-        return copy.map(List::of).orElse(List.of());
+    public ModelOccurrences readAt() {
+        return copy.map(ModelOccurrences::of).orElse(ModelOccurrences.NONE);
     }
 }

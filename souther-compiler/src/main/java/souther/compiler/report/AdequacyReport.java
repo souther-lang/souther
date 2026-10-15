@@ -20,6 +20,7 @@ import souther.compiler.types.CanonicalNameOrder;
 import souther.compiler.types.ExpansionLineage;
 import souther.compiler.types.ExpansionSite;
 import souther.compiler.types.ModelOccurrence;
+import souther.compiler.types.ModelOccurrences;
 import souther.compiler.types.StepOfACopy;
 import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.types.ValueName;
@@ -1339,30 +1340,30 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     private static Map<ModelOccurrence, CopyShown> copiesShown(
             Compilation compilation, String module, Map<DecisionRule, SettledAcross> settled,
             List<BorderAssessment> lines, List<ReportedFinding> reported) {
-        List<ModelOccurrence> copies = new ArrayList<>();
+        ModelOccurrences.Gathering copies = new ModelOccurrences.Gathering();
         for (SettledAcross rule : settled.values()) {
             for (SettledAt each : rule.places()) {
-                copies.addAll(each.at().saidOnTheWay().copies());
+                copies.add(each.at().saidOnTheWay().copies());
                 for (RuleStep step : each.at().steps()) {
                     step.seen().forEach(seen -> seen.copy().ifPresent(copies::add));
                 }
             }
         }
         for (BorderAssessment line : lines) {
-            copies.addAll(line.readAt());
-            copies.addAll(line.saidOnTheWay().copies());
+            copies.add(line.readAt());
+            copies.add(line.saidOnTheWay().copies());
         }
         // And the copies each rule this page says nothing worked out about was read at.
         for (ReportedFinding each : reported) {
-            copies.addAll(switch (each.about()) {
+            copies.add(switch (each.about()) {
                 case About.ARuleWithoutALine(var it) -> it.finding().readAt();
                 case About.ARuleNothingClassified(var it) -> it.finding().readAt();
                 case About.AQuestionNothingAnswered(var asked) -> asked.asked().readAt();
-                default -> List.of();
+                default -> ModelOccurrences.NONE;
             });
         }
         Map<ModelOccurrence, CopyShown> out = new LinkedHashMap<>();
-        for (ModelOccurrence copy : copies) {
+        for (ModelOccurrence copy : copies.gathered()) {
             out.computeIfAbsent(copy, _ -> new CopyShown(
                     Sites.placeIfKnown(compilation.db(), copy.origin()),
                     callsOf(compilation.db(), module, StepOfACopy.of(copy.lineage()))));
@@ -1475,7 +1476,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * <p>Every copy, in the order they were read: one rule of a helper read the same way at two
      * calls is one finding, and a reader sent to it is sent to both.
      */
-    private static String inCopies(List<ModelOccurrence> readAt,
+    private static String inCopies(ModelOccurrences readAt,
                                    Map<ModelOccurrence, CopyShown> copies,
                                    SourceRendering rendering, SourceId declaredIn) {
         List<String> calls = new ArrayList<>();
@@ -2459,26 +2460,22 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * <p>Every reading, which is what an entry open on all of them is about. A showing that
      * stopped says which of them stopped ({@link AdequacyUncertainty.ShowingStopped#readAt}).
      */
-    private Map<BorderObligationPoint, List<ModelOccurrence>> whereEachPointIsRead() {
-        Map<BorderObligationPoint, List<ModelOccurrence>> out = new LinkedHashMap<>();
+    private Map<BorderObligationPoint, ModelOccurrences> whereEachPointIsRead() {
+        Map<BorderObligationPoint, ModelOccurrences.Gathering> gathering = new LinkedHashMap<>();
         for (ModuleReport module : modules) {
             for (BehaviorReport behavior : module.behaviors()) {
                 if (behavior.partition() == null) {
                     continue;
                 }
                 for (BorderObligationPointAssessment point : behavior.account()) {
-                    List<ModelOccurrence> readAt =
-                            out.computeIfAbsent(point.point(), each -> new ArrayList<>());
-                    for (BorderObligationPointAssessment.ReadingSaid said : point.readingsSaid()) {
-                        for (ModelOccurrence copy : said.readAt()) {
-                            if (!readAt.contains(copy)) {
-                                readAt.add(copy);
-                            }
-                        }
-                    }
+                    ModelOccurrences.Gathering readAt = gathering.computeIfAbsent(point.point(),
+                            each -> new ModelOccurrences.Gathering());
+                    point.readingsSaid().forEach(said -> readAt.add(said.readAt()));
                 }
             }
         }
+        Map<BorderObligationPoint, ModelOccurrences> out = new LinkedHashMap<>();
+        gathering.forEach((point, readAt) -> out.put(point, readAt.gathered()));
         return out;
     }
 
@@ -2490,19 +2487,21 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * Anything else open at a point is open on every reading of it — nothing showed a row at any
      * of them — so those are every copy the point was read in.
      */
-    private static List<ModelOccurrence> readAt(
+    private static ModelOccurrences readAt(
             AdequacyUncertainty unanswered,
-            Map<BorderObligationPoint, List<ModelOccurrence>> pointsReadAt) {
+            Map<BorderObligationPoint, ModelOccurrences> pointsReadAt) {
         if (unanswered instanceof AdequacyUncertainty.ShowingStopped stopped) {
             return stopped.readAt();
         }
         return switch (unanswered.subject()) {
             case Subject.AtARule it -> it.question().readAt();
-            case Subject.AtAPoint it -> pointsReadAt.getOrDefault(it.point(), List.of());
+            case Subject.AtAPoint it ->
+                    pointsReadAt.getOrDefault(it.point(), ModelOccurrences.NONE);
             case Subject.OfAModule _, Subject.OfABehavior _, Subject.OfASource _,
                  Subject.OfARow _, Subject.AtASpelledPosition _, Subject.AtAPosition _,
                  Subject.AtAnInput _, Subject.AtABorder _, Subject.OfAMeasure _,
-                 Subject.OfAnAxisMeasure _, Subject.AtAFork _, Subject.AtAnArm _ -> List.of();
+                 Subject.OfAnAxisMeasure _, Subject.AtAFork _, Subject.AtAnArm _ ->
+                    ModelOccurrences.NONE;
         };
     }
 
@@ -2799,7 +2798,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // read in.
             PublishedRuleHandle.WhereARuleIs places = rulePlaces();
             Map<ModelOccurrence, CopyShown> copies = everyCopyShown();
-            Map<BorderObligationPoint, List<ModelOccurrence>> pointsReadAt = whereEachPointIsRead();
+            Map<BorderObligationPoint, ModelOccurrences> pointsReadAt = whereEachPointIsRead();
             out.append("  what keeps it open\n");
             out.append(String.format("    stopped at a figure of this compiler   %3d%n",
                     open.atAFigure()));
