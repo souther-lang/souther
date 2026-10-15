@@ -65,7 +65,6 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Deque;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -245,7 +244,7 @@ public final class Output {
             // A module read off the path was generated where it was compiled. What it published
             // declares its behaviors and carries none of their bodies, so there is nothing here to
             // generate it from.
-            if (!db.ask(new Front.Declared()).value().contains(name)) {
+            if (!Front.declaredHere(db, name)) {
                 return null;
             }
             Answer<Bodies.Elaborated> checked = switch (of) {
@@ -480,10 +479,9 @@ public final class Output {
         if (reaches == null) {
             return null;
         }
-        Set<String> declared = new HashSet<>(db.ask(new Front.Declared()).value());
         List<String> generated = new ArrayList<>();
         for (int i = reaches.size() - 1; i >= 0; i--) {
-            if (declared.contains(reaches.get(i))) {
+            if (Front.declaredHere(db, reaches.get(i))) {
                 generated.add(reaches.get(i));
             }
         }
