@@ -472,6 +472,72 @@ class OneValueAnswersEveryClassOfALocationOrNoneDoesTest {
                         .why());
     }
 
+    /**
+     * A rule telling sets of values apart, on a position whose declarations name its values, leaves
+     * the position divided at the values named — so the class of the value is a value at a place,
+     * and is composed with a class of a number taken of it as one value.
+     *
+     * <p>The premise the composing rests on, held here rather than said. A rule of sets makes classes
+     * that are sets ({@code Classing}), and a set has no number for the composing to read; what
+     * keeps those classes off such a position is that the declarations already divide it, at the
+     * values they name, and a body's rules only ever refine that ({@code Partitions.classesOf}).
+     * Wherever the values are named — on the value's own type, on a record holding it, on the
+     * element of a container.
+     */
+    @Test
+    void aRuleOfSetsOnAPositionWhoseValuesAreNamedLeavesItDividedAtThoseValues() {
+        String verdict = """
+                module example.named
+
+                data Ok
+                data No
+                data Verdict = Ok | No
+                """;
+        String rule = "String.startsWith(\"a\", %1$s) && String.length(%1$s) == 2";
+        List<String> models = List.of(verdict + """
+                data Code = String
+                    invariant value == "aa" || value == "bb" || value == "c"
+
+                behavior gate : (c: Code) -> Verdict
+                let gate (c) = if %s then No else Ok
+                """.formatted(rule.formatted("c.value")), verdict + """
+                data Request = { code: String }
+                    invariant code == "aa" || code == "bb" || code == "c"
+
+                behavior gate : (r: Request) -> Verdict
+                let gate (r) = if %s then No else Ok
+                """.formatted(rule.formatted("r.code")), verdict + """
+                data Code = String
+                    invariant value == "aa" || value == "bb" || value == "c"
+                data Request = { codes: List<Code> }
+
+                behavior gate : (r: Request) -> Verdict
+                let gate (r) = if List.any(c -> %s, r.codes) then No else Ok
+                """.formatted(rule.formatted("c.value")));
+        for (String source : models) {
+            Model model = new Model(source);
+            List<String> ofTheValue = new ArrayList<>();
+            for (Axis axis : model.partitioning.axes()) {
+                if (!(axis.term() instanceof NumericTerm.ValueOf)) {
+                    continue;
+                }
+                for (PartitionClass cls : axis.classes()) {
+                    assertInstanceOf(NumericSet.At.class, cls.recognises().numbers(),
+                            () -> "a class of the value is a value at a place: " + cls);
+                    ofTheValue.add(cls.label());
+                }
+            }
+            assertEquals(List.of("\"aa\"", "\"bb\"", "\"c\""), ofTheValue, source);
+
+            Compilation compilation = Compilation.ofSource(source, "Main");
+            compilation.measure(Adequacy.Asked.fullReport());
+            compilation.answerEverything();
+            String rows = GeneratedRows.of(compilation, "example.named", "gate",
+                    SourceRendering.namedByIdentity(SourceLayouts.NONE)).text();
+            assertFalse(rows.contains("would have to hold two values at once"), rows);
+        }
+    }
+
     /** One model, read and divided, with the numbers its classes are of in hand. */
     private static final class Model {
 
