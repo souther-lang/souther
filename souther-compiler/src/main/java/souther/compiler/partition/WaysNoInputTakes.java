@@ -6,7 +6,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.function.Function;
+import java.util.function.Supplier;
 
 /**
  * The ways one reading of a body proved no input takes, as it proves them
@@ -28,10 +28,26 @@ final class WaysNoInputTakes {
      */
     private final Map<DecisionRule, Optional<NoInputTakesIt>> asked = new HashMap<>();
 
-    /** Why no input takes {@code path}, where that is proved, asked once for what it consulted. */
-    Optional<NoInputTakesIt> whyNoInputTakes(DecisionPath path,
-                                             Function<DecisionPath, Optional<NoInputTakesIt>> proving) {
-        return asked.computeIfAbsent(path.rule(), _ -> proving.apply(path));
+    /** How many more ways this reading asks ({@link CompositionBudget#WAYS_A_DECISION_ASKS_AN_INPUT_TAKES}). */
+    private int waysLeft = CompositionBudget.WAYS_A_DECISION_ASKS_AN_INPUT_TAKES.maximum();
+
+    /**
+     * Why no input takes {@code path}, where that is proved, asked once for what it consulted —
+     * and nothing past the ways this reading asks in all, which is no proof and keeps the way.
+     */
+    Optional<NoInputTakesIt> whyNoInputTakes(DecisionRule consulted,
+                                             Supplier<Optional<NoInputTakesIt>> proving) {
+        Optional<NoInputTakesIt> known = asked.get(consulted);
+        if (known != null) {
+            return known;
+        }
+        if (waysLeft == 0) {
+            return Optional.empty();
+        }
+        waysLeft--;
+        Optional<NoInputTakesIt> answered = proving.get();
+        asked.put(consulted, answered);
+        return answered;
     }
 
     /** That no input takes {@code path}, for {@code why}. */

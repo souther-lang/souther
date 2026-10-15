@@ -570,6 +570,9 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + " comparison out as a part nothing read, naming it"),
             Map.entry("souther.compiler.partition.DecisionReading#<clinit>()V",
                     "how many paths through one body a decision is read for"),
+            Map.entry("souther.compiler.partition.WaysNoInputTakes#<init>()V",
+                    "omits no work a reader is owed: a way not asked is a way kept, and the rules"
+                            + " past it are read and said as rules, as with no proof at all"),
             Map.entry("souther.compiler.partition.DecisionReading#of("
                             + "Ljava/lang/String;Lsouther/compiler/check/AnalysisBody;"
                             + "Lsouther/compiler/inputs/InputReading;"

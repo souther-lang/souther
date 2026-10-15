@@ -85,6 +85,38 @@ class ATakeChainIsReadAlongOnlyTheWaysARunTakesTest {
                 .replace("REST", rest);
     }
 
+    /**
+     * The same chain written out in the body: each remainder a name bound to the choice, and the
+     * next condition comparing that name. A comparison whose side is the choice itself, and not a
+     * value its arithmetic stops at, is the other way a reading meets one.
+     */
+    private static String lets(int calls, boolean noughtOrMore) {
+        List<String> caps = new ArrayList<>();
+        StringBuilder lets = new StringBuilder();
+        String rest = "used.value";
+        for (int i = 0; i < calls; i++) {
+            caps.add("c" + i + ": MB");
+            lets.append("    let r%d = if %s <= held.c%d.value then 0 else %s - held.c%d.value\n"
+                    .formatted(i, rest, i, rest, i));
+            rest = "r" + i;
+        }
+        return """
+                module demo
+
+                data MB = Int BOUND
+                data Held = { CAPS }
+
+                behavior draw : (used: MB, held: Held) -> Int
+
+                let draw (used, held) = {
+                LETS    REST
+                }
+                """.replace(" BOUND", noughtOrMore ? "\n    invariant value >= 0" : "")
+                .replace("CAPS", String.join(", ", caps))
+                .replace("LETS", lets)
+                .replace("REST", rest);
+    }
+
     /** What each condition of the chain comes out as, the helper run here. */
     private static List<Boolean> taking(int calls, Map<String, Long> at) {
         List<Boolean> out = new ArrayList<>();
@@ -171,12 +203,20 @@ class ATakeChainIsReadAlongOnlyTheWaysARunTakesTest {
     }
 
     private static Model chainModel(int calls, boolean noughtOrMore) {
+        return model(chain(calls, noughtOrMore), calls, noughtOrMore);
+    }
+
+    private static Model letsModel(int calls, boolean noughtOrMore) {
+        return model(lets(calls, noughtOrMore), calls, noughtOrMore);
+    }
+
+    private static Model model(String source, int calls, boolean noughtOrMore) {
         List<String> atoms = new ArrayList<>(List.of("used"));
         for (int i = 0; i < calls; i++) {
             atoms.add("c" + i);
         }
-        return new Model(chain(calls, noughtOrMore), atoms, noughtOrMore ? 0 : -2,
-                noughtOrMore ? 4 : 2, at -> taking(calls, at));
+        return new Model(source, atoms, noughtOrMore ? 0 : -2, noughtOrMore ? 4 : 2,
+                at -> taking(calls, at));
     }
 
     private static Model apartModel(int conditions) {
@@ -262,17 +302,20 @@ class ATakeChainIsReadAlongOnlyTheWaysARunTakesTest {
      *  ({@link ACaseChainIsReadNoFurtherInAllThanOneConditionIsReadTest}). */
     @Test
     void aLongChainOfAmountsNoughtOrMoreReadsEveryConditionToTheEnd() {
-        List<Proposition> stated = stated(chain(12, true));
+        for (String source : List.of(chain(12, true), lets(12, true))) {
+            List<Proposition> stated = stated(source);
 
-        assertFalse(stated.isEmpty());
-        for (Proposition each : stated) {
-            assertEquals(List.of(), Proposition.stopsIn(each), each::key);
+            assertFalse(stated.isEmpty());
+            for (Proposition each : stated) {
+                assertEquals(List.of(), Proposition.stopsIn(each), each::key);
+            }
         }
     }
 
     @Test
     void eachConditionReadIsTheConditionTheHelperTests() {
-        for (Model model : List.of(chainModel(4, true), chainModel(4, false))) {
+        for (Model model : List.of(chainModel(4, true), chainModel(4, false), letsModel(4, true),
+                letsModel(4, false))) {
             List<Map<String, Long>> grid = model.grid();
             List<List<Boolean>> runs = grid.stream().map(model.run()).toList();
             int calls = runs.getFirst().size();

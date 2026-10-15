@@ -156,9 +156,9 @@ final class DecisionNaming implements Naming<DecisionPath> {
     /** Why no input brings out every condition {@code path} consulted as it did, where that is
      *  proved. */
     private Optional<NoInputTakesIt> noInputTakes(DecisionPath path) {
-        return proved.whyNoInputTakes(path, way -> {
+        return proved.whyNoInputTakes(path.rule(), () -> {
             List<OnTheWay> stated = new ArrayList<>();
-            way.consulted().forEach(each -> stated.addAll(each.states()));
+            path.consulted().forEach(each -> stated.addAll(each.states()));
             return new WayToTheBorder(stated)
                     .takenByNoInput(meanings.states().read().quantities().region());
         });

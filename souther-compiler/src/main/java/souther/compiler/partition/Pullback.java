@@ -4518,7 +4518,9 @@ final class Pullback {
                 if (past != null) {
                     yield partOf(at, new Derivation.Stopped(past, fixed));
                 }
-                Core choice = chosen.value();
+                // Taken as the if itself and not as whatever stood for it here: a name for the
+                // choice read again elsewhere on this reading is the same choice, taken.
+                Core choice = choiceAt.value();
                 yield new Derivation.AComparisonOfAChoice(madeBy(iff, armsOf(iff, choiceAt.at(),
                         condition, left, arm -> again.apply(on -> on.taking(choice, arm, 1)))));
             }
@@ -5343,6 +5345,20 @@ final class Pullback {
      */
     private Derivation comparedCase(Denotation left, Denotation right, Rel states,
                                     Denotation at) {
+        // An if on either side is gone into as any choice a comparison is read through is
+        // ({@link #goingIn}): the value its condition stops at first, and only the arms a run
+        // takes, each counted where it is read.
+        for (Denotation side : List.of(left, right)) {
+            if (chosenAt(side) instanceof Denotation chosen
+                    && Core.withoutStanding(chosen.value()) instanceof Core.If
+                    && !side.at().isTaken(chosen.value())) {
+                return goingIn(new Inside.AChoice(side), side.at(), at, false,
+                        taking -> comparedCase(
+                                new Denotation(left.value(), taking.apply(left.at())),
+                                new Denotation(right.value(), taking.apply(right.at())),
+                                states, at));
+            }
+        }
         Derivation byLeft = byItsCases(left, at, side -> comparedCase(side, right, states, at));
         if (byLeft != null) {
             return byLeft;
@@ -5380,6 +5396,12 @@ final class Pullback {
     private long readingsOf(Denotation side, long most) {
         Denotation chosen = chosenAt(side);
         if (chosen == null) {
+            return 1;
+        }
+        // An if is counted where it is gone into, in all and only for the arms a run takes
+        // ({@link #goingIn}): counted here as well, its arms would be counted twice and one no run
+        // takes among them.
+        if (Core.withoutStanding(chosen.value()) instanceof Core.If) {
             return 1;
         }
         Choice choice = Choice.of(Core.withoutStanding(chosen.value()));
