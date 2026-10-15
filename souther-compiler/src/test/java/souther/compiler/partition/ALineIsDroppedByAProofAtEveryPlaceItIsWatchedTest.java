@@ -30,6 +30,7 @@ import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Towards;
+import souther.compiler.observe.Figure;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
@@ -43,11 +44,13 @@ import souther.compiler.coverage.SeenConditionOutcome;
 import souther.compiler.types.ConstructOccurrence;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -231,6 +234,63 @@ class ALineIsDroppedByAProofAtEveryPlaceItIsWatchedTest {
                     narrowed.parts(),
                     () -> "the line in the case that showed it, and not worked out in the other,"
                             + " asked in the order " + cases);
+        }
+    }
+
+    /**
+     * Two cases of a line stopped at two different figures are the line not worked out at both,
+     * whichever is asked first, and the statement says both at the place: neither figure is hidden
+     * by the other having been met first.
+     */
+    @Test
+    void casesOfALineStoppedAtTwoFiguresSayBothInEitherOrder() {
+        PlaceOfALine both = new PlaceOfALine(PartOfAComparison.of(WrittenLine.THE_COMPARISON),
+                "both");
+        DecidingCase notTakenApart = new DecidingCase(
+                new Proposition.Truth(new DecisionSubject.AnInput(N), true),
+                new DecidingCase.Cases.MoreThanWereTakenApart());
+        // More cases than are asked, none of which any row reaches, under a condition every row
+        // does: the asking runs out of questions before it finds that none divides rows.
+        List<Proposition> each = new ArrayList<>();
+        for (int i = 0; i <= CompositionBudget.CASES_A_LINE_IS_ASKED_IN.maximum(); i++) {
+            each.add(new Proposition.Truth(new DecisionSubject.AnInput(TermPath.of("t" + i)),
+                    true));
+        }
+        DecidingCase tooMany = new DecidingCase(Proposition.any(each),
+                new DecidingCase.Cases.EachOf(each.stream()
+                        .<DecidingCase.Cases>map(DecidingCase.Cases.One::new).toList()));
+        // Rows reach where some one of either's cases holds, and none of the many alone.
+        Set<Proposition> reached = Set.of(notTakenApart.condition(),
+                tooMany.standsFor().holdingInSome().orElseThrow());
+        Function<Proposition, Reachability> reachingOnlyEveryRow = condition ->
+                reached.contains(condition) ? untouched()
+                        : new Reachability.NothingReaches(new Reachability.TwoAtOnce.Truths(N));
+        List<Figure> figures = Figure.inOrder(List.of(
+                CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.figure(),
+                CompositionBudget.CASES_A_LINE_IS_ASKED_IN.figure()));
+        for (List<DecidingCase> cases : List.of(List.of(notTakenApart, tooMany),
+                List.of(tooMany, notTakenApart))) {
+            ComparisonAssessment.Several read = new ComparisonAssessment.Several(List.of(
+                    new ComparisonAssessment.Several.Part(both, line(), cases)));
+
+            ComparisonAssessment.Several narrowed = assertInstanceOf(
+                    ComparisonAssessment.Several.class,
+                    ComparisonAssessment.narrowedByWhatArrives(read, untouched(),
+                            _ -> untouched(), reachingOnlyEveryRow,
+                            List.of(new ComparisonArrival.NoProjection()), false, reading()));
+            assertEquals(1, narrowed.parts().size(), () -> "one part: " + narrowed);
+            ComparisonAssessment.Unread unread = assertInstanceOf(
+                    ComparisonAssessment.Unread.class, narrowed.parts().getFirst().line());
+            assertEquals(List.of(new BlockReason.WhereALineDecidesNotWorkedOut(figures)),
+                    List.copyOf(unread.why().values()),
+                    () -> "not worked out at both figures, asked in the order " + cases);
+            assertEquals(Set.copyOf(cases), Set.copyOf(narrowed.parts().getFirst().cases()),
+                    "both cases nobody worked out");
+            assertEquals(List.of(figures), narrowed.whatEachPlaceIsLeftWith().stream()
+                            .map(left -> assertInstanceOf(BlockReason.RuleReadingStopped.class,
+                                    left.why()).figures())
+                            .toList(),
+                    "and the statement says both at the place, as a reading that stopped at both");
         }
     }
 

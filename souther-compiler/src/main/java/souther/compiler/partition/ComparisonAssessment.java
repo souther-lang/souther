@@ -29,6 +29,7 @@ import souther.compiler.types.ExpansionLineage;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -788,7 +789,7 @@ sealed interface ComparisonAssessment {
         // those ({@link CasesOfALineAsked}). Counted for each such case on its own, so that what
         // one case spent decides nothing about another.
         List<DecidingCase> notWorkedOut = new ArrayList<>();
-        CompositionBudget stoppedAt = null;
+        Set<CompositionBudget> stoppedAt = EnumSet.noneOf(CompositionBudget.class);
         for (DecidingCase each : part.cases()) {
             Reachability toIt = wayToAPart.apply(new WhereAPartDecides(part.id(),
                     each.condition()));
@@ -799,10 +800,8 @@ sealed interface ComparisonAssessment {
                             .inSomeOf(each)) {
                         case CasesOfALineAsked.Found.InSome _ -> true;
                         case CasesOfALineAsked.Found.InNone _ -> false;
-                        case CasesOfALineAsked.Found.NotWorkedOut(var figure) -> {
-                            if (stoppedAt == null) {
-                                stoppedAt = figure;
-                            }
+                        case CasesOfALineAsked.Found.NotWorkedOut(var figures) -> {
+                            stoppedAt.addAll(figures);
                             notWorkedOut.add(each);
                             yield false;
                         }
@@ -814,16 +813,18 @@ sealed interface ComparisonAssessment {
         }
         // The cases nobody worked out are neither ones the line turns in, owed rows where it may
         // decide nothing, nor ones dropped for a proof nobody finished: they are the line not
-        // worked out there, naming the figure, beside whatever the other cases showed.
+        // worked out there, naming every figure any of them stopped at, beside whatever the other
+        // cases showed.
         List<Several.Part> out = new ArrayList<>();
         if (!reached.isEmpty()) {
             out.add(new Several.Part(part.id(), arrived instanceof AcrossPositions across
                     && !deciding.isEmpty() ? across.whereRowsArrive(reading, deciding) : arrived,
                     reached));
         }
-        if (stoppedAt != null) {
+        if (!stoppedAt.isEmpty()) {
             out.add(new Several.Part(part.id(), new Unread(atEachOf(cutting.over(),
-                    new BlockReason.WhereALineDecidesNotWorkedOut(stoppedAt.figure()))),
+                    new BlockReason.WhereALineDecidesNotWorkedOut(stoppedAt.stream()
+                            .map(CompositionBudget::figure).toList()))),
                     notWorkedOut));
         }
         if (out.isEmpty()) {

@@ -3,7 +3,11 @@ package souther.compiler.meaning;
 import souther.compiler.partition.CompositionBudget;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.EnumSet;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.function.Predicate;
 
 /**
@@ -45,8 +49,20 @@ public final class CasesOfALineAsked {
         /** No case does. */
         record InNone() implements Found {}
 
-        /** Which it is was not worked out, and {@code figure} is what stopped it. */
-        record NotWorkedOut(CompositionBudget figure) implements Found {}
+        /**
+         * Which it is was not worked out, and {@code figures} are every figure some case of them
+         * was stopped at: no case was shown to divide rows, and not every case was shown not to.
+         */
+        record NotWorkedOut(Set<CompositionBudget> figures) implements Found {
+
+            public NotWorkedOut {
+                if (figures.isEmpty()) {
+                    throw new IllegalArgumentException("what was not worked out stopped at some"
+                            + " figure");
+                }
+                figures = Collections.unmodifiableSet(EnumSet.copyOf(figures));
+            }
+        }
     }
 
     private static final Found IN_SOME = new Found.InSome();
@@ -54,12 +70,12 @@ public final class CasesOfALineAsked {
     private static final Found IN_NONE = new Found.InNone();
 
     /** Out of questions: one more is asked than the figure lets be. */
-    private static final Found PAST_THE_QUESTIONS =
-            new Found.NotWorkedOut(CompositionBudget.CASES_A_LINE_IS_ASKED_IN);
+    private static final Found.NotWorkedOut PAST_THE_QUESTIONS =
+            new Found.NotWorkedOut(Set.of(CompositionBudget.CASES_A_LINE_IS_ASKED_IN));
 
     /** The cases were more than were taken apart, and nothing asks them. */
-    private static final Found NOT_TAKEN_APART =
-            new Found.NotWorkedOut(CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO);
+    private static final Found.NotWorkedOut NOT_TAKEN_APART =
+            new Found.NotWorkedOut(Set.of(CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO));
 
     private final Predicate<Proposition> crossedIn;
 
@@ -113,17 +129,27 @@ public final class CasesOfALineAsked {
                 more.add(condition);
                 yield crossedIn.test(Proposition.all(more)) ? chosen(more, rest) : IN_NONE;
             }
+            // Every alternative, and not the first that stopped: one that stopped shows nothing,
+            // and another after it may show the line divides rows. Which stopped first decides
+            // nothing, so every figure met is said.
             case DecidingCase.Cases.EachOf(var alternatives) -> {
+                Set<CompositionBudget> stopped = new HashSet<>();
+                boolean shown = false;
                 for (DecidingCase.Cases one : alternatives) {
                     List<DecidingCase.Cases> next = new ArrayList<>();
                     next.add(one);
                     next.addAll(rest);
                     Found found = chosen(chosen, next);
-                    if (!(found instanceof Found.InNone)) {
-                        yield found;
+                    if (found instanceof Found.InSome) {
+                        shown = true;
+                        break;
+                    }
+                    if (found instanceof Found.NotWorkedOut(var figures)) {
+                        stopped.addAll(figures);
                     }
                 }
-                yield IN_NONE;
+                yield shown ? IN_SOME
+                        : stopped.isEmpty() ? IN_NONE : new Found.NotWorkedOut(stopped);
             }
             case DecidingCase.Cases.Together(var factors) -> {
                 List<DecidingCase.Cases> next = new ArrayList<>(factors);

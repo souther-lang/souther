@@ -312,9 +312,8 @@ public sealed interface BlockReason {
                         Figure.compare(stoppedAt, ((PatternTooCostly) other).stoppedAt());
                 case OrderedExtentTooCostly(Meter.Stopped stopped) ->
                         stopped.compareTo(((OrderedExtentTooCostly) other).stopped());
-                case WhereALineDecidesNotWorkedOut(Figure stoppedAt) -> Figure.compare(
-                        List.of(stoppedAt),
-                        List.of(((WhereALineDecidesNotWorkedOut) other).stoppedAt()));
+                case WhereALineDecidesNotWorkedOut(List<Figure> stoppedAt) -> Figure.compare(
+                        stoppedAt, ((WhereALineDecidesNotWorkedOut) other).stoppedAt());
                 // The rank says which statement it is.
                 case WhatItStatesIsNoLine _ -> 0;
                 case UnreadComparisonForm _, UnreadComparisonDomain _, RuleAboutADerivedValue _,
@@ -427,7 +426,7 @@ public sealed interface BlockReason {
                 // and nothing hands it another ({@code TextExtents}), so which limit refused is
                 // the whole of what varies.
                 case OrderedExtentTooCostly it -> List.of(TextExtents.refusedAt(it.stopped()));
-                case WhereALineDecidesNotWorkedOut it -> List.of(it.stoppedAt());
+                case WhereALineDecidesNotWorkedOut it -> it.stoppedAt();
                 // The figure the part it declined stopped at, which that part's reason says.
                 case WhatItStatesIsNoLine(var why) -> why.figure().map(List::of).orElseGet(List::of);
                 case UnreadComparisonForm _, UnreadComparisonDomain _, RuleAboutADerivedValue _,
@@ -532,7 +531,7 @@ public sealed interface BlockReason {
      */
     sealed interface MetAtFigures extends BlockReason
             permits PatternTooCostly, ExactValuesTooCostly, BehaviorDistinctionsTooCostly,
-                    RulesNotHandedOnAsSets {
+                    RulesNotHandedOnAsSets, WhereALineDecidesNotWorkedOut {
 
         /** Every figure it was met at, each once and in {@link Figure#inOrder}. */
         List<Figure> stoppedAt();
@@ -574,6 +573,8 @@ public sealed interface BlockReason {
             case RulesNotHandedOnAsSets it -> new RulesNotHandedOnAsSets(
                     Figure.inOrder(both(it, (MetAtFigures) other)),
                     it.alsoAtNoFigure() || ((RulesNotHandedOnAsSets) other).alsoAtNoFigure());
+            case WhereALineDecidesNotWorkedOut it -> new WhereALineDecidesNotWorkedOut(
+                    both(it, (MetAtFigures) other));
             default -> one;
         };
         return (R) out;
@@ -1217,12 +1218,23 @@ public sealed interface BlockReason {
      * the position further in the cases nobody worked out, so the position's classes are not
      * settled by the ones that were. What the rules leave the position is read as it was.
      *
-     * @param stoppedAt the figure the asking stopped at
+     * <p>Met at every figure the asking stopped at, which may be more than one: one case nobody
+     * took apart and another that ran out of questions are one line not worked out, at two figures.
+     * The figures are what happened on the way and not what the reason is
+     * ({@link MetAtFigures}), so which of them was met first decides nothing.
+     *
+     * @param stoppedAt every figure the asking stopped at, each once and in {@link Figure#inOrder}
      */
-    record WhereALineDecidesNotWorkedOut(Figure stoppedAt) implements RuleReadingStopped {
+    record WhereALineDecidesNotWorkedOut(List<Figure> stoppedAt)
+            implements RuleReadingStopped, MetAtFigures {
 
         public WhereALineDecidesNotWorkedOut {
-            Objects.requireNonNull(stoppedAt, "a reading stopped short stopped at some figure");
+            stoppedAt = metAtSome(stoppedAt, "a line not worked out stopped at some figure");
+        }
+
+        /** Stopped at one figure. */
+        public WhereALineDecidesNotWorkedOut(Figure figure) {
+            this(List.of(figure));
         }
     }
 

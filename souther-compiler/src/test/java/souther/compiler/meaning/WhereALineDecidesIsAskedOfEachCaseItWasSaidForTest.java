@@ -136,7 +136,7 @@ class WhereALineDecidesIsAskedOfEachCaseItWasSaidForTest {
 
         CasesOfALineAsked.Found found = asking.of(many);
         assertEquals(new CasesOfALineAsked.Found.NotWorkedOut(
-                        CompositionBudget.CASES_A_LINE_IS_ASKED_IN), found,
+                        Set.of(CompositionBudget.CASES_A_LINE_IS_ASKED_IN)), found,
                 "one more question than are asked is not a proof that no case divides rows");
         assertEquals(most, asking.asked().size(), "every question the figure allows was asked");
     }
@@ -170,11 +170,48 @@ class WhereALineDecidesIsAskedOfEachCaseItWasSaidForTest {
     void casesNotTakenApartAreAskedAsTheirConditionAndNoFurther() {
         Asking dividing = new Asking(_ -> true);
         assertEquals(new CasesOfALineAsked.Found.NotWorkedOut(
-                        CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO),
+                        Set.of(CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO)),
                 dividing.of(new DecidingCase.Cases.MoreThanWereTakenApart()));
         assertEquals(List.of(SAID), dividing.asked(), "the condition alone");
 
         assertInstanceOf(CasesOfALineAsked.Found.InNone.class,
                 new Asking(_ -> false).of(new DecidingCase.Cases.MoreThanWereTakenApart()));
+    }
+
+    /**
+     * One alternative stopping is no answer about another: a case after it dividing rows shows the
+     * line decides, whichever of the two is asked first.
+     */
+    @Test
+    void anAlternativeThatStoppedDoesNotHideOneThatDividesRows() {
+        DecidingCase.Cases notTakenApart = new DecidingCase.Cases.MoreThanWereTakenApart();
+        for (List<DecidingCase.Cases> order : List.of(List.of(notTakenApart, one(A)),
+                List.of(one(A), notTakenApart))) {
+            assertInstanceOf(CasesOfALineAsked.Found.InSome.class,
+                    new Asking(_ -> true).of(new DecidingCase.Cases.EachOf(order)),
+                    () -> "a divides rows, asked in the order " + order);
+        }
+    }
+
+    /**
+     * Alternatives stopped at two figures, and none dividing rows, are not worked out at both,
+     * whichever is asked first: which figure was met first is what happened on the way.
+     */
+    @Test
+    void alternativesStoppedAtTwoFiguresSayBoth() {
+        DecidingCase.Cases notTakenApart = new DecidingCase.Cases.MoreThanWereTakenApart();
+        DecidingCase.Cases tooMany =
+                manyCases(CompositionBudget.CASES_A_LINE_IS_ASKED_IN.maximum());
+        Proposition someOne = new DecidingCase.Cases.EachOf(List.of(notTakenApart, tooMany))
+                .holdingInSome().orElse(SAID);
+        for (List<DecidingCase.Cases> order : List.of(List.of(notTakenApart, tooMany),
+                List.of(tooMany, notTakenApart))) {
+            assertEquals(new CasesOfALineAsked.Found.NotWorkedOut(Set.of(
+                            CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO,
+                            CompositionBudget.CASES_A_LINE_IS_ASKED_IN)),
+                    new Asking(each -> each.equals(someOne))
+                            .of(new DecidingCase.Cases.EachOf(order)),
+                    () -> "both figures, asked in the order " + order);
+        }
     }
 }
