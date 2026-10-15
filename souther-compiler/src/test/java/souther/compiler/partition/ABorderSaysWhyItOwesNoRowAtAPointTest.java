@@ -329,6 +329,23 @@ class ABorderSaysWhyItOwesNoRowAtAPointTest {
     }
 
     /**
+     * Two numbers taken of one position and asked of one row are answered by one value named,
+     * which comes to both.
+     *
+     * <p>A line on the length and one on what is left once trimmed put both numbers in a row: the
+     * point at one code point that is not whitespace, in the row where the length is past one, is
+     * {@code " b "} alone. Each number written for on its own reaches no value that answers the
+     * other, and the point came back as one no row was seen to reach.
+     */
+    @Test
+    void twoNumbersTakenOfOnePositionAreAnsweredByOneValueNamed() {
+        assertEquals(List.of("Code(\" b \")"), offeredAt(naming("Code", "String",
+                        "value == \"a\" || value == \" b \" || value == \"cc\" || value == \"  \"",
+                        "String.length(c.value) < 2 || String.length(String.trim(c.value)) < 1"),
+                "#(not whitespace)(c) = 1", PointRole.OFF));
+    }
+
+    /**
      * The same of a remainder: two is left by eight and not by four, so the row offered at two
      * holds eight rather than the first whole number that leaves two.
      */

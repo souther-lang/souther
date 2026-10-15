@@ -2311,11 +2311,11 @@ public final class Partitions {
      */
     static List<FixtureTemplate> admittedStringsOfSizes(TypeView view, RuleReadingContext reading,
                                                         Collection<Integer> sizes) {
-        List<FixtureTemplate> out = new ArrayList<>();
         RulesRead rules = rulesReadOn(view, reading);
         if (rules == null) {
-            return out;
+            return List.of();
         }
+        List<FixtureTemplate> out = new ArrayList<>();
         for (int size : sizes) {
             if (size < 0) {
                 continue;
@@ -2330,7 +2330,7 @@ public final class Partitions {
                 out.add(FixtureTemplate.string(each));
             }
         }
-        return out;
+        return List.copyOf(out);
     }
 
     /**
