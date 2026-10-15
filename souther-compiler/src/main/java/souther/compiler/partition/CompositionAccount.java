@@ -2,10 +2,14 @@ package souther.compiler.partition;
 
 import souther.compiler.meaning.AnswerAsAnInput;
 
+import souther.compiler.publish.CanonicalSelection;
+import souther.compiler.publish.PublicationOrders;
+
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -139,7 +143,13 @@ public record CompositionAccount(List<ReachabilityGap> onTheWay,
         List<ReachabilityGap> input = new ArrayList<>(onTheWay);
         input.sort(Comparator.comparingInt((ReachabilityGap gap) ->
                         placeIn(way.onTheWay(), aboutOf(gap)))
-                .thenComparing(CompositionAccount::rankOf, LEXICALLY));
+                .thenComparing(CompositionAccount::rankOf, LEXICALLY)
+                .thenComparing(CompositionAccount::figuresOf,
+                        published(PublicationOrders.COMPOSITION_BUDGETS))
+                .thenComparing(CompositionAccount::populationsOf,
+                        published(PublicationOrders.COMPOSITION_REPERTOIRES))
+                .thenComparing(CompositionAccount::unheldOf,
+                        published(PublicationOrders.COMPOSITION_CAPACITIES)));
         List<Object> asked = new ArrayList<>(demands.stated());
         asked.addAll(demands.declined());
         List<DemandGap> answers = new ArrayList<>(onAnAnswer);
@@ -147,7 +157,9 @@ public record CompositionAccount(List<ReachabilityGap> onTheWay,
                     case DemandGap.Uncomposed it -> it.demand();
                     case DemandGap.Unstated it -> it;
                 }))
-                .thenComparing(CompositionAccount::rankOf, LEXICALLY));
+                .thenComparing(CompositionAccount::rankOf, LEXICALLY)
+                .thenComparing(CompositionAccount::figuresOf,
+                        published(PublicationOrders.COMPOSITION_BUDGETS)));
         return new CompositionAccount(input, answers, takenUpByAnAnswer);
     }
 
@@ -160,6 +172,62 @@ public record CompositionAccount(List<ReachabilityGap> onTheWay,
         }
         return Integer.compare(one.size(), other.size());
     };
+
+    /**
+     * Two lists of one kind of reason, compared in the order that kind is published in.
+     *
+     * <p>Asked of the order and never worked out here: the first place the two differ is decided by
+     * which of the two the order says first, so what a reader meets first is what every other
+     * reader of the kind says first.
+     */
+    private static <T> Comparator<List<T>> published(CanonicalSelection.Order<T> order) {
+        return (one, other) -> {
+            for (int i = 0; i < Math.min(one.size(), other.size()); i++) {
+                T mine = one.get(i);
+                T theirs = other.get(i);
+                if (!Objects.equals(mine, theirs)) {
+                    return Objects.equals(order.keep(List.of(mine, theirs)).written().getFirst(),
+                            mine) ? -1 : 1;
+                }
+            }
+            return Integer.compare(one.size(), other.size());
+        };
+    }
+
+    private static List<CompositionBudget> figuresOf(ReachabilityGap gap) {
+        return switch (gap) {
+            case ReachabilityGap.Uncomposed(var _,
+                    ReachabilityGap.Why.TheWalkForItsPositionsWasStopped stopped) ->
+                    stopped.by().written();
+            case ReachabilityGap.LookedAlongWhole it -> List.of(it.figure());
+            case ReachabilityGap.Unstated _, ReachabilityGap.Uncomposed _,
+                 ReachabilityGap.ProvedImpossible _ -> List.of();
+        };
+    }
+
+    private static List<CompositionRepertoire> populationsOf(ReachabilityGap gap) {
+        return gap instanceof ReachabilityGap.Uncomposed(var _,
+                ReachabilityGap.Why.TheWalkForItsPositionsWasStopped stopped)
+                ? stopped.writes().written() : List.of();
+    }
+
+    private static List<CompositionCapacity> unheldOf(ReachabilityGap gap) {
+        return gap instanceof ReachabilityGap.Uncomposed(var _,
+                ReachabilityGap.Why.TheWalkForItsPositionsWasStopped stopped)
+                ? stopped.unheld().written() : List.of();
+    }
+
+    private static List<CompositionBudget> figuresOf(DemandGap gap) {
+        return switch (gap) {
+            case DemandGap.Uncomposed(var _,
+                    DemandGap.WhyNotComposed.NoPairComposedBeforeAFigureEnded ended) ->
+                    ended.figures().written();
+            case DemandGap.Uncomposed(var _,
+                    DemandGap.WhyNotComposed.NoWayComposedBeforeAFigureEnded ended) ->
+                    ended.figures().written();
+            case DemandGap.Uncomposed _, DemandGap.Unstated _ -> List.of();
+        };
+    }
 
     private static int placeIn(List<?> stated, Object what) {
         int at = stated.indexOf(what);
@@ -176,8 +244,9 @@ public record CompositionAccount(List<ReachabilityGap> onTheWay,
     }
 
     /**
-     * What a gap on the way says, as numbers in the order its shapes are declared: the shape,
-     * then the shape of its reason, then the figures it names.
+     * What a gap on the way says, as numbers in the order its shapes are declared: the shape, then
+     * the shape of its reason. The figures it names are asked of the order they are published in
+     * ({@link #published}), which is theirs to give.
      */
     private static List<Integer> rankOf(ReachabilityGap gap) {
         List<Integer> out = new ArrayList<>();
@@ -187,17 +256,7 @@ public record CompositionAccount(List<ReachabilityGap> onTheWay,
                 out.add(1);
                 switch (it.why()) {
                     case ReachabilityGap.Why.NoValueComposedForItsPositions _ -> out.add(0);
-                    case ReachabilityGap.Why.TheWalkForItsPositionsWasStopped stopped -> {
-                        out.add(1);
-                        stopped.by().written().forEach(figure -> out.add(figure.ordinal()));
-                        out.add(-1);
-                        stopped.writes().written().forEach(each -> out.add(each.ordinal()));
-                        out.add(-1);
-                        stopped.unheld().written().forEach(each -> {
-                            out.add(each.where().ordinal());
-                            out.add(each.why().ordinal());
-                        });
-                    }
+                    case ReachabilityGap.Why.TheWalkForItsPositionsWasStopped _ -> out.add(1);
                     case ReachabilityGap.Why.TwoNumbersAtOneLocation _ -> out.add(2);
                     case ReachabilityGap.Why.NoComposerWritesIt none -> {
                         out.add(3);
@@ -206,10 +265,7 @@ public record CompositionAccount(List<ReachabilityGap> onTheWay,
                     case ReachabilityGap.Why.ElementsWrittenAlike _ -> out.add(4);
                 }
             }
-            case ReachabilityGap.LookedAlongWhole it -> {
-                out.add(2);
-                out.add(it.figure().ordinal());
-            }
+            case ReachabilityGap.LookedAlongWhole _ -> out.add(2);
             case ReachabilityGap.ProvedImpossible _ -> out.add(3);
         }
         return out;
@@ -234,14 +290,8 @@ public record CompositionAccount(List<ReachabilityGap> onTheWay,
                     case DemandGap.WhyNotComposed.NoValueComposedAtItsPositions _ -> out.add(1);
                     case DemandGap.WhyNotComposed.NothingComposedAValueOfTheAnswer _ -> out.add(2);
                     case DemandGap.WhyNotComposed.OneValueAnswersEveryCall _ -> out.add(3);
-                    case DemandGap.WhyNotComposed.NoPairComposedBeforeAFigureEnded ended -> {
-                        out.add(4);
-                        ended.figures().written().forEach(figure -> out.add(figure.ordinal()));
-                    }
-                    case DemandGap.WhyNotComposed.NoWayComposedBeforeAFigureEnded ended -> {
-                        out.add(5);
-                        ended.figures().written().forEach(figure -> out.add(figure.ordinal()));
-                    }
+                    case DemandGap.WhyNotComposed.NoPairComposedBeforeAFigureEnded _ -> out.add(4);
+                    case DemandGap.WhyNotComposed.NoWayComposedBeforeAFigureEnded _ -> out.add(5);
                 }
             }
         }
