@@ -350,7 +350,9 @@ public enum CompositionBudget {
      * beside it ({@link souther.compiler.meaning.DecidingCase}), for a reader to ask whether the
      * line decides in any of them. What this bounds is the taking apart: each case is a way the
      * statement's other parts come out, and finding them walks every way the parts can come out
-     * once for each case found.
+     * once for each case found. And how many of them are asked: cases kept as choices rather than
+     * written out are as many as the ways of choosing one, counted before any is asked, and past
+     * this figure none is.
      *
      * <p><b>Reaching it gives the cases up and says so.</b> The condition is kept, said for cases
      * nobody took apart ({@link souther.compiler.meaning.DecidingCase.Cases.MoreThanWereTakenApart}).
@@ -374,12 +376,14 @@ public enum CompositionBudget {
      * took apart, or past the last question allowed — would run as far as that product. Counted for
      * each case said as one on its own, so what one of them spent decides nothing about another.
      *
-     * <p><b>Enough to walk what was taken apart.</b> Which of the cases the line decides in is
-     * asked, and not whether some one does, so where every case divides rows every case is chosen
-     * to the end. As many cases as {@link #CASES_A_LINE_IS_TAKEN_APART_INTO} takes apart, chosen
-     * one part of two at a time, are about four steps each: an alternative and a part at each
-     * level, and the levels near the leaves as many as the cases. Sized below that, a line every
-     * case of which divides rows would be not worked out for having been asked to the end.
+     * <p><b>What the asking costs, and not how many cases there are.</b> How many cases are asked
+     * is {@link #CASES_A_LINE_IS_TAKEN_APART_INTO}'s, counted before any is. Which of them the line
+     * decides in is asked, and not whether some one does, so where every case divides rows every
+     * case is chosen to the end, and what that costs is a step for each alternative and each part
+     * on the way to each case. Cases that share what they begin with, as the cases of a statement's
+     * parts do, take about four steps each, and this lets that many be asked of as many cases as
+     * are taken apart. Cases each chosen through more parts than that, sharing less, take more
+     * steps than that, and are where the line can come out not worked out at this figure.
      *
      * <p><b>Reaching it gives that case up and says so.</b> Its cases are neither ones the line
      * turns in nor ones it turns nothing in, so they are where the line was not worked out

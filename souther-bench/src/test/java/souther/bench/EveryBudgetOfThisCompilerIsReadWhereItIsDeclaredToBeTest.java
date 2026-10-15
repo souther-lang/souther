@@ -492,6 +492,11 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Ljava/util/function/Predicate;)V",
                     "how many times the cases one case was said for are asked, which every"
                             + " question spends"),
+            Map.entry("souther.compiler.meaning.CasesOfALineAsked#asked("
+                            + "Lsouther/compiler/meaning/DecidingCase;)"
+                            + "Lsouther/compiler/meaning/CasesOfALineAsked$Found;",
+                    "how many ways of choosing a case are asked, counted before any is: past the"
+                            + " figure, more cases than are taken apart, and none is asked"),
             Map.entry("souther.compiler.meaning.CasesOfALineAsked#chosen("
                             + "Ljava/util/List;Ljava/util/List;)V",
                     "cases met as they are chosen that nobody took apart, which are not worked"

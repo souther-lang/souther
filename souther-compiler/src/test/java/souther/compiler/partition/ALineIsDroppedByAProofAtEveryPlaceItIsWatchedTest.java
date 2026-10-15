@@ -299,22 +299,25 @@ class ALineIsDroppedByAProofAtEveryPlaceItIsWatchedTest {
         DecidingCase notTakenApart = new DecidingCase(
                 new Proposition.Truth(new DecisionSubject.AnInput(N), true),
                 new DecidingCase.Cases.MoreThanWereTakenApart());
-        // More cases than are asked, none of which any row reaches, under a condition every row
-        // does: the asking runs out of questions before it finds that none divides rows.
-        List<Proposition> each = new ArrayList<>();
-        for (int i = 0; i <= CompositionBudget.CASES_A_LINE_IS_ASKED_IN.maximum(); i++) {
-            each.add(new Proposition.Truth(new DecisionSubject.AnInput(TermPath.of("t" + i)),
-                    true));
+        // No more cases than are taken apart, each chosen through four parts of its own, and none
+        // of them one any row reaches though rows reach every part short of the last: the asking
+        // runs out of steps before it finds that none divides rows.
+        int depth = 4;
+        List<DecidingCase.Cases> each = new ArrayList<>();
+        for (int i = 0; i < CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.maximum() - 1; i++) {
+            List<DecidingCase.Cases> parts = new ArrayList<>();
+            for (int at = 0; at < depth; at++) {
+                parts.add(new DecidingCase.Cases.One(new Proposition.Truth(
+                        new DecisionSubject.AnInput(TermPath.of("t" + i + "." + at)), true)));
+            }
+            each.add(new DecidingCase.Cases.Together(parts));
         }
-        DecidingCase tooMany = new DecidingCase(Proposition.any(each),
-                new DecidingCase.Cases.EachOf(each.stream()
-                        .<DecidingCase.Cases>map(DecidingCase.Cases.One::new).toList()));
-        // Rows reach where some one of either's cases holds, and none of the many alone.
-        Set<Proposition> reached = Set.of(notTakenApart.condition(),
-                tooMany.standsFor().holdingInSome().orElseThrow());
+        DecidingCase.Cases deep = new DecidingCase.Cases.EachOf(each);
+        DecidingCase tooMany = new DecidingCase(deep.holdingInSome().orElseThrow(), deep);
         Function<Proposition, Reachability> reachingOnlyEveryRow = condition ->
-                reached.contains(condition) ? untouched()
-                        : new Reachability.NothingReaches(new Reachability.TwoAtOnce.Truths(N));
+                condition instanceof Proposition.All all && all.parts().size() == depth
+                        ? new Reachability.NothingReaches(new Reachability.TwoAtOnce.Truths(N))
+                        : untouched();
         List<Figure> figures = Figure.inOrder(List.of(
                 CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.figure(),
                 CompositionBudget.CASES_A_LINE_IS_ASKED_IN.figure()));

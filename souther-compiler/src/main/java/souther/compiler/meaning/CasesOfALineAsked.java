@@ -37,6 +37,12 @@ import java.util.function.Predicate;
  * on both sides of what has been chosen so far may each be in a case of their own further on, so a
  * case is one the line decides in only once it is chosen to the end.
  *
+ * <p><b>As many cases as are taken apart, and no more.</b> How many ways there are of choosing a
+ * case is counted off the choices before any is asked ({@link DecidingCase.Cases#waysOfChoosing}),
+ * and past {@link CompositionBudget#CASES_A_LINE_IS_TAKEN_APART_INTO} none is asked: those are
+ * more cases than are taken apart, whether they were written out or said as choices, and the line
+ * is not worked out in them at that figure.
+ *
  * <p><b>Counted by the step, and stopped short as a stop.</b> Every step of the choosing is counted
  * against {@link CompositionBudget#CASES_A_LINE_IS_ASKED_IN} for the one case they were said as:
  * each alternative taken and each part asked. Counted by the questions alone, the alternatives
@@ -117,6 +123,14 @@ public final class CasesOfALineAsked {
         }
         if (said.saidAlone()) {
             return new Found(List.of(said), Set.of());
+        }
+        // More ways of choosing a case than cases are taken apart is more cases than were taken
+        // apart, however they were written: said as choices rather than written out, they are as
+        // many to ask, and asking them is the work that figure bounds.
+        long most = CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.maximum();
+        if (said.standsFor().waysOfChoosing(most) > most) {
+            stopped.add(CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO);
+            return new Found(List.of(), stopped);
         }
         chosen(new ArrayList<>(), List.of(said.standsFor()));
         // Every case divides rows and every one was worked out: the case is what it was said as,

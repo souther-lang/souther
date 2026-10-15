@@ -245,6 +245,38 @@ public record DecidingCase(Proposition condition, Cases standsFor) {
             return Optional.of(every ? Proposition.all(parts) : Proposition.any(parts));
         }
 
+        /**
+         * How many ways there are of choosing one case of these, or {@code past} and one more
+         * where there are more than {@code past}.
+         *
+         * <p>Counted off the choices as they stand, without choosing: any one of several is as
+         * many ways as each of them has together, and one of each of several holding together is
+         * as many as theirs multiplied. Cases nobody took apart are one way, which ends there.
+         */
+        default long waysOfChoosing(long past) {
+            return switch (this) {
+                case One _, MoreThanWereTakenApart _ -> 1;
+                case EachOf(var alternatives) -> {
+                    long ways = 0;
+                    for (Cases one : alternatives) {
+                        ways = Math.min(past + 1, ways + one.waysOfChoosing(past));
+                    }
+                    yield ways;
+                }
+                case Together(var factors) -> {
+                    long ways = 1;
+                    for (Cases one : factors) {
+                        long these = one.waysOfChoosing(past);
+                        if (these == 0) {
+                            yield 0;
+                        }
+                        ways = Math.min(past + 1, ways * these);
+                    }
+                    yield ways;
+                }
+            };
+        }
+
         /** These, each one case of them said as {@code each} says it — no case at all where it
          *  says none. */
         default Cases eachSaid(Function<Proposition, Cases> each) {

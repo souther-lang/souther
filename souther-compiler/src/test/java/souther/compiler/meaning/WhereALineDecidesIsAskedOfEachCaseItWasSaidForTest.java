@@ -203,63 +203,33 @@ class WhereALineDecidesIsAskedOfEachCaseItWasSaidForTest {
                 "a divides rows, and of the cases under it only a with c does");
     }
 
+    private static final int TAKEN_APART =
+            CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.maximum();
+
     /**
-     * Past the figure, what was asked is no proof either way: the line is one where it decides was
-     * not worked out, and the figure is the one counting the questions.
+     * More ways of choosing a case than cases are taken apart are more cases than were taken
+     * apart, and none is asked: where some one holds is the one question, and the figure is the
+     * one bounding how many cases are taken apart.
      */
     @Test
-    void pastTheFigureNothingIsProvedAndTheFigureIsSaid() {
-        DecidingCase.Cases many = manyCases(ALTERNATIVES_THE_STEPS_ALLOW + 1);
+    void moreWaysOfChoosingThanCasesAreTakenApartAreNotAsked() {
+        DecidingCase.Cases many = manyCases(TAKEN_APART + 1);
         Proposition someOne = many.holdingInSome().orElseThrow();
-        Asking asking = new Asking(someOne::equals);
+        Asking asking = new Asking(_ -> true);
 
         assertEquals(new CasesOfALineAsked.Found(List.of(),
-                        Set.of(CompositionBudget.CASES_A_LINE_IS_ASKED_IN)), asking.of(many),
-                "one more case than the steps allow is not a proof that no case divides rows");
-        assertEquals(ALTERNATIVES_THE_STEPS_ALLOW + 1, asking.asked().size(),
-                "where some one holds, and every case the steps allowed");
+                        Set.of(CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO)),
+                asking.of(many));
+        assertEquals(List.of(someOne), asking.asked(), "where some one holds, and nothing else");
     }
 
     /**
-     * The cases shown to divide rows before the steps ran out are kept, beside the figure the rest
-     * stopped at: neither speaks for the other.
+     * Ways of choosing written as choices are counted as the cases they make, without choosing
+     * any: forty choices of two, one below the other, are more ways than are taken apart, and the
+     * choosing is not begun.
      */
     @Test
-    void theCasesShownBeforeTheFigureAreKeptBesideIt() {
-        DecidingCase.Cases many = manyCases(ALTERNATIVES_THE_STEPS_ALLOW + 1);
-        Proposition first = truth("t0");
-        Proposition someOne = many.holdingInSome().orElseThrow();
-        Asking asking = new Asking(each -> each.equals(someOne) || each.equals(first));
-
-        assertEquals(new CasesOfALineAsked.Found(List.of(DecidingCase.alone(first)),
-                        Set.of(CompositionBudget.CASES_A_LINE_IS_ASKED_IN)), asking.of(many));
-    }
-
-    /** And as many cases as the steps allow are asked to the end. */
-    @Test
-    void asManyCasesAsTheStepsAllowAreAskedToTheEnd() {
-        DecidingCase.Cases many = manyCases(ALTERNATIVES_THE_STEPS_ALLOW);
-        Proposition someOne = many.holdingInSome().orElseThrow();
-
-        assertEquals(IN_NONE, new Asking(someOne::equals).of(many));
-    }
-
-    /**
-     * How many alternatives of one part each the steps allow: one step asks where some one holds,
-     * and each alternative is two, the choosing of it and the asking of its part.
-     */
-    private static final int ALTERNATIVES_THE_STEPS_ALLOW =
-            (CompositionBudget.CASES_A_LINE_IS_ASKED_IN.maximum() - 1) / 2;
-
-    /**
-     * Choosing among alternatives that ask nothing is counted too. Twenty-odd choices of two, one
-     * below the other, over cases nobody took apart are more ways than any run walks; counted by
-     * the questions alone, the one question asked would have left them all to walk. Counted by the
-     * step, the choosing stops where the steps do, and says both figures: the steps, and the cases
-     * nobody took apart that were met and that are left.
-     */
-    @Test
-    void choosingThatAsksNothingRunsOutOfStepsAndStops() {
+    void waysWrittenAsChoicesAreCountedWithoutChoosing() {
         DecidingCase.Cases cases = new DecidingCase.Cases.MoreThanWereTakenApart();
         for (int i = 0; i < 40; i++) {
             cases = new DecidingCase.Cases.Together(List.of(
@@ -272,12 +242,93 @@ class WhereALineDecidesIsAskedOfEachCaseItWasSaidForTest {
         Asking asking = new Asking(_ -> true);
 
         CasesOfALineAsked.Found found = assertTimeoutPreemptively(Duration.ofSeconds(10),
-                () -> asking.of(deep), "the choosing stops where the steps do");
+                () -> asking.of(deep), "nothing is chosen");
+        assertEquals(new CasesOfALineAsked.Found(List.of(),
+                Set.of(CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO)), found);
+        assertEquals(List.of(SAID), asking.asked(), "and nothing asked but the condition");
+    }
+
+    /** And as many cases as are taken apart are asked to the end. */
+    @Test
+    void asManyCasesAsAreTakenApartAreAskedToTheEnd() {
+        DecidingCase.Cases many = manyCases(TAKEN_APART);
+        Proposition someOne = many.holdingInSome().orElseThrow();
+        Asking asking = new Asking(someOne::equals);
+
+        assertEquals(IN_NONE, asking.of(many));
+        assertEquals(TAKEN_APART + 1, asking.asked().size(),
+                "where some one holds, and every case");
+    }
+
+    /**
+     * Cases chosen through several parts each cost a step for each part and each alternative
+     * taken; past the steps, what was asked is no proof either way, and the figure is the one
+     * counting the steps. As many cases as are taken apart, each chosen through four parts no two
+     * of them share, every part but the last leaving rows on both sides, are more steps than that.
+     */
+    @Test
+    void pastTheStepsNothingIsProvedAndTheFigureIsSaid() {
+        Asking asking = new Asking(each -> !isACaseOf(each, DEPTH));
+
+        assertEquals(new CasesOfALineAsked.Found(List.of(),
+                        Set.of(CompositionBudget.CASES_A_LINE_IS_ASKED_IN)),
+                asking.of(deepCases(TAKEN_APART, DEPTH)),
+                "one more step than the figure allows is not a proof that no case divides rows");
+    }
+
+    /**
+     * The cases shown to divide rows before the steps ran out are kept, beside the figure the rest
+     * stopped at: neither speaks for the other.
+     */
+    @Test
+    void theCasesShownBeforeTheStepsRanOutAreKeptBesideTheFigure() {
+        Proposition first = deepCase(0, DEPTH);
+        Asking asking = new Asking(each -> !isACaseOf(each, DEPTH) || each.equals(first));
+
+        assertEquals(new CasesOfALineAsked.Found(List.of(DecidingCase.alone(first)),
+                        Set.of(CompositionBudget.CASES_A_LINE_IS_ASKED_IN)),
+                asking.of(deepCases(TAKEN_APART, DEPTH)));
+    }
+
+    /** And as many as the steps allow are asked to the end: one step asks where some one holds,
+     *  and each case is one alternative taken and a step for each of its parts. */
+    @Test
+    void asManyCasesAsTheStepsAllowAreAskedToTheEnd() {
+        int allowed = (CompositionBudget.CASES_A_LINE_IS_ASKED_IN.maximum() - 1) / (DEPTH + 1);
+
+        assertEquals(IN_NONE, new Asking(each -> !isACaseOf(each, DEPTH))
+                .of(deepCases(allowed, DEPTH)));
+    }
+
+    /**
+     * Choosing among alternatives that ask nothing is counted too: as many cases as are taken
+     * apart, each reached through choices of one alternative that ask nothing, over cases nobody
+     * took apart. Counted by the questions alone, the one question asked would leave all of it to
+     * walk; counted by the step, the choosing stops where the steps do, and says both figures: the
+     * steps, and the cases nobody took apart that were met and that are left.
+     */
+    @Test
+    void choosingThatAsksNothingRunsOutOfStepsAndStops() {
+        List<DecidingCase.Cases> each = new ArrayList<>();
+        for (int i = 0; i < TAKEN_APART; i++) {
+            DecidingCase.Cases chain = new DecidingCase.Cases.MoreThanWereTakenApart();
+            for (int level = 0; level < DEPTH; level++) {
+                chain = new DecidingCase.Cases.Together(List.of(new DecidingCase.Cases.EachOf(
+                        List.of(new DecidingCase.Cases.Together(List.of()))), chain));
+            }
+            each.add(chain);
+        }
+        Asking asking = new Asking(_ -> true);
+
         assertEquals(new CasesOfALineAsked.Found(List.of(), Set.of(
                         CompositionBudget.CASES_A_LINE_IS_ASKED_IN,
-                        CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO)), found);
+                        CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO)),
+                asking.of(new DecidingCase.Cases.EachOf(each)));
         assertEquals(List.of(SAID), asking.asked(), "and asked nothing but the condition");
     }
+
+    /** How many parts each of {@link #deepCases} is chosen through. */
+    private static final int DEPTH = 4;
 
     /** {@code count} cases of one truth each. */
     private static DecidingCase.Cases manyCases(int count) {
@@ -286,6 +337,34 @@ class WhereALineDecidesIsAskedOfEachCaseItWasSaidForTest {
             many.add(one(truth("t" + i)));
         }
         return new DecidingCase.Cases.EachOf(many);
+    }
+
+    /** {@code count} cases, each {@code depth} truths of its own held together. */
+    private static DecidingCase.Cases deepCases(int count, int depth) {
+        List<DecidingCase.Cases> many = new ArrayList<>();
+        for (int i = 0; i < count; i++) {
+            List<DecidingCase.Cases> parts = new ArrayList<>();
+            for (int at = 0; at < depth; at++) {
+                parts.add(one(truth("t" + i + "." + at)));
+            }
+            many.add(new DecidingCase.Cases.Together(parts));
+        }
+        return new DecidingCase.Cases.EachOf(many);
+    }
+
+    /** The {@code i}th of {@link #deepCases}, as the condition it is chosen to. */
+    private static Proposition deepCase(int i, int depth) {
+        List<Proposition> parts = new ArrayList<>();
+        for (int at = 0; at < depth; at++) {
+            parts.add(truth("t" + i + "." + at));
+        }
+        return Proposition.all(parts);
+    }
+
+    /** Whether {@code condition} is one of {@link #deepCases} chosen to the end. */
+    private static boolean isACaseOf(Proposition condition, int depth) {
+        return condition instanceof Proposition.All all && all.parts().size() == depth
+                && all.parts().stream().allMatch(Proposition.Truth.class::isInstance);
     }
 
     /**
@@ -328,16 +407,13 @@ class WhereALineDecidesIsAskedOfEachCaseItWasSaidForTest {
     @Test
     void alternativesStoppedAtTwoFiguresSayBoth() {
         DecidingCase.Cases notTakenApart = new DecidingCase.Cases.MoreThanWereTakenApart();
-        DecidingCase.Cases tooMany =
-                manyCases(CompositionBudget.CASES_A_LINE_IS_ASKED_IN.maximum());
-        Proposition someOne = new DecidingCase.Cases.EachOf(List.of(notTakenApart, tooMany))
-                .holdingInSome().orElse(SAID);
-        for (List<DecidingCase.Cases> order : List.of(List.of(notTakenApart, tooMany),
-                List.of(tooMany, notTakenApart))) {
+        DecidingCase.Cases tooDeep = deepCases(TAKEN_APART - 1, DEPTH);
+        for (List<DecidingCase.Cases> order : List.of(List.of(notTakenApart, tooDeep),
+                List.of(tooDeep, notTakenApart))) {
             assertEquals(new CasesOfALineAsked.Found(List.of(), Set.of(
                             CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO,
                             CompositionBudget.CASES_A_LINE_IS_ASKED_IN)),
-                    new Asking(each -> each.equals(someOne))
+                    new Asking(each -> !isACaseOf(each, DEPTH))
                             .of(new DecidingCase.Cases.EachOf(order)),
                     () -> "both figures, asked in the order " + order);
         }
