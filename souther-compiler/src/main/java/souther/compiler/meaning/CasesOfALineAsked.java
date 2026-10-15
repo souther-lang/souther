@@ -26,9 +26,9 @@ import java.util.function.Predicate;
  * side than a wider one, which is what makes stopping there a proof.
  *
  * <p><b>Counted, and stopped short as a stop.</b> Every question is counted against
- * {@link CompositionBudget#CASES_A_LINE_IS_ASKED_IN} for the line, and where the cases were more
- * than were taken apart nothing is asked of them at all. Either way the answer is that it was not
- * worked out, which is neither a line the statement turns on nor one it never turns on.
+ * {@link CompositionBudget#CASES_A_LINE_IS_ASKED_IN} for the one case they were said as, and where
+ * the cases were more than were taken apart nothing is asked of them at all. Either way the answer
+ * is that it was not worked out, which is neither a case the line turns in nor one it does not.
  *
  * <p>Here, beside where the cases were taken apart, because what a case chosen part by part has
  * chosen so far is a conjunction of the statement's parts, and those are joined where a rule joins

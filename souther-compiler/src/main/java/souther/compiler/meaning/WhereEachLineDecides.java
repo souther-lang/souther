@@ -408,9 +408,10 @@ public final class WhereEachLineDecides {
             if (insideAWholeQuantifier(stated, part)) {
                 return List.of(DecidingCase.alone(heldAgainstItsDenial(stated, part)));
             }
-            int most = CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.maximum();
+            // Taken apart as far as is said one by one first, and further only where nothing short
+            // of that says them: every case found walks the table again.
             List<List<Proposition>> cases = table == null ? null
-                    : casesOf(table, possible, index.get(part.key()), named, most);
+                    : casesOf(table, possible, index.get(part.key()), named, MOST_CASES);
             if (cases != null && cases.size() <= MOST_CASES) {
                 return cases.stream().map(each -> DecidingCase.alone(Proposition.all(each)))
                         .toList();
@@ -425,13 +426,16 @@ public final class WhereEachLineDecides {
                 return ofAValue;
             }
             Proposition said = heldAgainstItsDenial(stated, part);
-            if (cases != null) {
-                return List.of(new DecidingCase(said, cases.size() > most
+            int most = CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.maximum();
+            List<List<Proposition>> apart = cases == null ? null
+                    : casesOf(table, possible, index.get(part.key()), named, most);
+            if (apart != null) {
+                return List.of(new DecidingCase(said, apart.size() > most
                         ? new DecidingCase.Cases.MoreThanWereTakenApart()
-                        : DecidingCase.Cases.ofConjunctions(cases)));
+                        : DecidingCase.Cases.ofConjunctions(apart)));
             }
             return List.of(ofAValue == null ? DecidingCase.alone(said)
-                    : new DecidingCase(said, DecidingCase.someOneOf(ofAValue).standsFor()));
+                    : new DecidingCase(said, DecidingCase.eachOf(ofAValue)));
         }
 
         /** Whether {@code quantifier} stands held somewhere in the statement. */
@@ -961,7 +965,7 @@ public final class WhereEachLineDecides {
             Proposition said = value == null ? rest : Proposition.all(List.of(
                     new Proposition.InCases(value, CasesLeft.ofEach(atoms), true), rest));
             return written.stream().allMatch(DecidingCase::saidAlone) ? DecidingCase.alone(said)
-                    : new DecidingCase(said, DecidingCase.someOneOf(written).standsFor());
+                    : new DecidingCase(said, DecidingCase.eachOf(written));
         }
     }
 

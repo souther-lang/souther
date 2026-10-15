@@ -166,10 +166,38 @@ class ALineIsDroppedByAProofAtEveryPlaceItIsWatchedTest {
         assertEquals(List.of(new BlockReason.WhereALineDecidesNotWorkedOut(
                         CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.figure())),
                 List.copyOf(unread.why().values()), "and the figure that left them whole");
-        assertEquals(List.of(), narrowed.parts().getFirst().cases(),
-                "it is owed rows in no case");
+        assertEquals(read.parts().getFirst().cases(), narrowed.parts().getFirst().cases(),
+                "and the cases it was read in, none of them taken for one it turns nothing in");
         assertEquals(read.parts().getLast(), narrowed.parts().getLast(),
                 "the line beside it is read as it would be alone");
+    }
+
+    /**
+     * A line one of whose cases showed it decides is the line it is, whatever became of another
+     * case of it: what was not worked out there is kept as the condition it was said as, and
+     * whichever of the two is asked first, the answer is the same.
+     */
+    @Test
+    void aLineAnotherCaseShowsDecidesIsKeptWithTheCaseNobodyWorkedOut() {
+        Proposition anywhere = WhereAnApplicationIsMade.nothingAsked();
+        DecidingCase unworked = new DecidingCase(anywhere,
+                new DecidingCase.Cases.MoreThanWereTakenApart());
+        DecidingCase shown = DecidingCase.alone(anywhere);
+        for (List<DecidingCase> cases : List.of(List.of(unworked, shown),
+                List.of(shown, unworked))) {
+            ComparisonAssessment.Several read = new ComparisonAssessment.Several(List.of(
+                    new ComparisonAssessment.Several.Part(new PlaceOfALine(
+                            PartOfAComparison.of(WrittenLine.THE_COMPARISON), "both"), line(),
+                            cases)));
+
+            ComparisonAssessment.Several narrowed = assertInstanceOf(
+                    ComparisonAssessment.Several.class,
+                    ComparisonAssessment.narrowedByWhatArrives(read, untouched(),
+                            _ -> untouched(), _ -> untouched(),
+                            List.of(new ComparisonArrival.NoProjection()), false, reading()));
+            assertEquals(read.parts().getFirst(), narrowed.parts().getFirst(),
+                    () -> "a line, owed rows in both cases, asked in the order " + cases);
+        }
     }
 
     private static InputReading reading() {

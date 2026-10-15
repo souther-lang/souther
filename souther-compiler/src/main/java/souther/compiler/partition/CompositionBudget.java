@@ -362,16 +362,19 @@ public enum CompositionBudget {
     CASES_A_LINE_IS_TAKEN_APART_INTO(256),
 
     /**
-     * How many times the cases of where one line of a statement of several decides are asked
-     * whether a row stands on each side of the line in them, where those cases were said as one.
+     * How many times the cases one case of where a line of a statement of several decides was said
+     * for are asked whether a row stands on each side of the line in them.
      *
      * <p>Every question counted: each is the way to the line with what one case has chosen so far
      * taken in, and a case chosen part by part is asked after each part, so that a part leaving no
-     * row on one side settles every case chosen past it.
+     * row on one side settles every case chosen past it. Counted for each case said as one on its
+     * own, so what one of them spent decides nothing about another.
      *
-     * <p><b>Reaching it gives the line up and says so.</b> A line no case asked was shown to divide
-     * rows in is neither one the statement turns on nor one it never turns on, so it is a line where
-     * it decides was not worked out ({@link souther.compiler.inputs.BlockReason.WhereALineDecidesNotWorkedOut}).
+     * <p><b>Reaching it gives that case up and says so.</b> Where another case of the line showed
+     * it decides, the line is the line it is and the case is kept as the condition it was said as.
+     * Where none did, the line is neither one the statement turns on nor one it never turns on, so
+     * it is a line where it decides was not worked out
+     * ({@link souther.compiler.inputs.BlockReason.WhereALineDecidesNotWorkedOut}).
      */
     CASES_A_LINE_IS_ASKED_IN(256),
 

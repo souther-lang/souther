@@ -774,33 +774,45 @@ sealed interface ComparisonAssessment {
         // is where its values are what the case leaves them.
         List<Reachability.Reaching> deciding = new ArrayList<>();
         // A case said for several is asked of them, one at a time: rows on the two sides of its
-        // condition may be in two of them, and the line turns nothing between those. One count
-        // for the line, over every case of it.
-        CasesOfALineAsked asked = new CasesOfALineAsked(condition -> arrivesAtSomePlace(cutting,
-                wayToACase.apply(condition), arrivals, cutting::crossedIn));
+        // condition may be in two of them, and the line turns nothing between those. Counted for
+        // each such case on its own, so that what one case spent decides nothing about another.
+        // Whether the line decides is then what some case was shown to; one whose cases were
+        // not worked out is kept as the condition it was said as where the line decides anyway,
+        // and is the line not worked out where nothing else showed it decides.
+        boolean shown = false;
+        CompositionBudget stoppedAt = null;
         for (DecidingCase each : part.cases()) {
             Reachability toIt = wayToAPart.apply(new WhereAPartDecides(part.id(),
                     each.condition()));
             if (!arrivesAtSomePlace(cutting, toIt, arrivals, cutting::crossedIn)) {
                 continue;
             }
-            if (!each.saidAlone()) {
-                switch (asked.inSomeOf(each.standsFor())) {
-                    case CasesOfALineAsked.Found.InSome _ -> { }
+            if (each.saidAlone()) {
+                shown = true;
+            } else {
+                switch (new CasesOfALineAsked(condition -> arrivesAtSomePlace(cutting,
+                        wayToACase.apply(condition), arrivals, cutting::crossedIn))
+                        .inSomeOf(each.standsFor())) {
+                    case CasesOfALineAsked.Found.InSome _ -> shown = true;
                     case CasesOfALineAsked.Found.InNone _ -> {
                         continue;
                     }
-                    // Neither a line it turns on, owed rows where it may decide nothing, nor one
-                    // dropped for a proof nobody finished.
                     case CasesOfALineAsked.Found.NotWorkedOut(var figure) -> {
-                        return new Several.Part(part.id(), new Unread(atEachOf(cutting.over(),
-                                new BlockReason.WhereALineDecidesNotWorkedOut(figure.figure()))),
-                                List.of());
+                        if (stoppedAt == null) {
+                            stoppedAt = figure;
+                        }
                     }
                 }
             }
             reached.add(each);
             deciding.addAll(waysArrivedBy(toIt, arrivals));
+        }
+        // Neither a line it turns on, owed rows where it may decide nothing, nor one dropped for a
+        // proof nobody finished.
+        if (!shown && stoppedAt != null) {
+            return new Several.Part(part.id(), new Unread(atEachOf(cutting.over(),
+                    new BlockReason.WhereALineDecidesNotWorkedOut(stoppedAt.figure()))),
+                    part.cases());
         }
         ComparisonAssessment decided = arrived instanceof AcrossPositions across
                 && !deciding.isEmpty() ? across.whereRowsArrive(reading, deciding) : arrived;

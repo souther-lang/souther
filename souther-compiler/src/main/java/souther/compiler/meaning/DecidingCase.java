@@ -41,7 +41,12 @@ public record DecidingCase(Proposition condition, Cases standsFor) {
     static DecidingCase someOneOf(List<DecidingCase> cases) {
         return new DecidingCase(
                 Proposition.any(cases.stream().map(DecidingCase::condition).toList()),
-                new Cases.EachOf(cases.stream().map(DecidingCase::standsFor).toList()));
+                eachOf(cases));
+    }
+
+    /** The cases each of {@code cases} stands for, any one of them. */
+    static Cases eachOf(List<DecidingCase> cases) {
+        return new Cases.EachOf(cases.stream().map(DecidingCase::standsFor).toList());
     }
 
     /** This case where {@code also} holds as well, standing for each of its cases where it does. */

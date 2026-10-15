@@ -155,7 +155,7 @@ public final class WhereAnApplicationIsMade {
                 DecidingCase met = each.meeting(one.reached());
                 switch (met.condition()) {
                     case Proposition.Always(boolean holds) when holds -> {
-                        return List.of(DecidingCase.alone(met.condition()));
+                        return List.of(met);
                     }
                     case Proposition.Always _ -> { }
                     default -> kept.putIfAbsent(met.condition().key(), met);

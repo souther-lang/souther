@@ -29,6 +29,7 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.inputs.FilingCoordinate;
 import souther.compiler.inputs.RulesWithNoLine;
 import souther.compiler.meaning.AuthoredPointMapping;
+import souther.compiler.meaning.Proposition;
 import souther.compiler.numeric.Place;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.BooleanMeaning;
@@ -253,6 +254,7 @@ public final class GuardThresholds {
                     // asked would have to pick one of them with nothing to pick by.
                     cuts.reached(stated, each.assumed(), each.whereEachDecides(),
                             each.saidOnTheWay());
+                    Map<Proposition, Reachability> waysToACase = new HashMap<>();
                     switch (each.standing()) {
                         case BoundaryPolicy.Standing.Admitted admitted ->
                                 // The same reading on the narrower region a row at the line is in:
@@ -273,10 +275,13 @@ public final class GuardThresholds {
                                                 part -> Reachability.of(
                                                         new WayToTheBorder(each.wayTo(part)),
                                                         read.quantities().region()),
-                                                decides -> Reachability.of(
-                                                        new WayToTheBorder(
+                                                // Once for each case however many lines ask it:
+                                                // the lines of one statement are asked over the
+                                                // same parts.
+                                                decides -> waysToACase.computeIfAbsent(decides,
+                                                        _ -> Reachability.of(new WayToTheBorder(
                                                                 each.wayToACase(decides, read)),
-                                                        read.quantities().region()),
+                                                                read.quantities().region())),
                                                 at.observations().stream()
                                                         .map(one -> one.arrival()).toList(), false,
                                                 read),
