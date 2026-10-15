@@ -195,8 +195,9 @@ class TheBoundOnWaysStopsTheWorkAndNotOnlyTheAnswerTest {
         }
 
         @Override
-        public Marks oneOfTheWaysIn(Core.If fork, int part, Arrival<Marks> way) {
-            return way.value() != Truth.UNREAD && way.isComplete() ? way.path() : null;
+        public WayWritten<Marks> oneOfTheWaysIn(Core.If fork, int part, Arrival<Marks> way) {
+            return way.value() != Truth.UNREAD && way.isComplete()
+                    ? new WayWritten.As<>(way.path()) : new WayWritten.NoWords<>();
         }
 
         @Override

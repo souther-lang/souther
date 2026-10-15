@@ -141,7 +141,8 @@ class ACaseComparedWithAValueIsReadAsAMatchOnItTest {
      * that stopped at the case never asked the truth, and owes nothing of it.
      *
      * <p>However the case and the truth are written: an order on the cases, the denial under
-     * {@code ||}, the truth behind a name.
+     * {@code ||}, the truth behind a name, the truth asked twice — where the walk puts together a
+     * way on which it came out both ways, which no run takes.
      */
     @Test
     void aCaseTestedBesideATruthOwesWhatTheMatchUnderItOwes() {
@@ -158,6 +159,9 @@ class ACaseComparedWithAValueIsReadAsAMatchOnItTest {
                         + "    if reason < Expired && urgent then lock(account) else account\n",
                 "let apply (account, reason, urgent) =\n"
                         + "    if reason == WrongPassword && urgent == true then lock(account)"
+                        + " else account\n",
+                "let apply (account, reason, urgent) =\n"
+                        + "    if reason == WrongPassword && urgent && urgent then lock(account)"
                         + " else account\n",
                 "let apply (account, reason, urgent) =\n"
                         + "    if reason /= WrongPassword || urgent == false then account"

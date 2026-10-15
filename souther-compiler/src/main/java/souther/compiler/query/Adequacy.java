@@ -5670,6 +5670,8 @@ public final class Adequacy {
                                 .NO_WAY_INTO_THIS_ARM_CAN_BE_NAMED;
                         case WAYS_NOT_ENUMERABLE -> GenerationOutcome.NotSupported.Reason
                                 .THE_WAYS_INTO_THIS_ARM_ARE_NOT_ENUMERABLE;
+                        case WAYS_NOT_TOLD_APART -> GenerationOutcome.NotSupported.Reason
+                                .THE_WAYS_INTO_THIS_ARM_ARE_NOT_TOLD_APART;
                         case MORE_WAYS_IN_THAN_ARE_READ -> GenerationOutcome.NotSupported.Reason
                                 .MORE_WAYS_IN_THAN_THE_READING_HOLDS;
                         case RUNS_WHERE_SOMETHING_CALLS_IT -> GenerationOutcome.NotSupported.Reason

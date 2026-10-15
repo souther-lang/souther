@@ -16,6 +16,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * An arm of a fork on a truth the body was handed is reached by that truth, said of the position
@@ -151,31 +152,62 @@ class AnArmOnATruthTheBodyWasHandedIsReachedByThatTruthTest {
             """;
 
     /**
-     * The arm the condition fails into is reached by each way it fails, and each says what that run
-     * read: a run that stopped at the truth read the truth alone, and a run that went on read the
-     * comparison under it.
+     * The arm a conjunction fails into is reached by each way it fails, and where the comparison
+     * runs first the run is seen taking one of them: it came out one way or the other.
      */
     @Test
     void theArmAConjunctionFailsIntoIsReachedByEachWayItFails() {
         List<List<String>> ways = new ArrayList<>();
-        for (PathAccess each : armsOf("open && amount > 0").values()) {
+        for (PathAccess each : armsOf("amount > 0 && open").values()) {
             if (each instanceof PathAccess.Ways in && theModels(in) && in.ways().size() > 1) {
                 for (WayIn way : in.ways()) {
-                    ways.add(way.conditions().stream()
-                            .map(condition -> switch (condition) {
-                                case Condition.Case(var at, var names) ->
-                                        "Case(" + at + "=" + String.join("|", names) + ")";
-                                case Condition.Side side -> "Side(" + side.held() + ")";
-                                default -> condition.getClass().getSimpleName();
-                            })
-                            .toList());
+                    ways.add(shapeOf(way));
                 }
             }
         }
         ways.sort(Comparator.comparing(List::toString));
-        assertEquals(List.of(List.of("Case(open=false)"), List.of("Side(false)", "Case(open=true)")),
+        assertEquals(List.of(List.of("Side(false)"), List.of("Side(true)", "Case(open=false)")),
                 ways, () -> "the arm `else` is reached by both ways out: "
-                        + armsOf("open && amount > 0").values());
+                        + armsOf("amount > 0 && open").values());
+    }
+
+    /**
+     * Where the truth runs first, nothing a run is seen doing tells the two ways out apart: the
+     * truth is seen at the arm whichever way a run came. The arm steers no row, and what each way
+     * read is still what a run on it read.
+     */
+    @Test
+    void theWaysOutOfATruthAskedFirstAreReadAndNotSteeredBy() {
+        CoverageRead.Read read = readOf(MODEL.replace("CONDITION", "open && amount > 0"));
+        long notToldApart = read.arms().values().stream()
+                .filter(each -> each.equals(new PathAccess.Unsupported(
+                        PathAccess.Unsupported.Why.WAYS_NOT_TOLD_APART)))
+                .count();
+        assertEquals(1, notToldApart, () -> "the arm `else` is not steered by its ways: "
+                + read.arms().values());
+        List<List<String>> taken = new ArrayList<>();
+        for (WayIn way : read.taken()) {
+            List<String> shape = shapeOf(way);
+            if (!shape.contains("Case(open=true)") || shape.contains("Side(false)")) {
+                taken.add(shape);
+            }
+        }
+        assertTrue(taken.contains(List.of("Case(open=false)")),
+                () -> "a run that stopped at the truth read the truth alone: " + read.taken());
+        assertTrue(taken.contains(List.of("Side(false)", "Case(open=true)")),
+                () -> "and a run that went on read the comparison under it: " + read.taken());
+    }
+
+    /** What each condition of {@code way} is, a case with its names and a side with its way out. */
+    private static List<String> shapeOf(WayIn way) {
+        return way.conditions().stream()
+                .map(condition -> switch (condition) {
+                    case Condition.Case(var at, var names) ->
+                            "Case(" + at + "=" + String.join("|", names) + ")";
+                    case Condition.Side side -> "Side(" + side.held() + ")";
+                    default -> condition.getClass().getSimpleName();
+                })
+                .toList();
     }
 
     /** The shapes of the ways into the model's arms reached one way, that hold {@code open} true:
@@ -233,6 +265,10 @@ class AnArmOnATruthTheBodyWasHandedIsReachedByThatTruthTest {
     }
 
     private static Map<ArmProbe, PathAccess> armsIn(String source) {
+        return readOf(source).arms();
+    }
+
+    private static CoverageRead.Read readOf(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
@@ -242,6 +278,6 @@ class AnArmOnATruthTheBodyWasHandedIsReachedByThatTruthTest {
         CoverageRead.Read read =
                 compilation.db().ask(new Adequacy.Meets("example.settle")).value().get("settle");
         assertNotNull(read, "the body is read");
-        return read.arms();
+        return read;
     }
 }

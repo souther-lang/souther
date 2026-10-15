@@ -98,8 +98,8 @@ public interface Naming<P> {
 
     /**
      * {@code way}, one of the ways the condition comes out into arm {@code part} of {@code fork},
-     * as a run down the arm is seen taking it, written down whole — or null where this naming has
-     * no words for that.
+     * as a run down the arm is seen taking it, written down whole — or that this naming has no
+     * words for that, or that no run takes it.
      *
      * <p>Asked where there may be others, so the arm cannot stand for this way — a run down it may
      * have come by any of them. What it can add is to what the way already says of itself: a way
@@ -109,10 +109,12 @@ public interface Naming<P> {
      * ({@link Provenance#unworded}), says with the arm how the condition came out: the arm is
      * somewhere a run on the way is seen.
      *
-     * <p>Null leaves every way into the arm unwritten, since a list of them with one missing reads
-     * as all of them.
+     * <p>No words for one leaves every way into the arm unwritten, since a list of them with one
+     * missing reads as all of them. No run on one leaves it out and the rest as they are: the way
+     * was put together by a reading that could not see two of its parts were one decision, and a
+     * naming that can is saying the reading's list had one too many.
      */
-    P oneOfTheWaysIn(Core.If fork, int part, Arrival<P> way);
+    WayWritten<P> oneOfTheWaysIn(Core.If fork, int part, Arrival<P> way);
 
     /**
      * {@code left}, the one way the left of {@code operator} goes on, as a run that went on into the

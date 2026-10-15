@@ -8,6 +8,7 @@ import souther.compiler.core.Core;
 import souther.compiler.flow.Arrival;
 import souther.compiler.flow.Naming;
 import souther.compiler.flow.Truth;
+import souther.compiler.flow.WayWritten;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.WhatAConditionRuns;
 import souther.compiler.types.ConstructOccurrence;
@@ -223,19 +224,20 @@ final class DecisionNaming implements Naming<DecisionPath> {
      * {@link #seenAtTheArm}: and here the arm is not even the one way's, so it says less still.
      */
     @Override
-    public DecisionPath oneOfTheWaysIn(Core.If fork, int part, Arrival<DecisionPath> taken) {
+    public WayWritten<DecisionPath> oneOfTheWaysIn(Core.If fork, int part,
+                                                   Arrival<DecisionPath> taken) {
         if (taken.value() == Truth.UNREAD || !taken.isComplete()) {
-            return null;
+            return new WayWritten.NoWords<>();
         }
         DecisionPath way = taken.path();
         ModelOccurrence stated = forkStated(fork);
         if (stated == null) {
-            return way;
+            return new WayWritten.As<>(way);
         }
         // Worked out at the first condition settled short of an operand, which most ways have none
         // of, and not once for every way into the arm.
         List<Set<ModelOccurrence>> alwaysRun = new ArrayList<>(1);
-        return way.seenAgain(shown -> {
+        return new WayWritten.As<>(way.seenAgain(shown -> {
             if (!(shown instanceof ShownBy.ShortOf(var _, var notReached))) {
                 return shown;
             }
@@ -244,7 +246,7 @@ final class DecisionNaming implements Naming<DecisionPath> {
             }
             return alwaysRun.getFirst().contains(notReached)
                     ? new ShownBy.AtAnArmShortOf(stated, part, notReached) : shown;
-        });
+        }));
     }
 
     /** The operands every run down arm {@code part} of {@code fork} ran, where a run through one

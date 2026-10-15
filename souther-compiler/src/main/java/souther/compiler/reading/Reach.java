@@ -34,16 +34,26 @@ sealed interface Reach {
     }
 
     /**
-     * Ways that hold a run to something and steer no row: a fork this reading could not value,
-     * standing on the way here.
+     * Ways that hold a run to something and steer no row: a fork this reading could not value, or
+     * whose ways what a run is seen doing does not tell apart, standing on the way here.
      *
-     * @param why what left the reading with these rather than the ways themselves
+     * @param ways  what the walk goes on under, each decision on which is witnessed by its claim:
+     *              the arm itself where the fork stands, which a run is seen taking whichever way
+     *              it came
+     * @param why   what left the reading with these rather than the ways themselves
+     * @param known what a run here is known to have decided, one conjunction per way it may have
+     *              come: the ways themselves where the fork's ways were written down and only
+     *              could not be told apart, and {@code ways} otherwise. Read for what a run reads
+     *              and never for what it is seen doing, since a claim on one of these may be passed
+     *              by a run on another
      */
-    record Coarse(List<WayIn> ways, PathAccess.Unsupported.Why why) implements Reach {
+    record Coarse(List<WayIn> ways, PathAccess.Unsupported.Why why, List<WayIn> known)
+            implements Reach {
 
         public Coarse {
             ways = List.copyOf(ways);
-            if (ways.isEmpty()) {
+            known = List.copyOf(known);
+            if (ways.isEmpty() || known.isEmpty()) {
                 throw new IllegalArgumentException("a place reached no way is Nothing");
             }
         }
@@ -130,7 +140,7 @@ sealed interface Reach {
     default List<WayIn> known() {
         return switch (this) {
             case Ways it -> it.ways();
-            case Coarse it -> it.ways();
+            case Coarse it -> it.known();
             case Unnameable it -> it.known();
             case Nothing _ -> List.of();
         };

@@ -14,6 +14,7 @@ import souther.compiler.flow.Naming;
 import souther.compiler.flow.Truth;
 import souther.compiler.flow.Provenance;
 import souther.compiler.flow.UnwordedTruth;
+import souther.compiler.flow.WayWritten;
 import souther.compiler.inputs.CaseCompared;
 import souther.compiler.inputs.ComparedNumber;
 import souther.compiler.inputs.ComparedNumbers;
@@ -278,7 +279,8 @@ final class CoverageNaming implements Naming<Outcome> {
      */
     @Override
     public Outcome seenAtTheArm(Core.If fork, int part, Arrival<Outcome> onlyWay) {
-        return atTheArm(fork, part, onlyWay);
+        return atTheArm(fork, part, onlyWay) instanceof WayWritten.As<Outcome>(Outcome path)
+                ? path : null;
     }
 
     /**
@@ -291,15 +293,21 @@ final class CoverageNaming implements Naming<Outcome> {
      * then as known as it is on the one way in. A way that says the left failed says the right never
      * ran, and it reads nothing of it. Where the way says neither, the arm cannot say which of the
      * ways a run seen there came by, and this has no words for the way.
+     *
+     * <p>Written down, and not yet witnessed. A truth said here is seen at the arm, and the arm is
+     * passed by a run on any of the ways into it: whether what a run is seen doing tells this way
+     * from the others is a question about all of them together, which is the reader's
+     * ({@link CoverageRead}).
      */
     @Override
-    public Outcome oneOfTheWaysIn(Core.If fork, int part, Arrival<Outcome> way) {
+    public WayWritten<Outcome> oneOfTheWaysIn(Core.If fork, int part, Arrival<Outcome> way) {
         return atTheArm(fork, part, way);
     }
 
     /**
      * {@code way}, one of the ways into arm {@code part} of {@code fork}, with what it left out said
-     * as the arm sees it, or null where the arm does not say it.
+     * as the arm sees it; or that the arm does not say it; or that what the way and the arm say
+     * together settles one decision two ways, which no run does.
      *
      * <p>What the arm says is each part of the condition a run on the way down the arm brought out a
      * known way ({@link WhatAConditionRuns#alongAWay}): known from the arm alone where the condition
@@ -307,52 +315,54 @@ final class CoverageNaming implements Naming<Outcome> {
      * went through otherwise — a comparison it named, and a truth it had no words for with the way
      * that truth came out ({@link Provenance#unworded}).
      */
-    private Outcome atTheArm(Core.If fork, int part, Arrival<Outcome> way) {
+    private WayWritten<Outcome> atTheArm(Core.If fork, int part, Arrival<Outcome> way) {
         if (way.value() != Truth.UNREAD && way.isComplete()) {
-            return way.path();
+            return new WayWritten.As<>(way.path());
         }
         ControlClaim claim = claimAt(armPoint(fork, part));
         if (claim == null) {
-            return null;
+            return new WayWritten.NoWords<>();
         }
         Map<Core, Boolean> unworded = new IdentityHashMap<>();
         for (UnwordedTruth each : way.provenance().unworded()) {
             InputTruth.Asked asked = InputTruth.asked(each.truth(), each.held(), reads, symbols,
                     newtypes);
-            // Two spellings of one truth, a name and what it stands for, said two ways is a way
-            // nothing here can write down.
+            // A name and what it stands for are one truth, and one truth that came out both ways
+            // on one way is no run.
             Boolean already = unworded.put(asked.value(), asked.holding());
             if (already != null && already != asked.holding()) {
-                return null;
+                return new WayWritten.NoRun<>();
             }
         }
         WhatAConditionRuns ran = WhatAConditionRuns.alongAWay(fork.cond(), part == 0,
                 each -> told(way.path(), unworded, each), reads, symbols, newtypes);
         if (!ran.whole()) {
-            return null;
+            return new WayWritten.NoWords<>();
         }
         Outcome out = way.path();
         for (WhatAConditionRuns.Settled each : ran.settled()) {
-            // A way that says a part came out the other way from the one the arm says is a way
-            // that does not come here, and nothing this can write down.
+            // A way that says a part came out the other way from the one the arm says does not
+            // come here.
             Boolean came = unworded.get(each.part());
             if (came != null && came != each.held()) {
-                return null;
+                return new WayWritten.NoRun<>();
             }
             // Each part read where it was written, which behind a name is not where the fork is.
             InputTruth truth = InputTruth.of(each.part(), each.held(), each.reads(), symbols,
                     newtypes);
             if (truth != null) {
+                // Two reads of one position that came out two ways are one decision settled two
+                // ways, which is no path ({@link #join}).
                 out = join(out, one(new Decision(new Condition.Case(truth.at(),
                         List.of(truth.held() ? "true" : "false")), claim)));
+                if (out == null) {
+                    return new WayWritten.NoRun<>();
+                }
             } else if (!named(way.path(), each)) {
-                return null;
-            }
-            if (out == null) {
-                return null;
+                return new WayWritten.NoWords<>();
             }
         }
-        return out;
+        return new WayWritten.As<>(out);
     }
 
     /**

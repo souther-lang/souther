@@ -7,6 +7,7 @@ import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.ScopeStep;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
+import souther.compiler.coverage.ControlPlace;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.coverage.NormalReturn;
 import souther.compiler.coverage.RunBodies;
@@ -566,7 +567,7 @@ public final class CoverageRead {
         taken.addAll(reach.known());
         switch (reach) {
             case Reach.Unnameable unnamed -> saidInPart(reach.known(), unnamed, null);
-            case Reach.Coarse(var _, var why) ->
+            case Reach.Coarse(var _, var why, var _) ->
                     saidInPart(reach.known(), new WrittenWithout.AStep(why));
             // Named all the way to a fork whose case the arm is could not be named.
             case Reach.Ways _ -> saidInPart(reach.known(), new WrittenWithout.AStep(
@@ -845,7 +846,7 @@ public final class CoverageRead {
         // the bound holds by induction rather than by anything counted along the way. What an arm
         // under it is told is the limit, which is not what the fallback looks like from below.
         return under(reach, fallbackWayIn(iff, part, naming,
-                PathAccess.Unsupported.Why.MORE_WAYS_IN_THAN_ARE_READ));
+                PathAccess.Unsupported.Why.MORE_WAYS_IN_THAN_ARE_READ, List.of()));
     }
 
     /**
@@ -867,20 +868,76 @@ public final class CoverageRead {
         // less than what it states, and not the arm being closed.
         if (reading.waysInto(iff, part) instanceof Ways.Known<Outcome> known
                 && !known.paths().isEmpty()) {
-            return new Reach.Ways(waysOf(known.paths()));
+            List<WayIn> ways = waysOf(known.paths());
+            // Written down, and only steered by and witnessed where what a run is seen doing tells
+            // them apart. Otherwise what each holds is still what a run on it read.
+            return toldApart(ways) ? new Reach.Ways(ways) : fallbackWayIn(iff, part, naming,
+                    PathAccess.Unsupported.Why.WAYS_NOT_TOLD_APART, ways);
         }
         return fallbackWayIn(iff, part, naming,
-                PathAccess.Unsupported.Why.WAYS_NOT_ENUMERABLE);
+                PathAccess.Unsupported.Why.WAYS_NOT_ENUMERABLE, List.of());
     }
 
-    /** The arm itself as the one way in, for a condition this reading cannot value, under the
-     *  {@code why} that left it with this rather than with the ways. */
+    /**
+     * Whether what a run is seen doing tells each of {@code ways} from every other: each two claim
+     * some place a run passes once, one way on one and another way on the other.
+     *
+     * <p>The claims on a way are what a reader takes as the proof a run went that way, and a claim
+     * on one is passed by a run on another wherever the other passes that place the same way — or
+     * does not say how it passed it. A truth seen at the arm is seen there whichever way a run came;
+     * two ways told apart by nothing but such truths are one claim, and a run down either is
+     * credited with both. Two ways that passed one place two ways are never both taken by a run.
+     */
+    private static boolean toldApart(List<WayIn> ways) {
+        for (int one = 0; one < ways.size(); one++) {
+            for (int other = one + 1; other < ways.size(); other++) {
+                if (!passedOnePlaceTwoWays(ways.get(one), ways.get(other))) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    private static boolean passedOnePlaceTwoWays(WayIn one, WayIn other) {
+        for (Decision mine : one.decisions()) {
+            for (Decision theirs : other.decisions()) {
+                if (twoWaysOfOnePlace(mine.claims().at(), theirs.claims().at())) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /** Whether a run passing {@code one} does not pass {@code other}: one comparison coming out two
+     *  ways, or two arms of one fork. */
+    private static boolean twoWaysOfOnePlace(ControlPlace one, ControlPlace other) {
+        return switch (one) {
+            case ControlPlace.Outcome came -> other instanceof ControlPlace.Outcome went
+                    && went.at().equals(came.at()) && went.held() != came.held();
+            case ControlPlace.Arm took -> other instanceof ControlPlace.Arm went
+                    && went.arm().fork().equals(took.arm().fork())
+                    && went.arm().part() != took.arm().part();
+        };
+    }
+
+    /**
+     * The arm itself as the one way in, for a condition this reading cannot value or whose ways a
+     * run is not seen to tell apart, under the {@code why} that left it with this rather than with
+     * the ways.
+     *
+     * @param written the ways in, where they were written down and only not told apart; what a run
+     *                here is known to have decided, which the arm says less of. Empty otherwise
+     */
     private Reach fallbackWayIn(Core.If iff, int part, CoverageNaming naming,
-                                PathAccess.Unsupported.Why why) {
+                                PathAccess.Unsupported.Why why, List<WayIn> written) {
         Outcome back = naming.forkArm(iff, part);
-        return back == null
-                ? new Reach.Unnameable(PathAccess.Unsupported.Why.NO_WAY_IN_CAN_BE_NAMED)
-                : new Reach.Coarse(List.of(new WayIn(back.holds())), why);
+        if (back == null) {
+            return new Reach.Unnameable(PathAccess.Unsupported.Why.NO_WAY_IN_CAN_BE_NAMED);
+        }
+        List<WayIn> arm = List.of(new WayIn(back.holds()));
+        return new Reach.Coarse(arm, why, written.isEmpty() ? arm : written);
     }
 
     /**
@@ -939,13 +996,27 @@ public final class CoverageRead {
         if (held.isEmpty()) {
             return new Reach.Nothing(PathAccess.Unreachable.Why.CONTRADICTS_WHAT_ALREADY_HELD);
         }
-        if (above instanceof Reach.Coarse(var _, var why)) {
-            return new Reach.Coarse(held, why);
+        if (above instanceof Reach.Coarse(var _, var why, var _)) {
+            return coarse(held, why, both(above.known(), step.known()));
         }
-        if (step instanceof Reach.Coarse(var _, var why)) {
-            return new Reach.Coarse(held, why);
+        if (step instanceof Reach.Coarse(var _, var why, var _)) {
+            return coarse(held, why, both(above.known(), step.known()));
         }
         return new Reach.Ways(held);
+    }
+
+    /**
+     * {@code ways} steering no row, with {@code known} what a run on them decided — where that is
+     * any: what is known settling one decision two ways on every way is no run. Past the bound
+     * what is known is read no further than the ways themselves, which say less of it and never
+     * more.
+     */
+    private static Reach coarse(List<WayIn> ways, PathAccess.Unsupported.Why why,
+                                List<WayIn> known) {
+        if (known.isEmpty()) {
+            return new Reach.Nothing(PathAccess.Unreachable.Why.CONTRADICTS_WHAT_ALREADY_HELD);
+        }
+        return new Reach.Coarse(ways, why, known.size() > MOST_WAYS_IN ? ways : known);
     }
 
     /**
@@ -976,11 +1047,11 @@ public final class CoverageRead {
         if (ways.size() > MOST_WAYS_IN) {
             return new Reach.Unnameable(PathAccess.Unsupported.Why.MORE_WAYS_IN_THAN_ARE_READ);
         }
-        if (one instanceof Reach.Coarse(var _, var why)) {
-            return new Reach.Coarse(ways, why);
+        if (one instanceof Reach.Coarse(var _, var why, var _)) {
+            return coarse(ways, why, anyOf(one.known(), other.known()));
         }
-        if (other instanceof Reach.Coarse(var _, var why)) {
-            return new Reach.Coarse(ways, why);
+        if (other instanceof Reach.Coarse(var _, var why, var _)) {
+            return coarse(ways, why, anyOf(one.known(), other.known()));
         }
         return new Reach.Ways(ways);
     }

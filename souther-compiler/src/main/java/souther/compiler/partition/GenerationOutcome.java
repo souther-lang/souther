@@ -242,6 +242,14 @@ public sealed interface GenerationOutcome {
                             + " the ways to this one could not all be written down — some of them"
                             + " would say a row arrives where it may not"),
 
+            /** The ways into this arm were written down, and no run is seen taking one rather than
+             *  another. */
+            THE_WAYS_INTO_THIS_ARM_ARE_NOT_TOLD_APART(
+                    "a row is steered into an arm by the decisions that hold on the way there, and"
+                            + " what a run is seen doing does not tell the ways into this one"
+                            + " apart — a row through it would be credited with ways it did not"
+                            + " take"),
+
             /** More ways into this arm than the reading of the body holds at once. */
             MORE_WAYS_IN_THAN_THE_READING_HOLDS(
                     "the ways into this arm run past what one reading of the body holds at once, so"

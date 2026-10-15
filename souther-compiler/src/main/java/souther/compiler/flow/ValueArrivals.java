@@ -890,7 +890,8 @@ public final class ValueArrivals<P> {
      * left out for another: what the naming could not write of one way is that way's, and a way
      * into the arm written whole stays written whole beside it. Only the ways into this arm are
      * asked of — a way the condition comes out the other way by is no way here, whatever it is
-     * missing.
+     * missing, and so is one the naming sees no run take. Where that leaves none and the body does
+     * come out this way, the naming has refused what the body does, and the ways are not known.
      */
     private Ways<P> intoArm(Core.If iff, int part, Naming<P> naming) {
         boolean want = part == 0;
@@ -912,11 +913,13 @@ public final class ValueArrivals<P> {
             if (each.value() != Truth.of(want) && each.value() != Truth.UNREAD) {
                 continue;
             }
-            P seen = naming.oneOfTheWaysIn(iff, part, each);
-            if (seen == null) {
-                return new Ways.Unknown<>();
+            switch (naming.oneOfTheWaysIn(iff, part, each)) {
+                case WayWritten.As<P>(P seen) -> paths.add(seen);
+                case WayWritten.NoWords<P> _ -> {
+                    return new Ways.Unknown<>();
+                }
+                case WayWritten.NoRun<P> _ -> { }
             }
-            paths.add(seen);
         }
         if (paths.isEmpty() && comesAt(iff.cond()).mayCome(want)) {
             return new Ways.Unknown<>();
@@ -1063,13 +1066,22 @@ public final class ValueArrivals<P> {
          * from what the way consulted pays that search once per pair, and the cost of gathering
          * one body's ways grew with their square.
          *
-         * <p>Keyed by each as a way ({@link Provenance#asAWay}), and holding the way with the truths
-         * every run gathered under that key kept. Keyed with the truths, ways that differ only in
-         * how a truth nothing names came out would be told apart, which is as many ways as there
-         * are combinations of those truths, and the bound would be spent on what no naming wrote.
+         * <p>Each key is the way it is kept under: the way itself, truths and all, while there is
+         * room for them; and past the room, the way as a way ({@link Provenance#asAWay}).
          */
         private final SequencedMap<Arrival<P>, Arrival<P>> ways = new LinkedHashMap<>();
         private boolean beyond;
+
+        /**
+         * Whether ways that differ only in truths no naming wrote are held as one.
+         *
+         * <p>Apart while there is room, since which way such a truth came out is what lets an arm
+         * write a way down, and which of two ways settles one truth both ways and is no run. Past
+         * the room, as one, holding the truths every one of them kept: told apart there, they are as
+         * many as the combinations of those truths, and the bound would be spent on what no naming
+         * wrote where the ways it did write fit.
+         */
+        private boolean asWays;
 
         boolean isBeyond() {
             return beyond;
@@ -1086,15 +1098,31 @@ public final class ValueArrivals<P> {
             }
             // Asked and kept in one look: a way is hashed from everything it consulted, and two
             // looks pay that twice for every candidate.
-            Provenance<P> asAWay = way.provenance().asAWay();
             int before = ways.size();
+            keep(way);
+            if (ways.size() > before && ways.size() > naming.mostArrivals()) {
+                if (!asWays) {
+                    asWays = true;
+                    List<Arrival<P>> apart = List.copyOf(ways.values());
+                    ways.clear();
+                    apart.forEach(this::keep);
+                }
+                if (ways.size() > naming.mostArrivals()) {
+                    beyond = true;
+                    ways.clear();
+                }
+            }
+        }
+
+        private void keep(Arrival<P> way) {
+            if (!asWays) {
+                ways.putIfAbsent(way, way);
+                return;
+            }
+            Provenance<P> asAWay = way.provenance().asAWay();
             ways.merge(asAWay == way.provenance() ? way : new Arrival<>(way.value(), asAWay), way,
                     (held, again) -> new Arrival<>(held.value(),
                             held.provenance().sharedWith(again.provenance())));
-            if (ways.size() > before && ways.size() > naming.mostArrivals()) {
-                beyond = true;
-                ways.clear();
-            }
         }
 
         /** Each arrival held to what already holds along the way to it. */

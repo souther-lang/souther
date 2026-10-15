@@ -4961,6 +4961,7 @@
           "enum": [
             "no_way_in_can_be_named",
             "ways_not_enumerable",
+            "ways_not_told_apart",
             "more_ways_in_than_are_read",
             "runs_where_something_calls_it",
             "the_construction_decides_it"

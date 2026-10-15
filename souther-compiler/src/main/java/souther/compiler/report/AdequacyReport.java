@@ -3908,6 +3908,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     "a way of the body goes to a fork no position of the input could be named for";
             case WAYS_NOT_ENUMERABLE ->
                     "the ways to a value the body answers with could not all be written down";
+            case WAYS_NOT_TOLD_APART ->
+                    "a way of the body goes to an arm whose ways in a run is not seen to tell"
+                            + " apart";
             case MORE_WAYS_IN_THAN_ARE_READ ->
                     "a fork of the body has more ways into it than one reading holds at once";
             case RUNS_WHERE_SOMETHING_CALLS_IT ->
