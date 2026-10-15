@@ -7153,7 +7153,9 @@ public final class Adequacy {
      */
     private static String saidOn(BorderAssessment read, String axis) {
         return namesALevel(read)
-                ? axis + " = " + read.border().cut().of().writtenAt(read.border().obligation().at())
+                ? read.border().obligation().at()
+                        .map(at -> axis + " = " + read.border().cut().of().writtenAt(at))
+                        .orElse(axis)
                 : axis;
     }
 

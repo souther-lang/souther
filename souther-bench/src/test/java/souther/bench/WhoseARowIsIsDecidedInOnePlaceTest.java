@@ -89,6 +89,7 @@ class WhoseARowIsIsDecidedInOnePlaceTest {
                         // point is made, whether a row is owed at it or not.
                         ATTRIBUTION + "#of CALLS",
                         List.of("souther.compiler.partition.Border#leavesOut",
+                                "souther.compiler.partition.Border#owedAt",
                                 "souther.compiler.partition.Border#owes"))),
                 reachesFromOutside());
     }

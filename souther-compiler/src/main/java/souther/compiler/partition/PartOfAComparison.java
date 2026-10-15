@@ -15,8 +15,8 @@ import java.util.Objects;
  * one for each case of a value the caller chose — so those places are readings of this line and
  * not lines of their own.
  *
- * <p>Named by the reading that took the statement apart, and by nothing that met a line
- * afterwards.
+ * <p>Named by the arms alone, read off how the statement was derived ({@code WrittenLines}): what a
+ * call hands the definition never splits one of these or joins two.
  */
 public final class PartOfAComparison {
 

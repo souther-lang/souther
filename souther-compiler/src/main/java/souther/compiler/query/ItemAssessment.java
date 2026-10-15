@@ -964,6 +964,20 @@ public sealed interface ItemAssessment {
         };
     }
 
+    /**
+     * What a reading of a point's line that could not be tied to the point measured there: nothing
+     * counted for the point or against it, and the point held undecided where nothing tied to it
+     * settles it.
+     *
+     * <p>Whatever the reading's own search came to is about a place this reading cannot show to be
+     * the point, so it is not that search's coverage.
+     */
+    static Measurement<Coverage> notTiedTo(souther.compiler.partition.Border border) {
+        return new Measurement.FailedToMeasure<>(
+                NotTiedToTheAuthorsLine.NOT_TIED_TO_THE_AUTHORS_LINE,
+                WeakeningSet.of(new Weakening.AReadingNotTiedToItsLine(border)));
+    }
+
     /** Why a reading's measurement of a point could not be counted for it: the reading is of the
      *  point's line and could not be tied to the point ({@link Weakening.AReadingNotTiedToItsLine}). */
     enum NotTiedToTheAuthorsLine implements FailureReason {

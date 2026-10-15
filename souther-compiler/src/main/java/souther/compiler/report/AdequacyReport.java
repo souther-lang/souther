@@ -7833,7 +7833,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             ObjectNode one = out.addObject();
             ObjectNode id = one.putObject("lineId");
             authoredLineId(id.putObject("line"), line.line().line());
-            level(id.putObject("level"), line.line().at());
+            line.line().at().ifPresent(at -> level(id.putObject("level"), at));
             ruleId(one.putObject("ruleId"), line.line().provenance());
             one.put("label", line.said());
             ArrayNode none = one.putArray("noPoint");
@@ -7861,7 +7861,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             ObjectNode one = out.addObject();
             ObjectNode id = one.putObject("pointId");
             authoredLineId(id.putObject("line"), each.point().line().line());
-            level(id.putObject("level"), each.point().line().at());
+            each.point().line().at().ifPresent(at -> level(id.putObject("level"), at));
             location(id.putObject("location"), each.point().point());
             ArrayNode stops = id.putArray("stops");
             each.point().stops().forEach(end -> farEnd(stops.addObject(), end));

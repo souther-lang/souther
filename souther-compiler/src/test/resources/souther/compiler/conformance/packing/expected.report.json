@@ -2361,10 +2361,6 @@
                 },
                 "narrowedWithin" : [ ]
               },
-              "level" : {
-                "kind" : "a_count",
-                "at" : "4800"
-              },
               "direction" : "3 * bars + straws"
             },
             "standing" : "ruled_out"
@@ -2389,10 +2385,6 @@
                 },
                 "narrowedWithin" : [ ]
               },
-              "level" : {
-                "kind" : "a_count",
-                "at" : "4800"
-              },
               "direction" : "bars + straws"
             },
             "standing" : "ruled_out"
@@ -2416,10 +2408,6 @@
                   "singles" : false
                 },
                 "narrowedWithin" : [ ]
-              },
-              "level" : {
-                "kind" : "a_count",
-                "at" : "4800"
               },
               "direction" : "bars"
             },
@@ -2559,10 +2547,6 @@
               },
               "narrowedWithin" : [ ]
             },
-            "level" : {
-              "kind" : "a_count",
-              "at" : "4800"
-            },
             "location" : {
               "kind" : "at_the_line"
             }
@@ -2611,10 +2595,6 @@
                 "singles" : false
               },
               "narrowedWithin" : [ ]
-            },
-            "level" : {
-              "kind" : "a_count",
-              "at" : "4800"
             },
             "location" : {
               "kind" : "beside_the_line",
@@ -2666,22 +2646,9 @@
               },
               "narrowedWithin" : [ ]
             },
-            "level" : {
-              "kind" : "a_count",
-              "at" : "4800"
-            },
             "location" : {
               "kind" : "in_the_region",
               "side" : "below"
-            },
-            "stops" : {
-              "kind" : "at_the_domain",
-              "at" : {
-                "kind" : "a_count",
-                "at" : "0"
-              },
-              "per" : "1",
-              "inclusive" : true
             }
           },
           "point" : "in",
@@ -2729,22 +2696,9 @@
               },
               "narrowedWithin" : [ ]
             },
-            "level" : {
-              "kind" : "a_count",
-              "at" : "4800"
-            },
             "location" : {
               "kind" : "in_the_region",
               "side" : "above"
-            },
-            "stops" : {
-              "kind" : "at_the_domain",
-              "at" : {
-                "kind" : "a_count",
-                "at" : "18000"
-              },
-              "per" : "1",
-              "inclusive" : true
             }
           },
           "point" : "out",
@@ -3589,10 +3543,6 @@
                 },
                 "narrowedWithin" : [ ]
               },
-              "level" : {
-                "kind" : "a_count",
-                "at" : "8"
-              },
               "direction" : "until"
             },
             "standing" : "ruled_out"
@@ -3616,10 +3566,6 @@
                   "singles" : false
                 },
                 "narrowedWithin" : [ ]
-              },
-              "level" : {
-                "kind" : "a_count",
-                "at" : "8"
               },
               "direction" : "-2 * from + until"
             },
@@ -3645,10 +3591,6 @@
                 },
                 "narrowedWithin" : [ ]
               },
-              "level" : {
-                "kind" : "a_count",
-                "at" : "8"
-              },
               "direction" : "-from + 2 * until"
             },
             "standing" : "ruled_out"
@@ -3672,10 +3614,6 @@
                   "singles" : false
                 },
                 "narrowedWithin" : [ ]
-              },
-              "level" : {
-                "kind" : "a_count",
-                "at" : "8"
               },
               "direction" : "-from"
             },
@@ -3815,10 +3753,6 @@
               },
               "narrowedWithin" : [ ]
             },
-            "level" : {
-              "kind" : "a_count",
-              "at" : "8"
-            },
             "location" : {
               "kind" : "at_the_line"
             }
@@ -3867,10 +3801,6 @@
                 "singles" : false
               },
               "narrowedWithin" : [ ]
-            },
-            "level" : {
-              "kind" : "a_count",
-              "at" : "8"
             },
             "location" : {
               "kind" : "beside_the_line",
@@ -3922,22 +3852,9 @@
               },
               "narrowedWithin" : [ ]
             },
-            "level" : {
-              "kind" : "a_count",
-              "at" : "8"
-            },
             "location" : {
               "kind" : "in_the_region",
               "side" : "below"
-            },
-            "stops" : {
-              "kind" : "at_the_domain",
-              "at" : {
-                "kind" : "a_count",
-                "at" : "-24"
-              },
-              "per" : "1",
-              "inclusive" : true
             }
           },
           "point" : "in",
@@ -3985,22 +3902,9 @@
               },
               "narrowedWithin" : [ ]
             },
-            "level" : {
-              "kind" : "a_count",
-              "at" : "8"
-            },
             "location" : {
               "kind" : "in_the_region",
               "side" : "above"
-            },
-            "stops" : {
-              "kind" : "at_the_domain",
-              "at" : {
-                "kind" : "a_count",
-                "at" : "24"
-              },
-              "per" : "1",
-              "inclusive" : true
             }
           },
           "point" : "out",

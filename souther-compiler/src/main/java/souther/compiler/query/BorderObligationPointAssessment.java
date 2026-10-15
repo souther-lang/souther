@@ -533,9 +533,7 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
             // settles this point: its rows are not counted for it or against it, and it holds the
             // point undecided only where nothing tied to it settles it.
             if (!(seat instanceof ReadingSeat.At)) {
-                coverage.add(new Measurement.FailedToMeasure<>(
-                        ItemAssessment.NotTiedToTheAuthorsLine.NOT_TIED_TO_THE_AUTHORS_LINE,
-                        WeakeningSet.of(new Weakening.AReadingNotTiedToItsLine(reading.border()))));
+                coverage.add(ItemAssessment.notTiedTo(reading.border()));
                 continue;
             }
             coverage.add(owed.coverage());

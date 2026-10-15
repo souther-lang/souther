@@ -5437,7 +5437,8 @@ final class Pullback {
      * is not, or where nothing was read.
      */
     private static Derivation aComparisonAt(Core node, Derivation read) {
-        ConstructOccurrence at = ACopyOfAnApplication.occurrenceOf(node);        return read == null || at == null || !at.isWritten() ? read
+        ConstructOccurrence at = ACopyOfAnApplication.occurrenceOf(node);
+        return read == null || at == null || !at.isWritten() ? read
                 : new Derivation.AComparisonAt(at, read);
     }
 
@@ -5446,10 +5447,10 @@ final class Pullback {
      * source wrote ({@link Derivation.AChoiceAt}); {@code choice} alone where it is not.
      */
     private static Derivation madeBy(Core node, Derivation choice) {
-        // A call a representation kept standing says where it stands as a call does; the copies
-        // of an application are asked of the node's own shape.
-        ConstructOccurrence at = node instanceof Core.PreservedCall kept ? kept.occurrence()
-                : ACopyOfAnApplication.occurrenceOf(node);
+        // A call a representation kept standing says where it stands as a call does, whatever
+        // wider type it stands as; the copies of an application are asked of the node's own shape.
+        ConstructOccurrence at = Core.withoutStanding(node) instanceof Core.PreservedCall kept
+                ? kept.occurrence() : ACopyOfAnApplication.occurrenceOf(node);
         return at == null || !at.isWritten() ? choice : new Derivation.AChoiceAt(at, choice);
     }
 

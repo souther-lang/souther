@@ -4592,10 +4592,9 @@
     },
     "borderObligationId": {
       "type": "object",
-      "description": "What tells one line a rule draws, held against one line of its fault family, from every other such obligation, where what is owed is of the whole line rather than of a point on it. The line, the level it is read at, and the line of the family, and no place: a point of the line is somewhere, and a line held against a line beside it is nowhere in particular — what would answer it is an input that rules the other line out, which is not a point this line owns. A key within this document: it names an entry of `besides` under a `partition.boundaries` entry, and a consumer joins a `boundary_not_told_from_another` finding to the line it is about on it.",
+      "description": "What tells one line a rule draws, held against one line of its fault family, from every other such obligation, where what is owed is of the whole line rather than of a point on it. The line, the level it is read at, and the line of the family, and no place: a point of the line is somewhere, and a line held against a line beside it is nowhere in particular — what would answer it is an input that rules the other line out, which is not a point this line owns. A key within this document: it names an entry of `besides` under a `partition.boundaries` entry, and a consumer joins a `boundary_not_told_from_another` finding to the line it is about on it. A comparison written in a body carries no level: the value each call puts it at is the reading's, and the line is the one its author wrote.",
       "required": [
         "line",
-        "level",
         "direction"
       ],
       "additionalProperties": false,
@@ -4610,6 +4609,53 @@
           "type": "string",
           "description": "The line of the family, spelled as an author writes a form and with no threshold: where the rows leave the threshold moves with every row written, and the obligation does not. One obligation per line of the family, because a row ruling one of them out need not rule out another."
         }
+      },
+      "if": {
+        "properties": {
+          "line": {
+            "properties": {
+              "which": {
+                "anyOf": [
+                  {
+                    "properties": {
+                      "kind": {
+                        "const": "comparison"
+                      }
+                    }
+                  },
+                  {
+                    "properties": {
+                      "kind": {
+                        "const": "part_of_comparison"
+                      }
+                    }
+                  }
+                ],
+                "required": [
+                  "kind"
+                ]
+              }
+            },
+            "required": [
+              "which"
+            ]
+          }
+        },
+        "required": [
+          "line"
+        ]
+      },
+      "then": {
+        "not": {
+          "required": [
+            "level"
+          ]
+        }
+      },
+      "else": {
+        "required": [
+          "level"
+        ]
       }
     },
     "outputCaseObligationId": {
