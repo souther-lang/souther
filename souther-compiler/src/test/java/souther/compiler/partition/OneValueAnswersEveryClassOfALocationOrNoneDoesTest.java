@@ -425,6 +425,53 @@ class OneValueAnswersEveryClassOfALocationOrNoneDoesTest {
         assertTrue(rows.contains("// fills c=/= 2"), rows);
     }
 
+    /** A whole number held to three values, divided by what it leaves by two, three and five. */
+    private static final String THREE_REMAINDERS = """
+            module example.named
+
+            data Ok
+            data No
+            data Verdict = Ok | No
+            data Code = Int
+                invariant value == 7 || value == 11 || value == 16
+
+            behavior gate : (c: Code) -> Verdict
+            let gate (c) = if Int.floorMod(c.value, 2) == 1 && Int.floorMod(c.value, 3) == 1
+                && Int.floorMod(c.value, 5) == 1 then No else Ok
+            """;
+
+    /**
+     * Three classes no one value is in, though every two of them are.
+     *
+     * <p>Seven leaves one by two and three, eleven by two and five, sixteen by three and five, and
+     * none of them by all three. So a group is answered by what one value reads as of every number
+     * at once, and not by the pairs: each pair is in some value, and the three are in none.
+     */
+    @Test
+    void threeClassesEveryTwoOfWhichOneValueIsInAreAnsweredByNoValue() {
+        Model model = new Model(THREE_REMAINDERS);
+        List<SequencedMap<RealizationTarget.OfANumber, NumericSet>> each =
+                model.classOfEachTakenNumberLabelled("= 1");
+        assertEquals(3, each.size(), each::toString);
+
+        for (int left = 0; left < each.size(); left++) {
+            SequencedMap<RealizationTarget.OfANumber, NumericSet> pair = new LinkedHashMap<>();
+            for (int i = 0; i < each.size(); i++) {
+                if (i != left) {
+                    pair.putAll(each.get(i));
+                }
+            }
+            TermRealizations.Realization made = model.answering(pair);
+            assertInstanceOf(TermRealizations.Realization.Built.class, made, made::toString);
+        }
+        SequencedMap<RealizationTarget.OfANumber, NumericSet> all = new LinkedHashMap<>();
+        each.forEach(all::putAll);
+        TermRealizations.Realization made = model.answering(all);
+        assertEquals(Generator.UnresolvedCombination.Reason.NO_VALUE_CAN_STAND_THERE,
+                assertInstanceOf(TermRealizations.Realization.None.class, made, made::toString)
+                        .why());
+    }
+
     /** One model, read and divided, with the numbers its classes are of in hand. */
     private static final class Model {
 
@@ -504,6 +551,27 @@ class OneValueAnswersEveryClassOfALocationOrNoneDoesTest {
                                 + partitioning.axes().stream().flatMap(axis -> axis.classes()
                                         .stream()).map(PartitionClass::label).toList()));
                 out.put(RealizationTarget.of(cls.of()), cls.recognises().numbers());
+            }
+            return out;
+        }
+
+        /** The class called {@code label} of each number taken of the location, one map apiece,
+         *  in the order the axes were read. */
+        private List<SequencedMap<RealizationTarget.OfANumber, NumericSet>>
+                classOfEachTakenNumberLabelled(String label) {
+            List<SequencedMap<RealizationTarget.OfANumber, NumericSet>> out = new ArrayList<>();
+            for (Axis axis : partitioning.axes()) {
+                if (axis.term() instanceof NumericTerm.ValueOf) {
+                    continue;
+                }
+                for (PartitionClass cls : axis.classes()) {
+                    if (cls.label().equals(label)) {
+                        SequencedMap<RealizationTarget.OfANumber, NumericSet> one =
+                                new LinkedHashMap<>();
+                        one.put(RealizationTarget.of(cls.of()), cls.recognises().numbers());
+                        out.add(one);
+                    }
+                }
             }
             return out;
         }

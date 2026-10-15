@@ -78,15 +78,35 @@ public sealed interface HeldValues {
     /**
      * What the declarations hold a number of one position to.
      *
-     * @param on the order the number is answered on, or null where it is read of no one position's
-     *           value and nothing here applies
-     * @param class_ the class of whole numbers every value is of, or null where none is known
-     * @param named the values the position's rules admit, or the numbers those come to where the
-     *              number is taken of the position's value
+     * <p>Made where the declarations were read ({@link #of(SearchRegion, TermOrders)}), and in this
+     * package by a test that wants a synthetic one. A set named here is what a refusal is concluded
+     * from, so it is not one a reader elsewhere can write down.
      */
-    record OfAPosition(Carrier on, Congruences class_, ValueSet named) implements HeldValues {
+    final class OfAPosition implements HeldValues {
 
         static final OfAPosition NONE = new OfAPosition(null, null, ValueSet.ANY);
+
+        private final Carrier on;
+        private final Congruences class_;
+        private final ValueSet named;
+
+        /**
+         * @param on the order the number is answered on, or null where it is read of no one
+         *           position's value and nothing here applies
+         * @param class_ the class of whole numbers every value is of, or null where none is known
+         * @param named the values the position's rules admit, or the numbers those come to where
+         *              the number is taken of the position's value
+         */
+        OfAPosition(Carrier on, Congruences class_, ValueSet named) {
+            this.on = on;
+            this.class_ = class_;
+            this.named = named;
+        }
+
+        /** The values the position's rules admit, or the numbers those come to. */
+        ValueSet named() {
+            return named;
+        }
 
         /**
          * Whether the declarations refuse {@code level}.
@@ -158,12 +178,16 @@ public sealed interface HeldValues {
      * <p>A distance between two such numbers is the form that is their difference, and its levels
      * are what that comes to.
      *
-     * @param comesTo what the form comes to of each value the position admits
+     * <p>Made only of every value the position admits ({@link #of}): a level none of them comes to
+     * is refused, so a list missing one would refuse a level a value reaches.
      */
-    record OfAForm(List<ExactRatio> comesTo) implements HeldValues {
+    final class OfAForm implements HeldValues {
 
-        public OfAForm {
-            comesTo = List.copyOf(comesTo);
+        /** What the form comes to of each value the position admits. */
+        private final List<ExactRatio> comesTo;
+
+        private OfAForm(List<ExactRatio> comesTo) {
+            this.comesTo = List.copyOf(comesTo);
         }
 
         /**

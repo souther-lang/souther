@@ -29,13 +29,20 @@ import java.util.Set;
  * of these, so a reading no value comes to is one no row comes to; a value here is not shown to be
  * one a row can hold.
  *
- * @param each every value the position admits, with what each term reads of it, in the order the
- *             values were named
+ * <p>Made only by reading every value ({@link #of}). That every value is here is what a reader
+ * concludes a refusal from, so there is no way to hold some of them as though they were all.
  */
-public record ReadingsOfEachValue(List<ReadingsOfEachValue.Read> each) {
+public final class ReadingsOfEachValue {
 
-    public ReadingsOfEachValue {
-        each = List.copyOf(each);
+    private final List<Read> each;
+
+    private ReadingsOfEachValue(List<Read> each) {
+        this.each = List.copyOf(each);
+    }
+
+    /** Every value the position admits, with what each term reads of it. */
+    public List<Read> each() {
+        return each;
     }
 
     /**

@@ -15,6 +15,7 @@ import java.util.List;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
 /**
@@ -81,6 +82,21 @@ class WhatATermComesToOfTheValuesNamedIsReadOfThoseValuesTest {
     void aSetThatIsNotFinitelyManyValuesHoldsTheNumberToNothing() {
         assertNull(ReadingsOfEachValue.of(ValueSet.allBut(Value.text("a")),
                 List.of(notWhitespaceOf("c"))));
+    }
+
+    /**
+     * A value no term can read leaves the values unread together, rather than read without it: a
+     * reader holding the rest would take what that value comes to for something nothing comes to.
+     */
+    @Test
+    void aValueATermCannotReadLeavesTheValuesUnread() {
+        TermOrders whole = TermOrdersFixtures.itself(new NumericTerm.ValueOf(TermPath.of("c")),
+                new Carrier.Whole());
+        assertNotNull(ReadingsOfEachValue.of(ValueSet.oneOf(Set.of(Value.number(1))),
+                List.of(whole)), "a whole number is read on the order of the whole numbers");
+        assertNull(ReadingsOfEachValue.of(
+                ValueSet.oneOf(Set.of(Value.number(1), Value.text("a"))), List.of(whole)),
+                "and a string beside it is not");
     }
 
     @Test
