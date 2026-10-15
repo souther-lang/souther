@@ -54,10 +54,12 @@ import java.util.Set;
  * that is whole is another thing: a body that draws no distinction has one rule, and every run
  * takes it.
  *
- * <p><b>A run down a way the reading proved no input takes is the proof shown wrong.</b> The
- * reading read no rule past such a way ({@link DecisionReading#impossible}), so a run there would
- * otherwise match no rule and read as one this compiler could not place. It is recognised at the
- * way's conditions as a rule is, and answered as the proof it went against.
+ * <p><b>A run down a way the reading proved no input takes is the proof shown wrong.</b> It is
+ * recognised at the way's conditions as a rule is, and asked apart from where the run is placed
+ * ({@link #proofsGoneAgainst}): where a run is placed among the rules and which proofs it went
+ * against are two facts, and one run can be placed at a rule and go against a proof, or go against
+ * more than one proof. The reading read no rule past such a way ({@link DecisionReading#impossible}),
+ * so a run matching no rule that went against one is placed nowhere for that reason.
  */
 public final class RulesTaken {
 
@@ -67,9 +69,11 @@ public final class RulesTaken {
      * <p>More answers than two, because what a reader does with them differs. A run whose rule is
      * known is evidence that something stands there; a run whose rule could not be told is this
      * compiler falling short and says nothing about the model; a run matching no rule at all is the
-     * reading and the run disagreeing about the body, which is worth knowing; and a run down a way
-     * proved to be taken by no input is that proof being wrong, which is this compiler's error and
-     * named as the proof.
+     * reading and the run disagreeing about the body, which is worth knowing.
+     *
+     * <p>Where the run is placed and nothing else. Which proofs that no input takes a way the run
+     * went against is its own question ({@link #proofsGoneAgainst}), answered whatever this one
+     * answers.
      */
     public sealed interface WhichRule {
 
@@ -79,27 +83,6 @@ public final class RulesTaken {
         /** No rule this reading can recognise a run at matched, and why that is not a fact about
          *  the model. */
         record CouldNotTell(Why why) implements WhichRule {}
-
-        /**
-         * The run brought out every condition of a way the reading proved no input takes, as the
-         * way did. The proof is wrong then and not the run, and no rule past the way was read, so
-         * the run is placed at none: it is the proof the run went against.
-         *
-         * <p>The way as the conditions it consulted, which is what tells one such way from another
-         * ({@link DecisionReading.ImpossiblePath#way}); what proved it is the reading's, and held
-         * here it would be held by every answer that places a run.
-         */
-        record AgainstAProof(DecisionRule way) implements WhichRule {
-
-            public AgainstAProof {
-                Objects.requireNonNull(way, "a run goes against some proof");
-            }
-
-            /** Why the run's rule could not be told, said as every other run unplaced is. */
-            public Why why() {
-                return Why.ITS_WAY_IS_PROVED_TO_BE_TAKEN_BY_NO_INPUT;
-            }
-        }
 
         /** Why a run's rule could not be told. */
         enum Why {
@@ -113,8 +96,10 @@ public final class RulesTaken {
             A_CONDITION_CAME_OUT_BOTH_WAYS,
             /** More than one rule matched, which one run cannot have done. */
             MORE_THAN_ONE_RULE_MATCHES,
-            /** The run took a way the reading proved no input takes, and the reading read no rule
-             *  past a way it proved that of. */
+            /** No rule matched, and the run took a way the reading proved no input takes: the
+             *  reading read no rule past a way it proved that of, so there is none to place the run
+             *  at. Answered only where no rule matched; a run placed at a rule that also went
+             *  against a proof is placed there. */
             ITS_WAY_IS_PROVED_TO_BE_TAKEN_BY_NO_INPUT
         }
     }
@@ -441,16 +426,6 @@ public final class RulesTaken {
     public WhichRule takenBy(AlignedObservation seen, List<ObservedValue> values,
                              BehaviorInputs inputs) {
         Run run = new Run(seen, values, inputs);
-        // Asked first and whatever the rules say: a run down a way no input takes is the proof
-        // shown wrong, and placed at a rule it would be counted as a row the reading expected.
-        for (Recognised each : proofs) {
-            if (each.in(run).stream().allMatch(ExecutionEvidence.AS_THE_RULE_SAYS::equals)) {
-                return new WhichRule.AgainstAProof(each.rule());
-            }
-        }
-        if (recognisable.isEmpty()) {
-            return new WhichRule.CouldNotTell(WhichRule.Why.NO_RULE_IS_RECOGNISABLE);
-        }
         DecisionRule took = null;
         boolean butForBothWays = false;
         for (Recognised each : recognisable) {
@@ -468,8 +443,45 @@ public final class RulesTaken {
         if (took != null) {
             return new WhichRule.TookThis(took);
         }
+        // No rule matched. A run that went against a proof is placed nowhere because no rule past
+        // the way was read, which is the reason ahead of what the rules recognisable say of it.
+        if (!against(run).isEmpty()) {
+            return new WhichRule.CouldNotTell(
+                    WhichRule.Why.ITS_WAY_IS_PROVED_TO_BE_TAKEN_BY_NO_INPUT);
+        }
+        if (recognisable.isEmpty()) {
+            return new WhichRule.CouldNotTell(WhichRule.Why.NO_RULE_IS_RECOGNISABLE);
+        }
         return new WhichRule.CouldNotTell(butForBothWays
                 ? WhichRule.Why.A_CONDITION_CAME_OUT_BOTH_WAYS
                 : WhichRule.Why.NO_RECOGNISABLE_RULE_MATCHES);
+    }
+
+    /**
+     * Every way the reading proved no input takes that a run went down, given where it went and
+     * the values it was given.
+     *
+     * <p>A way is gone down where the run brought out every one of its conditions as the way did,
+     * as a rule is taken. Every such way and not the first: each is a proof of its own shown wrong,
+     * and one run can show more than one. Asked whatever {@link #takenBy} answers, since a run
+     * placed at a rule can go against a proof as well. In the order of
+     * {@link DecisionReading#impossible}.
+     *
+     * @param values what the row wrote, as {@link #takenBy} takes them
+     * @param inputs what the behavior takes, as {@link #takenBy} takes them
+     */
+    public List<DecisionRule> proofsGoneAgainst(AlignedObservation seen, List<ObservedValue> values,
+                                                BehaviorInputs inputs) {
+        return against(new Run(seen, values, inputs));
+    }
+
+    private List<DecisionRule> against(Run run) {
+        List<DecisionRule> out = new ArrayList<>();
+        for (Recognised each : proofs) {
+            if (each.in(run).stream().allMatch(ExecutionEvidence.AS_THE_RULE_SAYS::equals)) {
+                out.add(each.rule());
+            }
+        }
+        return List.copyOf(out);
     }
 }

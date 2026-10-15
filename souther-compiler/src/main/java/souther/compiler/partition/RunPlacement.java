@@ -2,7 +2,6 @@ package souther.compiler.partition;
 
 import souther.compiler.coverage.AlignedObservation;
 import souther.compiler.observe.ObservedValue;
-import souther.compiler.observe.ObservedValue;
 
 import java.util.List;
 
@@ -36,10 +35,29 @@ public record RunPlacement(RulesTaken rules, BehaviorInputs inputs) {
      * @throws IllegalArgumentException where nothing watched the row
      */
     public RulesTaken.WhichRule takenBy(ObservedInputs row) {
+        return rules.takenBy(seen(row), valuesOf(row), inputs);
+    }
+
+    /**
+     * Every way the reading proved no input takes that a run went down, whatever rule it was
+     * placed at.
+     *
+     * <p>Of a row something watched, as {@link #takenBy} is.
+     *
+     * @throws IllegalArgumentException where nothing watched the row
+     */
+    public List<DecisionRule> proofsGoneAgainst(ObservedInputs row) {
+        return rules.proofsGoneAgainst(seen(row), valuesOf(row), inputs);
+    }
+
+    private static AlignedObservation seen(ObservedInputs row) {
         if (!(row.watched() instanceof Generator.Watched.Ran(AlignedObservation seen))) {
             throw new IllegalArgumentException("a run nothing watched is placed nowhere");
         }
-        List<ObservedValue> values = row.answered() ? row.inputs() : List.of();
-        return rules.takenBy(seen, values, inputs);
+        return seen;
+    }
+
+    private static List<ObservedValue> valuesOf(ObservedInputs row) {
+        return row.answered() ? row.inputs() : List.of();
     }
 }

@@ -1013,12 +1013,6 @@ public record Settlements(List<ObligationIdentity> requested,
                     case RulesTaken.WhichRule.CouldNotTell _ ->
                             new Settlement.Undetermined(
                                     Settlement.Reason.THE_VALUES_COULD_NOT_BE_READ);
-                    // A run down a way no input takes shows a proof of this compiler's wrong, and
-                    // where the row went is then no answer the reading can stand on — which is
-                    // this compiler falling short, as a run it could not place is.
-                    case RulesTaken.WhichRule.AgainstAProof _ ->
-                            new Settlement.Undetermined(
-                                    Settlement.Reason.THE_VALUES_COULD_NOT_BE_READ);
                 };
                 case Generator.Watched.NoAccount _ ->
                         new Settlement.Undetermined(Settlement.Reason.NO_ACCOUNT_OF_THE_RUN);

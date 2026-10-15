@@ -78,6 +78,35 @@ class AProofOfReachARowWentAgainstIsWrittenWhereItIsTest {
                 "and is written by every condition it consulted");
     }
 
+    /** Two ways a row went down, neither standing for the other, are two proofs and each is
+     *  written once, in the order the rows met them. */
+    @Test
+    void everyWayGoneDownIsWrittenOnce() {
+        Compilation compilation = Compilation.ofSource("""
+                module m
+                behavior f : (x: Int, y: Int) -> Int
+                let f (x, y) = (if x > 10 then (if x < 5 then 1 else 2) else 3) + (if y > 10 then (if y < 5 then 1 else 2) else 3)
+                """, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        List<DecisionReading.ImpossiblePath> impossible = compilation.db()
+                .ask(new Adequacy.Decides(compilation.modules().getFirst())).value().get("f")
+                .read().impossible();
+        assertEquals(2, impossible.size(), () -> "one way on each input: " + impossible);
+        ObjectNode into = JSON.createObjectNode();
+
+        AdequacyReport.reachProofsContradicted(into, "f",
+                PathReachability.Answers.Contradictions.NONE, new LinkedHashSet<>(List.of(
+                        impossible.get(0).way().rule(), impossible.get(1).way().rule())));
+
+        JsonNode written = into.get("reachProofsContradicted");
+        assertEquals(2, written.size(), () -> "each way once: " + written);
+        written.forEach(each -> assertEquals("way_no_input_takes", each.get("kind").stringValue()));
+        assertEquals(impossible.get(0).way().rule().consulted().size(),
+                written.get(0).get("way").get("conditions").size(), "the first met, first");
+        assertFalse(written.get(0).equals(written.get(1)), "and the two are told apart");
+    }
+
     @Test
     void nothingTakenBackWritesNothing() {
         ObjectNode into = JSON.createObjectNode();
