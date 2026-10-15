@@ -144,7 +144,7 @@ final class Intervals {
             // The division the rule made, taken as it was read rather than rebuilt from a number.
             // A rule that wrote a multiple of the position parts its values where the position may
             // hold none, and rebuilding the seam from a value of the position lost exactly those.
-            parted.add(Parting.by(each.parts(), each.origin().authoredLine()));
+            parted.add(Parting.by(each.parts(), each.origin()));
         }
         // The one arrangement, which the points of every border on this position are read off as
         // well. Where the values part, in what order and with what left between them are questions

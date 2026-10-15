@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.IntStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -224,6 +225,57 @@ class AThresholdEachCaseNamesIsOwedInThatCaseTest {
         List<String> readings = readingsOf(source);
         assertTrue(readings.stream().anyMatch(each -> each.contains(" in 13 < month <= 24")),
                 () -> "the line at 24 bounds the run past 12: " + readings);
+    }
+
+    /**
+     * One comparison a helper writes, called in two arms with two numbers, is one line of its
+     * author's read at two places, and a row in one arm meets only the place its arm put it at:
+     * the place the other arm's call put is no edge of the one-year run either.
+     */
+    @Test
+    void oneLineAHelperWritesIsPartedOnlyByThePlacesItsRowsMeet() {
+        String source = """
+                module example.fee
+
+                data Term = OneYear | TwoYear
+                data Month = Int
+                    invariant value >= 1 && value <= 60
+                data Yen = Int
+
+                behavior cancelFee : (term: Term, month: Month) -> Yen
+                    constructs Yen
+
+                let cancelFee (term, month) =
+                    match term with
+                        | OneYear -> if within(month.value, 12) then Yen(9500) else Yen(0)
+                        | TwoYear -> if within(month.value, 24) then Yen(9500) else Yen(0)
+
+                let within (x: Int, limit: Int): Bool = x <= limit
+
+                example cancelFee
+                    | "one year, month 12" : (OneYear, Month(12)) -> Yen(9500)
+                """;
+        List<String> readings = readingsOf(source);
+        assertTrue(readings.stream().anyMatch(each -> each.startsWith("OUT in 13 < month <= 60")),
+                () -> "the one-year run past 12 runs to the end: " + readings);
+        assertTrue(readings.stream().noneMatch(each -> each.contains("13 < month <= 24")),
+                () -> "and is not stopped at the two-year place: " + readings);
+    }
+
+    /**
+     * A line that decides in more cases than are said one by one still says which: seventeen terms
+     * share one threshold and an eighteenth has its own, and the shared line is said under the
+     * seventeen.
+     */
+    @Test
+    void aLineOfManyCasesSaysThemAll() {
+        String source = ofTerms(18).replaceAll("\\| T(\\d+) -> \\d+\\n",
+                "| T$1 -> 12\n").replace("| T17 -> 12", "| T17 -> 24");
+        List<String> readings = readingsOf(source);
+        String many = String.join(" or ", IntStream.range(0, 17).mapToObj(i -> "T" + i)
+                .sorted().toList());
+        assertTrue(readings.stream().anyMatch(each -> each.endsWith("where term is " + many)),
+                () -> "the shared line is said under the seventeen terms: " + readings);
     }
 
     private static List<String> firstTermsOf(List<String> readings) {

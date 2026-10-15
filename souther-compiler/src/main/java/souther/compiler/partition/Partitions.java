@@ -814,7 +814,7 @@ public final class Partitions {
         // classes: the runs the lines leave, and each value out of the run it falls in.
         List<Parting> parted = new ArrayList<>(partedOf(axis));
         reachable.forEach(each -> parted.add(
-                Parting.by(each.parts(), each.origin().authoredLine())));
+                Parting.by(each.parts(), each.origin())));
         return made(out, at, behavior, term,
                 made.classesFor(axis, () -> OrderedClasses.of(
                         Intervals.of(reachable, within == null ? null : within.min(),
@@ -1209,10 +1209,8 @@ public final class Partitions {
         // A bound reads none of them: its run is what the rules leave.
         // Every place the rules part this position's values: the ones its cuts stand at, and the
         // ones no cut stands at because the position holds no value there. A border built from the
-        // cuts alone read its two sides past exactly the lines that were left out. Each cut's places
-        // with the line that drew them, since a line no row meets together with a border's own is
-        // no edge of a run beside it.
-        List<Border.PlacesOfALine> known = new ArrayList<>();
+        // cuts alone read its two sides past exactly the lines that were left out.
+        List<Parting> known = new ArrayList<>(axis.parted());
         UnheldNumber notWorkedOut = null;
         for (Cut cut : axis.cuts()) {
             BoundaryTarget where = BoundaryTarget.at(
@@ -1225,8 +1223,7 @@ public final class Partitions {
                 // not worked out is kept as that, since every border on this position is read off
                 // an arrangement it is missing a place of.
                 switch (Border.partedBy(where, origin)) {
-                    case ExactAnswer.Held<List<Parting>> held ->
-                            known.add(new Border.PlacesOfALine(origin, held.value()));
+                    case ExactAnswer.Held<List<Parting>> held -> known.addAll(held.value());
                     case ExactAnswer.Unheld<List<Parting>> unheld -> {
                         if (notWorkedOut == null) {
                             notWorkedOut = unheld.why();
@@ -1255,7 +1252,7 @@ public final class Partitions {
                 read.found(target, origin);
                 ExactAnswer<List<Parting>> parted;
                 if (notWorkedOut == null) {
-                    parted = ExactAnswer.held(Border.besideThe(origin, axis.parted(), known, apart));
+                    parted = ExactAnswer.held(Border.besideThe(origin, known, apart));
                 } else {
                     parted = ExactAnswer.unheld(notWorkedOut);
                 }

@@ -63,7 +63,7 @@ class APositionAtANumberNoRatioHoldsIsRefusedNotBuiltTest {
     void aPartingScaledPastTheLeastExponentIsRefused() {
         Parting parting = Parting.by(
                 new Seam(CutPosition.at(at(twoTo(Long.MIN_VALUE))), null, null),
-                WhatTheRulesTogetherLeaveAQuantityTest.aLine(0));
+                WhatTheRulesTogetherLeaveAQuantityTest.aReading(0));
 
         assertEquals(ExactAnswer.unheld(UnheldNumber.NO_REPRESENTATION_EXISTS),
                 parting.scaledBy(twoTo(-1)));

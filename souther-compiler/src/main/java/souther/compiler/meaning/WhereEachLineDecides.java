@@ -297,7 +297,7 @@ public final class WhereEachLineDecides {
                 if (element == null || line.mayTurnOnAnElementOf(element)) {
                     factors.add(reading.turnsOn(line));
                 } else {
-                    factors = List.of(heldAgainstItsDenial(whole, line));
+                    factors = List.of(List.of(heldAgainstItsDenial(whole, line)));
                 }
                 lines.putIfAbsent(line.key(), line);
                 standings.computeIfAbsent(line.key(), k -> new ArrayList<>()).add(factors);
@@ -373,7 +373,7 @@ public final class WhereEachLineDecides {
          */
         List<Proposition> turnsOn(Proposition part) {
             if (insideAWholeQuantifier(stated, part)) {
-                return heldAgainstItsDenial(stated, part);
+                return List.of(heldAgainstItsDenial(stated, part));
             }
             List<Proposition> cases = table == null ? null
                     : casesOf(table, possible, index.get(part.key()), named);
@@ -384,7 +384,7 @@ public final class WhereEachLineDecides {
                 }
                 cases = underEachCase == null ? null : inEachCaseOfAValue(underEachCase, part);
             }
-            return cases != null ? cases : heldAgainstItsDenial(stated, part);
+            return cases != null ? cases : List.of(heldAgainstItsDenial(stated, part));
         }
 
         /** Whether {@code quantifier} stands held somewhere in the statement. */
@@ -409,7 +409,8 @@ public final class WhereEachLineDecides {
             }
             cases.addAll(here);
         }
-        List<Proposition> each = cases == null ? null : cases.stream().distinct().toList();
+        List<Proposition> each = cases == null ? null
+                : joinedOverAValue(cases.stream().distinct().toList());
         if (each != null && each.size() <= MOST_CASES) {
             return each;
         }
@@ -691,51 +692,14 @@ public final class WhereEachLineDecides {
 
     /**
      * Where {@code part} decides, said as the statement with it held against the statement with it
-     * failing: one of them holding and the other not — or nowhere.
-     *
-     * <p>Only the ways round the part can turn the statement. A statement that states the part held
-     * and nowhere denied holds with it wherever it holds without it, so it never holds with it
-     * failing, and the other way round; said anyway, that way round is a conjunction of something
-     * and its denial that nothing here takes apart, and a reader composing rows against it looks
-     * for a row no value is.
+     * failing: one of them holding and the other not.
      */
-    private static List<Proposition> heldAgainstItsDenial(Proposition stated, Proposition part) {
+    private static Proposition heldAgainstItsDenial(Proposition stated, Proposition part) {
         Proposition held = with(stated, part, true);
         Proposition failing = with(stated, part, false);
-        Set<Boolean> stands = new HashSet<>();
-        standings(stated, part, true, stands);
-        List<Proposition> ways = new ArrayList<>();
-        if (stands.contains(true)) {
-            ways.add(Proposition.all(List.of(held, failing.denied())));
-        }
-        if (stands.contains(false)) {
-            ways.add(Proposition.all(List.of(held.denied(), failing)));
-        }
-        Proposition decides = Proposition.any(ways);
-        return decides instanceof Proposition.Always(boolean holds) && !holds ? List.of()
-                : List.of(decides);
-    }
-
-    /**
-     * Adds to {@code into} whether {@code part} stands held, denied or both in {@code stated}, each
-     * place {@link #with} would set it, read from outside where it stands {@code outside}.
-     *
-     * <p>A quantifier denied is no element meeting what it says, so what it says stands the other
-     * way round from it.
-     */
-    private static void standings(Proposition stated, Proposition part, boolean outside,
-                                  Set<Boolean> into) {
-        switch (stated) {
-            case Proposition.All all ->
-                    all.parts().forEach(each -> standings(each, part, outside, into));
-            case Proposition.Any any ->
-                    any.parts().forEach(each -> standings(each, part, outside, into));
-            case Proposition leaf when standsAs(leaf, part) ->
-                    into.add(leaf.key().equals(part.key()) == outside);
-            case Proposition.Some some when !part.mayTurnOnAnElementOf(some.container()) ->
-                    standings(some.ofTheElement(), part, outside == some.holds(), into);
-            default -> { }
-        }
+        return Proposition.any(List.of(
+                Proposition.all(List.of(held, failing.denied())),
+                Proposition.all(List.of(held.denied(), failing))));
     }
 
     /**
@@ -756,17 +720,13 @@ public final class WhereEachLineDecides {
                                                         Proposition part) {
         List<Proposition> out = new ArrayList<>();
         for (UnderACase each : underEachCase) {
-            if (!each.reading().index.containsKey(part.key())) {
-                continue;
-            }
-            for (Proposition one : each.reading().turnsOn(part)) {
-                out.add(Proposition.all(List.of(each.is(), one)));
-                if (out.size() > MOST_CASES) {
-                    return null;
-                }
+            if (each.reading().index.containsKey(part.key())) {
+                each.reading().turnsOn(part).forEach(one ->
+                        out.add(Proposition.all(List.of(each.is(), one))));
             }
         }
-        return out;
+        List<Proposition> joined = joinedOverAValue(out);
+        return joined.size() <= MOST_CASES ? joined : null;
     }
 
     /** A statement read under one case of a value: the case, and the reading of what the
@@ -806,6 +766,48 @@ public final class WhereEachLineDecides {
         out.add(new UnderACase(new Proposition.InCases(value, CasesLeft.ofEach(atoms), false),
                 Reading.of(assuming(stated, value, List.of()))));
         return out;
+    }
+
+    /**
+     * {@code cases}, with every two that ask one value to be two different cases and are the same
+     * otherwise said as one asking it to be either: where the value is A and the rest holds, or B
+     * and the rest holds, is where it is A or B and the rest holds.
+     *
+     * <p>The same cases and so the same rows, said in fewer. Asked before what is said is held to
+     * {@link #MOST_CASES}, because a line every case of a value turns the same way is one case
+     * however many cases the value has: past the bound and read whole instead, it lost which cases
+     * those were, and a reader could no longer be told them.
+     */
+    static List<Proposition> joinedOverAValue(List<Proposition> cases) {
+        Map<String, Joined> joined = new LinkedHashMap<>();
+        for (Proposition each : cases) {
+            List<Proposition> parts = each instanceof Proposition.All all ? all.parts()
+                    : List.of(each);
+            Proposition.InCases asked = parts.stream()
+                    .filter(part -> part instanceof Proposition.InCases in && oneValueOfTheRow(in))
+                    .map(Proposition.InCases.class::cast).findFirst().orElse(null);
+            if (asked == null) {
+                joined.putIfAbsent("whole " + each.key(), new Joined(null, each, List.of()));
+                continue;
+            }
+            Proposition rest = Proposition.all(parts.stream().filter(part -> part != asked)
+                    .toList());
+            Joined there = joined.computeIfAbsent(asked.of() + " " + rest.key(),
+                    _ -> new Joined(asked.of(), rest, new ArrayList<>()));
+            asked.cases().atoms().stream().filter(atom -> !there.atoms().contains(atom))
+                    .forEach(there.atoms()::add);
+        }
+        return joined.values().stream().map(Joined::said).toList();
+    }
+
+    /** Cases of {@link #joinedOverAValue} that differ in which case {@code value} is alone; a case
+     *  asking no value's case where {@code value} is null. */
+    private record Joined(DecisionSubject value, Proposition rest, List<Refinement> atoms) {
+
+        Proposition said() {
+            return value == null ? rest : Proposition.all(List.of(
+                    new Proposition.InCases(value, CasesLeft.ofEach(atoms), true), rest));
+        }
     }
 
     /**
