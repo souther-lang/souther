@@ -352,6 +352,11 @@ public final class PathReachability {
          * ({@link Arrivals}), and either way out of a comparison may be rightly proven while that
          * is wrong.
          *
+         * <p>Only what a run is recorded at. An arm answering {@code unreachable} has no probe, so a
+         * row reaching one is never here — reaching it is an error of its own, E1911 — and what an
+         * author claimed unreachable is judged from the model before any row runs, which this
+         * leaves as it was.
+         *
          * @param places        arms and comparison outcomes proven unreachable that a row went
          *                      through
          * @param emptyArrivals comparisons and applications proven to be arrived at by nothing
