@@ -7,6 +7,7 @@ import souther.compiler.core.ACopyOfAnApplication;
 import souther.compiler.core.Core;
 import souther.compiler.flow.Arrival;
 import souther.compiler.flow.Naming;
+import souther.compiler.flow.Paths;
 import souther.compiler.flow.Truth;
 import souther.compiler.flow.WayWritten;
 import souther.compiler.inputs.InputReads;
@@ -94,6 +95,12 @@ final class DecisionNaming implements Naming<DecisionPath> {
      * run takes. Asked of the way with its numbers taken in as it is walked
      * ({@link WayToTheBorder#takenByNoInput}), and only a proof drops a way: what the region
      * cannot take in, or a walk stopped at a figure, is a way kept.
+     *
+     * <p>A proof never drops every way out of a node. Those ways are one for each way the node's own
+     * conditions come out, so between them they take every input the declarations hold, and a body
+     * naming a type with no value is refused before it is read. Which is what lets a node this
+     * leaves no way out of read as one the naming would not hold apart ({@link Paths.Beyond}) and
+     * not as one no input takes.
      */
     @Override
     public DecisionPath join(DecisionPath held, DecisionPath more) {
