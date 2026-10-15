@@ -3,6 +3,7 @@ package souther.compiler.query;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.meaning.WhyNotTaken;
+import souther.compiler.partition.AnswersDemanded;
 import souther.compiler.partition.CameToNothing;
 import souther.compiler.partition.CompositionAccount;
 import souther.compiler.partition.CompositionBudget;
@@ -13,6 +14,7 @@ import souther.compiler.partition.ConditionReportAnchor;
 import souther.compiler.partition.Generator;
 import souther.compiler.partition.OnTheWay;
 import souther.compiler.partition.ReachabilityGap;
+import souther.compiler.partition.WayToTheBorder;
 
 import java.util.List;
 import java.util.Set;
@@ -152,7 +154,8 @@ class WhatTheWaysOfARuleCameToKeepsWhatEachMetTest {
     private static RuleSettlement cameTo(List<Generator.BoundaryAttempt> ways) {
         return Adequacy.DecisionSearch.whatTheWaysCameTo(ways, built -> RuleSettlement.of(
                 new RuleRequirement.Unsettled.AComposedRowWentElsewhere(),
-                built.unrepresented()), List.of(gap(0).anchor(), gap(1).anchor()));
+                built.unrepresented()), new WayToTheBorder(List.of(declined(0), declined(1))),
+                AnswersDemanded.NOTHING);
     }
 
     private static Generator.BoundaryAttempt.NoRow stoppedAt(CompositionBudget figure) {
@@ -176,11 +179,15 @@ class WhatTheWaysOfARuleCameToKeepsWhatEachMetTest {
     }
 
     private static ReachabilityGap gap(int which) {
+        return new ReachabilityGap.Unstated(declined(which));
+    }
+
+    private static OnTheWay.Declined declined(int which) {
         ConditionOccurrence condition =
                 new ConditionOccurrence("f", ConditionOccurrence.Reading.DECIDING, which);
-        return new ReachabilityGap.Unstated(new OnTheWay.Declined(condition,
+        return new OnTheWay.Declined(condition,
                 new ConditionReportAnchor.WhereTheReadingMetIt("example.ruled", condition),
-                new WhyNotTaken.OutsideDomain(WhyNotTaken.DomainLimit.A_QUANTITY_ON_NO_ORDER)));
+                new WhyNotTaken.OutsideDomain(WhyNotTaken.DomainLimit.A_QUANTITY_ON_NO_ORDER));
     }
 
     private static Generator.BoundaryAttempt built() {

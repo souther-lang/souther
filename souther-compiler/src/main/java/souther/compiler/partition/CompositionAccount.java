@@ -112,29 +112,140 @@ public record CompositionAccount(List<ReachabilityGap> onTheWay,
     }
 
     /**
-     * This account with what it went without in the order the conditions are stated in.
+     * This account with what it went without in an order of the model's.
      *
      * <p>For an account several composings were put together into. What each went without is in
      * the order that composing met it, and putting them together leaves the order they were put
      * together in — which is the order the composings were made in, and that is this compiler's
-     * walk and nothing a reader can find in the source. The order the reading states the
-     * conditions in is the model's, and is the same whichever composing came first.
+     * walk and nothing a reader can find in the source.
      *
-     * <p>A gap about a condition not among them comes after the rest, in the order it was in.
+     * <p>By what each gap is about, in the order the reading states it: the conditions on the way,
+     * then what the way asks of an answer, then what it could not state of one. By what it is about
+     * and not by where a report sends a reader for it, which is one place for every call of a
+     * helper and would leave the gaps of two calls in the order they were put together in.
      *
-     * @param stated where a report about each condition asks for its place, in the order the
-     *               reading states them
+     * <p>And two gaps about one thing by what each says, in the order their shapes are declared
+     * ({@link #rankOf(ReachabilityGap)}, {@link #rankOf(DemandGap)}). Two composings may go without
+     * one condition for two reasons, and which a reader meets first is not the walk's to decide.
+     * Whatever two such gaps say beyond their shape and their figures is about the condition's
+     * reading, which is the same along every way, so the order is total over what can come back.
+     *
+     * <p>A gap about something the reading did not state comes after the rest.
+     *
+     * @param way     the way the composings were made along
+     * @param demands what the way asks of the answers, and what it could not state of them
      */
-    public CompositionAccount inTheOrderOf(List<ConditionReportAnchor> stated) {
-        Comparator<ConditionReportAnchor> byStatement = Comparator.comparingInt(anchor -> {
-            int at = stated.indexOf(anchor);
-            return at < 0 ? stated.size() : at;
-        });
+    public CompositionAccount inTheOrderOf(WayToTheBorder way, AnswersDemanded demands) {
         List<ReachabilityGap> input = new ArrayList<>(onTheWay);
-        input.sort(Comparator.comparing(ReachabilityGap::anchor, byStatement));
-        List<DemandGap> demands = new ArrayList<>(onAnAnswer);
-        demands.sort(Comparator.comparing(DemandGap::anchor, byStatement));
-        return new CompositionAccount(input, demands, takenUpByAnAnswer);
+        input.sort(Comparator.comparingInt((ReachabilityGap gap) ->
+                        placeIn(way.onTheWay(), aboutOf(gap)))
+                .thenComparing(CompositionAccount::rankOf, LEXICALLY));
+        List<Object> asked = new ArrayList<>(demands.stated());
+        asked.addAll(demands.declined());
+        List<DemandGap> answers = new ArrayList<>(onAnAnswer);
+        answers.sort(Comparator.comparingInt((DemandGap gap) -> placeIn(asked, switch (gap) {
+                    case DemandGap.Uncomposed it -> it.demand();
+                    case DemandGap.Unstated it -> it;
+                }))
+                .thenComparing(CompositionAccount::rankOf, LEXICALLY));
+        return new CompositionAccount(input, answers, takenUpByAnAnswer);
+    }
+
+    private static final Comparator<List<Integer>> LEXICALLY = (one, other) -> {
+        for (int i = 0; i < Math.min(one.size(), other.size()); i++) {
+            int at = Integer.compare(one.get(i), other.get(i));
+            if (at != 0) {
+                return at;
+            }
+        }
+        return Integer.compare(one.size(), other.size());
+    };
+
+    private static int placeIn(List<?> stated, Object what) {
+        int at = stated.indexOf(what);
+        return at < 0 ? stated.size() : at;
+    }
+
+    private static OnTheWay aboutOf(ReachabilityGap gap) {
+        return switch (gap) {
+            case ReachabilityGap.Unstated it -> it.condition();
+            case ReachabilityGap.Uncomposed it -> it.condition();
+            case ReachabilityGap.LookedAlongWhole it -> it.condition();
+            case ReachabilityGap.ProvedImpossible it -> it.condition();
+        };
+    }
+
+    /**
+     * What a gap on the way says, as numbers in the order its shapes are declared: the shape,
+     * then the shape of its reason, then the figures it names.
+     */
+    private static List<Integer> rankOf(ReachabilityGap gap) {
+        List<Integer> out = new ArrayList<>();
+        switch (gap) {
+            case ReachabilityGap.Unstated _ -> out.add(0);
+            case ReachabilityGap.Uncomposed it -> {
+                out.add(1);
+                switch (it.why()) {
+                    case ReachabilityGap.Why.NoValueComposedForItsPositions _ -> out.add(0);
+                    case ReachabilityGap.Why.TheWalkForItsPositionsWasStopped stopped -> {
+                        out.add(1);
+                        stopped.by().written().forEach(figure -> out.add(figure.ordinal()));
+                        out.add(-1);
+                        stopped.writes().written().forEach(each -> out.add(each.ordinal()));
+                        out.add(-1);
+                        stopped.unheld().written().forEach(each -> {
+                            out.add(each.where().ordinal());
+                            out.add(each.why().ordinal());
+                        });
+                    }
+                    case ReachabilityGap.Why.TwoNumbersAtOneLocation _ -> out.add(2);
+                    case ReachabilityGap.Why.NoComposerWritesIt none -> {
+                        out.add(3);
+                        out.add(none.what().ordinal());
+                    }
+                    case ReachabilityGap.Why.ElementsWrittenAlike _ -> out.add(4);
+                }
+            }
+            case ReachabilityGap.LookedAlongWhole it -> {
+                out.add(2);
+                out.add(it.figure().ordinal());
+            }
+            case ReachabilityGap.ProvedImpossible _ -> out.add(3);
+        }
+        return out;
+    }
+
+    /** The same, of a gap about an answer. */
+    private static List<Integer> rankOf(DemandGap gap) {
+        List<Integer> out = new ArrayList<>();
+        switch (gap) {
+            case DemandGap.Unstated it -> {
+                out.add(0);
+                out.add(switch (it.why()) {
+                    case DemandGap.WhyNotStated.AFormOverMoreThanOneAnswer _ -> 0;
+                    case DemandGap.WhyNotStated.APlaceOnTheAnswersOwnOrder _ -> 1;
+                    case DemandGap.WhyNotStated.AStatementOfSeveralParts _ -> 2;
+                });
+            }
+            case DemandGap.Uncomposed it -> {
+                out.add(1);
+                switch (it.why()) {
+                    case DemandGap.WhyNotComposed.NoOrderUnderATermOfTheAnswer _ -> out.add(0);
+                    case DemandGap.WhyNotComposed.NoValueComposedAtItsPositions _ -> out.add(1);
+                    case DemandGap.WhyNotComposed.NothingComposedAValueOfTheAnswer _ -> out.add(2);
+                    case DemandGap.WhyNotComposed.OneValueAnswersEveryCall _ -> out.add(3);
+                    case DemandGap.WhyNotComposed.NoPairComposedBeforeAFigureEnded ended -> {
+                        out.add(4);
+                        ended.figures().written().forEach(figure -> out.add(figure.ordinal()));
+                    }
+                    case DemandGap.WhyNotComposed.NoWayComposedBeforeAFigureEnded ended -> {
+                        out.add(5);
+                        ended.figures().written().forEach(figure -> out.add(figure.ordinal()));
+                    }
+                }
+            }
+        }
+        return out;
     }
 
     /**

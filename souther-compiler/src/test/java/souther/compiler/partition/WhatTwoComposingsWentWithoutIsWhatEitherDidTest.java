@@ -2,7 +2,14 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.inputs.Evaluations;
+import souther.compiler.meaning.InjectedAnswer;
 import souther.compiler.meaning.WhyNotTaken;
+import souther.compiler.sites.WrittenCondition;
+import souther.compiler.types.SourceConstruct;
+import souther.compiler.types.SourceConstructOrigin;
+import souther.compiler.types.ValueName;
+import souther.compiler.types.WrittenOwner;
 
 import java.util.List;
 import java.util.Set;
@@ -61,20 +68,89 @@ class WhatTwoComposingsWentWithoutIsWhatEitherDidTest {
     void inTheOrderTheConditionsAreStatedTheOrderOfPuttingTogetherIsGone() {
         CompositionAccount one = CompositionAccount.ofTheInput(List.of(gap(1)));
         CompositionAccount other = CompositionAccount.ofTheInput(List.of(gap(0)));
-        List<ConditionReportAnchor> stated = List.of(gap(0).anchor(), gap(1).anchor());
+        WayToTheBorder way = new WayToTheBorder(List.of(declined(0), declined(1)));
 
         assertEquals(List.of(gap(0), gap(1)),
-                one.alongside(other).inTheOrderOf(stated).onTheWay(),
+                one.alongside(other).inTheOrderOf(way, AnswersDemanded.NOTHING).onTheWay(),
                 "the condition stated first is said first");
-        assertEquals(one.alongside(other).inTheOrderOf(stated),
-                other.alongside(one).inTheOrderOf(stated),
+        assertEquals(one.alongside(other).inTheOrderOf(way, AnswersDemanded.NOTHING),
+                other.alongside(one).inTheOrderOf(way, AnswersDemanded.NOTHING),
                 "whichever composing was put first");
     }
 
+    /**
+     * Two calls of a helper are two conditions sent to one place, and they are said in the order
+     * the way states them rather than the order the composings were put together in.
+     */
+    @Test
+    void twoCallsOfAHelperAreSaidInTheOrderTheWayStatesThem() {
+        ConditionReportAnchor written = new ConditionReportAnchor.WhereItIsWritten(
+                new WrittenCondition.Construct(new SourceConstructOrigin(
+                        new WrittenOwner.Body("example.helper", "either"), 0, 0,
+                        SourceConstruct.BINARY)));
+        OnTheWay.Declined first = declined(0, written);
+        OnTheWay.Declined second = declined(1, written);
+        CompositionAccount one = CompositionAccount.ofTheInput(
+                List.of(new ReachabilityGap.Unstated(second)));
+        CompositionAccount other = CompositionAccount.ofTheInput(
+                List.of(new ReachabilityGap.Unstated(first)));
+        WayToTheBorder way = new WayToTheBorder(List.of(first, second));
+
+        assertEquals(List.of(new ReachabilityGap.Unstated(first),
+                        new ReachabilityGap.Unstated(second)),
+                one.alongside(other).inTheOrderOf(way, AnswersDemanded.NOTHING).onTheWay(),
+                "the call the way states first is said first, though both are said at one place");
+    }
+
+    /**
+     * Two composings that went without one demand for two reasons say them in the order their
+     * shapes are declared, and two figures in the order the figures are, whichever was put first.
+     */
+    @Test
+    void twoReasonsAboutOneDemandAreSaidInOneOrder() {
+        AnswerDemand demand = new AnswerDemand.ATruth(new InjectedAnswer(Evaluations.of(
+                        new ValueName.Behavior("example.answered", "look"), 0), List.of()),
+                anchor(0), List.of(), true);
+        DemandGap nothingComposed = new DemandGap.Uncomposed(demand,
+                new DemandGap.WhyNotComposed.NoValueComposedAtItsPositions());
+        DemandGap oneValue = new DemandGap.Uncomposed(demand,
+                new DemandGap.WhyNotComposed.OneValueAnswersEveryCall());
+        DemandGap elements = new DemandGap.Uncomposed(demand,
+                DemandGap.WhyNotComposed.NoPairComposedBeforeAFigureEnded.by(
+                        Set.of(CompositionBudget.ELEMENTS_A_PROPOSAL_HOLDS)));
+        DemandGap characters = new DemandGap.Uncomposed(demand,
+                DemandGap.WhyNotComposed.NoPairComposedBeforeAFigureEnded.by(
+                        Set.of(CompositionBudget.CHARACTERS_A_PROPOSAL_HOLDS)));
+        AnswersDemanded demands = new AnswersDemanded(List.of(demand), List.of(), Set.of());
+
+        for (List<DemandGap> met : List.of(List.of(characters, oneValue, elements, nothingComposed),
+                List.of(nothingComposed, elements, oneValue, characters))) {
+            CompositionAccount together = CompositionAccount.NOTHING;
+            for (DemandGap each : met) {
+                together = together.alongside(
+                        new CompositionAccount(List.of(), List.of(each), Set.of()));
+            }
+            assertEquals(List.of(nothingComposed, oneValue, elements, characters),
+                    together.inTheOrderOf(new WayToTheBorder(List.of()), demands).onAnAnswer(),
+                    () -> "whichever was put together first: " + met);
+        }
+    }
+
     private static ReachabilityGap gap(int which) {
-        return new ReachabilityGap.Unstated(new OnTheWay.Declined(condition(which),
-                new ConditionReportAnchor.WhereTheReadingMetIt("example.ruled", condition(which)),
-                new WhyNotTaken.OutsideDomain(WhyNotTaken.DomainLimit.A_QUANTITY_ON_NO_ORDER)));
+        return new ReachabilityGap.Unstated(declined(which));
+    }
+
+    private static OnTheWay.Declined declined(int which) {
+        return declined(which, anchor(which));
+    }
+
+    private static OnTheWay.Declined declined(int which, ConditionReportAnchor anchor) {
+        return new OnTheWay.Declined(condition(which), anchor,
+                new WhyNotTaken.OutsideDomain(WhyNotTaken.DomainLimit.A_QUANTITY_ON_NO_ORDER));
+    }
+
+    private static ConditionReportAnchor anchor(int which) {
+        return new ConditionReportAnchor.WhereTheReadingMetIt("example.ruled", condition(which));
     }
 
     private static ConditionOccurrence condition(int which) {
