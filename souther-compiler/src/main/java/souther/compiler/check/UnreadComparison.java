@@ -273,6 +273,21 @@ public final class UnreadComparison {
     }
 
     /**
+     * What a rule read to the end is left with where the line it draws falls outside what its
+     * quantity ever holds.
+     *
+     * <p>Said here once, for every reader that says it: a comparison whose quantity the line does
+     * not reach, at every coordinate of that quantity; the filing of a name at the one position a
+     * line was moved to and found short of it; and an invariant whose end the reading of ends found
+     * past the last value of the order. Each of those is the same fact — the rule admits nothing
+     * there, and no reading fell short of it — and made in three places the three would be free to
+     * say it in three words.
+     */
+    public static BlockReason.RuleWithoutLineReason outsideWhatTheQuantityHolds() {
+        return new BlockReason.ComparisonCuttingOutsideDomain();
+    }
+
+    /**
      * What a rule stating where the values at one place stop is left with, where no line came of
      * it.
      *

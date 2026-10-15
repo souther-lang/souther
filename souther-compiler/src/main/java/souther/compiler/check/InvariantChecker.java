@@ -1063,7 +1063,6 @@ public final class InvariantChecker {
                 new LinkedHashMap<>();
         answered.perClause().forEach((each, one) -> {
             narrowedBy.put(each.from(), one);
-            one.account().adopted().forEach(position -> took.record(each.from(), position));
             // Here, and here alone, what a reading met becomes what an author wrote. Everything
             // above is coordinates of the tree this reading was built over, which two constructions
             // of one declaration number differently ({@link ClauseOccurrence}); what is filed is
@@ -2212,10 +2211,14 @@ public final class InvariantChecker {
         // to look at it.
         //
         // A bound past where the order stops is not named here, and the walk below is what it gets.
-        // It leaves nothing standing all the same — the numeric reading took the comparison in,
-        // whatever the order had at the far end — and that is asserted rather than arranged for
+        // On a position's own value it leaves nothing standing all the same — the numeric reading
+        // took the comparison in, whatever the order had at the far end — and that is asserted
+        // rather than arranged for
         // (`AQuestionExistsBecauseTheModelStatesItAndNotBecauseAReadingSucceeded`), since a second
-        // arm nothing observes is one that goes on being written after it stops being true.
+        // arm nothing observes is one that goes on being written after it stops being true. On a
+        // number taken of a position no reading takes it in, and the question it raises stands as
+        // a real one: the rule admits nothing, and whether the input is empty is the prover's to
+        // say. That it was read is said by the finding its caller files beside it.
         if (placed instanceof InvariantBound.Read.AnEnd) {
             return;
         }
@@ -2244,8 +2247,9 @@ public final class InvariantChecker {
         if (here == null || constrained == null) {
             throw new APartNoReadingSaw(part);
         }
-        // And what some reading took this part in at is recorded as taken in, per part. Asked of the
-        // whole clause alone, the clause is taken in only where one reading read every part of it:
+        // And what some reading took this part in at is recorded as taken in, per part and only
+        // here. Asked of the whole clause, the clause is taken in only where one reading read every
+        // part of it, and a part one reading read whole is a part this records anyway:
         // `value /= "abc" && String.length(value) == 3` is read by the values on one side and by
         // the numbers an operation answers on the other, and came back as a rule nothing read. A
         // part nothing took in is still left standing below, and that outranks this.
@@ -2498,7 +2502,7 @@ public final class InvariantChecker {
         // only word left about it was the reading of values' own: that it is written in a form
         // nothing here reads.
         if (end instanceof InvariantBound.Read.PastWhereTheOrderStops) {
-            file(about, part, clause, new BlockReason.ComparisonCuttingOutsideDomain(), noLines);
+            file(about, part, clause, UnreadComparison.outsideWhatTheQuantityHolds(), noLines);
         }
         if (end instanceof InvariantBound.Read.AnEnd placed) {
             out.add(new Direct(about.at(), statement, placed.bound(),
@@ -2607,15 +2611,22 @@ public final class InvariantChecker {
         Map<RuleKey, Set<FactSubject>> positions = new LinkedHashMap<>();
         byName.forEach((name, coordinate) -> {
             DerivedNumber number = DerivedNumber.of(coordinate.at());
-            if (number == null) {
-                positions.computeIfAbsent(coordinate.path(), _ -> new LinkedHashSet<>()).add(name);
-                return;
-            }
-            if (coordinate.carrier() == null) {
+            if (number == null || coordinate.carrier() == null) {
                 return;
             }
             numbers.put(name, number);
             carriers.put(number, coordinate.carrier());
+            // The names of the place the number is taken of, out of the table's own index of them:
+            // the ones standing for the place's own value and not for another number taken of it.
+            positions.computeIfAbsent(number.position(), path -> {
+                Set<FactSubject> own = new LinkedHashSet<>();
+                byName.namesAt(path).forEach(each -> {
+                    if (byName.get(each).at().of() instanceof NumberAt.OfWhatNumber.OfItsOwnValue) {
+                        own.add(each);
+                    }
+                });
+                return own;
+            });
         });
         return BoundaryReading.of(terms, numbers, carriers, positions);
     }

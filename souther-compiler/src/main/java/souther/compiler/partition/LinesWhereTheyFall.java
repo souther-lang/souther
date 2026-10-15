@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import souther.compiler.check.NewtypeInners;
 import souther.compiler.check.Symbols;
+import souther.compiler.check.UnreadComparison;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.FilingCoordinate;
 import souther.compiler.inputs.InputDomain;
@@ -171,14 +172,14 @@ public final class LinesWhereTheyFall {
      * the other names of the line — a position it is drawn against, which the line reaches under
      * every other case — are told nothing: the rule draws its line there, at the cases that reach
      * it. In the words a quantity the line never reaches is left with
-     * ({@link ComparisonAssessment.OutsideTheDomain#leaves}), since that is what this position is.
+     * ({@link UnreadComparison#outsideWhatTheQuantityHolds}), since that is what this position is.
      *
      * <p>Nothing is passed on from here either. A piece of evidence passed on is one the stage after
      * this owes an answer about, and there is no border here for it to answer with.
      */
     private static void outside(NumericTerm at, LineOrigin by, RulesWithNoLine.Gathered noLine) {
         noLine.add(by.cited(), FilingCoordinate.of(at),
-                ComparisonAssessment.OutsideTheDomain.leaves());
+                UnreadComparison.outsideWhatTheQuantityHolds());
     }
 
 
