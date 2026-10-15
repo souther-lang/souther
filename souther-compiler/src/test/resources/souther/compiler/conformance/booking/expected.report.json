@@ -5219,7 +5219,44 @@
           "between" : [ {
             "one" : "seat/ticket",
             "other" : "seat/party",
-            "total" : 4
+            "total" : 4,
+            "kept" : [ {
+              "one" : "ticket/String.startsWith(\"w-\", x)",
+              "other" : "party/1 <= x <= 4",
+              "by" : [ {
+                "reason" : "a_rule_no_decision_reads",
+                "position" : "seat/ticket"
+              }, {
+                "reason" : "a_decision_nothing_names"
+              } ]
+            }, {
+              "one" : "ticket/String.startsWith(\"w-\", x)",
+              "other" : "party/4 < x <= 8",
+              "by" : [ {
+                "reason" : "a_rule_no_decision_reads",
+                "position" : "seat/ticket"
+              }, {
+                "reason" : "a_decision_nothing_names"
+              } ]
+            }, {
+              "one" : "ticket/not String.startsWith(\"w-\", x)",
+              "other" : "party/1 <= x <= 4",
+              "by" : [ {
+                "reason" : "a_rule_no_decision_reads",
+                "position" : "seat/ticket"
+              }, {
+                "reason" : "a_decision_nothing_names"
+              } ]
+            }, {
+              "one" : "ticket/not String.startsWith(\"w-\", x)",
+              "other" : "party/4 < x <= 8",
+              "by" : [ {
+                "reason" : "a_rule_no_decision_reads",
+                "position" : "seat/ticket"
+              }, {
+                "reason" : "a_decision_nothing_names"
+              } ]
+            } ]
           } ],
           "status" : "unavailable",
           "reason" : "no_rows"

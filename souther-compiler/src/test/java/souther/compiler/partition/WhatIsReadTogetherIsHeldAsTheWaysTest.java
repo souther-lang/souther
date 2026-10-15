@@ -1,10 +1,12 @@
 package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.reading.PathAccess;
 
 import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.List;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -30,7 +32,7 @@ class WhatIsReadTogetherIsHeldAsTheWaysTest {
         every.set(0, CLASSES);
         ReadTogether.Read read = new ReadTogether.Read(List.of(one, other),
                 List.of(oneClasses, otherClasses),
-                List.of(new ReadTogether.Way(List.of(every, every), List.of(-1, -1))),
+                List.of(new ReadTogether.Way(List.of(every, every), List.of(-1, -1), Set.of())),
                 List.of());
 
         assertEquals(1, read.ways().size(), "what is held is the way");
@@ -51,12 +53,60 @@ class WhatIsReadTogetherIsHeldAsTheWaysTest {
         both.set(0, 2);
         ReadTogether.Read read = new ReadTogether.Read(List.of(one, other),
                 List.of(List.of("a", "b"), List.of("c", "d")),
-                List.of(new ReadTogether.Way(List.of(both, both), List.of(0, 0))),
+                List.of(new ReadTogether.Way(List.of(both, both), List.of(0, 0), Set.of())),
                 List.of());
 
         ReadTogether.Between between =
                 read.between(one, List.of("a", "b"), other, List.of("c", "d"));
         assertEquals(0, between.readWith(0).cardinality() + between.readWith(1).cardinality());
+    }
+
+    /**
+     * A combination says what kept it only where no way read whole reads it: what a way read in
+     * part could not say is no reason for a combination a way read whole brings together.
+     */
+    @Test
+    void aCombinationSaysWhatKeptItOnlyWhereNoWayReadWholeReadsIt() {
+        AxisId one = new AxisId("kept", "one");
+        AxisId other = new AxisId("kept", "other");
+        BitSet first = new BitSet();
+        first.set(0);
+        BitSet every = new BitSet();
+        every.set(0, 2);
+        WhyKept unread = new WhyKept.AWayReadInPart(
+                PathAccess.Unsupported.Why.MORE_WAYS_IN_THAN_ARE_READ);
+        ReadTogether.Read read = new ReadTogether.Read(List.of(one, other),
+                List.of(List.of("a", "b"), List.of("c", "d")),
+                List.of(new ReadTogether.Way(List.of(first, first), List.of(-1, -1), Set.of()),
+                        new ReadTogether.Way(List.of(every, every), List.of(-1, -1),
+                                Set.of(unread))),
+                List.of());
+
+        ReadTogether.Between between =
+                read.between(one, List.of("a", "b"), other, List.of("c", "d"));
+        assertEquals(Set.of(), between.keptBy(0, 0), "a way read whole reads a with c");
+        assertEquals(Set.of(unread), between.keptBy(0, 1));
+        assertEquals(Set.of(unread), between.keptBy(1, 1));
+    }
+
+    /** A rule no decision reads keeps every combination of its position, and says so beside what
+     *  kept it on the ways. */
+    @Test
+    void aRuleNoDecisionReadsKeepsEveryCombinationOfItsPosition() {
+        AxisId one = new AxisId("ruled", "one");
+        AxisId other = new AxisId("ruled", "other");
+        BitSet first = new BitSet();
+        first.set(0);
+        ReadTogether.Read read = new ReadTogether.Read(List.of(one, other),
+                List.of(List.of("a", "b"), List.of("c", "d")),
+                List.of(new ReadTogether.Way(List.of(first, first), List.of(-1, -1), Set.of())),
+                List.of(other));
+
+        ReadTogether.Between between =
+                read.between(one, List.of("a", "b"), other, List.of("c", "d"));
+        assertEquals(2, between.readWith(1).cardinality());
+        assertEquals(Set.of(), between.keptBy(0, 0), "a way read whole reads a with c");
+        assertEquals(Set.of(new WhyKept.ARuleNoDecisionReads(other)), between.keptBy(1, 0));
     }
 
     private static List<String> classes(String of) {

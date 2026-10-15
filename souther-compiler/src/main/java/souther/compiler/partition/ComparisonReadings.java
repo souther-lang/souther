@@ -91,17 +91,16 @@ import java.util.function.Supplier;
  * <p><b>And the case each arm of a {@code match} is, which this tree can name where the tree that
  * runs cannot.</b> A name a closure is handed stands for an element of a container where the
  * operation handing it over still stands, and for no position where that operation is expanded
- * ({@link ArmsNamed}).
+ * ({@link ArmsNamed}). And which forks a run gets to within one application of each closure around
+ * them, which is whether the closures are applied by the operations alone, and how
+ * ({@link WithinOneApplication}).
  *
- * @param armsNamed    the case each arm of each {@code match} is, where the value matched stands
- *                     at a position
- * @param dependencies which positions each construct deciding a fork the tree that runs names no
- *                     subject for may turn on ({@link ForkDependencies})
+ * @param operationsStanding what this tree says of the forks the tree that runs names less of
  */
 record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                           Map<ConditionOccurrence, Citation> conditionsMet,
                           List<TruthMet> truths, List<ForkDecided> decided,
-                          ArmsNamed armsNamed, ForkDependencies dependencies) {
+                          WhereTheOperationsStand operationsStanding) {
 
     ComparisonReadings {
         comparisons = List.copyOf(comparisons);
@@ -321,14 +320,23 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                         List<TruthMet> truths, List<ForkDecided> decided, StatedHere stated,
                         WhatConditionsState conditions, CallContext context, Core root,
                         InputReads atTheRoot, ArmsNamed.Gathered armsNamed,
-                        ForkDependencies.Gathered dependencies) {
+                        ForkDependencies.Gathered dependencies,
+                        WithinOneApplication.Gathered oneApplication) {
 
         /** The same reading, in the body of a recursive helper read at a call of it: its own
          *  tree, and the copy that call makes of each construct in it. */
         Body inside(Core helperBody, CallContext called, InputReads reads) {
             return new Body(behavior, read, Arrivals.inTheTree(helperBody), templates, truths,
                     decided, stated, conditions, called, helperBody, reads, armsNamed,
-                    dependencies);
+                    dependencies, oneApplication);
+        }
+
+        /** That the walk met the fork at {@code occurrence} where it is now, as this reading's copy
+         *  of it. */
+        void forkMet(ConstructOccurrence occurrence) {
+            if (occurrence != null) {
+                ModelOccurrence.statedAt(context.of(occurrence)).ifPresent(oneApplication::fork);
+            }
         }
 
         Symbols symbols() {
@@ -381,9 +389,11 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         Arrivals answering = Arrivals.inTheTrees(trees, analysis.templates()::bodyOf);
         ArmsNamed.Gathered armsNamed = new ArmsNamed.Gathered();
         ForkDependencies.Gathered dependencies = new ForkDependencies.Gathered();
+        WithinOneApplication.Gathered oneApplication = new WithinOneApplication.Gathered();
         walk(body, new Body(behavior, read, answering,
                         templates, truths, decided, stated, conditions,
-                        CallContext.OF_THE_BODY, body, reads, armsNamed, dependencies),
+                        CallContext.OF_THE_BODY, body, reads, armsNamed, dependencies,
+                        oneApplication),
                 reads, ClosureApplications.OUTSIDE,
                 LiveFlow.of(body), List.of(), true, readings, forks, numbering);
         // What each value the body builds states, read once. A value means the same wherever it is
@@ -399,14 +409,16 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                 // way joined, which no walk down the template says.
                 walk(template, new Body(behavior, read, answering,
                         templates, truths, decided, stated, conditions,
-                        CallContext.OF_THE_BODY, null, null, armsNamed, dependencies),
+                        CallContext.OF_THE_BODY, null, null, armsNamed, dependencies,
+                        oneApplication),
                         defined, ClosureApplications.OUTSIDE, LiveFlow.of(template),
                         entry.assumed(), entry.live(),
                         readings, forks, numbering);
             }
         }
         return new ComparisonReadings(readings, forks, numbering.metAt(), truths, decided,
-                armsNamed.named(), dependencies.read());
+                new WhereTheOperationsStand(armsNamed.named(), dependencies.read(),
+                        oneApplication.read()));
     }
 
     /** How one build of a value was reached: what stood on the way to it, and whether what it
@@ -513,6 +525,27 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
             out.add(new Reading(stands, stated.statement(), where, reads, assumed, standing,
                     decides, applying.elementsMetOn(), stated.written(), in.context(),
                     numbering.saidOnTheWay(ways)));
+        }
+        // A fork the reading of the runs takes a way out of, under the closures the walk is in, and
+        // what each closure written as an argument is passed to. A value standing as a wider type
+        // is no fork, and a fork under it is met one step down.
+        switch (e) {
+            case Core.If iff -> in.forkMet(iff.occurrence());
+            case Core.Match match -> in.forkMet(match.occurrence());
+            case Core.IfConstructed attempt -> in.forkMet(attempt.occurrence());
+            case Core.Binary binary when binary.op().stopsWhenItsAnswerIsSettled() ->
+                    in.forkMet(binary.occurrence());
+            case Core.Call call -> in.oneApplication().passing(call.args(),
+                    call.fn() instanceof Core.Reached reached
+                            ? calledAs(reached.denotes(), call.fn().rendered(), symbols)
+                            : call.fn().rendered(),
+                    call.occurrence().lineage(), symbols.module(),
+                    arg -> closureOf(arg, reads, in));
+            case Core.PreservedCall call -> in.oneApplication().passing(call.args(),
+                    calledAs(call.declared().operation(), call.declared().toString(), symbols),
+                    call.place().lineage(), symbols.module(), arg -> closureOf(arg, reads, in));
+            case Core.Widen _ -> { }
+            default -> { }
         }
         switch (e) {
             // The right operand runs only where the left came out the way that leaves the answer
@@ -688,11 +721,15 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                             return;
                         }
                         Denotation seed = new Denotation(seeded.seed(), reads);
+                        in.oneApplication().entering(seeded.step(),
+                                WithinOneApplication.eachElementOfAPosition(seeded.step(), inside,
+                                        in.read()));
                         ScopeStep.forEachChild(seeded.step(), (body, into) -> walk(body, in,
                                 inside.entering(into, symbols, in.newtypes()),
                                 through.into(seeded.step(), into, inside, in.read())
                                         .carryingIntoTheFirst(seeded.accumulator(), seed),
                                 flow, assumed, live, out, forks, numbering));
+                        in.oneApplication().leaving();
                     });
             // A helper that calls itself over a list the input holds, read where the call stands:
             // what its arguments are, and then the arm that takes an element, read at this call
@@ -716,14 +753,19 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
             // And what its answer may turn on, read on each application: where an operation's own
             // body forks on what the closure answers, that is what the fork turns on
             // ({@link ForkDependencies}).
-            case Core.Block block -> ScopeStep.forEachChild(block, (child, step) -> {
-                ClosureApplications applied = applying.into(block, step, reads, in.read());
-                if (child == block.body()) {
-                    answeredBy(block, applied, in);
-                }
-                walk(child, in, reads.entering(step, symbols, in.newtypes()), applied, flow,
-                        assumed, live, out, forks, numbering);
-            });
+            case Core.Block block -> {
+                in.oneApplication().entering(block,
+                        WithinOneApplication.eachElementOfAPosition(block, reads, in.read()));
+                ScopeStep.forEachChild(block, (child, step) -> {
+                    ClosureApplications applied = applying.into(block, step, reads, in.read());
+                    if (child == block.body()) {
+                        answeredBy(block, applied, in);
+                    }
+                    walk(child, in, reads.entering(step, symbols, in.newtypes()), applied, flow,
+                            assumed, live, out, forks, numbering);
+                });
+                in.oneApplication().leaving();
+            }
             // And each arm of an attempt under what the arm states: the clauses of the invariant it
             // checks, read over what the construction is handed. The built arm is where its name
             // stands for what was built, so a comparison written over that name is one over the
@@ -750,6 +792,30 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                             applying.entering(step, symbols, in.newtypes()), flow, assumed,
                             live, out, forks, numbering));
         }
+    }
+
+    /** The closure {@code arg} stands for where {@code reads} are the names: one written there, or
+     *  one a name in force there was given. Null where it stands for none. */
+    private static Core.Block closureOf(Core arg, InputReads reads, Body in) {
+        Core written = Core.withoutStanding(arg);
+        if (written instanceof Core.Block block) {
+            return block;
+        }
+        return written instanceof Core.Read
+                && Core.withoutStanding(reads.standing(written, in.symbols(), in.newtypes())
+                        .value()) instanceof Core.Block block ? block : null;
+    }
+
+    /** The operation a call of {@code called}, said as {@code rendered}, applies as the author
+     *  wrote it: the sugar, where the call is of what the library rewrote one to
+     *  ({@link souther.compiler.stdlib.Stdlib#writtenAs}). */
+    private static String calledAs(ValueName called, String rendered, Symbols symbols) {
+        if (called instanceof ValueName.Stdlib.Operation operation) {
+            return symbols.library().writtenAs(operation)
+                    .map(ValueName.Stdlib.Operation::qualified)
+                    .orElse(rendered);
+        }
+        return rendered;
     }
 
     /**

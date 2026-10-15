@@ -18,7 +18,9 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.reading.CoverageRead;
 import souther.compiler.reading.Decision;
 import souther.compiler.reading.NothingAnsweredHere;
+import souther.compiler.reading.PathAccess;
 import souther.compiler.reading.WayIn;
+import souther.compiler.reading.WrittenWithout;
 import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.SourceConstructOrigin;
@@ -105,22 +107,21 @@ final class WhatABodyTellsApart {
 
     /**
      * What the body read as {@code read} tells apart at each position {@code measured}, where
-     * {@code noLine} is what the reading of the input found about the rules it drew no line for and
-     * {@code armsNamed} the case each arm of a {@code match} is and {@code dependencies} which
-     * positions what decides a fork may turn on, both read where the operations stand, and
+     * {@code noLine} is what the reading of the input found about the rules it drew no line for,
+     * {@code operationsStanding} what the tree the operations stand in says of the forks, and
      * {@code arrives} what the model's rules prove arrives at each place a way passes.
      */
     static BodyInputReading of(CoverageRead.Read read,
                                MeasuredInput.MeasuredAxes measured,
                                List<RuleWithoutALine> noLine,
-                               ArmsNamed armsNamed,
-                               ForkDependencies dependencies,
+                               WhereTheOperationsStand operationsStanding,
                                PathReachability.Answers arrives) {
-        WhatABodyTellsApart reading =
-                new WhatABodyTellsApart(measured, noLine, armsNamed, dependencies, arrives);
+        WhatABodyTellsApart reading = new WhatABodyTellsApart(measured, noLine,
+                operationsStanding.armsNamed(), operationsStanding.dependencies(), arrives);
+        WithinOneApplication oneApplication = operationsStanding.oneApplication();
         List<Axis> axes = measured.axes();
         for (WayIn way : read.taken()) {
-            reading.take(way, read.saidInPart().contains(way), true);
+            reading.take(way, saidInPart(read, way, oneApplication), true);
         }
         // And the ways a run ends, for what a run reads together and nothing else. Each of their
         // decisions is on a way out of its fork already, which is what a position is told apart
@@ -130,7 +131,7 @@ final class WhatABodyTellsApart {
         Set<WayIn> taken = new HashSet<>(read.taken());
         for (WayIn way : read.answeredBy()) {
             if (!taken.contains(way)) {
-                reading.take(way, read.saidInPart().contains(way), false);
+                reading.take(way, saidInPart(read, way, oneApplication), false);
             }
         }
         for (NothingAnsweredHere part : read.answersNothing()) {
@@ -157,6 +158,45 @@ final class WhatABodyTellsApart {
         }
         return new BodyInputReading(out, new ReadTogether.Read(ids, classes,
                 List.copyOf(reading.readTogether), everyOneWith));
+    }
+
+    /**
+     * Whether {@code way} holds less than a run on it decided, as far as which positions the run
+     * read together goes.
+     *
+     * <p>A way inside a function value is written without what the function was called with. Where
+     * the fork it goes to is reached within one application of each closure around it
+     * ({@link WithinOneApplication}), that is which element the application was handed, and a
+     * decision on the element on the way is about the element's position already: what the way
+     * says is all that application read together. Anything else it was written without may be a
+     * decision on any position, and is what keeps the combinations the way may be part of.
+     *
+     * <p>A fork inside a closure the walk met where no closure around it kept it from being read
+     * one application at a time is one inside a function value the tree the operations stand in
+     * holds no closure for, which is a step this reading has no words for.
+     */
+    private static Set<WhyKept> saidInPart(CoverageRead.Read read, WayIn way,
+                                           WithinOneApplication oneApplication) {
+        Set<WrittenWithout> without = read.saidInPart().get(way);
+        if (without == null) {
+            return Set.of();
+        }
+        Set<WhyKept> out = new LinkedHashSet<>();
+        for (WrittenWithout each : without) {
+            switch (each) {
+                case WrittenWithout.AStep(var why) -> out.add(new WhyKept.AWayReadInPart(why));
+                case WrittenWithout.InAFunction(var fork) -> {
+                    if (!oneApplication.holdsAt(fork)) {
+                        Optional<WhyKept.AFunctionReadAsAWhole> function =
+                                oneApplication.readAsAWholeAt(fork);
+                        out.add(function.isPresent() ? function.get()
+                                : new WhyKept.AWayReadInPart(
+                                        PathAccess.Unsupported.Why.RUNS_WHERE_SOMETHING_CALLS_IT));
+                    }
+                }
+            }
+        }
+        return out;
     }
 
     /**
@@ -504,11 +544,12 @@ final class WhatABodyTellsApart {
      * One way: what all of its decisions admit together at each position, and which classes of two
      * positions it reads together, if a value can take it.
      *
-     * @param saidInPart whether the way was written without something that holds on it
+     * @param saidInPart what the way was written without that holds on it, as what keeps the
+     *                   combinations it may be part of; empty where it was written whole
      * @param tellsApart whether what the way admits at each position is part of what the body
      *                   tells apart there, as against only what it reads together
      */
-    private void take(WayIn way, boolean saidInPart, boolean tellsApart) {
+    private void take(WayIn way, Set<WhyKept> saidInPart, boolean tellsApart) {
         // A place on the way the model's rules prove nothing arrives at is one no run passes, so
         // no run takes the way and nothing on it is anything a run decides.
         for (Decision decision : way.decisions()) {
@@ -529,13 +570,13 @@ final class WhatABodyTellsApart {
      * account of the obligations says is open on the part.
      */
     private void takeToAnEnd(List<souther.compiler.reading.Condition> conditions) {
-        take(conditions, false, false);
+        take(conditions, Set.of(), false);
     }
 
     /** The same of a way held as the conditions on it, once no place on it is proved to be one no
      *  run passes. */
-    private void take(List<souther.compiler.reading.Condition> conditions, boolean saidInPart,
-                      boolean tellsApart) {
+    private void take(List<souther.compiler.reading.Condition> conditions,
+                      Set<WhyKept> saidInPart, boolean tellsApart) {
         // What the way says at the positions it stands at whatever case a row is: a condition
         // about the position itself puts a row taking the way there.
         Admitted direct = new Admitted(axes.size());
@@ -607,7 +648,11 @@ final class WhatABodyTellsApart {
         if (!oneValueCanTake(taken)) {
             return;
         }
-        readTogether(direct, chosen, saidInPart || subjectUnknownHere);
+        Set<WhyKept> kept = new LinkedHashSet<>(saidInPart);
+        if (subjectUnknownHere) {
+            kept.add(new WhyKept.ADecisionNothingNames());
+        }
+        readTogether(direct, chosen, kept);
         if (!tellsApart) {
             return;
         }
@@ -651,8 +696,11 @@ final class WhatABodyTellsApart {
      *
      * <p>Held as ways and never as the combinations they make, which are as many as the product of
      * the positions' classes ({@link ReadTogether.Way}).
+     *
+     * @param kept what the reading could not say of the way, which is why it is read at every
+     *             position; empty where it was read whole
      */
-    private void readTogether(Admitted direct, List<Chosen> chosen, boolean saidInPart) {
+    private void readTogether(Admitted direct, List<Chosen> chosen, Set<WhyKept> kept) {
         int size = axes.size();
         // The group each position is measured under, if one is: -1 where none is, and -2 where
         // more than one is, which is read whole.
@@ -664,12 +712,12 @@ final class WhatABodyTellsApart {
             }
         }
         List<Integer> noneApart = Collections.nCopies(size, -1);
-        if (saidInPart) {
+        if (!kept.isEmpty()) {
             List<BitSet> classes = new ArrayList<>();
             for (int at = 0; at < size; at++) {
                 classes.add(classesOf(at, mayHold(at, direct, chosen, group)));
             }
-            remember(new ReadTogether.Way(classes, noneApart));
+            remember(new ReadTogether.Way(classes, noneApart, kept));
             return;
         }
         // The way whole: each position in the classes the choices that read it read it in, two
@@ -682,7 +730,7 @@ final class WhatABodyTellsApart {
                     : readUnderTheChoices(at, chosen));
             apart.add(Math.max(group[at], -1));
         }
-        remember(new ReadTogether.Way(whole, apart));
+        remember(new ReadTogether.Way(whole, apart, Set.of()));
         // And each choice of a group over the positions only that group is measured at, which is
         // where two positions of the group are read together.
         for (int g = 0; g < chosen.size(); g++) {
@@ -692,7 +740,7 @@ final class WhatABodyTellsApart {
                     classes.add(group[at] == g && reads(way, at)
                             ? classesOf(at, way.here[at]) : null);
                 }
-                remember(new ReadTogether.Way(classes, noneApart));
+                remember(new ReadTogether.Way(classes, noneApart, Set.of()));
             }
         }
     }

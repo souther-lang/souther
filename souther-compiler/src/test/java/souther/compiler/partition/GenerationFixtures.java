@@ -37,7 +37,7 @@ final class GenerationFixtures {
                            AdequacyPolicy.OfTheGeneration budget) {
         return fill(subject, existing, check,
                 new CoverageRead.Read(List.of(), new LinkedHashMap<>(), List.of(), List.of(),
-                        Set.of(),
+                        Map.of(),
                         new LinkedHashMap<>(), List.of()),
                 budget);
     }

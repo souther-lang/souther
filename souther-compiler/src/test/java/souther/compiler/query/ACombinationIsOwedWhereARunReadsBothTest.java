@@ -1,20 +1,33 @@
 package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
+import souther.compiler.DocumentShape;
+import souther.compiler.diag.SourceRendering;
+import souther.compiler.meta.ModulePath;
 import souther.compiler.partition.AdequacyPolicy;
+import souther.compiler.partition.AxisId;
 import souther.compiler.partition.Budgets;
+import souther.compiler.partition.WhyKept;
+import souther.compiler.reading.PathAccess;
 import souther.compiler.regex.PatternPlan;
 import souther.compiler.report.AdequacyReport;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
 
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A combination of two classes is owed where some run reads both, in those classes, and nowhere
@@ -534,6 +547,457 @@ class ACombinationIsOwedWhereARunReadsBothTest {
                 "a decision past the construction may read either, whichever side of the line");
     }
 
+    /**
+     * A total over line items, with each item charged by a function a run applies once to every
+     * item: a premium destination is charged whatever the plan, and a normal one reads it.
+     *
+     * <p>{@code %s} is the body of {@code total}. The rows hold under every body written for it
+     * here.
+     */
+    private static final String CALLS = """
+            module probe.calls
+
+            data Free
+            data Paid
+            data Plan = Free | Paid
+            data Normal
+            data Premium
+            data Dest = Normal | Premium
+            data Call = { dest: Dest, seconds: Int }
+            data Yen = Int
+
+            behavior total : (plan: Plan, calls: List<Call>) -> Yen
+                constructs Yen
+
+            let total (plan, calls) = %s
+
+            let charge (plan: Plan, call: Call): Yen =
+                match call.dest with
+                    | Premium -> Yen(call.seconds)
+                    | Normal ->
+                        match plan with
+                            | Free -> Yen(0)
+                            | Paid -> Yen(call.seconds)
+
+            let premiumOrPaid (plan: Plan, call: Call): Bool =
+                match call.dest with
+                    | Premium -> true
+                    | Normal ->
+                        match plan with
+                            | Free -> false
+                            | Paid -> true
+
+            example total
+                | "premium on free" : (Free, [Call { dest = Premium, seconds = 60 }]) -> Yen(60)
+                | "normal on free" : (Free, [Call { dest = Normal, seconds = 60 }]) -> Yen(0)
+                | "normal on paid" : (Paid, [Call { dest = Normal, seconds = 60 }]) -> Yen(60)
+            """;
+
+    /** What a call to a normal destination reads beside the plan, and nothing else. */
+    private static final Set<String> A_NORMAL_CALL_READS_THE_PLAN =
+            Set.of("Free × Normal", "Paid × Normal");
+
+    /** Every combination of the plan and the destination. */
+    private static final Set<String> EVERY_PLAN_WITH_EVERY_DESTINATION =
+            Set.of("Free × Normal", "Free × Premium", "Paid × Normal", "Paid × Premium");
+
+    /**
+     * A function an operation applies once to every element of a list the input holds is read an
+     * application at a time. What a way inside it was written without is which element the run
+     * handed it, and the decision on the element says that already — so a premium call, which no
+     * application reads the plan beside, owes no combination with it. A run over a premium call and
+     * a normal one reads both, in two applications, and neither of them reads the two together.
+     *
+     * <p>However the function reaches the operation: written in the call, given a name first, or
+     * handed to an operation whose own body the reading of the runs has rewritten.
+     */
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "Yen(List.fold((sum, c) -> sum + charge(plan, c).value, 0, calls))",
+            "{\n    let f = (sum, c) -> sum + charge(plan, c).value\n    Yen(List.fold(f, 0, calls))\n}",
+            "Yen(List.fold((sum, n) -> sum + n, 0, List.map(c -> charge(plan, c).value, calls)))"})
+    void aWayInsideAFunctionAppliedToEachElementIsReadWithinOneApplication(String body) {
+        Measured total = measured(CALLS.formatted(body), "total");
+
+        assertEquals(A_NORMAL_CALL_READS_THE_PLAN, total.owed(),
+                "only a normal call reads the plan, and in the same application");
+        assertEquals(List.of(), total.pairGaps(), "and the rows written reach both");
+        assertEquals(Map.of(), total.kept(), "every way inside was read whole, so nothing is kept");
+    }
+
+    /**
+     * What a walk carries from one application to the next is what every application before it
+     * read. A decision on it is about no position — any of them, as far as this reading goes — and
+     * a run deciding it reads it beside the call it charges, so every combination stays.
+     */
+    @Test
+    void aDecisionOnWhatTheWalkCarriedKeepsEveryCombination() {
+        Measured total = measured(CALLS.formatted("""
+                Yen(List.fold((sum, c) -> {
+                        let x = charge(plan, c).value
+                        if sum > 100 then sum else sum + x
+                    }, 0, calls))"""), "total");
+
+        assertEquals(EVERY_PLAN_WITH_EVERY_DESTINATION, total.owed(),
+                "the cap reads what the calls before were charged, on whichever plan");
+        assertEquals(Map.of("Free × Premium", Set.of(new WhyKept.ADecisionNothingNames()),
+                        "Paid × Premium", Set.of(new WhyKept.ADecisionNothingNames())),
+                total.kept(), "a normal call reads the plan on a way read whole");
+    }
+
+    /**
+     * An operation that stops at the first element its function holds of applies it to a later
+     * element only where every earlier one failed — which is what those applications read, the
+     * plan among it. A way inside is written without that, and every combination stays.
+     *
+     * <p>The element found is handed out whole, so nothing decides on what the operation answered
+     * and what is owed is what the ways inside the function say.
+     */
+    @Test
+    void anOperationThatStopsAtAnAnswerKeepsEveryCombination() {
+        Measured pick = measured(PICK, "pick");
+
+        assertEquals(EVERY_PLAN_WITH_EVERY_DESTINATION, pick.owed(),
+                "a premium call is reached past the calls that did not hold on the plan");
+    }
+
+    /** A combination picked out of every element by an operation that stops at an answer. */
+    private static final String PICK = """
+            module probe.pick
+
+            data Free
+            data Paid
+            data Plan = Free | Paid
+            data Normal
+            data Premium
+            data Dest = Normal | Premium
+            data Call = { dest: Dest, seconds: Int }
+            data Picked = { call: Call? }
+
+            behavior pick : (plan: Plan, calls: List<Call>) -> Picked
+                constructs Picked
+
+            let pick (plan, calls) =
+                Picked { call = List.find(c -> premiumOrPaid(plan, c), calls) }
+
+            let premiumOrPaid (plan: Plan, call: Call): Bool =
+                match call.dest with
+                    | Premium -> true
+                    | Normal ->
+                        match plan with
+                            | Free -> false
+                            | Paid -> true
+
+            example pick
+                | (Free, [Call { dest = Premium, seconds = 60 }])
+                    -> Picked { call = Call { dest = Premium, seconds = 60 } }
+                | (Free, [Call { dest = Normal, seconds = 60 }]) -> Picked { }
+            """;
+
+    /**
+     * A combination kept because the ways inside a function were read as a whole says which
+     * function, where it is written and what it is passed to — under each combination no row is
+     * in, and in the document beside every one kept.
+     */
+    @Test
+    void aCombinationKeptByAFunctionReadAsAWholeSaysWhichFunction() {
+        Measured pick = measured(PICK, "pick");
+        String function = "c -> premiumOrPaid";
+        int line = 1;
+        int column = 0;
+        for (String each : PICK.lines().toList()) {
+            if (each.contains(function)) {
+                column = each.indexOf(function) + 1;
+                break;
+            }
+            line++;
+        }
+        String place = line + ":" + column;
+
+        for (Set<WhyKept> why : pick.kept().values()) {
+            assertEquals(1, why.size(), () -> "kept by the function alone: " + why);
+            WhyKept.AFunctionReadAsAWhole kept = assertInstanceOf(
+                    WhyKept.AFunctionReadAsAWhole.class, why.iterator().next());
+            assertEquals(Optional.of("List.find"), kept.operation());
+        }
+        assertEquals(EVERY_PLAN_WITH_EVERY_DESTINATION, pick.kept().keySet(),
+                "no way inside the function was read whole");
+
+        List<String> lines = pick.human().lines().toList();
+        int gaps = 0;
+        for (int at = 0; at < lines.size(); at++) {
+            if (lines.get(at).contains("no row is in `") && lines.get(at).contains(" with `")) {
+                gaps++;
+                assertEquals("          · kept: the ways inside the function passed to"
+                                + " `List.find` (" + place + ") were read as a whole: it is not"
+                                + " applied once to each element of a position of the input",
+                        lines.get(at + 1), "under " + lines.get(at));
+            }
+        }
+        assertEquals(2, gaps, "the rows are on Free, so both Paid combinations are gaps");
+
+        JsonNode json = pick.json();
+        assertEquals(List.of(), DocumentShape.of(json).wrong(), "what the schema refuses");
+        Set<String> written = new LinkedHashSet<>();
+        for (JsonNode module : json.get("modules")) {
+            for (JsonNode behavior : module.get("behaviors")) {
+                for (JsonNode between : behavior.get("partition").get("pairs").get("between")) {
+                    for (JsonNode kept : between.get("kept")) {
+                        JsonNode by = kept.get("by").get(0);
+                        assertEquals("a_function_read_as_a_whole", by.get("reason").asString());
+                        assertEquals("List.find", by.get("passedTo").asString());
+                        assertEquals(place, by.get("at").get("line").asInt() + ":"
+                                + by.get("at").get("column").asInt());
+                        written.add(kept.get("one").asString() + " × "
+                                + kept.get("other").asString());
+                    }
+                }
+            }
+        }
+        assertEquals(EVERY_PLAN_WITH_EVERY_DESTINATION, written,
+                "every combination kept is written, a row in it or not");
+    }
+
+    /**
+     * Applied to every element of what another operation answered, the function is applied to the
+     * elements that operation let through, which its own function decided. A way inside is written
+     * without that, and every combination stays.
+     *
+     * <p>Here the filter reads the plan alone, so nothing but the ways inside the charging
+     * function reads the destination: a premium call is charged only on the plan the filter let
+     * it through on, and that is what is owed.
+     */
+    @Test
+    void aFunctionOverWhatAnotherOperationAnsweredKeepsEveryCombination() {
+        Measured total = measured("""
+                module probe.paying
+
+                data Free
+                data Paid
+                data Plan = Free | Paid
+                data Normal
+                data Premium
+                data Dest = Normal | Premium
+                data Call = { dest: Dest, seconds: Int }
+                data Yen = Int
+
+                behavior total : (plan: Plan, calls: List<Call>) -> Yen
+                    constructs Yen
+
+                let total (plan, calls) = {
+                    let kept = List.filter(c -> paying(plan), calls)
+                    Yen(List.fold((sum, c) -> sum + charge(plan, c).value, 0, kept)
+                            + List.length(kept))
+                }
+
+                let paying (plan: Plan): Bool =
+                    match plan with
+                        | Free -> false
+                        | Paid -> true
+
+                let charge (plan: Plan, call: Call): Yen =
+                    match call.dest with
+                        | Premium -> Yen(call.seconds)
+                        | Normal ->
+                            match plan with
+                                | Free -> Yen(0)
+                                | Paid -> Yen(call.seconds)
+
+                example total
+                    | (Paid, [Call { dest = Premium, seconds = 60 }]) -> Yen(61)
+                    | (Free, [Call { dest = Premium, seconds = 60 }]) -> Yen(0)
+                """, "total");
+
+        assertEquals(EVERY_PLAN_WITH_EVERY_DESTINATION, total.owed(),
+                "a call is charged only on the plan the filter let it through on");
+        assertEquals(Set.of("List.fold"), total.passedTo(),
+                "the filter is applied to each call, and the fold to what the filter let through");
+    }
+
+    /**
+     * A function is said to be passed to the operation the author wrote, and not to what the
+     * library expanded that operation into: {@code Set.fold} hands its function to a fold over a
+     * list it makes of the set, which no author wrote.
+     *
+     * <p>Over a set made of the input's list, whose elements are no position of the input, so the
+     * ways inside are read as a whole and the function is named.
+     */
+    @Test
+    void aFunctionIsSaidToBePassedToTheOperationTheAuthorWrote() {
+        Measured total = measured("""
+                module probe.rates
+
+                data Free
+                data Paid
+                data Plan = Free | Paid
+                data Normal
+                data Premium
+                data Dest = Normal | Premium
+                data Yen = Int
+
+                behavior total : (plan: Plan, dests: List<Dest>) -> Yen
+                    constructs Yen
+
+                let total (plan, dests) =
+                    Yen(Set.fold((sum, d) -> sum + rate(plan, d), 0, Set.fromList(dests)))
+
+                let rate (plan: Plan, dest: Dest): Int =
+                    match dest with
+                        | Premium -> 5
+                        | Normal ->
+                            match plan with
+                                | Free -> 0
+                                | Paid -> 1
+
+                example total
+                    | (Free, [Premium]) -> Yen(5)
+                """, "total");
+
+        assertEquals(Set.of("Set.fold"), total.passedTo(), () -> "kept: " + total.kept());
+    }
+
+    /**
+     * And a helper of another module is expanded where the author called it, so the operation its
+     * body hands the function to is one the author did not write: what they passed it to is the
+     * helper.
+     */
+    @Test
+    void aFunctionHandedOnByAnotherModulesHelperIsSaidToBePassedToTheHelper() {
+        Compilation compilation = Compilation.ofSources(List.of("""
+                module probe.pickers
+
+                let firstOver (p: (Int) -> Bool, xs: List<Int>): Option<Int> = List.find(p, xs)
+                """, """
+                module probe.picking
+
+                import probe.pickers ( firstOver )
+
+                data Free
+                data Paid
+                data Plan = Free | Paid
+                data Picked = { amount: Int? }
+
+                behavior pick : (plan: Plan, amounts: List<Int>) -> Picked
+                    constructs Picked
+
+                let pick (plan, amounts) =
+                    Picked { amount = firstOver(a -> paidOver(plan, a), amounts) }
+
+                let paidOver (plan: Plan, amount: Int): Bool =
+                    match plan with
+                        | Free -> false
+                        | Paid -> amount > 100
+
+                example pick
+                    | (Paid, [101]) -> Picked { amount = 101 }
+                """), ModulePath.EMPTY);
+        Measured pick = measured(compilation, "probe.picking", "pick");
+
+        assertEquals(Set.of("probe.pickers.firstOver"), pick.passedTo(),
+                () -> "kept: " + pick.kept());
+    }
+
+    /**
+     * A function inside one whose applications are not each element's is inside that one's as
+     * well, and a way to a fork in it is written without what that one was written without.
+     */
+    @Test
+    void aFunctionInsideOneThatStopsAtAnAnswerKeepsEveryCombination() {
+        Measured pick = measured("""
+                module probe.orders
+
+                data Free
+                data Paid
+                data Plan = Free | Paid
+                data Normal
+                data Premium
+                data Dest = Normal | Premium
+                data Call = { dest: Dest, seconds: Int }
+                data Order = { calls: List<Call> }
+                data Picked = { order: Order? }
+
+                behavior pick : (plan: Plan, orders: List<Order>) -> Picked
+                    constructs Picked
+
+                let pick (plan, orders) = Picked { order = List.find(
+                        o -> List.fold((last, c) -> premiumOrPaid(plan, c), false, o.calls),
+                        orders) }
+
+                let premiumOrPaid (plan: Plan, call: Call): Bool =
+                    match call.dest with
+                        | Premium -> true
+                        | Normal ->
+                            match plan with
+                                | Free -> false
+                                | Paid -> true
+
+                example pick
+                    | (Free, [Order { calls = [Call { dest = Premium, seconds = 60 }] }])
+                        -> Picked { order = Order { calls = [Call { dest = Premium, seconds = 60 }] } }
+                """, "pick");
+
+        assertEquals(EVERY_PLAN_WITH_EVERY_DESTINATION,
+                pick.owedBetween("plan", "orders[*].calls[*].dest"),
+                "an order's calls are read only where the orders before it held on none");
+        assertEquals(Set.of("List.find"), pick.passedTo(),
+                "the fold is applied to each call, inside the function the find stops at");
+    }
+
+    /**
+     * Inside a function applied to each element, a fork reached more ways than are read is read
+     * without what held above it, as anywhere else — the destination's arm among it. A way read so
+     * is written without more than the element, so every combination with what it reads stays.
+     */
+    @Test
+    void aForkInsideAFunctionReachedMoreWaysThanAreReadKeepsEveryCombination() {
+        Measured fork = measured("""
+                module probe.forks
+
+                data Normal
+                data Premium
+                data Dest = Normal | Premium
+                data Call = { dest: Dest }
+                data In = { a: Int, b: Int, c: Int, usage: Int }
+                data Fee = Int
+
+                behavior total : (i: In, calls: List<Call>) -> Fee
+                    constructs Fee
+
+                let total (i, calls) = Fee(List.fold((sum, c) -> sum + charge(i, c).value, 0, calls))
+
+                let charge (i: In, call: Call): Fee = {
+                    guard i.a > 1 || i.a < -1 else Fee(1)
+                    guard i.b > 1 || i.b < -1 else Fee(2)
+                    guard i.c > 1 || i.c < -1 else Fee(3)
+                    match call.dest with
+                        | Premium -> Fee(1000)
+                        | Normal ->
+                            if i.usage <= 100 || i.usage > 1000 || i.usage == 500
+                            then Fee(300) else Fee(800)
+                }
+
+                example total
+                    | (In { a = 2, b = 2, c = 2, usage = 0 }, [Call { dest = Premium }]) -> Fee(1000)
+                """, "total");
+
+        assertEquals(Set.of("i.usage/x <= 100 × Normal", "i.usage/= 500 × Normal",
+                        "i.usage/100 < x <= 1000 and x /= 500 × Normal",
+                        "i.usage/1000 < x × Normal",
+                        "i.usage/x <= 100 × Premium", "i.usage/= 500 × Premium",
+                        "i.usage/100 < x <= 1000 and x /= 500 × Premium",
+                        "i.usage/1000 < x × Premium"),
+                fork.owedBetween("i.usage", "calls[*].dest"),
+                "the ways into the usage's arm were read without the destination above them");
+        // And by the usage's rules, which no decision on a way read whole reads: the ways to them
+        // are the ones past the bound.
+        Set<WhyKept> pastTheBound = Set.of(
+                new WhyKept.AWayReadInPart(PathAccess.Unsupported.Why.MORE_WAYS_IN_THAN_ARE_READ),
+                new WhyKept.ARuleNoDecisionReads(new AxisId("total", "i.usage")));
+        assertTrue(!fork.kept().isEmpty()
+                        && fork.kept().values().stream().allMatch(pastTheBound::equals),
+                () -> "kept by the ways past the bound: " + fork.kept());
+    }
+
     private record Measured(String behavior, Compilation compilation,
                             PartitionEvidence evidence) {
 
@@ -568,6 +1032,41 @@ class ACombinationIsOwedWhereARunReadsBothTest {
             return out;
         }
 
+        /** What kept each combination no way read whole reads, as the two classes it is of. */
+        Map<String, Set<WhyKept>> kept() {
+            Map<String, Set<WhyKept>> out = new LinkedHashMap<>();
+            for (PartitionEvidence.PairSpace.AxisPair pair : evidence.pairs().space()) {
+                PartitionEvidence.PairSpace.Owed.Listed listed = assertInstanceOf(
+                        PartitionEvidence.PairSpace.Owed.Listed.class, pair.owed());
+                listed.kept().forEach((cell, why) ->
+                        out.put(cell.one() + " × " + cell.other(), why));
+            }
+            return out;
+        }
+
+        /** What each function read as a whole that kept a combination is passed to. */
+        Set<String> passedTo() {
+            Set<String> out = new LinkedHashSet<>();
+            for (Set<WhyKept> why : kept().values()) {
+                for (WhyKept each : why) {
+                    if (each instanceof WhyKept.AFunctionReadAsAWhole(var _, var operation)) {
+                        out.add(operation.orElse("no operation"));
+                    }
+                }
+            }
+            return out;
+        }
+
+        String human() {
+            return AdequacyReport.of(compilation).human(
+                    SourceRendering.namedByIdentity(compilation.texts()));
+        }
+
+        JsonNode json() {
+            return JsonMapper.builder().build().readTree(AdequacyReport.of(compilation).json(
+                    SourceRendering.namedByIdentity(compilation.texts())));
+        }
+
         List<?> left() {
             return evidence.pairs().left(behavior);
         }
@@ -588,13 +1087,17 @@ class ACombinationIsOwedWhereARunReadsBothTest {
 
     private static Measured measured(String source, String behavior) {
         Compilation compilation = Compilation.ofSource(source, "Main");
+        return measured(compilation, compilation.modules().get(0), behavior);
+    }
+
+    private static Measured measured(Compilation compilation, String module, String behavior) {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         assertEquals(List.of(), compilation.errors().stream()
                 .map(each -> each.diagnostic().code() + " " + each.diagnostic().said()).toList(),
                 "the model under test compiles and its rows hold");
         Map<String, PartitionEvidence> all = compilation.db()
-                .ask(new Adequacy.Coverage(compilation.modules().get(0))).value();
+                .ask(new Adequacy.Coverage(module)).value();
         assertNotNull(all, "the model under test is measured");
         return new Measured(behavior, compilation, all.get(behavior));
     }

@@ -20,7 +20,6 @@ import souther.compiler.types.Type;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -85,7 +84,7 @@ class NoAxesByItselfIsNotAGenerationReasonTest {
         java.util.SequencedMap<ArmProbe, PathAccess> ways = new java.util.LinkedHashMap<>();
         ways.put(ARM, NOT_ENUMERABLE);
         CoverageRead.Read read = new CoverageRead.Read(List.of(), ways, List.of(), List.of(),
-                Set.of(), new LinkedHashMap<>(), List.of());
+                Map.of(), new LinkedHashMap<>(), List.of());
 
         return GenerationFixtures.fill(subject, List.of(), Generator.CandidateCheck.ANY, read,
                 Generator.Trial.NOTHING_RUNS, List.of(), List.of(), List.of(ARM),

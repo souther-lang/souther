@@ -1707,7 +1707,7 @@ public final class Generator {
         List<WhereToLook>cells = placesFor(new LinkedHashSet<>(armsOwed), offered);
         // And the ways into the arms inside closures, read off the ways once for every arm asked.
         Map<ArmProbe, List<WayIn>> namedWays =
-                waysNamedInto(read, axes.subject().partitioning().armsNamed());
+                waysNamedInto(read, axes.subject().partitioning().operationsStanding().armsNamed());
         Set<ArmProbe> notOffered = new LinkedHashSet<>();
         // Which arms each held-back group could have been searched at, kept per group so that the
         // summary at the end can be counted off the entries rather than worked out a second way.

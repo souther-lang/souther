@@ -466,6 +466,10 @@ class EverySchemaWordIsAccountedForTest {
             Vocabulary.of("replacement.reason",
                     List.of("$defs", "replacement", "properties", "reason"),
                     ReplacementEvidence.class),
+            // What a way that kept a combination holds and the reading has no words for.
+            new Vocabulary("whyKept.shortOf",
+                    List.of("$defs", "whyKept", "properties", "shortOf"),
+                    souther.compiler.reading.PathAccess.Unsupported.Why.class),
             // And why one rewrite was left open, which is the entry's own word.
             new Vocabulary("replacement.obligations[].undecidedBecause",
                     List.of("$defs", "replacement", "properties", "obligations", "items",
@@ -1450,6 +1454,10 @@ class EverySchemaWordIsAccountedForTest {
         held.add("/$defs/conditionNotReadReason/allOf/0/then/properties/reason");
         held.add("/$defs/conditionNotReadReason/allOf/1/then/properties/reason");
         held.add("/$defs/conditionNotReadReason/allOf/2/then/properties/reason");
+        // What kept a combination, by kind. Written by a switch over the sealed reasons, so an arm
+        // added there does not compile without its word, and held to the schema by the same
+        // validation of the corpus documents.
+        held.add("/$defs/whyKept/properties/reason");
 
         List<String> unaccounted = paths.stream().filter(p -> !held.contains(p)).toList();
         assertEquals(List.of(), unaccounted,

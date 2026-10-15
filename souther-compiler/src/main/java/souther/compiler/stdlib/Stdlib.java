@@ -19,6 +19,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.SequencedMap;
 import java.util.SequencedSet;
 import java.util.Set;
@@ -296,6 +297,24 @@ public final class Stdlib {
     /** What {@code operation} rewrites to, or null where it is not sugar. */
     public Rewrite rewriteOf(ValueName.Stdlib.Operation operation) {
         return sugars.get(operation);
+    }
+
+    /**
+     * The sugar an author wrote where a tree holds a call of {@code target}, which the library keeps
+     * to itself: a call of a private member outside the library is one a sugar was rewritten to, and
+     * a report about it quotes what the author wrote. Empty where {@code target} is not private, or
+     * no sugar rewrites to it.
+     */
+    public Optional<ValueName.Stdlib.Operation> writtenAs(ValueName.Stdlib.Operation target) {
+        if (!isPrivateMember(target)) {
+            return Optional.empty();
+        }
+        for (Map.Entry<ValueName.Stdlib.Operation, Rewrite> each : sugars.entrySet()) {
+            if (each.getValue().target().equals(target)) {
+                return Optional.of(each.getKey());
+            }
+        }
+        return Optional.empty();
     }
 
     /** Every sugared operation, by what it rewrites to, in the order the sugars are written. */

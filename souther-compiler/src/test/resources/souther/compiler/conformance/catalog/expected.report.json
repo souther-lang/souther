@@ -6818,6 +6818,19 @@
             "one" : "出荷する/指示.重量",
             "other" : "出荷する/Time.hour(指示.集荷時刻)",
             "total" : 2,
+            "kept" : [ {
+              "one" : "指示.重量/1 <= x <= 30000",
+              "other" : "Time.hour(指示.集荷時刻)/0 <= x < 12",
+              "by" : [ {
+                "reason" : "a_decision_nothing_names"
+              } ]
+            }, {
+              "one" : "指示.重量/1 <= x <= 30000",
+              "other" : "Time.hour(指示.集荷時刻)/12 <= x <= 23",
+              "by" : [ {
+                "reason" : "a_decision_nothing_names"
+              } ]
+            } ],
             "covered" : 2,
             "unknown" : 0
           } ],
