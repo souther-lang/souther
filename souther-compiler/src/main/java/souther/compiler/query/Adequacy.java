@@ -1,6 +1,7 @@
 package souther.compiler.query;
 
 import souther.compiler.carrier.Lookup;
+import souther.compiler.cst.CstLexer;
 import souther.compiler.carrier.Membership;
 import souther.compiler.execute.BoundaryValues;
 import souther.compiler.execute.ExampleExecution;
@@ -1886,7 +1887,7 @@ public final class Adequacy {
             private static String shown(Value value) {
                 return switch (value) {
                     case Value.Number number -> number.value().toPlainString();
-                    case Value.Text text -> "\"" + text.value() + "\"";
+                    case Value.Text text -> CstLexer.literalOf(text.value());
                     case Value.Truth truth -> Boolean.toString(truth.value());
                     case Value.Case named -> named.data().name();
                 };

@@ -1,5 +1,7 @@
 package souther.compiler.check;
 
+import souther.compiler.cst.CstLexer;
+
 /**
  * What a rule about the values at a position states, in the words the model states it in.
  *
@@ -43,7 +45,7 @@ public sealed interface PredicateStatement {
 
         @Override
         public String saidOf(String subject) {
-            return operation + "(" + quoted(written) + ", " + subject + ")";
+            return operation + "(" + CstLexer.literalOf(written) + ", " + subject + ")";
         }
     }
 
@@ -66,7 +68,7 @@ public sealed interface PredicateStatement {
 
         @Override
         public String saidOf(String subject) {
-            return subject + " = " + quoted(written);
+            return subject + " = " + CstLexer.literalOf(written);
         }
     }
 
@@ -82,19 +84,5 @@ public sealed interface PredicateStatement {
     /** And the values it leaves, said the same way. */
     default String deniedOf(String subject) {
         return "not " + saidOf(subject);
-    }
-
-    /** The text as a source carries it, so that a label reads back as something somebody wrote. */
-    static String quoted(String text) {
-        StringBuilder out = new StringBuilder("\"");
-        text.codePoints().forEach(each -> out.append(switch (each) {
-            case '"' -> "\\\"";
-            case '\\' -> "\\\\";
-            case '\n' -> "\\n";
-            case '\r' -> "\\r";
-            case '\t' -> "\\t";
-            default -> Character.toString(each);
-        }));
-        return out.append('"').toString();
     }
 }

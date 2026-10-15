@@ -84,6 +84,20 @@ class AnArmNothingReachesIsNotOwedARowTest {
         return out.toString(StandardCharsets.UTF_8);
     }
 
+    /** What the command prints about the model where the report is not: the warnings, and the
+     *  hints under them. */
+    private static String warnedOn(String model) throws Exception {
+        PrintStream was = System.err;
+        ByteArrayOutputStream err = new ByteArrayOutputStream();
+        System.setErr(new PrintStream(err, true, StandardCharsets.UTF_8));
+        try {
+            reportOn(model);
+        } finally {
+            System.setErr(was);
+        }
+        return err.toString(StandardCharsets.UTF_8);
+    }
+
     /**
      * An arm for a case the position's own rules refuse is not an arm either.
      *
@@ -190,6 +204,57 @@ class AnArmNothingReachesIsNotOwedARowTest {
                 () -> "a `b` of 5 is a value some pair holds, so both arms are owed:\n" + report);
         assertTrue(report.contains("no row goes through `then`"),
                 () -> "and no row went through this one:\n" + report);
+    }
+
+    /**
+     * A branch for a value between the ones a rule names is said to be outside them, by them.
+     *
+     * <p>The range the three run between holds 2, so a sentence about the range would tell an
+     * author the branch asks for a value the position plainly holds.
+     */
+    @Test
+    void aBranchBetweenTheValuesARuleNamesIsToldWhichValuesThoseAre() throws Exception {
+        String report = warnedOn("""
+                module example.odd
+
+                data Low
+                data High
+                data Odd = Int
+                    invariant value == 1 || value == 3 || value == 7
+
+                behavior pick : (c: Odd) -> Low | High
+                let pick (c) = if c.value == 2 then Low else High
+
+                example pick
+                    | "one" : (Odd(1)) -> High
+                """);
+
+        assertTrue(report.contains("`c` holds one of 1, 3, 7, so the values this branch is"
+                        + " written for are not values it can hold"),
+                () -> "the values the rule names, and not where they run between:\n" + report);
+    }
+
+    /** The same of strings, each written as the literal that denotes it: a quote and a backslash
+     *  in a value are escaped where the value is named. */
+    @Test
+    void theStringsARuleNamesAreWrittenAsTheirLiterals() throws Exception {
+        String report = warnedOn("""
+                module example.quoted
+
+                data Low
+                data High
+                data Code = String
+                    invariant value == "a\\"b" || value == "c\\\\d"
+
+                behavior pick : (c: Code) -> Low | High
+                let pick (c) = if c.value == "x" then Low else High
+
+                example pick
+                    | "one" : (Code("a\\"b")) -> High
+                """);
+
+        assertTrue(report.contains("`c` holds one of \"a\\\"b\", \"c\\\\d\""),
+                () -> "each value as the literal it is read back from:\n" + report);
     }
 
     // --- the cases behind such an arm -------------------------------------------------------------

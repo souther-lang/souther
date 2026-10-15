@@ -9,6 +9,7 @@ import souther.compiler.reach.PathDecision;
 import souther.compiler.reach.Proof;
 import souther.compiler.reach.WhyUnsettled;
 import souther.compiler.types.TypeSymbol;
+import souther.compiler.values.Value;
 import souther.compiler.values.ValueSet;
 
 import java.util.List;
@@ -134,6 +135,16 @@ final class WhatAnAnswerSays {
         });
     }
 
+    /** One value a rule names, as its own content: a number at its digits, a text as it is. */
+    private static String valueOf(Value value) {
+        return switch (value) {
+            case Value.Number number -> number.value().toPlainString();
+            case Value.Text text -> text.value();
+            case Value.Truth truth -> Boolean.toString(truth.value());
+            case Value.Case one -> one.data().name();
+        };
+    }
+
     /** Where a proof says the position's own values stop short of the branch, that position and
      *  what it holds — or nothing, where the proof says something else. */
     static String positionOutrunIn(Proof proof) {
@@ -147,9 +158,15 @@ final class WhatAnAnswerSays {
             @Override
             public String outsideInputDomain(TermPath position, NumericDomain.Bounds admits,
                                              ValueSet.Finite named, PathDecision departure) {
-                // The ends and not a rendering of them: how a report words a range is the
-                // renderer's, and a test asserting on that would be asserting on it twice.
-                return position + " " + admits.min().at() + ".." + admits.max().at();
+                // The ends and the values and not a rendering of them: how a report words either
+                // is the renderer's, and a test asserting on that would be asserting on it twice.
+                // Each where the proof holds it, which is one or both.
+                return position
+                        + (admits == null ? "" : " "
+                                + (admits.min() == null ? "" : admits.min().at()) + ".."
+                                + (admits.max() == null ? "" : admits.max().at()))
+                        + (named == null ? "" : " " + named.values().stream()
+                                .map(WhatAnAnswerSays::valueOf).toList());
             }
 
             @Override

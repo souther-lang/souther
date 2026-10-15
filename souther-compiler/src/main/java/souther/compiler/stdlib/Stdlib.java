@@ -1,6 +1,7 @@
 package souther.compiler.stdlib;
 
 import souther.compiler.Reserved;
+import souther.compiler.cst.CstLexer;
 import souther.compiler.ast.Hir;
 import souther.compiler.core.Kernel;
 import souther.compiler.core.KernelSignature;
@@ -562,8 +563,9 @@ public final class Stdlib {
                     // for one every program calls.
                     Kernel named = byKey.get(written.key());
                     if (named == null) {
-                        throw new IllegalStateException("the standard library declares `intrinsic \""
-                                + written.key() + "\"`, which this compiler has no kernel for");
+                        throw new IllegalStateException("the standard library declares `intrinsic "
+                                + CstLexer.literalOf(written.key())
+                                + "`, which this compiler has no kernel for");
                     }
                     Intrinsic intrinsic = new Intrinsic(named,
                             declaredAs(operation.qualified(), e.getValue().signature()));

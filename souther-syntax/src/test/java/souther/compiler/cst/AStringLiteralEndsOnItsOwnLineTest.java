@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * What a string literal may be, held against the lexer that decides it.
@@ -69,5 +70,45 @@ class AStringLiteralEndsOnItsOwnLineTest {
         String src = "let a = \"n\\nt\\tr\\rq\\\"b\\\\\"\n";
         assertEquals(List.of(), saidBy(src));
         assertEquals(1, literalsOf(src).size());
+    }
+
+    /**
+     * The literal written for a string is one this scan reads, whole and without a word, back to the
+     * same string.
+     *
+     * <p>Every text a writer of a literal is handed: the plain, each character that has an escape,
+     * a carriage return no line feed follows and one that it does — the second a line terminator
+     * written as itself would end — and text beyond the first plane.
+     */
+    @Test
+    void theLiteralWrittenForAStringReadsBackAsThatString() {
+        for (String text : List.of("", "plain", "a\"b", "back\\slash", "\\\"", "line\nbreak",
+                "cr\ronly", "crlf\r\n", "tab\t", "日本語 😀")) {
+            String written = CstLexer.literalOf(text);
+            String src = "let a = " + written + "\n";
+            assertEquals(List.of(), saidBy(src), () -> "the scan refuses " + written);
+            assertEquals(List.of(written), literalsOf(src),
+                    () -> "the literal is one token, ending where it was written to: " + written);
+            assertEquals(text, CstLexer.textOf(written), () -> "and denotes the text: " + written);
+        }
+    }
+
+    /** And every backslash the writer puts in is one the scan names as an escape, over every
+     *  character below the first non-ASCII one. */
+    @Test
+    void theWriterEscapesOnlyWhatTheScanReadsAsAnEscape() {
+        StringBuilder every = new StringBuilder();
+        for (char c = 0; c < 128; c++) {
+            every.append(c);
+        }
+        String written = CstLexer.literalOf(every.toString());
+        for (int i = 1; i < written.length() - 1; i++) {
+            if (written.charAt(i) == '\\') {
+                String escaped = String.valueOf(written.charAt(++i));
+                assertTrue(CstLexer.escapes().contains(escaped),
+                        () -> "a backslash before " + escaped + ", which the scan does not read");
+            }
+        }
+        assertEquals(every.toString(), CstLexer.textOf(written));
     }
 }

@@ -1,6 +1,6 @@
 package souther.compiler.execute;
 
-import souther.compiler.partition.FixtureTemplate;
+import souther.compiler.cst.CstLexer;
 import souther.exact.ExactDecimals;
 
 import java.math.BigDecimal;
@@ -24,7 +24,7 @@ public sealed interface WrittenValue {
      *  is an identity a copy is kept by and not code that has to compile again. */
     default String written() {
         return switch (this) {
-            case Text(String text) -> FixtureTemplate.quoted(text);
+            case Text(String text) -> CstLexer.literalOf(text);
             case Whole(long whole) -> String.valueOf(whole);
             case Truth(boolean truth) -> String.valueOf(truth);
             case Decimal(BigDecimal decimal) -> ExactDecimals.spelledBounded(decimal);

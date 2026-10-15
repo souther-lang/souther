@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.AffineForms;
+import souther.compiler.cst.CstLexer;
 import souther.compiler.check.ValueStanding;
 import souther.compiler.check.DeclarationAccess;
 import souther.compiler.check.DeclarationNewtypes;
@@ -216,7 +217,7 @@ record DecisionSubjects(InputDomain inputs, Symbols symbols, DeclarationAccess d
                     workedOut(construct.values().getFirst().value(), at, met);
             case Core.Int written -> Long.toString(written.value());
             case Core.Decimal written -> ExactRatio.spelledBounded(written.value());
-            case Core.Str written -> '"' + written.value() + '"';
+            case Core.Str written -> CstLexer.literalOf(written.value());
             case Core.Bool written -> Boolean.toString(written.value());
             case Core.Temporal written -> written.text();
             // The names read off a value, written as the accesses they stand for.
