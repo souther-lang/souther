@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -32,14 +33,14 @@ class OneWordIsOneAnswerAndWhatWasMetUnderItAddsUpTest {
                     Generator.UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED);
 
     private static final CameToNothing STOPPED_AT_ONE = new CameToNothing(NOTHING_COMPOSED,
-            CompositionShortfall.of(List.of(CompositionBudget.NUMBERS_OF_A_SET_TRIED)));
+            CompositionShortfall.of(List.of(CompositionBudget.NUMBERS_OF_A_SET_TRIED)), Set.of());
 
     private static final CameToNothing STOPPED_AT_ANOTHER = new CameToNothing(NOTHING_COMPOSED,
-            CompositionShortfall.of(List.of(CompositionBudget.STEPS_A_SEARCH_MAY_TAKE)));
+            CompositionShortfall.of(List.of(CompositionBudget.STEPS_A_SEARCH_MAY_TAKE)), Set.of());
 
     private static final CameToNothing STOPPED_AT_BOTH = new CameToNothing(NOTHING_COMPOSED,
             CompositionShortfall.of(List.of(CompositionBudget.NUMBERS_OF_A_SET_TRIED,
-                    CompositionBudget.STEPS_A_SEARCH_MAY_TAKE)));
+                    CompositionBudget.STEPS_A_SEARCH_MAY_TAKE)), Set.of());
 
     /** The law itself: one answer per word, with what was met under it added up. */
     @Test

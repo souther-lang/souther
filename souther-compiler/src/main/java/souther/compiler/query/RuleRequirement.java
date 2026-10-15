@@ -213,7 +213,7 @@ public sealed interface RuleRequirement {
          * The synthesis produced no candidate, so there was nothing to try the rule with.
          *
          * <p>A fact about the inquiry and not about the rule. What the synthesis fell short on
-         * travels on its own axis ({@link RuleSettlement#synthesisShortfall()}) and is carried
+         * travels on its own axis ({@link RuleSettlement#synthesisShortfalls()}) and is carried
          * nowhere here: a generator's failure is not a requirement answer, and a reason from its
          * vocabulary sitting inside this one would make it one — a reader of the requirement would
          * be told a way is unsettled *because* a table is what this compiler does not write, which

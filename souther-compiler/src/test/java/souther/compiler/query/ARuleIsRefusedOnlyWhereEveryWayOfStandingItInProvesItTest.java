@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.partition.CameToNothing;
 import souther.compiler.partition.CompositionBudget;
 import souther.compiler.partition.CompositionShortfall;
 import souther.compiler.partition.Generator;
@@ -36,7 +37,8 @@ class ARuleIsRefusedOnlyWhereEveryWayOfStandingItInProvesItTest {
     /** Every way of standing the dependencies in proved it, which is the rule's own answer. */
     @Test
     void everyWayProvingItIsTheRulesAnswer() {
-        assertEquals(RuleSearch.CameToNothing.by(leavesNothing()),
+        assertEquals(
+                RuleSearch.CameToNothing.of(List.of(CameToNothing.metNothing(leavesNothing()))),
                 Adequacy.DecisionSearch.provedByEveryWay(List.of(proved(), proved())),
                 "both standings leave the rule nothing, which is what the model says of it");
     }
@@ -57,8 +59,32 @@ class ARuleIsRefusedOnlyWhereEveryWayOfStandingItInProvesItTest {
 
         assertEquals(said, mirrored,
                 "which way a walk met first is not something the rule's account is a function of");
-        assertEquals(List.of(leavesNothing(), positionCannotBeBoth()), said.ways(),
+        assertEquals(List.of(leavesNothing(), positionCannotBeBoth()),
+                said.ways().stream().map(RuleSearch.Came::why).toList(),
                 "both words are said, in the order this document says such words in");
+    }
+
+    /**
+     * A word that proves, from a search a figure cut what it was handed, is not a proof.
+     *
+     * <p>What it proves is about the part it was handed, which is short of the point. Under every
+     * standing alike it is still not the rule's answer, and read as one the model would be said to
+     * refuse a way this compiler only looked at part of.
+     */
+    @Test
+    void aProvingWordOverLessThanThePointIsNotAProof() {
+        assertNull(Adequacy.DecisionSearch.provedByEveryWay(List.of(limited(), limited())),
+                "the searches ran over a plan a figure had cut, so nothing about the rule was"
+                        + " proved");
+        assertNull(Adequacy.DecisionSearch.provedByEveryWay(List.of(proved(), limited())),
+                "and beside a whole search that proved it, the cut one still proves nothing");
+    }
+
+    /** Nor is a point nothing was planned for, which no search was made for at all. */
+    @Test
+    void aWayNothingWasPlannedForIsNotAProof() {
+        assertNull(Adequacy.DecisionSearch.provedByEveryWay(List.of(proved(), unplanned())),
+                "no search was made under the other standing, so nothing there was proved");
     }
 
     /** One of them proving it is a statement about that standing's region and not about the rule. */
@@ -129,6 +155,18 @@ class ARuleIsRefusedOnlyWhereEveryWayOfStandingItInProvesItTest {
                 Generator.UnresolvedCombination.Reason.wordFor(Set.of(budget))),
                 CompositionShortfall.of(EnumSet.of(budget)),
                 NOTHING_LEFT_OUT);
+    }
+
+    private static Generator.BoundaryAttempt limited() {
+        return new Generator.BoundaryAttempt.Limited(leavesNothing(),
+                Set.of(CompositionBudget.DEPTH_A_CONSTRUCTION_PLAN_DESCENDS), NOTHING_LEFT_OUT);
+    }
+
+    private static Generator.BoundaryAttempt unplanned() {
+        return new Generator.BoundaryAttempt.Unplanned(new Generator.UnresolvedCombination(
+                List.of("a rule of the decision"),
+                Generator.UnresolvedCombination.Reason.NO_READING_OF_THE_LINE_COULD_BE_SEARCHED),
+                Set.of(CompositionBudget.DEPTH_A_CONSTRUCTION_PLAN_DESCENDS), NOTHING_LEFT_OUT);
     }
 
     /** These searches are about what a rule's answer is made of and not about what was left out. */

@@ -39,8 +39,9 @@ public enum DocumentPart {
     FINDINGS("findings", "/$defs/findings"),
 
     /** What gave the offer no value, where a search of a rule of a decision composed nothing. */
-    SYNTHESIS_SHORTFALL_CAUSES("synthesisShortfallCauses",
-            "/$defs/decision/properties/obligations/items/properties/synthesisShortfallCauses");
+    SYNTHESIS_SHORTFALL_CAUSES("causes",
+            "/$defs/decision/properties/obligations/items/properties/synthesisShortfalls/items"
+                    + "/properties/causes");
 
     private final String key;
     private final String schemaPath;

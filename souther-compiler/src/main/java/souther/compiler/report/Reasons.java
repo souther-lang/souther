@@ -3,6 +3,7 @@ package souther.compiler.report;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.Target;
+import souther.compiler.partition.CameToNothing;
 import souther.compiler.partition.CompositionBudget;
 import souther.compiler.partition.CompositionCapacity;
 import souther.compiler.partition.CompositionRepertoire;
@@ -12,6 +13,7 @@ import souther.compiler.publish.PublicationOrders;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 /**
  * What a reason reads as to a person.
@@ -220,25 +222,47 @@ final class Reasons {
      * model and has no opening of this kind to make.
      */
     static String met(CompositionShortfall shortfall) {
-        if (shortfall.nothing()) {
-            return "";
-        }
+        return met(PublicationOrders.COMPOSITION_BUDGETS.keep(shortfall.figures()),
+                PublicationOrders.COMPOSITION_REPERTOIRES.keep(shortfall.populations()),
+                PublicationOrders.COMPOSITION_CAPACITIES.keep(shortfall.unheld()),
+                PublicationOrders.COMPOSITION_BUDGETS.keep(Set.of()));
+    }
+
+    /** The same, of a search that came to nothing: what it met, and what cut its plan short. */
+    static String met(CameToNothing came) {
+        return met(PublicationOrders.COMPOSITION_BUDGETS.keep(came.met().figures()),
+                PublicationOrders.COMPOSITION_REPERTOIRES.keep(came.met().populations()),
+                PublicationOrders.COMPOSITION_CAPACITIES.keep(came.met().unheld()),
+                PublicationOrders.COMPOSITION_BUDGETS.keep(came.planCut()));
+    }
+
+    /**
+     * The same, of what was met already put in the order each kind is said in.
+     *
+     * <p>A figure that cut the plan short is said as a limit on the plan and never as a stop. The
+     * search ran to the end of what it was handed, or was never made, so a reader told it stopped
+     * would go looking for a search that did not finish. Nor as a search over a plan cut short:
+     * where nothing was planned, no search was made, and the word after the clause says so.
+     */
+    static String met(CanonicalSelection<CompositionBudget> figures,
+                      CanonicalSelection<CompositionRepertoire> populations,
+                      CanonicalSelection<CompositionCapacity> unheld,
+                      CanonicalSelection<CompositionBudget> planCut) {
         List<String> out = new ArrayList<>();
-        if (!shortfall.figures().isEmpty()) {
-            out.add("this compiler stopped at "
-                    + said(PublicationOrders.COMPOSITION_BUDGETS.keep(shortfall.figures())));
+        if (!figures.isEmpty()) {
+            out.add("this compiler stopped at " + said(figures));
         }
-        if (!shortfall.populations().isEmpty()) {
-            out.add("this compiler writes some of "
-                    + writes(PublicationOrders.COMPOSITION_REPERTOIRES.keep(
-                            shortfall.populations()))
+        if (!planCut.isEmpty()) {
+            out.add("this compiler's plan of the value was limited by " + said(planCut));
+        }
+        if (!populations.isEmpty()) {
+            out.add("this compiler writes some of " + writes(populations)
                     + " rather than all of them");
         }
-        if (!shortfall.unheld().isEmpty()) {
-            out.add("this compiler could not hold "
-                    + unheld(PublicationOrders.COMPOSITION_CAPACITIES.keep(shortfall.unheld())));
+        if (!unheld.isEmpty()) {
+            out.add("this compiler could not hold " + unheld(unheld));
         }
-        return String.join(", and ", out) + ": ";
+        return out.isEmpty() ? "" : String.join(", and ", out) + ": ";
     }
 
     private Reasons() {}

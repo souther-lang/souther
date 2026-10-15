@@ -28,7 +28,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  *
  * <p>Two fields carry the vocabulary: {@code notRead}, under a position, and what stopped the
  * reading of a rule an offer of values got nothing from
- * ({@code synthesisShortfallCauses[].unread}). The second is the first's words said of a rule, so a word either of them writes is a word of the
+ * ({@code synthesisShortfalls[].causes[].unread}). The second is the first's words said of a rule, so a word either of them writes is a word of the
  * vocabulary kept — read off one of them alone, a word only the other writes would arrive here as
  * a promise nothing keeps.
  *
@@ -611,7 +611,7 @@ class EveryPublishedReasonIsWrittenBySomeCompilationTest {
                             ? each.get("reason").asString() : each.asString()));
                 }
                 // A cause a limit refused carries no reason, and is not one of these.
-                if (name.equals("synthesisShortfallCauses")) {
+                if (name.equals("causes")) {
                     node.get(name).forEach(each -> {
                         if (each.has("unread")) {
                             out.add(each.get("unread").asString());

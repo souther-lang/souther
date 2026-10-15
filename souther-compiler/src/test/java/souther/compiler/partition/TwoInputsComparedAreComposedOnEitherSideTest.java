@@ -6,7 +6,7 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.DecisionEvidence;
 import souther.compiler.query.RuleRequirement;
-import souther.compiler.query.SettledAt;
+import souther.compiler.query.SettledAcross;
 
 import java.util.List;
 import java.util.Map;
@@ -56,7 +56,7 @@ class TwoInputsComparedAreComposedOnEitherSideTest {
     void whichSideEachIsWrittenOnChangesNothing() {
         assertEveryRuleTaken(PASSWORDS.replace("account.password /= given",
                 "given /= account.password"));
-        Map<?, SettledAt> twice = search("""
+        Map<?, SettledAcross> twice = search("""
                 module example.twice
 
                 behavior f : (a: String, b: String) -> Int
@@ -67,7 +67,7 @@ class TwoInputsComparedAreComposedOnEitherSideTest {
         assertEquals(2, twice.size(),
                 () -> "a == b and b == a are one distinction, so two rules and not four: " + twice);
         twice.values().forEach(each -> assertInstanceOf(RuleRequirement.Required.class,
-                each.settlement().requirement(), () -> "each taken by its row: " + each));
+                each.requirement(), () -> "each taken by its row: " + each));
     }
 
     @Test
@@ -310,13 +310,13 @@ class TwoInputsComparedAreComposedOnEitherSideTest {
      */
     @Test
     void threeTruthsApartAreNotSaidToBeOutOfReach() {
-        Map<?, SettledAt> settled = search(model3("Bool"), "f");
+        Map<?, SettledAcross> settled = search(model3("Bool"), "f");
         assertEquals(1, settled.values().stream()
-                .filter(each -> each.settlement().requirement()
+                .filter(each -> each.requirement()
                         instanceof RuleRequirement.Required).count(),
                 () -> "only the way past the else is taken: " + settled);
-        for (SettledAt each : settled.values()) {
-            assertFalse(each.settlement().requirement() instanceof RuleRequirement.Excluded,
+        for (SettledAcross each : settled.values()) {
+            assertFalse(each.requirement() instanceof RuleRequirement.Excluded,
                     () -> "running out of values is no proof: " + each);
         }
     }
@@ -340,7 +340,7 @@ class TwoInputsComparedAreComposedOnEitherSideTest {
      */
     @Test
     void aWayAskingTheTwoToBeOneAndTwoIsTakenByNoRowComposedForIt() {
-        Map<?, SettledAt> settled = search("""
+        Map<?, SettledAcross> settled = search("""
                 module example.contradiction
 
                 behavior f : (a: String, b: String) -> Int
@@ -349,7 +349,7 @@ class TwoInputsComparedAreComposedOnEitherSideTest {
                     if a == b && a /= b then 1 else 2
                 """, "f");
         List<RuleRequirement> requirements = settled.values().stream()
-                .map(each -> each.settlement().requirement()).toList();
+                .map(each -> each.requirement()).toList();
         assertEquals(1, requirements.stream().filter(RuleRequirement.Required.class::isInstance)
                 .count(), () -> "the way past the else is taken and the other is not: "
                 + requirements);
@@ -379,7 +379,7 @@ class TwoInputsComparedAreComposedOnEitherSideTest {
      */
     @Test
     void whereNothingTriedDiffersTheRuleIsNotSaidToBeOutOfReach() {
-        Map<?, SettledAt> settled = search("""
+        Map<?, SettledAcross> settled = search("""
                 module example.code
 
                 data Code = String
@@ -390,8 +390,8 @@ class TwoInputsComparedAreComposedOnEitherSideTest {
                 let f (a, b) =
                     if a /= b then 1 else 2
                 """, "f");
-        for (SettledAt each : settled.values()) {
-            assertFalse(each.settlement().requirement() instanceof RuleRequirement.Excluded,
+        for (SettledAcross each : settled.values()) {
+            assertFalse(each.requirement() instanceof RuleRequirement.Excluded,
                     () -> "nothing here shows the rule is out of reach: " + each);
         }
     }
@@ -432,26 +432,26 @@ class TwoInputsComparedAreComposedOnEitherSideTest {
         assertEquals(1, arms.size(), () -> "the arm the values apart take: " + arms);
         assertFalse(arms.getFirst().outcome() instanceof GenerationOutcome.NotSupported,
                 () -> "a way into it is read:\n" + model + "\n" + arms);
-        Map<?, SettledAt> settled =
+        Map<?, SettledAcross> settled =
                 compilation.db().ask(new Adequacy.DecisionSearch(module, "f")).value();
         assertEquals(1, settled.size(), () -> "the rule the example leaves: " + settled);
         assertInstanceOf(RuleRequirement.Required.class,
-                settled.values().iterator().next().settlement().requirement(),
+                settled.values().iterator().next().requirement(),
                 () -> "a row whose run takes the arm:\n" + model + "\n" + settled);
     }
 
     private static void assertEveryRuleTaken(String model) {
-        Map<?, SettledAt> settled = search(model, "f");
+        Map<?, SettledAcross> settled = search(model, "f");
         assertTrue(settled.size() >= 2, () -> "a rule each way: " + settled);
-        for (SettledAt each : settled.values()) {
-            assertInstanceOf(RuleRequirement.Required.class, each.settlement().requirement(),
+        for (SettledAcross each : settled.values()) {
+            assertInstanceOf(RuleRequirement.Required.class, each.requirement(),
                     () -> "a row whose run took the rule:\n" + model + "\n" + each);
         }
     }
 
     /** What the search came to for each rule the rows written leave untaken, which is every rule
      *  here: no row is written. */
-    private static Map<?, SettledAt> search(String model, String behavior) {
+    private static Map<?, SettledAcross> search(String model, String behavior) {
         Compilation compilation = compiled(model);
         String module = compilation.modules().getFirst();
         DecisionEvidence evidence = compilation.db().ask(new Adequacy.Decides(module)).value()

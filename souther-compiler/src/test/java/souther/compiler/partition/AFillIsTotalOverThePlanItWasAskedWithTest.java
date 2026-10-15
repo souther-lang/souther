@@ -18,6 +18,7 @@ import souther.compiler.types.Type;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -254,9 +255,11 @@ class AFillIsTotalOverThePlanItWasAskedWithTest {
     @Test
     void whatEachPlaceCameToIsOneAnswerPerWord() {
         CameToNothing stoppedAtOne = new CameToNothing(NOTHING_CAME_OF_IT.why(),
-                CompositionShortfall.of(List.of(CompositionBudget.NUMBERS_OF_A_SET_TRIED)));
+                CompositionShortfall.of(List.of(CompositionBudget.NUMBERS_OF_A_SET_TRIED)),
+                Set.of());
         CameToNothing stoppedAtAnother = new CameToNothing(NOTHING_CAME_OF_IT.why(),
-                CompositionShortfall.of(List.of(CompositionBudget.STEPS_A_SEARCH_MAY_TAKE)));
+                CompositionShortfall.of(List.of(CompositionBudget.STEPS_A_SEARCH_MAY_TAKE)),
+                Set.of());
         GenerationPlan plan = planOver(List.of(A_CLASS), List.of());
 
         FillResult filled = new FillResult(new LinkedHashMap<>(),
@@ -267,7 +270,7 @@ class AFillIsTotalOverThePlanItWasAskedWithTest {
 
         assertEquals(List.of(new CameToNothing(NOTHING_CAME_OF_IT.why(),
                         CompositionShortfall.of(List.of(CompositionBudget.NUMBERS_OF_A_SET_TRIED,
-                                CompositionBudget.STEPS_A_SEARCH_MAY_TAKE)))),
+                                CompositionBudget.STEPS_A_SEARCH_MAY_TAKE)), Set.of())),
                 filled.unresolved(),
                 "one word, with what both searches met under it");
     }

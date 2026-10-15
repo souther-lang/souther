@@ -5,6 +5,7 @@ import souther.compiler.inputs.TermPath;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Set;
 import java.util.Optional;
 import java.util.SequencedMap;
 
@@ -182,7 +183,7 @@ record SearchShortfall(CompositionShortfall met,
     CameToNothing published(List<String> classes, Generator.UnresolvedCombination.Reason said,
                             String detail, Optional<String> sentence) {
         return new CameToNothing(new Generator.UnresolvedCombination(classes, wordFor(said),
-                detail, toldFor(said, sentence), offered), met);
+                detail, toldFor(said, sentence), offered), met, Set.of());
     }
 
     /**
