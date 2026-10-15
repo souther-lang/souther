@@ -109,11 +109,21 @@ class AContainerHoldsNoMoreThanItsElementsHaveValuesTest {
             let f (s) = if %s == %d then 1 else 2
             """;
 
-    /** Each with the number of values of what it holds apart, worked out by hand. */
+    /** One behavior of several in one module, each measured on its own. */
+    private static final String ONE_OF_SEVERAL = """
+            behavior %s : (s: %s) -> Int
+            let %s (s) = if %s == %d then 1 else 2
+            """;
+
+    /**
+     * Each with the number of values of what it holds apart, worked out by hand. Each type is a
+     * behavior of its own in one module, since what a behavior is measured to owe is read of that
+     * behavior alone.
+     */
     @Test
     void thePointsPastHowManyThereAreAreRefused() {
         record Case(String type, String size, int most) {}
-        for (Case each : List.of(
+        List<Case> cases = List.of(
                 new Case("Set<Service>", "Set.size(s)", 3),
                 new Case("Set<Bool>", "Set.size(s)", 2),
                 // A record's optional field: none, or one of two.
@@ -146,9 +156,18 @@ class AContainerHoldsNoMoreThanItsElementsHaveValuesTest {
                 new Case("Set<Few>", "Set.size(s)", 2),
                 new Case("Set<Pick>", "Set.size(s)", 4),
                 // Beside a rule nothing reads, which may refuse one of them and add none.
-                new Case("Set<Loose>", "Set.size(s)", 2))) {
-            BorderAssessment line = lineOf(MODEL.formatted(TYPES, each.type(), each.size(),
-                    each.most()), "p", Integer.toString(each.most()));
+                new Case("Set<Loose>", "Set.size(s)", 2));
+        StringBuilder model = new StringBuilder("module p\n").append(TYPES);
+        for (int i = 0; i < cases.size(); i++) {
+            Case each = cases.get(i);
+            model.append(ONE_OF_SEVERAL.formatted("f" + i, each.type(), "f" + i, each.size(),
+                    each.most()));
+        }
+        Map<String, List<BorderAssessment>> read = readingsOf(
+                Compilation.ofSource(model.toString(), "Main"), "p");
+        for (int i = 0; i < cases.size(); i++) {
+            Case each = cases.get(i);
+            BorderAssessment line = lineOf(read, "f" + i, Integer.toString(each.most()));
 
             assertEquals(new ItemAssessment.NotOwed(NotOwedReason.NO_VALUE_CAN_STAND_THERE),
                     line.items().get(new DomainPoint.BesideTheLine(Towards.ABOVE)), each.type());
@@ -571,12 +590,22 @@ class AContainerHoldsNoMoreThanItsElementsHaveValuesTest {
     }
 
     private static BorderAssessment lineOf(Compilation compilation, String module, String value) {
+        return lineOf(readingsOf(compilation, module), "f", value);
+    }
+
+    private static Map<String, List<BorderAssessment>> readingsOf(Compilation compilation,
+                                                                  String module) {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         Map<String, List<BorderAssessment>> read = Adequacy.readingsOf(compilation.db(), module);
         assertNotNull(read, "the model under test compiles");
-        List<BorderAssessment> lines = read.get("f");
-        assertNotNull(lines, "f was measured");
+        return read;
+    }
+
+    private static BorderAssessment lineOf(Map<String, List<BorderAssessment>> read,
+                                           String behavior, String value) {
+        List<BorderAssessment> lines = read.get(behavior);
+        assertNotNull(lines, () -> behavior + " was measured");
         for (BorderAssessment border : lines) {
             if (border.value().equals(value)) {
                 return border;

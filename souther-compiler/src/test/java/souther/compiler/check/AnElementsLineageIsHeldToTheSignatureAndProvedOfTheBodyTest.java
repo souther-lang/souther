@@ -115,10 +115,14 @@ class AnElementsLineageIsHeldToTheSignatureAndProvedOfTheBodyTest {
                 && e.getMessage().contains("as a building and again alone"), e.getMessage());
     }
 
-    /** Control: the body the library ships proves what is stated of it. */
+    /**
+     * Control: the body the library ships proves what is stated of it. Read off the proofs the build
+     * shipped, which {@link TheProofsShippedAreWhatProvingTheLibraryComesToTest} holds to what
+     * proving the library comes to.
+     */
     @Test
     void theBodyTheLibraryShipsProvesWhereItsElementsCameFrom() {
-        BoundOperationFacts facts = OperationFactBinder.bindAll(DefaultStdlib.get());
+        BoundOperationFacts facts = DefaultBoundOperationFacts.get();
 
         assertNotNull(facts.elementsMadeFromAlone(FLAT_MAP));
     }
