@@ -4823,19 +4823,20 @@ public final class Generator {
              * it does not, and a search a figure stopped reaches an author as one this compiler has
              * nothing to say about.
              *
-             * <p>A figure that cut what the search was handed, or left nothing planned to search,
-             * is met the way a figure that stopped a search is: in every one of them the word is
-             * not about the whole of the point, and the figure is what an author would raise.
+             * <p>A figure that cut the plan the search was handed, or left it nothing planned, is
+             * not something the search met, and is held apart from what it did meet: the word of
+             * a search over a plan cut short is that search's own answer about less than the
+             * point had, and the word of one nothing was planned for says no search was made.
              */
             default CameToNothing came() {
                 return switch (this) {
                     case Unresolved it -> CameToNothing.metNothing(it.why());
-                    case Stopped it -> new CameToNothing(it.why(), it.met());
-                    case Unexhausted it -> new CameToNothing(it.why(), it.met());
+                    case Stopped it -> new CameToNothing(it.why(), it.met(), Set.of());
+                    case Unexhausted it -> new CameToNothing(it.why(), it.met(), Set.of());
                     case Limited it ->
-                            new CameToNothing(it.why(), CompositionShortfall.of(it.by()));
+                            new CameToNothing(it.why(), CompositionShortfall.NONE, it.by());
                     case Unplanned it ->
-                            new CameToNothing(it.why(), CompositionShortfall.of(it.by()));
+                            new CameToNothing(it.why(), CompositionShortfall.NONE, it.by());
                 };
             }
         }

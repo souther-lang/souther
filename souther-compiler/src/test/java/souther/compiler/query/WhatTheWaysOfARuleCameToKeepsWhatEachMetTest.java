@@ -2,12 +2,17 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.meaning.WhyNotTaken;
 import souther.compiler.partition.CameToNothing;
 import souther.compiler.partition.CompositionAccount;
 import souther.compiler.partition.CompositionBudget;
 import souther.compiler.partition.CompositionRepertoire;
 import souther.compiler.partition.CompositionShortfall;
+import souther.compiler.partition.ConditionOccurrence;
+import souther.compiler.partition.ConditionReportAnchor;
 import souther.compiler.partition.Generator;
+import souther.compiler.partition.OnTheWay;
+import souther.compiler.partition.ReachabilityGap;
 
 import java.util.List;
 import java.util.Set;
@@ -40,7 +45,7 @@ class WhatTheWaysOfARuleCameToKeepsWhatEachMetTest {
 
         assertEquals(List.of(RuleSearch.Came.of(new CameToNothing(elements.why(),
                         CompositionShortfall.of(Set.of(CompositionBudget.ELEMENTS_A_PROPOSAL_HOLDS,
-                                CompositionBudget.CHARACTERS_A_PROPOSAL_HOLDS))))),
+                                CompositionBudget.CHARACTERS_A_PROPOSAL_HOLDS)), Set.of()))),
                 settled.synthesisShortfalls(),
                 "both figures are something an author could raise, so neither is dropped");
     }
@@ -75,6 +80,54 @@ class WhatTheWaysOfARuleCameToKeepsWhatEachMetTest {
         assertEquals(cameTo(List.of(elements, characters, some)),
                 cameTo(List.of(some, characters, elements)),
                 "which way a walk met first is not something the rule's account is a function of");
+    }
+
+    /**
+     * And what the ways went without is what any of them went without, whichever was met first.
+     *
+     * <p>Two ways that came back with one word and went without two different conditions. One way's
+     * account standing for both would leave the other condition unsaid, and which one was left out
+     * would follow the order the ways were walked in.
+     */
+    @Test
+    void whatEveryWayWentWithoutIsSaid() {
+        Generator.BoundaryAttempt one = new Generator.BoundaryAttempt.Unresolved(
+                nothingComposes(), CompositionAccount.ofTheInput(List.of(gap(0))));
+        Generator.BoundaryAttempt other = new Generator.BoundaryAttempt.Unresolved(
+                nothingComposes(), CompositionAccount.ofTheInput(List.of(gap(1))));
+
+        assertEquals(Set.of(gap(0), gap(1)),
+                Set.copyOf(cameTo(List.of(one, other)).account().onTheWay()),
+                "both conditions were gone without by a search for the rule");
+        assertEquals(Set.copyOf(cameTo(List.of(one, other)).account().onTheWay()),
+                Set.copyOf(cameTo(List.of(other, one)).account().onTheWay()),
+                "whichever way was walked first");
+    }
+
+    /**
+     * A search over a plan a figure cut short, or one nothing was planned for, did not stop at
+     * the figure.
+     *
+     * <p>What it was handed was cut short, and that is held as itself: told it as a stop, a reader
+     * goes looking for a search that did not finish.
+     */
+    @Test
+    void aFigureThatCutThePlanShortIsNotAStop() {
+        Set<CompositionBudget> plan = Set.of(CompositionBudget.DEPTH_A_CONSTRUCTION_PLAN_DESCENDS);
+        Generator.BoundaryAttempt.NoRow limited = new Generator.BoundaryAttempt.Limited(
+                nothingComposes(), plan, CompositionAccount.NOTHING);
+        Generator.BoundaryAttempt.NoRow unplanned = new Generator.BoundaryAttempt.Unplanned(
+                new Generator.UnresolvedCombination(List.of("a rule of the decision"),
+                        Generator.UnresolvedCombination.Reason
+                                .NO_READING_OF_THE_LINE_COULD_BE_SEARCHED),
+                plan, CompositionAccount.NOTHING);
+
+        for (Generator.BoundaryAttempt.NoRow each : List.of(limited, unplanned)) {
+            assertEquals(CompositionShortfall.NONE, each.came().met(),
+                    () -> "nothing stopped the search: " + each);
+            assertEquals(plan, each.came().planCut(),
+                    () -> "the figure cut short what it was handed: " + each);
+        }
     }
 
     /** A way that had a row to try is the answer over every way that had none. */
@@ -117,6 +170,19 @@ class WhatTheWaysOfARuleCameToKeepsWhatEachMetTest {
                 Generator.UnresolvedCombination.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED),
                 CompositionShortfall.writing(Set.of(CompositionRepertoire.WAYS_A_TOTAL_IS_SPREAD)),
                 CompositionAccount.NOTHING);
+    }
+
+    private static Generator.UnresolvedCombination nothingComposes() {
+        return new Generator.UnresolvedCombination(List.of("a rule of the decision"),
+                Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+    }
+
+    private static ReachabilityGap gap(int which) {
+        ConditionOccurrence condition =
+                new ConditionOccurrence("f", ConditionOccurrence.Reading.DECIDING, which);
+        return new ReachabilityGap.Unstated(new OnTheWay.Declined(condition,
+                new ConditionReportAnchor.WhereTheReadingMetIt("example.ruled", condition),
+                new WhyNotTaken.OutsideDomain(WhyNotTaken.DomainLimit.A_QUANTITY_ON_NO_ORDER)));
     }
 
     private static Generator.BoundaryAttempt built() {

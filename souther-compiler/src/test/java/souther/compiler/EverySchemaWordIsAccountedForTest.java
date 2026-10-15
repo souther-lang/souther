@@ -502,9 +502,16 @@ class EverySchemaWordIsAccountedForTest {
             // And what each word's searches met of this compiler's, in the three vocabularies a
             // search meets things in. Held against the types themselves, so a figure added to this
             // compiler is one the document admits without anybody editing the schema by hand.
+            new Vocabulary("$defs.compositionBudget", List.of("$defs", "compositionBudget"),
+                    CompositionBudget.class),
             new Vocabulary("decision.obligations[].synthesisShortfalls[].figures[]",
                     List.of("$defs", "decision", "properties", "obligations", "items",
                             "properties", "synthesisShortfalls", "items", "properties", "figures",
+                            "items"),
+                    CompositionBudget.class),
+            new Vocabulary("decision.obligations[].synthesisShortfalls[].planCut[]",
+                    List.of("$defs", "decision", "properties", "obligations", "items",
+                            "properties", "synthesisShortfalls", "items", "properties", "planCut",
                             "items"),
                     CompositionBudget.class),
             new Vocabulary("decision.obligations[].synthesisShortfalls[].populations[]",

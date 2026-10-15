@@ -4293,7 +4293,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                                      PublishedRuleHandle.WhereARuleIs places) {
         List<String> clauses = new ArrayList<>();
         for (RuleSearch.Came each : came) {
-            String clause = Reasons.met(each.figures(), each.populations(), each.unheld())
+            String clause = Reasons.met(each.figures(), each.populations(), each.unheld(),
+                    each.planCut())
                     + GeneratedRows.beside(saidOrWhy(each.why()), each.why(), rendering, places);
             if (!clauses.contains(clause)) {
                 clauses.add(clause);
@@ -7482,6 +7483,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 ArrayNode figures = one.putArray("figures");
                 each.figures().written().forEach(figure -> figures.add(word(figure)));
             }
+            if (!each.planCut().isEmpty()) {
+                ArrayNode planCut = one.putArray("planCut");
+                each.planCut().written().forEach(figure -> planCut.add(word(figure)));
+            }
             if (!each.populations().isEmpty()) {
                 ArrayNode populations = one.putArray("populations");
                 each.populations().written()
@@ -7513,21 +7518,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         SequencedMap<List<Object>, RuleSearch.Came> under = new LinkedHashMap<>();
         for (RuleSearch.Came each : came) {
             under.merge(List.of(each.why().reason(), each.why().alsoShort()), each,
-                    (first, then) -> new RuleSearch.Came(first.why(),
-                            PublicationOrders.COMPOSITION_BUDGETS.keep(
-                                    both(first.figures(), then.figures())),
-                            PublicationOrders.COMPOSITION_REPERTOIRES.keep(
-                                    both(first.populations(), then.populations())),
-                            PublicationOrders.COMPOSITION_CAPACITIES.keep(
-                                    both(first.unheld(), then.unheld()))));
+                    RuleSearch.Came::and);
         }
         return List.copyOf(under.values());
-    }
-
-    private static <T> Set<T> both(CanonicalSelection<T> one, CanonicalSelection<T> other) {
-        Set<T> out = new LinkedHashSet<>(one.written());
-        out.addAll(other.written());
-        return out;
     }
 
     /**

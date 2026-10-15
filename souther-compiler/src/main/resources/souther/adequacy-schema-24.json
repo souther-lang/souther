@@ -122,6 +122,47 @@
         "fork in `Money`"
       ]
     },
+    "compositionBudget": {
+      "description": "A figure this compiler holds a piece of its own work to, which an author could raise. Which way it acted on a search — stopping it, or cutting short the plan it ran over — is the field it is written under.",
+      "enum": [
+        "elements_a_proposal_holds",
+        "characters_a_proposal_holds",
+        "pairings_built_at_once",
+        "elements_a_total_is_spread_over",
+        "shapes_of_a_total_offered",
+        "elements_a_count_is_composed_with",
+        "containers_a_count_is_offered",
+        "shares_a_count_is_tried_at",
+        "values_an_element_is_chosen_among",
+        "ways_down_to_a_total_tried",
+        "ways_under_the_cases_tried",
+        "ways_a_way_is_looked_along",
+        "choices_on_a_way_looked_at",
+        "pairs_of_input_numbers_and_an_answer_tried",
+        "choices_of_input_numbers_looked_at",
+        "places_a_pair_is_tried_at",
+        "places_a_pair_is_looked_at",
+        "steps_a_search_may_take",
+        "assignments_a_search_composes",
+        "values_of_an_unbounded_progression_tried",
+        "levels_a_side_is_asked_at",
+        "times_the_rules_are_asked_again",
+        "values_a_position_on_the_way_is_tried_at",
+        "places_a_position_on_the_way_is_looked_at",
+        "assignments_on_the_way_composed_for",
+        "values_a_point_is_tried_with",
+        "paths_of_a_decision_read",
+        "readings_of_one_condition",
+        "total_readings_of_one_condition",
+        "parts_a_derivation_concludes",
+        "alternatives_a_path_tries",
+        "depth_a_construction_plan_descends",
+        "numbers_of_a_set_tried",
+        "code_points_a_string_is_searched_in_full",
+        "code_points_beyond_a_count_a_string_is_looked_for",
+        "runs_repairing_a_row"
+      ]
+    },
     "runSensitivity": {
       "enum": [
         "may_change",
@@ -4828,46 +4869,18 @@
                       "type": "array",
                       "minItems": 1,
                       "uniqueItems": true,
-                      "description": "The figures of this compiler's that the searches with this word met: one that stopped a search, one that cut short what a search was handed, or one that left nothing planned to search. Each is a number an author could raise, and `reason` beside it is the answer of a search that did not get to the end of the point. In one order, whatever order the searches met them in. Absent where no figure was met.",
+                      "description": "The figures of this compiler's that stopped the searches with this word. Each is a number an author could raise, and `reason` beside it is the answer of a search that did not finish. In one order, whatever order the searches met them in. Absent where no figure stopped one.",
                       "items": {
-                        "enum": [
-                          "elements_a_proposal_holds",
-                          "characters_a_proposal_holds",
-                          "pairings_built_at_once",
-                          "elements_a_total_is_spread_over",
-                          "shapes_of_a_total_offered",
-                          "elements_a_count_is_composed_with",
-                          "containers_a_count_is_offered",
-                          "shares_a_count_is_tried_at",
-                          "values_an_element_is_chosen_among",
-                          "ways_down_to_a_total_tried",
-                          "ways_under_the_cases_tried",
-                          "ways_a_way_is_looked_along",
-                          "choices_on_a_way_looked_at",
-                          "pairs_of_input_numbers_and_an_answer_tried",
-                          "choices_of_input_numbers_looked_at",
-                          "places_a_pair_is_tried_at",
-                          "places_a_pair_is_looked_at",
-                          "steps_a_search_may_take",
-                          "assignments_a_search_composes",
-                          "values_of_an_unbounded_progression_tried",
-                          "levels_a_side_is_asked_at",
-                          "times_the_rules_are_asked_again",
-                          "values_a_position_on_the_way_is_tried_at",
-                          "places_a_position_on_the_way_is_looked_at",
-                          "assignments_on_the_way_composed_for",
-                          "values_a_point_is_tried_with",
-                          "paths_of_a_decision_read",
-                          "readings_of_one_condition",
-                          "total_readings_of_one_condition",
-                          "parts_a_derivation_concludes",
-                          "alternatives_a_path_tries",
-                          "depth_a_construction_plan_descends",
-                          "numbers_of_a_set_tried",
-                          "code_points_a_string_is_searched_in_full",
-                          "code_points_beyond_a_count_a_string_is_looked_for",
-                          "runs_repairing_a_row"
-                        ]
+                        "$ref": "#/$defs/compositionBudget"
+                      }
+                    },
+                    "planCut": {
+                      "type": "array",
+                      "minItems": 1,
+                      "uniqueItems": true,
+                      "description": "The figures of this compiler's that cut short the plan the searches with this word ran over, or left them no plan to run over. Not figures that stopped a search: such a search ran to the end of what it was handed, or was never made, and `reason` beside it is about less than the rule's way had. Each is a number an author could raise. In one order, whatever order the searches met them in. Absent where every search ran over the whole of the way.",
+                      "items": {
+                        "$ref": "#/$defs/compositionBudget"
                       }
                     },
                     "populations": {

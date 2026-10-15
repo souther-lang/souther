@@ -3,6 +3,7 @@ package souther.compiler.report;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.Target;
+import souther.compiler.partition.CameToNothing;
 import souther.compiler.partition.CompositionBudget;
 import souther.compiler.partition.CompositionCapacity;
 import souther.compiler.partition.CompositionRepertoire;
@@ -12,6 +13,7 @@ import souther.compiler.publish.PublicationOrders;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 /**
  * What a reason reads as to a person.
@@ -222,16 +224,36 @@ final class Reasons {
     static String met(CompositionShortfall shortfall) {
         return met(PublicationOrders.COMPOSITION_BUDGETS.keep(shortfall.figures()),
                 PublicationOrders.COMPOSITION_REPERTOIRES.keep(shortfall.populations()),
-                PublicationOrders.COMPOSITION_CAPACITIES.keep(shortfall.unheld()));
+                PublicationOrders.COMPOSITION_CAPACITIES.keep(shortfall.unheld()),
+                PublicationOrders.COMPOSITION_BUDGETS.keep(Set.of()));
     }
 
-    /** The same, of what was met already put in the order each kind is said in. */
+    /** The same, of a search that came to nothing: what it met, and what cut its plan short. */
+    static String met(CameToNothing came) {
+        return met(PublicationOrders.COMPOSITION_BUDGETS.keep(came.met().figures()),
+                PublicationOrders.COMPOSITION_REPERTOIRES.keep(came.met().populations()),
+                PublicationOrders.COMPOSITION_CAPACITIES.keep(came.met().unheld()),
+                PublicationOrders.COMPOSITION_BUDGETS.keep(came.planCut()));
+    }
+
+    /**
+     * The same, of what was met already put in the order each kind is said in.
+     *
+     * <p>A figure that cut the plan short is said as that and never as a stop. The search ran to
+     * the end of what it was handed, or was never made, so a reader told it stopped would go
+     * looking for a search that did not finish; told the plan was cut short, they read the word
+     * after it as being about less than the point had, which is what it is.
+     */
     static String met(CanonicalSelection<CompositionBudget> figures,
                       CanonicalSelection<CompositionRepertoire> populations,
-                      CanonicalSelection<CompositionCapacity> unheld) {
+                      CanonicalSelection<CompositionCapacity> unheld,
+                      CanonicalSelection<CompositionBudget> planCut) {
         List<String> out = new ArrayList<>();
         if (!figures.isEmpty()) {
             out.add("this compiler stopped at " + said(figures));
+        }
+        if (!planCut.isEmpty()) {
+            out.add("this compiler cut short the plan it searched at " + said(planCut));
         }
         if (!populations.isEmpty()) {
             out.add("this compiler writes some of " + writes(populations)

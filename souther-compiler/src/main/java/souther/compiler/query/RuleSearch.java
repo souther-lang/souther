@@ -7,6 +7,7 @@ import souther.compiler.partition.Generator;
 import souther.compiler.publish.CanonicalSelection;
 import souther.compiler.publish.PublicationOrders;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
@@ -109,17 +110,20 @@ public sealed interface RuleSearch {
      * the result put in order once.
      *
      * @param why         what the searches came to, in the words a report prints
-     * @param figures     the figures they stopped at, were cut short by, or left nothing planned at
+     * @param figures     the figures that stopped them
      * @param populations what this compiler writes some of that they walked in part
      * @param unheld      the numbers they could not hold
+     * @param planCut     the figures that cut short the plan they ran over, or left them none
      */
     record Came(Generator.UnresolvedCombination why,
                 CanonicalSelection<CompositionBudget> figures,
                 CanonicalSelection<CompositionRepertoire> populations,
-                CanonicalSelection<CompositionCapacity> unheld) {
+                CanonicalSelection<CompositionCapacity> unheld,
+                CanonicalSelection<CompositionBudget> planCut) {
 
         public Came {
-            if (why == null || figures == null || populations == null || unheld == null) {
+            if (why == null || figures == null || populations == null || unheld == null
+                    || planCut == null) {
                 throw new IllegalArgumentException("a word the ways came back with says what they"
                         + " met, or that it was nothing");
             }
@@ -129,7 +133,35 @@ public sealed interface RuleSearch {
             return new Came(came.why(),
                     PublicationOrders.COMPOSITION_BUDGETS.keep(came.met().figures()),
                     PublicationOrders.COMPOSITION_REPERTOIRES.keep(came.met().populations()),
-                    PublicationOrders.COMPOSITION_CAPACITIES.keep(came.met().unheld()));
+                    PublicationOrders.COMPOSITION_CAPACITIES.keep(came.met().unheld()),
+                    PublicationOrders.COMPOSITION_BUDGETS.keep(came.planCut()));
+        }
+
+        /**
+         * This and another word a reader cannot tell from it, as one holding what both met.
+         *
+         * <p>For a projection that says less of the word than this holds. The page says the
+         * sentence beside the word and a document need not, and where a projection leaves out
+         * what told two of these apart, they are one thing to it — written as two, its reader
+         * meets one thing twice with half of what was met apiece. The word kept is this one's, so
+         * only a caller whose projection does not show what the two words differ in joins them.
+         */
+        public Came and(Came other) {
+            return new Came(why,
+                    PublicationOrders.COMPOSITION_BUDGETS.keep(
+                            both(figures.written(), other.figures().written())),
+                    PublicationOrders.COMPOSITION_REPERTOIRES.keep(
+                            both(populations.written(), other.populations().written())),
+                    PublicationOrders.COMPOSITION_CAPACITIES.keep(
+                            both(unheld.written(), other.unheld().written())),
+                    PublicationOrders.COMPOSITION_BUDGETS.keep(
+                            both(planCut.written(), other.planCut().written())));
+        }
+
+        private static <T> List<T> both(List<T> one, List<T> other) {
+            List<T> out = new ArrayList<>(one);
+            out.addAll(other);
+            return out;
         }
     }
 }

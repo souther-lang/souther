@@ -87,6 +87,28 @@ public record CompositionAccount(List<ReachabilityGap> onTheWay,
     }
 
     /**
+     * What this composing and another of the same way went without, between them.
+     *
+     * <p>For an answer made of several composings, none of which is the answer alone: a condition
+     * either went without is one the answer is weaker for. So what either could not compose against
+     * is kept, and a condition counts as taken up by an answer only where both took it up — one
+     * that only the other took up is one this composing went without, and reconciled against the
+     * way it is a gap ({@link #reconciledWith}). What comes out reconciles to every gap either of
+     * the two reconciles to, and to no other.
+     *
+     * <p>Each gap once, in the order this then the other met them.
+     */
+    public CompositionAccount alongside(CompositionAccount other) {
+        List<ReachabilityGap> input = new ArrayList<>(new LinkedHashSet<>(onTheWay));
+        other.onTheWay.stream().filter(each -> !input.contains(each)).forEach(input::add);
+        List<DemandGap> demands = new ArrayList<>(new LinkedHashSet<>(onAnAnswer));
+        other.onAnAnswer.stream().filter(each -> !demands.contains(each)).forEach(demands::add);
+        Set<ConditionOccurrence> taken = new LinkedHashSet<>(takenUpByAnAnswer);
+        taken.retainAll(other.takenUpByAnAnswer);
+        return new CompositionAccount(input, demands, taken);
+    }
+
+    /**
      * This account with a figure said to be why the statements about an answer that name a number
      * of the input were not composed against.
      *

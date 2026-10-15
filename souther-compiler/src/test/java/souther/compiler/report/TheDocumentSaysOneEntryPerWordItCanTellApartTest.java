@@ -53,8 +53,7 @@ class TheDocumentSaysOneEntryPerWordItCanTellApartTest {
         RuleSearch.Came table = new RuleSearch.Came(new Generator.UnresolvedCombination(
                 List.of("a rule of the decision"),
                 Generator.UnresolvedCombination.Reason.A_TABLE_IS_WHAT_THIS_NEEDS),
-                PublicationOrders.COMPOSITION_BUDGETS.keep(Set.of()), NO_POPULATIONS,
-                NO_CAPACITIES);
+                NO_FIGURES, NO_POPULATIONS, NO_CAPACITIES, NO_FIGURES);
 
         assertEquals(List.of(stood, table), AdequacyReport.published(List.of(stood, table)),
                 "two words are two things the document says");
@@ -66,8 +65,11 @@ class TheDocumentSaysOneEntryPerWordItCanTellApartTest {
                 Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE, null,
                 Optional.of(said)),
                 PublicationOrders.COMPOSITION_BUDGETS.keep(Set.of(figure)), NO_POPULATIONS,
-                NO_CAPACITIES);
+                NO_CAPACITIES, NO_FIGURES);
     }
+
+    private static final CanonicalSelection<CompositionBudget> NO_FIGURES =
+            PublicationOrders.COMPOSITION_BUDGETS.keep(Set.of());
 
     private static final CanonicalSelection<CompositionRepertoire> NO_POPULATIONS =
             PublicationOrders.COMPOSITION_REPERTOIRES.keep(Set.of());

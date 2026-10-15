@@ -2801,9 +2801,11 @@ public final class Adequacy {
          * so what they came to is joined by the law every search that came to nothing is joined
          * by.
          *
-         * <p>What the composing was arrived at without is the first such way's. It says what the
-         * conditions of one way's region were, and two regions' conditions put into one account
-         * would read as conditions one composing went without together.
+         * <p>And what they were arrived at without is what any of them went without
+         * ({@link CompositionAccount#alongside}). Each way's account says what that composing could
+         * not compose against, and the answer is all of them together; one way's account in place
+         * of the rest would leave out what the others went without, and which one would follow the
+         * order the ways were enumerated in.
          *
          * @param run what the run of a row that was composed settles about the rule
          */
@@ -2812,7 +2814,7 @@ public final class Adequacy {
                                                         RuleSettlement> run) {
             RuleSettlement established = null;
             List<CameToNothing> cameToNothing = new ArrayList<>();
-            CompositionAccount firstAccount = null;
+            CompositionAccount without = null;
             for (Generator.BoundaryAttempt made : ways) {
                 switch (made) {
                     // What the composing came to, said on the axis it is about. The rule is left
@@ -2821,7 +2823,8 @@ public final class Adequacy {
                     // reason would say otherwise.
                     case Generator.BoundaryAttempt.NoRow none -> {
                         cameToNothing.add(none.came());
-                        firstAccount = firstAccount == null ? none.unrepresented() : firstAccount;
+                        without = without == null ? none.unrepresented()
+                                : without.alongside(none.unrepresented());
                     }
                     case Generator.BoundaryAttempt.Built built -> {
                         RuleSettlement here = run.apply(built);
@@ -2836,7 +2839,7 @@ public final class Adequacy {
             }
             if (!cameToNothing.isEmpty()) {
                 return RuleSettlement.nothingToTryWith(RuleSearch.CameToNothing.of(cameToNothing),
-                        firstAccount);
+                        without);
             }
             // Nothing was tried at all, which is the classes not linking rather than a search that
             // came to nothing.

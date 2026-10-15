@@ -1176,7 +1176,7 @@ public final class GeneratedRows {
     private static String saidOf(CameToNothing came,
                                  SourceRendering rendering,
                                  PublishedRuleHandle.WhereARuleIs places) {
-        return Reasons.met(came.met()) + saidOf(came.why(), rendering, places);
+        return Reasons.met(came) + saidOf(came.why(), rendering, places);
     }
 
     /**
