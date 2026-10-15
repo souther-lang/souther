@@ -1273,9 +1273,8 @@ public final class Front {
 
         @Override
         public Answer<Boolean> compute(Db db) {
-            Layout.Of layout = db.ask(new Layout()).value();
             ModulePath path = db.ask(new Path()).value();
-            if (layout == null || path == null || !layout.idOfModule().containsKey(name)) {
+            if (path == null || !declaredHere(db, name)) {
                 return Answer.of(Boolean.FALSE);
             }
             // Whether the path has the name, and not whether what it has can be read. Two modules
