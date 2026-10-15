@@ -2505,7 +2505,7 @@
         "reachProofsContradicted": {
           "type": "array",
           "minItems": 1,
-          "description": "The proofs this compiler made that nothing arrives somewhere in this body, that a row then went against: an arm proven to be gone into by nothing that a row went through, a comparison proven to come out one way for nothing that a row brought out so, a comparison proven to be arrived at by nothing that a row came to. Nothing about the model is wrong then and the proof is, and every measure here reads the body with it taken back. Of the reading and of no measure: which measures rested on one says so in its own words — `denominatorSettled` and `proof_contradicted` for the arms, `reachProofsContradicted` on a rule of the decision for one the proof would have left no row — and a proof no measure rested on is listed here all the same. Each proof once, however many rules rested on it. Absent where no row went against any.",
+          "description": "The proofs this compiler made that nothing arrives somewhere in this body, that a row then went against: an arm proven to be gone into by nothing that a row went through, a comparison proven to come out one way for nothing that a row brought out so, a comparison or an application whose answer states a line proven to be arrived at by nothing that a row came to. Nothing about the model is wrong then and the proof is, and every measure here reads the body with it taken back. Of the reading and of no measure: which measures rested on one says so in its own words — `denominatorSettled` and `proof_contradicted` for the arms, `reachProofsContradicted` on a rule of the decision for one the proof would have left no row — and a proof no measure rested on is listed here all the same. Each proof once, however many rules rested on it. Absent where no row went against any.",
           "items": {
             "$ref": "#/$defs/reachProof"
           }
@@ -2517,7 +2517,7 @@
     },
     "reachProof": {
       "type": "object",
-      "description": "One place a proof that nothing arrives was about, as it stands in the tree that runs: `construct` is the copy of the construct, in the coordinates a combination's decision is written under, so a helper called twice is two copies and what one call cannot reach another may. `arm` is an arm of a fork, by `part`, its place among the fork's arms; `comparison_outcome` a comparison coming out one way, `held` saying which; `comparison_arrival` a comparison as a whole, proven to be arrived at by nothing — which is not either of its ways, since both may be rightly proven while this is wrong.",
+      "description": "One place a proof that nothing arrives was about, as it stands in the tree that runs: `construct` is the copy of the construct, in the coordinates a combination's decision is written under, so a helper called twice is two copies and what one call cannot reach another may. `arm` is an arm of a fork, by `part`, its place among the fork's arms; `comparison_outcome` a comparison coming out one way, `held` saying which; `arrival` a construct a line is drawn at — a comparison, or an application whose answer states one — proven to be arrived at by nothing as a whole, which is not either way out of a comparison, since both may be rightly proven while this is wrong.",
       "required": [
         "kind",
         "construct"
@@ -2528,7 +2528,7 @@
           "enum": [
             "arm",
             "comparison_outcome",
-            "comparison_arrival"
+            "arrival"
           ]
         },
         "construct": {
@@ -2591,7 +2591,7 @@
           "if": {
             "properties": {
               "kind": {
-                "const": "comparison_arrival"
+                "const": "arrival"
               }
             },
             "required": [

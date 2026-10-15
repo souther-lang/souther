@@ -160,8 +160,7 @@ class AProofAboutAMatchArmSaysNothingAboutWhatIsAnsweredWithTest {
                                                          ControlPlace.Arm now) {
         Map<ControlPlace, souther.compiler.reach.Reachability> found = new LinkedHashMap<>();
         answers.found().forEach((where, said) -> found.put(where.equals(was) ? now : where, said));
-        return new PathReachability.Answers(answers.numbering(), found, answers.arriving(),
-                answers.recordedAt());
+        return new PathReachability.Answers(answers.numbering(), found, answers.arrivals());
     }
 
     /**

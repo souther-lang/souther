@@ -172,7 +172,7 @@ public final class GuardThresholds {
                             CoverageSites.Plan plan,
                             InputReading read,
                             ElementBindings elements,
-                            PathReachability.Answers arrives,
+                            PathReachability.Arrivals arrives,
                             RuleReachNumbering reaches) {
         // A behavior with no representation for the analysis to read leaves nothing to read. This
         // reading is of that tree — where the language's operations stand — so where there is none
@@ -371,7 +371,7 @@ public final class GuardThresholds {
     private static List<EmittedComparisonState.Observation> watchedAt(
             String behavior, ComparisonReadings.Reading each,
             ComparisonEmissionIndex comparisons, AnswerEmissionIndex answers,
-            PathReachability.Answers arrives) {
+            PathReachability.Arrivals arrives) {
         List<EmittedComparisonState.Observation> out = new ArrayList<>();
         switch (each.occurrence().origin().kind()) {
             // Asked by the construct as the tree that runs holds it, which is the one place every

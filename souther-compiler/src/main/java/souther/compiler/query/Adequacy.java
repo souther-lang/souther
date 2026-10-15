@@ -1030,7 +1030,7 @@ public final class Adequacy {
      * nothing. Written once so that each reader does not decide again what to do without one.
      *
      * <p>As the rows corrected it ({@link Arrived}), which is what a line is dropped by: a proof
-     * that nothing arrives at a comparison a row came to is a proof shown wrong, and a line
+     * that nothing arrives at a construct a row came to is a proof shown wrong, and a line
      * dropped by it would be dropped by a reading the run has already taken back.
      */
     private static PathReachability.Answers arrivalsOf(
@@ -1039,11 +1039,11 @@ public final class Adequacy {
         return asRun == null ? PathReachability.Answers.NONE : asRun.answers();
     }
 
-    /** The same, of what arrives at the comparisons alone ({@link ArrivedAtComparisons}). */
-    private static PathReachability.Answers atTheComparisonsOf(
-            Map<String, PathReachability.Answers> read, Hir.SpecBehavior spec) {
-        return read == null ? PathReachability.Answers.NONE
-                : read.getOrDefault(spec.name(), PathReachability.Answers.NONE);
+    /** The same, of what arrives at the constructs lines are drawn at ({@link ArrivedAtLines}). */
+    private static PathReachability.Arrivals atTheLinesOf(
+            Map<String, PathReachability.Arrivals> read, Hir.SpecBehavior spec) {
+        return read == null ? PathReachability.Arrivals.NONE
+                : read.getOrDefault(spec.name(), PathReachability.Arrivals.NONE);
     }
 
     /**
@@ -2025,17 +2025,17 @@ public final class Adequacy {
 
 
     /**
-     * What arrives at each comparison of every behavior of one module, once the rows have run, and
-     * nothing about any arm or outcome.
+     * What arrives at each construct a line is drawn at, of every behavior of one module, once the
+     * rows have run ({@link PathReachability.Arrivals}).
      *
      * <p>Its own answer because the division of a body reads this and nothing else of the reading,
      * and {@link Arrived} changes whenever the rows go somewhere new: a place a row went through is
      * answered with the run that went there. Read off that, every division of the module was made
      * again for a row that lit another arm, over arrivals that had not moved. This changes only
-     * where a row came to a comparison proven to be arrived at by nothing.
+     * where a row came to a construct proven to be arrived at by nothing.
      */
-    public record ArrivedAtComparisons(String name)
-            implements Key<Map<String, PathReachability.Answers>> {
+    public record ArrivedAtLines(String name)
+            implements Key<Map<String, PathReachability.Arrivals>> {
 
         @Override
         public String module() {
@@ -2043,14 +2043,13 @@ public final class Adequacy {
         }
 
         @Override
-        public Answer<Map<String, PathReachability.Answers>> compute(Db db) {
+        public Answer<Map<String, PathReachability.Arrivals>> compute(Db db) {
             Answer<Map<String, PathReachability.Answers.AsRun>> arrived = db.ask(new Arrived(name));
             if (!arrived.present()) {
                 return Answer.absent();
             }
-            Map<String, PathReachability.Answers> out = new LinkedHashMap<>();
-            arrived.value().forEach((behavior, run) ->
-                    out.put(behavior, run.answers().arrivalsOnly()));
+            Map<String, PathReachability.Arrivals> out = new LinkedHashMap<>();
+            arrived.value().forEach((behavior, run) -> out.put(behavior, run.answers().arrivals()));
             return Answer.of(Ordered.map(out));
         }
     }
@@ -2594,7 +2593,7 @@ public final class Adequacy {
                     // rule about the strings at a position still stands as the author wrote it.
                     bodyReading(db, name, checked, behavior),
                     plan,
-                    atTheComparisonsOf(db.ask(new ArrivedAtComparisons(name)).value(), spec),
+                    atTheLinesOf(db.ask(new ArrivedAtLines(name)).value(), spec),
                     statedOf(db.ask(new Bodies.StatedContracts(name)).value(), spec),
                     // One allowance for this measure, made here and handed on. Asked for again
                     // further in, a position would be allowed its machines once per caller and what

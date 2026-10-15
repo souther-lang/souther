@@ -224,9 +224,11 @@ class AComparisonIsOutOfReachOnlyWhereEveryCopyOfItIsTest {
         assertEquals(Set.of(), run.contradicted().places(),
                 "and that way of it was never proven, so no place is");
         assertInstanceOf(ComparisonArrival.NoProjection.class,
-                run.answers().arrivalAt(first.occurrence()), "what arrives restricts nothing");
+                run.answers().arrivals().arrivalAt(first.occurrence()),
+                "what arrives restricts nothing");
         assertInstanceOf(ComparisonArrival.NothingArrives.class,
-                run.answers().arrivalAt(second.occurrence()), "and the other copy's proof stands");
+                run.answers().arrivals().arrivalAt(second.occurrence()),
+                "and the other copy's proof stands");
     }
 
     /**
@@ -256,7 +258,7 @@ class AComparisonIsOutOfReachOnlyWhereEveryCopyOfItIsTest {
 
     /**
      * What a body is divided by is the same whichever arms and ways the rows went through, where
-     * no row came to a comparison proven to be arrived at by nothing — so a run that goes
+     * no row came to a construct proven to be arrived at by nothing — so a run that goes
      * somewhere new divides nothing again. The places themselves do move: a row is a witness.
      */
     @Test
@@ -269,8 +271,8 @@ class AComparisonIsOutOfReachOnlyWhereEveryCopyOfItIsTest {
                 Set.of(seen(first)));
 
         assertNotEquals(none.answers(), somewhere.answers(), "the rows went somewhere");
-        assertEquals(none.answers().arrivalsOnly(), somewhere.answers().arrivalsOnly(),
-                "and what arrives at the comparisons is what it was");
+        assertEquals(none.answers().arrivals(), somewhere.answers().arrivals(),
+                "and what arrives at the constructs lines are drawn at is what it was");
     }
 
     // --- what the compile made, and answers put over it --------------------------------------------
@@ -355,11 +357,13 @@ class AComparisonIsOutOfReachOnlyWhereEveryCopyOfItIsTest {
                                                            arriving) {
         Map<ControlPlace, Reachability> found = new LinkedHashMap<>(COMPILED.answers().found());
         found.putAll(set);
+        PathReachability.Arrivals compiled = COMPILED.answers().arrivals();
         Map<ConstructOccurrence, ComparisonArrival> arrivals =
-                new LinkedHashMap<>(COMPILED.answers().arriving());
+                new LinkedHashMap<>(compiled.arriving());
         arrivals.putAll(arriving);
-        return new PathReachability.Answers(COMPILED.answers().numbering(), found, arrivals,
-                COMPILED.answers().recordedAt());
+        return new PathReachability.Answers(COMPILED.answers().numbering(), found,
+                new PathReachability.Arrivals(compiled.numbering(), arrivals,
+                        compiled.recordedAt()));
     }
 
     /** A row seen bringing the comparison out the way {@code place} is. */

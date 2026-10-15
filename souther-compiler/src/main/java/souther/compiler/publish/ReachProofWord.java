@@ -15,6 +15,9 @@ public enum ReachProofWord {
     /** A comparison coming out one way, proven to come out so for nothing. */
     COMPARISON_OUTCOME,
 
-    /** A comparison, proven to be arrived at by nothing at all. */
-    COMPARISON_ARRIVAL
+    /**
+     * A construct a line is drawn at — a comparison, or an application whose answer states one —
+     * proven to be arrived at by nothing at all.
+     */
+    ARRIVAL
 }

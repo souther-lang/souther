@@ -124,7 +124,7 @@ final class Coverages {
                                       souther.compiler.inputs.InputReading read,
                                       souther.compiler.partition.BodyReading reading,
                                       CoverageSites.Plan plan,
-                                      PathReachability.Answers arrives,
+                                      PathReachability.Arrivals arrives,
                                       souther.compiler.check.StatedContract stated,
                                       souther.compiler.values.Allowance<
                                               souther.compiler.inputs.NumericTerm.FromOnePosition>

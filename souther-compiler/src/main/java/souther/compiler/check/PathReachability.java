@@ -78,6 +78,113 @@ import java.util.Set;
 public final class PathReachability {
 
     /**
+     * What arrives at each construct a line is drawn at — a comparison, or an application whose
+     * answer states one — before it is taken either way, and where a row coming to it is recorded.
+     *
+     * <p>Its own value beside the places ({@link Answers#found}) because it is a fact of its own
+     * and is read on its own. A line is dropped by what arrives at the construct, and the division
+     * that drops it reads nothing about any arm or way out; handed the places as well, it would be
+     * made again whenever a row went somewhere new, over arrivals that had not moved, and could ask
+     * a place a question it has no business asking.
+     *
+     * @param numbering  which plan's constructs these are, or empty where no reading was made
+     * @param arriving   what arrives at each, in the order the walk met them
+     * @param recordedAt where a row coming to each is recorded, which is the plan's and is kept
+     *                   here, asked of the plan where the reading was made, so that a run can be
+     *                   read against it later with no plan in hand. A comparison's way out and an
+     *                   application's answer are both recorded there, and a row recorded there
+     *                   either way came to it
+     */
+    public record Arrivals(Optional<NumberingIdentity> numbering,
+                           Map<ConstructOccurrence, ComparisonArrival> arriving,
+                           Map<ConstructOccurrence, ConditionOutcomeSite> recordedAt) {
+
+        /** No reading, which goes with any plan because it says nothing about one. */
+        public static final Arrivals NONE = new Arrivals(Optional.empty(), Map.of(), Map.of());
+
+        public Arrivals {
+            if (numbering == null) {
+                throw new IllegalArgumentException(
+                        "a reading either was made under some numbering or was not made");
+            }
+            if (numbering.isEmpty() && !(arriving.isEmpty() && recordedAt.isEmpty())) {
+                throw new IllegalArgumentException("a reading that answered about "
+                        + arriving.size() + " constructs was made under some numbering; they are"
+                        + " of a plan and nothing here would say which");
+            }
+            arriving = Collections.unmodifiableMap(new LinkedHashMap<>(arriving));
+            recordedAt = Collections.unmodifiableMap(new LinkedHashMap<>(recordedAt));
+        }
+
+        /** That the constructs {@code of} names are the ones this reading answered about — see
+         *  {@link Answers#requireNumbering}, which holds the places to the same. */
+        public void requireNumbering(NumberingIdentity of) {
+            requireOf(numbering, of);
+        }
+
+        /**
+         * What arrives at {@code at} — one construct a line is drawn at, before it is taken
+         * either way.
+         *
+         * <p>An entry's absence reads as {@link ComparisonArrival.NoProjection}, which restricts
+         * nothing. Two ways to have none, and one answer for both: this reading was never made at
+         * all — the caller holds {@link #NONE}, which is what a reader of a construct outside a
+         * measured body is given — or the walk fell over before finishing, since a walk that
+         * finished is held to an entry per numbered comparison ({@link PathReachability#unanswered}).
+         * A partial reading is owed the fail-open answer, the same one every other consumer of one
+         * gets.
+         *
+         * <p>What is not among them is a construct this plan numbers no site for. There is no
+         * occurrence to ask about then, and a caller that has one has it from the plan — asked with
+         * something worked out another way, an absence here would be this reading and the plan
+         * disagreeing, dressed as a fact about the model.
+         */
+        public ComparisonArrival arrivalAt(ConstructOccurrence at) {
+            ComparisonArrival answer = arriving.get(at);
+            return answer != null ? answer : new ComparisonArrival.NoProjection();
+        }
+
+        /** The constructs proven to be arrived at by nothing that a row is recorded coming to,
+         *  either way, in {@code seen}. */
+        Set<ConstructOccurrence> shownWrongBy(Set<SeenConditionOutcome> seen) {
+            Set<ConstructOccurrence> out = new LinkedHashSet<>();
+            recordedAt.forEach((construct, site) -> {
+                if (arriving.get(construct) instanceof ComparisonArrival.NothingArrives
+                        && (seen.contains(new SeenConditionOutcome(site, true))
+                                || seen.contains(new SeenConditionOutcome(site, false)))) {
+                    out.add(construct);
+                }
+            });
+            return out;
+        }
+
+        /** These, with what arrives at each of {@code takenBack} answered as what restricts
+         *  nothing: a row came, and which values did is not what the run says. */
+        Arrivals takingBack(Set<ConstructOccurrence> takenBack) {
+            if (takenBack.isEmpty()) {
+                return this;
+            }
+            Map<ConstructOccurrence, ComparisonArrival> out = new LinkedHashMap<>(arriving);
+            takenBack.forEach(construct -> out.put(construct, new ComparisonArrival.NoProjection()));
+            return new Arrivals(numbering, out, recordedAt);
+        }
+    }
+
+    /**
+     * The one check a reading and a plan are held to each other by, for the places and the
+     * constructs alike.
+     */
+    private static void requireOf(Optional<NumberingIdentity> numbering, NumberingIdentity of) {
+        if (numbering.isPresent() && !numbering.get().equals(of)) {
+            throw new IllegalArgumentException("this reading was made under " + numbering.get()
+                    + " and is being read against " + of
+                    + "; what one plan's reading says about another's places is nothing, and"
+                    + " answering it would report every place of a body as one nothing"
+                    + " reached");
+        }
+    }
+
+    /**
      * What was found, and what a place nothing was found about comes to.
      *
      * @param numbering which plan's places these are filed under, or empty where no reading was
@@ -85,39 +192,36 @@ public final class PathReachability {
      *                  say about it is a reading and answers for that plan, while what a caller
      *                  holds where a module's reading could not be made is no reading and answers
      *                  for none. The two are the same map and are not the same fact
-     * @param recordedAt where a row coming to each construct {@code arriving} answers for is
-     *                  recorded, which is the plan's and is kept with the reading so a run can be
-     *                  read against it. A comparison's way out and an application's answer are
-     *                  both recorded there, and a row recorded there either way came to it
+     * @param arrivals  what arrives at each construct a line is drawn at, under the same numbering
      */
     public record Answers(Optional<NumberingIdentity> numbering,
                           Map<ControlPlace, Reachability> found,
-                          Map<ConstructOccurrence,
-                                  souther.compiler.reach.ComparisonArrival> arriving,
-                          Map<ConstructOccurrence, ConditionOutcomeSite> recordedAt) {
+                          Arrivals arrivals) {
 
         /** No reading, which every consumer takes the way it takes a place nothing was found
          *  about, and which goes with any plan because it says nothing about one. */
-        public static final Answers NONE =
-                new Answers(Optional.empty(), Map.of(), Map.of(), Map.of());
+        public static final Answers NONE = new Answers(Optional.empty(), Map.of(), Arrivals.NONE);
 
         public Answers {
             if (numbering == null) {
                 throw new IllegalArgumentException(
                         "a reading either was made under some numbering or was not made");
             }
-            if (numbering.isEmpty() && !(found.isEmpty() && arriving.isEmpty())) {
+            if (numbering.isEmpty() && !found.isEmpty()) {
                 throw new IllegalArgumentException(
-                        "a reading that answered about " + found.size() + " places and "
-                                + arriving.size() + " comparisons was made under some numbering;"
-                                + " its places are of a plan and nothing here would say which");
+                        "a reading that answered about " + found.size() + " places was made under"
+                                + " some numbering; its places are of a plan and nothing here"
+                                + " would say which");
+            }
+            if (!numbering.equals(arrivals.numbering())) {
+                throw new IllegalArgumentException("the places were read under " + numbering
+                        + " and what arrives at the constructs under " + arrivals.numbering()
+                        + "; one reading of one body is of one plan");
             }
             // The order the walk found them in. `Map.copyOf` is unordered and its iteration is
             // salted per run, so the warnings read off this came out in a different order on every
             // JVM — a diagnostic whose place in the output is not a function of the source.
-            found = java.util.Collections.unmodifiableMap(new LinkedHashMap<>(found));
-            arriving = java.util.Collections.unmodifiableMap(new LinkedHashMap<>(arriving));
-            recordedAt = Collections.unmodifiableMap(new LinkedHashMap<>(recordedAt));
+            found = Collections.unmodifiableMap(new LinkedHashMap<>(found));
         }
 
         /**
@@ -139,13 +243,7 @@ public final class PathReachability {
          * a place nothing was found about.
          */
         public void requireNumbering(NumberingIdentity of) {
-            if (numbering.isPresent() && !numbering.get().equals(of)) {
-                throw new IllegalArgumentException("this reading was made under " + numbering.get()
-                        + " and is being read against " + of
-                        + "; what one plan's reading says about another's places is nothing, and"
-                        + " answering it would report every place of a body as one nothing"
-                        + " reached");
-            }
+            requireOf(numbering, of);
         }
 
         /**
@@ -169,29 +267,6 @@ public final class PathReachability {
         }
 
         /**
-         * What arrives at {@code at} — one comparison, before it is taken either way.
-         *
-         * <p>An entry's absence reads as {@link souther.compiler.reach.ComparisonArrival
-         * .NoProjection}, which restricts nothing. Two ways to have none, and one answer for both:
-         * this reading was never made at all — the caller holds {@link #NONE}, which is what a
-         * reader of a comparison outside a measured body is given — or the walk fell over before
-         * finishing, since a walk that finished is held to an entry per numbered comparison
-         * ({@link PathReachability#unanswered}). A partial reading is owed the fail-open answer,
-         * the same one every other consumer of one gets.
-         *
-         * <p>What is not among them is a comparison this plan numbers no site for. There is no
-         * occurrence to ask about then, and a caller that has one has it from the plan — asked with
-         * something worked out another way, an absence here would be this reading and the plan
-         * disagreeing, dressed as a fact about the model.
-         */
-        public souther.compiler.reach.ComparisonArrival arrivalAt(
-                ConstructOccurrence at) {
-            souther.compiler.reach.ComparisonArrival answer = arriving.get(at);
-            return answer != null ? answer
-                    : new souther.compiler.reach.ComparisonArrival.NoProjection();
-        }
-
-        /**
          * These answers with what the rows actually did taken in, and the proofs they took back.
          *
          * <p>A row that went through an arm went through it. So a run is a witness — the plainest
@@ -206,13 +281,12 @@ public final class PathReachability {
          * comparison never comes out its way would otherwise stand on two different accounts of
          * what the rows did.
          *
-         * <p>And a row that came to a comparison arrived at it. A row seen bringing a comparison
-         * out either way — or an application answering either way — shows wrong a proof that
-         * nothing arrives there, and what arrives is answered then with what restricts nothing
-         * ({@link ComparisonArrival.NoProjection}): the run says a row came, and not which values
-         * did. Asked where the reading says such a row is recorded ({@link #recordedAt}), which
-         * holds an application as well as a comparison, and not of the places filed above, which
-         * hold comparisons only.
+         * <p>And a row that came to a construct a line is drawn at arrived at it. A row seen
+         * bringing a comparison out either way — or an application answering either way — shows
+         * wrong a proof that nothing arrives there, and what arrives is answered then with what
+         * restricts nothing ({@link ComparisonArrival.NoProjection}): the run says a row came, and
+         * not which values did. Asked of the arrivals where they say such a row is recorded
+         * ({@link Arrivals#recordedAt}), and not of the places above, which hold no application.
          *
          * <p>Every place is held to one rule — seen, and proven unreachable, is a proof shown wrong
          * — and what that weakens is each measure's to say by what it rests on, not this reading's.
@@ -228,7 +302,6 @@ public final class PathReachability {
             seen.forEach(outcome -> requireNumbering(outcome.at().numbering()));
             Map<ControlPlace, Reachability> out = new LinkedHashMap<>(found);
             Set<ControlPlace> places = new LinkedHashSet<>();
-            Set<ConstructOccurrence> emptyArrivals = new LinkedHashSet<>();
             found.forEach((where, said) -> {
                 Optional<Witness> ran = switch (where) {
                     case ControlPlace.Arm arm ->
@@ -246,21 +319,11 @@ public final class PathReachability {
                 }
                 out.put(where, new Reachability.Reachable(ran.get()));
             });
-            recordedAt.forEach((construct, site) -> {
-                if (arriving.get(construct) instanceof ComparisonArrival.NothingArrives
-                        && (seen.contains(new SeenConditionOutcome(site, true))
-                                || seen.contains(new SeenConditionOutcome(site, false)))) {
-                    emptyArrivals.add(construct);
-                }
-            });
+            Set<ConstructOccurrence> emptyArrivals = arrivals.shownWrongBy(seen);
             if (places.isEmpty() && emptyArrivals.isEmpty()) {
-                return new AsRun(new Answers(numbering, out, arriving, recordedAt),
-                        Contradictions.NONE);
+                return new AsRun(new Answers(numbering, out, arrivals), Contradictions.NONE);
             }
-            Map<ConstructOccurrence, ComparisonArrival> arrived = new LinkedHashMap<>(arriving);
-            emptyArrivals.forEach(comparison ->
-                    arrived.put(comparison, new ComparisonArrival.NoProjection()));
-            return new AsRun(new Answers(numbering, out, arrived, recordedAt),
+            return new AsRun(new Answers(numbering, out, arrivals.takingBack(emptyArrivals)),
                     new Contradictions(places, emptyArrivals));
         }
 
@@ -285,12 +348,14 @@ public final class PathReachability {
          *
          * <p>Two kinds, because they are two propositions. That nothing comes out of a comparison
          * one way is about a place ({@link ControlPlace.Outcome}), as nothing arriving at an arm is;
-         * that nothing arrives at a comparison at all is about the comparison, and either of its
-         * ways may be rightly proven while that is wrong.
+         * that nothing arrives at a construct a line is drawn at is about the construct
+         * ({@link Arrivals}), and either way out of a comparison may be rightly proven while that
+         * is wrong.
          *
          * @param places        arms and comparison outcomes proven unreachable that a row went
          *                      through
-         * @param emptyArrivals comparisons proven to be arrived at by nothing that a row came to
+         * @param emptyArrivals comparisons and applications proven to be arrived at by nothing
+         *                      that a row came to
          */
         public record Contradictions(Set<ControlPlace> places,
                                      Set<ConstructOccurrence> emptyArrivals) {
@@ -308,17 +373,6 @@ public final class PathReachability {
             public boolean isEmpty() {
                 return places.isEmpty() && emptyArrivals.isEmpty();
             }
-        }
-
-        /**
-         * What arrives at each comparison, and nothing about any place.
-         *
-         * <p>For a reader that asks only {@link #arrivalAt}, so that what it is handed changes only
-         * where that does. Every place answers unsettled here, which is the fail-open answer and
-         * the one a reader of no place never meets.
-         */
-        public Answers arrivalsOnly() {
-            return new Answers(numbering, Map.of(), arriving, recordedAt);
         }
 
         /** Whether this reading proved nothing arrives anywhere, which is what a walk that would
@@ -429,7 +483,8 @@ public final class PathReachability {
         Map<ConstructOccurrence, ConditionOutcomeSite> recordedAt = new LinkedHashMap<>();
         arriving.keySet().forEach(construct -> plan.outcomeOf(construct, true)
                 .ifPresent(way -> recordedAt.put(construct, way.at())));
-        return new Answers(Optional.of(plan.identity()), out, arriving, recordedAt);
+        Optional<NumberingIdentity> numbering = Optional.of(plan.identity());
+        return new Answers(numbering, out, new Arrivals(numbering, arriving, recordedAt));
     }
 
     /**

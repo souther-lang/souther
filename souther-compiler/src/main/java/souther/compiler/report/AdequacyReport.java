@@ -7684,7 +7684,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
 
     /**
      * The proofs of one body's reading of reach a row went against, the places they were about
-     * first and the comparisons said to be arrived at by nothing after.
+     * first and the constructs lines are drawn at said to be arrived at by nothing after.
      *
      * <p>Beside the measures and in none of them. Which measure rested on which proof is that
      * measure's to say — the arm count of its denominator, a rule of what would have left it no row
@@ -7698,10 +7698,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         }
         ArrayNode all = into.putArray("reachProofsContradicted");
         shownWrong.places().forEach(place -> reachProof(all.addObject(), place));
-        for (ConstructOccurrence comparison : shownWrong.emptyArrivals()) {
+        for (ConstructOccurrence construct : shownWrong.emptyArrivals()) {
             ObjectNode one = all.addObject();
-            one.put("kind", word(ReachProofWord.COMPARISON_ARRIVAL));
-            constructId(one.putObject("construct"), comparison);
+            one.put("kind", word(ReachProofWord.ARRIVAL));
+            constructId(one.putObject("construct"), construct);
         }
     }
 

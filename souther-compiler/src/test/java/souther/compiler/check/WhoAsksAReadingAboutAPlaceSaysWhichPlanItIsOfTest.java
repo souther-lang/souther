@@ -56,8 +56,11 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  */
 class WhoAsksAReadingAboutAPlaceSaysWhichPlanItIsOfTest {
 
-    private static final String A_READING =
-            "souther/compiler/check/PathReachability$Answers";
+    /** The two halves of a reading: what arrives at the places, and what arrives at the
+     *  constructs lines are drawn at. Either is asked about something of a plan. */
+    private static final Set<String> A_READING = Set.of(
+            "souther/compiler/check/PathReachability$Answers",
+            "souther/compiler/check/PathReachability$Arrivals");
 
     /** The two ways a reading is asked about a place of a plan. Both answer an absence as an
      *  ordinary fact, so neither can tell a caller it was handed the wrong reading. */
@@ -156,7 +159,7 @@ class WhoAsksAReadingAboutAPlaceSaysWhichPlanItIsOfTest {
             for (MethodModel method : model.methods()) {
                 method.code().ifPresent(code -> code.forEach(element -> {
                     if (element instanceof InvokeInstruction call
-                            && call.owner().asInternalName().equals(A_READING)
+                            && A_READING.contains(call.owner().asInternalName())
                             && ASKS_ABOUT_A_PLACE.contains(call.name().stringValue())) {
                         calls.merge(from + "." + wroteIt(method.methodName().stringValue())
                                 + " -> " + call.name().stringValue(), 1, Integer::sum);

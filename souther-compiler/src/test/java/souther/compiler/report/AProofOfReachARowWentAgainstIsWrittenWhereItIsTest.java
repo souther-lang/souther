@@ -58,7 +58,7 @@ class AProofOfReachARowWentAgainstIsWrittenWhereItIsTest {
         JsonNode written = into.get("reachProofsContradicted");
         List<String> kinds = new ArrayList<>();
         written.forEach(each -> kinds.add(each.get("kind").stringValue()));
-        assertEquals(List.of("arm", "comparison_outcome", "comparison_arrival"), kinds,
+        assertEquals(List.of("arm", "comparison_outcome", "arrival"), kinds,
                 "the places first, in the order the reading found them, and the arrivals after");
         assertEquals(places.arm().arm().part(), written.get(0).get("part").intValue(),
                 "an arm says which of the fork's arms");
