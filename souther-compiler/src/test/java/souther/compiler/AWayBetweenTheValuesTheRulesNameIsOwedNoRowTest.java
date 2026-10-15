@@ -7,17 +7,18 @@ import souther.compiler.check.PathReachability;
 import souther.compiler.coverage.ControlPlace;
 import souther.compiler.coverage.SeenConditionOutcome;
 import souther.compiler.diag.SourceRendering;
+import souther.compiler.partition.DecisionReading;
 import souther.compiler.partition.DecisionRule;
+import souther.compiler.partition.NoInputTakesIt;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.RuleRequirement;
-import souther.compiler.query.RuleSearch;
 import souther.compiler.query.SettledAcross;
-import souther.compiler.query.SettledAt;
 import souther.compiler.reach.Reachability;
 import souther.compiler.report.AdequacyReport;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -33,10 +34,15 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>{@code Odd} holds 1, 3 and 7. A way that needs its value at or above 2 and below 3 asks for a
  * value inside the range the three run between and outside the three, so nothing takes it — and
- * what says so is the reading of the body's reach, the one the branch count is made by, and not a
- * search that came to nothing. Both measures read that one answer: the arm leaves the branch count,
- * and the rule of the decision through it is out by the comparison it needs to come out a way
- * nothing arrives at coming out so.
+ * what says so is a proof had of the model, and not a search that came to nothing. The reading of
+ * the body's reach, the one the branch count is made by, takes the arm out of the branch count. The
+ * reading of the decision proves the way through it one no input takes, by the numbers its two
+ * comparisons state with what {@code Odd} holds, and holds that way once in place of the rules past
+ * it.
+ *
+ * <p>Between strings, whose order has no arithmetic to say a range in, the numbers prove nothing:
+ * the rule is read as any other, and it is the reading of reach that puts it out, by the comparison
+ * it needs to come out a way nothing arrives at coming out so.
  */
 class AWayBetweenTheValuesTheRulesNameIsOwedNoRowTest {
 
@@ -80,9 +86,28 @@ class AWayBetweenTheValuesTheRulesNameIsOwedNoRowTest {
     void aWayBetweenTheNumbersIsOutByTheComparisonItNeeds() {
         String model = ODD.replace("BOUND", "3");
 
-        assertEquals(List.of("a_comparison_outcome_nothing_reaches"), excludedBecause(model),
-                "the rule through the inner `then` is the one out, and by the reading of reach");
+        assertEquals(List.of("the_numbers_on_the_way_leave_none"), waysNoInputTakes(model),
+                "the way through the inner `then` is the one no input takes, and by the numbers");
+        assertEquals(List.of(), excludedBecause(model),
+                "and no rule past it is an obligation to be put out");
+        DecisionReading read = reading(model);
+        DecisionReading.ImpossiblePath way = read.impossible().getFirst();
+        assertEquals(2, way.way().rule().consulted().size(),
+                () -> "the way is the two comparisons the inner `then` needs: " + way);
+        assertEquals(2, read.rules().size(),
+                () -> "the rules left are the outer `then` and the inner `else`: " + read.found());
+        assertTrue(read.rules().stream().noneMatch(way::standsFor),
+                () -> "and neither is past the way: " + read.found());
         String page = human(model);
+        assertTrue(saysTheWays(page, List.of(
+                        "      · no input takes 1 way through this body, and no row is owed at a"
+                                + " rule past it",
+                        "          · the declarations and the conditions on the way leave no value:",
+                        "              · the comparison at 9:27 does not hold",
+                        "              · the comparison at 9:57 holds")),
+                () -> "the page says the way by the two comparisons:\n" + page);
+        assertTrue(page.contains("decision    rules 2"),
+                () -> "and counts it apart from the rules:\n" + page);
         assertTrue(page.contains("branch      3/3"),
                 () -> "the inner `then` leaves the branch count:\n" + page);
         assertFalse(page.contains("no row goes through"), () -> page);
@@ -91,7 +116,8 @@ class AWayBetweenTheValuesTheRulesNameIsOwedNoRowTest {
     }
 
     @Test
-    void aWayBetweenTheStringsIsOutTheSameWay() {
+    void aWayBetweenTheStringsIsOutByTheReadingOfReach() {
+        assertEquals(List.of(), waysNoInputTakes(CODE), "no numbers say the gap between strings");
         assertEquals(List.of("a_comparison_outcome_nothing_reaches"), excludedBecause(CODE));
         String page = human(CODE);
         assertTrue(page.contains("branch      3/3"), () -> page);
@@ -128,8 +154,15 @@ class AWayBetweenTheValuesTheRulesNameIsOwedNoRowTest {
                     | "blank" : (Blank) -> High
                 """;
 
-        assertEquals(List.of("a_comparison_outcome_nothing_reaches"), excludedBecause(model));
+        assertEquals(List.of("the_numbers_on_the_way_leave_none"), waysNoInputTakes(model));
+        assertEquals(List.of(), excludedBecause(model));
         String page = human(model);
+        assertTrue(saysTheWays(page, List.of(
+                        "          · the declarations and the conditions on the way leave no value:",
+                        "              · the comparison at 12:30 does not hold",
+                        "              · the comparison at 12:60 holds")),
+                () -> "the way is the two comparisons of what the arm binds, and nothing of the"
+                        + " arm it takes them under:\n" + page);
         assertTrue(page.contains("branch      5/5"), () -> page);
         assertFalse(page.contains("no row expects `Low`"), () -> page);
     }
@@ -141,25 +174,30 @@ class AWayBetweenTheValuesTheRulesNameIsOwedNoRowTest {
         String model = ODD.replace("BOUND", "4");
 
         assertEquals(List.of(), excludedBecause(model), "3 takes the way through the inner `then`");
+        assertEquals(List.of(), waysNoInputTakes(model), "so nothing proves no input takes it");
         String page = human(model);
         assertTrue(page.contains("no row goes through `then`"),
                 () -> "and nothing went through it:\n" + page);
     }
 
     /**
-     * The settlement was the model's, read off the rules before anything was composed.
+     * The proof was the model's, had where the ways were read, before anything was composed.
      *
-     * <p>Which is what keeps the word from being a search's: a search that came to nothing says
-     * {@link RuleRequirement.Excluded.NoValueCanTakeIt}, and this one composed no row at all.
+     * <p>Which is what keeps it from being a search's: a search that came to nothing says
+     * {@link RuleRequirement.Excluded.NoValueCanTakeIt}, and this one was handed no rule past the
+     * way at all.
      */
     @Test
     void nothingIsComposedForTheRule() {
-        List<SettledAt> out = excludedPlaces(ODD.replace("BOUND", "3"));
+        String model = ODD.replace("BOUND", "3");
+        DecisionReading.ImpossiblePath way = reading(model).impossible().getFirst();
 
-        assertEquals(1, out.size(), () -> "one rule, stated at one place: " + out);
-        assertInstanceOf(RuleRequirement.Excluded.AComparisonOutcomeNothingReaches.class,
-                out.getFirst().settlement().requirement());
-        assertInstanceOf(RuleSearch.NotMade.class, out.getFirst().settlement().search());
+        assertInstanceOf(NoInputTakesIt.TheNumbersLeaveNone.class, way.why());
+        assertEquals(Map.of(), searched(model),
+                "the two rules left are taken by the rows, and nothing past the way is a rule to"
+                        + " hand the search");
+        assertTrue(reading(model).rules().stream().noneMatch(way::standsFor),
+                () -> "the rules are the two left: " + reading(model).found());
     }
 
     /**
@@ -198,10 +236,11 @@ class AWayBetweenTheValuesTheRulesNameIsOwedNoRowTest {
      * A helper's comparison stands once per call, and each call's copy is out on its own reading.
      *
      * <p>{@code pick} decides by both calls, so a rule of it is one way through the first call's
-     * fork beside one way through the second's: three by three. The ways through the middle of the
-     * first call are out, since what it is handed is one of the three. Those through the middle of
-     * the second are out only where the second is handed one of the three as well — a 2 handed in
-     * there takes them, and a copy of the first speaking for the second would take them away.
+     * fork beside one way through the second's: three by three. The way through the middle of the
+     * first call is one no input takes, since what it is handed is one of the three, and it stands
+     * for the three rules past it. The way through the middle of the second is one only where the
+     * second is handed one of the three as well — a 2 handed in there takes it, and a copy of the
+     * first's proof speaking for the second would take its rules away.
      *
      * @param second what the second call hands the helper: a value of {@code Odd} again, or a
      *               number nothing holds to the three
@@ -228,17 +267,44 @@ class AWayBetweenTheValuesTheRulesNameIsOwedNoRowTest {
 
     @Test
     void aHelpersComparisonIsOutAtACallOnlyByWhatThatCallHandsIt() {
-        // By the reading of reach and not by a search: a search finds the same ways empty where it
-        // composes a row for each, and counted without the word this would hold of a compiler that
-        // had stopped reading what a call's copy is handed.
-        assertEquals(List.of("a_comparison_outcome_nothing_reaches",
-                        "a_comparison_outcome_nothing_reaches",
-                        "a_comparison_outcome_nothing_reaches"),
-                excludedBecause(twoCalls("e")),
-                "the three ways through the first call's middle, and none through the second's");
-        assertEquals(5, excludedBecause(twoCalls("d.value")).stream()
-                        .filter("a_comparison_outcome_nothing_reaches"::equals).count(),
-                "the three through either call's middle, the one through both counted once");
+        // By a proof had where the ways are read and not by a search: a search finds the same ways
+        // empty where it composes a row for each, and counted without the proof this would hold of
+        // a compiler that had stopped reading what a call's copy is handed.
+        String handedAnyNumber = human(twoCalls("e"));
+        assertEquals(List.of("the_numbers_on_the_way_leave_none"), waysNoInputTakes(twoCalls("e")),
+                "one way, through the first call's middle");
+        assertTrue(saysTheWays(handedAnyNumber, List.of(
+                        "      · no input takes 1 way through this body, and no row is owed at a"
+                                + " rule past it",
+                        "          · the declarations and the conditions on the way leave no value:",
+                        "              · the comparison at 8:10 does not hold in band@12:29",
+                        "              · the comparison at 8:39 holds in band@12:29")),
+                () -> "the way is at the first call:\n" + handedAnyNumber);
+        assertTrue(handedAnyNumber.contains("decision    rules 6"),
+                () -> "the three past it are no rules:\n" + handedAnyNumber);
+        assertEquals(List.of(), excludedBecause(twoCalls("e")));
+        assertEquals(2, rulesNoRowTakesThrough(handedAnyNumber,
+                        "the comparison at 8:10 does not hold in band@12:51",
+                        "the comparison at 8:39 holds in band@12:51"),
+                () -> "and the two through the second call's middle are owed:\n" + handedAnyNumber);
+
+        String handedAnOdd = human(twoCalls("d.value"));
+        assertEquals(List.of("the_numbers_on_the_way_leave_none",
+                        "the_numbers_on_the_way_leave_none"),
+                waysNoInputTakes(twoCalls("d.value")), "a way through either call's middle");
+        assertTrue(saysTheWays(handedAnOdd, List.of(
+                        "      · no input takes 2 ways through this body, and no row is owed at a"
+                                + " rule past them",
+                        "          · the declarations and the conditions on the way leave no value:",
+                        "              · the comparison at 8:10 does not hold in band@12:29",
+                        "              · the comparison at 8:39 holds in band@12:29",
+                        "          · the declarations and the conditions on the way leave no value:",
+                        "              · the comparison at 8:10 does not hold in band@12:51",
+                        "              · the comparison at 8:39 holds in band@12:51")),
+                () -> "each at its own call:\n" + handedAnOdd);
+        assertTrue(handedAnOdd.contains("decision    rules 4"),
+                () -> "the five past either are no rules, the one past both counted once:\n"
+                        + handedAnOdd);
     }
 
     /**
@@ -294,18 +360,55 @@ class AWayBetweenTheValuesTheRulesNameIsOwedNoRowTest {
         return out;
     }
 
-    /** Every place of every rule the decision search settled as excluded. */
-    private static List<SettledAt> excludedPlaces(String model) {
+    /** The words the decision's ways no input takes were proved by, one per way. */
+    private static List<String> waysNoInputTakes(String model) {
+        JsonNode ways = JSON.readTree(json(model))
+                .get("modules").get(0).get("behaviors").get(0)
+                .get("decision").get("waysNoInputTakes");
+        List<String> out = new ArrayList<>();
+        if (ways != null) {
+            ways.forEach(way -> out.add(way.get("because").stringValue()));
+        }
+        return out;
+    }
+
+    /** The reading of {@code pick}'s decision. */
+    private static DecisionReading reading(String model) {
         Compilation compilation = measured(model);
-        Map<DecisionRule, SettledAcross> rules = compilation.db()
+        return compilation.db()
+                .ask(new Adequacy.DecisionReadings(compilation.modules().getFirst())).value()
+                .get("pick");
+    }
+
+    /** Every rule the decision search was handed, with what it settled. */
+    private static Map<DecisionRule, SettledAcross> searched(String model) {
+        Compilation compilation = measured(model);
+        return compilation.db()
                 .ask(new Adequacy.DecisionSearch(compilation.modules().getFirst(), "pick"))
                 .value();
-        List<SettledAt> out = new ArrayList<>();
-        rules.values().forEach(settled -> settled.places().stream()
-                .filter(place -> place.settlement().requirement()
-                        instanceof RuleRequirement.Excluded)
-                .forEach(out::add));
-        return out;
+    }
+
+    /** Whether {@code page} says {@code lines}, one after another. */
+    private static boolean saysTheWays(String page, List<String> lines) {
+        return Collections.indexOfSubList(page.lines().toList(), lines) >= 0;
+    }
+
+    /** How many rules the page says no row takes whose conditions include every one of
+     *  {@code conditions}. */
+    private static long rulesNoRowTakesThrough(String page, String... conditions) {
+        List<List<String>> rules = new ArrayList<>();
+        List<String> current = null;
+        for (String line : page.lines().toList()) {
+            if (line.equals("      ! no row takes a decision rule")) {
+                current = new ArrayList<>();
+                rules.add(current);
+            } else if (current != null && line.startsWith("          · ")) {
+                current.add(line.substring("          · ".length()));
+            } else {
+                current = null;
+            }
+        }
+        return rules.stream().filter(rule -> rule.containsAll(List.of(conditions))).count();
     }
 
     private static String human(String model) {

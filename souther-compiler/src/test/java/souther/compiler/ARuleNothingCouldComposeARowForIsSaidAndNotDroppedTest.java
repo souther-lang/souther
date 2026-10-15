@@ -327,6 +327,8 @@ class ARuleNothingCouldComposeARowForIsSaidAndNotDroppedTest {
      * rules cannot hold for what it is applied to. What is owed of the other call is untouched by
      * that: a way through it is a way an author writes a row for, and reporting it as one the
      * model's own rules excuse would be answering about one call with what was found at the next.
+     * The way the rule handed in at the first call holds on is one no input takes, and it is said
+     * of that call's condition alone.
      */
     @Test
     void aRuleThatCannotHoldAtOneCallLeavesTheOtherCallsWaysOwed() {
@@ -334,7 +336,8 @@ class ARuleNothingCouldComposeARowForIsSaidAndNotDroppedTest {
             List<String> owedWhereTheRuleCanHold = new ArrayList<>();
             List<String> saidWhereItCannot = new ArrayList<>();
             for (JsonNode rule : rulesOf(eachWithItsOwnRule(first))) {
-                (heldAt("age", rule) ? owedWhereTheRuleCanHold : saidWhereItCannot)
+                (heldAt("age", rule.get("obligationId")) ? owedWhereTheRuleCanHold
+                        : saidWhereItCannot)
                         .add(rule.get("requirement") == null ? "nothing said"
                                 : rule.get("requirement").stringValue());
             }
@@ -343,30 +346,48 @@ class ARuleNothingCouldComposeARowForIsSaidAndNotDroppedTest {
                     () -> "the call handing the second rule reaches the arm, so nothing shows the"
                             + " ways down it out of reach (" + first + " first): "
                             + owedWhereTheRuleCanHold);
-            // And the ways the first call's rule cannot hold on are excluded, which is what makes
-            // the sentence above about attribution. Asked of the same pair of runs: a reading that
-            // excluded nothing at all would pass the line above by having nothing to say.
-            assertEquals(List.of("excluded", "excluded"), saidWhereItCannot,
-                    () -> "a value the invariant refuses is what those ways need, which is the"
+            assertEquals(2, owedWhereTheRuleCanHold.size(),
+                    () -> "both ways of the other call are rules (" + first + " first): "
+                            + owedWhereTheRuleCanHold);
+            assertEquals(List.of(), saidWhereItCannot,
+                    () -> "no rule goes where the first call's rule holds (" + first + " first): "
+                            + saidWhereItCannot);
+            // And the way the first call's rule holds on is one no input takes, which is what makes
+            // the sentences above about attribution. Asked of the same pair of runs: a reading that
+            // proved nothing at all would pass the line above by having nothing to say.
+            JsonNode ways = waysNoInputTakesOf(eachWithItsOwnRule(first));
+            assertNotNull(ways, () -> "a way no input takes is said (" + first + " first)");
+            assertEquals(1, ways.size(), () -> "one way (" + first + " first): " + ways);
+            JsonNode way = ways.get(0);
+            assertEquals("the_numbers_on_the_way_leave_none", way.get("because").stringValue(),
+                    () -> "a value the invariant refuses is what the way needs, which is the"
                             + " model's answer and not a search that fell short (" + first
-                            + " first): " + saidWhereItCannot);
+                            + " first): " + way);
+            assertEquals(1, way.get("way").get("conditions").size(),
+                    () -> "said of the first call's condition, and of nothing at the other call ("
+                            + first + " first): " + way);
+            assertFalse(heldAt("age", way.get("way")),
+                    () -> "the way is the one the rule handed in holds on (" + first + " first): "
+                            + way);
         }
     }
 
     /**
-     * Whether the way this rule is takes the branch its condition on {@code position} holds at.
+     * Whether the way this obligation names takes the branch its condition on {@code position}
+     * holds at.
      *
      * <p>Read off the condition the way names rather than off where it was written: what tells the
      * two calls apart is which position the rule handed in is applied to, and both of them are the
      * same authored fork.
      */
-    private static boolean heldAt(String position, JsonNode rule) {
-        for (JsonNode condition : rule.get("obligationId").get("conditions")) {
+    private static boolean heldAt(String position, JsonNode obligationId) {
+        for (JsonNode condition : obligationId.get("conditions")) {
             if (condition.get("condition").stringValue().contains(position + "=")) {
                 return "held".equals(condition.get("outcome").stringValue());
             }
         }
-        throw new IllegalStateException("no condition of this way is over " + position + ": " + rule);
+        throw new IllegalStateException("no condition of this way is over " + position + ": "
+                + obligationId);
     }
 
     @Test
@@ -385,6 +406,13 @@ class ARuleNothingCouldComposeARowForIsSaidAndNotDroppedTest {
         return JSON.readTree(json(model))
                 .get("modules").get(0).get("behaviors").get(0)
                 .get("decision").get("obligations");
+    }
+
+    /** The ways no input takes through the one behavior's body, as the document writes them. */
+    private static JsonNode waysNoInputTakesOf(String model) {
+        return JSON.readTree(json(model))
+                .get("modules").get(0).get("behaviors").get(0)
+                .get("decision").get("waysNoInputTakes");
     }
 
     /** What the document says a row is owed at, rule by rule. */
