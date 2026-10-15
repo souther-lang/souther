@@ -135,15 +135,20 @@ class AConditionOverValuesWrittenOutIsReadOnEachApplicationTest {
                 + " two together are past it");
     }
 
-    /** The cases of each side of a comparison are compared with each other's, and counted so. */
+    /**
+     * The cases of each side of a comparison are compared with each other's, and counted so: a
+     * chain of {@code n} cases is {@code n - 1} ifs of two arms each, read once on the left and once
+     * more under each of the left's {@code n} cases, which is {@code 2(n² - 1)} arms read in all.
+     */
     @Test
     void casesComparedWithCasesAreCountedTogether() {
-        int side = (int) Math.sqrt(CompositionBudget.READINGS_OF_ONE_CONDITION.maximum());
+        int side = (int) Math.sqrt(
+                CompositionBudget.TOTAL_READINGS_OF_ONE_CONDITION.maximum() / 2 + 1);
         Proposition within = stated(choices("w.n", side) + " > " + choices("w.first.days", side));
         assertFalse(unreadIn(within), () -> "within the figure: " + within);
         Proposition past = stated(choices("w.n", side + 1) + " > "
                 + choices("w.first.days", side + 1));
-        assertEquals(List.of(new WhyUnread.MoreReadingsThanAreMade()), whysIn(past));
+        assertEquals(List.of(new WhyUnread.MoreTotalReadingsThanAreMade()), whysIn(past));
     }
 
     /**
