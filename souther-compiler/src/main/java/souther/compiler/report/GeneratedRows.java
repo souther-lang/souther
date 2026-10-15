@@ -327,7 +327,7 @@ public final class GeneratedRows {
     private static String openingFor(GenerationOutcome.NotSupported.Reason why) {
         return switch (why) {
             case NO_WAY_INTO_THIS_ARM_CAN_BE_NAMED, THE_WAYS_INTO_THIS_ARM_ARE_NOT_ENUMERABLE,
-                 MORE_WAYS_IN_THAN_THE_READING_HOLDS, THE_ARM_RUNS_WHERE_SOMETHING_CALLS_IT,
+                 THE_WAYS_INTO_THIS_ARM_ARE_NOT_TOLD_APART, MORE_WAYS_IN_THAN_THE_READING_HOLDS, THE_ARM_RUNS_WHERE_SOMETHING_CALLS_IT,
                  A_CONSTRUCTION_DECIDES_THIS_ARM, NO_AXIS_AT_THIS_POSITION ->
                     "nothing offers a row for";
             case NO_STRATEGY_FOR_AN_OUTPUT_CASE -> "nothing aims a row at";

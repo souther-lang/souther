@@ -41,22 +41,25 @@ import java.util.Set;
 public final class WrittenLines {
 
     /**
-     * Where a walk is: under which of the author's lines, whether it came through what decided a
-     * caller's choice, and whether it is inside another comparison the author wrote — whose
-     * relation faces that comparison's sides and not this one's.
+     * Where a walk is: under which of the author's lines, where a row takes the arms of it, whether
+     * it came through what decided a caller's choice, and whether it is inside another comparison
+     * the author wrote — whose relation faces that comparison's sides and not this one's.
      */
-    private record Under(WrittenLine line, boolean decidedOutside, boolean inAnother) {
+    private record Under(WrittenLine line, Proposition taken, boolean decidedOutside,
+                         boolean inAnother) {
 
-        Under then(WrittenLine.Arm arm) {
-            return new Under(line.then(arm), decidedOutside, inAnother);
+        /** One arm further in, taken where {@code taking} holds as well. */
+        Under then(WrittenLine.Arm arm, Proposition taking) {
+            return new Under(line.then(arm), Proposition.all(List.of(taken, taking)),
+                    decidedOutside, inAnother);
         }
 
         Under outside() {
-            return new Under(line, true, inAnother);
+            return new Under(line, taken, true, inAnother);
         }
 
         Under inAnotherComparison() {
-            return new Under(line, decidedOutside, true);
+            return new Under(line, taken, decidedOutside, true);
         }
     }
 
@@ -84,6 +87,8 @@ public final class WrittenLines {
     private final Set<WrittenLine> settled = new HashSet<>();
     /** Each relation made, held, under its spelling. */
     private final Map<String, Proposition.Compared> stated = new HashMap<>();
+    /** Where a row takes the arms of each line some relation was made under. */
+    private final Map<WrittenLine, Proposition> taken = new LinkedHashMap<>();
 
     private WrittenLines(ExpansionLineage comparison, Optional<ModelOccurrence> where) {
         this.comparison = comparison;
@@ -93,7 +98,7 @@ public final class WrittenLines {
     /**
      * For each relation {@code how} concludes, spelled as {@link Proposition.Compared#heldKey}, the
      * lines of the comparison standing in {@code comparison} it is a place of, and how it stands to
-     * each.
+     * each; and where a row takes the arms of each of those lines.
      *
      * @param where   the construct of the model the comparison is, as the derivation was
      *                concluded at
@@ -103,11 +108,12 @@ public final class WrittenLines {
      *                an application states, whose lines are each what its operation's law says of
      *                it, and claim what that says
      */
-    public static Map<String, Map<WrittenLine, AuthoredPointMapping>> of(
+    public static AuthorsLines of(
             Derivation how, ExpansionLineage comparison, Optional<ModelOccurrence> where,
             Optional<ComparisonClaim> written) {
         WrittenLines lines = new WrittenLines(comparison, where);
-        lines.walk(how, new Under(WrittenLine.THE_COMPARISON, false, false));
+        lines.walk(how, new Under(WrittenLine.THE_COMPARISON, new Proposition.Always(true), false,
+                false));
         Map<String, Map<WrittenLine, AuthoredPointMapping>> out = new LinkedHashMap<>();
         lines.seen.forEach((relation, under) -> {
             Map<WrittenLine, AuthoredPointMapping> each = new LinkedHashMap<>();
@@ -125,7 +131,7 @@ public final class WrittenLines {
             });
             out.put(relation, each);
         });
-        return out;
+        return new AuthorsLines(out, lines.taken);
     }
 
     private void walk(Derivation step, Under under) {
@@ -158,14 +164,19 @@ public final class WrittenLines {
         }
     }
 
-    /** Each arm of {@code choice}, walked under its own arm of {@code at}. */
+    /**
+     * Each arm of {@code choice}, walked under its own arm of {@code at}: what an arm answers where
+     * a row takes the arm, and what selects it wherever the choice is made.
+     */
     private void armsOf(WrittenChoice at, Derivation choice, Under under) {
         madeHere(choice, premisesOf(choice), under);
+        Proposition always = new Proposition.Always(true);
         switch (choice) {
             case Derivation.IfThenElse(var condition, var then, var otherwise) -> {
-                walk(condition, under.then(new WrittenLine.Arm(at, 0, true)));
-                walk(then, under.then(new WrittenLine.Arm(at, 0, false)));
-                walk(otherwise, under.then(new WrittenLine.Arm(at, 1, false)));
+                Proposition holds = concluded.of(condition);
+                walk(condition, under.then(new WrittenLine.Arm(at, 0, true), always));
+                walk(then, under.then(new WrittenLine.Arm(at, 0, false), holds));
+                walk(otherwise, under.then(new WrittenLine.Arm(at, 1, false), holds.denied()));
             }
             case Derivation.MatchArms(var arms) -> arms(at, arms, under);
             case Derivation.AnOperationsCases(var _, var cases) -> arms(at, cases, under);
@@ -177,9 +188,14 @@ public final class WrittenLines {
     }
 
     private void arms(WrittenChoice at, List<Derivation.MatchArms.Arm> arms, Under under) {
+        Proposition always = new Proposition.Always(true);
+        List<Proposition> before = new ArrayList<>();
         for (int i = 0; i < arms.size(); i++) {
-            walk(arms.get(i).selects(), under.then(new WrittenLine.Arm(at, i, true)));
-            walk(arms.get(i).states(), under.then(new WrittenLine.Arm(at, i, false)));
+            Proposition selects = concluded.of(arms.get(i).selects());
+            walk(arms.get(i).selects(), under.then(new WrittenLine.Arm(at, i, true), always));
+            walk(arms.get(i).states(), under.then(new WrittenLine.Arm(at, i, false),
+                    Derivation.taken(before, selects)));
+            before.add(selects);
         }
     }
 
@@ -224,7 +240,8 @@ public final class WrittenLines {
             case Derivation.ALawJoins(var _, var parts) -> {
                 madeHere(step, parts, under);
                 for (int i = 0; i < parts.size(); i++) {
-                    ofTheLaw(at, parts.get(i), under.then(new WrittenLine.Arm(at, i, false)));
+                    ofTheLaw(at, parts.get(i), under.then(new WrittenLine.Arm(at, i, false),
+                            new Proposition.Always(true)));
                 }
             }
             case Derivation.ALawJoinsWithoutWhatImpliesAnother(var _, var each) -> {
@@ -232,7 +249,8 @@ public final class WrittenLines {
                 for (int i = 0; i < each.size(); i++) {
                     if (each.get(i) instanceof Derivation.ALawJoinsWithoutWhatImpliesAnother
                             .Disjunct.Read(var read)) {
-                        ofTheLaw(at, read, under.then(new WrittenLine.Arm(at, i, false)));
+                        ofTheLaw(at, read, under.then(new WrittenLine.Arm(at, i, false),
+                                new Proposition.Always(true)));
                     }
                 }
             }
@@ -264,6 +282,9 @@ public final class WrittenLines {
         if (!under.decidedOutside()) {
             drawn.add(under.line());
         }
+        // Reached by more than one way to it, a line's arms are taken where any of them is.
+        taken.merge(under.line(), under.taken(), (one, other) -> Proposition.any(List.of(one,
+                other)));
         for (String each : here) {
             boolean itsOwn = each.equals(own);
             Seen how = new Seen(under.decidedOutside() ? null

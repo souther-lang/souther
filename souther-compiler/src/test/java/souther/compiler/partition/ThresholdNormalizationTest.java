@@ -320,7 +320,8 @@ class ThresholdNormalizationTest {
     private static List<String> pointsAgainstTheLines(Axis axis,
                                                       souther.compiler.inputs.Quantities reading,
                                                       NumericDomain.Bounds within) {
-        return Partitions.bordersOf(axis, reading, within, new LinesRead()).stream()
+        return Partitions.bordersOf(axis, reading, within, new LinesRead(), (one, other) -> false)
+                .stream()
                 .flatMap(border -> java.util.stream.Stream.of(PointRole.ON, PointRole.OFF)
                         .filter(role -> border.demand(role).criterion() != null)
                         .map(role -> role + " "

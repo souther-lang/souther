@@ -5,10 +5,13 @@ import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.TermPath;
 
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.TreeMap;
 
 /**
@@ -318,14 +321,21 @@ public final class WhereEachLineDecides {
         private final Map<String, Integer> index;
         private final Map<String, Literal> leaves;
         private final boolean[] table;
+        private final boolean[] possible;
+        /** Whether some part has asked for the statement under each case of a value. */
+        private boolean readUnderEachCase;
+        /** The statement under each case of a value, once some part asked for it — null where it
+         *  asks no value's case twice. */
+        private List<UnderACase> underEachCase;
 
         private Reading(Proposition stated, List<Proposition> named, Map<String, Integer> index,
-                        Map<String, Literal> leaves, boolean[] table) {
+                        Map<String, Literal> leaves, boolean[] table, boolean[] possible) {
             this.stated = stated;
             this.named = named;
             this.index = index;
             this.leaves = leaves;
             this.table = table;
+            this.possible = possible;
         }
 
         /** The parts the statement joins, held, in the order of their spellings. */
@@ -345,7 +355,8 @@ public final class WhereEachLineDecides {
             boolean[] table = named.size() <= MOST_PARTS_READ_TOGETHER
                     && (1L << named.size()) * placesIn(stated) <= MOST_PLACES_READ
                     ? tabulated(stated, leaves, index, named.size()) : null;
-            return new Reading(stated, named, index, leaves, table);
+            return new Reading(stated, named, index, leaves, table,
+                    table == null ? null : possible(named));
         }
 
         /**
@@ -355,10 +366,24 @@ public final class WhereEachLineDecides {
          * as well inside a quantifier it is not about is not: there it is the same thing of the
          * same row, and comes out the way the part does. Said as one case then, which moves it
          * everywhere it stands.
+         *
+         * <p>Where the table says nothing — there is none, or more cases than are said one by one
+         * — the statement is read under each case of a value it asks the case of, which leaves out
+         * the ways where the value is two cases as the table does; and only past that as one case.
          */
         List<Proposition> turnsOn(Proposition part) {
-            List<Proposition> cases = table == null || insideAWholeQuantifier(stated, part)
-                    ? null : casesOf(table, index.get(part.key()), named);
+            if (insideAWholeQuantifier(stated, part)) {
+                return List.of(heldAgainstItsDenial(stated, part));
+            }
+            List<Proposition> cases = table == null ? null
+                    : casesOf(table, possible, index.get(part.key()), named);
+            if (cases == null) {
+                if (!readUnderEachCase) {
+                    underEachCase = WhereEachLineDecides.underEachCase(stated, named);
+                    readUnderEachCase = true;
+                }
+                cases = underEachCase == null ? null : inEachCaseOfAValue(underEachCase, part);
+            }
             return cases != null ? cases : List.of(heldAgainstItsDenial(stated, part));
         }
 
@@ -384,7 +409,8 @@ public final class WhereEachLineDecides {
             }
             cases.addAll(here);
         }
-        List<Proposition> each = cases == null ? null : cases.stream().distinct().toList();
+        List<Proposition> each = cases == null ? null
+                : joinedOverAValue(cases.stream().distinct().toList());
         if (each != null && each.size() <= MOST_CASES) {
             return each;
         }
@@ -532,15 +558,19 @@ public final class WhereEachLineDecides {
      * differently with the line held and with it failing. The cases are taken by asking the other
      * parts one at a time, in order, each only where what is left still turns on it: a part every
      * way left decides under, or none does, says nothing more.
+     *
+     * <p>Asked only of the ways the parts can come out together ({@link #possible}): what a way no
+     * row is comes to says nothing about where a row has to be.
      */
-    private static List<Proposition> casesOf(boolean[] table, int at, List<Proposition> named) {
+    private static List<Proposition> casesOf(boolean[] table, boolean[] possible, int at,
+                                             List<Proposition> named) {
         int line = 1 << at;
         boolean[] decides = new boolean[table.length];
         for (int ways = 0; ways < table.length; ways++) {
             decides[ways] = (ways & line) == 0 && table[ways] != table[ways | line];
         }
         List<List<Proposition>> cases = new ArrayList<>();
-        if (!split(decides, line, 0, 0, new ArrayList<>(), named, at, cases)) {
+        if (!split(decides, possible, line, 0, 0, new ArrayList<>(), named, at, cases)) {
             return null;
         }
         return cases.stream().map(Proposition::all).toList();
@@ -550,14 +580,18 @@ public final class WhereEachLineDecides {
      * The cases under {@code asked}, the parts whose bits are {@code fixed} coming out as
      * {@code values} says — or false as soon as there are more than {@link #MOST_CASES}, so the
      * limit bounds the work and not only what is kept.
+     *
+     * <p>False as well where no one part tells the ways the line decides at from the rest. Every way
+     * being possible, some part always does; with ways no row is left out, the two may be apart in
+     * two parts at once, and the cases are not said this way.
      */
-    private static boolean split(boolean[] decides, int line, int fixed, int values,
-                                 List<Proposition> asked, List<Proposition> named, int at,
-                                 List<List<Proposition>> into) {
+    private static boolean split(boolean[] decides, boolean[] possible, int line, int fixed,
+                                 int values, List<Proposition> asked, List<Proposition> named,
+                                 int at, List<List<Proposition>> into) {
         boolean some = false;
         boolean every = true;
         for (int ways = 0; ways < decides.length; ways++) {
-            if ((ways & line) == 0 && (ways & fixed) == values) {
+            if ((ways & line) == 0 && (ways & fixed) == values && possible[ways]) {
                 some |= decides[ways];
                 every &= decides[ways];
             }
@@ -571,32 +605,89 @@ public final class WhereEachLineDecides {
         }
         for (int part = 0; part < named.size(); part++) {
             int its = 1 << part;
-            if (part == at || (fixed & its) != 0 || !turnsOn(decides, line, fixed, values, its)) {
+            if (part == at || (fixed & its) != 0
+                    || !turnsOn(decides, possible, line, fixed, values, its)) {
                 continue;
             }
             List<Proposition> held = new ArrayList<>(asked);
             held.add(named.get(part));
-            if (!split(decides, line, fixed | its, values | its, held, named, at, into)) {
+            if (!split(decides, possible, line, fixed | its, values | its, held, named, at,
+                    into)) {
                 return false;
             }
             List<Proposition> failing = new ArrayList<>(asked);
             failing.add(named.get(part).denied());
-            return split(decides, line, fixed | its, values, failing, named, at, into);
+            return split(decides, possible, line, fixed | its, values, failing, named, at, into);
         }
-        throw new IllegalStateException("where a line decides turns on some part where it is"
-                + " neither everywhere nor nowhere");
+        return false;
     }
 
     /** Whether, the parts at {@code fixed} coming out as {@code values}, where the line decides
-     *  turns on the part at {@code its}. */
-    private static boolean turnsOn(boolean[] decides, int line, int fixed, int values, int its) {
+     *  turns on the part at {@code its} between two ways both possible. */
+    private static boolean turnsOn(boolean[] decides, boolean[] possible, int line, int fixed,
+                                   int values, int its) {
         for (int ways = 0; ways < decides.length; ways++) {
             if ((ways & line) == 0 && (ways & its) == 0 && (ways & fixed) == values
+                    && possible[ways] && possible[ways | its]
                     && decides[ways] != decides[ways | its]) {
                 return true;
             }
         }
         return false;
+    }
+
+    /**
+     * Which ways the parts can come out together, the {@code i}th part held where bit {@code i}
+     * is set.
+     *
+     * <p>Parts that say which cases one value of the input is are not free of each other: the
+     * value is one case, so a way is one a row can be only where some one case is in every set of
+     * cases held there and in none failing there. Kept in the table, a way where it is two at once
+     * is a way where a line decides or does not, and what tells it from the rest is asked as a
+     * part: {@code month.value <= minimum(term)} states its line at 12 where {@code term} is
+     * {@code OneYear} and its line at 24 where it is {@code TwoYear}, and with a way where it is
+     * both, the line at 12 decided only where the month is not above 24 as well.
+     *
+     * <p>The cases the parts name need not be every case of the value, so a value none of them
+     * names is a case as well: every way holding none of them is possible.
+     */
+    private static boolean[] possible(List<Proposition> named) {
+        Map<DecisionSubject, List<Integer>> byValue = new LinkedHashMap<>();
+        for (int i = 0; i < named.size(); i++) {
+            if (named.get(i) instanceof Proposition.InCases cases && oneValueOfTheRow(cases)) {
+                byValue.computeIfAbsent(cases.of(), _ -> new ArrayList<>()).add(i);
+            }
+        }
+        boolean[] out = new boolean[1 << named.size()];
+        Arrays.fill(out, true);
+        for (List<Integer> parts : byValue.values()) {
+            if (parts.size() < 2) {
+                continue;
+            }
+            List<Refinement> atoms = new ArrayList<>();
+            for (int each : parts) {
+                ((Proposition.InCases) named.get(each)).cases().atoms().stream()
+                        .filter(atom -> !atoms.contains(atom)).forEach(atoms::add);
+            }
+            // Which of the parts hold for a value that is each case, as bits; and none of them
+            // for a value that is a case none of them names.
+            Set<Integer> holding = new HashSet<>();
+            holding.add(0);
+            for (Refinement atom : atoms) {
+                int bits = 0;
+                for (int each : parts) {
+                    if (((Proposition.InCases) named.get(each)).cases().atoms().contains(atom)) {
+                        bits |= 1 << each;
+                    }
+                }
+                holding.add(bits);
+            }
+            int mask = parts.stream().mapToInt(each -> 1 << each).reduce(0, (a, b) -> a | b);
+            for (int ways = 0; ways < out.length; ways++) {
+                out[ways] &= holding.contains(ways & mask);
+            }
+        }
+        return out;
     }
 
     /**
@@ -609,6 +700,225 @@ public final class WhereEachLineDecides {
         return Proposition.any(List.of(
                 Proposition.all(List.of(held, failing.denied())),
                 Proposition.all(List.of(held.denied(), failing))));
+    }
+
+    /**
+     * Where {@code part} decides in a statement the table does not say it of, read in each case
+     * of one value the statement asks the case of — or null where that is more cases than are
+     * said one by one.
+     *
+     * <p>The cases of one value are never two at once, and a statement too large for a table, or
+     * one whose table says too much, is read under each case of the value instead: every part
+     * asking which case it is comes out one way, and what is left is a statement of the parts
+     * that case has. {@code days <= limit(s)} with {@code limit} choosing one of eight numbers is,
+     * where {@code s} is the sixth stage, {@code days <= 20} and nothing else. And past every case
+     * the statement names, the value being none of them.
+     *
+     * @param underEachCase the statement read under each case of the value ({@link #underEachCase})
+     */
+    private static List<Proposition> inEachCaseOfAValue(List<UnderACase> underEachCase,
+                                                        Proposition part) {
+        List<Proposition> out = new ArrayList<>();
+        for (UnderACase each : underEachCase) {
+            if (each.reading().index.containsKey(part.key())) {
+                each.reading().turnsOn(part).forEach(one ->
+                        out.add(Proposition.all(List.of(each.is(), one))));
+            }
+        }
+        List<Proposition> joined = joinedOverAValue(out);
+        return joined.size() <= MOST_CASES ? joined : null;
+    }
+
+    /** A statement read under one case of a value: the case, and the reading of what the
+     *  statement comes to there. */
+    private record UnderACase(Proposition is, Reading reading) {}
+
+    /**
+     * {@code stated} read under each case of the first value it asks the case of more than once,
+     * and under that value being none of them — or null where it asks no value's case twice.
+     *
+     * <p>The same for every part of the statement, so worked out once for the statement and asked
+     * of by each of its parts. A value inside the elements or the keys of a container is not one
+     * value of the row, and is not read this way.
+     */
+    private static List<UnderACase> underEachCase(Proposition stated, List<Proposition> named) {
+        Map<DecisionSubject, List<Refinement>> asked = new LinkedHashMap<>();
+        Map<DecisionSubject, Integer> times = new LinkedHashMap<>();
+        for (Proposition each : named) {
+            if (each instanceof Proposition.InCases cases && oneValueOfTheRow(cases)) {
+                times.merge(cases.of(), 1, Integer::sum);
+                List<Refinement> atoms = asked.computeIfAbsent(cases.of(), _ -> new ArrayList<>());
+                cases.cases().atoms().stream().filter(atom -> !atoms.contains(atom))
+                        .forEach(atoms::add);
+            }
+        }
+        DecisionSubject value = times.entrySet().stream().filter(each -> each.getValue() > 1)
+                .map(Map.Entry::getKey).findFirst().orElse(null);
+        if (value == null) {
+            return null;
+        }
+        List<Refinement> atoms = asked.get(value);
+        List<UnderACase> out = new ArrayList<>();
+        for (Refinement atom : atoms) {
+            out.add(new UnderACase(new Proposition.InCases(value, CasesLeft.of(atom), true),
+                    Reading.of(assuming(stated, value, List.of(atom)))));
+        }
+        out.add(new UnderACase(new Proposition.InCases(value, CasesLeft.ofEach(atoms), false),
+                Reading.of(assuming(stated, value, List.of()))));
+        return out;
+    }
+
+    /**
+     * {@code cases}, each of them where {@code taken} holds as well: where a line of the author's
+     * decides that is under arms a row takes only where {@code taken} holds.
+     *
+     * <p>One relation can be a place of several of the author's lines. {@code minimum(term)} with
+     * an arm for each of seventeen terms returning 12 puts one line at 12 under each arm, and the
+     * statement turns at 12 for every one of those terms; the line under the first arm turns it
+     * only for the first. A case asking a value to be cases the arms do not take is no case of the
+     * line, and is left out.
+     */
+    public static List<Proposition> takenWhere(List<Proposition> cases, Proposition taken) {
+        if (taken instanceof Proposition.Always(boolean holds) && holds) {
+            return cases;
+        }
+        return joinedOverAValue(cases.stream()
+                .map(each -> Proposition.all(List.of(each, taken))).toList());
+    }
+
+    /**
+     * {@code stated} with what it asks each value of the row to be said as the cases left: the
+     * cases every set it holds the value to shares, less the cases it holds the value out of — or
+     * holding nowhere where none is left. A value it only holds out of some cases is left asked
+     * that.
+     *
+     * <p>A case read off the table says the parts asked before it failing beside the one that
+     * holds: where the term is not the first case and is the second. Of one value, the first says
+     * nothing the second does not, and said apart it keeps two cases that differ in which case the
+     * value is from being said as one ({@link #joinedOverAValue}).
+     */
+    private static Proposition leftOfEachValue(Proposition stated) {
+        List<Proposition> parts = stated instanceof Proposition.All all ? all.parts()
+                : List.of(stated);
+        Map<DecisionSubject, CasesLeft> held = new LinkedHashMap<>();
+        Map<DecisionSubject, List<Refinement>> outside = new LinkedHashMap<>();
+        List<Proposition> rest = new ArrayList<>();
+        for (Proposition part : parts) {
+            if (part instanceof Proposition.InCases asked && oneValueOfTheRow(asked)) {
+                CasesLeft before = held.get(asked.of());
+                CasesLeft both = before == null ? asked.cases() : before.meet(asked.cases());
+                if (both == null) {
+                    return new Proposition.Always(false);
+                }
+                held.put(asked.of(), both);
+            } else if (part instanceof Proposition.InCases denied && !denied.holds()
+                    && aValueOfTheRow(denied.of())) {
+                outside.computeIfAbsent(denied.of(), _ -> new ArrayList<>())
+                        .addAll(denied.cases().atoms());
+            } else {
+                rest.add(part);
+            }
+        }
+        outside.forEach((value, atoms) -> {
+            if (!held.containsKey(value)) {
+                rest.add(new Proposition.InCases(value, CasesLeft.ofEach(atoms), false));
+            }
+        });
+        for (Map.Entry<DecisionSubject, CasesLeft> each : held.entrySet()) {
+            List<Refinement> out = outside.getOrDefault(each.getKey(), List.of());
+            List<Refinement> left = each.getValue().atoms().stream()
+                    .filter(atom -> !out.contains(atom)).toList();
+            if (left.isEmpty()) {
+                return new Proposition.Always(false);
+            }
+            rest.add(new Proposition.InCases(each.getKey(), CasesLeft.ofEach(left), true));
+        }
+        return Proposition.all(rest);
+    }
+
+    /**
+     * {@code cases}, with every two that ask one value to be two different cases and are the same
+     * otherwise said as one asking it to be either: where the value is A and the rest holds, or B
+     * and the rest holds, is where it is A or B and the rest holds.
+     *
+     * <p>The same cases and so the same rows, said in fewer. Asked before what is said is held to
+     * {@link #MOST_CASES}, because a line every case of a value turns the same way is one case
+     * however many cases the value has: past the bound and read whole instead, it lost which cases
+     * those were, and a reader could no longer be told them.
+     */
+    static List<Proposition> joinedOverAValue(List<Proposition> cases) {
+        Map<String, Joined> joined = new LinkedHashMap<>();
+        for (Proposition written : cases) {
+            // Said as the cases left of each value first, so that what two cases ask of a value is
+            // one set each and the two are told apart by that alone. A case leaving no value is
+            // no case.
+            Proposition each = leftOfEachValue(written);
+            if (each instanceof Proposition.Always(boolean holds) && !holds) {
+                continue;
+            }
+            List<Proposition> parts = each instanceof Proposition.All all ? all.parts()
+                    : List.of(each);
+            Proposition.InCases asked = parts.stream()
+                    .filter(part -> part instanceof Proposition.InCases in && oneValueOfTheRow(in))
+                    .map(Proposition.InCases.class::cast).findFirst().orElse(null);
+            if (asked == null) {
+                joined.putIfAbsent("whole " + each.key(), new Joined(null, each, List.of()));
+                continue;
+            }
+            Proposition rest = Proposition.all(parts.stream().filter(part -> part != asked)
+                    .toList());
+            Joined there = joined.computeIfAbsent(asked.of() + " " + rest.key(),
+                    _ -> new Joined(asked.of(), rest, new ArrayList<>()));
+            asked.cases().atoms().stream().filter(atom -> !there.atoms().contains(atom))
+                    .forEach(there.atoms()::add);
+        }
+        return joined.values().stream().map(Joined::said).toList();
+    }
+
+    /** Cases of {@link #joinedOverAValue} that differ in which case {@code value} is alone; a case
+     *  asking no value's case where {@code value} is null. */
+    private record Joined(DecisionSubject value, Proposition rest, List<Refinement> atoms) {
+
+        Proposition said() {
+            return value == null ? rest : Proposition.all(List.of(
+                    new Proposition.InCases(value, CasesLeft.ofEach(atoms), true), rest));
+        }
+    }
+
+    /**
+     * Whether {@code cases}, held, asks which case one value of the row is. A value inside the
+     * elements or the keys of a container is one of them, and two parts asking it may ask it of two
+     * elements.
+     */
+    private static boolean oneValueOfTheRow(Proposition.InCases cases) {
+        return cases.holds() && aValueOfTheRow(cases.of());
+    }
+
+    /** Whether {@code value} is one value of the row, and not one inside the elements or the keys
+     *  of a container. */
+    private static boolean aValueOfTheRow(DecisionSubject value) {
+        return value instanceof DecisionSubject.AnInput(TermPath at)
+                && at.steps().stream().noneMatch(step -> step instanceof TermPath.Step.Element
+                        || step instanceof TermPath.Step.Key);
+    }
+
+    /**
+     * {@code stated} with {@code value} one of {@code atoms} — every part asking which case it is
+     * come out the way that answers — or none of the cases asked where {@code atoms} is empty.
+     */
+    private static Proposition assuming(Proposition stated, DecisionSubject value,
+                                        List<Refinement> atoms) {
+        return switch (stated) {
+            case Proposition.All all -> Proposition.all(all.parts().stream()
+                    .map(each -> assuming(each, value, atoms)).toList());
+            case Proposition.Any any -> Proposition.any(any.parts().stream()
+                    .map(each -> assuming(each, value, atoms)).toList());
+            case Proposition.InCases cases when cases.of().equals(value) -> new Proposition.Always(
+                    atoms.stream().anyMatch(cases.cases().atoms()::contains) == cases.holds());
+            case Proposition.Some some -> new Proposition.Some(some.container(),
+                    assuming(some.ofTheElement(), value, atoms), some.holds());
+            default -> stated;
+        };
     }
 
     /**

@@ -143,8 +143,10 @@ public final class WhereAnApplicationIsMade {
      * each case of where it decides on one application, met where that application is made.
      *
      * <p>Each case kept once. A case holding wherever a row is makes every other say nothing more,
-     * and one holding nowhere says nothing. Past {@link WhereEachLineDecides#MOST_CASES}, the cases
-     * are said as one: some one of them holding.
+     * and one holding nowhere says nothing. Cases that differ only in which case one value is are
+     * said as one ({@link WhereEachLineDecides#joinedOverAValue}); past
+     * {@link WhereEachLineDecides#MOST_CASES} after that, the cases are said as one: some one of
+     * them holding.
      */
     public static List<Proposition> decidesOn(List<OnOne> readings) {
         Map<String, Proposition> kept = new LinkedHashMap<>();
@@ -160,7 +162,8 @@ public final class WhereAnApplicationIsMade {
                 }
             }
         }
-        List<Proposition> cases = List.copyOf(kept.values());
+        List<Proposition> cases = WhereEachLineDecides.joinedOverAValue(
+                List.copyOf(kept.values()));
         return cases.size() <= WhereEachLineDecides.MOST_CASES ? cases
                 : List.of(Proposition.any(cases));
     }

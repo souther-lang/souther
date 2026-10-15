@@ -2778,7 +2778,10 @@ public final class Generator {
                 // a list's emptiness standing for the other two.
                 List<List<ControlClaim>> written = switch (rest.get().ways()) {
                     case Ways.Unknown<List<ControlClaim>> _ -> null;
-                    case Ways.Known<List<ControlClaim>>(List<List<ControlClaim>> paths) -> paths;
+                    // Any way past is what the search is after, whichever of them a run is seen
+                    // taking.
+                    case Ways.Known<List<ControlClaim>>(List<List<ControlClaim>> paths, var _) ->
+                            paths;
                 };
                 if (written == null || written.isEmpty()) {
                     return Composed.stopping(best, new RepairShortfall(purposes,

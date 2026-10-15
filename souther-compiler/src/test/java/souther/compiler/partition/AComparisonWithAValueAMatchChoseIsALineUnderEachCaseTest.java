@@ -101,10 +101,11 @@ class AComparisonWithAValueAMatchChoseIsALineUnderEachCaseTest {
     }
 
     /**
-     * The runs between the lines are the classes of {@code days}, which every line on it bounds
-     * whatever case it decides in; a row in one is owed to a line only where it is in that line's
-     * case. Five days at {@code Warm} is in the run above the line for {@code Hot} and below the
-     * line for {@code Warm}, and is the second of those and not the first.
+     * A run beside a line is bounded by the lines a row at it can meet as well, which are the
+     * lines of its own case, and a row in one is owed to a line only where it is in that line's
+     * case. Five days at {@code Warm} is below the line for {@code Warm}, in a run the line for
+     * {@code Hot} does not bound, since no {@code Warm} row meets it; and it is no row of the run
+     * above the line for {@code Hot}.
      */
     @Test
     void aRowInARunIsOwedOnlyToTheLineOfItsOwnCase() {
@@ -114,8 +115,8 @@ class AComparisonWithAValueAMatchChoseIsALineUnderEachCaseTest {
                 """);
         List<String> met = new ArrayList<>();
         regions(report, met);
-        assertEquals(List.of("arm 1 below 2 < days < 7"), met,
-                "the run below the line for Warm, and not the same run above the line for Hot");
+        assertEquals(List.of("arm 1 below days < 7"), met,
+                "the run below the line for Warm, and not the run above the line for Hot");
     }
 
     /**
@@ -156,8 +157,8 @@ class AComparisonWithAValueAMatchChoseIsALineUnderEachCaseTest {
         assertEquals(Set.of(), pointsMetOn(atC6, "chk/days"), "a C6 row meets no line at 17");
         List<String> runsAtC6 = new ArrayList<>();
         regions(atC6, runsAtC6);
-        assertEquals(List.of("arm 6 below 17 < days < 20"), runsAtC6,
-                "and does meet the run below its own");
+        assertEquals(List.of("arm 6 below days < 20"), runsAtC6,
+                "and does meet the run below its own, which no other stage's line bounds");
     }
 
     /**

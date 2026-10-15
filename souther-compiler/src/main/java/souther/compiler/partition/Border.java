@@ -23,6 +23,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.BiPredicate;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
@@ -1272,7 +1273,8 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
      * rows the same way, so they are one quantity and their lines are one arrangement.
      */
     public static List<Border> allOf(List<LineDrawn> drawn) {
-        return allOf(drawn, java.util.Map.of(), new LinesRead(), _ -> HeldValues.NONE);
+        return allOf(drawn, Map.of(), new LinesRead(), (one, other) -> false,
+                _ -> HeldValues.NONE);
     }
 
     /**
@@ -1286,20 +1288,21 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
      *
      * @param alsoParted where the rules part each quantity, in the quantity's own units, by
      *                   {@link QuantityKey#key}
+     * @param apart      whether no row meets two lines at once ({@link ReachingCuts#neverTogether})
      * @param heldTo     what the declarations hold each quantity to besides where it runs
      *                   ({@link BorderQuantity#heldIn})
      */
-    static List<Border> allOf(List<LineDrawn> drawn,
-                              java.util.Map<String, List<Parting>> alsoParted,
-                              LinesRead read, Function<BorderQuantity, HeldValues> heldTo) {
+    public static List<Border> allOf(List<LineDrawn> drawn, Map<String, List<Parting>> alsoParted,
+                                     LinesRead read, BiPredicate<LineOrigin, LineOrigin> apart,
+                                     Function<BorderQuantity, HeldValues> heldTo) {
         // Collected in the quantity's own units, because that is the only order the lines of one
         // quantity are all on. Two rules can write one quantity at two scales — `3a + 6b > 48` and
         // `a + 2b > 20` run the same way — and the numbers they carry are not comparable until both
         // are read as what they are a multiple of.
-        java.util.Map<String, List<Parting>> byQuantity = new LinkedHashMap<>();
+        Map<String, List<Parting>> byQuantity = new LinkedHashMap<>();
         // A quantity one of whose lines has a place that was not worked out. Kept as the way it
         // was not, so that every border on the quantity can say so.
-        java.util.Map<String, UnheldNumber> notWorkedOut = new LinkedHashMap<>();
+        Map<String, UnheldNumber> notWorkedOut = new LinkedHashMap<>();
         alsoParted.forEach((key, parted) ->
                 byQuantity.computeIfAbsent(key, _ -> new ArrayList<>()).addAll(parted));
         for (LineDrawn each : drawn) {
@@ -1326,7 +1329,8 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
             // the next one this can place only if it is known that no line lies between, and here
             // that is the one thing not known.
             ExactAnswer<List<Parting>> beside = inTheUnitsOf(per,
-                    byQuantity.getOrDefault(each.cuts().quantity(), List.of()),
+                    besideThe(each.by(),
+                            byQuantity.getOrDefault(each.cuts().quantity(), List.of()), apart),
                     notWorkedOut.get(each.cuts().quantity()));
             // One line drawn, one border. Which lines there are was settled by whoever read the
             // rules — a comparison whose line the quantity does not reach is no line, and says so
@@ -1345,6 +1349,27 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
             }
         }
         return List.copyOf(out);
+    }
+
+    /**
+     * The places that bound the runs beside the line {@code drawn} drew: every place the quantity
+     * is parted at, put there by the readings a row at this line can meet as well.
+     *
+     * <p>A run beside a line holds the rows that meet it, and a reading none of them meets parts
+     * none of them. Bounded there, a run would ask for a row between two places of which only one
+     * is any edge of what the rows at this line are, and a row past the other would count for
+     * nothing. Asked of the readings and not of the lines they are of: one line the author wrote
+     * can be put at two places by two calls, and a row meeting the one meets the other or not by
+     * which call it went through.
+     */
+    static List<Parting> besideThe(LineOrigin drawn, List<Parting> parted,
+                                   BiPredicate<LineOrigin, LineOrigin> apart) {
+        List<Parting> out = new ArrayList<>();
+        for (Parting each : parted) {
+            each.putBy(reading -> reading.equals(drawn) || !apart.test(drawn, reading))
+                    .ifPresent(out::add);
+        }
+        return out;
     }
 
     /**
@@ -1413,7 +1438,7 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
             return ExactAnswer.held(List.of());
         }
         return Seam.eachOf(origin.lineFacts().claim(), seamOn).map(seams -> seams.stream()
-                .map(seam -> Parting.by(seam, origin.authoredLine())).toList());
+                .map(seam -> Parting.by(seam, origin)).toList());
     }
 
     /**

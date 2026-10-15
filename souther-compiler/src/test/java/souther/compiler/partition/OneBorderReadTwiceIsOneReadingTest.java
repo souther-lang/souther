@@ -363,27 +363,31 @@ class OneBorderReadTwiceIsOneReadingTest {
     /** A body's comparison keeping the values from a hundred up, which is what the readings whose
      *  runs other lines stop are read off. */
     private static LineOrigin aComparisonOrigin() {
+        return aComparisonKeeping(1, Towards.ABOVE);
+    }
+
+    /** A reading of another line of the body, for a place to be parted by something other than the
+     *  line read. */
+    private static LineOrigin aComparison() {
+        return aComparisonKeeping(2, Towards.BELOW);
+    }
+
+    /** The comparison written {@code ordinal}th in the body, keeping the values {@code kept} of
+     *  its number. */
+    private static LineOrigin aComparisonKeeping(int ordinal, Towards kept) {
         SourceConstructOrigin wrote = new SourceConstructOrigin(
-                new WrittenOwner.Body("example.weigh", "weigh"), 1, 0, SourceConstruct.BINARY);
+                new WrittenOwner.Body("example.weigh", "weigh"), ordinal, 0,
+                SourceConstruct.BINARY);
         return new LineOrigin.ComparisonOrigin(
                 new LineOrigin.ComparisonOrigin.Read(
                         new RuleRef.Comparison("weigh", wrote),
                         new ModelOccurrence(wrote, ExpansionLineage.ORIGINAL),
                         new RuleReportAnchor.ByTheModuleThatWroteIt(),
-                        List.of(Numberings.comparison(1, 0)), ElementsMetOn.EVERY),
+                        List.of(Numberings.comparison(ordinal, 0)), ElementsMetOn.EVERY),
                 Optional.empty(),
-                new LineFacts(new ComparisonClaim.Cut(Towards.ABOVE, true)),
+                new LineFacts(new ComparisonClaim.Cut(kept, true)),
                 new AuthoredPointMapping.Proven(WrittenLine.THE_COMPARISON,
-                        new ComparisonClaim.Cut(Towards.ABOVE, true),
+                        new ComparisonClaim.Cut(kept, true),
                         Derivation.AComparisonRead.Facing.NOTHING_WRITTEN, true));
-    }
-
-    /** A line of a body, for a place to be parted by something other than the line read. */
-    private static AuthoredLine aComparison() {
-        return new AuthoredLine(new WhichLine.OfAComparison(new RuleRef.Comparison("weigh",
-                new souther.compiler.types.SourceConstructOrigin(
-                        new WrittenOwner.Body("example.weigh", "weigh"), 2, 0,
-                        souther.compiler.types.SourceConstruct.BINARY))),
-                new LineFacts(new ComparisonClaim.Cut(Towards.BELOW, true)), List.of());
     }
 }

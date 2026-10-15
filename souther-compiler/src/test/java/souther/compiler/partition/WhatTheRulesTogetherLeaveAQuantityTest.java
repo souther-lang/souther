@@ -3,16 +3,20 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.Carrier;
-import souther.compiler.check.ComparisonClaim;
+import souther.compiler.check.Clause;
 import souther.compiler.check.DeclaredLine;
 import souther.compiler.check.InvariantStatementId;
 import souther.compiler.check.PartId;
+import souther.compiler.check.RuleRef;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.EndSide;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Towards;
+import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbols;
 
 import java.util.List;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -133,25 +137,25 @@ class WhatTheRulesTogetherLeaveAQuantityTest {
     private static List<Parting> byItsOwnRule(Seam... parted) {
         List<Parting> out = new java.util.ArrayList<>();
         for (Seam each : parted) {
-            out.add(Parting.by(each, aLine(out.size())));
+            out.add(Parting.by(each, aReading(out.size())));
         }
         return out;
     }
 
     /** One clause of one declaration, told from the next by which clause of it this is. */
     static AuthoredLine aLine(int clause) {
-        return new AuthoredLine(new WhichLine.OfADeclarationsLine(
+        return aReading(clause).authoredLine();
+    }
+
+    /** A reading of the line {@link #aLine} names, which is what puts a place on a quantity. */
+    static LineOrigin aReading(int clause) {
+        return new LineOrigin.InvariantOrigin(
                 new DeclaredLine.OfAStatement(new InvariantStatementId(new PartId<>(
-                        new souther.compiler.check.RuleRef.Invariant(
-                                new souther.compiler.check.Clause.Ref(
-                                        new souther.compiler.check.Clause.Id(
-                                                souther.compiler.types.TypeSymbols.declared(
-                                                        new souther.compiler.types.TypeKey(
-                                                                "example.runs", "N")),
-                                                clause),
-                                        java.util.Optional.empty())), 0),
-                        0))),
-                new LineFacts(new ComparisonClaim.Cut(Towards.ABOVE, true)), List.of());
+                        new RuleRef.Invariant(new Clause.Ref(new Clause.Id(
+                                TypeSymbols.declared(new TypeKey("example.runs", "N")), clause),
+                                Optional.empty())), 0),
+                        0)),
+                EndSide.LOWER, true);
     }
 
     /**
@@ -255,7 +259,7 @@ class WhatTheRulesTogetherLeaveAQuantityTest {
     @Test
     void twoRulesAtOnePlaceAreOnePlaceWithBothLinesAgainstIt() {
         QuantityArrangement arranged = QuantityArrangement.of(NUMBERS,
-                List.of(Parting.by(upTo("10"), aLine(0)), Parting.by(upTo("10"), aLine(1))));
+                List.of(Parting.by(upTo("10"), aReading(0)), Parting.by(upTo("10"), aReading(1))));
 
         assertEquals(1, arranged.partings().size(), "the values part once");
         assertEquals(List.of(aLine(0), aLine(1)), arranged.partings().get(0).alternatives(),
@@ -277,9 +281,9 @@ class WhatTheRulesTogetherLeaveAQuantityTest {
     @Test
     void aSecondLineAtOnePlaceDoesNotChangeWhatARowIsAskedFor() {
         QuantityArrangement one = QuantityArrangement.of(NUMBERS,
-                List.of(Parting.by(upTo("10"), aLine(0))));
+                List.of(Parting.by(upTo("10"), aReading(0))));
         QuantityArrangement also = QuantityArrangement.of(NUMBERS,
-                List.of(Parting.by(upTo("10"), aLine(0)), Parting.by(upTo("10"), aLine(1))));
+                List.of(Parting.by(upTo("10"), aReading(0)), Parting.by(upTo("10"), aReading(1))));
 
         assertNotEquals(one.partings(), also.partings(),
                 "the two arrangements do differ, and this is what they differ in");
@@ -308,7 +312,7 @@ class WhatTheRulesTogetherLeaveAQuantityTest {
         QuantityArrangement withoutTheLine = QuantityArrangement.of(NUMBERS, List.of(),
                 between(null, upTo100));
         QuantityArrangement withTheLine = QuantityArrangement.of(NUMBERS,
-                List.of(Parting.by(upTo("100"), aLine(0))),
+                List.of(Parting.by(upTo("100"), aReading(0))),
                 between(null, upTo100));
 
         assertEquals(List.of(new FarEnd.AtTheDomain(upTo100)),
@@ -336,7 +340,7 @@ class WhatTheRulesTogetherLeaveAQuantityTest {
     @Test
     void aLineTheRulesStopShortOfDoesNotStopTheRun() {
         QuantityArrangement arranged = QuantityArrangement.of(NUMBERS,
-                List.of(Parting.by(upTo("100"), aLine(0))),
+                List.of(Parting.by(upTo("100"), aReading(0))),
                 between(null, Bound.at(at("50"), true)));
 
         assertEquals(List.of(new FarEnd.AtTheDomain(Bound.at(at("50"), true))),
@@ -348,7 +352,7 @@ class WhatTheRulesTogetherLeaveAQuantityTest {
     @Test
     void oneRuleReadTwiceIsOneLineAgainstThePlace() {
         QuantityArrangement arranged = QuantityArrangement.of(NUMBERS,
-                List.of(Parting.by(upTo("10"), aLine(0)), Parting.by(upTo("10"), aLine(0))));
+                List.of(Parting.by(upTo("10"), aReading(0)), Parting.by(upTo("10"), aReading(0))));
 
         assertEquals(List.of(aLine(0)), arranged.partings().get(0).alternatives(),
                 "one line, however many readings of it arrived");

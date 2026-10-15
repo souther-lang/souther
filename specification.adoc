@@ -3897,6 +3897,15 @@ guard n > 10 ; guard n > 20       IN  11 < n <= 20        OUT n < 10
 
 With the second line written, a row at thirty is in a third partition and answers for neither point of the border at ten. Read as everything past the line it answered for the `+IN+` point, and a model whose rows reach the middle partition only at its edge had nothing said about it: the count of equivalence partitions reports the partition as reached, which it is, and the point that tells a row inside from a row on the line was already discharged by a row that is in neither.
 
+[[a-line-in-a-case-is-parted-only-by-the-lines-of-that-case]]The partitions are those of the lines a row at the border can meet as well. A comparison against a number each case of a value names is a line in each case — `+month.value <= minimum(term)+` with `+minimum+` answering 12 for `+OneYear+` and 24 for `+TwoYear+` is a line at 12 where `+term+` is `+OneYear+` and a line at 24 where it is `+TwoYear+` — and a one-year row never meets the line at 24, so for it every month past 12 is one partition. The same holds of two comparisons in two arms of a `+match+` on `+term+`. Which side is inside is the comparison's as written, in the case the line is read in, as it is for a fixed number; and since the two lines are one comparison at one place, a point says the case beside the values:
+
+....
+month.value <= minimum(term)      IN  1 <= month < 12 where term is OneYear     OUT 13 < month <= 60 where term is OneYear
+                                  IN  1 <= month < 24 where term is TwoYear     OUT 25 < month <= 60 where term is TwoYear
+....
+
+A row of one case answers for no point of the other, whatever its month.
+
 What the report writes for a point is the relation and what it is against, whole — a value alone would name a witness of a partition as though it were the partition.
 
 * [[a-border-says-which-point-it-owes]]a point the report names MUST say which of the four it is. A border can owe a row at all of them, two of the values differ by one step, and a report naming neither role leaves an author to work the closed-border rule out for themselves — which is the reading this vocabulary exists to hand over rather than ask for.

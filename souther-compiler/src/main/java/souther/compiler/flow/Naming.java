@@ -4,6 +4,8 @@ import souther.compiler.check.Choice;
 import souther.compiler.check.ScopeStep;
 import souther.compiler.core.Core;
 
+import java.util.List;
+
 /**
  * How a reading writes down what got a run to a value.
  *
@@ -98,14 +100,36 @@ public interface Naming<P> {
 
     /**
      * {@code way}, one of the ways the condition comes out into arm {@code part} of {@code fork},
-     * as a run down the arm is seen taking it.
+     * as a run down the arm is seen taking it, written down whole — or that this naming has no
+     * words for that, or that no run takes it.
      *
      * <p>Asked where there may be others, so the arm cannot stand for this way — a run down it may
      * have come by any of them. What it can add is to what the way already says of itself: a way
      * that says an operand was not run says something only where the operator was, and taking an
-     * arm of a fork whose condition runs the operator first says it was.
+     * arm of a fork whose condition runs the operator first says it was. And a way that says how
+     * the parts it went through came out, some as truths it had no words for
+     * ({@link Provenance#unworded}), says with the arm how the condition came out: the arm is
+     * somewhere a run on the way is seen.
+     *
+     * <p>No words for one leaves every way into the arm unwritten, since a list of them with one
+     * missing reads as all of them. No run on one leaves it out and the rest as they are: the way
+     * was put together by a reading that could not see two of its parts were one decision, and a
+     * naming that can is saying the reading's list had one too many.
      */
-    P oneOfTheWaysIn(Core.If fork, int part, P way);
+    WayWritten<P> oneOfTheWaysIn(Core.If fork, int part, Arrival<P> way);
+
+    /**
+     * Whether what a run is seen doing tells each of {@code ways}, the ways into one arm, from every
+     * other.
+     *
+     * <p>A question about the ways together, which is why it is not asked of one. Each way holds
+     * what it says; what is asked is whether a run seen on one could have been on another — which a
+     * truth written at the arm it is seen at does nothing to rule out, since the arm is passed
+     * whichever way a run came. Where they are not, every reader taking a way as the proof a run
+     * went that way is told so ({@link Ways.Known#seenApart}), and the value the arm answers is
+     * seen as the arm ({@link Provenance#seenAs}).
+     */
+    boolean toldApart(List<P> ways);
 
     /**
      * {@code left}, the one way the left of {@code operator} goes on, as a run that went on into the

@@ -1,12 +1,19 @@
 package souther.compiler.partition;
 
+import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.Quantities;
+import souther.compiler.inputs.Refinement;
+import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.CasesHeldTo;
 import souther.compiler.meaning.Proposition;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Objects;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * One of the lines a statement of several relations draws, read in one case of where the statement
@@ -32,6 +39,50 @@ public record WhereAPartDecides(PlaceOfALine part, Proposition decides) {
     public WhereAPartDecides {
         Objects.requireNonNull(part, "a line of a statement is one of its lines");
         Objects.requireNonNull(decides, "a line decides somewhere, or nowhere");
+    }
+
+    /**
+     * Where the line decides, as a report says it after what a row there has to do on the
+     * positions {@code readAt} — or null where that says all of it.
+     *
+     * <p>Said because it is part of the line. Two readings of one comparison at one place can be
+     * readings of two lines in two cases, and the place and the values alone tell a reader nothing
+     * about which a row of theirs is at: {@code month.value <= minimum(term)} asks for a month above
+     * 12 where {@code term} is {@code OneYear} and for one above 24 where it is {@code TwoYear}.
+     *
+     * <p>The cases of values the line decides in, and nothing else of where it decides: which case
+     * a value is, whether it holds a value, which truth it is. Those are what a row is written in
+     * and what the values of the point do not say. The relations beside them are said by the
+     * values a search composes against; written out here as well, a reader is shown how the
+     * statement was taken apart — a part read once held and once failing where one of them is
+     * enough — and not anything a row has to do.
+     *
+     * <p>What every row in the case is, read through the whole of it ({@link CasesHeldTo}): a case
+     * said as one of several things is where each of them holds, and what they all hold a value
+     * to is what the case does.
+     *
+     * <p>Less what the positions already say. A line at a field of one case of a value decides
+     * where the value is that case, and the position it is read at is named through that case.
+     */
+    public String said(List<TermPath> readAt) {
+        List<String> said = new ArrayList<>();
+        CasesHeldTo.of(decides).forEach((at, held) -> {
+            switch (held) {
+                case CasesHeldTo.Held.OneOf(var cases) -> {
+                    if (readAt.stream().noneMatch(each -> each.isAtOrUnder(at.refine(cases)))) {
+                        said.add(at + " is " + spelled(cases));
+                    }
+                }
+                case CasesHeldTo.Held.NoneOf(var cases) -> said.add(at + " is not "
+                        + spelled(cases));
+                case CasesHeldTo.Held.ATruth(var holds) -> said.add(at + " is " + holds);
+            }
+        });
+        return said.isEmpty() ? null : String.join(" and ", said);
+    }
+
+    private static String spelled(CasesLeft cases) {
+        return cases.atoms().stream().map(Refinement::spelled).collect(Collectors.joining(" or "));
     }
 
     /** Whether a row is somewhere the line decides, or what kept that from being read. */

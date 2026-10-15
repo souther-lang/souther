@@ -25,6 +25,7 @@ import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.Towards;
 import souther.compiler.meaning.AuthoredPointMapping;
+import souther.compiler.meaning.AuthorsLines;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Derivation;
@@ -713,7 +714,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                                  Pullback.OnTheInput onTheInput,
                                  Optional<ExpansionLineage> writtenIn) {
         Pullback.Pulled stated = onTheInput.stated();
-        Supplier<Optional<Map<String, Map<WrittenLine, AuthoredPointMapping>>>> lines =
+        Supplier<Optional<AuthorsLines>> lines =
                 new Pullback.Once<>(() -> writtenIn.map(at -> WrittenLines.of(
                         stated.meaning().how(), at, Optional.empty(),
                         Optional.of(comparison.claim()))));
@@ -723,17 +724,20 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                         || drawn instanceof Read.NumberNoRatioHolds)) {
             return drawn;
         }
+        AuthorsLines authors = lines.get().orElseThrow();
         Map<PartOfAComparison, AuthoredPointMapping> of =
-                authorsLines(lines.get().orElseThrow(), compared, comparison.claim());
+                authorsLines(authors, compared, comparison.claim());
         // A place of one of the author's lines is that line's one reading here, whichever line it
-        // is; the line it is a place of is carried with it. A place of several is a line of each.
+        // is; the line it is a place of is carried with it. A place of several is a line of each,
+        // deciding where a row takes the arms that line is under.
         if (of.size() == 1) {
             return authored(drawn, of.values().iterator().next(), compared);
         }
         List<Read.Several.Part> parts = new ArrayList<>();
         of.forEach((line, mapping) -> parts.add(new Read.Several.Part(
                 new PlaceOfALine(line, compared.heldKey()), authored(drawn, mapping, compared),
-                List.of(WhereAnApplicationIsMade.nothingAsked()))));
+                WhereEachLineDecides.takenWhere(List.of(WhereAnApplicationIsMade.nothingAsked()),
+                        authors.takenWhere(mapping.line())))));
         return new Read.Several(parts);
     }
 
@@ -745,9 +749,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * @param written what the comparison claims, as its author wrote it
      */
     private static Map<PartOfAComparison, AuthoredPointMapping> authorsLines(
-            Map<String, Map<WrittenLine, AuthoredPointMapping>> lines,
-            Proposition.Compared relation, ComparisonClaim written) {
-        Map<WrittenLine, AuthoredPointMapping> under = lines.get(relation.heldKey());
+            AuthorsLines lines, Proposition.Compared relation, ComparisonClaim written) {
+        Map<WrittenLine, AuthoredPointMapping> under = lines.of(relation.heldKey());
         Map<PartOfAComparison, AuthoredPointMapping> out = new LinkedHashMap<>();
         if (under == null || under.isEmpty()) {
             out.put(THE_COMPARISON,
@@ -762,8 +765,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
     private static Read readAsAWhole(String behavior, StatedComparison comparison,
                                      InputReading read, InputReads reads, Arrivals answering,
                                      Pullback.OnTheInput onTheInput,
-                                     Supplier<Optional<Map<String,
-                                             Map<WrittenLine, AuthoredPointMapping>>>> lines) {
+                                     Supplier<Optional<AuthorsLines>> lines) {
         Pullback.Pulled stated = onTheInput.stated();
         // A form put on the input's numbers, where what is stated is one over them.
         LinearForm<NumericTerm> overTheInput =
@@ -1118,7 +1120,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      */
     static Read ofAnApplication(String behavior, Core application, Proposition stated,
                                 InputReading read, InputReads reads,
-                                Map<String, Map<WrittenLine, AuthoredPointMapping>> authors) {
+                                AuthorsLines authors) {
         if (several(behavior, application, stated, read, reads, Optional.of(authors))
                 instanceof Read.Several lines) {
             return lines;
@@ -1247,8 +1249,9 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * with {@code b} above {@code g} is answered the same way on both sides of the line, so it is
      * no row for it.
      *
-     * <p>A relation that is a place of two of the author's lines is drawn for each: a row at it
-     * meets both, and each is owed its own row.
+     * <p>A relation that is a place of two of the author's lines is drawn for each, deciding where
+     * the statement turns on it and a row takes the arms that line is under: a row there meets
+     * both, and each is owed its own row.
      *
      * <p>Every relation of the statement is a line or none of them is drawn. A relation over
      * something no row writes — what a dependency answered — has no line on the input to be; the
@@ -1261,14 +1264,13 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      *
      * @param written the construct the rule is written as, asked only which position it names
      *                first, which is the way each line is faced
-     * @param authors which of the author's lines each relation is a place of, and how it stands to
-     *                each ({@link WrittenLines}); nothing for a clause, which no body wrote and
-     *                whose lines are its own relations
+     * @param authors which of the author's lines each relation is a place of, how it stands to
+     *                each and where a row takes each one's arms ({@link WrittenLines}); nothing
+     *                for a clause, which no body wrote and whose lines are its own relations
      */
     private static Read several(String behavior, Core written,
                                 Proposition stated, InputReading read, InputReads reads,
-                                Optional<Map<String, Map<WrittenLine, AuthoredPointMapping>>>
-                                        authors) {
+                                Optional<AuthorsLines> authors) {
         if (!onlyRelations(stated) && !drawsLines(stated)) {
             return null;
         }
@@ -1290,7 +1292,9 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             authorsLines(authors.get(), each.line(), WrittenLines.claimOf(each.line()))
                     .forEach((of, mapping) -> parts.add(
                     new Read.Several.Part(new PlaceOfALine(of, each.line().key()),
-                            authored(line, mapping, each.line()), each.cases())));
+                            authored(line, mapping, each.line()),
+                            WhereEachLineDecides.takenWhere(each.cases(),
+                                    authors.get().takenWhere(mapping.line())))));
         }
         return new Read.Several(parts);
     }

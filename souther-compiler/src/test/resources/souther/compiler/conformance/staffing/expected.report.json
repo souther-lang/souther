@@ -3264,7 +3264,7 @@
               "side" : "below"
             },
             "relation" : "in",
-            "against" : "45 < hours < 100",
+            "against" : "0 <= hours < 100",
             "knownWritable" : true,
             "writableBecause" : [ "a_value_was_built" ],
             "status" : "unavailable",
@@ -3393,7 +3393,7 @@
               "side" : "above"
             },
             "relation" : "in",
-            "against" : "46 < hours <= 100",
+            "against" : "46 < hours <= 200",
             "knownWritable" : true,
             "writableBecause" : [ "a_value_was_built" ],
             "status" : "unavailable",
@@ -3611,7 +3611,7 @@
             "behavior" : "judgeHours",
             "axis" : "judgeHours/hours",
             "relation" : "in",
-            "against" : "45 < hours < 100",
+            "against" : "0 <= hours < 100",
             "status" : "unavailable",
             "reason" : "no_rows"
           } ]
@@ -3763,7 +3763,7 @@
             "behavior" : "judgeHours",
             "axis" : "judgeHours/hours",
             "relation" : "in",
-            "against" : "46 < hours <= 100",
+            "against" : "46 < hours <= 200",
             "status" : "unavailable",
             "reason" : "no_rows"
           } ]

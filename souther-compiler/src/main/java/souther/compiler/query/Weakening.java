@@ -12,6 +12,7 @@ import souther.compiler.types.SourceConstructOrigin;
 
 import java.util.List;
 import java.util.Objects;
+import java.util.Objects;
 
 /**
  * One thing that leaves a measurement weaker than it looks.
@@ -94,7 +95,7 @@ public sealed interface Weakening {
                  BodyNotInEvaluation _, BoundaryNotDerived _, InputNotRead _,
                  ProofContradicted _, ArmsUnsettled _, DecisionOfRowUnreadable _,
                  DecisionRunNotWatched _, DecisionRuleReadShort _,
-                 KeyedOverwriteCasesUnmeasured _ -> List.of();
+                 KeyedOverwriteCasesUnmeasured _, MeetingsNotPlaced _ -> List.of();
             case BorderValueUnreadable it -> it.why().figures();
             case BorderReadingsNotExhausted it -> it.limits();
             case ModelReadingIncomplete it -> it.cause().figures();
@@ -558,6 +559,36 @@ public sealed interface Weakening {
         }
 
         /** What watched a run is what this build recorded, and a wider one records no more. */
+        @Override
+        public RunSensitivity runSensitivity() {
+            return RunSensitivity.UNAFFECTED;
+        }
+    }
+
+    /**
+     * A meeting of the body's decisions whose combinations the classes of the input do not place.
+     *
+     * <p>A way of settling one of its factors, or the way to it, narrows no position — the arm
+     * itself, where what a run is seen doing does not tell the ways into it apart — or two ways of
+     * settling one factor leave the same classes. No row can be steered into one of its
+     * combinations rather than another, so none is asked for, and which of them the rows make is
+     * not measured. Nothing is owed at any of them, because nothing established that a row is
+     * missing.
+     *
+     * <p>Beside {@link MeetingsNotWalked}, which a wider run walks. This is how the body is read,
+     * and allowing more reads it the same way.
+     */
+    record MeetingsNotPlaced(String behavior, int groups) implements Weakening {
+
+        public MeetingsNotPlaced {
+            Objects.requireNonNull(behavior, "a meeting is a meeting of some behavior");
+            if (groups < 1) {
+                throw new IllegalArgumentException(
+                        "a measure that placed every group went without nothing here: " + groups);
+            }
+        }
+
+        /** The classes place what they place however much a run allows. */
         @Override
         public RunSensitivity runSensitivity() {
             return RunSensitivity.UNAFFECTED;

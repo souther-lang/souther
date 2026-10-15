@@ -2,6 +2,8 @@ package souther.compiler.query;
 
 import souther.compiler.check.RuleCitation;
 import souther.compiler.check.RuleCitations;
+import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.TermPath;
 import souther.compiler.observe.Figure;
 import souther.compiler.partition.Border;
 import souther.compiler.partition.Demand;
@@ -10,6 +12,7 @@ import souther.compiler.partition.DomainPoint;
 import souther.compiler.partition.LineOrigin;
 import souther.compiler.partition.PointRole;
 import souther.compiler.partition.SaidOnTheWay;
+import souther.compiler.partition.WhereAPartDecides;
 import souther.compiler.publish.PublishedRuleHandle;
 import souther.compiler.publish.PublishedSentence;
 import souther.compiler.types.ModelOccurrence;
@@ -359,6 +362,18 @@ public record BorderAssessment(Border border, Map<DomainPoint, ItemAssessment> i
         return against(border.theOne(role));
     }
 
+    /**
+     * The cases of the input's values the line decides in, as a report says them
+     * ({@link WhereAPartDecides#said}) — or null where the position the line is read at already
+     * names all of them: always for a line that is the whole of what its rule states.
+     */
+    public String decidesWhere() {
+        List<TermPath> readAt = border.cut().of().numbers().stream()
+                .map(NumericTerm::subjectPath).toList();
+        return border.origin() instanceof LineOrigin.ComparisonOrigin read
+                ? read.part().map(part -> part.said(readAt)).orElse(null) : null;
+    }
+
     /** The left of the {@code left = right} a report names this line by. */
     public String left() {
         return border.cut().left();
@@ -392,10 +407,16 @@ public record BorderAssessment(Border border, Map<DomainPoint, ItemAssessment> i
             return border.label(at);
         }
 
-        /** What this asks of a row, as a report writes it, or null where none is owed. */
+        /** What this asks of a row, as a report writes it, or null where none is owed: the values,
+         *  and the cases of the input the line decides in where the position does not name
+         *  them. */
         public String asked() {
-            return border.operator(at) == null ? null
-                    : border.operator(at) + " " + border.against(at);
+            if (border.operator(at) == null) {
+                return null;
+            }
+            String where = border.decidesWhere();
+            return border.operator(at) + " " + border.against(at)
+                    + (where == null ? "" : " where " + where);
         }
 
         /** What the point is against, or null where none is owed. */

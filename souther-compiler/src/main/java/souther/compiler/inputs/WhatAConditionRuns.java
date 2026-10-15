@@ -6,7 +6,11 @@ import souther.compiler.core.Core;
 import souther.compiler.core.Evaluated;
 
 import java.util.ArrayList;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.function.Function;
 
 /**
  * What every run that brought a condition out one way ran on the way.
@@ -53,7 +57,27 @@ public record WhatAConditionRuns(List<Core> mayNotRun, List<Settled> settled, bo
     public static WhatAConditionRuns whenItCameOut(Core cond, boolean cameOut, InputReads reads,
                                                    Symbols symbols,
                                                    DeclarationNewtypes newtypes) {
-        Walk walk = new Walk(symbols, newtypes);
+        return alongAWay(cond, cameOut, _ -> Optional.empty(), reads, symbols, newtypes);
+    }
+
+    /**
+     * What every run that brought {@code cond} out {@code cameOut} ran, among the runs on a way
+     * that says how some of its parts came out ({@code told}).
+     *
+     * <p>Where the operator came out the way that leaves its left open, the way may say which: the
+     * left came out the way that runs the right, and then the right came out the operator's way, or
+     * it came out the other, and then the right never ran. Either is as known as the operator
+     * coming out the way that settles both.
+     *
+     * @param told how the way says a part came out, asked of a part that is no such operator, as
+     *             what it is asked of ({@link InputTruth#asked}); empty where the way says nothing
+     *             of it
+     */
+    public static WhatAConditionRuns alongAWay(Core cond, boolean cameOut,
+                                               Function<Core, Optional<Boolean>> told,
+                                               InputReads reads, Symbols symbols,
+                                               DeclarationNewtypes newtypes) {
+        Walk walk = new Walk(told, symbols, newtypes);
         walk.known(cond, cameOut, reads);
         return new WhatAConditionRuns(walk.mayNotRun, walk.settled, walk.whole);
     }
@@ -71,13 +95,17 @@ public record WhatAConditionRuns(List<Core> mayNotRun, List<Settled> settled, bo
 
     private static final class Walk {
 
+        private final Function<Core, Optional<Boolean>> told;
         private final Symbols symbols;
         private final DeclarationNewtypes newtypes;
         private final List<Core> mayNotRun = new ArrayList<>();
         private final List<Settled> settled = new ArrayList<>();
+        private final Map<Core, Optional<Boolean>> worked = new IdentityHashMap<>();
         private boolean whole = true;
 
-        Walk(Symbols symbols, DeclarationNewtypes newtypes) {
+        Walk(Function<Core, Optional<Boolean>> told, Symbols symbols,
+             DeclarationNewtypes newtypes) {
+            this.told = told;
             this.symbols = symbols;
             this.newtypes = newtypes;
         }
@@ -94,11 +122,52 @@ public record WhatAConditionRuns(List<Core> mayNotRun, List<Settled> settled, bo
             if (asked.holding() == some.comesOut()) {
                 known(some.asked(), asked.holding(), asked.reads());
                 known(some.expression(), asked.holding(), asked.reads());
-            } else {
-                unknown(some.asked(), asked.reads());
-                // The right may not have run, and where it did, which way is not known either.
-                whole = false;
+                return;
             }
+            Optional<Boolean> left = cameOut(some.asked(), asked.reads());
+            if (left.isPresent()) {
+                known(some.asked(), left.get(), asked.reads());
+                if (left.get() == some.comesOut()) {
+                    known(some.expression(), asked.holding(), asked.reads());
+                }
+                return;
+            }
+            unknown(some.asked(), asked.reads());
+            // The right may not have run, and where it did, which way is not known either.
+            whole = false;
+        }
+
+        /**
+         * How the way says {@code e} came out, worked out from how it says its parts did; empty
+         * where it does not say.
+         *
+         * <p>Kept by the node: a walk down a chain of operators asks it of each left in turn, and
+         * each of those is the chain below it asked again. A node occurs once, so what its names
+         * read is the same each time.
+         */
+        Optional<Boolean> cameOut(Core e, InputReads reads) {
+            Optional<Boolean> already = worked.get(e);
+            if (already != null) {
+                return already;
+            }
+            Optional<Boolean> out = cameOutAfresh(e, reads);
+            worked.put(e, out);
+            return out;
+        }
+
+        private Optional<Boolean> cameOutAfresh(Core e, InputReads reads) {
+            InputTruth.Asked asked = InputTruth.asked(e, true, reads, symbols, newtypes);
+            Evaluated.Step.OnlyWhere some = onlySometimes(asked.value());
+            Optional<Boolean> value;
+            if (some == null) {
+                value = told.apply(asked.value());
+            } else {
+                value = cameOut(some.asked(), asked.reads());
+                if (value.isPresent() && value.get() == some.comesOut()) {
+                    value = cameOut(some.expression(), asked.reads());
+                }
+            }
+            return value.map(it -> it == asked.holding());
         }
 
         /** {@code e}, which ran and came out a way not known here. */
