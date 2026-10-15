@@ -15,7 +15,7 @@ public final class DecidingCases {
      * Each case {@code cases} stands for, as the conjunction of what it chose, each once and in the
      * order they are chosen.
      *
-     * @throws IllegalArgumentException where they were more than were taken apart, which is no
+     * @throws IllegalArgumentException where some of them nobody took apart, which is no
      *                                  list of cases
      */
     public static List<Proposition> eachOf(DecidingCase.Cases cases) {
@@ -48,8 +48,8 @@ public final class DecidingCases {
                 next.addAll(rest);
                 chosen(chosen, next, into);
             }
-            case DecidingCase.Cases.MoreThanWereTakenApart _ -> throw new IllegalArgumentException(
-                    "cases more than were taken apart are not written out");
+            case DecidingCase.Cases.NotTakenApart _ -> throw new IllegalArgumentException(
+                    "cases nobody took apart are not written out");
         }
     }
 }

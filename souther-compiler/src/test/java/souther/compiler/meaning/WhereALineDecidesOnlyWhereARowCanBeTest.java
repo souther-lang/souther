@@ -57,9 +57,9 @@ class WhereALineDecidesOnlyWhereARowCanBeTest {
     }
 
     /**
-     * Read in each case of a value past the parts a table holds, a case the statement asks only
-     * denied is one of the cases it is read in: where the term is the last one, the last arm says
-     * nothing, and the line at ninety decides nowhere.
+     * Where a line decides in a statement of fourteen parts, a case the statement asks only denied
+     * is one case the value can be: where the term is the last one, the last arm says nothing,
+     * and the line at ninety decides nowhere.
      */
     @Test
     void aCaseAskedOnlyDeniedIsReadAsOneOfTheCases() {

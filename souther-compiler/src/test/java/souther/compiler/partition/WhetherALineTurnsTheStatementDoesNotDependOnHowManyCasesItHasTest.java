@@ -35,13 +35,14 @@ class WhetherALineTurnsTheStatementDoesNotDependOnHowManyCasesItHasTest {
      * A helper taking what it can of a cap, called on what the call before it left. Inside the
      * last call, the first call's choice of what is left is a part of the statement, and both of
      * its arms leave nought where its line is: the line turns nothing there. At three calls the
-     * cases of that part are said one by one, and at four they are past the figure and said as
-     * one; either way the line between {@code used} and the first cap is a border at the first
-     * call alone.
+     * cases of that part are said one by one, at four they are past the figure and said as one,
+     * and at five the last call's statement has more parts than a table of every way they come
+     * out would hold; each way the line between {@code used} and the first cap is a border at the
+     * first call alone.
      */
     @Test
     void aLineNoCaseOfItTurnsIsOwedNothingWhereverItsCasesAreSaidAsOne() {
-        for (int calls = 3; calls <= 4; calls++) {
+        for (int calls = 3; calls <= 5; calls++) {
             JsonNode report = reportOf(takes(calls));
             List<JsonNode> against = bordersOn(report, "draw/used").stream()
                     .filter(each -> each.path("value").asString().equals("held.h0"))

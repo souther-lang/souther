@@ -169,7 +169,8 @@ class WhereALineDecidesIsAskedOfEachCaseItWasSaidForTest {
      */
     @Test
     void choosingThatAsksNothingRunsOutOfStepsAndStops() {
-        DecidingCase.Cases cases = new DecidingCase.Cases.MoreThanWereTakenApart();
+        DecidingCase.Cases cases = new DecidingCase.Cases.NotTakenApart(
+                CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO);
         for (int i = 0; i < 40; i++) {
             cases = new DecidingCase.Cases.Together(List.of(
                     new DecidingCase.Cases.EachOf(List.of(
@@ -207,11 +208,13 @@ class WhereALineDecidesIsAskedOfEachCaseItWasSaidForTest {
         Asking dividing = new Asking(_ -> true);
         assertEquals(new CasesOfALineAsked.Found.NotWorkedOut(
                         Set.of(CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO)),
-                dividing.of(new DecidingCase.Cases.MoreThanWereTakenApart()));
+                dividing.of(new DecidingCase.Cases.NotTakenApart(
+                CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO)));
         assertEquals(List.of(SAID), dividing.asked(), "the condition alone");
 
         assertInstanceOf(CasesOfALineAsked.Found.InNone.class,
-                new Asking(_ -> false).of(new DecidingCase.Cases.MoreThanWereTakenApart()));
+                new Asking(_ -> false).of(new DecidingCase.Cases.NotTakenApart(
+                CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO)));
     }
 
     /**
@@ -220,7 +223,8 @@ class WhereALineDecidesIsAskedOfEachCaseItWasSaidForTest {
      */
     @Test
     void anAlternativeThatStoppedDoesNotHideOneThatDividesRows() {
-        DecidingCase.Cases notTakenApart = new DecidingCase.Cases.MoreThanWereTakenApart();
+        DecidingCase.Cases notTakenApart = new DecidingCase.Cases.NotTakenApart(
+                CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO);
         for (List<DecidingCase.Cases> order : List.of(List.of(notTakenApart, one(A)),
                 List.of(one(A), notTakenApart))) {
             assertInstanceOf(CasesOfALineAsked.Found.InSome.class,
@@ -235,7 +239,8 @@ class WhereALineDecidesIsAskedOfEachCaseItWasSaidForTest {
      */
     @Test
     void alternativesStoppedAtTwoFiguresSayBoth() {
-        DecidingCase.Cases notTakenApart = new DecidingCase.Cases.MoreThanWereTakenApart();
+        DecidingCase.Cases notTakenApart = new DecidingCase.Cases.NotTakenApart(
+                CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO);
         DecidingCase.Cases tooMany =
                 manyCases(CompositionBudget.CASES_A_LINE_IS_ASKED_IN.maximum());
         Proposition someOne = new DecidingCase.Cases.EachOf(List.of(notTakenApart, tooMany))

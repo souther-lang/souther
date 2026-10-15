@@ -35,10 +35,10 @@ import java.util.function.Predicate;
  * would be walked unbounded where nothing is asked — the cases of a choice nobody took apart, or
  * every way of choosing past the last question allowed — and those are as many as the product of
  * the choices. Where the steps run out the choosing stops there, and says the figures it met and,
- * of what it did not walk to, only what is written in the cases already: that some were more than
- * were taken apart. And where the cases were more than were taken apart nothing is asked of them at
- * all. Either way the answer is that it was not worked out, which is
- * neither a case the line turns in nor one it does not.
+ * of what it did not walk to, only what is written in the cases already: that some were never
+ * taken apart, and the figure each stopped at. And where the cases were never taken apart nothing
+ * is asked of them at all. Either way the answer is that it was not worked out, which is neither a
+ * case the line turns in nor one it does not.
  *
  * <p>Here, beside where the cases were taken apart, because what a case chosen part by part has
  * chosen so far is a conjunction of the statement's parts, and those are joined where a rule joins
@@ -78,10 +78,6 @@ public final class CasesOfALineAsked {
     /** Out of steps: one more is taken than the figure lets be. */
     private static final Found.NotWorkedOut PAST_THE_STEPS =
             new Found.NotWorkedOut(Set.of(CompositionBudget.CASES_A_LINE_IS_ASKED_IN));
-
-    /** The cases were more than were taken apart, and nothing asks them. */
-    private static final Found.NotWorkedOut NOT_TAKEN_APART =
-            new Found.NotWorkedOut(Set.of(CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO));
 
     private final Predicate<Proposition> crossedIn;
 
@@ -171,35 +167,37 @@ public final class CasesOfALineAsked {
                 next.addAll(rest);
                 yield chosen(chosen, next);
             }
-            case DecidingCase.Cases.MoreThanWereTakenApart _ -> NOT_TAKEN_APART;
+            // Nobody took them apart, and nothing asks them.
+            case DecidingCase.Cases.NotTakenApart(var stoppedAt) ->
+                    new Found.NotWorkedOut(Set.of(stoppedAt));
         };
     }
 
     /**
-     * Out of steps, with {@code notWalked} left: stopped at the steps, and at how many cases are
-     * taken apart as well where some case left was never taken apart.
+     * Out of steps, with {@code notWalked} left: stopped at the steps, and at each figure a case
+     * left was stopped at where it was never taken apart.
      *
-     * <p>The second is not work this would have done. That the cases were more than were taken
-     * apart was met where they were taken apart, and is written in the cases themselves, so it is
-     * read off them as they stand — once over each, and not by choosing among them.
+     * <p>The others are not work this would have done. That the cases were never taken apart was
+     * met where they were taken apart, and is written in the cases themselves, so it is read off
+     * them as they stand — once over each, and not by choosing among them.
      */
     private static Found.NotWorkedOut pastTheSteps(List<DecidingCase.Cases> notWalked) {
-        return notWalked.stream().anyMatch(CasesOfALineAsked::holdsSomeNotTakenApart)
-                ? new Found.NotWorkedOut(EnumSet.of(CompositionBudget.CASES_A_LINE_IS_ASKED_IN,
-                        CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO))
-                : PAST_THE_STEPS;
+        Set<CompositionBudget> figures = EnumSet.of(CompositionBudget.CASES_A_LINE_IS_ASKED_IN);
+        notWalked.forEach(each -> notTakenApartAt(each, figures));
+        return figures.size() == 1 ? PAST_THE_STEPS : new Found.NotWorkedOut(figures);
     }
 
-    /** Whether some case {@code cases} stands for is one more than were taken apart. */
-    private static boolean holdsSomeNotTakenApart(DecidingCase.Cases cases) {
-        return switch (cases) {
-            case DecidingCase.Cases.One _ -> false;
+    /** Adds to {@code figures} each figure a case {@code cases} stands for was stopped at, where
+     *  it was never taken apart. */
+    private static void notTakenApartAt(DecidingCase.Cases cases, Set<CompositionBudget> figures) {
+        switch (cases) {
+            case DecidingCase.Cases.One _ -> { }
             case DecidingCase.Cases.EachOf(var alternatives) ->
-                    alternatives.stream().anyMatch(CasesOfALineAsked::holdsSomeNotTakenApart);
+                    alternatives.forEach(each -> notTakenApartAt(each, figures));
             case DecidingCase.Cases.Together(var factors) ->
-                    factors.stream().anyMatch(CasesOfALineAsked::holdsSomeNotTakenApart);
-            case DecidingCase.Cases.MoreThanWereTakenApart _ -> true;
-        };
+                    factors.forEach(each -> notTakenApartAt(each, figures));
+            case DecidingCase.Cases.NotTakenApart(var stoppedAt) -> figures.add(stoppedAt);
+        }
     }
 
     /** Whether one more step may be taken — an alternative chosen or a part asked — counting it

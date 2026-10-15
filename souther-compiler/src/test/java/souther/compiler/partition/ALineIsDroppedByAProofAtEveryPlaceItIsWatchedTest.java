@@ -167,7 +167,8 @@ class ALineIsDroppedByAProofAtEveryPlaceItIsWatchedTest {
                 new ComparisonAssessment.Several.Part(new PlaceOfALine(
                         PartOfAComparison.of(WrittenLine.THE_COMPARISON), "unworked"), line(),
                         List.of(new DecidingCase(anywhere,
-                                new DecidingCase.Cases.MoreThanWereTakenApart()))),
+                                new DecidingCase.Cases.NotTakenApart(
+                CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO)))),
                 new ComparisonAssessment.Several.Part(new PlaceOfALine(
                         PartOfAComparison.of(WrittenLine.THE_COMPARISON), "worked"), line(),
                         List.of(DecidingCase.alone(anywhere)))));
@@ -209,7 +210,8 @@ class ALineIsDroppedByAProofAtEveryPlaceItIsWatchedTest {
                 "both");
         DecidingCase unworked = new DecidingCase(
                 new Proposition.Truth(new DecisionSubject.AnInput(N), true),
-                new DecidingCase.Cases.MoreThanWereTakenApart());
+                new DecidingCase.Cases.NotTakenApart(
+                CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO));
         DecidingCase shown = DecidingCase.alone(WhereAnApplicationIsMade.nothingAsked());
         for (List<DecidingCase> cases : List.of(List.of(unworked, shown),
                 List.of(shown, unworked))) {
@@ -248,7 +250,8 @@ class ALineIsDroppedByAProofAtEveryPlaceItIsWatchedTest {
                 "both");
         DecidingCase notTakenApart = new DecidingCase(
                 new Proposition.Truth(new DecisionSubject.AnInput(N), true),
-                new DecidingCase.Cases.MoreThanWereTakenApart());
+                new DecidingCase.Cases.NotTakenApart(
+                CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO));
         // More cases than are asked, none of which any row reaches, under a condition every row
         // does: the asking runs out of questions before it finds that none divides rows.
         List<Proposition> each = new ArrayList<>();

@@ -481,13 +481,27 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/meaning/Proposition;)J",
                     "counts the parts a statement comes to written out no further than one past"
                             + " the figure"),
-            // Where one line of a statement of several decides: its cases taken apart, and each
-            // asked whether rows stand on both sides of the line. Past either figure the line is
-            // one where it decides was not worked out, naming the figure.
+            // Where one line of a statement of several decides: the statement read, its cases
+            // taken apart, and each asked whether rows stand on both sides of the line. Past any
+            // of the figures the line is one where it decides was not worked out, naming the
+            // figure.
+            Map.entry("souther.compiler.meaning.WhereEachLineDecides$Lifting#<init>()V",
+                    "how many places quantifiers are said outside in, past which nothing of the"
+                            + " statement is read and every line is said for cases nobody took"
+                            + " apart"),
+            Map.entry("souther.compiler.meaning.WhereEachLineDecides$Reading#<init>("
+                            + "Lsouther/compiler/meaning/Proposition;Z)V",
+                    "how many steps the statement is read in, past which its lines are said for"
+                            + " cases nobody took apart"),
+            Map.entry("souther.compiler.meaning.WhereEachLineDecides$Reading#takenApart("
+                            + "Lsouther/compiler/meaning/Proposition;I)"
+                            + "Lsouther/compiler/meaning/WhereEachLineDecides$TakenApart;",
+                    "how many steps one line's cases are taken apart in, past which it says so"),
             Map.entry("souther.compiler.meaning.WhereEachLineDecides$Reading#turnsOn("
                             + "Lsouther/compiler/meaning/Proposition;)Ljava/util/List;",
                     "how many cases where a line decides are taken apart, past which the cases"
-                            + " are kept as more than were taken apart"),
+                            + " are kept as nobody taking them apart, naming the figure that"
+                            + " stopped it"),
             Map.entry("souther.compiler.meaning.CasesOfALineAsked#<init>("
                             + "Ljava/util/function/Predicate;)V",
                     "how many times the cases one case was said for are asked, which every"

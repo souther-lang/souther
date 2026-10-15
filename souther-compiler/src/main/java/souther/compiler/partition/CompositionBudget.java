@@ -343,6 +343,28 @@ public enum CompositionBudget {
     ALTERNATIVES_A_PATH_TRIES(1024),
 
     /**
+     * How many steps a statement of several relations is read in, to say where each of its lines
+     * decides.
+     *
+     * <p>A step is one statement built out of others: a quantifier said with a part about no
+     * element of it outside, the statement as its parts come out one at a time
+     * ({@link souther.compiler.meaning.WhereEachLineDecides}), which ways its parts can come out
+     * together; and, for each line, the statement with the line held against it with the line
+     * failing, and what that is left as at each part the cases are taken apart on. Counted once for
+     * the statement and once for each line on its own, so what one line spent decides nothing about
+     * another. What it bounds is a statement whose parts, every way they come out, leave it as a
+     * different statement each time — which is as many as the ways, and doubles with each part.
+     *
+     * <p><b>Reaching it gives the cases up and says so.</b> The line is where the statement turns,
+     * said for cases nobody took apart
+     * ({@link souther.compiler.meaning.DecidingCase.Cases.NotTakenApart}), and where rows on both
+     * sides of the line reach that, the line is not worked out
+     * ({@link souther.compiler.inputs.BlockReason.WhereALineDecidesNotWorkedOut}) — never owed rows
+     * where the statement may turn nothing, and never dropped for a proof nobody finished.
+     */
+    STEPS_A_STATEMENT_IS_READ_IN(1 << 17),
+
+    /**
      * How many cases where a line of a statement of several decides are taken apart, where they are
      * more than are said one by one.
      *
@@ -547,6 +569,9 @@ public enum CompositionBudget {
             case ALTERNATIVES_A_PATH_TRIES ->
                     "how many parts of one of several things a path takes alone, to know which of"
                             + " them it leaves";
+            case STEPS_A_STATEMENT_IS_READ_IN ->
+                    "how many steps a statement is read in, to say where each of its lines"
+                            + " decides";
             case CASES_A_LINE_IS_TAKEN_APART_INTO ->
                     "how many cases where a line of a statement decides are taken apart";
             case CASES_A_LINE_IS_ASKED_IN ->
@@ -609,8 +634,8 @@ public enum CompositionBudget {
                  VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT, VALUES_A_POINT_IS_TRIED_WITH,
                  PATHS_OF_A_DECISION_READ, READINGS_OF_ONE_CONDITION,
                  TOTAL_READINGS_OF_ONE_CONDITION, PARTS_A_DERIVATION_CONCLUDES,
-                 ALTERNATIVES_A_PATH_TRIES, CASES_A_LINE_IS_TAKEN_APART_INTO,
-                 CASES_A_LINE_IS_ASKED_IN,
+                 ALTERNATIVES_A_PATH_TRIES, STEPS_A_STATEMENT_IS_READ_IN,
+                 CASES_A_LINE_IS_TAKEN_APART_INTO, CASES_A_LINE_IS_ASKED_IN,
                  WAYS_A_WAY_IS_LOOKED_ALONG,
                  DEPTH_A_CONSTRUCTION_PLAN_DESCENDS, NUMBERS_OF_A_SET_TRIED,
                  CODE_POINTS_A_STRING_IS_SEARCHED_IN_FULL,

@@ -7,11 +7,15 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
+import souther.compiler.partition.CompositionBudget;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -67,6 +71,110 @@ class WhereALineInsideAQuantifierDecidesTest {
         }
     }
 
+    /**
+     * A relation about the row decides in the same cases whether it is written inside a quantifier
+     * or beside it: some element above nought with {@code a} above five is {@code a} above five
+     * and some element above nought. Each case a case of its own, as written beside it — and
+     * taken apart the same where the relation stands outside the quantifier as well.
+     */
+    @Test
+    void aRelationOfTheRowDecidesTheSameInsideAQuantifierAsBesideIt() {
+        Proposition.Compared row = compared(A, 5, Rel.GT);
+        Proposition element = compared(N, 0, Rel.GT);
+        Proposition inside = new Proposition.Some(CONTAINER,
+                Proposition.all(List.of(element, row)), true);
+        Proposition beside = Proposition.all(List.of(row,
+                new Proposition.Some(CONTAINER, element, true)));
+        Proposition t0 = truth("t0");
+        Proposition t1 = truth("t1");
+        Proposition t2 = truth("t2");
+        // Inside alone, and inside as well as outside it.
+        for (List<Proposition> rest : List.of(
+                List.of(Proposition.all(List.of(t0, t1))),
+                List.of(Proposition.all(List.of(row, t0)), Proposition.all(List.of(t1, t2))))) {
+            List<Proposition> written = new ArrayList<>(rest);
+            written.add(inside);
+            List<Proposition> read = new ArrayList<>(rest);
+            read.add(beside);
+            List<DecidingCase> cases = decidingCasesOf(Proposition.any(written), row);
+            assertTrue(cases.size() > 1 && cases.stream().allMatch(DecidingCase::saidAlone),
+                    () -> "taken apart, each said for itself: " + cases);
+            assertEquals(Set.copyOf(casesOf(Proposition.any(read), row)),
+                    Set.copyOf(cases.stream().map(DecidingCase::condition).toList()),
+                    () -> "the same cases as written beside the quantifier, of " + written);
+        }
+    }
+
+    /**
+     * A truth of the row inside a quantifier and beside it is one part: {@code x} above nought
+     * decides where {@code t} and {@code u} hold, or where {@code t} fails and some element is
+     * above nought — and not where some element is above nought with {@code t} failing whatever
+     * {@code t} is beside it, which a quantifier read as a part of its own would say.
+     */
+    @Test
+    void aTruthOfTheRowInsideAQuantifierAndBesideItIsOnePart() {
+        Proposition.Compared line = compared(A, 0, Rel.GT);
+        Proposition t = truth("t");
+        Proposition element = compared(N, 0, Rel.GT);
+        Proposition written = Proposition.all(List.of(line, Proposition.any(List.of(
+                Proposition.all(List.of(t, truth("u"))),
+                new Proposition.Some(CONTAINER, Proposition.all(List.of(element, t.denied())),
+                        true)))));
+        Proposition read = Proposition.all(List.of(line, Proposition.any(List.of(
+                Proposition.all(List.of(t, truth("u"))),
+                Proposition.all(List.of(t.denied(),
+                        new Proposition.Some(CONTAINER, element, true)))))));
+
+        assertEquals(Set.copyOf(casesOf(read, line)), Set.copyOf(casesOf(written, line)));
+    }
+
+    /**
+     * A quantifier holding eighteen relations about the row, each with one about its element and
+     * any of them enough, is said outside the quantifier once for every way the eighteen come
+     * out, which is more than a statement is read in. Nothing is taken apart then, and every line
+     * says so, naming the figure.
+     */
+    @Test
+    void aQuantifierPastTheStepsLeavesEveryLineNotTakenApart() {
+        List<Proposition> each = new ArrayList<>();
+        for (int i = 0; i < 18; i++) {
+            each.add(Proposition.all(List.of(compared(TermPath.of("r" + i), 0, Rel.GT),
+                    compared(XS.element().then("n" + i), 0, Rel.GT))));
+        }
+        Proposition stated = new Proposition.Some(CONTAINER, Proposition.any(each), true);
+        List<WhereEachLineDecides.Decides> lines = WhereEachLineDecides.in(stated);
+
+        assertEquals(36, lines.size(), lines::toString);
+        for (WhereEachLineDecides.Decides line : lines) {
+            assertEquals(Set.of(CompositionBudget.STEPS_A_STATEMENT_IS_READ_IN),
+                    stoppedAt(line.cases()), () -> "nothing taken apart: " + line);
+        }
+    }
+
+    /** Every figure the cases were stopped at, and none where a case was taken apart. */
+    private static Set<CompositionBudget> stoppedAt(List<DecidingCase> cases) {
+        Set<CompositionBudget> out = new HashSet<>();
+        for (DecidingCase each : cases) {
+            stoppedAt(each.standsFor(), out);
+        }
+        return out;
+    }
+
+    private static void stoppedAt(DecidingCase.Cases cases, Set<CompositionBudget> into) {
+        switch (cases) {
+            case DecidingCase.Cases.One one -> throw new AssertionError("a case taken: " + one);
+            case DecidingCase.Cases.EachOf(var alternatives) ->
+                    alternatives.forEach(one -> stoppedAt(one, into));
+            case DecidingCase.Cases.Together(var factors) ->
+                    factors.forEach(one -> stoppedAt(one, into));
+            case DecidingCase.Cases.NotTakenApart(var figure) -> into.add(figure);
+        }
+    }
+
+    private static Proposition truth(String name) {
+        return new Proposition.Truth(new DecisionSubject.AnInput(TermPath.of(name)), true);
+    }
+
     /** The relation {@code at} against {@code value} as {@code rel}, held. */
     private static Proposition.Compared compared(TermPath at, long value, Rel rel) {
         return new Proposition.Compared(new Relation.Affine(new LinearForm<>(
@@ -76,10 +184,15 @@ class WhereALineInsideAQuantifierDecidesTest {
 
     /** Where {@code line} decides in {@code stated}. */
     private static List<Proposition> casesOf(Proposition stated, Proposition.Compared line) {
+        return decidingCasesOf(stated, line).stream().map(DecidingCase::condition).toList();
+    }
+
+    private static List<DecidingCase> decidingCasesOf(Proposition stated,
+                                                      Proposition.Compared line) {
         List<WhereEachLineDecides.Decides> lines = WhereEachLineDecides.in(stated);
         for (WhereEachLineDecides.Decides each : lines) {
             if (each.line().key().equals(line.key())) {
-                return each.cases().stream().map(DecidingCase::condition).toList();
+                return each.cases();
             }
         }
         throw new AssertionError(line + " is a line of " + stated + ": " + lines);
