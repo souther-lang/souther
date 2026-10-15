@@ -43,6 +43,8 @@ class AConditionOverValuesWrittenOutIsReadOnEachApplicationTest {
     private static final String INPUT = """
             data Month = { days: Int }
             data Window = { first: Month, second: Month, third: Month, n: Int }
+            data Lo
+            data Hi
             """;
 
     @Test
@@ -152,6 +154,19 @@ class AConditionOverValuesWrittenOutIsReadOnEachApplicationTest {
     }
 
     /**
+     * The case a value is, where an arm selects by it, is split where it is met, every case of it at
+     * once: past how many readings one condition makes, it is not walked at all.
+     */
+    @Test
+    void theCasesOfAValueAnArmSelectsByAreCountedBeforeAnyIsRead() {
+        int most = CompositionBudget.READINGS_OF_ONE_CONDITION.maximum();
+        Proposition past = stated("(match " + cases(0, most + 1) + " with\n    | Lo -> true\n"
+                + "    | Hi -> false)");
+        assertEquals(List.of(new WhyUnread.MoreReadingsThanAreMade()), whysIn(past),
+                () -> "one case more than the figure: " + past);
+    }
+
+    /**
      * A container past what a walk writes out stops a condition at that figure, and not at how many
      * readings one condition is read in: the two bound different work.
      */
@@ -178,6 +193,17 @@ class AConditionOverValuesWrittenOutIsReadOnEachApplicationTest {
                     .append(at).append(" else ");
         }
         return out.append("0)").toString();
+    }
+
+    /** A value chosen by the cases {@code from} up to {@code to} of {@code w.n}, halved at each if
+     *  so that the source stays shallow however many there are. */
+    private static String cases(int from, int to) {
+        if (to - from == 1) {
+            return from % 2 == 0 ? "Lo" : "Hi";
+        }
+        int half = (from + to) / 2;
+        return "(if w.n < " + half + " then " + cases(from, half) + " else " + cases(half, to)
+                + ")";
     }
 
     private static boolean unreadIn(Proposition stated) {

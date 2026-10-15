@@ -25,6 +25,12 @@ final class WaysNoInputTakes {
      * the ways a proof is had of as few conditions as still give it, ask about the same conditions
      * over and over, met in one order or another. What a way states is what each condition it
      * consulted states coming out as it did, which the reading of the body answers once.
+     *
+     * <p>Keyed by the rule, while the proof reads what each condition states. The two are one
+     * question because a condition states one thing however often a way consults it
+     * ({@link DecisionPath.Consulted#again}): two ways that are the same rule state the same of the
+     * input. A condition whose statement turned on where it was consulted would have to be a
+     * condition of its own, or this would answer one way with another's proof.
      */
     private final Map<DecisionRule, Optional<NoInputTakesIt>> asked = new HashMap<>();
 

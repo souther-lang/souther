@@ -1036,7 +1036,7 @@ final class Pullback {
                                               WhyUnread.AtNoPosition.Place nowhere) {
         Denotation chosen = chosenAt(value);
         if (chosen != null) {
-            WhyUnread past = splitInto(value.at(), readingsOf(value, READINGS.maximum()));
+            WhyUnread past = splitInto(value.at(), readingsOf(value, READINGS.maximum(), false));
             if (past != null) {
                 return new WhichCase.Unread(past);
             }
@@ -5331,7 +5331,8 @@ final class Pullback {
         // Each case of one side is compared with each of the other's, on every application this
         // reading is one of: counted before any is made.
         long most = READINGS.maximum();
-        WhyUnread past = splitInto(reads, readingsOf(left, most) * readingsOf(right, most));
+        WhyUnread past = splitInto(reads,
+                readingsOf(left, most, true) * readingsOf(right, most, true));
         if (past != null) {
             return partOf(at, new Derivation.Stopped(past, false));
         }
@@ -5350,8 +5351,7 @@ final class Pullback {
         // takes, each counted where it is read.
         for (Denotation side : List.of(left, right)) {
             if (chosenAt(side) instanceof Denotation chosen
-                    && Core.withoutStanding(chosen.value()) instanceof Core.If
-                    && !side.at().isTaken(chosen.value())) {
+                    && Core.withoutStanding(chosen.value()) instanceof Core.If) {
                 return goingIn(new Inside.AChoice(side), side.at(), at, false,
                         taking -> comparedCase(
                                 new Denotation(left.value(), taking.apply(left.at())),
@@ -5392,16 +5392,20 @@ final class Pullback {
      * cases ({@link #comparedCase}): one where it is chosen by none, and otherwise one for what
      * each case answers and one for each relation of the values a library operation's case is
      * reached under — or one more than {@code most}, where it is more than that.
+     *
+     * @param ifsGoneInto whether the reader goes into an if rather than splitting it here. A
+     *                    comparison does ({@link #comparedCase}), and its arms are counted there,
+     *                    in all and only for the arms a run takes ({@link #goingIn}): counted here
+     *                    as well, they would be counted twice and one no run takes among them. The
+     *                    case a value is ({@link #answered}) splits an if where it meets it, and
+     *                    counts its arms here.
      */
-    private long readingsOf(Denotation side, long most) {
+    private long readingsOf(Denotation side, long most, boolean ifsGoneInto) {
         Denotation chosen = chosenAt(side);
         if (chosen == null) {
             return 1;
         }
-        // An if is counted where it is gone into, in all and only for the arms a run takes
-        // ({@link #goingIn}): counted here as well, its arms would be counted twice and one no run
-        // takes among them.
-        if (Core.withoutStanding(chosen.value()) instanceof Core.If) {
+        if (ifsGoneInto && Core.withoutStanding(chosen.value()) instanceof Core.If) {
             return 1;
         }
         Choice choice = Choice.of(Core.withoutStanding(chosen.value()));
@@ -5409,16 +5413,18 @@ final class Pullback {
         for (Choice.Arm arm : choice.arms()) {
             InputReads inside = chosen.at().choosing(arm.decidedBy(), read.rules().symbols(),
                     read.rules().newtypes());
-            readings += readingsOf(new Denotation(arm.answers(), inside), most);
+            readings += readingsOf(new Denotation(arm.answers(), inside), most, ifsGoneInto);
             List<Choice.ArgumentRelation> reachedUnder = switch (choice.kind()) {
                 case THE_ARGUMENTS -> relationsDeciding(arm);
                 // An arm a condition or a case decides is reached by reading that once, and not
                 // by comparisons split on its own.
                 case A_CONDITION, A_CASE, AN_ATTEMPT -> List.of();
             };
+            // A relation the arguments stand in is a comparison, which goes into an if whoever
+            // asked.
             for (Choice.ArgumentRelation stands : reachedUnder) {
-                readings += readingsOf(new Denotation(stands.left(), inside), most)
-                        * readingsOf(new Denotation(stands.right(), inside), most);
+                readings += readingsOf(new Denotation(stands.left(), inside), most, true)
+                        * readingsOf(new Denotation(stands.right(), inside), most, true);
             }
             if (readings > most) {
                 return most + 1;

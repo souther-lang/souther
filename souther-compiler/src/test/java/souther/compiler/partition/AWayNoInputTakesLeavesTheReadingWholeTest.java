@@ -6,10 +6,8 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 
 import java.util.List;
-import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
 /**
@@ -121,12 +119,13 @@ class AWayNoInputTakesLeavesTheReadingWholeTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
 
-        assertFalse(compilation.diagnostics().values().stream().flatMap(List::stream)
-                        .noneMatch(said -> said.diagnostic().severity() == Severity.ERROR),
-                "a type with no value is refused");
-        Map<String, ?> decides = compilation.db()
-                .ask(new Adequacy.Decides(compilation.modules().getFirst())).value();
-        assertNull(decides == null ? null : decides.get("f"),
-                "so no reading of the body has every way dropped by a proof");
+        assertEquals(List.of("E1013"), compilation.diagnostics().values().stream()
+                        .flatMap(List::stream)
+                        .filter(said -> said.diagnostic().severity() == Severity.ERROR)
+                        .map(said -> said.diagnostic().code()).toList(),
+                "a declaration nothing can construct is refused where it is written");
+        assertNull(compilation.db()
+                        .ask(new Adequacy.Decides(compilation.modules().getFirst())).value(),
+                "so no body of the module is read, and none has every way dropped by a proof");
     }
 }

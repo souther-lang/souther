@@ -172,9 +172,13 @@ class ATakeChainIsReadAlongOnlyTheWaysARunTakesTest {
      * @param least the least each takes in the grid, which the declarations allow
      * @param most  the most
      * @param run   what each condition comes out as on an assignment
+     * @param way   the conditions the answer turns on, as they come out on an assignment: every
+     *              one where the answer reads every value chosen, and fewer where an arm reads
+     *              none of the values before it
      */
     private record Model(String source, List<String> atoms, long least, long most,
-                         Function<Map<String, Long>, List<Boolean>> run) {
+                         Function<Map<String, Long>, List<Boolean>> run,
+                         Function<Map<String, Long>, List<Boolean>> way) {
 
         /** Every assignment of the grid. */
         List<Map<String, Long>> grid() {
@@ -194,29 +198,41 @@ class ATakeChainIsReadAlongOnlyTheWaysARunTakesTest {
             return out;
         }
 
-        /** Each way the conditions come out together on some assignment of the grid. */
+        /** Each way the answer is come to on some assignment of the grid. */
         Set<List<Boolean>> ways() {
             Set<List<Boolean>> out = new HashSet<>();
-            grid().forEach(each -> out.add(run.apply(each)));
+            grid().forEach(each -> out.add(way.apply(each)));
             return out;
         }
     }
 
+    /** The helper's chain: the list answered holds what every call took, so the answer turns on
+     *  every condition. */
     private static Model chainModel(int calls, boolean noughtOrMore) {
-        return model(chain(calls, noughtOrMore), calls, noughtOrMore);
+        return model(chain(calls, noughtOrMore), calls, noughtOrMore, at -> taking(calls, at));
     }
 
+    /**
+     * The chain written out: the answer is the last remainder, and an arm that fits answers nought
+     * without reading the remainder before it. So the answer turns on the conditions from the last
+     * back to the last one that fits, and on every condition only where none fits.
+     */
     private static Model letsModel(int calls, boolean noughtOrMore) {
-        return model(lets(calls, noughtOrMore), calls, noughtOrMore);
+        return model(lets(calls, noughtOrMore), calls, noughtOrMore, at -> {
+            List<Boolean> each = taking(calls, at);
+            int fits = each.lastIndexOf(true);
+            return fits < 0 ? each : List.copyOf(each.subList(fits, each.size()));
+        });
     }
 
-    private static Model model(String source, int calls, boolean noughtOrMore) {
+    private static Model model(String source, int calls, boolean noughtOrMore,
+                               Function<Map<String, Long>, List<Boolean>> way) {
         List<String> atoms = new ArrayList<>(List.of("used"));
         for (int i = 0; i < calls; i++) {
             atoms.add("c" + i);
         }
         return new Model(source, atoms, noughtOrMore ? 0 : -2, noughtOrMore ? 4 : 2,
-                at -> taking(calls, at));
+                at -> taking(calls, at), way);
     }
 
     private static Model apartModel(int conditions) {
@@ -224,7 +240,8 @@ class ATakeChainIsReadAlongOnlyTheWaysARunTakesTest {
         for (int i = 0; i < conditions; i++) {
             atoms.add("x" + i);
         }
-        return new Model(apart(conditions), atoms, -2, 2, at -> each(conditions, at));
+        return new Model(apart(conditions), atoms, -2, 2, at -> each(conditions, at),
+                at -> each(conditions, at));
     }
 
     /** What the body states of each condition it reads, as the reading of its meanings has it. */
@@ -353,6 +370,21 @@ class ATakeChainIsReadAlongOnlyTheWaysARunTakesTest {
         assertEquals(List.of(), read.impossible(), "every way is some input's");
     }
 
+    /** The chain written out answers nought or the excess past every cap, which is two ways. */
+    @Test
+    void theChainWrittenOutOfAmountsNoughtOrMoreLeavesARuleForEachWayItsAnswerIsComeTo() {
+        DecisionReading read = rulesAgainstTheRun(letsModel(4, true), 2);
+
+        assertFalse(read.impossible().isEmpty(), "the ways no run takes are proved closed");
+    }
+
+    @Test
+    void theChainWrittenOutOfAmountsThatMayBeNegativeLeavesEveryWay() {
+        DecisionReading read = rulesAgainstTheRun(letsModel(4, false), 5);
+
+        assertEquals(List.of(), read.impossible(), "every way is some input's");
+    }
+
     @Test
     void conditionsOnPositionsOfTheirOwnLeaveEveryWay() {
         DecisionReading read = rulesAgainstTheRun(apartModel(4), 16);
@@ -374,7 +406,7 @@ class ATakeChainIsReadAlongOnlyTheWaysARunTakesTest {
             Set<List<Boolean>> ways = new HashSet<>();
             for (Map<String, Long> at : grid) {
                 if (holdsAll(rule, at)) {
-                    ways.add(model.run().apply(at));
+                    ways.add(model.way().apply(at));
                 }
             }
             assertEquals(1, ways.size(),
