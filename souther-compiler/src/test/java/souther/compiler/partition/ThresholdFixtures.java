@@ -40,7 +40,7 @@ final class ThresholdFixtures {
         return states == null ? GuardThresholds.Guards.NONE
                 : GuardThresholds.of(behavior, states, emitted, plan, inputs.reading(source),
                         ElementBindings.of(states, source.newtypes()),
-                        PathReachability.Answers.NONE,
+                        PathReachability.Arrivals.NONE,
                         new RuleReachNumbering(source.symbols().module(), behavior));
     }
 

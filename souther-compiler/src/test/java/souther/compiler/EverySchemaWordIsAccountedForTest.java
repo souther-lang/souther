@@ -49,6 +49,7 @@ import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.types.RuleOrigin;
 import souther.compiler.publish.InputUseWord;
 import souther.compiler.publish.MaterialisationRegionWord;
+import souther.compiler.publish.ReachProofWord;
 import souther.compiler.publish.RegionSlotWord;
 import souther.compiler.publish.ThroughStepWord;
 import souther.compiler.types.TypeKey;
@@ -399,6 +400,10 @@ class EverySchemaWordIsAccountedForTest {
                             "properties", "construct", "properties", "through", "items",
                             "properties", "kind"),
                     ThroughStepWord.class),
+            // Which kind of place a proof that nothing arrives was about, where a row went there.
+            new Vocabulary("reachProof.kind",
+                    List.of("$defs", "reachProof", "properties", "kind"),
+                    ReachProofWord.class),
             // Where a row that does not hold stopped, which only the places a row fails at spell.
             new Vocabulary("aRowThatDoesNotHold.failedAt",
                     List.of("$defs", "aRowThatDoesNotHold", "properties", "failedAt"),

@@ -1,10 +1,14 @@
 package souther.compiler.query;
 
+import souther.compiler.coverage.ControlPlace;
 import souther.compiler.partition.ConditionGap;
 import souther.compiler.partition.DecisionReading;
 
+import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * What the search of a rule of a decision at one place came to, and the place.
@@ -18,12 +22,24 @@ import java.util.Objects;
  *
  * @param at         the place the answer came from
  * @param settlement what the search there came to
+ * @param shownWrong the places a proof that nothing arrives was about that would have left this
+ *                   place no row, and that a row went through — which is why the place was asked
+ *                   at all. Empty where no such proof was on its way, and always where the place
+ *                   is excluded: what excludes it then is something that stands. The proofs are
+ *                   the reading's ({@link Adequacy.Arrived}) and these are which of them this
+ *                   place rested on
  */
-public record SettledAt(DecisionReading.Ruled at, RuleSettlement settlement) {
+public record SettledAt(DecisionReading.Ruled at, RuleSettlement settlement,
+                        Set<ControlPlace> shownWrong) {
 
     public SettledAt {
         Objects.requireNonNull(at, "an answer was arrived at some place of the rule");
         Objects.requireNonNull(settlement, "a place searched came to some answer");
+        shownWrong = Collections.unmodifiableSet(new LinkedHashSet<>(shownWrong));
+        if (!shownWrong.isEmpty() && settlement.requirement() instanceof RuleRequirement.Excluded) {
+            throw new IllegalArgumentException("a place excluded is excluded by a proof that"
+                    + " stands, and no proof taken back is why it is owed nothing: " + shownWrong);
+        }
     }
 
     /** The conditions of the place searched that the composing there was arrived at without. */
