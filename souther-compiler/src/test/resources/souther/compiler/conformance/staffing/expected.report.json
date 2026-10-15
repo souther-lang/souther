@@ -1961,6 +1961,44 @@
                 "singles" : false
               },
               "narrowedWithin" : [ ]
+            },
+            "placement" : {
+              "kind" : "placed",
+              "points" : [ {
+                "point" : {
+                  "kind" : "at_the_line"
+                },
+                "authored" : {
+                  "kind" : "at_the_line"
+                }
+              }, {
+                "point" : {
+                  "kind" : "beside_the_line",
+                  "side" : "below"
+                },
+                "authored" : {
+                  "kind" : "beside_the_line",
+                  "side" : "below"
+                }
+              }, {
+                "point" : {
+                  "kind" : "in_the_region",
+                  "side" : "below"
+                },
+                "authored" : {
+                  "kind" : "in_the_region",
+                  "side" : "below"
+                }
+              }, {
+                "point" : {
+                  "kind" : "in_the_region",
+                  "side" : "above"
+                },
+                "authored" : {
+                  "kind" : "in_the_region",
+                  "side" : "above"
+                }
+              } ]
             }
           },
           "axis" : "grantLeave/worked",
@@ -2260,6 +2298,44 @@
                 "singles" : false
               },
               "narrowedWithin" : [ ]
+            },
+            "placement" : {
+              "kind" : "placed",
+              "points" : [ {
+                "point" : {
+                  "kind" : "at_the_line"
+                },
+                "authored" : {
+                  "kind" : "at_the_line"
+                }
+              }, {
+                "point" : {
+                  "kind" : "beside_the_line",
+                  "side" : "below"
+                },
+                "authored" : {
+                  "kind" : "beside_the_line",
+                  "side" : "below"
+                }
+              }, {
+                "point" : {
+                  "kind" : "in_the_region",
+                  "side" : "below"
+                },
+                "authored" : {
+                  "kind" : "in_the_region",
+                  "side" : "below"
+                }
+              }, {
+                "point" : {
+                  "kind" : "in_the_region",
+                  "side" : "above"
+                },
+                "authored" : {
+                  "kind" : "in_the_region",
+                  "side" : "above"
+                }
+              } ]
             }
           },
           "axis" : "grantLeave/rate",
@@ -3102,6 +3178,44 @@
                 "singles" : false
               },
               "narrowedWithin" : [ ]
+            },
+            "placement" : {
+              "kind" : "placed",
+              "points" : [ {
+                "point" : {
+                  "kind" : "at_the_line"
+                },
+                "authored" : {
+                  "kind" : "at_the_line"
+                }
+              }, {
+                "point" : {
+                  "kind" : "beside_the_line",
+                  "side" : "above"
+                },
+                "authored" : {
+                  "kind" : "beside_the_line",
+                  "side" : "above"
+                }
+              }, {
+                "point" : {
+                  "kind" : "in_the_region",
+                  "side" : "below"
+                },
+                "authored" : {
+                  "kind" : "in_the_region",
+                  "side" : "below"
+                }
+              }, {
+                "point" : {
+                  "kind" : "in_the_region",
+                  "side" : "above"
+                },
+                "authored" : {
+                  "kind" : "in_the_region",
+                  "side" : "above"
+                }
+              } ]
             }
           },
           "axis" : "judgeHours/hours",
@@ -3205,6 +3319,44 @@
                 "singles" : false
               },
               "narrowedWithin" : [ ]
+            },
+            "placement" : {
+              "kind" : "placed",
+              "points" : [ {
+                "point" : {
+                  "kind" : "at_the_line"
+                },
+                "authored" : {
+                  "kind" : "at_the_line"
+                }
+              }, {
+                "point" : {
+                  "kind" : "beside_the_line",
+                  "side" : "above"
+                },
+                "authored" : {
+                  "kind" : "beside_the_line",
+                  "side" : "above"
+                }
+              }, {
+                "point" : {
+                  "kind" : "in_the_region",
+                  "side" : "below"
+                },
+                "authored" : {
+                  "kind" : "in_the_region",
+                  "side" : "below"
+                }
+              }, {
+                "point" : {
+                  "kind" : "in_the_region",
+                  "side" : "above"
+                },
+                "authored" : {
+                  "kind" : "in_the_region",
+                  "side" : "above"
+                }
+              } ]
             }
           },
           "axis" : "judgeHours/hours",

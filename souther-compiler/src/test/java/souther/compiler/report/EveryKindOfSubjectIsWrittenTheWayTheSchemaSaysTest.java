@@ -98,6 +98,12 @@ class EveryKindOfSubjectIsWrittenTheWayTheSchemaSaysTest {
         weighed.put("coefficient", "1");
         target.set("level", level.deepCopy());
         lineId.set("line", line.deepCopy());
+        // And how the points of the line drawn there are the comparison's own.
+        ObjectNode placement = lineId.putObject("placement");
+        placement.put("kind", "placed");
+        ObjectNode atTheLine = placement.putArray("points").addObject();
+        atTheLine.putObject("point").put("kind", "at_the_line");
+        atTheLine.putObject("authored").put("kind", "at_the_line");
         return List.of(
                 new PublishedSubject.OfAModule("m"),
                 new PublishedSubject.OfABehavior("b"),

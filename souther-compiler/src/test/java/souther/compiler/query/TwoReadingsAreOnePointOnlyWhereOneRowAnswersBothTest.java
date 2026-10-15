@@ -2,8 +2,11 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.check.RuleRef;
+import souther.compiler.numeric.Towards;
 import souther.compiler.partition.Demand;
 import souther.compiler.partition.PointRole;
+import souther.compiler.types.WrittenOwner;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -108,6 +111,103 @@ class TwoReadingsAreOnePointOnlyWhereOneRowAnswersBothTest {
         assertTrue(refused.getMessage().contains("never merged"), refused::getMessage);
     }
 
+    /**
+     * Two calls putting one comparison at one place facing its author's sides two ways are two
+     * readings, and what a row showed is counted for the author's point it is at in each.
+     *
+     * <p>{@code check(a, 10)} holds up to ten on {@code a} and {@code check(20 - a, 10)} from ten
+     * up, and both are evaluated on every row. The value beside the author's line on the side where
+     * {@code x <= limit} fails is eleven on {@code a} for the first call and nine for the second,
+     * and the run past it is above eleven for the first and below nine for the second. The rows at
+     * eight and nine are rows at the second call's places of those two points and at neither of
+     * the first's; merged as one reading of one place, they were counted for the first call's points
+     * or not at all.
+     *
+     * <p>The run on the holding side is asked of neither call here: each call's line stops the
+     * other's run at ten, which is the value at the line.
+     */
+    @Test
+    void aCallTurningTheQuantityRoundAtOnePlaceIsAReadingOfItsOwn() {
+        List<BorderObligationPointAssessment> points = pointsOf("""
+                module example.turned
+
+                data R = { p: Bool, q: Bool }
+
+                behavior f : (a: Int) -> R
+                let f (a) = R { p = check(a, 10), q = check(20 - a, 10) }
+
+                let check (x: Int, limit: Int): Bool = x <= limit
+
+                example f
+                    | "eight" : (8) -> R { p = true, q = false }
+                    | "nine" : (9) -> R { p = true, q = false }
+                    | "ten" : (10) -> R { p = true, q = true }
+                """);
+        Map<PointRole, Map<String, Boolean>> hit = new LinkedHashMap<>();
+        for (BorderObligationPointAssessment each : points) {
+            Map<String, Boolean> byReading = new LinkedHashMap<>();
+            for (BorderAssessment reading : each.readings()) {
+                byReading.put(each.askedAt(reading).toString(),
+                        each.owedAt(reading).coverage()
+                                instanceof Measurement.Complete<ItemAssessment.Coverage>(var seen)
+                                && ItemAssessment.Coverage.hit(seen));
+            }
+            hit.put(each.role(), byReading);
+        }
+
+        assertEquals(Map.of("BesideTheLine[side=ABOVE]", false, "BesideTheLine[side=BELOW]", true),
+                hit.get(PointRole.OFF),
+                () -> "the value beside the line where it fails is eleven for one call and nine"
+                        + " for the other, and only the second has a row there: " + hit);
+        assertEquals(Map.of("InTheRegion[side=ABOVE]", false, "InTheRegion[side=BELOW]", true),
+                hit.get(PointRole.OUT),
+                () -> "and the run past it is above eleven for one and below nine for the other,"
+                        + " where the row at eight is the second's: " + hit);
+    }
+
+    /**
+     * Which side of the author's line a point is on is said of the author's line, whichever way a
+     * reading of it faces.
+     *
+     * <p>{@code x == limit} handed {@code 20 - a} is crossed below the author's ten where {@code a}
+     * is above it, and the point beside the line on the author's lower side is said to be below
+     * the line.
+     */
+    @Test
+    void theSideOfAPointIsTheSideOfTheAuthorsLine() {
+        List<BorderObligationPointAssessment> points = pointsOf("""
+                module example.turned
+
+                behavior f : (a: Int) -> Int
+                let f (a) = if check(20 - a, 10) then 1 else 2
+
+                let check (x: Int, limit: Int): Bool = x == limit
+                """);
+        for (BorderObligationPointAssessment each : points) {
+            if (each.role() == PointRole.OFF) {
+                assertEquals(each.at().side() == Towards.BELOW
+                                ? " below the line" : " above the line", each.whichSide(),
+                        () -> each.at() + " is on that side of the author's line");
+            }
+        }
+        assertTrue(points.stream().anyMatch(each -> each.role() == PointRole.OFF),
+                () -> "the line owes the values beside it: " + points);
+    }
+
+    /** The points the body comparisons of the module {@code example.turned} owe. */
+    private static List<BorderObligationPointAssessment> pointsOf(String model) {
+        Compilation compilation = Compilation.ofSource(model, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        List<BorderObligationPointAssessment> points = compilation.db().ask(
+                new Adequacy.Obligations("example.turned", new GenerationScope.Module(),
+                        HowALineIsRead.VALUES_COMPOSED)).value();
+        assertNotNull(points, "the model under test compiles");
+        return points.stream().filter(each -> each.id().provenance() instanceof RuleRef.Comparison c
+                && c.origin().owner().equals(new WrittenOwner.Body("example.turned", "check")))
+                .toList();
+    }
+
     private static List<String> readings(BorderObligationPointAssessment point) {
         return point.met().keySet().stream().map(where -> where.target().left()).toList();
     }
@@ -123,7 +223,7 @@ class TwoReadingsAreOnePointOnlyWhereOneRowAnswersBothTest {
             // too, and the run beside one of them is stopped by this guard — so they are owed to
             // the reading as much as this is, and telling them apart is asking which rule drew
             // them.
-            if (each.id().provenance() instanceof souther.compiler.check.RuleRef.Comparison) {
+            if (each.id().provenance() instanceof RuleRef.Comparison) {
                 out.get(each.role()).add(each);
             }
         }

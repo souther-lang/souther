@@ -291,8 +291,21 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
      */
     public String whichSide(DomainPoint point) {
         PointRole role = roleOf(point);
-        boolean andAnother = answers.keySet().stream()
-                .anyMatch(each -> !each.equals(point) && roleOf(each) == role);
+        return sideSaid(point, answers.keySet().stream()
+                .anyMatch(each -> !each.equals(point) && roleOf(each) == role));
+    }
+
+    /**
+     * The same, of {@code point} of a line that claims {@code facts}: which side of it the point is
+     * on, where another point of that line plays the same role.
+     */
+    public static String whichSideOf(LineFacts facts, DomainPoint point) {
+        PointRole role = PointRole.of(point, facts.holdsAt(point));
+        return sideSaid(point, pointsOf(facts).stream().anyMatch(each -> !each.equals(point)
+                && PointRole.of(each, facts.holdsAt(each)) == role));
+    }
+
+    private static String sideSaid(DomainPoint point, boolean andAnother) {
         if (!andAnother) {
             return "";
         }
@@ -372,13 +385,17 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
      * forgot to decide would measure a body against a line no row written for it is owed.
      */
     public List<OwedPoint> owes(DomainPoint point) {
+        return owes(point, placement());
+    }
+
+    private List<OwedPoint> owes(DomainPoint point, AuthoredPlacement placement) {
         BorderObligationId line = obligation();
         // The line's own rule is behind every point of it, whatever else settled the region beside
         // it: it is the line a row here stands at or beside, and an author moving it moves the
         // point.
         PointContributions own = PointContributions.by(origin.authoredLine());
-        if (line.at().isEmpty() && origin instanceof LineOrigin.ComparisonOrigin comparison) {
-            return ofTheAuthorsLine(point, line, own, comparison.authored());
+        if (line.at().isEmpty()) {
+            return ofTheAuthorsLine(point, line, own, placement);
         }
         ReadingSeat here = new ReadingSeat.At(point);
         return switch (answer(point)) {
@@ -412,23 +429,50 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
      */
     private List<OwedPoint> ofTheAuthorsLine(DomainPoint point, BorderObligationId line,
                                              PointContributions own,
-                                             AuthoredPointMapping authored) {
+                                             AuthoredPlacement placement) {
         PointContributions settled = settledAt(point, own);
-        if (settled == null || !(authored instanceof AuthoredPointMapping.Proven proven)) {
+        if (settled == null || !(placement instanceof AuthoredPlacement.Placed placed)) {
             return List.of();
         }
-        List<DomainPoint> ofTheLine = pointsOf(line.line().facts());
-        Optional<DomainPoint> tied = theAuthorsPoint(point, proven).filter(ofTheLine::contains);
+        Optional<DomainPoint> tied = placed.of(point);
         if (tied.isPresent()) {
             return List.of(owedAt(line, tied.get(), settled, new ReadingSeat.At(point)));
         }
         List<OwedPoint> out = new ArrayList<>();
-        for (DomainPoint each : ofTheLine) {
+        for (DomainPoint each : pointsOf(line.line().facts())) {
             if (sameKind(each, point)) {
                 out.add(owedAt(line, each, settled, new ReadingSeat.Untied(point)));
             }
         }
         return out;
+    }
+
+    /**
+     * How this reading's points stand to the points of the line its author wrote
+     * ({@link AuthoredPlacement}), worked out from how the reading stands to that line.
+     *
+     * <p>Every point of the reading's own line, whether or not a row is owed at it here: which of
+     * the author's points a place on the input is, is the same question wherever the values run,
+     * and two readings that agree about it are one reading however differently their runs stop.
+     */
+    public AuthoredPlacement placement() {
+        if (obligation().at().isPresent()
+                || !(origin instanceof LineOrigin.ComparisonOrigin comparison)) {
+            return new AuthoredPlacement.ItsOwn();
+        }
+        return switch (comparison.authored()) {
+            case AuthoredPointMapping.Proven proven -> {
+                List<DomainPoint> ofTheLine = pointsOf(obligation().line().facts());
+                Map<DomainPoint, Optional<DomainPoint>> points = new LinkedHashMap<>();
+                for (DomainPoint each : pointsOf(origin)) {
+                    points.put(each, theAuthorsPoint(each, proven).filter(ofTheLine::contains));
+                }
+                yield new AuthoredPlacement.Placed(points);
+            }
+            case AuthoredPointMapping.NotAnAuthoredBoundary _ ->
+                    new AuthoredPlacement.NoPlaceOfTheLine();
+            case AuthoredPointMapping.Undetermined _ -> new AuthoredPlacement.NotShown();
+        };
     }
 
     /** What settled {@code point} of this reading, from the line's own rule on, or null where no
@@ -615,7 +659,9 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
 
     /** The same over every point this line has, in the order the points are in. */
     public List<OwedPoint> owes() {
-        return answers.keySet().stream().flatMap(point -> owes(point).stream()).toList();
+        AuthoredPlacement placement = placement();
+        return answers.keySet().stream().flatMap(point -> owes(point, placement).stream())
+                .toList();
     }
 
     /**
@@ -629,8 +675,7 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
      * the line to say.
      */
     public List<OwedPoint> holdsOpen() {
-        if (!(origin instanceof LineOrigin.ComparisonOrigin comparison)
-                || !(comparison.authored() instanceof AuthoredPointMapping.Undetermined)) {
+        if (!(placement() instanceof AuthoredPlacement.NotShown)) {
             return List.of();
         }
         BorderObligationId line = obligation();

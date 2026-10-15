@@ -776,6 +776,14 @@ class EverySchemaWordIsAccountedForTest {
             new Vocabulary("location.side",
                     List.of("$defs", "location", "properties", "side"),
                     souther.compiler.numeric.Towards.class),
+            // How a reading's points are the points of the line its author wrote. One word per
+            // arm a body comparison's line can stand in; a declaration's line is read in its own
+            // values and writes no placement.
+            new Vocabulary("boundaryLineId.placement.kind",
+                    List.of("$defs", "boundaryLineId", "properties", "placement", "properties",
+                            "kind"),
+                    List.of(souther.compiler.partition.AuthoredPlacement.class),
+                    Set.of("placed", "no_place_of_the_line", "not_shown"), Set.of()),
             new Vocabulary("obligationId.stops.kind",
                     List.of("$defs", "obligationId", "properties", "stops", "properties", "kind"),
                     List.of(souther.compiler.partition.FarEnd.class),

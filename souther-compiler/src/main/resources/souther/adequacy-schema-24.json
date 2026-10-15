@@ -640,13 +640,70 @@
     },
     "boundaryLineId": {
       "type": "object",
-      "description": "One line a row can be written at: where it was drawn, and which line of the model was drawn there. Both, because either alone names more than one line. One line of a type is drawn at every position the type stands at, and those lines share `line`; one rule draws several lines at one place, and those share `target`. Which reading of the model drew the line is not part of it, so a line one helper draws once per call is one line here. Two of these are one line exactly when they are equal as JSON values.",
+      "description": "One line a row can be written at: where it was drawn, and which line of the model was drawn there. Both, because either alone names more than one line. One line of a type is drawn at every position the type stands at, and those lines share `line`; one rule draws several lines at one place, and those share `target`. Which reading of the model drew the line is not part of it, so a line one helper draws once per call is one line here. A comparison written in a body carries `placement` as well, which is how the points of the line drawn here are the points of the line its author wrote: one comparison put at one place facing its author's sides two ways — `check(a, 10)` and `check(20 - a, 10)` — is two lines here, because the run on one side of the place is one of the author's points in one and another in the other. Two of these are one line exactly when they are equal as JSON values.",
       "required": [
         "target",
         "line"
       ],
       "additionalProperties": false,
       "properties": {
+        "placement": {
+          "type": "object",
+          "description": "`placed` is a line shown to be a place of the author's line, with each of its own points (`point`) and the author's point it is (`authored`), or no `authored` where the reading cannot tell which of the author's sides it is on. `no_place_of_the_line` is a line a caller's choice draws between values the comparison comes out one way for. `not_shown` is a line where a caller's choice turns the comparison, which is not shown to be a place of the author's line or not to be one.",
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "enum": [
+                "placed",
+                "no_place_of_the_line",
+                "not_shown"
+              ]
+            },
+            "points": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "point"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "point": {
+                    "$ref": "#/$defs/location"
+                  },
+                  "authored": {
+                    "$ref": "#/$defs/location"
+                  }
+                }
+              }
+            }
+          },
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "placed"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "required": [
+              "points"
+            ]
+          },
+          "else": {
+            "not": {
+              "required": [
+                "points"
+              ]
+            }
+          }
+        },
         "target": {
           "type": "object",
           "description": "Where the line was drawn: the behavior whose input it is on, the quantity it cuts and the level it cuts it at.",
@@ -670,6 +727,53 @@
         },
         "line": {
           "$ref": "#/$defs/authoredLineId"
+        }
+      },
+      "if": {
+        "properties": {
+          "line": {
+            "properties": {
+              "which": {
+                "anyOf": [
+                  {
+                    "properties": {
+                      "kind": {
+                        "const": "comparison"
+                      }
+                    }
+                  },
+                  {
+                    "properties": {
+                      "kind": {
+                        "const": "part_of_comparison"
+                      }
+                    }
+                  }
+                ],
+                "required": [
+                  "kind"
+                ]
+              }
+            },
+            "required": [
+              "which"
+            ]
+          }
+        },
+        "required": [
+          "line"
+        ]
+      },
+      "then": {
+        "required": [
+          "placement"
+        ]
+      },
+      "else": {
+        "not": {
+          "required": [
+            "placement"
+          ]
         }
       }
     },

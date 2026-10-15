@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.partition.AuthoredPlacement;
 import souther.compiler.partition.BorderObligationPoint;
 import souther.compiler.partition.BorderQuantity;
 import souther.compiler.partition.Demand;
@@ -121,24 +122,32 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
      * the pair, and neither is what tells two of them apart; keyed on one, two readings of one line
      * arrived as one and {@link #across} refused a model the compiler can read.
      *
-     * <p><b>So a point and a reading of it are a line and where it was read.</b> A point carries
-     * the authored line ({@link souther.compiler.partition.BorderObligationId#line}), this carries
-     * the target, and the two together are the {@link souther.compiler.partition.BoundaryLine} the
-     * readings of one behavior were folded under ({@code Coverages.merged}). That is why the fold
-     * and this cannot come apart: they are one equivalence written once, rather than two that agree
-     * while every quantity has one position.
+     * <p><b>And how its points stand to the author's.</b> One comparison put at one place facing
+     * its author's sides two ways is two readings there ({@link AuthoredPlacement}): what a row
+     * showed about the run on one side is about one of the author's points in the one and another in
+     * the other.
+     *
+     * <p><b>So a point and a reading of it are a line and where and how it was read.</b> A point
+     * carries the authored line ({@link souther.compiler.partition.BorderObligationId#line}), this
+     * carries the target and the placement, and the two together are the
+     * {@link souther.compiler.partition.BoundaryLine} the readings of one behavior were folded under
+     * ({@code Coverages.merged}). That is why the fold and this cannot come apart: they are one
+     * equivalence written once, rather than two that agree while every quantity has one position
+     * and every call faces the author's line one way.
      */
-    public record Reading(souther.compiler.partition.BoundaryTarget target) {
+    public record Reading(souther.compiler.partition.BoundaryTarget target,
+                          AuthoredPlacement placement) {
 
         public Reading {
-            if (target == null) {
-                throw new IllegalArgumentException("a reading is of some line, somewhere");
+            if (target == null || placement == null) {
+                throw new IllegalArgumentException("a reading is of some line, somewhere, facing"
+                        + " it some way");
             }
         }
 
         /** The reading made where {@code line} was met. */
         public static Reading of(souther.compiler.partition.Border line) {
-            return new Reading(line.cut());
+            return new Reading(line.cut(), line.placement());
         }
 
         /**
@@ -463,6 +472,13 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
      * reading's words and is said under the mark rather than in it.
      */
     public String whichSide() {
+        // Of a comparison a body wrote, the point is a side of the author's line, and a reading's
+        // own side of the place it was put at is the other one wherever the call turned the
+        // quantity round.
+        if (point.line().at().isEmpty()) {
+            return souther.compiler.partition.Border.whichSideOf(point.line().line().facts(),
+                    point.point());
+        }
         Map.Entry<Reading, BorderAssessment> said = met.firstEntry();
         return said.getValue().border().whichSide(seats.get(said.getKey()).asked());
     }

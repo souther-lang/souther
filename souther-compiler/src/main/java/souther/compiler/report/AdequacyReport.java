@@ -28,6 +28,7 @@ import souther.compiler.partition.AuthoredLine;
 import souther.compiler.partition.BorderObligationPoint;
 import souther.compiler.partition.BorderQuantity;
 import souther.compiler.partition.LinearQuantity;
+import souther.compiler.partition.AuthoredPlacement;
 import souther.compiler.partition.BoundaryLine;
 import souther.compiler.partition.InteractionRequirements;
 import souther.compiler.partition.ObligationIdentity;
@@ -6000,7 +6001,33 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         quantityId(target.putObject("quantity"), line.target().of());
         level(target.putObject("level"), line.target().at());
         authoredLineId(into.putObject("line"), line.line());
+        // A declaration's line is read in the type's own values, and its points are the line's.
+        switch (line.placement()) {
+            case AuthoredPlacement.ItsOwn _ -> { }
+            case AuthoredPlacement.Placed placed -> {
+                ObjectNode placement = into.putObject("placement");
+                placement.put("kind", "placed");
+                ArrayNode points = placement.putArray("points");
+                for (DomainPoint each : EVERY_POINT) {
+                    if (!placed.points().containsKey(each)) {
+                        continue;
+                    }
+                    ObjectNode one = points.addObject();
+                    location(one.putObject("point"), each);
+                    placed.of(each).ifPresent(of -> location(one.putObject("authored"), of));
+                }
+            }
+            case AuthoredPlacement.NoPlaceOfTheLine _ ->
+                    into.putObject("placement").put("kind", "no_place_of_the_line");
+            case AuthoredPlacement.NotShown _ ->
+                    into.putObject("placement").put("kind", "not_shown");
+        }
     }
+
+    /** Every point a line can have, in the order the technique names them. */
+    private static final List<DomainPoint> EVERY_POINT = List.of(new DomainPoint.AtTheLine(),
+            new DomainPoint.BesideTheLine(Towards.BELOW), new DomainPoint.BesideTheLine(Towards.ABOVE),
+            new DomainPoint.InTheRegion(Towards.BELOW), new DomainPoint.InTheRegion(Towards.ABOVE));
 
     /**
      * What a line was drawn on, by every part a quantity is equal by, out of what the quantity

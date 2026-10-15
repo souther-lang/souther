@@ -2668,6 +2668,53 @@
                 "singles" : true
               },
               "narrowedWithin" : [ ]
+            },
+            "placement" : {
+              "kind" : "placed",
+              "points" : [ {
+                "point" : {
+                  "kind" : "at_the_line"
+                },
+                "authored" : {
+                  "kind" : "at_the_line"
+                }
+              }, {
+                "point" : {
+                  "kind" : "beside_the_line",
+                  "side" : "below"
+                },
+                "authored" : {
+                  "kind" : "beside_the_line",
+                  "side" : "below"
+                }
+              }, {
+                "point" : {
+                  "kind" : "beside_the_line",
+                  "side" : "above"
+                },
+                "authored" : {
+                  "kind" : "beside_the_line",
+                  "side" : "above"
+                }
+              }, {
+                "point" : {
+                  "kind" : "in_the_region",
+                  "side" : "below"
+                },
+                "authored" : {
+                  "kind" : "in_the_region",
+                  "side" : "below"
+                }
+              }, {
+                "point" : {
+                  "kind" : "in_the_region",
+                  "side" : "above"
+                },
+                "authored" : {
+                  "kind" : "in_the_region",
+                  "side" : "above"
+                }
+              } ]
             }
           },
           "axis" : "redeem/voucher",
@@ -3074,6 +3121,44 @@
                 "singles" : false
               },
               "narrowedWithin" : [ ]
+            },
+            "placement" : {
+              "kind" : "placed",
+              "points" : [ {
+                "point" : {
+                  "kind" : "at_the_line"
+                },
+                "authored" : {
+                  "kind" : "at_the_line"
+                }
+              }, {
+                "point" : {
+                  "kind" : "beside_the_line",
+                  "side" : "above"
+                },
+                "authored" : {
+                  "kind" : "beside_the_line",
+                  "side" : "above"
+                }
+              }, {
+                "point" : {
+                  "kind" : "in_the_region",
+                  "side" : "below"
+                },
+                "authored" : {
+                  "kind" : "in_the_region",
+                  "side" : "below"
+                }
+              }, {
+                "point" : {
+                  "kind" : "in_the_region",
+                  "side" : "above"
+                },
+                "authored" : {
+                  "kind" : "in_the_region",
+                  "side" : "above"
+                }
+              } ]
             }
           },
           "axis" : "redeem/party",
@@ -4834,6 +4919,44 @@
                 "singles" : false
               },
               "narrowedWithin" : [ ]
+            },
+            "placement" : {
+              "kind" : "placed",
+              "points" : [ {
+                "point" : {
+                  "kind" : "at_the_line"
+                },
+                "authored" : {
+                  "kind" : "at_the_line"
+                }
+              }, {
+                "point" : {
+                  "kind" : "beside_the_line",
+                  "side" : "above"
+                },
+                "authored" : {
+                  "kind" : "beside_the_line",
+                  "side" : "above"
+                }
+              }, {
+                "point" : {
+                  "kind" : "in_the_region",
+                  "side" : "below"
+                },
+                "authored" : {
+                  "kind" : "in_the_region",
+                  "side" : "below"
+                }
+              }, {
+                "point" : {
+                  "kind" : "in_the_region",
+                  "side" : "above"
+                },
+                "authored" : {
+                  "kind" : "in_the_region",
+                  "side" : "above"
+                }
+              } ]
             }
           },
           "axis" : "seat/party",

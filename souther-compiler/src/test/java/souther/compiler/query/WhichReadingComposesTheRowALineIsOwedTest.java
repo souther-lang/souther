@@ -9,6 +9,7 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.Limits;
+import souther.compiler.partition.AuthoredPlacement;
 import souther.compiler.partition.BorderQuantity;
 import souther.compiler.partition.BoundaryTarget;
 import souther.compiler.partition.Criterion;
@@ -189,8 +190,8 @@ class WhichReadingComposesTheRowALineIsOwedTest {
      */
     @Test
     void twoReadingsInOneBehaviorAreTwoReadings() {
-        Reading first = new Reading(aLineAt("one", "x.a"));
-        Reading second = new Reading(aLineAt("one", "x.b"));
+        Reading first = new Reading(aLineAt("one", "x.a"), ITS_OWN);
+        Reading second = new Reading(aLineAt("one", "x.b"), ITS_OWN);
         SearchCoverage coverage = coverageOf(Map.of(
                         first, new SearchCoverage.ReadingSearch.Attempted(nothingThere()),
                         second, new SearchCoverage.ReadingSearch.Attempted(refused())),
@@ -305,8 +306,11 @@ class WhichReadingComposesTheRowALineIsOwedTest {
 
     /** A reading of the line: one behavior at its one position carrying the type. */
     private static Reading at(String behavior) {
-        return new Reading(aLineAt(behavior, behavior + ".value"));
+        return new Reading(aLineAt(behavior, behavior + ".value"), ITS_OWN);
     }
+
+    /** How a reading of a declaration's line stands to it: at the line's own points. */
+    private static final AuthoredPlacement ITS_OWN = new AuthoredPlacement.ItsOwn();
 
     /** Where a line was read: one position of one behavior, cut at one value. */
     private static BoundaryTarget aLineAt(String behavior, String path) {
