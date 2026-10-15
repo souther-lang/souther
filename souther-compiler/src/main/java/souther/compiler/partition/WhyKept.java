@@ -114,8 +114,8 @@ public sealed interface WhyKept {
         Comparator<Shortfall> ONE_IN_A_STEADY_ORDER = Comparator
                 .comparingInt(Shortfall::kind)
                 .thenComparing(Shortfall::operationIfAny)
-                .thenComparingInt(each -> each instanceof ToSomeOfTheElements(var _, var applied)
-                        ? applied.ordinal() : -1);
+                .thenComparing(each -> each instanceof ToSomeOfTheElements(var _, var applied)
+                        ? applied : null, Comparator.nullsFirst(Comparator.naturalOrder()));
 
         /** Which kind this is, in the order the kinds are said. */
         private int kind() {
