@@ -2,6 +2,7 @@ package souther.cli;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import souther.cli.backend.LocalRepository;
 
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
@@ -93,15 +94,27 @@ class ALineATargetIsWrittenWrongOnIsRefusedBeforeAnythingIsLookedForTest {
         assertTrue(said.err().contains("0.0.1-other"), said.err());
     }
 
+    /**
+     * With the repository named here, so that a line read as a fetch would ask it rather than
+     * the one a machine running this is set to.
+     */
     @Test
-    void theFetchCommandTakesFetchAndATargetAndNothingElse(@TempDir Path work) {
-        for (List<String> line : List.of(List.of("backend"), List.of("backend", "fetch"),
-                List.of("backend", "get", "wasm"), List.of("backend", "fetch", "wasm", "x"),
-                List.of("backend", "fetch", "jvm"))) {
-            Said said = run(work, line.toArray(String[]::new));
+    void theFetchCommandTakesFetchAndATargetAndNothingElse(@TempDir Path work) throws Exception {
+        try (LocalRepository repository = LocalRepository.start()) {
+            System.setProperty("souther.repository", repository.uri().toString());
+            try {
+                for (List<String> line : List.of(List.of("backend"), List.of("backend", "fetch"),
+                        List.of("backend", "get", "wasm"), List.of("backend", "fetch", "wasm", "x"),
+                        List.of("backend", "fetch", "jvm"))) {
+                    Said said = run(work, line.toArray(String[]::new));
 
-            assertEquals(2, said.code(), line + said.err());
-            assertFalse(said.out().contains("wasm"), line + said.out());
+                    assertEquals(2, said.code(), line + said.err());
+                    assertFalse(said.out().contains("wasm"), line + said.out());
+                }
+            } finally {
+                System.clearProperty("souther.repository");
+            }
+            assertEquals(List.of(), repository.asked());
         }
     }
 }

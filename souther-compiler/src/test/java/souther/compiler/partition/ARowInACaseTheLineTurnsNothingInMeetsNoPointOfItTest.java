@@ -8,6 +8,7 @@ import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.meaning.Proposition;
+import souther.compiler.meaning.WhereEachLineDecides;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
@@ -55,10 +56,6 @@ class ARowInACaseTheLineTurnsNothingInMeetsNoPointOfItTest {
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
-    /** How many cases a line is said in one by one, {@code WhereEachLineDecides.MOST_CASES}, which
-     *  the numbers of truths here are chosen either side of. */
-    private static final int SAID_ONE_BY_ONE = 16;
-
     /** The guards of {@code e} for each number of truths, which every test here only reads. */
     private static final Map<Integer, GuardThresholds.Guards> GUARDS = new ConcurrentHashMap<>();
 
@@ -93,7 +90,7 @@ class ARowInACaseTheLineTurnsNothingInMeetsNoPointOfItTest {
             int of = truths;
             int dividing = 1 << (truths - 1);
             List<Proposition> cases = casesTheLineIsDrawnIn(truths);
-            assertEquals(dividing <= SAID_ONE_BY_ONE ? dividing : 1, cases.size(),
+            assertEquals(dividing <= WhereEachLineDecides.MOST_CASES ? dividing : 1, cases.size(),
                     () -> "the cases the line is drawn in, of " + of + " truths: " + cases);
             for (Proposition each : cases) {
                 List<Boolean> comparisons = each.partsHeld().stream()
