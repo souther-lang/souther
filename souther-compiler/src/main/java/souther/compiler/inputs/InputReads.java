@@ -807,8 +807,7 @@ public final class InputReads {
      */
     public InputReads steppingThrough(CalledBody body, List<Core> args, BindingId element,
                                       TermPath at, DeclarationNewtypes newtypes) {
-        return calledWith(body, args,
-                names.entering(body.elements()).overStandingCalls().naming(element, at),
+        return calledWith(body, args, names.entering(body.elements()).naming(element, at),
                 applied.entered(), newtypes);
     }
 
@@ -821,8 +820,8 @@ public final class InputReads {
      * says what it takes them to answer.
      */
     public InputReads searching(CalledBody body, List<Core> args, DeclarationNewtypes newtypes) {
-        return calledWith(body, args, names.entering(body.elements()).overStandingCalls(),
-                applied.entered(), newtypes);
+        return calledWith(body, args, names.entering(body.elements()), applied.entered(),
+                newtypes);
     }
 
     /**
@@ -830,13 +829,17 @@ public final class InputReads {
      * handed it, {@code entered} the bodies entered on the way — or null where the call hands
      * another number of values than the body takes. A parameter handed a value at a position
      * stands at it, and one handed anything else is given it as read here.
+     *
+     * <p>The body is the tree the analysis of its behavior reads, which keeps the language's
+     * operations standing as calls whichever tree the call was read in; the arguments stay read
+     * here.
      */
     private InputReads calledWith(CalledBody body, List<Core> args, BindingEnvironment entering,
                                   Set<ValueName.Behavior> entered, DeclarationNewtypes newtypes) {
         if (args.size() != body.parameters().size()) {
             return null;
         }
-        BindingEnvironment inside = entering;
+        BindingEnvironment inside = entering.overStandingCalls();
         Map<BindingId, Denotation> given = new LinkedHashMap<>(applied.given());
         for (int i = 0; i < args.size(); i++) {
             Core.Binder parameter = body.parameters().get(i);
