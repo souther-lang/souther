@@ -13,6 +13,7 @@ import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.PathResolution;
 import souther.compiler.inputs.Refinement;
+import souther.compiler.inputs.Requirements;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermPath;
@@ -23,6 +24,7 @@ import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -30,6 +32,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.BiPredicate;
 
 /**
  * What a row has already had to satisfy by the time it arrives at one comparison.
@@ -208,6 +211,56 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
         List<OnTheWay> found =
                 byLine.get(new ALine(comparison.read().states(), comparison.part()));
         return new WayToTheBorder(found == null ? List.of() : found);
+    }
+
+    /**
+     * Whether no row is on the ways to the lines {@code one} and {@code other} at once: what the two
+     * ways ask of a row, taken together, asks one position to be two things.
+     *
+     * <p>Then a row at one of them is never at the other, and the other's place is no edge of a run
+     * beside the first. {@code month.value <= minimum(term)} draws its line at 12 where {@code term}
+     * is {@code OneYear} and at 24 where it is {@code TwoYear}; a row at the first has a month above
+     * 24 on the same side of 12 as one at 13.
+     *
+     * <p>Only a proof says so. Nothing is said where either way is one of several ways, or where the
+     * position asked twice is inside the elements or keys of a container: two comparisons inside two
+     * closures each ask that of an element of their own, which may be two elements of one row.
+     *
+     * <p>Asked of the cases and the truths the two ways ask, which are the two things a way asks a
+     * position to be ({@link Reachability.TwoAtOnce}); the region the ways leave is not worked out,
+     * since nothing here reads it.
+     */
+    public boolean neverTogether(LineOrigin one, LineOrigin other) {
+        WayToTheBorder first = wayTo(one);
+        WayToTheBorder second = wayTo(other);
+        if (first.onTheWay().isEmpty() || second.onTheWay().isEmpty()
+                || !first.severalWays().isEmpty() || !second.severalWays().isEmpty()) {
+            return false;
+        }
+        List<OnTheWay> joined = new ArrayList<>(first.onTheWay());
+        joined.addAll(second.onTheWay());
+        WayToTheBorder both = new WayToTheBorder(joined);
+        TermPath twice = switch (both.requirements()) {
+            case Requirements.Merge.Conflict conflict -> conflict.at();
+            case Requirements.Merge.Merged _ ->
+                    both.truths() instanceof TruthsAsked.Merge.Conflict(TermPath at) ? at : null;
+        };
+        return twice != null && twice.steps().stream().noneMatch(step ->
+                step instanceof TermPath.Step.Element || step instanceof TermPath.Step.Key);
+    }
+
+    /**
+     * {@link #neverTogether}, asked of each pair of lines once however many borders ask it: a
+     * border asks it of every other line on its quantity, and every line on the quantity is a
+     * border.
+     */
+    public BiPredicate<LineOrigin, LineOrigin> apart() {
+        Map<LineOrigin, Map<LineOrigin, Boolean>> asked = new IdentityHashMap<>();
+        return (one, other) -> {
+            Boolean before = asked.getOrDefault(other, Map.of()).get(one);
+            return before != null ? before : asked.computeIfAbsent(one, _ -> new IdentityHashMap<>())
+                    .computeIfAbsent(other, _ -> neverTogether(one, other));
+        };
     }
 
     /**

@@ -1468,6 +1468,10 @@
                   "type": "string",
                   "description": "What a row at this reading has to do, in this position's terms — `boundaries[].items[].against` for the same border and point."
                 },
+                "where": {
+                  "type": "string",
+                  "description": "What every row at this reading has to be beside the values: which cases of a sum a value is or is not, whether it holds a value, which truth it is, as the cases the line decides in hold them, less what the position read already names. Absent where those cases hold no value of the input to a case or a truth; the relations they ask beside it are not said here."
+                },
                 "status": {
                   "$ref": "#/$defs/status"
                 },

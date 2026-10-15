@@ -136,7 +136,7 @@ class AMeasureIsHeldUnderThePositionItMeasuresTest {
                         HeldSeams.of(LevelSpace.onACarrier(whole),
                                 new Level.OnACarrier(whole, Count.of(java.math.BigDecimal.TEN)),
                                 Towards.BELOW),
-                        WhatTheRulesTogetherLeaveAQuantityTest.aLine(1))),
+                        WhatTheRulesTogetherLeaveAQuantityTest.aReading(1))),
                 souther.compiler.check.NarrowedBounds.NOTHING);
         PositionMeasurements parting =
                 new PositionMeasurements(n.position(), List.of(partsOnly), READ_TO_THE_END);
