@@ -228,6 +228,146 @@ class ABorderSaysWhyItOwesNoRowAtAPointTest {
         assertEquals("1", length.against(PointRole.ON));
     }
 
+    /**
+     * A number taken of a position whose rules name its values is held to the numbers those values
+     * come to, and a point or a run holding none of them is refused as one of the value itself is.
+     *
+     * <p>{@code "a"} and {@code "b"} are both one long, so a guard at one owes nothing at nought
+     * and nothing past one, and owes the row at one.
+     */
+    @Test
+    void aNumberTakenOfTheValuesNamedIsHeldToTheNumbersTheyComeTo() {
+        BorderAssessment line = lineOf(naming("Code", "String", "value == \"a\" || value == \"b\"",
+                "String.length(c.value) < 1"), "String.length(c) = 0");
+        assertEquals(List.of("ON: NO_VALUE_CAN_STAND_THERE", "OFF = 1: owed",
+                        "IN: NO_VALUE_CAN_STAND_THERE", "OUT: NO_VALUE_CAN_STAND_THERE"),
+                owedAt(line), "no value named is empty, and none is longer than one");
+    }
+
+    /** Each point of {@code line}, with what a row there is asked and whether one is owed, or why
+     *  none is. */
+    private static List<String> owedAt(BorderAssessment line) {
+        List<String> said = new ArrayList<>();
+        for (BorderAssessment.Point point : line.points()) {
+            said.add(point.role() + (point.asked() == null ? "" : " " + point.asked()) + ": "
+                    + switch (point.item()) {
+                case ItemAssessment.Owed _ -> "owed";
+                case ItemAssessment.NotOwed not -> not.reason().name();
+                case ItemAssessment.NotWorkedOut not -> "not worked out: " + not.why();
+            });
+        }
+        return said;
+    }
+
+    /**
+     * The numbers the values come to, and not the run between the least and the greatest of them.
+     *
+     * <p>{@code "a"} and {@code "bbb"} are one and three long and nothing between, so a point at two
+     * is refused while the runs either side of it hold one of the two.
+     */
+    @Test
+    void theNumbersTheValuesComeToLeaveTheGapsBetweenThem() {
+        String named = "value == \"a\" || value == \"bbb\"";
+        BorderAssessment underThree = lineOf(naming("Code", "String", named,
+                "String.length(c.value) < 3"), "String.length(c) = 3");
+        assertEquals(NOT_OWED, underThree.at(PointRole.ON), "nothing named is two long");
+        assertTrue(underThree.at(PointRole.OFF) instanceof ItemAssessment.Owed,
+                underThree::toString);
+
+        BorderAssessment underTwo = lineOf(naming("Code", "String", named,
+                "String.length(c.value) < 2"), "String.length(c) = 2");
+        assertTrue(underTwo.at(PointRole.ON) instanceof ItemAssessment.Owed, underTwo::toString);
+        assertEquals(NOT_OWED, underTwo.at(PointRole.OFF), "nothing named is two long");
+        assertTrue(underTwo.at(PointRole.OUT) instanceof ItemAssessment.Owed,
+                () -> "three is past two: " + underTwo);
+    }
+
+    /**
+     * A number the values named come to is offered a row holding one of them.
+     *
+     * <p>Three is a length {@code "bbb"} has, and a string of three nobody named is one the rules
+     * refuse. Offered that string, the point would come back as one every value tried at was
+     * refused.
+     */
+    @Test
+    void aNumberTheValuesNamedComeToIsOfferedOneOfThem() {
+        Compilation compiled = compiled(naming("Code", "String",
+                "value == \"a\" || value == \"bbb\"", "String.length(c.value) < 3"));
+        BorderAssessment line = Adequacy.searchedBoundariesOf(compiled.db(), "example.owed")
+                .values().stream().flatMap(List::stream)
+                .filter(each -> each.label().equals("String.length(c) = 3")).findFirst()
+                .orElseThrow();
+        List<String> offered = new ArrayList<>();
+        for (ItemAssessment.Attempt attempt : line.owedAt(PointRole.OFF).searches().each()) {
+            if (attempt instanceof ItemAssessment.Attempt.Built built) {
+                offered.add(String.join(", ",
+                        built.row().inputs().stream().map(FixtureTemplate::text).toList()));
+            }
+        }
+        assertEquals(List.of("Code(\"bbb\")"), offered);
+    }
+
+    /**
+     * A value named empty is nought long, and a value outside the basic plane is one long: the
+     * number is the one the term reads of the value, counted in code points.
+     */
+    @Test
+    void theNumbersAreTheOnesTheTermReadsOfEachValue() {
+        BorderAssessment empty = lineOf(naming("Code", "String", "value == \"\" || value == \"a\"",
+                "String.length(c.value) < 1"), "String.length(c) = 0");
+        assertTrue(empty.at(PointRole.ON) instanceof ItemAssessment.Owed, empty::toString);
+        assertEquals(NOT_OWED, empty.at(PointRole.OUT), "and nothing named is longer than one");
+
+        BorderAssessment astral = lineOf(naming("Code", "String", "value == \"😀\"",
+                "String.length(c.value) < 2"), "String.length(c) = 2");
+        assertTrue(astral.at(PointRole.ON) instanceof ItemAssessment.Owed, astral::toString);
+        assertEquals(NOT_OWED, astral.at(PointRole.OFF), "one code point is one long");
+    }
+
+    /**
+     * Of any number taken of the position and not of a length alone: a remainder is read of each
+     * value with what it was given beside it.
+     *
+     * <p>One and four leave one by three, so a guard at one owes nothing at nought or at two.
+     */
+    @Test
+    void aRemainderOfTheValuesNamedIsHeldToTheRemaindersTheyLeave() {
+        Map<String, BorderAssessment> borders = bordersOf(naming("Code", "Int",
+                "value == 1 || value == 4", "Int.floorMod(c.value, 3) < 1"));
+        BorderAssessment line = borders.values().stream()
+                .filter(each -> each.label().startsWith("Int.floorMod")).findFirst()
+                .orElseThrow(() -> new AssertionError(borders.keySet().toString()));
+        assertEquals(NOT_OWED, line.at(PointRole.ON), "neither leaves nought");
+        assertTrue(line.at(PointRole.OFF) instanceof ItemAssessment.Owed, line::toString);
+        assertEquals(NOT_OWED, line.at(PointRole.OUT), "nor two");
+    }
+
+    /**
+     * And of a count of some of the code points of the string, which no operation answers.
+     *
+     * <p>{@code "a"} and {@code " b "} each hold one code point that is not whitespace, so what is
+     * left of either once trimmed is never empty and never longer than one.
+     */
+    @Test
+    void aCountOfTheCodePointsOfTheValuesNamedIsHeldToTheCountsTheyHold() {
+        Map<String, BorderAssessment> borders = bordersOf(naming("Code", "String",
+                "value == \"a\" || value == \" b \"", "String.length(String.trim(c.value)) < 1"));
+        BorderAssessment line = borders.values().stream()
+                .filter(each -> each.label().startsWith("#(")).findFirst()
+                .orElseThrow(() -> new AssertionError(borders.keySet().toString()));
+        assertEquals(List.of("ON: NO_VALUE_CAN_STAND_THERE", "OFF = 1: owed",
+                        "IN: NO_VALUE_CAN_STAND_THERE", "OUT: NO_VALUE_CAN_STAND_THERE"),
+                owedAt(line));
+    }
+
+    /** The border of {@code model} at {@code label}. */
+    private static BorderAssessment lineOf(String model, String label) {
+        Map<String, BorderAssessment> borders = bordersOf(model);
+        BorderAssessment line = borders.get(label);
+        assertNotNull(line, borders.keySet().toString());
+        return line;
+    }
+
     private static final ItemAssessment.NotOwed NOT_OWED =
             new ItemAssessment.NotOwed(NotOwedReason.NO_VALUE_CAN_STAND_THERE);
 

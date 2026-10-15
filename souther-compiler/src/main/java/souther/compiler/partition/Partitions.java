@@ -28,6 +28,7 @@ import souther.compiler.inputs.TypeBounds;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.values.AdmissibleSet;
 import souther.compiler.values.Allowance;
+import souther.compiler.values.Value;
 import souther.compiler.values.ValueSet;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.FilingCoordinate;
@@ -2296,11 +2297,26 @@ public final class Partitions {
      * different questions: whether a string of that length exists at all is a claim about strings,
      * and a reading of it that had consulted one type's format would be that claim taken from an
      * opinion about that type.
+     *
+     * <p>Where the rules of the names name finitely many strings, the ones of that many code points
+     * among them. Those are every string the position can hold, so a string a format admits beside
+     * them is one the rules refuse, and a string of that length nobody named is none.
      */
     static List<FixtureTemplate> admittedStringOfSize(TypeView view, RuleReadingContext reading,
                                                       int size) {
         if (size < 0) {
             return List.of();
+        }
+        if (PartitionClasses.admittedByItsNames(view, reading).approximation()
+                instanceof ValueSet.Finite named) {
+            List<FixtureTemplate> out = new ArrayList<>();
+            for (Value each : named.values()) {
+                if (each instanceof Value.Text(String text)
+                        && text.codePointCount(0, text.length()) == size) {
+                    out.add(FixtureTemplate.string(text));
+                }
+            }
+            return out;
         }
         RulesRead rules = rulesReadOn(view, reading);
         if (rules == null) {

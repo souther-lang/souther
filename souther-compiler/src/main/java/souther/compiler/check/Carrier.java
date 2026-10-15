@@ -1505,7 +1505,7 @@ public sealed interface Carrier extends ValueOrder {
      * where it sits are the same fact said twice, and the crossing between them is the carrier's.
      * The temporal carriers place no written value, so nothing here writes one back.
      */
-    private Value valueAt(Place at) {
+    default Value valueAt(Place at) {
         return switch (this) {
             case Whole _, Dense _ -> Value.number(Count.number(at).at());
             case Text _ -> Value.text(((souther.compiler.numeric.Text) at).at());
@@ -1637,7 +1637,7 @@ public sealed interface Carrier extends ValueOrder {
      * nothing ever asks this to place one, and answering would be a second way for a date to be
      * written down.
      */
-    private Place placeOf(Value value) {
+    default Place placeOf(Value value) {
         return switch (this) {
             case Whole _, Dense _ -> value instanceof Value.Number it
                     ? onTheGrid(Count.of(it.value())) : null;
