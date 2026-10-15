@@ -2,8 +2,11 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.check.Carrier;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
+import souther.compiler.diag.SourceLayouts;
+import souther.compiler.diag.SourceRendering;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.RunSource;
@@ -14,6 +17,7 @@ import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Place;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
+import souther.compiler.report.GeneratedRows;
 import souther.compiler.semantics.TakenAs;
 
 import java.math.BigDecimal;
@@ -24,6 +28,7 @@ import java.util.Map;
 import java.util.SequencedMap;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -319,6 +324,107 @@ class OneValueAnswersEveryClassOfALocationOrNoneDoesTest {
                 "the value of the container, how many it holds and a total over what it holds");
     }
 
+    /**
+     * A string held to three values, divided by the values themselves and by how long each is.
+     *
+     * <p>{@code " a"} and {@code "bb"} are two long and {@code "c"} is one, so a class of the value
+     * and a class of the length are in one value exactly where the value is that long.
+     */
+    private static final String THREE_STRINGS = """
+            module example.named
+
+            data Ok
+            data No
+            data Verdict = Ok | No
+            data Code = String
+                invariant value == " a" || value == "bb" || value == "c"
+
+            behavior gate : (c: Code) -> Verdict
+            let gate (c) = if String.length(c.value) == 2
+                && String.length(String.trim(c.value)) == 1 then No else Ok
+            """;
+
+    /**
+     * A class of the value and a class of a number taken of it are answered by a value that is in
+     * both.
+     *
+     * <p>Each class composed a value for itself, so the value {@code " a"} and the lengths of two
+     * — {@code " a"} and {@code "bb"} — were two writes of one location, and the row was refused
+     * as one holding two values at once.
+     */
+    @Test
+    void aClassOfTheValueAndAClassOfANumberTakenOfItAreAnsweredByOneValue() {
+        Model model = new Model(THREE_STRINGS);
+        TermRealizations.Realization made = model.answering(model.classesLabelled("\" a\"", "= 2"));
+
+        List<FixtureTemplate> built = assertInstanceOf(
+                TermRealizations.Realization.Built.class, made, made::toString).values();
+        assertEquals(List.of("Code(\" a\")"), built.stream().map(FixtureTemplate::text).toList());
+    }
+
+    /**
+     * And where no value named is in both, that is what the model settles: every value the
+     * position can hold was read through both, and none is {@code "c"} and two long.
+     */
+    @Test
+    void aClassOfTheValueAndAClassOfANumberNoValueIsInAreAnsweredAsNoValue() {
+        Model model = new Model(THREE_STRINGS);
+        TermRealizations.Realization made = model.answering(model.classesLabelled("\"c\"", "= 2"));
+
+        TermRealizations.Realization.None none = assertInstanceOf(
+                TermRealizations.Realization.None.class, made, made::toString);
+        assertEquals(Generator.UnresolvedCombination.Reason.NO_VALUE_CAN_STAND_THERE, none.why());
+    }
+
+    /**
+     * And a number picked out of a class to try is answered about that number alone: a caller that
+     * picked one length out of every length but two has asked whether one value stands there,
+     * which is no statement about the lengths it was picked out of.
+     *
+     * <p>The same two classes asked whole are what the model settles, as above: {@code " a"} is
+     * two long and in no length but two.
+     */
+    @Test
+    void aNumberPickedOutOfAClassToTryIsAnsweredAboutThatNumberAlone() {
+        Model model = new Model(THREE_STRINGS);
+        SequencedMap<RealizationTarget.OfANumber, NumericSet> classes =
+                model.classesLabelled("\" a\"", "/= 2");
+        TermRealizations.Realization whole = model.answering(classes);
+        assertEquals(Generator.UnresolvedCombination.Reason.NO_VALUE_CAN_STAND_THERE,
+                assertInstanceOf(TermRealizations.Realization.None.class, whole,
+                        whole::toString).why());
+
+        SequencedMap<RealizationTarget, AskedAt> asked = new LinkedHashMap<>();
+        classes.forEach((target, admits) -> {
+            Carrier on = model.subject.quantities().ordersOf(target.term()).answered();
+            asked.put(target, target.term() instanceof NumericTerm.ValueOf
+                    ? AskedAt.theClass(admits, on)
+                    : AskedAt.aNumberOutOf(admits, Count.of(BigDecimal.ONE), on));
+        });
+        TermRealizations.Realization picked = model.answeringAsked(asked);
+        assertEquals(Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
+                assertInstanceOf(TermRealizations.Realization.None.class, picked,
+                        picked::toString).why());
+    }
+
+    /**
+     * And the rows a reader is handed: every class of the length is written with a value of it,
+     * and none is said to need the value to be two things.
+     */
+    @Test
+    void theRowsForTheClassesOfTheLengthAreWrittenWithAValueOfEach() {
+        Compilation compilation = Compilation.ofSource(THREE_STRINGS, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        String rows = GeneratedRows.of(compilation, "example.named", "gate",
+                SourceRendering.namedByIdentity(SourceLayouts.NONE)).text();
+
+        assertFalse(rows.contains("would have to hold two values at once"), rows);
+        assertFalse(rows.contains("no row for"), rows);
+        assertTrue(rows.contains("// fills c== 2"), rows);
+        assertTrue(rows.contains("// fills c=/= 2"), rows);
+    }
+
     /** One model, read and divided, with the numbers its classes are of in hand. */
     private static final class Model {
 
@@ -385,6 +491,23 @@ class OneValueAnswersEveryClassOfALocationOrNoneDoesTest {
             return out;
         }
 
+        /** The classes called {@code labels}, one of each, whichever of the location's numbers
+         *  each is a class of. */
+        private SequencedMap<RealizationTarget.OfANumber, NumericSet> classesLabelled(
+                String... labels) {
+            SequencedMap<RealizationTarget.OfANumber, NumericSet> out = new LinkedHashMap<>();
+            for (String label : labels) {
+                PartitionClass cls = partitioning.axes().stream()
+                        .flatMap(axis -> axis.classes().stream())
+                        .filter(each -> each.label().equals(label)).findFirst()
+                        .orElseThrow(() -> new AssertionError("no class " + label + " among "
+                                + partitioning.axes().stream().flatMap(axis -> axis.classes()
+                                        .stream()).map(PartitionClass::label).toList()));
+                out.put(RealizationTarget.of(cls.of()), cls.recognises().numbers());
+            }
+            return out;
+        }
+
         private TermRealizations.Realization answering(
                 SequencedMap<RealizationTarget.OfANumber, NumericSet> demands) {
             // The classes as they are asked for, which is what a search of one is about: these
@@ -392,8 +515,13 @@ class OneValueAnswersEveryClassOfALocationOrNoneDoesTest {
             SequencedMap<RealizationTarget, AskedAt> asked = new LinkedHashMap<>();
             demands.forEach((target, admits) -> asked.put(target, AskedAt.theClass(admits,
                     subject.quantities().ordersOf(target.term()).answered())));
+            return answeringAsked(asked);
+        }
+
+        private TermRealizations.Realization answeringAsked(
+                SequencedMap<RealizationTarget, AskedAt> asked) {
             return TermRealizations.allSatisfying(
-                    subject.inputs().typeAtWrittenPath(demands.firstEntry().getKey().writeRoot()),
+                    subject.inputs().typeAtWrittenPath(asked.firstEntry().getKey().writeRoot()),
                     asked, subject.quantities(), subject.quantities().region(),
                     subject.ruleReading());
         }

@@ -1272,7 +1272,7 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
      * rows the same way, so they are one quantity and their lines are one arrangement.
      */
     public static List<Border> allOf(List<LineDrawn> drawn) {
-        return allOf(drawn, java.util.Map.of(), new LinesRead());
+        return allOf(drawn, java.util.Map.of(), new LinesRead(), _ -> HeldValues.NONE);
     }
 
     /**
@@ -1286,11 +1286,12 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
      *
      * @param alsoParted where the rules part each quantity, in the quantity's own units, by
      *                   {@link QuantityKey#key}
+     * @param heldTo     what the declarations hold each quantity to besides where it runs
+     *                   ({@link BorderQuantity#heldIn})
      */
-    public static List<Border> allOf(List<LineDrawn> drawn,
-                                               java.util.Map<String,
-                                                       List<Parting>> alsoParted,
-                                               LinesRead read) {
+    static List<Border> allOf(List<LineDrawn> drawn,
+                              java.util.Map<String, List<Parting>> alsoParted,
+                              LinesRead read, Function<BorderQuantity, HeldValues> heldTo) {
         // Collected in the quantity's own units, because that is the only order the lines of one
         // quantity are all on. Two rules can write one quantity at two scales — `3a + 6b > 48` and
         // `a + 2b > 20` run the same way — and the numbers they carry are not comparable until both
@@ -1337,8 +1338,8 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
             // this reading lost — the account is asked of the lines and not of how many times the
             // loop went round.
             read.found(each.cuts().target(), each.by());
-            Border made = at(each.cuts().target(), each.by(), each.cuts().within(), beside,
-                    NarrowedBounds.NOTHING);
+            Border made = at(each.cuts().target(), each.by(), each.cuts().within(),
+                    heldTo.apply(each.cuts().target().of()), beside, NarrowedBounds.NOTHING);
             if (out.stream().noneMatch(had -> had.sameReadingAs(made))) {
                 out.add(read.drew(made));
             }

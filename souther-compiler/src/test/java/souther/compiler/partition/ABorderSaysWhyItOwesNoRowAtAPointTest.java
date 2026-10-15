@@ -346,6 +346,119 @@ class ABorderSaysWhyItOwesNoRowAtAPointTest {
     }
 
     /**
+     * A line on two numbers of one position is held to what each value named comes to of both, and
+     * not to what the numbers each come to put together.
+     *
+     * <p>{@code 4}, {@code 8} and {@code 10} less their remainders by three come to three, six and
+     * nine. The values are {@code {4, 8, 10}} and the remainders {@code {1, 2}}, and a value and a
+     * remainder taken apart come to five — so the point at five was owed, and the side past six,
+     * which only ten reaches, came back as one nothing could build a row for.
+     */
+    @Test
+    void aLineOnTwoNumbersOfOnePositionIsHeldToWhatEachValueComesTo() {
+        String model = naming("Code", "Int", "value == 4 || value == 8 || value == 10",
+                "c.value - Int.floorMod(c.value, 3) < 6");
+        String label = "Int.floorMod(c, 3) = c - 6";
+        assertEquals(List.of("ON: NO_VALUE_CAN_STAND_THERE", "OFF = c - 6: owed",
+                        "IN in c - 6 < Int.floorMod(c, 3) <= c - 2: owed",
+                        "OUT in c - 10 <= Int.floorMod(c, 3) < c - 6: owed"),
+                owedAt(lineOf(model, label)), "no value comes to five");
+        assertEquals(List.of("Code(10)"), offeredAt(model, label, PointRole.OUT),
+                "ten is the one value past six");
+        assertEquals(List.of("Code(8)"), offeredAt(model, label, PointRole.OFF));
+        assertEquals(List.of("Code(4)"), offeredAt(model, label, PointRole.IN));
+    }
+
+    /**
+     * The same of a form weighing its numbers: twice each value less its remainder by three comes
+     * to seven, fourteen and nineteen, so neither point either side of ten is a number a value
+     * comes to.
+     */
+    @Test
+    void aFormOverNumbersOfOnePositionIsHeldToWhatEachValueComesTo() {
+        List<String> owed = owedAt(lineOf(naming("Code", "Int",
+                        "value == 4 || value == 8 || value == 10",
+                        "2 * c.value - Int.floorMod(c.value, 3) < 10"),
+                "Int.floorMod(c, 3) - 2 * c = -10"));
+        assertEquals(List.of("ON: NO_VALUE_CAN_STAND_THERE", "OFF: NO_VALUE_CAN_STAND_THERE"),
+                owed.subList(0, 2), owed::toString);
+    }
+
+    /**
+     * And a side of such a form is offered the value that comes to a number on it, however far
+     * along the side that is: past fifteen only a hundred thousand does, at 199999, and a walk of
+     * the side level by level stops long before that.
+     */
+    @Test
+    void aSideOfAFormOverNumbersOfOnePositionIsOfferedTheValueThatComesToANumberOnIt() {
+        String model = naming("Code", "Int", "value == 4 || value == 8 || value == 100000",
+                "2 * c.value - Int.floorMod(c.value, 3) < 15");
+        assertEquals(List.of("Code(100000)"),
+                offeredAt(model, "Int.floorMod(c, 3) - 2 * c = -15", PointRole.OUT));
+    }
+
+    /**
+     * Numbers of two positions are two values, and are not read as one.
+     *
+     * <p>A value less the remainder of another comes to seven where the first is eight and the
+     * second leaves one — which no value of one position does of itself.
+     */
+    @Test
+    void aFormOverTwoPositionsIsNotReadOfOneValue() {
+        String model = """
+                module example.owed
+
+                data Code = Int
+                    invariant value == 4 || value == 8 || value == 10
+
+                data Ok
+                data No
+                data Verdict = Ok | No
+
+                behavior take : (a: Code, b: Code) -> Verdict
+                let take (a, b) = if a.value - Int.floorMod(b.value, 3) < 7 then No else Ok
+                """;
+        assertEquals(List.of("Code(8), Code(4)"),
+                offeredAt(model, "a = Int.floorMod(b, 3) + 7", PointRole.OFF));
+    }
+
+    /**
+     * A value of the position that the way to the line leaves out is a value no row reaching the
+     * line holds, and the side it alone comes to is left open rather than refused.
+     *
+     * <p>Ten is the one value past six, and a row holding it goes the other way before the line.
+     * What the declarations admit is all the values there are, and not all the values that reach
+     * here: the side is not shown to be out of reach by the values alone.
+     */
+    @Test
+    void aSideOnlyAValueTheWayLeavesOutComesToIsLeftOpen() {
+        String model = naming("Code", "Int", "value == 4 || value == 8 || value == 10",
+                "c.value == 10 then Ok else if c.value - Int.floorMod(c.value, 3) < 6");
+        String label = "Int.floorMod(c, 3) = c - 6";
+        BorderAssessment line = searchedLineOf(model, label);
+        assertTrue(line.at(PointRole.OUT) instanceof ItemAssessment.Owed, line::toString);
+        List<ItemAssessment.Attempt> tried = line.owedAt(PointRole.OUT).searches().each();
+        assertFalse(tried.isEmpty(), line::toString);
+        for (ItemAssessment.Attempt each : tried) {
+            assertTrue(each instanceof ItemAssessment.Attempt.Unresolved unresolved
+                            && unresolved.why().reason()
+                                    != Generator.UnresolvedCombination.Reason.NO_VALUE_CAN_STAND_THERE,
+                    () -> "no row reaches the side, which is not that no value can: " + each);
+        }
+    }
+
+    /**
+     * A position whose rules name no finite set holds a line on two of its numbers to nothing, so
+     * a point no value the rules leave comes to is not refused by this.
+     */
+    @Test
+    void aLineOnTwoNumbersOfAPositionNamingNoFiniteSetRefusesNoPoint() {
+        assertTrue(lineOf(naming("Code", "Int", "value >= 4 && value <= 10",
+                        "c.value - Int.floorMod(c.value, 3) < 6"), "Int.floorMod(c, 3) = c - 6")
+                .at(PointRole.ON) instanceof ItemAssessment.Owed);
+    }
+
+    /**
      * The same of a remainder: two is left by eight and not by four, so the row offered at two
      * holds eight rather than the first whole number that leaves two.
      */
@@ -376,19 +489,23 @@ class ABorderSaysWhyItOwesNoRowAtAPointTest {
     /** Each row offered at {@code role} of the border of {@code model} at {@code label}, as its
      *  inputs are written. */
     private static List<String> offeredAt(String model, String label, PointRole role) {
-        Compilation compiled = compiled(model);
-        BorderAssessment line = Adequacy.searchedBoundariesOf(compiled.db(), "example.owed")
-                .values().stream().flatMap(List::stream)
-                .filter(each -> each.label().equals(label)).findFirst()
-                .orElseThrow(() -> new AssertionError("no border at " + label));
         List<String> offered = new ArrayList<>();
-        for (ItemAssessment.Attempt attempt : line.owedAt(role).searches().each()) {
+        for (ItemAssessment.Attempt attempt : searchedLineOf(model, label).owedAt(role).searches()
+                .each()) {
             if (attempt instanceof ItemAssessment.Attempt.Built built) {
                 offered.add(String.join(", ",
                         built.row().inputs().stream().map(FixtureTemplate::text).toList()));
             }
         }
         return offered;
+    }
+
+    /** The border at {@code label}, with what was searched for at each point it owes. */
+    private static BorderAssessment searchedLineOf(String model, String label) {
+        return Adequacy.searchedBoundariesOf(compiled(model).db(), "example.owed")
+                .values().stream().flatMap(List::stream)
+                .filter(each -> each.label().equals(label)).findFirst()
+                .orElseThrow(() -> new AssertionError("no border at " + label));
     }
 
     /**

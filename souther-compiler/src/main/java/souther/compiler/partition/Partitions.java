@@ -1030,7 +1030,8 @@ public final class Partitions {
         // reading, and an accounting over one of them says nothing about the other.
         LinesRead read = new LinesRead();
         java.util.Map<AxisId, List<Border>> lines = linesAlong(out, reading, read);
-        List<Border> across = Border.allOf(between, partedByQuantity(out), read);
+        List<Border> across = Border.allOf(between, partedByQuantity(out), read,
+                quantity -> quantity.heldIn(reading.region()));
         read.returning(lines.values().stream().flatMap(List::stream).toList());
         read.returning(across);
         // Drawn from the reading that was made, or said to be the absence of one. A body this

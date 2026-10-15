@@ -1342,6 +1342,25 @@ public sealed interface BorderQuantity
     }
 
     /**
+     * What the declarations {@code region} reads hold this quantity to besides where it runs: a
+     * number of one position is held to what the position's values come to, and a form or a
+     * distance over numbers of one position to what each of its values comes to of the whole.
+     *
+     * <p>Nothing of a distance between values that do not count, whose one level is where they
+     * meet, nor of a count or a remainder of a form: what a position's values come to there is not
+     * worked out, which refuses nothing.
+     */
+    default HeldValues heldIn(SearchRegion region) {
+        return switch (this) {
+            case OfACoordinate coordinate -> HeldValues.of(region, coordinate.of());
+            case OverAForm over -> HeldValues.OfAForm.of(region, over);
+            case Apart apart -> apart.on().answered().counts()
+                    ? HeldValues.OfAForm.of(region, apart) : HeldValues.NONE;
+            case HowMany _, RemainderOfAForm _ -> HeldValues.NONE;
+        };
+    }
+
+    /**
      * Where a rule about this quantity is filed, as a reader is sent to it: the numbers it is
      * taken of, in the order a document names them ({@link AffineReading#filedAt}).
      */

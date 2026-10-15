@@ -192,12 +192,19 @@ public sealed interface Recognition {
      * <p>Exhaustive with no {@code default}. A meaning about what stands at the position is about a
      * value rather than a number, and says so by having none — which is a different answer from a
      * set that holds nothing, and is why this is asked before a search is.
+     *
+     * <p>Except the one value a reading singled out where it sits on the position's order. That is
+     * the position's own number at one place, as a run of the position's values is its number in a
+     * run — so a class of it beside a class of a number taken of the same position is answered by
+     * choosing one value that is in both. Asked apart, each class offers a value of its own, and
+     * a location offered two values is a row nothing writes.
      */
     default NumericSet numbers() {
         return switch (this) {
             case OfACount count -> count.is();
             case Under under -> under.inner().numbers();
-            case Truth _, Held _, OfCase _, AtAValue _, OfASet _, Nothing _ -> null;
+            case AtAValue one -> one.at() == null ? null : new NumericSet.At(one.at());
+            case Truth _, Held _, OfCase _, OfASet _, Nothing _ -> null;
         };
     }
 

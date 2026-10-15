@@ -1969,13 +1969,30 @@ final class ReadQuantities implements Quantities {
 
     /**
      * The values the position's rules hold {@code term} to: the position's values for its own
-     * value, and each of them read through the term ({@link TermOrders#readOfEach}) for a number
+     * value, and what each of them reads as through the term ({@link #readingsOfEach}) for a number
      * taken of it, on the orders this reading has the term standing on.
      */
     public ValueSet heldAt(NumericTerm.FromOnePosition term) {
-        ValueSet admitted = admittedAt(term);
-        return term instanceof NumericTerm.ValueOf ? admitted
-                : ordersOf(term).readOfEach(admitted);
+        if (term instanceof NumericTerm.ValueOf) {
+            return admittedAt(term);
+        }
+        ReadingsOfEachValue read = readingsOfEach(List.of(term));
+        return read == null ? ValueSet.ANY : read.comeTo(ordersOf(term));
+    }
+
+    /**
+     * Every value the position {@code terms} are taken of was read to admit, each read through every
+     * one of them on the orders this reading has it standing on.
+     */
+    public ReadingsOfEachValue readingsOfEach(List<NumericTerm.FromOnePosition> terms) {
+        if (terms.isEmpty()) {
+            return null;
+        }
+        List<TermOrders> orders = new ArrayList<>();
+        for (NumericTerm.FromOnePosition each : terms) {
+            orders.add(ordersOf(each));
+        }
+        return ReadingsOfEachValue.of(admittedAt(terms.getFirst()), orders);
     }
 
     /**

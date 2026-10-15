@@ -68,7 +68,7 @@ final class OrderedClasses {
         }
         Endpoint min = within == null ? null : within.min();
         Endpoint max = within == null ? null : within.max();
-        HeldValues held = HeldValues.of(reading.region(), orders);
+        HeldValues.OfAPosition held = HeldValues.of(reading.region(), orders);
         List<PartitionClass> classes = new ArrayList<>();
         if (runs.isEmpty()) {
             if (!values.isEmpty()) {
@@ -141,7 +141,8 @@ final class OrderedClasses {
                                                    Type type, Quantities reading,
                                                    RuleReadingContext ruleReading,
                                                    NumericDomain.Bounds within,
-                                                   Supplier<Meter> perWitness, HeldValues held) {
+                                                   Supplier<Meter> perWitness,
+                                                   HeldValues.OfAPosition held) {
         Carrier carrier = orders.answered();
         List<PartitionClass> classes = new ArrayList<>();
         for (Place value : values) {
