@@ -215,8 +215,8 @@ class ALineIsDroppedByAProofAtEveryPlaceItIsWatchedTest {
     }
 
     /**
-     * An application a line is drawn at — the emptiness check in {@code size} — read off a
-     * compile, with what arrives at it set by hand.
+     * An application a line is drawn at — the emptiness check in the behavior the model below
+     * states — read off a compile, with what arrives at it set by hand.
      *
      * @param read      the reading the compile made
      * @param construct the application, which files no way out of it among the places
