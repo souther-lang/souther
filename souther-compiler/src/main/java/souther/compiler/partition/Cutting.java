@@ -25,6 +25,7 @@ import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.Towards;
 import souther.compiler.meaning.AuthoredPointMapping;
+import souther.compiler.meaning.DecidingCase;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Derivation;
@@ -269,7 +270,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
              * @param cases where the statement turns on it, as cases any one of which is enough;
              *              empty where it turns on it nowhere
              */
-            record Part(PlaceOfALine id, Read line, List<Proposition> cases) {
+            record Part(PlaceOfALine id, Read line, List<DecidingCase> cases) {
 
                 public Part {
                     Objects.requireNonNull(id, "a line of a statement is one of its lines");
@@ -433,7 +434,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         // is; said in anything but what a row's own numbers answer, a row could not be asked
         // whether it is somewhere the line decides, and none of the lines is drawn.
         return drawn instanceof Read.Several several && several.parts().stream()
-                .anyMatch(part -> !part.cases().stream().allMatch(AStatementAtARow::askable))
+                .anyMatch(part -> !part.cases().stream()
+                        .allMatch(one -> AStatementAtARow.askable(one.condition())))
                 ? severalNotDrawn(comparison, read, reads, answering)
                 : drawn;
     }
@@ -733,7 +735,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         List<Read.Several.Part> parts = new ArrayList<>();
         of.forEach((line, mapping) -> parts.add(new Read.Several.Part(
                 new PlaceOfALine(line, compared.heldKey()), authored(drawn, mapping, compared),
-                List.of(WhereAnApplicationIsMade.nothingAsked()))));
+                List.of(DecidingCase.alone(WhereAnApplicationIsMade.nothingAsked())))));
         return new Read.Several(parts);
     }
 

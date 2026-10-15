@@ -3,8 +3,12 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.carrier.Membership;
+import souther.compiler.inputs.BlockReason;
 import souther.compiler.meaning.AuthoredPointMapping;
+import souther.compiler.meaning.DecidingCase;
 import souther.compiler.meaning.Derivation;
+import souther.compiler.meaning.Proposition;
+import souther.compiler.meaning.WhereAnApplicationIsMade;
 import souther.compiler.meaning.WrittenLine;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.ComparisonClaim;
@@ -102,7 +106,8 @@ class ALineIsDroppedByAProofAtEveryPlaceItIsWatchedTest {
     void oneProofAmongSeveralPlacesTakesNoLineAway() {
         ComparisonAssessment read = line();
 
-        assertEquals(read, ComparisonAssessment.narrowedByWhatArrives(read, untouched(), _ -> untouched(),
+        assertEquals(read, ComparisonAssessment.narrowedByWhatArrives(read, untouched(),
+                        _ -> untouched(), _ -> untouched(),
                         List.of(new ComparisonArrival.NothingArrives(),
                                 new ComparisonArrival.NoProjection()),
                         false, reading()),
@@ -113,7 +118,7 @@ class ALineIsDroppedByAProofAtEveryPlaceItIsWatchedTest {
     void everyPlaceProvingItTakesTheLineAway() {
         assertInstanceOf(ComparisonAssessment.NothingArrivesAtItsLine.class,
                 ComparisonAssessment.narrowedByWhatArrives(line(), untouched(), _ -> untouched(),
-                        List.of(new ComparisonArrival.NothingArrives(), misses()), false,
+                        _ -> untouched(), List.of(new ComparisonArrival.NothingArrives(), misses()), false,
                         reading()),
                 "no run answers through the rule at any place it is watched");
     }
@@ -122,11 +127,49 @@ class ALineIsDroppedByAProofAtEveryPlaceItIsWatchedTest {
     void onePlaceReachingItKeepsTheLine() {
         ComparisonAssessment read = line();
 
-        assertEquals(read, ComparisonAssessment.narrowedByWhatArrives(read, untouched(), _ -> untouched(),
+        assertEquals(read, ComparisonAssessment.narrowedByWhatArrives(read, untouched(),
+                        _ -> untouched(), _ -> untouched(),
                         List.of(new ComparisonArrival.NothingArrives(),
                                 new ComparisonArrival.Values(N, NumericDomain.Bounds.OPEN)),
                         false, reading()),
                 "a run reaches the line at one of the places the rule is watched at");
+    }
+
+    /**
+     * A line of several whose cases nobody worked out is neither kept nor dropped: it is a line
+     * where it decides was not worked out, naming the figure, and the line beside it in the same
+     * statement is read as it would be alone.
+     *
+     * <p>Rows reach the condition the cases were said as on both sides of the line, so the
+     * condition is no proof that the line turns nothing; and nothing showed that it turns
+     * anything in any one of the cases.
+     */
+    @Test
+    void aLineWhoseCasesWereNotWorkedOutIsNeitherKeptNorDropped() {
+        Proposition anywhere = WhereAnApplicationIsMade.nothingAsked();
+        ComparisonAssessment.Several read = new ComparisonAssessment.Several(List.of(
+                new ComparisonAssessment.Several.Part(new PlaceOfALine(
+                        PartOfAComparison.of(WrittenLine.THE_COMPARISON), "unworked"), line(),
+                        List.of(new DecidingCase(anywhere,
+                                new DecidingCase.Cases.MoreThanWereTakenApart()))),
+                new ComparisonAssessment.Several.Part(new PlaceOfALine(
+                        PartOfAComparison.of(WrittenLine.THE_COMPARISON), "worked"), line(),
+                        List.of(DecidingCase.alone(anywhere)))));
+
+        ComparisonAssessment.Several narrowed = assertInstanceOf(
+                ComparisonAssessment.Several.class,
+                ComparisonAssessment.narrowedByWhatArrives(read, untouched(), _ -> untouched(),
+                        _ -> untouched(), List.of(new ComparisonArrival.NoProjection()), false,
+                        reading()));
+        ComparisonAssessment.Unread unread = assertInstanceOf(ComparisonAssessment.Unread.class,
+                narrowed.parts().getFirst().line(), "the line whose cases nobody took apart");
+        assertEquals(List.of(new BlockReason.WhereALineDecidesNotWorkedOut(
+                        CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.figure())),
+                List.copyOf(unread.why().values()), "and the figure that left them whole");
+        assertEquals(List.of(), narrowed.parts().getFirst().cases(),
+                "it is owed rows in no case");
+        assertEquals(read.parts().getLast(), narrowed.parts().getLast(),
+                "the line beside it is read as it would be alone");
     }
 
     private static InputReading reading() {

@@ -234,6 +234,9 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      * @param whereEachDecides what each reading of a line of a statement of several asks of a row
      *                   beside the way — one case of where the statement turns on the line — put on
      *                   the way at this comparison; empty where the comparison is one line
+     * @param severalStated the comparison as the condition where each of its lines decides is put
+     *                   on the way at, which is what any other case of where one decides is put on
+     *                   the way at too ({@link #wayToACase}); nothing where it is one line
      * @param metOn      which elements of the input a run makes the comparison on, where it stands
      *                   inside closures an operation stopping at an answer applies to them
      * @param runsAs     the construct as the tree that runs holds it, which is {@code occurrence}
@@ -250,16 +253,38 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                    InputReads reads,
                    List<OnTheWay> assumed, BoundaryPolicy.Standing standing,
                    Map<WhereAPartDecides, List<OnTheWay>> whereEachDecides,
+                   Optional<Condition> severalStated,
                    ElementsMetOn metOn, ConstructOccurrence runsAs, CallContext context,
                    SaidOnTheWay saidOnTheWay) {
 
         Reading {
-            if (occurrence == null || statement == null || at == null || metOn == null
-                    || runsAs == null || context == null || saidOnTheWay == null) {
+            if (occurrence == null || statement == null || at == null || severalStated == null
+                    || metOn == null || runsAs == null || context == null
+                    || saidOnTheWay == null) {
                 throw new IllegalArgumentException(
                         "a reading is of some comparison of the model, placed somewhere");
             }
             whereEachDecides = Collections.unmodifiableMap(new LinkedHashMap<>(whereEachDecides));
+        }
+
+        /**
+         * What a row in {@code decides} has met by the time it is at the comparison: the way, and
+         * then {@code decides} put on the way where a case of where a line decides is.
+         *
+         * <p>Any condition over the statement's parts and not only a case one of its readings was
+         * read in: a case said for several is asked of each of them, and of what choosing one has
+         * chosen so far. The same reading of it as {@link #wayTo} has of a case it holds, read
+         * off the same condition, so the two cannot come to say two things of one case.
+         *
+         * @param read the reading of the input this comparison was read against
+         */
+        List<OnTheWay> wayToACase(Proposition decides, InputReading read) {
+            Condition statedAt = severalStated.orElseThrow(() -> new IllegalArgumentException(
+                    "this comparison is one line, and no case of where one decides is put on the"
+                            + " way at it: " + decides));
+            List<OnTheWay> out = new ArrayList<>(assumed);
+            out.addAll(ReachingCuts.whereItDecides(statedAt, decides, read).entries());
+            return List.copyOf(out);
         }
 
         /** What a row at the reading {@code part} of a line has met by the time it is there: the
@@ -520,14 +545,15 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                                         ComparisonAssessment.ofAnApplication(answered, where,
                                                 in.read());
                             }));
+            Optional<Condition> severalStated = severalStated(e, standing, reads, in, numbering);
             Map<WhereAPartDecides, List<OnTheWay>> decides =
-                    whereEachDecides(e, standing, reads, in, numbering);
+                    whereEachDecides(standing, severalStated, in, numbering);
             List<List<OnTheWay>> ways = new ArrayList<>();
             ways.add(assumed);
             ways.addAll(decides.values());
             out.add(new Reading(stands, stated.statement(), where, reads, assumed, standing,
-                    decides, applying.elementsMetOn(), stated.written(), in.context(),
-                    numbering.saidOnTheWay(ways)));
+                    decides, severalStated, applying.elementsMetOn(), stated.written(),
+                    in.context(), numbering.saidOnTheWay(ways)));
         }
         // A fork the reading of the runs takes a way out of, under the closures the walk is in. A
         // value standing as a wider type is no fork, and a fork under it is met one step down.
@@ -1009,13 +1035,14 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      * one line or draws none.
      */
     private static Map<WhereAPartDecides, List<OnTheWay>> whereEachDecides(
-            Core e, BoundaryPolicy.Standing standing, InputReads reads, Body in,
+            BoundaryPolicy.Standing standing, Optional<Condition> statedAt, Body in,
             ConditionNumbering numbering) {
         if (!(standing instanceof BoundaryPolicy.Standing.Admitted admitted)
-                || !(admitted.read() instanceof ComparisonAssessment.Several several)) {
+                || !(admitted.read() instanceof ComparisonAssessment.Several several)
+                || statedAt.isEmpty()) {
             return Map.of();
         }
-        Condition at = Condition.of(e, reads, in.symbols(), in.newtypes(), numbering);
+        Condition at = statedAt.get();
         Map<WhereAPartDecides, List<OnTheWay>> out = new LinkedHashMap<>();
         for (ComparisonAssessment.Several.Part part : several.parts()) {
             for (WhereAPartDecides reading : part.readings()) {
@@ -1024,6 +1051,19 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
             }
         }
         return out;
+    }
+
+    /**
+     * The comparison {@code e} as a condition, where its statement is several lines: what where
+     * each of them decides is put on the way at — nothing where it is one line or draws none.
+     */
+    private static Optional<Condition> severalStated(Core e, BoundaryPolicy.Standing standing,
+                                                     InputReads reads, Body in,
+                                                     ConditionNumbering numbering) {
+        return standing instanceof BoundaryPolicy.Standing.Admitted admitted
+                && admitted.read() instanceof ComparisonAssessment.Several
+                ? Optional.of(Condition.of(e, reads, in.symbols(), in.newtypes(), numbering))
+                : Optional.empty();
     }
 
     /**

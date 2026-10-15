@@ -79,7 +79,7 @@ class WhereALineInsideAQuantifierDecidesTest {
         List<WhereEachLineDecides.Decides> lines = WhereEachLineDecides.in(stated);
         for (WhereEachLineDecides.Decides each : lines) {
             if (each.line().key().equals(line.key())) {
-                return each.cases();
+                return each.cases().stream().map(DecidingCase::condition).toList();
             }
         }
         throw new AssertionError(line + " is a line of " + stated + ": " + lines);

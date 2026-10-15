@@ -293,6 +293,7 @@ public sealed interface BlockReason {
                     case NO_RELATION_OF_NUMBERS -> 22;
                 };
                 case RelationNotShownToReachEveryValue _ -> 23;
+                case WhereALineDecidesNotWorkedOut _ -> 24;
             };
         }
 
@@ -311,6 +312,9 @@ public sealed interface BlockReason {
                         Figure.compare(stoppedAt, ((PatternTooCostly) other).stoppedAt());
                 case OrderedExtentTooCostly(Meter.Stopped stopped) ->
                         stopped.compareTo(((OrderedExtentTooCostly) other).stopped());
+                case WhereALineDecidesNotWorkedOut(Figure stoppedAt) -> Figure.compare(
+                        List.of(stoppedAt),
+                        List.of(((WhereALineDecidesNotWorkedOut) other).stoppedAt()));
                 // The rank says which statement it is.
                 case WhatItStatesIsNoLine _ -> 0;
                 case UnreadComparisonForm _, UnreadComparisonDomain _, RuleAboutADerivedValue _,
@@ -351,6 +355,9 @@ public sealed interface BlockReason {
                 // values were read. What the position admits is what the rules leave; the line
                 // through them is what nobody worked out.
                 case EndLeftOpenByAChoice _ -> false;
+                // And where one line of several decides was not worked out, which is a question
+                // about the line and asks nothing of the values the rules leave.
+                case WhereALineDecidesNotWorkedOut _ -> false;
                 // And the same operator read the other way does widen it, which is the whole
                 // difference between the two: what the alternatives admit was not read here, so
                 // the position holds whatever a value taking the unread branch may hold.
@@ -378,6 +385,9 @@ public sealed interface BlockReason {
                 // into, and the machines that say where the strings it admits stop. A run allowed
                 // more of either need not stop at the same rule.
                 case PatternTooCostly _, OrderedExtentTooCostly _ -> RunSensitivity.MAY_CHANGE;
+                // And the cases where one line of several decides, taken apart and asked one at a
+                // time as far as a figure lets them be.
+                case WhereALineDecidesNotWorkedOut _ -> RunSensitivity.MAY_CHANGE;
                 // And the readings of what a statement means, which stop at a figure only where
                 // the part they declined stopped at one.
                 case WhatItStatesIsNoLine(var why) -> why.figure().isPresent()
@@ -417,6 +427,7 @@ public sealed interface BlockReason {
                 // and nothing hands it another ({@code TextExtents}), so which limit refused is
                 // the whole of what varies.
                 case OrderedExtentTooCostly it -> List.of(TextExtents.refusedAt(it.stopped()));
+                case WhereALineDecidesNotWorkedOut it -> List.of(it.stoppedAt());
                 // The figure the part it declined stopped at, which that part's reason says.
                 case WhatItStatesIsNoLine(var why) -> why.figure().map(List::of).orElseGet(List::of);
                 case UnreadComparisonForm _, UnreadComparisonDomain _, RuleAboutADerivedValue _,
@@ -1192,6 +1203,26 @@ public sealed interface BlockReason {
      * meaning was read perfectly well.
      */
     record SeveralLinesInOneRule() implements RuleReadingStopped {}
+
+    /**
+     * What the rule states was read in full, and it is several lines held together, and for one of
+     * them where the statement turns on it was not worked out: the cases where it decides were said
+     * as one, and asking each of them whether a row stands on both sides of the line stopped at
+     * {@code stoppedAt}.
+     *
+     * <p>Not a line, and not a line the statement never turns on. Held as the first, it is owed
+     * rows in cases it may turn nothing in, which no row an author writes discharges; held as the
+     * second, it is dropped for a proof that was never finished. What was not worked out is the
+     * line, and what the rules leave the position is read as it was.
+     *
+     * @param stoppedAt the figure the asking stopped at
+     */
+    record WhereALineDecidesNotWorkedOut(Figure stoppedAt) implements RuleReadingStopped {
+
+        public WhereALineDecidesNotWorkedOut {
+            Objects.requireNonNull(stoppedAt, "a reading stopped short stopped at some figure");
+        }
+    }
 
     /**
      * What the rule states was read in full, and it relates the value here to another value that is

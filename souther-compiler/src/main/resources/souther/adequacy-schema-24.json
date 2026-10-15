@@ -156,6 +156,8 @@
         "total_readings_of_one_condition",
         "parts_a_derivation_concludes",
         "alternatives_a_path_tries",
+        "cases_a_line_is_taken_apart_into",
+        "cases_a_line_is_asked_in",
         "depth_a_construction_plan_descends",
         "numbers_of_a_set_tried",
         "code_points_a_string_is_searched_in_full",

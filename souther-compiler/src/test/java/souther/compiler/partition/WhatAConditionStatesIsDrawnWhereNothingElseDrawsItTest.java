@@ -83,7 +83,7 @@ class WhatAConditionStatesIsDrawnWhereNothingElseDrawsItTest {
         ComparisonAssessment.Several several = assertInstanceOf(ComparisonAssessment.Several.class,
                 assertInstanceOf(BoundaryPolicy.Standing.Admitted.class, check.standing()).read());
         assertTrue(several.parts().getFirst().cases().stream()
-                        .anyMatch(each -> each.key().contains("o.open")),
+                        .anyMatch(each -> each.condition().key().contains("o.open")),
                 () -> "it decides where the order is open: " + several);
         assertEquals(List.of(), walked.leftToTheFork());
     }

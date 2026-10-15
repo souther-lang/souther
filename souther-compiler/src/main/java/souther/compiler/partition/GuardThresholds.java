@@ -273,6 +273,10 @@ public final class GuardThresholds {
                                                 part -> Reachability.of(
                                                         new WayToTheBorder(each.wayTo(part)),
                                                         read.quantities().region()),
+                                                decides -> Reachability.of(
+                                                        new WayToTheBorder(
+                                                                each.wayToACase(decides, read)),
+                                                        read.quantities().region()),
                                                 at.observations().stream()
                                                         .map(one -> one.arrival()).toList(), false,
                                                 read),

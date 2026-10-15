@@ -3,6 +3,7 @@ package souther.compiler.meaning;
 import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.partition.CompositionBudget;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -65,7 +66,13 @@ public final class WhereEachLineDecides {
      */
     private static final long MOST_PLACES_READ = 1L << 17;
 
-    /** How many cases where a line decides is said in before it is said as one. */
+    /**
+     * How many cases where a line decides is said in before it is said as one.
+     *
+     * <p>How many are said, and not which: the cases said as one are kept beside it
+     * ({@link DecidingCase#standsFor}), so whether the line decides in any of them is asked of
+     * them and not of the one condition they were said as.
+     */
     static final int MOST_CASES = 16;
 
     private WhereEachLineDecides() {
@@ -80,7 +87,7 @@ public final class WhereEachLineDecides {
      *              of parts, or nothing asked at all. Empty where it decides nowhere. None of them
      *              names {@code line}
      */
-    public record Decides(Proposition.Compared line, List<Proposition> cases) {
+    public record Decides(Proposition.Compared line, List<DecidingCase> cases) {
 
         public Decides {
             Objects.requireNonNull(line, "a line is some relation");
@@ -110,7 +117,7 @@ public final class WhereEachLineDecides {
      */
     public static List<Decides> in(Proposition writtenAs) {
         Map<String, Proposition.Compared> lines = new TreeMap<>();
-        Map<String, List<List<List<Proposition>>>> standings = new TreeMap<>();
+        Map<String, List<List<List<DecidingCase>>>> standings = new TreeMap<>();
         read(writtenAs, writtenAs, null, List.of(), lines, standings);
         List<Decides> out = new ArrayList<>();
         lines.forEach((key, line) -> out.add(new Decides(line,
@@ -128,9 +135,13 @@ public final class WhereEachLineDecides {
      * field the value does not have, and is no part of where the line decides; the second asks the
      * value to be two cases, and is no place the line is. So the one is left out and the other
      * case with it, and every case is said with the case the line is at.
+     *
+     * <p>And so is every case one said for several stands for, part by part where it was taken
+     * apart: a part is asked of the value whichever case it is chosen in, so a case is what its
+     * parts come to however it was put together.
      */
-    private static List<Proposition> whereItStands(Proposition.Compared line,
-                                                   List<Proposition> cases) {
+    private static List<DecidingCase> whereItStands(Proposition.Compared line,
+                                                    List<DecidingCase> cases) {
         Map<TermPath, CasesLeft> at = casesItIsOver(line);
         if (at.isEmpty()) {
             return cases;
@@ -142,24 +153,41 @@ public final class WhereEachLineDecides {
                 stands.add(standing);
             }
         });
-        List<Proposition> out = new ArrayList<>();
-        cases:
-        for (Proposition each : cases) {
-            List<Proposition> parts = new ArrayList<>();
-            for (Proposition part : each instanceof Proposition.All all ? all.parts()
-                    : List.of(each)) {
-                switch (asked(part, at)) {
-                    case OF_ANOTHER_CASE -> { }
-                    case NOT_THERE -> {
-                        continue cases;
-                    }
-                    case THERE -> parts.add(part);
-                }
+        Proposition standsThere = Proposition.all(stands);
+        List<DecidingCase> out = new ArrayList<>();
+        for (DecidingCase each : cases) {
+            Proposition there = there(each.condition(), at);
+            if (there == null) {
+                continue;
             }
-            parts.addAll(stands);
-            out.add(Proposition.all(parts));
+            Proposition said = Proposition.all(List.of(there, standsThere));
+            out.add(each.saidAlone() ? DecidingCase.alone(said) : new DecidingCase(said,
+                    new DecidingCase.Cases.Together(List.of(each.standsFor().eachSaid(one -> {
+                        Proposition itsOwn = there(one, at);
+                        return itsOwn == null ? new DecidingCase.Cases.EachOf(List.of())
+                                : new DecidingCase.Cases.One(itsOwn);
+                    }), new DecidingCase.Cases.One(standsThere)))));
         }
         return out;
+    }
+
+    /**
+     * {@code each}, without the parts of it that ask the value the line is at what only another
+     * case of it has — or null where a part of it asks the value to be a case it is not.
+     */
+    private static Proposition there(Proposition each, Map<TermPath, CasesLeft> at) {
+        List<Proposition> parts = new ArrayList<>();
+        for (Proposition part : each instanceof Proposition.All all ? all.parts()
+                : List.of(each)) {
+            switch (asked(part, at)) {
+                case OF_ANOTHER_CASE -> { }
+                case NOT_THERE -> {
+                    return null;
+                }
+                case THERE -> parts.add(part);
+            }
+        }
+        return Proposition.all(parts);
     }
 
     /**
@@ -284,23 +312,24 @@ public final class WhereEachLineDecides {
      * @param around  where each quantifier {@code stated} is inside turns what holds it
      */
     private static void read(Proposition stated, Proposition whole, DecisionSubject element,
-                             List<List<Proposition>> around,
+                             List<List<DecidingCase>> around,
                              Map<String, Proposition.Compared> lines,
-                             Map<String, List<List<List<Proposition>>>> standings) {
+                             Map<String, List<List<List<DecidingCase>>>> standings) {
         Reading reading = Reading.of(stated);
         for (Proposition part : reading.named()) {
             if (part instanceof Proposition.Compared line) {
-                List<List<Proposition>> factors = new ArrayList<>(around);
+                List<List<DecidingCase>> factors = new ArrayList<>(around);
                 if (element == null || line.mayTurnOnAnElementOf(element)) {
                     factors.add(reading.turnsOn(line));
                 } else {
-                    factors = List.of(List.of(heldAgainstItsDenial(whole, line)));
+                    factors = List.of(List.of(
+                            DecidingCase.alone(heldAgainstItsDenial(whole, line))));
                 }
                 lines.putIfAbsent(line.key(), line);
                 standings.computeIfAbsent(line.key(), k -> new ArrayList<>()).add(factors);
             } else if (part instanceof Proposition.Some some && reading.standsHeld(some)
                     && statesARelation(some.ofTheElement())) {
-                List<List<Proposition>> inside = new ArrayList<>(around);
+                List<List<DecidingCase>> inside = new ArrayList<>(around);
                 inside.add(reading.turnsOn(some));
                 read(some.ofTheElement(), whole, some.container(), inside, lines, standings);
             }
@@ -355,11 +384,23 @@ public final class WhereEachLineDecides {
          * as well inside a quantifier it is not about is not: there it is the same thing of the
          * same row, and comes out the way the part does. Said as one case then, which moves it
          * everywhere it stands.
+         *
+         * <p>Past {@link #MOST_CASES}, said as one case too, and the cases it is said for kept
+         * beside it — or, past as many as are taken apart, the fact that there were more.
          */
-        List<Proposition> turnsOn(Proposition part) {
-            List<Proposition> cases = table == null || insideAWholeQuantifier(stated, part)
-                    ? null : casesOf(table, index.get(part.key()), named);
-            return cases != null ? cases : List.of(heldAgainstItsDenial(stated, part));
+        List<DecidingCase> turnsOn(Proposition part) {
+            if (table == null || insideAWholeQuantifier(stated, part)) {
+                return List.of(DecidingCase.alone(heldAgainstItsDenial(stated, part)));
+            }
+            List<List<Proposition>> cases = casesOf(table, index.get(part.key()), named,
+                    CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.maximum());
+            if (cases != null && cases.size() <= MOST_CASES) {
+                return cases.stream().map(each -> DecidingCase.alone(Proposition.all(each)))
+                        .toList();
+            }
+            return List.of(new DecidingCase(heldAgainstItsDenial(stated, part), cases == null
+                    ? new DecidingCase.Cases.MoreThanWereTakenApart()
+                    : DecidingCase.Cases.ofConjunctions(cases)));
         }
 
         /** Whether {@code quantifier} stands held somewhere in the statement. */
@@ -372,46 +413,67 @@ public final class WhereEachLineDecides {
     /**
      * Where a line decides, off each way it stands: a case of what each thing around it is turned
      * under, taken together — or, where those are more than {@link #MOST_CASES}, each way said as
-     * one case.
+     * one case, which stands for the ways it was said for.
      */
-    private static List<Proposition> casesOf(List<List<List<Proposition>>> standings) {
-        List<Proposition> cases = new ArrayList<>();
-        for (List<List<Proposition>> factors : standings) {
-            List<Proposition> here = takenTogether(factors);
+    private static List<DecidingCase> casesOf(List<List<List<DecidingCase>>> standings) {
+        Map<Proposition, DecidingCase> cases = new LinkedHashMap<>();
+        boolean saidOneByOne = true;
+        for (List<List<DecidingCase>> factors : standings) {
+            List<DecidingCase> here = takenTogether(factors);
             if (here == null) {
-                cases = null;
+                saidOneByOne = false;
                 break;
             }
-            cases.addAll(here);
+            here.forEach(each -> cases.putIfAbsent(each.condition(), each));
         }
-        List<Proposition> each = cases == null ? null : cases.stream().distinct().toList();
-        if (each != null && each.size() <= MOST_CASES) {
-            return each;
+        if (saidOneByOne && cases.size() <= MOST_CASES) {
+            return List.copyOf(cases.values());
         }
-        return List.of(Proposition.any(standings.stream()
-                .map(factors -> Proposition.all(factors.stream().map(Proposition::any).toList()))
-                .toList()));
+        return List.of(new DecidingCase(
+                Proposition.any(standings.stream()
+                        .map(factors -> Proposition.all(factors.stream()
+                                .map(factor -> Proposition.any(factor.stream()
+                                        .map(DecidingCase::condition).toList()))
+                                .toList()))
+                        .toList()),
+                new DecidingCase.Cases.EachOf(standings.stream()
+                        .<DecidingCase.Cases>map(factors -> new DecidingCase.Cases.Together(
+                                factors.stream()
+                                        .<DecidingCase.Cases>map(factor ->
+                                                new DecidingCase.Cases.EachOf(factor.stream()
+                                                        .map(DecidingCase::standsFor).toList()))
+                                        .toList()))
+                        .toList())));
     }
 
     /** Every way of taking one case of each of {@code factors} together, or null as soon as
      *  there are more than {@link #MOST_CASES}. */
-    private static List<Proposition> takenTogether(List<List<Proposition>> factors) {
-        List<List<Proposition>> ways = List.of(List.of());
-        for (List<Proposition> factor : factors) {
+    private static List<DecidingCase> takenTogether(List<List<DecidingCase>> factors) {
+        List<List<DecidingCase>> ways = List.of(List.of());
+        for (List<DecidingCase> factor : factors) {
             if ((long) ways.size() * factor.size() > MOST_CASES) {
                 return null;
             }
-            List<List<Proposition>> wider = new ArrayList<>();
-            for (List<Proposition> way : ways) {
-                for (Proposition one : factor) {
-                    List<Proposition> both = new ArrayList<>(way);
+            List<List<DecidingCase>> wider = new ArrayList<>();
+            for (List<DecidingCase> way : ways) {
+                for (DecidingCase one : factor) {
+                    List<DecidingCase> both = new ArrayList<>(way);
                     both.add(one);
                     wider.add(both);
                 }
             }
             ways = wider;
         }
-        return ways.stream().map(Proposition::all).toList();
+        return ways.stream().map(WhereEachLineDecides::together).toList();
+    }
+
+    /** One case of each of several taken together: the case itself where each was said alone,
+     *  and otherwise said for the cases of each taken together. */
+    private static DecidingCase together(List<DecidingCase> chosen) {
+        Proposition said = Proposition.all(chosen.stream().map(DecidingCase::condition).toList());
+        return chosen.stream().allMatch(DecidingCase::saidAlone) ? DecidingCase.alone(said)
+                : new DecidingCase(said, new DecidingCase.Cases.Together(
+                        chosen.stream().map(DecidingCase::standsFor).toList()));
     }
 
     /** Whether {@code part} stands inside a quantifier {@code stated} joins that it is not about
@@ -526,34 +588,36 @@ public final class WhereEachLineDecides {
 
     /**
      * Where the {@code at}th part decides, read off what the statement comes to every way its parts
-     * can come out, as cases — or null where there are more of them than {@link #MOST_CASES}.
+     * can come out, as cases, each the parts it asks — or null where there are more of them than
+     * {@code most}.
      *
      * <p>The line decides at a way its other parts come out where the statement comes out
      * differently with the line held and with it failing. The cases are taken by asking the other
      * parts one at a time, in order, each only where what is left still turns on it: a part every
      * way left decides under, or none does, says nothing more.
      */
-    private static List<Proposition> casesOf(boolean[] table, int at, List<Proposition> named) {
+    private static List<List<Proposition>> casesOf(boolean[] table, int at,
+                                                   List<Proposition> named, int most) {
         int line = 1 << at;
         boolean[] decides = new boolean[table.length];
         for (int ways = 0; ways < table.length; ways++) {
             decides[ways] = (ways & line) == 0 && table[ways] != table[ways | line];
         }
         List<List<Proposition>> cases = new ArrayList<>();
-        if (!split(decides, line, 0, 0, new ArrayList<>(), named, at, cases)) {
+        if (!split(decides, line, 0, 0, new ArrayList<>(), named, at, most, cases)) {
             return null;
         }
-        return cases.stream().map(Proposition::all).toList();
+        return cases;
     }
 
     /**
      * The cases under {@code asked}, the parts whose bits are {@code fixed} coming out as
-     * {@code values} says — or false as soon as there are more than {@link #MOST_CASES}, so the
-     * limit bounds the work and not only what is kept.
+     * {@code values} says — or false as soon as there are more than {@code most}, so the limit
+     * bounds the work and not only what is kept.
      */
     private static boolean split(boolean[] decides, int line, int fixed, int values,
                                  List<Proposition> asked, List<Proposition> named, int at,
-                                 List<List<Proposition>> into) {
+                                 int most, List<List<Proposition>> into) {
         boolean some = false;
         boolean every = true;
         for (int ways = 0; ways < decides.length; ways++) {
@@ -567,7 +631,7 @@ public final class WhereEachLineDecides {
         }
         if (every) {
             into.add(List.copyOf(asked));
-            return into.size() <= MOST_CASES;
+            return into.size() <= most;
         }
         for (int part = 0; part < named.size(); part++) {
             int its = 1 << part;
@@ -576,12 +640,12 @@ public final class WhereEachLineDecides {
             }
             List<Proposition> held = new ArrayList<>(asked);
             held.add(named.get(part));
-            if (!split(decides, line, fixed | its, values | its, held, named, at, into)) {
+            if (!split(decides, line, fixed | its, values | its, held, named, at, most, into)) {
                 return false;
             }
             List<Proposition> failing = new ArrayList<>(asked);
             failing.add(named.get(part).denied());
-            return split(decides, line, fixed | its, values, failing, named, at, into);
+            return split(decides, line, fixed | its, values, failing, named, at, most, into);
         }
         throw new IllegalStateException("where a line decides turns on some part where it is"
                 + " neither everywhere nor nowhere");
