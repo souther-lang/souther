@@ -1234,9 +1234,11 @@ public final class Bodies {
             List<Report> reports = new ArrayList<>();
             for (List<ValueName.Behavior> required : onThePath.behaviorRequirements().values()) {
                 for (ValueName.Behavior dependency : required) {
-                    // A module nothing in this compilation has is said where the path is read.
-                    Ast.Module there = db.ask(new Front.Available(dependency.module())).value();
-                    if (there != null && !declaresBehavior(there, dependency.name())) {
+                    // A module nothing in this compilation has is said where the path is read, and one
+                    // compiled here is not one the module's classes find at all
+                    // (Front.NeedsThisCompilation).
+                    Front.FromPath.OnThePath there = Front.onThePath(db, dependency.module());
+                    if (there != null && !declaresBehavior(there.module(), dependency.name())) {
                         reports.add(Report.raised(builtAgainstAnother(
                                 new ModuleMessage.ItWasBuiltRequiringWhatTheModuleDoesNotDeclare(
                                         name, dependency.name(), dependency.module()),
