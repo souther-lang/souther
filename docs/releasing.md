@@ -50,7 +50,9 @@ more, and both existed only because develop had been made to claim a number it w
 
    The release workflow runs on the tag: it builds, attaches `souther`, `souther.jar`,
    `souther-lsp.jar`, `souther.tmLanguage.json`, the Windows distributions and `SHA256SUMS` to the
-   GitHub Release, and gives the Release `docs/releases/<version>.md` as its text. A version
+   GitHub Release, and gives the Release `docs/releases/<version>.md` as its text, with each
+   paragraph on one line (`bin/release-notes.sh`), since a Release renders a line break inside a
+   paragraph as a break. A version
    with a hyphen in it is published as a prerelease, which the workflow reads off the tag rather
    than being told.
 
