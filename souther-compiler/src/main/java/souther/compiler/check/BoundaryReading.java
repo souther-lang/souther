@@ -89,6 +89,11 @@ final class BoundaryReading {
                         new LinkedHashMap<>(carriers), new LinkedHashMap<>(positions));
     }
 
+    /** Whether this value has no number an operation answers, so no leaf of it is one this reads. */
+    boolean holdsNoNumber() {
+        return byName.isEmpty();
+    }
+
     /**
      * What one leaf did to the number it states a line on.
      *

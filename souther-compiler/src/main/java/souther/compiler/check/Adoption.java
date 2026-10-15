@@ -95,9 +95,15 @@ record Adoption<A, L extends ReadingLanguage>(Set<A> read, Set<A> settled, Set<A
         }
     }
 
+    /** What every clause a reading has no word for comes to, made once: it holds nothing of any
+     *  position, so one of them serves every name a position has and every reading. */
+    private static final Adoption<?, ?> NOTHING =
+            new Adoption<>(Set.of(), Set.of(), Set.of(), false, Set.of());
+
     /** What a clause this reading has no word for comes to. */
+    @SuppressWarnings("unchecked")
     static <A, L extends ReadingLanguage> Adoption<A, L> nothing() {
-        return new Adoption<>(Set.of(), Set.of(), Set.of(), false, Set.of());
+        return (Adoption<A, L>) NOTHING;
     }
 
     /**
@@ -191,6 +197,14 @@ record Adoption<A, L extends ReadingLanguage>(Set<A> read, Set<A> settled, Set<A
      * nothing about {@code x} — so an opening reached here outlives the conjunction it is under.
      */
     Adoption<A, L> both(Adoption<A, L> other) {
+        // Beside an account of nothing, a conjunction is the other account: every set here is a
+        // union and the flag is an or, and nothing adds nothing to either.
+        if (other == NOTHING) {
+            return this;
+        }
+        if (this == NOTHING) {
+            return other;
+        }
         return new Adoption<>(union(read, other.read), union(settled, other.settled),
                 union(missed, other.missed), hasUnreadPart || other.hasUnreadPart,
                 union(opened, other.opened));

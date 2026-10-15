@@ -755,11 +755,14 @@ sealed interface StatedByClauses {
                     Adoption.at(mentions, range.boundedAt(), ordered.gaveUpAt(e)),
                     // And the numbers an operation answers, taken in at the position the number is
                     // of where the leaf leaves it a range holding a value. A line nothing here
-                    // placed is a leaf this reading gave up on.
-                    Adoption.at(mentions,
-                            bounds instanceof BoundaryReading.Read.Bounded it
-                                    ? it.readWholeAt() : Set.of(),
-                            bounds instanceof BoundaryReading.Read.LeftOpen),
+                    // placed is a leaf this reading gave up on. A value with no such number is
+                    // most values, and none of its leaves can be taken in, so there is no account
+                    // to make for every leaf and compose at every connective.
+                    boundaries.holdsNoNumber() ? Adoption.nothing()
+                            : Adoption.at(mentions,
+                                    bounds instanceof BoundaryReading.Read.Bounded it
+                                            ? it.readWholeAt() : Set.of(),
+                                    bounds instanceof BoundaryReading.Read.LeftOpen),
                     // And what the leaf leaves them, beside which of them it was about. The second
                     // is a projection of the first and the two answer different questions: a
                     // reader asking whether the clause holds a position down wants the values, and

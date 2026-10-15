@@ -392,6 +392,26 @@ class ARuleReadToTheEndIsNotOneThisCouldNotReadTest {
     }
 
     /**
+     * And beside a conjunct another reading takes in, each part read by the reading that has a
+     * word for it.
+     *
+     * <p>{@code name /= "x"} is the values' and the equality is the numbers'. Neither reading reads
+     * both, and the rule is still read whole, part by part — as the same rule with the equality
+     * written as two bounds is.
+     */
+    @Test
+    void anEqualityBesideAConjunctAnotherReadingTakesInIsRead() {
+        for (String clause : List.of(
+                "name /= \"x\" && String.length(name) == 2",
+                "String.length(name) == 2 && name /= \"x\"")) {
+            Measured measured = of("    invariant " + clause);
+
+            assertFalse(measured.kinds().contains("rule_unaccounted"), clause + ": "
+                    + measured.kinds() + "\n" + measured.human());
+        }
+    }
+
+    /**
      * Of any operation answering a number of a position, and not of a string's length.
      *
      * <p>The reading is of the numbers an operation answers, and the length of a list is one.
@@ -434,7 +454,8 @@ class ARuleReadToTheEndIsNotOneThisCouldNotReadTest {
                 "String.length(name) == 2 || String.length(name) == 4",
                 "String.length(name) <= 1 || String.length(name) >= 3",
                 "String.length(name) == 2 && String.length(name) <= 3 - 0",
-                "String.length(name) /= 2")) {
+                "String.length(name) /= 2",
+                "name /= \"x\" && String.length(name) /= 2")) {
             Measured measured = of("    invariant " + clause);
 
             assertTrue(measured.kinds().contains("rule_unaccounted"), clause + ": "

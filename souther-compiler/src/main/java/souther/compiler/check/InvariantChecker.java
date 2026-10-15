@@ -1964,19 +1964,33 @@ public final class InvariantChecker {
      * of its shorter chains names one of them without naming each.
      *
      * <p>Made together and carried together, so the chains are of this table's names and no other.
+     *
+     * @param byPath every name a place is written under, the place's own value and every number
+     *               taken of it alike. Made with the table: every statement of every clause asks it,
+     *               and worked out per statement it was a walk of the whole table each time
      */
-    private record Coordinates(Map<FactSubject, Coordinate> byName, Term.Chains chains) {
+    private record Coordinates(Map<FactSubject, Coordinate> byName, Term.Chains chains,
+                               Map<RuleKey, Set<FactSubject>> byPath) {
 
         static Coordinates of(Map<FactSubject, Coordinate> byName) {
             List<Term> held = new ArrayList<>(byName.size());
-            for (FactSubject each : byName.keySet()) {
-                held.add(each.identity());
+            Map<RuleKey, Set<FactSubject>> byPath = new LinkedHashMap<>();
+            for (Map.Entry<FactSubject, Coordinate> each : byName.entrySet()) {
+                held.add(each.getKey().identity());
+                byPath.computeIfAbsent(each.getValue().path(), _ -> new LinkedHashSet<>())
+                        .add(each.getKey());
             }
-            return new Coordinates(Collections.unmodifiableMap(byName), new Term.Chains(held));
+            return new Coordinates(Collections.unmodifiableMap(byName), new Term.Chains(held),
+                    Collections.unmodifiableMap(byPath));
         }
 
         Coordinate get(FactSubject name) {
             return byName.get(name);
+        }
+
+        /** Every name {@code path} is written under, or none where this value has no such place. */
+        Set<FactSubject> namesAt(RuleKey path) {
+            return byPath.getOrDefault(path, Set.of());
         }
 
         boolean containsKey(FactSubject name) {
@@ -2207,12 +2221,9 @@ public final class InvariantChecker {
         }
         // The positions this part is about, by every name each answers to, since a reading files a
         // clause under whichever name it recognised.
-        Set<RuleKey> named = states.about();
         Set<FactSubject> about = new LinkedHashSet<>();
-        for (Map.Entry<FactSubject, Coordinate> each : byName.entrySet()) {
-            if (named.contains(each.getValue().path())) {
-                about.add(each.getKey());
-            }
+        for (RuleKey each : states.about()) {
+            about.addAll(byName.namesAt(each));
         }
         if (about.isEmpty()) {
             return;
@@ -2233,9 +2244,16 @@ public final class InvariantChecker {
         if (here == null || constrained == null) {
             throw new APartNoReadingSaw(part);
         }
+        // And what some reading took this part in at is recorded as taken in, per part. Asked of the
+        // whole clause alone, the clause is taken in only where one reading read every part of it:
+        // `value /= "abc" && String.length(value) == 3` is read by the values on one side and by
+        // the numbers an operation answers on the other, and came back as a rule nothing read. A
+        // part nothing took in is still left standing below, and that outranks this.
         Set<FactSubject> standing = new LinkedHashSet<>();
         for (FactSubject name : about) {
-            if (!here.contains(name) && !constrained.contains(name)) {
+            if (here.contains(name)) {
+                took.record(rule, name);
+            } else if (!constrained.contains(name)) {
                 standing.add(name);
             }
         }
