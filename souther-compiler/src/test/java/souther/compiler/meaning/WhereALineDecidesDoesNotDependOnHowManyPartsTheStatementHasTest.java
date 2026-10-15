@@ -120,18 +120,22 @@ class WhereALineDecidesDoesNotDependOnHowManyPartsTheStatementHasTest {
     }
 
     /**
-     * A statement that, as its parts come out in the order they are read, is left as a different
-     * statement every way the first eighteen come out: more steps than a statement is read in.
-     * The line is where the statement turns, said for cases nobody took apart, and the figure that
-     * stopped it is the one said.
+     * Eighteen pairs, any of them both holding, beside a choice that holds nowhere and names the
+     * first of every pair before any second: read in the order the parts first stand, the
+     * statement is left as a different statement every way the first eighteen come out, which is
+     * more steps than a statement is read in. The line is where the statement turns, said for
+     * cases nobody took apart, and the figure that stopped it is the one said.
      */
     @Test
     void aStatementPastTheStepsIsSaidNotToHaveBeenTakenApart() {
         List<Proposition> pairs = new ArrayList<>();
+        List<Proposition> firsts = new ArrayList<>(List.of(truth("a00").denied()));
         for (int i = 0; i < 18; i++) {
             pairs.add(Proposition.all(List.of(truth("a%02d".formatted(i)),
                     truth("b%02d".formatted(i)))));
+            firsts.add(truth("a%02d".formatted(i)));
         }
+        pairs.add(Proposition.all(firsts));
         List<DecidingCase> cases = casesOf(Proposition.all(List.of(LINE,
                 Proposition.any(pairs))));
 

@@ -129,25 +129,87 @@ class WhereALineInsideAQuantifierDecidesTest {
     }
 
     /**
-     * A quantifier holding eighteen relations about the row, each with one about its element and
-     * any of them enough, is said outside the quantifier once for every way the eighteen come
-     * out, which is more than a statement is read in. Nothing is taken apart then, and every line
-     * says so, naming the figure.
+     * A quantifier holding eighteen relations about the row, each or one about its element and
+     * every one of those choices together, is said outside the quantifier once for every way the
+     * eighteen come out, which is more than a statement is read in. Nothing is taken apart then,
+     * and every line says so, naming the figure.
      */
     @Test
     void aQuantifierPastTheStepsLeavesEveryLineNotTakenApart() {
         List<Proposition> each = new ArrayList<>();
         for (int i = 0; i < 18; i++) {
-            each.add(Proposition.all(List.of(compared(TermPath.of("r" + i), 0, Rel.GT),
+            each.add(Proposition.any(List.of(compared(TermPath.of("r" + i), 0, Rel.GT),
                     compared(XS.element().then("n" + i), 0, Rel.GT))));
         }
-        Proposition stated = new Proposition.Some(CONTAINER, Proposition.any(each), true);
+        Proposition stated = new Proposition.Some(CONTAINER, Proposition.all(each), true);
         List<WhereEachLineDecides.Decides> lines = WhereEachLineDecides.in(stated);
 
         assertEquals(36, lines.size(), lines::toString);
         for (WhereEachLineDecides.Decides line : lines) {
             assertEquals(Set.of(CompositionBudget.STEPS_A_STATEMENT_IS_READ_IN),
                     stoppedAt(line.cases()), () -> "nothing taken apart: " + line);
+        }
+    }
+
+    /**
+     * Eighteen relations about the row, each with one about the element, any of them enough: some
+     * element meeting one of them is one of them with some element meeting its other half, so
+     * nothing is said once for each way the eighteen come out, and the statement is read. Where a
+     * line decides is then more cases than are taken apart, which is the figure said, and not how
+     * many steps a statement is read in.
+     */
+    @Test
+    void aQuantifierOverChoicesIsSaidChoiceByChoice() {
+        List<Proposition> each = new ArrayList<>();
+        for (int i = 0; i < 18; i++) {
+            each.add(Proposition.all(List.of(compared(TermPath.of("r" + i), 0, Rel.GT),
+                    compared(XS.element().then("n" + i), 0, Rel.GT))));
+        }
+        Proposition stated = new Proposition.Some(CONTAINER, Proposition.any(each), true);
+
+        for (WhereEachLineDecides.Decides line : WhereEachLineDecides.in(stated)) {
+            assertFalse(notTakenApartAt(line.cases())
+                            .contains(CompositionBudget.STEPS_A_STATEMENT_IS_READ_IN),
+                    () -> "read: " + line.line());
+        }
+    }
+
+    /**
+     * Some element meeting a truth of the row or a relation of its own: with the truth held, the
+     * element meets what holds wherever it is, which is no part to say once held and once failing.
+     * Read, and where the line on the element decides is taken apart; and the same of a quantifier
+     * written over what holds everywhere beside a line of the row.
+     */
+    @Test
+    void aQuantifierOverWhatHoldsEverywhereIsReadAsItIs() {
+        Proposition.Compared element = compared(N, 0, Rel.GT);
+        List<DecidingCase> ofTheElement = decidingCasesOf(new Proposition.Some(CONTAINER,
+                Proposition.any(List.of(truth("flag"), element)), true), element);
+        assertFalse(ofTheElement.isEmpty(), "the line on the element decides somewhere");
+        assertEquals(Set.of(), notTakenApartAt(ofTheElement), ofTheElement::toString);
+
+        Proposition.Compared row = compared(A, 5, Rel.GT);
+        List<DecidingCase> ofTheRow = decidingCasesOf(Proposition.all(List.of(row,
+                new Proposition.Some(CONTAINER, new Proposition.Always(true), true))), row);
+        assertFalse(ofTheRow.isEmpty(), "the line on the row decides somewhere");
+        assertEquals(Set.of(), notTakenApartAt(ofTheRow), ofTheRow::toString);
+    }
+
+    /** Every figure some case nobody took apart was stopped at. */
+    private static Set<CompositionBudget> notTakenApartAt(List<DecidingCase> cases) {
+        Set<CompositionBudget> out = new HashSet<>();
+        cases.forEach(each -> notTakenApartAt(each.standsFor(), out));
+        return out;
+    }
+
+    private static void notTakenApartAt(DecidingCase.Cases cases, Set<CompositionBudget> into) {
+        switch (cases) {
+            case DecidingCase.Cases.One _ -> { }
+            case DecidingCase.Cases.EachOf(var alternatives) ->
+                    alternatives.forEach(one -> notTakenApartAt(one, into));
+            case DecidingCase.Cases.Together(var factors) ->
+                    factors.forEach(one -> notTakenApartAt(one, into));
+            case DecidingCase.Cases.NotTakenApart(var figure) -> into.add(figure);
         }
     }
 

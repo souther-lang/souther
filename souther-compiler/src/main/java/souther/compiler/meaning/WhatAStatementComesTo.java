@@ -1,9 +1,14 @@
 package souther.compiler.meaning;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.BitSet;
+import java.util.Deque;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * What statements over the same parts come to, every way the parts can come out, held as the parts
@@ -68,6 +73,35 @@ final class WhatAStatementComesTo {
         nodes.add(node);
         held.put(node, nodes.size() - 1);
         return nodes.size() - 1;
+    }
+
+    /** The part {@code statement} asks first, alone — none where it asks none. Held only where it
+     *  turns the statement, so it does. */
+    BitSet firstPartAsked(int statement) {
+        BitSet out = new BitSet();
+        if (statement > ALWAYS) {
+            out.set(partAsked(statement));
+        }
+        return out;
+    }
+
+    /** The parts {@code statement} asks somewhere. A part it does not ask turns nothing of it. */
+    BitSet partsAsked(int statement) {
+        BitSet out = new BitSet();
+        Set<Integer> seen = new HashSet<>();
+        Deque<Integer> toSee = new ArrayDeque<>();
+        toSee.push(statement);
+        while (!toSee.isEmpty()) {
+            int each = toSee.pop();
+            if (each <= ALWAYS || !seen.add(each)) {
+                continue;
+            }
+            Node node = nodes.get(each);
+            out.set(node.part());
+            toSee.push(node.failing());
+            toSee.push(node.holding());
+        }
+        return out;
     }
 
     /** One asking: the statements it builds out of others, each step of it counted against a

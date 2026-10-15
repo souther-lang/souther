@@ -1,6 +1,8 @@
 package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
@@ -40,18 +42,16 @@ class WhetherALineTurnsTheStatementDoesNotDependOnHowManyCasesItHasTest {
      * out would hold; each way the line between {@code used} and the first cap is a border at the
      * first call alone.
      */
-    @Test
-    void aLineNoCaseOfItTurnsIsOwedNothingWhereverItsCasesAreSaidAsOne() {
-        for (int calls = 3; calls <= 5; calls++) {
-            JsonNode report = reportOf(takes(calls));
-            List<JsonNode> against = bordersOn(report, "draw/used").stream()
-                    .filter(each -> each.path("value").asString().equals("held.h0"))
-                    .toList();
-            int at = calls;
-            assertEquals(1, against.size(),
-                    () -> "the first call's own line and no other, at " + at + " calls: "
-                            + against);
-        }
+    @ParameterizedTest
+    @ValueSource(ints = {3, 4, 5})
+    void aLineNoCaseOfItTurnsIsOwedNothingWhereverItsCasesAreSaidAsOne(int calls) {
+        JsonNode report = reportOf(takes(calls));
+        List<JsonNode> against = bordersOn(report, "draw/used").stream()
+                .filter(each -> each.path("value").asString().equals("held.h0"))
+                .toList();
+        assertEquals(1, against.size(),
+                () -> "the first call's own line and no other, at " + calls + " calls: "
+                        + against);
     }
 
     /**
