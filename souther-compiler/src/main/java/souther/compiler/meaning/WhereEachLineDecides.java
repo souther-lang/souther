@@ -347,6 +347,11 @@ public final class WhereEachLineDecides {
         private final Map<String, Literal> leaves;
         private final boolean[] table;
         private final boolean[] possible;
+        /** Whether some part has asked for the statement under each case of a value. */
+        private boolean readUnderEachCase;
+        /** The statement under each case of a value, once some part asked for it — null where it
+         *  asks no value's case twice. */
+        private List<UnderACase> underEachCase;
 
         private Reading(Proposition stated, List<Proposition> named, Map<String, Integer> index,
                         Map<String, Literal> leaves, boolean[] table, boolean[] possible) {
@@ -391,8 +396,16 @@ public final class WhereEachLineDecides {
             if (insideAWholeQuantifier(stated, part)) {
                 return heldAgainstItsDenial(stated, part);
             }
-            List<Case> cases = table != null ? casesOf(table, possible, index.get(part.key()), named)
-                    : inEachCaseOfAValue(stated, named, part);
+            List<Case> cases;
+            if (table != null) {
+                cases = casesOf(table, possible, index.get(part.key()), named);
+            } else {
+                if (!readUnderEachCase) {
+                    underEachCase = WhereEachLineDecides.underEachCase(stated, named);
+                    readUnderEachCase = true;
+                }
+                cases = underEachCase == null ? null : inEachCaseOfAValue(underEachCase, part);
+            }
             return cases != null ? cases : heldAgainstItsDenial(stated, part);
         }
 
@@ -779,9 +792,41 @@ public final class WhereEachLineDecides {
      * that case has: {@code days <= limit(s)} with {@code limit} choosing one of eight numbers is,
      * where {@code s} is the sixth stage, {@code days <= 20} and nothing else. And past every case
      * the statement names, the value being none of them.
+     *
+     * @param underEachCase the statement read under each case of the value ({@link #underEachCase})
      */
-    private static List<Case> inEachCaseOfAValue(Proposition stated, List<Proposition> named,
+    private static List<Case> inEachCaseOfAValue(List<UnderACase> underEachCase,
                                                  Proposition part) {
+        List<Case> out = new ArrayList<>();
+        for (UnderACase each : underEachCase) {
+            if (!each.reading().index.containsKey(part.key())) {
+                continue;
+            }
+            for (Case one : each.reading().turnsOn(part)) {
+                out.add(new Case(Proposition.all(List.of(each.is(), one.where())),
+                        one.holdsWithTheLine()));
+                if (out.size() > MOST_CASES) {
+                    return null;
+                }
+            }
+        }
+        return out;
+    }
+
+    /**
+     * {@code stated} read under one case of a value: the case, and the reading of what the
+     * statement comes to there.
+     */
+    private record UnderACase(Proposition is, Reading reading) {}
+
+    /**
+     * {@code stated} read under each case of the first value it asks the case of more than once,
+     * and under that value being none of them — or null where it asks no value's case twice.
+     *
+     * <p>The same for every part of the statement, so worked out once for the statement and
+     * asked of by each of its parts.
+     */
+    private static List<UnderACase> underEachCase(Proposition stated, List<Proposition> named) {
         Map<DecisionSubject, List<Refinement>> asked = new LinkedHashMap<>();
         Map<DecisionSubject, Integer> times = new LinkedHashMap<>();
         for (Proposition each : named) {
@@ -801,38 +846,14 @@ public final class WhereEachLineDecides {
             return null;
         }
         List<Refinement> atoms = asked.get(value);
-        List<Case> out = new ArrayList<>();
+        List<UnderACase> out = new ArrayList<>();
         for (Refinement atom : atoms) {
-            Proposition is = new Proposition.InCases(value, CasesLeft.of(atom), true);
-            if (!underACase(out, is, assuming(stated, value, List.of(atom)), part)) {
-                return null;
-            }
+            out.add(new UnderACase(new Proposition.InCases(value, CasesLeft.of(atom), true),
+                    Reading.of(assuming(stated, value, List.of(atom)))));
         }
-        Proposition none = new Proposition.InCases(value, CasesLeft.ofEach(atoms), false);
-        if (!underACase(out, none, assuming(stated, value, List.of()), part)) {
-            return null;
-        }
-        return out.size() <= MOST_CASES ? out : null;
-    }
-
-    /**
-     * Adds to {@code into} where {@code part} decides in {@code stated}, each case said with
-     * {@code is} beside it — or false where that was not read.
-     */
-    private static boolean underACase(List<Case> into, Proposition is, Proposition stated,
-                                      Proposition part) {
-        Reading reading = Reading.of(stated);
-        if (reading.named().stream().noneMatch(each -> each.key().equals(part.key()))) {
-            return true;
-        }
-        for (Case each : reading.turnsOn(part)) {
-            into.add(new Case(Proposition.all(List.of(is, each.where())),
-                    each.holdsWithTheLine()));
-            if (into.size() > MOST_CASES) {
-                return false;
-            }
-        }
-        return true;
+        out.add(new UnderACase(new Proposition.InCases(value, CasesLeft.ofEach(atoms), false),
+                Reading.of(assuming(stated, value, List.of()))));
+        return out;
     }
 
     /**

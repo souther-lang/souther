@@ -1033,8 +1033,7 @@ public final class Partitions {
         // the position and a line between two leaves its border beside them; they are the same
         // reading, and an accounting over one of them says nothing about the other.
         LinesRead read = new LinesRead();
-        BiPredicate<LineOrigin, LineOrigin> apart =
-                (one, other) -> reaching.neverTogether(one, other, reading.region());
+        BiPredicate<LineOrigin, LineOrigin> apart = reaching.apart();
         Map<AxisId, List<Border>> lines = linesAlong(out, reading, read, apart);
         List<Border> across = Border.allOf(between, partedByQuantity(out), read, apart);
         read.returning(lines.values().stream().flatMap(List::stream).toList());
