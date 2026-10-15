@@ -283,10 +283,11 @@ class AModuleOnThePathIsHeldToEachDeclarationItsClassesReadTest {
         assertEquals("answers", moved(said(USES_ONLY_INC, path), "lib.b", "limit").fact());
     }
 
-    /** The declaration that moved is one of a module compiled here. What it offers is what its
-     *  classes are about to offer, and `lib.b` is held to that. */
+    /** The declaration that moved is one of a module compiled here. `lib.b` does not reach a module
+     *  compiled here at all, so that is what is said, and not the declaration: rebuilt against this
+     *  `lib.c`, it would still not reach it. */
     @Test
-    void aModuleCompiledHereIsWhatAModuleOnThePathIsHeldTo() {
+    void aModuleCompiledHereIsNotOneAModuleOnThePathIsHeldTo() {
         Map<String, ClassFileImage> path = Compiler.compileModules(List.of(B_CALLS_TWICE),
                 ModulePath.of(Compiler.compile(C)));
         Compilation compilation = Compilation.ofSources(List.of("""
@@ -302,7 +303,8 @@ class AModuleOnThePathIsHeldToEachDeclarationItsClassesReadTest {
             said.add(found.report().diagnostic().said());
         }
 
-        assertEquals("answers", moved(said, "lib.b", "twice").fact());
+        assertEquals(List.of(new ModuleMessage.AModuleOnThePathNeedsOneCompiledHere("lib.b",
+                "lib.c")), said);
     }
 
     private static final String D_TAKING_ONE = """

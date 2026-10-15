@@ -391,11 +391,13 @@ public final class Linkages {
      * of another module its classes were built against, held to what that declaration's module
      * offers here (spec {@code [#a-published-module-agrees-with-what-it-was-built-against]}).
      *
-     * <p>What a module compiled here offers is what its classes are about to offer; what a module
-     * off the path offers is what its classes record. A declaration a module off the path offers
-     * differently from what a module built against it assumed is said about the module that assumed
-     * it — the one whose classes stop when they reach it — and not about any module built on that
-     * one: a module that did not read the declaration is not held to it.
+     * <p>Held only to modules on the path, as their classes record what they offer. A module off the
+     * path reaching one compiled here is said as that ({@link Front.NeedsThisCompilation}): its
+     * classes do not find it whatever it offers, and telling the author to rebuild against it would
+     * fix nothing. A declaration a module off the path offers differently from what a module built
+     * against it assumed is said about the module that assumed it — the one whose classes stop when
+     * they reach it — and not about any module built on that one: a module that did not read the
+     * declaration is not held to it.
      *
      * <p>Asked of every module read off the path, where the compilation's problems are gathered, and
      * not by whoever goes on to use some of the module.
@@ -464,7 +466,7 @@ public final class Linkages {
             Map<String, Map<CopyTarget, CopyRecord>> copiesOfferedBy = new HashMap<>();
             CopyAgreement.Held copies = CopyAgreement.of(onThePath.requiredCopies(),
                     module -> copiesOfferedBy.computeIfAbsent(module,
-                            m -> Copies.offered(db, m)));
+                            m -> offeredToCopy(db, m)));
             for (CopyAgreement.Disagreement disagreement : copies.disagreements()) {
                 CopyTarget target = disagreement.target();
                 Diagnostic said = switch (disagreement) {
@@ -499,26 +501,21 @@ public final class Linkages {
     }
 
     /**
-     * What {@code module} offers as a class built against it reads it: as its classes record it,
-     * for a module off the path, and as its classes are about to offer it, for one compiled here —
-     * or null where this compilation does not have it, or it did not come out.
+     * What {@code module} offers as a class built against it reads it, as its classes record it —
+     * or null where the path does not carry it. A module compiled here is not one a module on the
+     * path can link against at all ({@link Front.NeedsThisCompilation}), so what it would offer is
+     * not asked.
      */
     private static Map<LinkageTarget, LinkageRecord> offered(Db db, String module) {
         Front.FromPath.OnThePath onThePath = Front.onThePath(db, module);
-        if (onThePath != null) {
-            return onThePath.provides();
-        }
-        if (!held(db, module)) {
-            return null;
-        }
-        Answer<Of> provided = db.ask(new Provided(module));
-        if (!provided.present()) {
-            return null;
-        }
-        Map<LinkageTarget, LinkageRecord> out = new TreeMap<>();
-        provided.value().provides().forEach((target, projection) ->
-                out.put(target, LinkageRecord.of(projection)));
-        return out;
+        return onThePath == null ? null : onThePath.provides();
+    }
+
+    /** What {@code module} offers to be copied, as its classes record it — or null where the path
+     *  does not carry it, for the reason {@link #offered} answers that. */
+    private static Map<CopyTarget, CopyRecord> offeredToCopy(Db db, String module) {
+        Front.FromPath.OnThePath onThePath = Front.onThePath(db, module);
+        return onThePath == null ? null : onThePath.providedCopies();
     }
 
     /** One side of a fact that moved, as a report shows it; a dash where that side says nothing. */

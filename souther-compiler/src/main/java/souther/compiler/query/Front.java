@@ -1290,6 +1290,43 @@ public final class Front {
     }
 
     /**
+     * A module off the path that reaches one a source of this compilation declares. Its classes run
+     * from the path, and the path is where the classes this compilation makes cannot be seen: a
+     * name the check resolves to a module compiled here is one the running module never finds.
+     *
+     * <p>What it reaches is {@link #reaches(ReadableModule)}, the same answer the path is walked by,
+     * so what its bodies link against counts as much as what its declarations name. Only what it
+     * reaches itself: a module beyond it that reaches one compiled here is said about that module.
+     */
+    public record NeedsThisCompilation(String name) implements Key<Boolean> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Boolean> compute(Db db) {
+            FromPath.OnThePath onThePath = onThePath(db, name);
+            if (onThePath == null) {
+                return Answer.of(Boolean.FALSE);
+            }
+            List<Report> reports = new ArrayList<>();
+            for (String reached : reaches(onThePath.read())) {
+                if (declaredHere(db, reached)) {
+                    reports.add(Report.raised(Diagnostic.say(
+                                    new ModuleMessage.AModuleOnThePathNeedsOneCompiledHere(name,
+                                            reached))
+                            .hint(new ModuleMessage.CompileItHereOrTakeTheOtherFromThePath(name,
+                                    reached))
+                            .atCodeWrittenOutOfSight(ModuleReadback.provenanceOf(name))
+                            .build()));
+                }
+            }
+            return reports.isEmpty() ? Answer.of(Boolean.FALSE) : Answer.absent(reports);
+        }
+    }
+
+    /**
      * Every module name this compilation knows — declared by a source, or read off the path whether
      * or not it may be used.
      *

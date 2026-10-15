@@ -189,6 +189,16 @@ public sealed interface ModuleMessage extends Message {
 
     record RenameItOrDropTheDependency(String module) implements ModuleMessage, Supporting {}
 
+    /** A module off the path reaches {@code reached}, which a source of this compilation declares.
+     * Its classes were built elsewhere and run from the path, and the classes this compilation
+     * makes are not where they can be seen from there. */
+    @Code(DiagnosticCode.E1511)
+    record AModuleOnThePathNeedsOneCompiledHere(String module, String reached)
+            implements ModuleMessage, Reported {}
+
+    record CompileItHereOrTakeTheOtherFromThePath(String module, String reached)
+            implements ModuleMessage, Supporting {}
+
     @Code(DiagnosticCode.E1506)
     record TheModuleDeclaresNoSuchQualifiedName(String name, String module) implements ModuleMessage, Reported {}
 

@@ -569,7 +569,9 @@ public final class Compilation {
 
     /**
      * The problems that stop this compilation before any module is looked at: a source that names a
-     * module twice, one that shadows a module already on the path, and a cycle among them.
+     * module twice, one that shadows a module already on the path, a cycle among them, and a module
+     * on the path that needs one compiled here or was built against another version of what it
+     * reaches.
      *
      * <p>These come first because each one makes "which module is this name" unanswerable, and
      * every question below that is about a name.
@@ -602,6 +604,9 @@ public final class Compilation {
         Front.FromPath.Of path = db.ask(new Front.FromPath()).value();
         if (path != null) {
             for (String module : path.modules().keySet()) {
+                for (Report report : db.ask(new Front.NeedsThisCompilation(module)).reports()) {
+                    found.add(new Db.Found(module, null, report));
+                }
                 for (Report report : db.ask(new Bodies.BuiltAgainst(module)).reports()) {
                     found.add(new Db.Found(module, null, report));
                 }
