@@ -53,15 +53,15 @@ class WhatTheDeclarationsHoldAValueToIsOneAnswerTest {
     private static final Carrier WHOLE = new Carrier.Whole();
 
     /** A position held to {@code "a"} or {@code "b"}. */
-    private static final HeldValues TWO_STRINGS = new HeldValues(TEXT, null,
+    private static final HeldValues TWO_STRINGS = new HeldValues.OfAPosition(TEXT, null,
             new ValueSet.Finite(Set.of(new Value.Text("a"), new Value.Text("b"))));
 
     /** A position held to the multiples of a thousand. */
-    private static final HeldValues THOUSANDS = new HeldValues(WHOLE,
+    private static final HeldValues THOUSANDS = new HeldValues.OfAPosition(WHOLE,
             new Congruences(BigInteger.ZERO, BigInteger.valueOf(1000)), ValueSet.ANY);
 
     /** A position held away from two. */
-    private static final HeldValues NOT_TWO = new HeldValues(WHOLE, null,
+    private static final HeldValues NOT_TWO = new HeldValues.OfAPosition(WHOLE, null,
             new ValueSet.Cofinite(Set.of(new Value.Number(BigDecimal.valueOf(2)))));
 
     @Test
@@ -126,7 +126,7 @@ class WhatTheDeclarationsHoldAValueToIsOneAnswerTest {
      */
     @Test
     void aValueSingledOutThatTheDeclarationsRefuseOwesNoRowAtIt() {
-        HeldValues odd = new HeldValues(WHOLE, null, new ValueSet.Finite(Set.of(
+        HeldValues odd = new HeldValues.OfAPosition(WHOLE, null, new ValueSet.Finite(Set.of(
                 new Value.Number(BigDecimal.ONE), new Value.Number(BigDecimal.valueOf(3)))));
         assertEquals(new PointAnswer.NotOwed(NotOwedReason.NO_VALUE_CAN_STAND_THERE, List.of()),
                 singledAt(2, odd).answers().get(new DomainPoint.AtTheLine()));

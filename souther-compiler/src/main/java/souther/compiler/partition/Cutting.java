@@ -1559,11 +1559,10 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                         ? range : null);
         // What the declarations hold a position's value to inside where it runs, which a value is
         // refused by before the region is asked anything: a position held to "a" or "b" takes no
-        // value at "a0", whatever the region says of the strings. A side of a line is not asked
-        // it: the side runs to an end of the range, and the range ends at a value the declarations
-        // leave.
-        HeldValues held = of instanceof BorderQuantity.OfACoordinate coordinate
-                ? HeldValues.of(region, coordinate.of()) : HeldValues.NONE;
+        // value at "a0", whatever the region says of the strings — and a form over that one
+        // position takes no value none of them comes to. A side of a line is not asked it: the
+        // side runs to an end of the range, and the range ends at a value the declarations leave.
+        HeldValues held = of.heldIn(region);
         return new Border.Values() {
             @Override
             public boolean extendTo(Level level) {

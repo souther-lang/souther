@@ -778,7 +778,9 @@ public final class InputReads {
      * Where the body of {@code behavior}, called with {@code args} here, is read: its parameters
      * standing for what the call handed — a position where the argument stands at one, and the
      * argument read here where it does not — and what the body binds to the elements of what known
-     * beside what this body does. Null where its body is entered already on the way here, which is
+     * beside what this body does. The body is read as the tree its behavior's analysis reads,
+     * where the language's operations stand as calls, whichever tree this reading is of ({@link
+     * #calledWith}). Null where its body is entered already on the way here, which is
      * the behavior reached again while its own answer is being read, or where the call hands it
      * another number of values than it takes.
      *
@@ -793,7 +795,7 @@ public final class InputReads {
         }
         Set<ValueName.Behavior> entered = new HashSet<>(applied.entered());
         entered.add(behavior);
-        return calledWith(body, args, names.entering(body.elements()), entered, newtypes);
+        return calledWith(body, args, Map.of(), entered, newtypes);
     }
 
     /**
@@ -807,9 +809,7 @@ public final class InputReads {
      */
     public InputReads steppingThrough(CalledBody body, List<Core> args, BindingId element,
                                       TermPath at, DeclarationNewtypes newtypes) {
-        return calledWith(body, args,
-                names.entering(body.elements()).overStandingCalls().naming(element, at),
-                applied.entered(), newtypes);
+        return calledWith(body, args, Map.of(element, at), applied.entered(), newtypes);
     }
 
     /**
@@ -821,22 +821,30 @@ public final class InputReads {
      * says what it takes them to answer.
      */
     public InputReads searching(CalledBody body, List<Core> args, DeclarationNewtypes newtypes) {
-        return calledWith(body, args, names.entering(body.elements()).overStandingCalls(),
-                applied.entered(), newtypes);
+        return calledWith(body, args, Map.of(), applied.entered(), newtypes);
     }
 
     /**
-     * Where {@code body} is read in {@code entering} with its parameters standing for what a call
-     * handed it, {@code entered} the bodies entered on the way — or null where the call hands
-     * another number of values than the body takes. A parameter handed a value at a position
-     * stands at it, and one handed anything else is given it as read here.
+     * Where {@code body} is read with what it binds known beside what this body does, each of
+     * {@code standing} at its position, and its parameters standing for what a call handed it,
+     * {@code entered} the bodies entered on the way — or null where the call hands another number
+     * of values than the body takes. A parameter handed a value at a position stands at it, and
+     * one handed anything else is given it as read here.
+     *
+     * <p>The body is the tree the analysis of its behavior reads, which keeps the language's
+     * operations standing as calls whichever tree the call was read in; the arguments stay read
+     * here.
      */
-    private InputReads calledWith(CalledBody body, List<Core> args, BindingEnvironment entering,
+    private InputReads calledWith(CalledBody body, List<Core> args,
+                                  Map<BindingId, TermPath> standing,
                                   Set<ValueName.Behavior> entered, DeclarationNewtypes newtypes) {
         if (args.size() != body.parameters().size()) {
             return null;
         }
-        BindingEnvironment inside = entering;
+        BindingEnvironment inside = names.entering(body.elements()).overStandingCalls();
+        for (Map.Entry<BindingId, TermPath> each : standing.entrySet()) {
+            inside = inside.naming(each.getKey(), each.getValue());
+        }
         Map<BindingId, Denotation> given = new LinkedHashMap<>(applied.given());
         for (int i = 0; i < args.size(); i++) {
             Core.Binder parameter = body.parameters().get(i);

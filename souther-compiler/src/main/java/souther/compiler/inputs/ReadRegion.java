@@ -7,6 +7,7 @@ import souther.compiler.numeric.PlacesApart;
 import souther.compiler.numeric.Rel;
 import souther.compiler.values.ValueSet;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -87,6 +88,11 @@ record ReadRegion(ReadQuantities within) implements SearchRegion {
     @Override
     public ValueSet heldAt(NumericTerm.FromOnePosition term) {
         return within.heldAt(term);
+    }
+
+    @Override
+    public ReadingsOfEachValue readingsOfEach(List<NumericTerm.FromOnePosition> terms) {
+        return within.readingsOfEach(terms);
     }
 
     @Override

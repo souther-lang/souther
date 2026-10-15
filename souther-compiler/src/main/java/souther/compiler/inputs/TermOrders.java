@@ -4,13 +4,10 @@ import souther.compiler.check.Carrier;
 import souther.compiler.numeric.Place;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.values.Value;
-import souther.compiler.values.ValueSet;
 
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
 import java.util.function.Function;
 
 /**
@@ -106,37 +103,6 @@ public final class TermOrders {
                     term + " is read over the values of a run, and this is one value");
         }
         return TermReading.at(this, value);
-    }
-
-    /**
-     * The numbers this term reads of the values in {@code admitted}, as a set of values on the order
-     * it is answered on — or every value where that is not worked out.
-     *
-     * <p>What a position's rules name are values of the position, and a number taken of it is
-     * another quantity: a string held to {@code "a"} or {@code "b"} is held to a length of one, and
-     * to no length the set of strings would say anything of. So each value is read through this
-     * term, as a row holding it would be, and what they come to is the set.
-     *
-     * <p>Only ever as wide as what was admitted. {@code admitted} holds every value the position
-     * may hold, so the numbers read of them hold every number the term may come to there; a number
-     * outside is one no value reaches, and a number inside is not shown to be one a row can hold.
-     * Every value where the set is not finitely many values or where one of them is read as no
-     * number: a set leaving one of them out would refuse a number a value comes to.
-     */
-    public ValueSet readOfEach(ValueSet admitted) {
-        if (answered == null || !(admitted instanceof ValueSet.Finite finite)) {
-            return ValueSet.ANY;
-        }
-        Set<Value> numbers = new LinkedHashSet<>();
-        for (Value each : finite.values()) {
-            Value comesTo = readOf(each) instanceof NumericTerm.Reading.Number(Place number)
-                    ? answered.valueAt(number) : null;
-            if (comesTo == null) {
-                return ValueSet.ANY;
-            }
-            numbers.add(comesTo);
-        }
-        return ValueSet.oneOf(numbers);
     }
 
     /**

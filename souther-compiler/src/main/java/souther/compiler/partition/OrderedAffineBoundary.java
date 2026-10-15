@@ -10,6 +10,7 @@ import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Towards;
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashSet;
@@ -167,6 +168,23 @@ public record OrderedAffineBoundary(LinearQuantity of, Seam seam, Towards satisf
     public static ExactAnswer<ExactRatio> at(LinearForm<NumericTerm> form,
                                              Map<NumericTerm, Place> values) {
         return summed(form.coefs(), values, form.constant());
+    }
+
+    /**
+     * What {@code dividend} leaves by {@code divisor} at a row: the form there, less every whole
+     * turn of the divisor — none where the form does not come to a whole number, which leaves no
+     * remainder — or which way the exact arithmetic could not hold the form.
+     *
+     * <p>The one place a remainder of a form is worked out of the numbers a row holds, so a row
+     * read against a border on it and a value of a position read for what it comes to are read
+     * alike.
+     */
+    static ExactAnswer<Optional<ExactRatio>> remainderAt(LinearForm<NumericTerm> dividend,
+                                                         BigInteger divisor,
+                                                         Map<NumericTerm, Place> values) {
+        return at(dividend, values).map(comesTo -> comesTo.isWhole()
+                && comesTo.floor() instanceof ExactAnswer.Held<BigInteger> whole
+                ? Optional.of(ExactRatio.of(whole.value().mod(divisor))) : Optional.empty());
     }
 
     /**

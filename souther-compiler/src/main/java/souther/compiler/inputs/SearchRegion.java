@@ -8,6 +8,7 @@ import souther.compiler.numeric.PlacesApart;
 import souther.compiler.numeric.Rel;
 import souther.compiler.values.ValueSet;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -251,6 +252,24 @@ public interface SearchRegion {
      */
     default ValueSet heldAt(NumericTerm.FromOnePosition term) {
         return ValueSet.ANY;
+    }
+
+    /**
+     * Every value the declarations admit the position {@code terms} are taken of, each with what
+     * every one of them reads of it — or null where that is not worked out.
+     *
+     * <p>What a reader asking several numbers of one position together asks, and never the sets
+     * {@link #heldAt} answers for each of them met with one another. Which value comes to which
+     * numbers is what those sets leave out, so a combination each set holds a number of may be one
+     * no value comes to.
+     *
+     * <p>Null where the terms are not all of one position, where the position admits no finite set
+     * of values, or where a value of it is read as no number of one of the terms: a reader then
+     * knows nothing of the values together, as a region that reads no position does not, which is
+     * what the default is.
+     */
+    default ReadingsOfEachValue readingsOfEach(List<NumericTerm.FromOnePosition> terms) {
+        return null;
     }
 
     /** The same, of one term — the one-term case of the question above and not a second answer to
