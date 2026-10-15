@@ -98,11 +98,12 @@ final class DecisionNaming implements Naming<DecisionPath> {
     @Override
     public DecisionPath join(DecisionPath held, DecisionPath more) {
         DecisionPath joined = held.and(more);
-        // Where one of the two consulted everything the other did, the way is that one's, which
-        // was asked when it was joined.
-        if (joined == null || joined.rule().equals(held.rule())
-                || joined.rule().equals(more.rule())) {
-            return joined;
+        // Asked of every way joined, even one that consults nothing either of the two did not: a
+        // way can come to several conditions without being joined — both sides of an operator that
+        // stops when its answer is settled are one side of it — and what is asked is answered once
+        // for what it states ({@link WaysNoInputTakes#whyNoInputTakes}).
+        if (joined == null) {
+            return null;
         }
         Optional<NoInputTakesIt> none = noInputTakes(joined);
         if (none.isEmpty()) {

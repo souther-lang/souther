@@ -301,12 +301,20 @@ public record DecisionReading(String behavior, List<Ruled> found, List<Impossibl
             return new DecisionReading(behavior, List.of(), proved.leastOfThem(),
                     new Enumeration.StoppedAtAFigure(PATHS_READ), Map.of());
         }
+        // A rule past a way no input takes is no rule a run takes, however the reading came to it:
+        // a way made of several conditions without being joined is asked only where it is joined
+        // to more, and one that is never joined to more is the body's whole way. The proof stands
+        // for it, and the rule is not held beside the proof.
+        List<ImpossiblePath> impossible = proved.leastOfThem();
         List<Ruled> found = new ArrayList<>();
         for (Arrival<DecisionPath> way : held.arrivals()) {
-            found.add(new Ruled(way.path().rule(), way.path().steps(), way.isComplete()));
+            DecisionRule rule = way.path().rule();
+            if (impossible.stream().noneMatch(each -> each.standsFor(rule))) {
+                found.add(new Ruled(rule, way.path().steps(), way.isComplete()));
+            }
         }
-        return new DecisionReading(behavior, found, proved.leastOfThem(),
-                new Enumeration.Complete(), numbering.metAt());
+        return new DecisionReading(behavior, found, impossible, new Enumeration.Complete(),
+                numbering.metAt());
     }
 
     /** What this body's conditions decide, made once for the whole reading of it. */
