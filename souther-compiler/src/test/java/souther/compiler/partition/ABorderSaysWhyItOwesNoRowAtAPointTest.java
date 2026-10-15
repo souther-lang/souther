@@ -398,6 +398,42 @@ class ABorderSaysWhyItOwesNoRowAtAPointTest {
     }
 
     /**
+     * The same of a remainder of a form over numbers of one position: what each value leaves.
+     *
+     * <p>Four, eight and ten with their remainders by three added leave one, two and three by four,
+     * so the run below one holds nothing; twice each leaves one, two and six by seven, so three is
+     * no remainder any value leaves.
+     */
+    @Test
+    void aRemainderOfAFormOverNumbersOfOnePositionIsHeldToWhatEachValueLeaves() {
+        String named = "value == 4 || value == 8 || value == 10";
+        String sum = naming("Code", "Int", named,
+                "Int.floorMod(c.value + Int.floorMod(c.value, 3), 4) < 2");
+        String overSum = "Int.floorMod(Int.floorMod(c, 3) + c, 4) = 2";
+        assertEquals(List.of("ON = 1: owed", "OFF = 2: owed", "IN: NO_VALUE_CAN_STAND_THERE",
+                        "OUT in 2 < Int.floorMod(Int.floorMod(c, 3) + c, 4) <= 3: owed"),
+                owedAt(lineOf(sum, overSum)), "no value leaves nought");
+        assertEquals(List.of("Code(10)"), offeredAt(sum, overSum, PointRole.OUT));
+
+        assertEquals(new ItemAssessment.NotOwed(NotOwedReason.NO_VALUE_CAN_STAND_THERE),
+                lineOf(naming("Code", "Int", named, "Int.floorMod(2 * c.value, 7) < 3"),
+                        "Int.floorMod(2 * c, 7) = 3").at(PointRole.OFF),
+                "no value leaves three");
+    }
+
+    /**
+     * And a remainder of such a form is offered the value that leaves it, however far that value is
+     * from the others: only 100006 with its remainder by three added leaves three by four.
+     */
+    @Test
+    void aRemainderOfAFormOverNumbersOfOnePositionIsOfferedTheValueThatLeavesIt() {
+        assertEquals(List.of("Code(100006)"), offeredAt(naming("Code", "Int",
+                        "value == 4 || value == 8 || value == 100006",
+                        "Int.floorMod(c.value + Int.floorMod(c.value, 3), 4) < 3"),
+                "Int.floorMod(Int.floorMod(c, 3) + c, 4) = 3", PointRole.OFF));
+    }
+
+    /**
      * Numbers of two positions are two values, and are not read as one.
      *
      * <p>A value less the remainder of another comes to seven where the first is eight and the

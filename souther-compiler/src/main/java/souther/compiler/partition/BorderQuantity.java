@@ -1138,14 +1138,13 @@ public sealed interface BorderQuantity
                 case ValuesAtARow.NoneHere _ -> Stands.NO;
                 case ValuesAtARow.CouldNotTell(Set<ReadingGap> why) -> Stands.couldNotTell(why);
                 case ValuesAtARow.Read(Map<NumericTerm, Place> values) ->
-                        switch (OrderedAffineBoundary.at(wholeDividend(), values)) {
-                            case ExactAnswer.Unheld<ExactRatio> unheld ->
+                        switch (OrderedAffineBoundary.remainderAt(wholeDividend(), divisor,
+                                values)) {
+                            case ExactAnswer.Unheld<Optional<ExactRatio>> unheld ->
                                     Stands.couldNotTell(Set.of(ReadingGap.of(unheld.why())));
-                            case ExactAnswer.Held<ExactRatio> held ->
-                                    held.value().isWhole() && held.value().floor()
-                                            instanceof ExactAnswer.Held<BigInteger> whole
-                                            && where.holds(new Level.OfTheQuantity(ExactRatio.of(
-                                                    whole.value().mod(divisor))))
+                            case ExactAnswer.Held<Optional<ExactRatio>>(var left) ->
+                                    left.isPresent()
+                                            && where.holds(new Level.OfTheQuantity(left.get()))
                                             ? Stands.YES : Stands.NO;
                         };
             };
@@ -1343,20 +1342,28 @@ public sealed interface BorderQuantity
 
     /**
      * What the declarations {@code region} reads hold this quantity to besides where it runs: a
-     * number of one position is held to what the position's values come to, and a form or a
-     * distance over numbers of one position to what each of its values comes to of the whole.
+     * number of one position is held to what the position's values come to, and a form, a
+     * distance or a remainder of a form over numbers of one position to what each of its values
+     * comes to of the whole — worked out of the value as a row holding it is read
+     * ({@link OrderedAffineBoundary#at}, {@link OrderedAffineBoundary#remainderAt}).
      *
      * <p>Nothing of a distance between values that do not count, whose one level is where they
-     * meet, nor of a count or a remainder of a form: what a position's values come to there is not
-     * worked out, which refuses nothing.
+     * meet, nor of a count of elements, which no one position's values say: neither refuses
+     * anything.
      */
     default HeldValues heldIn(SearchRegion region) {
         return switch (this) {
             case OfACoordinate coordinate -> HeldValues.of(region, coordinate.of());
-            case OverAForm over -> HeldValues.OfAForm.of(region, over);
-            case Apart apart -> apart.on().answered().counts()
-                    ? HeldValues.OfAForm.of(region, apart) : HeldValues.NONE;
-            case HowMany _, RemainderOfAForm _ -> HeldValues.NONE;
+            case OverAForm over -> HeldValues.OfAForm.of(region, over.terms(),
+                    values -> OrderedAffineBoundary.at(over.form(), values).map(Optional::of));
+            case Apart apart -> apart.counts()
+                    ? HeldValues.OfAForm.of(region, apart.terms(), values -> OrderedAffineBoundary
+                            .at(apart.direction(), values).map(Optional::of))
+                    : HeldValues.NONE;
+            case RemainderOfAForm remainder -> HeldValues.OfAForm.of(region,
+                    remainder.dividend().terms(), values -> OrderedAffineBoundary.remainderAt(
+                            remainder.wholeDividend(), remainder.divisor(), values));
+            case HowMany _ -> HeldValues.NONE;
         };
     }
 

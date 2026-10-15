@@ -32,6 +32,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 /**
@@ -749,8 +750,22 @@ public final class LevelRealizer {
      */
     private Realization amongTheValuesNamed(LinearForm<NumericTerm> form, Criterion where,
                                             SearchRegion within, ValuesTried tried) {
+        return amongTheValuesNamed(form.coefs().keySet(),
+                values -> OrderedAffineBoundary.at(form, values).map(Optional::of), where, within,
+                tried);
+    }
+
+    /**
+     * The same, of a quantity over {@code terms} that is at the level {@code comesTo} says where
+     * its terms read as given — or at none, as a remainder of a form that comes to no whole number
+     * is.
+     */
+    private Realization amongTheValuesNamed(
+            Collection<NumericTerm> over,
+            Function<Map<NumericTerm, Place>, ExactAnswer<Optional<ExactRatio>>> comesTo,
+            Criterion where, SearchRegion within, ValuesTried tried) {
         List<NumericTerm.FromOnePosition> terms = new ArrayList<>();
-        for (NumericTerm each : NumericTerms.inOrder(form.coefs().keySet())) {
+        for (NumericTerm each : NumericTerms.inOrder(over)) {
             if (each.atOnePosition() == null) {
                 return null;
             }
@@ -762,11 +777,11 @@ public final class LevelRealizer {
         }
         boolean cameToOne = false;
         for (ReadingsOfEachValue.Read each : named.each()) {
-            if (!(OrderedAffineBoundary.at(form, each.numbers())
-                    instanceof ExactAnswer.Held<ExactRatio>(ExactRatio comesTo))) {
+            if (!(comesTo.apply(each.numbers())
+                    instanceof ExactAnswer.Held<Optional<ExactRatio>>(var level))) {
                 return null;
             }
-            if (!where.holds(new Level.OfTheQuantity(comesTo))) {
+            if (level.isEmpty() || !where.holds(new Level.OfTheQuantity(level.get()))) {
                 continue;
             }
             cameToOne = true;
@@ -862,6 +877,14 @@ public final class LevelRealizer {
     private Realization ofARemainder(Standing.OfARemainder over, SearchRegion within,
                                      Map<NumericTerm, NumericDomain.Bounds> runs,
                                      ValuesTried tried) {
+        // A remainder of a form over numbers of one position is what one value leaves, as a form
+        // over them is what one value comes to.
+        Realization named = amongTheValuesNamed(over.dividend().coefs().keySet(),
+                values -> OrderedAffineBoundary.remainderAt(over.dividend(), over.divisor(),
+                        values), over.where(), within, tried);
+        if (named != null) {
+            return named;
+        }
         LinearForm<NumericTerm> form = new LinearForm<>(ExactRatio.ZERO, over.dividend().coefs());
         BigInteger moved = ((ExactAnswer.Held<BigInteger>) over.dividend().constant().floor())
                 .value();

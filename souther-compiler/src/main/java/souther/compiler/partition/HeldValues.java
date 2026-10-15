@@ -10,11 +10,15 @@ import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.OrderedInterval;
+import souther.compiler.numeric.Place;
 import souther.compiler.values.ValueSet;
 
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.function.Function;
 
 /**
  * What a position's declarations hold its value to besides where it runs: the class of whole
@@ -175,8 +179,8 @@ public sealed interface HeldValues {
      * comes to on its own are {@code {4, 8, 10}} and {@code {1, 2}}, and put together apart from the
      * values they were read of they would reach five, which no value does.
      *
-     * <p>A distance between two such numbers is the form that is their difference, and its levels
-     * are what that comes to.
+     * <p>A distance between two such numbers is the form that is their difference, and a remainder
+     * of such a form is what the form leaves by its divisor: the levels are what those come to.
      *
      * <p>Made only of every value the position admits ({@link #of}): a level none of them comes to
      * is refused, so a list missing one would refuse a level a value reaches.
@@ -191,29 +195,35 @@ public sealed interface HeldValues {
         }
 
         /**
-         * What {@code quantity}'s form comes to of each value its one position admits, or nothing
-         * where its terms are not all of one position, where the position admits no finite set, or
-         * where the form is not worked out of a value.
+         * What a quantity over {@code terms} comes to of each value their one position admits, or
+         * nothing where the terms are not all of one position, where the position admits no
+         * finite set, or where what one value comes to is not worked out.
+         *
+         * @param comesTo the level the quantity is at where its terms read as given, or none where
+         *                it is at no level there — a remainder of a form that comes to no whole
+         *                number
          */
-        static HeldValues of(SearchRegion region, LinearQuantity quantity) {
-            List<NumericTerm.FromOnePosition> terms = new ArrayList<>();
-            for (NumericTerm each : quantity.terms()) {
+        static HeldValues of(SearchRegion region, List<NumericTerm> terms,
+                             Function<Map<NumericTerm, Place>, ExactAnswer<Optional<ExactRatio>>>
+                                     comesTo) {
+            List<NumericTerm.FromOnePosition> named = new ArrayList<>();
+            for (NumericTerm each : terms) {
                 if (each.atOnePosition() == null) {
                     return NONE;
                 }
-                terms.add(each.atOnePosition());
+                named.add(each.atOnePosition());
             }
-            ReadingsOfEachValue read = region.readingsOfEach(terms);
+            ReadingsOfEachValue read = region.readingsOfEach(named);
             if (read == null) {
                 return NONE;
             }
             List<ExactRatio> out = new ArrayList<>();
             for (ReadingsOfEachValue.Read each : read.each()) {
-                if (!(OrderedAffineBoundary.at(quantity.direction(), each.numbers())
-                        instanceof ExactAnswer.Held<ExactRatio>(ExactRatio at))) {
+                if (!(comesTo.apply(each.numbers())
+                        instanceof ExactAnswer.Held<Optional<ExactRatio>>(var at))) {
                     return NONE;
                 }
-                out.add(at);
+                at.ifPresent(out::add);
             }
             return new OfAForm(out);
         }
