@@ -1,6 +1,9 @@
 package souther.compiler.reading;
 
+import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.SequencedSet;
 
 /**
  * What the walk carries down: how the place it is at is reached, and what it can say about that.
@@ -68,16 +71,25 @@ sealed interface Reach {
     /**
      * Nothing here can be said in the terms a way in is written in.
      *
+     * @param whys  every step nothing states on the way here, by what left it so, the one a place
+     *              here is told first. Every one and not the first: what {@code known} leaves out
+     *              is all of them, and a reader asking whether it leaves out anything but a
+     *              function value being called is asking about each
      * @param known what is known to hold here as far as it was named: the decisions the ways above
      *              the step nothing states had settled, and whatever is settled under it since. A
      *              step nothing states is taken to rule out nothing, so these are no ways in — a
      *              row composed along one may not get here — and are what a run here is known to
      *              have decided. One way with nothing in it where nothing is known
      */
-    record Unnameable(PathAccess.Unsupported.Why why, List<WayIn> known) implements Reach {
+    record Unnameable(SequencedSet<PathAccess.Unsupported.Why> whys, List<WayIn> known)
+            implements Reach {
 
         public Unnameable {
+            whys = Collections.unmodifiableSequencedSet(new LinkedHashSet<>(whys));
             known = List.copyOf(known);
+            if (whys.isEmpty()) {
+                throw new IllegalArgumentException("a step nothing states is left so for a reason");
+            }
             if (known.isEmpty()) {
                 throw new IllegalArgumentException("a place runs reach is known by some way, even"
                         + " one nothing is known on; none is Nothing");
@@ -86,7 +98,12 @@ sealed interface Reach {
 
         /** A step nothing states, with nothing known about what holds there. */
         Unnameable(PathAccess.Unsupported.Why why) {
-            this(why, List.of(new WayIn(List.of())));
+            this(new LinkedHashSet<>(List.of(why)), List.of(new WayIn(List.of())));
+        }
+
+        /** What a place here is told is missing: the first step nothing states. */
+        PathAccess.Unsupported.Why why() {
+            return whys.getFirst();
         }
 
         @Override
@@ -96,7 +113,7 @@ sealed interface Reach {
 
         @Override
         public PathAccess told(souther.compiler.coverage.ControlClaim arrivesAt) {
-            return new PathAccess.Unsupported(why);
+            return new PathAccess.Unsupported(why());
         }
     }
 

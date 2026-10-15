@@ -1,5 +1,6 @@
 package souther.compiler.inputs;
 
+import souther.compiler.check.ClosureUses;
 import souther.compiler.check.ElementAnswer;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.core.Core;
@@ -209,6 +210,12 @@ final class BindingEnvironment {
      *  application of it is an operation's ({@link ElementBindings#enteredOver}). */
     List<Core> enteredOver(BindingId binding) {
         return elements.enteredOver(binding);
+    }
+
+    /** Every use of the closure {@code binding} is a parameter of, or null where no operation
+     *  applies it ({@link ElementBindings#usesOf}). */
+    ClosureUses usesOf(BindingId binding) {
+        return elements.usesOf(binding);
     }
 
     /** Where in the element handed to {@code binding} the value a walk answered stands, or null

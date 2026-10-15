@@ -129,6 +129,8 @@ import souther.compiler.query.ArmDisposition;
 import souther.compiler.query.ArmExclusion;
 import souther.compiler.partition.WhereNothingIsAnswered;
 import souther.compiler.partition.WhichLine;
+import souther.compiler.partition.WhyKept;
+import souther.compiler.reading.PathAccess;
 import souther.compiler.query.ArmCoverage;
 import souther.compiler.query.ArmObligation;
 import souther.compiler.query.ArmSummary;
@@ -3266,12 +3268,22 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     // And which of them no row is in, one to a line, as every gap is named.
                     // Summed, the count says how much of the space the rows cover and nothing
                     // about where the rest of it is — and where it is is what a reader acts on.
+                    //
+                    // Under each, what kept it where no way read whole brings its two classes
+                    // together: a reader sent after a row is told whether the body reads the two
+                    // together or the reading did not get far enough to rule it out.
+                    Map<ObligationIdentity.OfAFallbackPairCell, List<WhyKept>> kept =
+                            partition.pairs().kept(behavior.name());
                     for (ReportedFinding f : behavior.reported()) {
                         if (f.finding().about() instanceof
                                 About.ACombinationOfTwoClassesNoRowIsIn(var combination)) {
                             out.append(String.format("      %s %sis in %s%s%n",
                                     mark(f.finding()), noRow(f.finding()),
                                     twoClasses(combination), onAPremise(f.finding())));
+                            for (WhyKept why : kept.getOrDefault(combination, List.of())) {
+                                out.append(String.format("          · kept: %s%n",
+                                        whyKept(why, rendering, declaredIn)));
+                            }
                         }
                     }
                     for (CoveredOnlyByRowsThatDoNotHold.Covered<PartitionEvidence.PairSpace.Cell>
@@ -3842,6 +3854,69 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         return combination.inOrder().stream()
                 .map(each -> "`" + each.classId() + "` at " + each.at())
                 .collect(java.util.stream.Collectors.joining(" with "));
+    }
+
+    /**
+     * What kept a combination owed that no way of the body read whole reads, as the line under it
+     * says it.
+     *
+     * <p>What the body holds that the reading stopped at, and where it can be said where: a
+     * function is written somewhere a reader can open, and the other reasons are about a way, which
+     * has no one place.
+     */
+    private static String whyKept(WhyKept why, SourceRendering rendering, SourceId declaredIn) {
+        return switch (why) {
+            case WhyKept.AFunctionReadAsAWhole function ->
+                    "the ways inside the function at " + function.at().said(rendering, declaredIn)
+                            + " were read as a whole: " + function.shortfalls().stream()
+                                    .map(AdequacyReport::shortfall)
+                                    .collect(Collectors.joining("; "));
+            case WhyKept.AWayReadInPart(var cause) -> wayReadInPart(cause)
+                    + ", and what that way reads together was not read";
+            case WhyKept.ADecisionNothingNames() -> "a decision on a way of the body is about"
+                    + " something no position of the input names, and what that way reads"
+                    + " together was not read";
+            case WhyKept.ARuleNoDecisionReads(var at) -> "the body wrote a rule dividing " + at
+                    + " that no decision on its ways reads, and what " + at + " is read beside"
+                    + " was not read";
+        };
+    }
+
+    /** One use of a function that is not an operation applying it once to each element of a
+     *  position, as the line under a combination says it. */
+    private static String shortfall(WhyKept.Shortfall shortfall) {
+        return switch (shortfall) {
+            case WhyKept.Shortfall.NotOnlyByOperations() ->
+                    "something other than an operation of the language applies it";
+            case WhyKept.Shortfall.ToSomeOfTheElements(var operation, var applied) ->
+                    "`" + operation + "` applies it " + switch (applied) {
+                        case TO_EVERY_ELEMENT -> "to every element";
+                        case UNTIL_ONE_HOLDS -> "to each element only until one application holds";
+                        case UNTIL_ONE_FAILS -> "to each element only until one application fails";
+                        case AT_MOST_ONE -> "to one element at most";
+                        case TO_SOME -> "to some of the elements";
+                    };
+            case WhyKept.Shortfall.OverNoPosition(var operation) ->
+                    "`" + operation + "` applies it over what is no position of the input";
+        };
+    }
+
+    /** What a way of the body holds that the reading has no words for, by what it is short of. */
+    private static String wayReadInPart(PathAccess.Unsupported.Why cause) {
+        return switch (cause) {
+            case NO_WAY_IN_CAN_BE_NAMED ->
+                    "a way of the body goes to a fork no position of the input could be named for";
+            case WAYS_NOT_ENUMERABLE ->
+                    "the ways to a value the body answers with could not all be written down";
+            case MORE_WAYS_IN_THAN_ARE_READ ->
+                    "a fork of the body has more ways into it than one reading holds at once";
+            case RUNS_WHERE_SOMETHING_CALLS_IT ->
+                    "a way of the body runs inside a function value, under whatever it is called"
+                            + " with";
+            case THE_CONSTRUCTION_DECIDES_IT ->
+                    "a way of the body is taken by whether an attempted construction held its"
+                            + " value's rules";
+        };
     }
 
     /**
@@ -6872,6 +6947,47 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     }
 
     /**
+     * What kept a combination owed that no way of the body read whole reads, as one entry.
+     *
+     * <p>The function's place where there is one a document may write: a function written in a
+     * text no reader holds is still named by what it is passed to.
+     */
+    private static void whyKept(ObjectNode into, WhyKept why, DocumentSources sources) {
+        switch (why) {
+            case WhyKept.AFunctionReadAsAWhole function -> {
+                into.put("reason", "a_function_read_as_a_whole");
+                PublishedAt.of(function.at()).ifPresent(place -> at(into, place, sources));
+                ArrayNode shortfalls = into.putArray("shortfalls");
+                for (WhyKept.Shortfall each : function.shortfalls()) {
+                    ObjectNode one = shortfalls.addObject();
+                    switch (each) {
+                        case WhyKept.Shortfall.NotOnlyByOperations() ->
+                                one.put("kind", "not_only_by_operations");
+                        case WhyKept.Shortfall.ToSomeOfTheElements(var operation, var applied) -> {
+                            one.put("kind", "to_some_of_the_elements");
+                            one.put("operation", operation);
+                            one.put("applied", word(applied));
+                        }
+                        case WhyKept.Shortfall.OverNoPosition(var operation) -> {
+                            one.put("kind", "over_no_position");
+                            one.put("operation", operation);
+                        }
+                    }
+                }
+            }
+            case WhyKept.AWayReadInPart(var cause) -> {
+                into.put("reason", "a_way_read_in_part");
+                into.put("shortOf", word(cause));
+            }
+            case WhyKept.ADecisionNothingNames() -> into.put("reason", "a_decision_nothing_names");
+            case WhyKept.ARuleNoDecisionReads(var at) -> {
+                into.put("reason", "a_rule_no_decision_reads");
+                into.put("position", at.toString());
+            }
+        }
+    }
+
+    /**
      * The same, into a node the caller has already put under whatever key it is writing.
      *
      * <p>The fields and not the key, because more than one key carries a place and the shape they
@@ -7301,6 +7417,26 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 said.put("one", pair.between().one().toString());
                 said.put("other", pair.between().other().toString());
                 said.put("total", pair.total());
+                // What kept each of them that no way of the body read whole reads. A fact about
+                // the body and not about the rows, so written whether or not anybody counted.
+                // In the order the combinations are owed in, which is the relation's own.
+                if (pair.owed() instanceof PartitionEvidence.PairSpace.Owed.Listed(var cells,
+                        var kept) && !kept.isEmpty()) {
+                    ArrayNode keptBy = said.putArray("kept");
+                    for (PartitionEvidence.PairSpace.Cell cell : cells) {
+                        List<WhyKept> why = kept.get(cell);
+                        if (why == null) {
+                            continue;
+                        }
+                        ObjectNode one = keptBy.addObject();
+                        one.put("one", cell.one());
+                        one.put("other", cell.other());
+                        ArrayNode by = one.putArray("by");
+                        for (WhyKept each : why) {
+                            whyKept(by.addObject(), each, sources);
+                        }
+                    }
+                }
                 if (partition.pairs().counted().made().isPresent()) {
                     said.put("covered", partition.pairs().counts().covered(pair.between()));
                     said.put("unknown", partition.pairs().unknown(pair));

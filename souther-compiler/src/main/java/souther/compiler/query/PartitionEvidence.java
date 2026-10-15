@@ -20,10 +20,12 @@ import souther.compiler.partition.ObligationIdentity;
 import souther.compiler.partition.ReportedReason;
 import souther.compiler.partition.RuleEvidenceOrigin;
 import souther.compiler.partition.UndividedPosition;
+import souther.compiler.partition.WhyKept;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -623,7 +625,7 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
                 // combinations somebody listed: a reached combination outside them is a count over
                 // more than the space, and what is left would come out below nothing.
                 for (AxisPair pair : space) {
-                    if (!(pair.owed() instanceof Owed.Listed(var cells))
+                    if (!(pair.owed() instanceof Owed.Listed(var cells, var _))
                             || !new HashSet<>(cells).containsAll(made.reached(pair.between()))) {
                         throw new IllegalArgumentException("what the rows reached of "
                                 + pair.between() + " is among what is owed there: "
@@ -690,14 +692,35 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
              *
              * <p>A list, because the order is part of the answer — what is left is said in it — and
              * two answers in different orders are two answers.
+             *
+             * @param kept for each of them that no way of the body read whole reads, what kept it
+             *             ({@link WhyKept}), each reason once and in {@link
+             *             WhyKept#IN_A_STEADY_ORDER}. A combination the body brings together and
+             *             one the reading did not get far enough to rule out are owed alike, and
+             *             this is what tells a reader which one a row is asked for. Keyed and not
+             *             ordered: what is said of them is said in the order of {@code cells}
              */
-            record Listed(List<Cell> cells) implements Owed {
+            record Listed(List<Cell> cells, Map<Cell, List<WhyKept>> kept) implements Owed {
 
                 public Listed {
                     cells = List.copyOf(cells);
                     if (new HashSet<>(cells).size() != cells.size()) {
                         throw new IllegalArgumentException("a combination is owed once: " + cells);
                     }
+                    Map<Cell, List<WhyKept>> copied = new HashMap<>();
+                    for (Map.Entry<Cell, List<WhyKept>> each : kept.entrySet()) {
+                        if (each.getValue().isEmpty()) {
+                            throw new IllegalArgumentException("a combination kept says what kept"
+                                    + " it: " + each.getKey());
+                        }
+                        copied.put(each.getKey(), each.getValue().stream().distinct()
+                                .sorted(WhyKept.IN_A_STEADY_ORDER).toList());
+                    }
+                    if (!new HashSet<>(cells).containsAll(copied.keySet())) {
+                        throw new IllegalArgumentException("what is kept is among what is owed: "
+                                + copied.keySet() + " against " + cells);
+                    }
+                    kept = Collections.unmodifiableMap(copied);
                 }
             }
 
@@ -939,6 +962,23 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
                 }
             }
             return List.copyOf(out);
+        }
+
+        /**
+         * What kept each combination owed by {@code behavior} that no way of the body read whole
+         * reads, keyed as a finding about it is ({@link Owed.Listed#kept()}).
+         *
+         * <p>Whether or not a row is in it. That the reading did not rule a combination out is a
+         * fact about the body, and a reader asks it of a combination a row is in as well.
+         */
+        public Map<ObligationIdentity.OfAFallbackPairCell, List<WhyKept>> kept(String behavior) {
+            Map<ObligationIdentity.OfAFallbackPairCell, List<WhyKept>> out = new HashMap<>();
+            for (AxisPair pair : space) {
+                if (pair.owed() instanceof Owed.Listed(var _, var kept)) {
+                    kept.forEach((cell, why) -> out.put(cell.owedBy(behavior), why));
+                }
+            }
+            return Collections.unmodifiableMap(out);
         }
 
         /** The same for a caller that has only the name, which costs a look through the space. */

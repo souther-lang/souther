@@ -40,8 +40,10 @@ import souther.compiler.check.BehaviorContract;
 import souther.compiler.check.BehaviorImplementation;
 import souther.compiler.check.Clause;
 import souther.compiler.check.RuleRef;
+import souther.compiler.reading.PathAccess;
 import souther.compiler.report.AdequacyReport;
 import souther.compiler.report.RowFailure;
+import souther.compiler.semantics.HowAClosureIsApplied;
 import souther.compiler.types.SourceConstruct;
 import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.types.RuleOrigin;
@@ -67,6 +69,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -472,6 +475,22 @@ class EverySchemaWordIsAccountedForTest {
             Vocabulary.of("replacement.reason",
                     List.of("$defs", "replacement", "properties", "reason"),
                     ReplacementEvidence.class),
+            // What a way that kept a combination holds and the reading has no words for.
+            new Vocabulary("whyKept.shortOf",
+                    List.of("$defs", "whyKept", "properties", "shortOf"),
+                    PathAccess.Unsupported.Why.class),
+            // How far an operation that falls short applies a function: the enum's words, less
+            // applying it to every element, which is no shortfall and which one refuses to be
+            // made of.
+            new Vocabulary("whyKept.shortfalls[].applied",
+                    List.of("$defs", "whyKept", "properties", "shortfalls", "items",
+                            "properties", "applied"),
+                    List.of(HowAClosureIsApplied.class),
+                    Arrays.stream(HowAClosureIsApplied.values())
+                            .filter(each -> each != HowAClosureIsApplied.TO_EVERY_ELEMENT)
+                            .map(AdequacyReport::word)
+                            .collect(Collectors.toSet()),
+                    Set.of()),
             // And why one rewrite was left open, which is the entry's own word.
             new Vocabulary("replacement.obligations[].undecidedBecause",
                     List.of("$defs", "replacement", "properties", "obligations", "items",
@@ -1498,6 +1517,13 @@ class EverySchemaWordIsAccountedForTest {
         held.add("/$defs/conditionNotReadReason/allOf/0/then/properties/reason");
         held.add("/$defs/conditionNotReadReason/allOf/1/then/properties/reason");
         held.add("/$defs/conditionNotReadReason/allOf/2/then/properties/reason");
+        // What kept a combination, by kind. Written by a switch over the sealed reasons, so an arm
+        // added there does not compile without its word, and held to the schema by the same
+        // validation of the corpus documents.
+        held.add("/$defs/whyKept/properties/reason");
+        // And which use of a function fell short, by kind. Written by a switch over the sealed
+        // shortfalls, for the reason the one above is.
+        held.add("/$defs/whyKept/properties/shortfalls/items/properties/kind");
 
         List<String> unaccounted = paths.stream().filter(p -> !held.contains(p)).toList();
         assertEquals(List.of(), unaccounted,

@@ -64,6 +64,7 @@ import souther.compiler.partition.Generator;
 import souther.compiler.partition.Reachability;
 import souther.compiler.partition.SaidOnTheWay;
 import souther.compiler.partition.WayToTheBorder;
+import souther.compiler.partition.WhyKept;
 
 import java.util.ArrayList;
 import java.util.BitSet;
@@ -215,10 +216,11 @@ final class Coverages {
                             new souther.compiler.partition.MeasureClosure
                                     .Drawing.NoneWasMade(behavior.name());
                 },
-                // And the case each arm of a `match` is, and which positions what decides a fork
-                // may turn on, which the walk of the comparisons reads where the reading of the
-                // runs may not.
-                guards.armsNamed(), guards.dependencies()), quantities,
+                // And the case each arm of a `match` is, which positions what decides a fork may
+                // turn on, and which forks are within one application of the closures around
+                // them, which the walk of the comparisons reads where the reading of the runs may
+                // not.
+                guards.operationsStanding()), quantities,
                 // Where this reading met each condition it places itself, beside the geometry and
                 // not inside it. A report points at a condition and an answer says which condition
                 // it is, and the two are kept apart so that moving one leaves the other alone.
@@ -560,7 +562,8 @@ final class Coverages {
         List<PartitionEvidence.PairSpace.AxisPair> space = new ArrayList<>();
         for (OwedBetween each : owed) {
             space.add(new PartitionEvidence.PairSpace.AxisPair(each.between(), listed
-                    ? new PartitionEvidence.PairSpace.Owed.Listed(List.copyOf(each.cells()))
+                    ? new PartitionEvidence.PairSpace.Owed.Listed(List.copyOf(each.cells()),
+                            each.kept())
                     : new PartitionEvidence.PairSpace.Owed.Counted(each.count())));
         }
         // Before anything about the rows, because there are none to be about: a build that asked for
@@ -673,9 +676,12 @@ final class Coverages {
         // combinations and not all of them.
         ReadTogether.Between read = together.between(ones.id(), oneClasses, others.id(),
                 otherClasses);
+        Map<PartitionEvidence.PairSpace.Cell, List<WhyKept>> kept = new LinkedHashMap<>();
         long count = 0;
         for (int here = 0; here < oneClasses.size(); here++) {
             BitSet readWith = read.readWith(here);
+            // Asked once for the row, where one of it is listed.
+            Map<Integer, Set<WhyKept>> keptWith = null;
             for (int there = readWith.nextSetBit(0); there >= 0;
                     there = readWith.nextSetBit(there + 1)) {
                 if (!among.canHoldTogether(one, here, other, there)) {
@@ -685,13 +691,22 @@ final class Coverages {
                 String otherClass = otherClasses.get(there);
                 count++;
                 if (count <= room) {
-                    cells.add(new PartitionEvidence.PairSpace.Cell(between, oneClass,
-                            otherClass));
+                    PartitionEvidence.PairSpace.Cell cell =
+                            new PartitionEvidence.PairSpace.Cell(between, oneClass, otherClass);
+                    cells.add(cell);
+                    if (keptWith == null) {
+                        keptWith = read.keptWith(here);
+                    }
+                    Set<WhyKept> why = keptWith.get(there);
+                    if (why != null) {
+                        kept.put(cell, List.copyOf(why));
+                    }
                 }
             }
         }
-        return new OwedBetween(one, other, between, count,
-                count <= room ? cells : new LinkedHashSet<>());
+        return count <= room
+                ? new OwedBetween(one, other, between, count, cells, kept)
+                : new OwedBetween(one, other, between, count, new LinkedHashSet<>(), Map.of());
     }
 
     /**
@@ -700,9 +715,11 @@ final class Coverages {
      * @param one   which of the positions walked the relation's first is
      * @param other which its second is
      * @param cells each of them, where there are no more than could be listed; empty past that
+     * @param kept  what kept each of {@code cells} that no way of the body read whole reads
      */
     private record OwedBetween(int one, int other, PartitionEvidence.PairSpace.Between between,
-                               long count, SequencedSet<PartitionEvidence.PairSpace.Cell> cells) {
+                               long count, SequencedSet<PartitionEvidence.PairSpace.Cell> cells,
+                               Map<PartitionEvidence.PairSpace.Cell, List<WhyKept>> kept) {
     }
 
     /**

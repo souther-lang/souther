@@ -118,13 +118,12 @@ public final class Partitions {
      *                neither of them is the one at fault and there is no position for it to be
      *                about. Null is "not proved empty" and never "there is a value" — what a proof
      *                of emptiness has no proof of is not the opposite claim
-     * @param armsNamed the case each arm of a {@code match} in the body is, as the tree the
-     *                language's operations stand in names it. Beside the lines and not a line: an
-     *                arm is a case, which the type divides already, and what this adds is which
-     *                position an arm the reading of the runs could not name is about
-     * @param dependencies which positions each construct deciding a fork may turn on, read by the
-     *                same walk: what a fork the reading of the runs could name no subject for may
-     *                tell apart, and nothing about how
+     * @param operationsStanding what the tree the language's operations stand in says of the forks
+     *                of the body ({@link WhereTheOperationsStand}). Beside the lines and not a line:
+     *                an arm is a case, which the type divides already, and what this adds is which
+     *                position an arm the reading of the runs could not name is about, what a fork
+     *                it could name no subject for may tell apart, and which ways it read inside a
+     *                closure say all a run decided within one application of it
      */
     public record Partitioning(List<PositionMeasurements> measurements,
                                List<StandingQuestion> unanswered,
@@ -137,8 +136,7 @@ public final class Partitions {
                                MeasureClosure.OfThePartition partitionClosure,
                                MeasureClosure.OfTheBorder borderClosure,
                                souther.compiler.inputs.EmptyInput inputIsEmpty,
-                               ArmsNamed armsNamed,
-                               ForkDependencies dependencies) {
+                               WhereTheOperationsStand operationsStanding) {
         public Partitioning {
             measurements = List.copyOf(measurements);
             unanswered = List.copyOf(unanswered);
@@ -471,7 +469,7 @@ public final class Partitions {
                 // asking per position or per rule would be asking what neither of them decides.
                 quantities.emptiness().orElse(null),
                 // No body is read here.
-                ArmsNamed.NONE, ForkDependencies.NONE);
+                WhereTheOperationsStand.NONE);
     }
 
     /**
@@ -965,8 +963,7 @@ public final class Partitions {
                                             List<LineDrawn> between,
                                             ReachingCuts reaching,
                                             MeasureClosure.Drawing drawing,
-                                            ArmsNamed armsNamed,
-                                            ForkDependencies dependencies) {
+                                            WhereTheOperationsStand operationsStanding) {
         // Both producers of one kind of evidence. What a body compared and what a type's own rules
         // bound are read by different readers and answer the same question, so a position either of
         // them wrote about and neither could turn into a line is named once, whichever wrote it.
@@ -1066,7 +1063,7 @@ public final class Partitions {
                 // Carried across. Whether the rules leave the input a value is the declarations'
                 // answer, and a body drawing lines on what they left does not change it.
                 base.inputIsEmpty(),
-                armsNamed, dependencies);
+                operationsStanding);
     }
 
     /**

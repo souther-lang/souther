@@ -46,6 +46,9 @@ public record BodyInputReading(Map<AxisId, BodyDistinction> distinctions,
      * it ({@link ArmsNamed}): such an arm, on what a closure was handed, is one application and
      * takes its element's case. And with which positions a fork it could name no subject for may
      * turn on ({@link ForkDependencies}), which is what such a fork leaves unread and all it does.
+     * And with which forks a run gets to within one application of each closure around them
+     * ({@link WithinOneApplication}): a way to one, written from where the closures stand, says all
+     * that application decided.
      *
      * <p>A way through a place {@code arrives} proves nothing reaches is a way no run takes. The
      * reading of the runs keeps every way it could not rule out itself, and what the model's rules
@@ -56,7 +59,6 @@ public record BodyInputReading(Map<AxisId, BodyDistinction> distinctions,
                                       PathReachability.Answers arrives) {
         return WhatABodyTellsApart.of(read, subject.axes(),
                 subject.partitioning().rulesWithoutALine(),
-                subject.partitioning().armsNamed(), subject.partitioning().dependencies(),
-                arrives);
+                subject.partitioning().operationsStanding(), arrives);
     }
 }
