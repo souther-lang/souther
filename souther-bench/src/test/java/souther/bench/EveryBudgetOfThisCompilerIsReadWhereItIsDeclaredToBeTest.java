@@ -179,6 +179,10 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
             Map.entry("souther.compiler.partition.WayToTheBorder#along()"
                             + "Lsouther/compiler/partition/OneOfEach$Walked;",
                     "hands both figures to the walk, whose answer says which it stopped at"),
+            Map.entry("souther.compiler.partition.WayToTheBorder#takenByNoInput("
+                            + "Lsouther/compiler/inputs/SearchRegion;)Ljava/util/Optional;",
+                    "hands both figures to the walk, and a walk stopped at either is no proof:"
+                            + " the way is kept"),
             Map.entry("souther.compiler.partition.ElementsWrittenAlike#of("
                             + "Lsouther/compiler/partition/Reachability$Reaching;)"
                             + "Lsouther/compiler/partition/ElementsWrittenAlike$Choices;",

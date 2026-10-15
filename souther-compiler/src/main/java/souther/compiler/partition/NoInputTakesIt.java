@@ -15,11 +15,32 @@ import java.util.Objects;
  */
 public sealed interface NoInputTakesIt {
 
-    /** Two conditions on the way ask for what no row is at once ({@link Reachability}). */
-    record TheConditionsClash(Reachability why) implements NoInputTakesIt {
+    /** The conditions on the way ask for what no row is, whatever the numbers. */
+    record TheConditionsClash(Clash clash) implements NoInputTakesIt {
 
         public TheConditionsClash {
-            Objects.requireNonNull(why, "conditions clash at something");
+            Objects.requireNonNull(clash, "conditions clash at something");
+        }
+    }
+
+    /** How conditions clash, each the settled fact a walk of the way closes on. */
+    sealed interface Clash {
+
+        /** Two of them ask for two cases of one value, two answers of one truth, or counts that
+         *  leave none in common. */
+        record TwoAtOnce(Reachability.TwoAtOnce what) implements Clash {
+
+            public TwoAtOnce {
+                Objects.requireNonNull(what, "two things are asked at once of something");
+            }
+        }
+
+        /** One of them comes out the other way for every row. */
+        record NeverComesOutSo(OnTheWay.Settled condition) implements Clash {
+
+            public NeverComesOutSo {
+                Objects.requireNonNull(condition, "some condition never comes out so");
+            }
         }
     }
 

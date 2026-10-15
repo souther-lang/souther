@@ -153,7 +153,14 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
             public Step<Numbered, NoInputTakesIt> with(Numbered so, OnTheWay entry) {
                 return switch (takenIn(so.held(), entry)) {
                     case Step.Closed<HeldTogether, Reachability>(var why) ->
-                            new Step.Closed<>(new NoInputTakesIt.TheConditionsClash(why));
+                            new Step.Closed<>(new NoInputTakesIt.TheConditionsClash(switch (why) {
+                                case Reachability.NothingReaches(var what) ->
+                                        new NoInputTakesIt.Clash.TwoAtOnce(what);
+                                case Reachability.NothingComesOutThatWay(var condition) ->
+                                        new NoInputTakesIt.Clash.NeverComesOutSo(condition);
+                                case Reachability.Reaching _ -> throw new IllegalStateException(
+                                        "a way taken in closes on why nothing reaches it");
+                            }));
                     case Step.Held<HeldTogether, Reachability>(var held) -> {
                         SearchRegion region = ofOnePosition(entry)
                                 ? narrowedBy(so.region(), entry) : so.region();
