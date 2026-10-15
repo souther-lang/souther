@@ -457,8 +457,10 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
     void aRuleFromOutsideDoesNotChooseWhichCoordinateAPositionIsMeasuredAt() {
         String report = report(TWO_WAYS);
 
-        assertTrue(report.contains("no row is at the ON point value = m (invariant Name #1)"),
-                report);
+        // The line is there and answers at its point. What it answers is that no row is owed: `m`
+        // is shorter than the record lets a name be, so no name of a person stands at it.
+        assertTrue(report.contains("no ON point is owed at value = m (invariant Name #1): excluded"
+                + " — no value can stand there"), report);
     }
 
     /**

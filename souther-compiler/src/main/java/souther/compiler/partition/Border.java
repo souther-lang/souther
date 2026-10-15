@@ -2,7 +2,6 @@ package souther.compiler.partition;
 
 import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.NarrowedBounds;
-import souther.compiler.numeric.Congruences;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.EndSide;
 import souther.compiler.numeric.Endpoint;
@@ -15,7 +14,6 @@ import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.publish.PublishedRuleHandle;
 import souther.compiler.publish.PublishedSentence;
 
-import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -666,21 +664,22 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
      */
     public static Border at(BoundaryTarget target, LineOrigin origin, NumericDomain.Bounds within,
                             ExactAnswer<List<Parting>> parted, NarrowedBounds narrowed) {
-        return at(target, origin, within, null, parted, narrowed);
+        return at(target, origin, within, HeldValues.NONE, parted, narrowed);
     }
 
     /**
-     * The same, told the class of whole numbers the declarations leave the quantity's value in, or
-     * null where they leave it no class.
+     * The same, told what the declarations hold the quantity's value to besides where it runs.
      *
-     * <p>The ends of a range say nothing of the numbers between them, so a point inside the range
-     * that is not of the class is one the rules refuse all the same.
+     * <p>The ends of a range say nothing of the values between them, so a point inside the range the
+     * declarations refuse is refused all the same — and so is a run they leave nothing in.
+     * {@code "a"} and {@code "b"} have {@code "aa"} between them on the order of the strings, and none
+     * of a position holding one of the two.
      */
-    public static Border at(BoundaryTarget target, LineOrigin origin, NumericDomain.Bounds within,
-                            Congruences class_, ExactAnswer<List<Parting>> parted,
-                            NarrowedBounds narrowed) {
+    static Border at(BoundaryTarget target, LineOrigin origin, NumericDomain.Bounds within,
+                     HeldValues heldTo, ExactAnswer<List<Parting>> parted,
+                     NarrowedBounds narrowed) {
         NumericDomain.Bounds reach = within == null ? new NumericDomain.Bounds(null, null) : within;
-        Admissible admissible = new Admissible(reach, class_);
+        Admissible admissible = new Admissible(reach, heldTo);
         LevelSpace space = target.levels();
         Level cut = target.at();
         if (!reaches(cut, () -> seamOf(space, cut, origin), origin.lineFacts().claim(),
@@ -733,7 +732,7 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
                 case ExactAnswer.Held<Arranged> held ->
                         runOf(space, runBeside(held.value().arrangement(), held.value().mine(), side),
                                 held.value().arrangement().emptyBeside(held.value().mine(), side),
-                                levelAgainstTheLineOn(demands, origin, side), side);
+                                levelAgainstTheLineOn(demands, origin, side), side, admissible);
             });
         }
         return new Border(target, origin, demands, leftNothing(space, cut, origin, ends));
@@ -773,9 +772,12 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
             case ComparisonClaim.Singled _ -> {
                 // The value itself, and never a value the order names near it: what such a rule
                 // names is that value, and a row at the value beside it is a row the rule is not
-                // about.
-                demands.put(new DomainPoint.AtTheLine(),
-                        new PointAnswer.AtLine(new Criterion.AtTheLevel(cut)));
+                // about. Asked of what the rules leave as every other point is, and refused where
+                // they refuse the value rather than moved to one they do not.
+                demands.put(new DomainPoint.AtTheLine(), admitted(reach, cut)
+                        ? new PointAnswer.AtLine(new Criterion.AtTheLevel(cut))
+                        : new PointAnswer.NotOwed(NotOwedReason.NO_VALUE_CAN_STAND_THERE,
+                                refusing(ends, cut)));
                 for (Towards side : Towards.values()) {
                     demands.put(new DomainPoint.BesideTheLine(side),
                             pointAt(space, cut, side, false, reach, ends));
@@ -1212,16 +1214,25 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
      * in is not among the runs ({@code emptyRun} is it); where there is not even that, nothing but
      * the line is there to have settled it.
      *
+     * <p>The order is asked after the values the rules name. A run the order has values in can hold
+     * none the position takes, and that is the rules refusing it as they refuse a point.
+     *
      * @param run      the run on this side the rules leave something in, or null
      * @param emptyRun the run on this side the rules leave nothing in, or null
      */
     private static PointAnswer runOf(LevelSpace space, QuantityArrangement.Run run,
-                                     QuantityArrangement.Run emptyRun, Level except, Towards away) {
+                                     QuantityArrangement.Run emptyRun, Level except, Towards away,
+                                     Admissible reach) {
         if (run == null) {
             return new PointAnswer.NotOwed(NotOwedReason.NO_VALUE_CAN_STAND_THERE,
                     emptyRun == null ? List.of() : emptyRun.endsAt(away));
         }
         Criterion.Within inside = new Criterion.Within(run.values(), except, away);
+        List<LevelInterval> parts = inside.region().parts();
+        if (parts.stream().allMatch(reach::admitsNothingIn)) {
+            return new PointAnswer.NotOwed(NotOwedReason.NO_VALUE_CAN_STAND_THERE,
+                    run.endsAt(away));
+        }
         // What the run is owed to, from the same reading that said what it asks: the line this point
         // is named for is the border's own, and the far side is where the run stops — which is the
         // end lying the way the run does.
@@ -1231,7 +1242,7 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
         // shown to hold nothing, and only a part this did find something in settles that a row is
         // owed here without waiting for the rest.
         UnheldNumber notWorkedOut = null;
-        for (LevelInterval part : inside.region().parts()) {
+        for (LevelInterval part : parts) {
             switch (space.inspect(part)) {
                 case Occupancy.Inhabited _ -> {
                     return new PointAnswer.InRegion(inside, run.endsAt(away));
@@ -1349,34 +1360,32 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
     }
 
     /**
-     * What the rules leave a quantity's value, as far as they were read: the range it runs in and
-     * the class of whole numbers it is held to.
+     * What the rules leave a quantity's value, as far as they were read: the range it runs in, and
+     * what the declarations hold it to inside that ({@link HeldValues}).
      *
-     * <p>Both are consequences of the declarations, so a number outside either is one the rules
-     * refuse. A number inside both is not shown to be a value the rules leave — another rule may
-     * refuse it — which is why this is asked only for the refusal ({@link #admits}) and never read
-     * as the presence of a row.
+     * <p>Both are consequences of the declarations, so a value outside either is one the rules
+     * refuse. A value inside both is not shown to be a value the rules leave — another rule may
+     * refuse it — which is why this is asked only for the refusal ({@link #admits},
+     * {@link #admitsNothingIn}) and never read as the presence of a row.
      *
      * @param bounds the range the value runs in
-     * @param necessary the class every value is of, or null where none is known
+     * @param held   what the declarations hold the value to besides where it runs
      */
-    private record Admissible(NumericDomain.Bounds bounds, Congruences necessary) {
+    private record Admissible(NumericDomain.Bounds bounds, HeldValues held) {
 
         /** Whether a row may be written at {@code level} as far as these two say. */
         boolean admits(Level level) {
-            ExactRatio number = level.asANumber();
-            if (number == null) {
-                return bounds.admits(level.asAPlace());
+            if (held.refuses(level)) {
+                return false;
             }
-            return bounds.admits(number) && inTheClass(number);
+            ExactRatio number = level.asANumber();
+            return number == null ? bounds.admits(level.asAPlace()) : bounds.admits(number);
         }
 
-        private boolean inTheClass(ExactRatio number) {
-            if (necessary == null || !number.isWhole()
-                    || !(number.floor() instanceof ExactAnswer.Held<BigInteger> whole)) {
-                return true;
-            }
-            return whole.value().mod(necessary.modulus()).equals(necessary.residue());
+        /** Whether the rules leave nothing in {@code part}: of the range, what the declarations hold
+         *  the value to ({@link HeldValues}). */
+        boolean admitsNothingIn(LevelInterval part) {
+            return held.leaveNothingIn(part, bounds);
         }
     }
 
@@ -1452,7 +1461,8 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
         // arrangement at all and the row away from its line came back refused.
         Level against = against(on) != null ? against(on) : cut;
         demands.put(new DomainPoint.InTheRegion(kept),
-                runOf(space, leaves.endmost(kept), leaves.emptyEndmost(kept), against, kept));
+                runOf(space, leaves.endmost(kept), leaves.emptyEndmost(kept), against, kept,
+                        admissible));
         demands.put(new DomainPoint.InTheRegion(kept.opposite()),
                 new PointAnswer.NotOwed(NotOwedReason.NO_VALUE_CAN_STAND_THERE, List.of()));
     }

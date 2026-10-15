@@ -1328,6 +1328,13 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         Border.Values extent = Border.Values.within(
                 runs instanceof NumericDomain.FormProjection.Within(NumericDomain.Bounds range)
                         ? range : null);
+        // What the declarations hold a position's value to inside where it runs, which a value is
+        // refused by before the region is asked anything: a position held to "a" or "b" takes no
+        // value at "a0", whatever the region says of the strings. A side of a line is not asked
+        // it: the side runs to an end of the range, and the range ends at a value the declarations
+        // leave.
+        HeldValues held = of instanceof BorderQuantity.OfACoordinate coordinate
+                ? HeldValues.of(region, coordinate.of()) : HeldValues.NONE;
         return new Border.Values() {
             @Override
             public boolean extendTo(Level level) {
@@ -1336,6 +1343,9 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
 
             @Override
             public boolean holdAt(Level level) {
+                if (held.refuses(level)) {
+                    return false;
+                }
                 // Whether a row stands at the value is asked of a value the quantity takes. One
                 // it never takes is the order's answer and not the rows': `2 * a == 9` names
                 // nothing an integer is twice, under any rules, and the line is the order's to
