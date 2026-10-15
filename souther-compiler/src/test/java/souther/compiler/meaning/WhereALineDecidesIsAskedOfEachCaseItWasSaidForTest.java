@@ -230,7 +230,8 @@ class WhereALineDecidesIsAskedOfEachCaseItWasSaidForTest {
      */
     @Test
     void waysWrittenAsChoicesAreCountedWithoutChoosing() {
-        DecidingCase.Cases cases = new DecidingCase.Cases.MoreThanWereTakenApart();
+        DecidingCase.Cases cases = new DecidingCase.Cases.NotTakenApart(
+                CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO);
         for (int i = 0; i < 40; i++) {
             cases = new DecidingCase.Cases.Together(List.of(
                     new DecidingCase.Cases.EachOf(List.of(
@@ -246,6 +247,40 @@ class WhereALineDecidesIsAskedOfEachCaseItWasSaidForTest {
         assertEquals(new CasesOfALineAsked.Found(List.of(),
                 Set.of(CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO)), found);
         assertEquals(List.of(SAID), asking.asked(), "and nothing asked but the condition");
+    }
+
+    /**
+     * What stopped a taking apart is said, whichever way the asking comes to it: met as the
+     * choosing walks, left among what the steps did not walk to, or among more ways of choosing
+     * than are taken apart, where nothing is walked. That one figure stops the asking says nothing
+     * about another one the cases already stopped at.
+     */
+    @Test
+    void whatStoppedATakingApartIsSaidWhicheverWayTheAskingComesToIt() {
+        DecidingCase.Cases readTooLong = new DecidingCase.Cases.NotTakenApart(
+                CompositionBudget.STEPS_A_STATEMENT_IS_READ_IN);
+
+        assertEquals(new CasesOfALineAsked.Found(List.of(DecidingCase.alone(A)),
+                        Set.of(CompositionBudget.STEPS_A_STATEMENT_IS_READ_IN)),
+                new Asking(_ -> true).of(new DecidingCase.Cases.EachOf(
+                        List.of(readTooLong, one(A)))),
+                "met as it walks");
+
+        assertEquals(new CasesOfALineAsked.Found(List.of(), Set.of(
+                        CompositionBudget.CASES_A_LINE_IS_ASKED_IN,
+                        CompositionBudget.STEPS_A_STATEMENT_IS_READ_IN)),
+                new Asking(each -> !isACaseOf(each, DEPTH)).of(new DecidingCase.Cases.EachOf(
+                        List.of(deepCases(TAKEN_APART - 1, DEPTH), readTooLong))),
+                "left where the steps ran out");
+
+        List<DecidingCase.Cases> many = new ArrayList<>(
+                ((DecidingCase.Cases.EachOf) manyCases(TAKEN_APART)).alternatives());
+        many.add(readTooLong);
+        assertEquals(new CasesOfALineAsked.Found(List.of(), Set.of(
+                        CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO,
+                        CompositionBudget.STEPS_A_STATEMENT_IS_READ_IN)),
+                new Asking(_ -> true).of(new DecidingCase.Cases.EachOf(many)),
+                "among more ways of choosing than are taken apart");
     }
 
     /** And as many cases as are taken apart are asked to the end. */
@@ -311,7 +346,8 @@ class WhereALineDecidesIsAskedOfEachCaseItWasSaidForTest {
     void choosingThatAsksNothingRunsOutOfStepsAndStops() {
         List<DecidingCase.Cases> each = new ArrayList<>();
         for (int i = 0; i < TAKEN_APART; i++) {
-            DecidingCase.Cases chain = new DecidingCase.Cases.MoreThanWereTakenApart();
+            DecidingCase.Cases chain = new DecidingCase.Cases.NotTakenApart(
+                    CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO);
             for (int level = 0; level < DEPTH; level++) {
                 chain = new DecidingCase.Cases.Together(List.of(new DecidingCase.Cases.EachOf(
                         List.of(new DecidingCase.Cases.Together(List.of()))), chain));
@@ -377,11 +413,13 @@ class WhereALineDecidesIsAskedOfEachCaseItWasSaidForTest {
         Asking dividing = new Asking(_ -> true);
         assertEquals(new CasesOfALineAsked.Found(List.of(),
                         Set.of(CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO)),
-                dividing.of(new DecidingCase.Cases.MoreThanWereTakenApart()));
+                dividing.of(new DecidingCase.Cases.NotTakenApart(
+                CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO)));
         assertEquals(List.of(SAID), dividing.asked(), "the condition alone");
 
         assertEquals(IN_NONE,
-                new Asking(_ -> false).of(new DecidingCase.Cases.MoreThanWereTakenApart()));
+                new Asking(_ -> false).of(new DecidingCase.Cases.NotTakenApart(
+                        CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO)));
     }
 
     /**
@@ -390,7 +428,8 @@ class WhereALineDecidesIsAskedOfEachCaseItWasSaidForTest {
      */
     @Test
     void anAlternativeThatStoppedDoesNotHideOneThatDividesRows() {
-        DecidingCase.Cases notTakenApart = new DecidingCase.Cases.MoreThanWereTakenApart();
+        DecidingCase.Cases notTakenApart = new DecidingCase.Cases.NotTakenApart(
+                CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO);
         for (List<DecidingCase.Cases> order : List.of(List.of(notTakenApart, one(A)),
                 List.of(one(A), notTakenApart))) {
             assertEquals(new CasesOfALineAsked.Found(List.of(DecidingCase.alone(A)),
@@ -406,7 +445,8 @@ class WhereALineDecidesIsAskedOfEachCaseItWasSaidForTest {
      */
     @Test
     void alternativesStoppedAtTwoFiguresSayBoth() {
-        DecidingCase.Cases notTakenApart = new DecidingCase.Cases.MoreThanWereTakenApart();
+        DecidingCase.Cases notTakenApart = new DecidingCase.Cases.NotTakenApart(
+                CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO);
         DecidingCase.Cases tooDeep = deepCases(TAKEN_APART - 1, DEPTH);
         for (List<DecidingCase.Cases> order : List.of(List.of(notTakenApart, tooDeep),
                 List.of(tooDeep, notTakenApart))) {

@@ -193,12 +193,17 @@ class AStageAnotherModuleDeclaresBringsWhatItRequiresTest {
     }
 
     /** The same, with the version that no longer declares it compiled here rather than read off the
-     *  path. Which of the two it is does not change what the module on the path was built against. */
+     *  path. A module on the path does not reach one compiled here at all, so that is what is said,
+     *  and not a rebuild against it that would leave the module still not reaching it. */
     @Test
-    void aRequirementOfAModuleCompiledHereIsHeldToItToo() {
-        assertRefusedForRate(assertThrows(CompileException.class,
+    void aRequirementOfAModuleCompiledHereIsSaidAsReachingIt() {
+        CompileException refused = assertThrows(CompileException.class,
                 () -> Compiler.compileModules(List.of(C_WITHOUT_RATE, BUILDS_ON_B),
-                        ModulePath.of(B_BUILT_WITH_RATE))));
+                        ModulePath.of(B_BUILT_WITH_RATE)));
+
+        assertEquals(List.of(new ModuleMessage.AModuleOnThePathNeedsOneCompiledHere("lib.b",
+                        "lib.c")),
+                refused.diagnostics().stream().map(d -> d.said()).toList(), refused.getMessage());
     }
 
     /** A compile that uses only what of `lib.b` requires nothing. What the module was built against

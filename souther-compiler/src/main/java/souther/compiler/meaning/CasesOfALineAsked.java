@@ -49,10 +49,10 @@ import java.util.function.Predicate;
  * would be walked unbounded where nothing is asked — the cases of a choice nobody took apart, or
  * every way of choosing past the last question allowed — and those are as many as the product of
  * the choices. Where the steps run out the choosing stops there, and says the figures it met and,
- * of what it did not walk to, only what is written in the cases already: that some were more than
- * were taken apart. And where the cases were more than were taken apart nothing is asked of them at
- * all. Either way what was not walked is neither a case the line turns in nor one it does not, and
- * the cases already shown to divide rows are what they are beside it.
+ * of what it did not walk to, only what is written in the cases already: that some were never
+ * taken apart, and the figure each stopped at. And where the cases were never taken apart nothing
+ * is asked of them at all. Either way what was not walked is neither a case the line turns in nor
+ * one it does not, and the cases already shown to divide rows are what they are beside it.
  *
  * <p>Here, beside where the cases were taken apart, because what a case chosen part by part has
  * chosen so far is a conjunction of the statement's parts, and those are joined where a rule joins
@@ -126,10 +126,13 @@ public final class CasesOfALineAsked {
         }
         // More ways of choosing a case than cases are taken apart is more cases than were taken
         // apart, however they were written: said as choices rather than written out, they are as
-        // many to ask, and asking them is the work that figure bounds.
+        // many to ask, and asking them is the work that figure bounds. And every figure a case
+        // among them was already stopped at where it was never taken apart, read off the cases
+        // as they stand: that one figure stops the asking says nothing about the others.
         long most = CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.maximum();
         if (said.standsFor().waysOfChoosing(most) > most) {
             stopped.add(CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO);
+            notTakenApartAt(said.standsFor(), stopped);
             return new Found(List.of(), stopped);
         }
         chosen(new ArrayList<>(), List.of(said.standsFor()));
@@ -190,36 +193,35 @@ public final class CasesOfALineAsked {
                 next.addAll(rest);
                 chosen(chosen, next);
             }
-            case DecidingCase.Cases.MoreThanWereTakenApart _ ->
-                    stopped.add(CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO);
+            // Nobody took them apart, and nothing asks them.
+            case DecidingCase.Cases.NotTakenApart(var stoppedAt) -> stopped.add(stoppedAt);
         }
     }
 
     /**
-     * Out of steps, with {@code notWalked} left: stopped at the steps, and at how many cases are
-     * taken apart as well where some case left was never taken apart.
+     * Out of steps, with {@code notWalked} left: stopped at the steps, and at each figure a case
+     * left was stopped at where it was never taken apart.
      *
-     * <p>The second is not work this would have done. That the cases were more than were taken
-     * apart was met where they were taken apart, and is written in the cases themselves, so it is
-     * read off them as they stand — once over each, and not by choosing among them.
+     * <p>The others are not work this would have done. That the cases were never taken apart was
+     * met where they were taken apart, and is written in the cases themselves, so it is read off
+     * them as they stand — once over each, and not by choosing among them.
      */
     private void pastTheSteps(List<DecidingCase.Cases> notWalked) {
         stopped.add(CompositionBudget.CASES_A_LINE_IS_ASKED_IN);
-        if (notWalked.stream().anyMatch(CasesOfALineAsked::holdsSomeNotTakenApart)) {
-            stopped.add(CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO);
-        }
+        notWalked.forEach(each -> notTakenApartAt(each, stopped));
     }
 
-    /** Whether some case {@code cases} stands for is one more than were taken apart. */
-    private static boolean holdsSomeNotTakenApart(DecidingCase.Cases cases) {
-        return switch (cases) {
-            case DecidingCase.Cases.One _ -> false;
+    /** Adds to {@code figures} each figure a case {@code cases} stands for was stopped at, where
+     *  it was never taken apart. */
+    private static void notTakenApartAt(DecidingCase.Cases cases, Set<CompositionBudget> figures) {
+        switch (cases) {
+            case DecidingCase.Cases.One _ -> { }
             case DecidingCase.Cases.EachOf(var alternatives) ->
-                    alternatives.stream().anyMatch(CasesOfALineAsked::holdsSomeNotTakenApart);
+                    alternatives.forEach(each -> notTakenApartAt(each, figures));
             case DecidingCase.Cases.Together(var factors) ->
-                    factors.stream().anyMatch(CasesOfALineAsked::holdsSomeNotTakenApart);
-            case DecidingCase.Cases.MoreThanWereTakenApart _ -> true;
-        };
+                    factors.forEach(each -> notTakenApartAt(each, figures));
+            case DecidingCase.Cases.NotTakenApart(var stoppedAt) -> figures.add(stoppedAt);
+        }
     }
 
     /** Whether one more step may be taken — an alternative chosen or a part asked — counting it

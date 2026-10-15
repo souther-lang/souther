@@ -167,7 +167,8 @@ class ALineIsDroppedByAProofAtEveryPlaceItIsWatchedTest {
                 new ComparisonAssessment.Several.Part(new PlaceOfALine(
                         PartOfAComparison.of(WrittenLine.THE_COMPARISON), "unworked"), line(),
                         List.of(new DecidingCase(anywhere,
-                                new DecidingCase.Cases.MoreThanWereTakenApart()))),
+                                new DecidingCase.Cases.NotTakenApart(
+                CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO)))),
                 new ComparisonAssessment.Several.Part(new PlaceOfALine(
                         PartOfAComparison.of(WrittenLine.THE_COMPARISON), "worked"), line(),
                         List.of(DecidingCase.alone(anywhere)))));
@@ -209,7 +210,8 @@ class ALineIsDroppedByAProofAtEveryPlaceItIsWatchedTest {
                 "both");
         DecidingCase unworked = new DecidingCase(
                 new Proposition.Truth(new DecisionSubject.AnInput(N), true),
-                new DecidingCase.Cases.MoreThanWereTakenApart());
+                new DecidingCase.Cases.NotTakenApart(
+                CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO));
         DecidingCase shown = DecidingCase.alone(WhereAnApplicationIsMade.nothingAsked());
         for (List<DecidingCase> cases : List.of(List.of(unworked, shown),
                 List.of(shown, unworked))) {
@@ -256,7 +258,8 @@ class ALineIsDroppedByAProofAtEveryPlaceItIsWatchedTest {
                 true);
         DecidingCase mixed = new DecidingCase(said, new DecidingCase.Cases.EachOf(List.of(
                 new DecidingCase.Cases.One(dividing), new DecidingCase.Cases.One(dividingNone),
-                new DecidingCase.Cases.MoreThanWereTakenApart())));
+                new DecidingCase.Cases.NotTakenApart(
+                        CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO))));
         Set<Proposition> reached = Set.of(said, dividing);
         ComparisonAssessment.Several read = new ComparisonAssessment.Several(List.of(
                 new ComparisonAssessment.Several.Part(at, line(), List.of(mixed))));
@@ -298,7 +301,8 @@ class ALineIsDroppedByAProofAtEveryPlaceItIsWatchedTest {
                 "both");
         DecidingCase notTakenApart = new DecidingCase(
                 new Proposition.Truth(new DecisionSubject.AnInput(N), true),
-                new DecidingCase.Cases.MoreThanWereTakenApart());
+                new DecidingCase.Cases.NotTakenApart(
+                        CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO));
         // No more cases than are taken apart, each chosen through four parts of its own, and none
         // of them one any row reaches though rows reach every part short of the last: the asking
         // runs out of steps before it finds that none divides rows.

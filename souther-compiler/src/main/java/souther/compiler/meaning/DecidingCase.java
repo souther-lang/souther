@@ -191,11 +191,18 @@ public record DecidingCase(Proposition condition, Cases standsFor) {
         }
 
         /**
-         * More cases than are taken apart
-         * ({@link CompositionBudget#CASES_A_LINE_IS_TAKEN_APART_INTO}). Which of them hold a row on
-         * each side of the line is something nobody worked out.
+         * Cases nobody took apart, the taking apart stopped at {@code stoppedAt}: more cases than
+         * are taken apart ({@link CompositionBudget#CASES_A_LINE_IS_TAKEN_APART_INTO}), or more
+         * steps than a statement is read in
+         * ({@link CompositionBudget#STEPS_A_STATEMENT_IS_READ_IN}). Which of them hold a row on each
+         * side of the line is something nobody worked out.
          */
-        record MoreThanWereTakenApart() implements Cases {}
+        record NotTakenApart(CompositionBudget stoppedAt) implements Cases {
+
+            public NotTakenApart {
+                Objects.requireNonNull(stoppedAt, "a taking apart stops at some figure");
+            }
+        }
 
         /** The cases these conditions say, each a conjunction of its parts, sharing what the ones
          *  beside each other begin with. */
@@ -229,7 +236,7 @@ public record DecidingCase(Proposition condition, Cases standsFor) {
                 case One(var condition) -> Optional.of(condition);
                 case EachOf(var alternatives) -> joined(alternatives, false);
                 case Together(var factors) -> joined(factors, true);
-                case MoreThanWereTakenApart _ -> Optional.empty();
+                case NotTakenApart _ -> Optional.empty();
             };
         }
 
@@ -255,7 +262,7 @@ public record DecidingCase(Proposition condition, Cases standsFor) {
          */
         default long waysOfChoosing(long past) {
             return switch (this) {
-                case One _, MoreThanWereTakenApart _ -> 1;
+                case One _, NotTakenApart _ -> 1;
                 case EachOf(var alternatives) -> {
                     long ways = 0;
                     for (Cases one : alternatives) {
@@ -286,7 +293,7 @@ public record DecidingCase(Proposition condition, Cases standsFor) {
                         new EachOf(alternatives.stream().map(one -> one.eachSaid(each)).toList());
                 case Together(var factors) ->
                         new Together(factors.stream().map(one -> one.eachSaid(each)).toList());
-                case MoreThanWereTakenApart more -> more;
+                case NotTakenApart notTakenApart -> notTakenApart;
             };
         }
     }

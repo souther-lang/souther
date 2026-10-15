@@ -481,13 +481,19 @@ public final class Front {
          *        author editing either has to be told — an editor marking one file leaves the other
          *        looking clean while the build fails. Empty only where nothing this compile can
          *        quote reached it.
+         * @param reaches the modules it reaches ({@link #reaches(ReadableModule)}), as the path was
+         *        walked by them. Worked out from the module alone, and kept all the same: the walk
+         *        has to have it, and every question after the walk that wants it would otherwise
+         *        walk the module's declarations again.
          */
-        public record OnThePath(ReadableModule read, List<SourcePos> reachedFrom) {
+        public record OnThePath(ReadableModule read, List<SourcePos> reachedFrom,
+                                List<String> reaches) {
 
             /** Copied, for the reason {@link ReadableModule} is: this is remembered, and what is
              *  remembered is a value. */
             public OnThePath {
                 reachedFrom = List.copyOf(reachedFrom);
+                reaches = List.copyOf(reaches);
             }
 
             public Ast.Module module() {
@@ -641,7 +647,8 @@ public final class Front {
             Map<String, List<SourcePos>> reachedFrom = reachedFrom(named, edges);
             Map<String, OnThePath> found = new LinkedHashMap<>();
             read.forEach((name, module) -> found.put(name,
-                    new OnThePath(module, reachedFrom.getOrDefault(name, List.of()))));
+                    new OnThePath(module, reachedFrom.getOrDefault(name, List.of()),
+                            edges.get(name))));
             for (Map.Entry<String, Diagnostic> taken : refused.entrySet()) {
                 reports.add(saidAbout(taken.getKey(), taken.getValue(), reachedFrom));
             }
@@ -1273,9 +1280,8 @@ public final class Front {
 
         @Override
         public Answer<Boolean> compute(Db db) {
-            Layout.Of layout = db.ask(new Layout()).value();
             ModulePath path = db.ask(new Path()).value();
-            if (layout == null || path == null || !layout.idOfModule().containsKey(name)) {
+            if (path == null || !declaredHere(db, name)) {
                 return Answer.of(Boolean.FALSE);
             }
             // Whether the path has the name, and not whether what it has can be read. Two modules
@@ -1287,6 +1293,46 @@ public final class Front {
             }
             return Answer.absent(Report.raised(Diagnostic.say(new ModuleMessage.TheModuleIsCompiledHereAndOnThePath(name))
                             .hint(new ModuleMessage.RenameItOrDropTheDependency(name)).nowhere().build()));
+        }
+    }
+
+    /**
+     * A module off the path that reaches one a source of this compilation declares. Its classes run
+     * from the path, and the path is where the classes this compilation makes cannot be seen: a
+     * name the check resolves to a module compiled here is one the running module never finds.
+     *
+     * <p>What it reaches is {@link Linkages.Named}, which for a module on the path is
+     * {@link #reaches(ReadableModule)}, so what its bodies link against counts as much as what its
+     * declarations name; asked there so the module is walked once whichever question wants it. Only
+     * what it reaches itself: a module beyond it that reaches one compiled here is said about that
+     * module.
+     */
+    public record NeedsThisCompilation(String name) implements Key<Boolean> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Boolean> compute(Db db) {
+            if (onThePath(db, name) == null) {
+                return Answer.of(Boolean.FALSE);
+            }
+            List<Report> reports = new ArrayList<>();
+            for (String reached : db.ask(new Linkages.Named(name)).value()) {
+                // A name the path carries too is two modules, and which of them this one reaches is
+                // what that report says is not decided (ShadowsPath); it is not the one here.
+                if (declaredHere(db, reached) && db.ask(new ShadowsPath(reached)).present()) {
+                    reports.add(Report.raised(Diagnostic.say(
+                                    new ModuleMessage.AModuleOnThePathNeedsOneCompiledHere(name,
+                                            reached))
+                            .hint(new ModuleMessage.CompileItHereOrTakeTheOtherFromThePath(name,
+                                    reached))
+                            .atCodeWrittenOutOfSight(ModuleReadback.provenanceOf(name))
+                            .build()));
+                }
+            }
+            return reports.isEmpty() ? Answer.of(Boolean.FALSE) : Answer.absent(reports);
         }
     }
 
@@ -1324,6 +1370,33 @@ public final class Front {
             return layout == null ? Answer.of(List.of())
                     : Answer.of(List.copyOf(layout.idOfModule().keySet()));
         }
+    }
+
+    /**
+     * Whether a source of this compilation declares {@code name} — whether this compilation is the
+     * one that makes it. A module read off the path was made where it was compiled.
+     *
+     * <p>Asked of one name rather than read off {@link Declared}, which is the list to walk. A reader
+     * that searched the list paid for every module there is on every name it asked about, and
+     * depended on every module there is: one added anywhere recomputed it, while this answer moves
+     * only when the module it is about comes or goes.
+     */
+    public record DeclaredHere(String name) implements Key<Boolean> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Boolean> compute(Db db) {
+            Layout.Of layout = db.ask(new Layout()).value();
+            return Answer.of(layout != null && layout.idOfModule().containsKey(name));
+        }
+    }
+
+    /** Whether this compilation is the one that makes {@code module}. */
+    public static boolean declaredHere(Db db, String module) {
+        return db.ask(new DeclaredHere(module)).value();
     }
 
     /**

@@ -57,10 +57,11 @@ class WhatAModuleCopiedIsHeldToWhatItWasBuiltAgainstTest {
                 refusal(path, readerOf("app.k")));
     }
 
-    /** The same, with the new `lib.k` compiled here rather than read off the path: what it offers is
-     *  what its classes are about to offer. */
+    /** The same, with the new `lib.k` compiled here rather than read off the path. A module on the
+     *  path does not reach one compiled here at all, so that is what is said, and not the constant:
+     *  rebuilt against this `lib.k`, it would still not reach it. */
     @Test
-    void aConstantOfAModuleCompiledHereIsHeldTheSameWay() {
+    void aConstantOfAModuleCompiledHereIsSaidAsReachingIt() {
         Map<String, ClassFileImage> path = new HashMap<>(Compiler.compileModules(
                 List.of(READS_THE_CONSTANT), ModulePath.of(Compiler.compile("""
                         module lib.k exposing ( limit )
@@ -72,9 +73,9 @@ class WhatAModuleCopiedIsHeldToWhatItWasBuiltAgainstTest {
                         let limit = 4
                         """, readerOf("app.k")), ModulePath.of(path)));
 
-        assertEquals("E1510", refused.diagnostic().code(), refused.getMessage());
-        assertEquals(new ModuleMessage.ItCopiedAnotherConstant("app.k", "limit", "lib.k", "3", "4"),
-                refused.diagnostic().said());
+        assertEquals(List.of(new ModuleMessage.AModuleOnThePathNeedsOneCompiledHere("app.k",
+                        "lib.k")),
+                refused.diagnostics().stream().map(d -> d.said()).toList(), refused.getMessage());
     }
 
     /** The issue's second case: a published helper is expanded into its reader, so a reader built

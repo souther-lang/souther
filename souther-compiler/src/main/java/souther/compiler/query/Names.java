@@ -624,6 +624,12 @@ public final class Names {
      *
      * <p>Every import is validated here and nowhere else — that it names a module this compilation
      * has, that the module exposes what is asked for, that no two imports bring in the same name.
+     *
+     * <p>Nothing is said about the imports of a module on the path that reaches one compiled here.
+     * That is refused as what it is ({@link Front.NeedsThisCompilation}), and what its names would
+     * mean against the module here is not what its classes run with: every report about that would
+     * be the same refusal said again. The scope is still answered, so a module reading this one
+     * still knows what it declares.
      */
     public record ModuleScope(String name) implements Key<Scoping.Scoped> {
 
@@ -639,6 +645,12 @@ public final class Names {
                 return Answer.absent();
             }
             Scoping.Scoped scoped = Scoping.of(CompilationUniverse.over(db), subject);
+            // A module here is asked nothing of the path: the path is walked from what its scope
+            // brings in, so asking would go round.
+            if (!Front.declaredHere(db, name) && !scoped.refused().isEmpty()
+                    && !db.ask(new Front.NeedsThisCompilation(name)).present()) {
+                return Answer.of(scoped);
+            }
             List<Report> reports = new ArrayList<>();
             for (Scoping.Refusal refusal : scoped.refused()) {
                 reports.add(said(refusal));
@@ -1111,8 +1123,7 @@ public final class Names {
             // asked as well as the reports.
             if (Boolean.TRUE.equals(db.ask(new Nameless(name)).value())) {
                 return Answer.of(Boolean.FALSE);
-            }
-            Ast.Module m = db.ask(new Front.Available(name)).value();
+            }            Ast.Module m = db.ask(new Front.Available(name)).value();
             if (m != null) {
                 for (Ast.Import imp : m.imports()) {
                     // An import that could not be followed at all — the module is not here, or the
