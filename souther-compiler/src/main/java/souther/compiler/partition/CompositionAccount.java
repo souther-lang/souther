@@ -124,7 +124,8 @@ public record CompositionAccount(List<ReachabilityGap> onTheWay,
      * walk and nothing a reader can find in the source.
      *
      * <p>By what each gap is about, in the order the reading states it: the conditions on the way,
-     * then what the way asks of an answer, then what it could not state of one. By what it is about
+     * those inside an alternative among them ({@link WayToTheBorder#stated()}), then what the way
+     * asks of an answer, then what it could not state of one. By what it is about
      * and not by where a report sends a reader for it, which is one place for every call of a
      * helper and would leave the gaps of two calls in the order they were put together in.
      *
@@ -140,9 +141,10 @@ public record CompositionAccount(List<ReachabilityGap> onTheWay,
      * @param demands what the way asks of the answers, and what it could not state of them
      */
     public CompositionAccount inTheOrderOf(WayToTheBorder way, AnswersDemanded demands) {
+        List<OnTheWay> conditions = way.stated();
         List<ReachabilityGap> input = new ArrayList<>(onTheWay);
         input.sort(Comparator.comparingInt((ReachabilityGap gap) ->
-                        placeIn(way.onTheWay(), aboutOf(gap)))
+                        placeIn(conditions, aboutOf(gap)))
                 .thenComparing(CompositionAccount::rankOf, LEXICALLY)
                 .thenComparing(CompositionAccount::figuresOf,
                         published(PublicationOrders.COMPOSITION_BUDGETS))

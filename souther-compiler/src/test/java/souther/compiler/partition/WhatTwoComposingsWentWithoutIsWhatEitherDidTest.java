@@ -12,6 +12,7 @@ import souther.compiler.types.ValueName;
 import souther.compiler.types.WrittenOwner;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -100,6 +101,33 @@ class WhatTwoComposingsWentWithoutIsWhatEitherDidTest {
                         new ReachabilityGap.Unstated(second)),
                 one.alongside(other).inTheOrderOf(way, AnswersDemanded.NOTHING).onTheWay(),
                 "the call the way states first is said first, though both are said at one place");
+    }
+
+    /**
+     * Two conditions inside the alternatives of a condition of several ways are said in the order
+     * the alternatives are kept, whichever composing was put first.
+     *
+     * <p>They are not on the way's top, so a placing that read the top alone put both nowhere and
+     * left them in the order they were put together in.
+     */
+    @Test
+    void conditionsInsideAlternativesAreSaidInTheOrderTheAlternativesAreKept() {
+        OnTheWay.Declined inFirst = declined(1);
+        OnTheWay.Declined inSecond = declined(2);
+        WayToTheBorder way = new WayToTheBorder(List.of(new OnTheWay.OneOf(condition(0),
+                anchor(0), List.of(List.of(inFirst), List.of(inSecond)), Optional.empty())));
+        CompositionAccount one = CompositionAccount.ofTheInput(
+                List.of(new ReachabilityGap.Unstated(inSecond)));
+        CompositionAccount other = CompositionAccount.ofTheInput(
+                List.of(new ReachabilityGap.Unstated(inFirst)));
+
+        assertEquals(List.of(new ReachabilityGap.Unstated(inFirst),
+                        new ReachabilityGap.Unstated(inSecond)),
+                one.alongside(other).inTheOrderOf(way, AnswersDemanded.NOTHING).onTheWay(),
+                "the first alternative's condition first");
+        assertEquals(one.alongside(other).inTheOrderOf(way, AnswersDemanded.NOTHING),
+                other.alongside(one).inTheOrderOf(way, AnswersDemanded.NOTHING),
+                "whichever composing was put first");
     }
 
     /**
