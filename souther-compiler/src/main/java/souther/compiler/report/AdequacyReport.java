@@ -1,5 +1,9 @@
 package souther.compiler.report;
 
+import souther.compiler.check.PathReachability;
+import souther.compiler.coverage.ControlPlace;
+import souther.compiler.publish.ReachProofWord;
+import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.query.Answer;
 import souther.compiler.query.ClaimAnnotations;
 import souther.compiler.diag.QuotedFrom;
@@ -613,6 +617,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      *                  than among them: a finding is an obligation and a rule nothing could show a
      *                  row for is owed none, while a page or a document that showed only the
      *                  findings would say a rule count and put fewer lines under it than the count
+     * @param reachShownWrong the proofs of this body's reading of reach a row went against. Of the
+     *                  reading and of no measure: what each measure rested on it says itself, and
+     *                  a proof a row took back that no measure rested on is still this compiler
+     *                  having been wrong about the body
      * @param combinationReadings how a page tells a reader which combination of the body's
      *                  decisions a line is about, one list of conditions per way a run can make
      *                  it. For the combinations a line names and no others, for the reason a rule's
@@ -633,10 +641,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                                  Map<RuleSite, Citation> partPlaces,
                                  Map<DecisionReading.Ruled, List<ShownCondition>> ruleReadings,
                                  Map<DecisionRule, SettledAcross> ruleSettlements,
+                                 PathReachability.Answers.Contradictions reachShownWrong,
                                  Map<ObligationIdentity.OfACombinationOfDecisions,
                                          List<List<ShownCondition>>> combinationReadings,
                                  Map<RowRef, WhereARowIs.Shown> rowPlaces) {
         public BehaviorReport {
+            Objects.requireNonNull(reachShownWrong,
+                    "what the rows showed of the reading of reach, or that they showed nothing");
             reported = List.copyOf(reported);
             armPlaces = Map.copyOf(armPlaces);
             Objects.requireNonNull(conditionPlaces, "where the conditions are shown, or nowhere");
@@ -977,6 +988,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 compilation.db().ask(new Adequacy.BodyBorders(name)).value();
         Map<String, Adequacy.BranchEvidence> branches =
                 compilation.db().ask(new Adequacy.BranchCoverage(name)).value();
+        // What each body's reading of reach came to once the rows ran, which every measure above
+        // read; here for the proofs the rows took back, which belong to none of them.
+        Map<String, PathReachability.Answers.AsRun> arrived =
+                compilation.db().ask(new Adequacy.Arrived(name)).value();
         // The rules of each body's decision and which of them the rows took, beside the arms and
         // never among them. Asked once for the module, the way the arms are: read per behavior,
         // what a page costs would grow with its behaviors reading one another's bodies.
@@ -1061,6 +1076,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                             decisions == null ? null : decisions.get(behavior.name()),
                             reported, requirements),
                     requirements,
+                    reachShownWrong(arrived, behavior.name()),
                     combinationReadings(compilation, name, behavior.name(),
                             evidence.combinations(), reported),
                     rowPlaces));
@@ -6875,6 +6891,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 decision(b, behavior, sources);
                 interaction(b, behavior, sources);
                 replacement(b, behavior, sources);
+                reachProofsContradicted(b, behavior.reachShownWrong());
                 findings(b, behavior, sources);
             }
         }
@@ -7653,8 +7670,69 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 if (!shortfalls.isEmpty()) {
                     synthesisShortfalls(one, shortfalls, sources, behavior.rulePlace());
                 }
+                // And the proofs a row took back that would have left the rule no row, which is
+                // why it was asked at all. Named as the behavior's `reachProofsContradicted` names
+                // them, which is where the proofs are, so a consumer joins the two and counts one
+                // proof once however many rules rested on it.
+                if (!settled.shownWrong().isEmpty()) {
+                    ArrayNode proofs = one.putArray("reachProofsContradicted");
+                    settled.shownWrong().forEach(place -> reachProof(proofs.addObject(), place));
+                }
             }
         }
+    }
+
+    /**
+     * The proofs of one body's reading of reach a row went against, the places they were about
+     * first and the comparisons said to be arrived at by nothing after.
+     *
+     * <p>Beside the measures and in none of them. Which measure rested on which proof is that
+     * measure's to say — the arm count of its denominator, a rule of what would have left it no row
+     * — and a proof nothing rested on is this compiler having been wrong about the body all the
+     * same. Absent where no row went against any.
+     */
+    static void reachProofsContradicted(ObjectNode into,
+                                        PathReachability.Answers.Contradictions shownWrong) {
+        if (shownWrong.isEmpty()) {
+            return;
+        }
+        ArrayNode all = into.putArray("reachProofsContradicted");
+        shownWrong.places().forEach(place -> reachProof(all.addObject(), place));
+        for (ConstructOccurrence comparison : shownWrong.emptyArrivals()) {
+            ObjectNode one = all.addObject();
+            one.put("kind", word(ReachProofWord.COMPARISON_ARRIVAL));
+            constructId(one.putObject("construct"), comparison);
+        }
+    }
+
+    /**
+     * One place a proof that nothing arrives was about: the copy of the construct in the tree that
+     * runs, and which arm or which way out of it.
+     *
+     * <p>The copy and not the construct as written, because that is what was proven: a helper's
+     * fork is one construct and one copy per call, and what one call cannot reach another may.
+     */
+    private static void reachProof(ObjectNode into, ControlPlace place) {
+        switch (place) {
+            case ControlPlace.Arm arm -> {
+                into.put("kind", word(ReachProofWord.ARM));
+                constructId(into.putObject("construct"), arm.arm().fork());
+                into.put("part", arm.arm().part());
+            }
+            case ControlPlace.Outcome outcome -> {
+                into.put("kind", word(ReachProofWord.COMPARISON_OUTCOME));
+                constructId(into.putObject("construct"), outcome.occurrence());
+                into.put("held", outcome.held());
+            }
+        }
+    }
+
+    /** What the rows showed of one behavior's reading of reach, which is nothing where the
+     *  reading was not made. */
+    private static PathReachability.Answers.Contradictions reachShownWrong(
+            Map<String, PathReachability.Answers.AsRun> arrived, String behavior) {
+        PathReachability.Answers.AsRun run = arrived == null ? null : arrived.get(behavior);
+        return run == null ? PathReachability.Answers.Contradictions.NONE : run.contradicted();
     }
 
     /**

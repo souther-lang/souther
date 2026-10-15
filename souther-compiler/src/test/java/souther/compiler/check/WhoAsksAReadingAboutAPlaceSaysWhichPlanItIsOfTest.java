@@ -102,11 +102,13 @@ class WhoAsksAReadingAboutAPlaceSaysWhichPlanItIsOfTest {
                             + " over, so there is no pair for a caller to get wrong and nothing"
                             + " here for a check to be asked about"),
             new Licence("souther.compiler.query.Adequacy.DecisionSearch.NothingReaches"
-                    + ".comesOutSoNowhere -> at", 1,
-                    "whether every copy of a comparison comes out a way nothing arrives at, asked"
-                            + " of places of the plan the copies were found in; the reading is held"
-                            + " to that plan's numbering where the pair is put together, before any"
-                            + " place is looked up"));
+                    + ".unreachableIn -> at", 1,
+                    "whether an arm or a copy of a comparison coming out a way is one nothing"
+                            + " arrives at, asked of places of the plan the arms and the copies"
+                            + " were found in — as the rows corrected it, and with the proofs they"
+                            + " took back put back for what a rule no longer rests on. The reading"
+                            + " is held to that plan's numbering where the pair is put together,"
+                            + " before any place is looked up"));
 
     @Test
     void everyReaderThatAsksAReadingAboutAPlaceIsWrittenDownWithWhatMakesItSafe() {

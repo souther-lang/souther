@@ -42,12 +42,15 @@ import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * What the model's own rules say arrives at each place in a behavior's body.
@@ -195,57 +198,97 @@ public final class PathReachability {
          * comparison never comes out its way would otherwise stand on two different accounts of
          * what the rows did.
          *
+         * <p>And a row that came to a comparison arrived at it. A row seen bringing a comparison
+         * out either way shows wrong a proof that nothing arrives there, and what arrives is
+         * answered then with what restricts nothing ({@link ComparisonArrival.NoProjection}): the
+         * run says a row came, and not which values did.
+         *
+         * <p>Every place is held to one rule — seen, and proven unreachable, is a proof shown wrong
+         * — and what that weakens is each measure's to say by what it rests on, not this reading's.
+         *
          * @param lit  the probes a row was recorded at, which are places of the numbering this
          *             reading was made under. A probe of another is one no arm here answers to, so
          *             the run would correct nothing and every proof would stand — the same answer
          *             as a run that went nowhere
          * @param seen the ways a row saw a condition come out, of the same numbering
          */
-        public AsRun asRunWith(java.util.Set<ArmProbe> lit,
-                               java.util.Set<SeenConditionOutcome> seen) {
+        public AsRun asRunWith(Set<ArmProbe> lit, Set<SeenConditionOutcome> seen) {
             lit.forEach(probe -> requireNumbering(probe.numbering()));
             seen.forEach(outcome -> requireNumbering(outcome.at().numbering()));
             Map<ControlPlace, Reachability> out = new LinkedHashMap<>(found);
-            java.util.Set<ArmProbe> provedWrong =
-                    new java.util.LinkedHashSet<>();
+            Map<ConstructOccurrence, ComparisonArrival> arrived = new LinkedHashMap<>(arriving);
+            Set<ControlPlace> places = new LinkedHashSet<>();
+            Set<ConstructOccurrence> emptyArrivals = new LinkedHashSet<>();
             found.forEach((where, said) -> {
-                switch (where) {
-                    case ControlPlace.Arm arm when arm.probe().isPresent()
-                            && lit.contains(arm.probe().get()) -> {
-                        if (said instanceof Reachability.Unreachable) {
-                            provedWrong.add(arm.probe().get());
-                        }
-                        out.put(where, new Reachability.Reachable(
-                                Witness.aRunWentThrough(arm.probe().get())));
-                    }
-                    // Not among the arms a proof was shown wrong at, which is the branch count's
-                    // own account: what it doubts is the set of arms it is made over, and a
-                    // condition coming out a way is no arm of that set.
-                    case ControlPlace.Outcome outcome
-                            when seen.contains(new SeenConditionOutcome(outcome.at(),
-                                    outcome.held())) ->
-                            out.put(where, new Reachability.Reachable(
-                                    Witness.aRunWentThrough(outcome.at())));
-                    default -> { }
+                Optional<Witness> ran = switch (where) {
+                    case ControlPlace.Arm arm ->
+                            arm.probe().filter(lit::contains).map(Witness::aRunWentThrough);
+                    case ControlPlace.Outcome outcome ->
+                            seen.contains(new SeenConditionOutcome(outcome.at(), outcome.held()))
+                                    ? Optional.of(Witness.aRunWentThrough(outcome.at()))
+                                    : Optional.empty();
+                };
+                if (ran.isEmpty()) {
+                    return;
+                }
+                if (said instanceof Reachability.Unreachable) {
+                    places.add(where);
+                }
+                out.put(where, new Reachability.Reachable(ran.get()));
+                if (where instanceof ControlPlace.Outcome outcome
+                        && arriving.get(outcome.occurrence())
+                                instanceof ComparisonArrival.NothingArrives) {
+                    emptyArrivals.add(outcome.occurrence());
+                    arrived.put(outcome.occurrence(), new ComparisonArrival.NoProjection());
                 }
             });
-            // The arrivals as they were: a run corrects what an arm's denominator counts, and the
-            // geometry the arrivals decide was settled from the model before any row ran.
-            return new AsRun(new Answers(numbering, out, arriving), provedWrong);
+            return new AsRun(new Answers(numbering, out, arrived),
+                    new Contradictions(places, emptyArrivals));
         }
 
         /**
          * What arrives once the rows have run, and where this reading was shown wrong.
          *
-         * @param provedWrong arms proven unreachable that a row went through anyway. Nothing about
-         *                    the model is wrong then — this reading is — and a measure says so
-         *                    rather than quietly counting the arm again
+         * @param answers      what arrives, with every proof a row went against taken back
+         * @param contradicted the proofs a row went against. Nothing about the model is wrong then
+         *                     — this reading is — and a measure that rested on one says so rather
+         *                     than quietly counting what it had left out
          */
-        public record AsRun(Answers answers,
-                            java.util.Set<ArmProbe> provedWrong) {
+        public record AsRun(Answers answers, Contradictions contradicted) {
 
             public AsRun {
-                provedWrong = java.util.Set.copyOf(provedWrong);
+                Objects.requireNonNull(answers, "a run is a run of some reading");
+                Objects.requireNonNull(contradicted, "a run shows some proofs wrong, or none");
+            }
+        }
+
+        /**
+         * The proofs of one reading a row went against, held where the reading is and once.
+         *
+         * <p>Two kinds, because they are two propositions. That nothing comes out of a comparison
+         * one way is about a place ({@link ControlPlace.Outcome}), as nothing arriving at an arm is;
+         * that nothing arrives at a comparison at all is about the comparison, and either of its
+         * ways may be rightly proven while that is wrong.
+         *
+         * @param places        arms and comparison outcomes proven unreachable that a row went
+         *                      through
+         * @param emptyArrivals comparisons proven to be arrived at by nothing that a row came to
+         */
+        public record Contradictions(Set<ControlPlace> places,
+                                     Set<ConstructOccurrence> emptyArrivals) {
+
+            /** No proof gone against. */
+            public static final Contradictions NONE = new Contradictions(Set.of(), Set.of());
+
+            public Contradictions {
+                // The order the reading found them in, which is the order a report says them in.
+                places = Collections.unmodifiableSet(new LinkedHashSet<>(places));
+                emptyArrivals = Collections.unmodifiableSet(new LinkedHashSet<>(emptyArrivals));
+            }
+
+            /** Whether a row went against no proof at all. */
+            public boolean isEmpty() {
+                return places.isEmpty() && emptyArrivals.isEmpty();
             }
         }
 
@@ -774,7 +817,6 @@ public final class PathReachability {
         if (which == null) {
             return;
         }
-        arriving.put(which, arrivalAt(comparison, k, at, reads));
         for (boolean result : new boolean[] {true, false}) {
             Optional<ControlPlace.Outcome> where =
                     plan.outcomeOf(which, result);
@@ -788,6 +830,9 @@ public final class PathReachability {
                             with(decided, taken, comparison.pos(), result)))
                     : new Reachability.Unsettled(whyNot(taken, comparison)));
         }
+        // After both ways, so a comparison with an arrival filed has both of its ways filed too: a
+        // row seen at either way is what shows an empty arrival wrong, and is asked of the ways.
+        arriving.put(which, arrivalAt(comparison, k, at, reads));
     }
 
     /**

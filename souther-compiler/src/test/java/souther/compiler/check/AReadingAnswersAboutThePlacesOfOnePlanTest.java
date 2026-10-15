@@ -201,8 +201,8 @@ class AReadingAnswersAboutThePlacesOfOnePlanTest {
 
         ArmProbe elsewhere = refused.armProvenDead().probe().orElseThrow();
 
-        assertEquals(Set.of(),
-                capped.arrives.asRunWith(Set.of(), Set.of()).provedWrong(),
+        assertEquals(PathReachability.Answers.Contradictions.NONE,
+                capped.arrives.asRunWith(Set.of(), Set.of()).contradicted(),
                 "no row ran, so this reading is shown wrong nowhere");
 
         IllegalArgumentException refusal = assertThrows(IllegalArgumentException.class,

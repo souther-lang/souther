@@ -25,6 +25,7 @@ import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Towards;
+import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
@@ -36,6 +37,8 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A line goes only where every place it is watched at proved nothing reaches it.
@@ -127,6 +130,31 @@ class ALineIsDroppedByAProofAtEveryPlaceItIsWatchedTest {
                                 new ComparisonArrival.Values(N, NumericDomain.Bounds.OPEN)),
                         false, reading()),
                 "a run reaches the line at one of the places the rule is watched at");
+    }
+
+    /**
+     * What a body is divided by is the reading as the rows corrected it. A row at a comparison
+     * shows wrong a proof that nothing arrives there ({@link
+     * souther.compiler.check.PathReachability.Answers#asRunWith}), and a division made from the
+     * reading before the run would drop the line by the proof the run took back.
+     */
+    @Test
+    void aBodyIsDividedByWhatArrivesOnceTheRowsHaveRun() {
+        Compilation compilation = Compilation.ofSources(List.of("""
+                module g
+
+                data Small
+                data Large
+
+                behavior size : (n: Int) -> Small | Large
+                let size (n) = if n > 10 then Large else Small
+                """), ModulePath.EMPTY);
+        String module = compilation.modules().get(0);
+
+        assertNotNull(compilation.db().ask(new Adequacy.Divided(module, "size")).value(),
+                "the body is divided");
+        assertTrue(compilation.db().isComputed(new Adequacy.Arrived(module)),
+                "by what arrives once the rows have run");
     }
 
     private static InputReading reading() {

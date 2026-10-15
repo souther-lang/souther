@@ -390,8 +390,9 @@ public final class Adequacy {
 
     /** Nothing read, so nothing proven and nothing shown wrong. What a measure gets where the
      *  reading is not available, which leaves every arm owed whatever it was owed. */
-    public static final souther.compiler.check.PathReachability.Answers.AsRun NOTHING_PROVEN =
-            new souther.compiler.check.PathReachability.Answers.AsRun(souther.compiler.check.PathReachability.Answers.NONE, Set.of());
+    public static final PathReachability.Answers.AsRun NOTHING_PROVEN =
+            new PathReachability.Answers.AsRun(PathReachability.Answers.NONE,
+                    PathReachability.Answers.Contradictions.NONE);
 
     static Asked askedOf(Db db) {
         Asked asked = db.ask(new Requested()).value();
@@ -1026,13 +1027,15 @@ public final class Adequacy {
      * <p>An absent reading is not a reading that found nothing: the difference is what the caller
      * goes on to say, and what it may say about a behavior whose signature is not in hand is
      * nothing. Written once so that each reader does not decide again what to do without one.
+     *
+     * <p>As the rows corrected it ({@link Arrived}), which is what a line is dropped by: a proof
+     * that nothing arrives at a comparison a row came to is a proof shown wrong, and a line
+     * dropped by it would be dropped by a reading the run has already taken back.
      */
-    private static souther.compiler.check.PathReachability.Answers arrivalsOf(
-            Map<String, souther.compiler.check.PathReachability.Answers> read,
-            Hir.SpecBehavior spec) {
-        return read == null ? souther.compiler.check.PathReachability.Answers.NONE
-                : read.getOrDefault(spec.name(),
-                        souther.compiler.check.PathReachability.Answers.NONE);
+    private static PathReachability.Answers arrivalsOf(
+            Map<String, PathReachability.Answers.AsRun> read, Hir.SpecBehavior spec) {
+        PathReachability.Answers.AsRun asRun = read == null ? null : read.get(spec.name());
+        return asRun == null ? PathReachability.Answers.NONE : asRun.answers();
     }
 
     /**
@@ -1221,6 +1224,10 @@ public final class Adequacy {
      * comparison against what the declarations leave a position, which is the same answer wherever
      * in a body the comparison stands — so a guard whose departure the guards above it have already
      * ruled out came back as an arm still owed a row.
+     *
+     * <p>As the model has it, before any row ran. Every measure reads it as the rows corrected it
+     * ({@link Arrived}): a proof a row went against is taken back there, and a measure reading this
+     * directly would leave out what a run has already shown is there.
      */
     public record PathReached(String name)
             implements Key<Map<String, souther.compiler.check.PathReachability.Answers>> {
@@ -2227,7 +2234,7 @@ public final class Adequacy {
             Map<String, InputDomain> readInputs = db.ask(new Inputs(name)).value();
             // What the guards above each place leave, asked once for the module and read by
             // every measure below — the same reason the reading of the input is.
-            db.ask(new PathReached(name));
+            db.ask(new Arrived(name));
             // What every line this module's rules drew came to, asked once and read here. Measuring a
             // line takes building values, which is not this measure's work and not work to do twice.
             // What each behavior states about its answer, read into the representation the analysis
@@ -2308,7 +2315,7 @@ public final class Adequacy {
                 // What the model's rules prove arrives at each place, which the ways read are
                 // places of: one plan's places, held to being so.
                 PathReachability.Answers arrives =
-                        arrivalsOf(db.ask(new PathReached(name)).value(), spec);
+                        arrivalsOf(db.ask(new Arrived(name)).value(), spec);
                 arrives.requireNumbering(checked.plan().identity());
                 body = BodyInputReading.of(met.get(spec.name()), subject, arrives);
             } else {
@@ -2548,7 +2555,7 @@ public final class Adequacy {
                     // rule about the strings at a position still stands as the author wrote it.
                     bodyReading(db, name, checked, behavior),
                     plan,
-                    arrivalsOf(db.ask(new PathReached(name)).value(), spec),
+                    arrivalsOf(db.ask(new Arrived(name)).value(), spec),
                     statedOf(db.ask(new Bodies.StatedContracts(name)).value(), spec),
                     // One allowance for this measure, made here and handed on. Asked for again
                     // further in, a position would be allowed its machines once per caller and what
@@ -2635,15 +2642,15 @@ public final class Adequacy {
                     db.ask(new Arrived(name)).value();
             souther.compiler.check.PathReachability.Answers.AsRun arrived = arrivals == null
                     ? null : arrivals.getOrDefault(behavior, NOTHING_PROVEN);
-            // Where the reading proved nothing unreached there is no arm or outcome to look up, and
-            // the copies of the comparisons are not walked for.
+            // Where the reading proved nothing unreached, and no row took a proof back, there is no
+            // arm or outcome to look up, and the copies of the comparisons are not walked for.
             NothingReaches unreached = arrived == null
-                    || arrived.answers().provesNothingUnreached() ? NothingReaches.NOTHING
-                    : new NothingReaches(
-                            BranchEvidence.unreached(checked.value().plan().arms(behavior),
-                                    arrived),
+                    || (arrived.answers().provesNothingUnreached()
+                            && arrived.contradicted().places().isEmpty())
+                    ? NothingReaches.NOTHING
+                    : NothingReaches.of(checked.value().plan().arms(behavior),
                             ComparisonEmissionIndex.ofBody(emitted, checked.value().plan()),
-                            checked.value().plan(), arrived.answers());
+                            checked.value().plan(), arrived);
             // Asked once, because what it answers is one list and asking it per rule would walk the
             // rules once for every rule.
             Set<DecisionRule> toSettle = new LinkedHashSet<>(evidence.notTakenByRows());
@@ -2659,7 +2666,12 @@ public final class Adequacy {
                         : stated.occurrences()) {
                     RuleSettlement here = whatSettles(each, probe, taken, declared, unreached,
                             everyRowAborts);
-                    atEach.add(here == null ? null : new SettledAt(each, here));
+                    // What would have left the place no row before the run and no longer does. A
+                    // place still excluded is excluded by something that stands, whatever else
+                    // was taken back on its way.
+                    atEach.add(here == null ? null : new SettledAt(each, here,
+                            here.requirement() instanceof RuleRequirement.Excluded ? Set.of()
+                                    : unreached.shownWrongOnTheWay(each)));
                 }
                 SettledAcross settled = acrossThePlaces(atEach);
                 if (settled != null) {
@@ -2765,26 +2777,123 @@ public final class Adequacy {
          * way nowhere — a helper's comparison is one construct and one copy per call, and a copy
          * one call cannot reach coming out so is one another may.
          *
+         * <p>And what the same reading said before the rows ran, which excludes nothing and is
+         * asked for one thing: which proofs a row took back would have put a way out, so a rule
+         * that is owed a row because of it can say so ({@link #shownWrongOnTheWay}).
+         *
          * @param arms        the arms the branch count leaves out, as the author wrote them
+         * @param sites       every arm of the behavior, which is what says which places an arm as
+         *                    the author wrote it stands at
          * @param comparisons every copy of each comparison of the model in the tree that runs
          * @param plan        the plan that numbered the places those copies come out at
-         * @param answers     what the reading proved of each place, as the rows corrected it
+         * @param run         what the reading proved of each place, as the rows corrected it, and
+         *                    the proofs they took back
          */
         record NothingReaches(Set<CoverageSites.AsWritten> arms,
+                              List<CoverageSites.ArmSite> sites,
                               ComparisonEmissionIndex comparisons,
                               CoverageSites.Plan plan,
-                              souther.compiler.check.PathReachability.Answers answers) {
+                              PathReachability.Answers.AsRun run) {
 
             /** Held to the plan where it is made, before any place is looked up: an answer of
              *  another plan's reading says nothing arrives at a place its walk never came to. */
             NothingReaches {
-                if (answers != null) {
-                    answers.requireNumbering(plan.identity());
+                if (run != null) {
+                    run.answers().requireNumbering(plan.identity());
                 }
             }
 
             /** Nothing proven, for a behavior whose reach was not read. */
-            static final NothingReaches NOTHING = new NothingReaches(Set.of(), null, null, null);
+            static final NothingReaches NOTHING =
+                    new NothingReaches(Set.of(), List.of(), null, null, null);
+
+            /** What {@code run} proved of {@code sites} and of the copies of the comparisons. */
+            static NothingReaches of(List<CoverageSites.ArmSite> sites,
+                                     ComparisonEmissionIndex comparisons,
+                                     CoverageSites.Plan plan,
+                                     PathReachability.Answers.AsRun run) {
+                return new NothingReaches(BranchEvidence.unreached(sites, run), sites,
+                        comparisons, plan, run);
+            }
+
+            /** Whether {@code run}'s reading, as the rows corrected it, proved nothing arrives at
+             *  {@code where}. */
+            private static boolean unreachableIn(PathReachability.Answers.AsRun run,
+                                                 ControlPlace where) {
+                return run.answers().at(where) instanceof Reachability.Unreachable;
+            }
+
+            /**
+             * Whether the reading proved nothing arrives at {@code where} as it stood before any
+             * row ran — the answer corrected, with the proofs the rows took back put back.
+             *
+             * <p>Asked for what would have been left out, so a rule can say what no longer is and
+             * why. Nothing is left out by this.
+             */
+            private static boolean provedBeforeTheRun(PathReachability.Answers.AsRun run,
+                                                      ControlPlace where) {
+                return unreachableIn(run, where) || run.contradicted().places().contains(where);
+            }
+
+            /**
+             * The proofs a row took back that would have put {@code ruled}'s way out, as the
+             * places they were about — empty where none would have.
+             *
+             * <p>Every one of them and not the first. A way is out by any place on it, so each of
+             * these would have been a reason on its own, and a reader asking why the rule is owed
+             * a row is owed all of them. Asked only of a way nothing still puts out: one that is
+             * still out is out by a proof that stands.
+             *
+             * <p>What the count would have left out before the run is worked out here and not kept:
+             * it is asked only where a row took a proof back, which a reading that holds never
+             * meets.
+             */
+            Set<ControlPlace> shownWrongOnTheWay(
+                    souther.compiler.partition.DecisionReading.Ruled ruled) {
+                if (run == null || run.contradicted().places().isEmpty()) {
+                    return Set.of();
+                }
+                Set<ControlPlace> taken = run.contradicted().places();
+                Set<CoverageSites.AsWritten> before = BranchEvidence.unreached(sites,
+                        where -> provedBeforeTheRun(run, where));
+                Set<ControlPlace> out = new LinkedHashSet<>();
+                for (RuleStep step : ruled.steps()) {
+                    for (ShownBy each : step.seen()) {
+                        switch (each) {
+                            case ShownBy.AtAnArm(var fork, var part) ->
+                                    armShownWrong(new CoverageSites.AsWritten(fork.origin(), part),
+                                            before, taken, out);
+                            case ShownBy.AtAnArmShortOf(var fork, var part, var _) ->
+                                    armShownWrong(new CoverageSites.AsWritten(fork.origin(), part),
+                                            before, taken, out);
+                            case ShownBy.AtAnOutcome(var construct, var held) -> {
+                                if (comesOutSoNowhere(construct, held,
+                                        where -> provedBeforeTheRun(run, where))) {
+                                    copiesOf(construct, held).stream().filter(taken::contains)
+                                            .forEach(out::add);
+                                }
+                            }
+                            case ShownBy.ShortOf _, ShownBy.NothingIsRecorded _ -> { }
+                        }
+                    }
+                }
+                return out;
+            }
+
+            /** The places of {@code arm} a row took a proof back at, where without that the arm
+             *  would have been out ({@code before}) and is not now. */
+            private void armShownWrong(CoverageSites.AsWritten arm,
+                                       Set<CoverageSites.AsWritten> before,
+                                       Set<ControlPlace> taken, Set<ControlPlace> into) {
+                if (!before.contains(arm) || arms.contains(arm)) {
+                    return;
+                }
+                for (CoverageSites.ArmSite site : sites) {
+                    if (site.obligation().asWritten().equals(arm) && taken.contains(site.place())) {
+                        into.add(site.place());
+                    }
+                }
+            }
 
             /**
              * The place on {@code ruled}'s way nothing arrives at, said as the reason the way is
@@ -2811,7 +2920,8 @@ public final class Adequacy {
                             case ShownBy.AtAnArmShortOf(var fork, var part, var _) ->
                                     armOutOfReach(new CoverageSites.AsWritten(fork.origin(), part));
                             case ShownBy.AtAnOutcome(var construct, var held) ->
-                                    comesOutSoNowhere(construct, held)
+                                    comesOutSoNowhere(construct, held,
+                                            where -> unreachableIn(run, where))
                                             ? new RuleRequirement.Excluded
                                                     .AComparisonOutcomeNothingReaches(construct, held)
                                             : null;
@@ -2832,15 +2942,17 @@ public final class Adequacy {
             }
 
             /**
-             * Whether every copy of {@code construct} was proven to come out {@code held} nowhere.
+             * Whether every copy of {@code construct} was proven to come out {@code held} nowhere,
+             * by {@code proven}'s account of each place.
              *
              * <p>False where there is no copy, or a copy with no place it comes out at: a place
              * nothing numbered is one nothing was proven about, and no copy at all is an
              * application or a construct the tree that runs does not hold — neither of them a
              * proof.
              */
-            private boolean comesOutSoNowhere(ModelOccurrence construct, boolean held) {
-                if (answers == null) {
+            private boolean comesOutSoNowhere(ModelOccurrence construct, boolean held,
+                                              Predicate<ControlPlace> proven) {
+                if (run == null) {
                     return false;
                 }
                 List<ComparisonEmissionIndex.EmittedComparison> made =
@@ -2850,12 +2962,21 @@ public final class Adequacy {
                 }
                 for (ComparisonEmissionIndex.EmittedComparison each : made) {
                     Optional<ControlPlace.Outcome> where = plan.outcomeOf(each.occurrence(), held);
-                    if (where.isEmpty() || !(answers.at(where.get())
-                            instanceof souther.compiler.reach.Reachability.Unreachable)) {
+                    if (where.isEmpty() || !proven.test(where.get())) {
                         return false;
                     }
                 }
                 return true;
+            }
+
+            /** The places every copy of {@code construct} comes out {@code held} at. */
+            private List<ControlPlace.Outcome> copiesOf(ModelOccurrence construct, boolean held) {
+                List<ControlPlace.Outcome> out = new ArrayList<>();
+                for (ComparisonEmissionIndex.EmittedComparison each
+                        : comparisons.madeFor(construct)) {
+                    plan.outcomeOf(each.occurrence(), held).ifPresent(out::add);
+                }
+                return out;
             }
         }
 
@@ -4206,12 +4327,15 @@ public final class Adequacy {
          * denominators free to disagree about one body.
          */
         public static List<CoverageSites.ArmSite> owed(
-                List<CoverageSites.ArmSite> all,
-                souther.compiler.check.PathReachability.Answers.AsRun reachable) {
-            return all.stream()
-                    .filter(site -> !(reachable.answers().at(site.place())
-                            instanceof Reachability.Unreachable))
-                    .toList();
+                List<CoverageSites.ArmSite> all, PathReachability.Answers.AsRun reachable) {
+            return owed(all, place -> reachable.answers().at(place)
+                    instanceof Reachability.Unreachable);
+        }
+
+        /** The same, by {@code proven}'s account of which places nothing arrives at. */
+        private static List<CoverageSites.ArmSite> owed(List<CoverageSites.ArmSite> all,
+                                                        Predicate<ControlPlace> proven) {
+            return all.stream().filter(site -> !proven.test(site.place())).toList();
         }
 
         /**
@@ -4235,10 +4359,24 @@ public final class Adequacy {
          * something the count kept.
          */
         public static Set<CoverageSites.AsWritten> unreached(
-                List<CoverageSites.ArmSite> all,
-                souther.compiler.check.PathReachability.Answers.AsRun reachable) {
-            Set<CoverageSites.Obligation> stands = new java.util.LinkedHashSet<>();
-            owed(all, reachable).forEach(site -> stands.add(site.obligation()));
+                List<CoverageSites.ArmSite> all, PathReachability.Answers.AsRun reachable) {
+            return leftOutOf(all, owed(all, reachable));
+        }
+
+        /**
+         * The same, by {@code proven}'s account of which places nothing arrives at — which is how
+         * the reading as it stood before the rows ran is asked what it would have left out.
+         */
+        static Set<CoverageSites.AsWritten> unreached(List<CoverageSites.ArmSite> all,
+                                                      Predicate<ControlPlace> proven) {
+            return leftOutOf(all, owed(all, proven));
+        }
+
+        /** The arms of {@code all} as the author wrote them that no site of {@code owed} is. */
+        private static Set<CoverageSites.AsWritten> leftOutOf(List<CoverageSites.ArmSite> all,
+                                                              List<CoverageSites.ArmSite> owed) {
+            Set<CoverageSites.Obligation> stands = new LinkedHashSet<>();
+            owed.forEach(site -> stands.add(site.obligation()));
             Set<CoverageSites.AsWritten> written = new java.util.LinkedHashSet<>();
             Set<CoverageSites.AsWritten> kept = new java.util.LinkedHashSet<>();
             for (CoverageSites.ArmSite site : all) {
@@ -4252,25 +4390,27 @@ public final class Adequacy {
         }
 
         /**
-         * The arms a set of probes is about, which is asked here because here is where both are.
+         * The arms among the places a run showed a proof wrong at, as the obligations they are of.
          *
-         * <p>A probe is the number a run through an arm was recorded at; which arm that is, is what
-         * the sites hold. Nothing further along has the sites, so a probe carried past this point
-         * arrives everywhere else as a token its reader cannot resolve — which is what a fact about
-         * a contradicted proof used to be made of.
+         * <p>Arms only, because what the count doubts is the set of arms it is made over: a proof
+         * that a comparison never comes out one way left no arm out of it. Which obligation an arm
+         * is of is what the sites hold, and nothing further along has them.
          *
-         * <p>Refused where no site of this behavior was numbered for it. A proof contradicted at an
-         * arm is a proof about one of these arms, and a probe none of them was issued for means the
-         * two lists are of different behaviors.
+         * <p>Refused where no site of this behavior is the arm. A proof contradicted at an arm is a
+         * proof about one of these arms, and an arm none of them is means the two lists are of
+         * different behaviors.
          */
         private static Set<CoverageSites.Obligation> armsBehind(List<CoverageSites.ArmSite> all,
-                                                                Set<ArmProbe> probes) {
-            Set<CoverageSites.Obligation> out = new java.util.LinkedHashSet<>();
-            for (ArmProbe probe : probes) {
+                                                                Set<ControlPlace> places) {
+            Set<CoverageSites.Obligation> out = new LinkedHashSet<>();
+            for (ControlPlace place : places) {
+                if (!(place instanceof ControlPlace.Arm arm)) {
+                    continue;
+                }
                 CoverageSites.ArmSite site = all.stream()
-                        .filter(each -> each.index().equals(probe))
+                        .filter(each -> each.place().equals(arm))
                         .findFirst().orElseThrow(() -> new IllegalArgumentException(
-                                "a run was recorded at " + probe + ", which is no arm of these"));
+                                "a run went through " + arm + ", which is no arm of these"));
                 out.add(site.obligation());
             }
             return out;
@@ -4304,7 +4444,7 @@ public final class Adequacy {
                                                       List<WhereNothingIsAnswered.Premise>>
                                                       premisesOf) {
             ArmAccount account = ArmAccount.of(owed(all, reachable), covered, awaiting, weakenings,
-                    ArmCensus.of(armsBehind(all, reachable.provedWrong())), premisesOf);
+                    ArmCensus.of(armsBehind(all, reachable.contradicted().places())), premisesOf);
             WeakeningSet by = account.weakening();
             return new BranchEvidence(by.isEmpty()
                     ? new Measurement.Complete<>(account.summary())
@@ -5265,7 +5405,7 @@ public final class Adequacy {
                 Map<String, InputDomain> readInputs = db.ask(new Inputs(name)).value();
                 // What the guards above each place leave, asked once for the module and read by
                 // every measure below — the same reason the reading of the input is.
-                db.ask(new PathReached(name));
+                db.ask(new Arrived(name));
                 // And what each behavior states about its answer, which draws lines of its own.
                 db.ask(new Bodies.StatedContracts(name));
                 Hir.SpecBehavior spec = specOf(prepared.value(), behavior);

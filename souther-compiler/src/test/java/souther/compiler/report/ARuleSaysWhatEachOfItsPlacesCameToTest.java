@@ -56,9 +56,9 @@ class ARuleSaysWhatEachOfItsPlacesCameToTest {
         List<DecisionReading.Ruled> at = twoPlaces();
         SettledAt elsewhere = new SettledAt(at.get(0), RuleSettlement.of(
                 new RuleRequirement.Unsettled.AComposedRowWentElsewhere(),
-                CompositionAccount.NOTHING));
+                CompositionAccount.NOTHING), Set.of());
         SettledAt nothing = new SettledAt(at.get(1), nothingTried(
-                CompositionBudget.ELEMENTS_A_PROPOSAL_HOLDS));
+                CompositionBudget.ELEMENTS_A_PROPOSAL_HOLDS), Set.of());
 
         assertEquals(List.of("a_composed_row_went_elsewhere", "nothing_was_composed_to_try"),
                 AdequacyReport.becauseOf(new SettledAcross(List.of(elsewhere, nothing))),
@@ -76,9 +76,10 @@ class ARuleSaysWhatEachOfItsPlacesCameToTest {
     void theDocumentSaysWhatEveryPlaceMet() {
         List<DecisionReading.Ruled> at = twoPlaces();
         SettledAcross rule = new SettledAcross(List.of(
-                new SettledAt(at.get(0), nothingTried(CompositionBudget.ELEMENTS_A_PROPOSAL_HOLDS)),
+                new SettledAt(at.get(0), nothingTried(CompositionBudget.ELEMENTS_A_PROPOSAL_HOLDS),
+                        Set.of()),
                 new SettledAt(at.get(1),
-                        nothingTried(CompositionBudget.CHARACTERS_A_PROPOSAL_HOLDS))));
+                        nothingTried(CompositionBudget.CHARACTERS_A_PROPOSAL_HOLDS), Set.of())));
 
         List<RuleSearch.Came> said = RuleSearch.Came.joinedAsShown(
                 AdequacyReport.shortfallsOf(rule), AdequacyReport::shownInTheDocument);

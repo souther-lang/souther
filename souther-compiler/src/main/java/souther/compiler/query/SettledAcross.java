@@ -1,6 +1,11 @@
 package souther.compiler.query;
 
+import souther.compiler.coverage.ControlPlace;
+
+import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * What a rule of a decision came to over every place it is stated at.
@@ -57,5 +62,15 @@ public record SettledAcross(List<SettledAt> places) {
     /** Whether a row is owed at the rule, over all of its places. */
     public RuleRequirement requirement() {
         return answer().settlement().requirement();
+    }
+
+    /**
+     * The places a proof a row took back was about, that would have left some place of the rule
+     * no row — each once, in the order the places are held.
+     */
+    public Set<ControlPlace> shownWrong() {
+        Set<ControlPlace> out = new LinkedHashSet<>();
+        places.forEach(each -> out.addAll(each.shownWrong()));
+        return Collections.unmodifiableSet(out);
     }
 }

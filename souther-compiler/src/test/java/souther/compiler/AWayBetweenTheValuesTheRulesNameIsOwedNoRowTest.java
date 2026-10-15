@@ -268,10 +268,15 @@ class AWayBetweenTheValuesTheRulesNameIsOwedNoRowTest {
                 proven.asRunWith(Set.of(), Set.of(new SeenConditionOutcome(proof.at(),
                         !proof.held()))).answers().at(proof),
                 "a row seeing it come out the other way says nothing against it");
-        assertInstanceOf(Reachability.Reachable.class,
-                proven.asRunWith(Set.of(), Set.of(new SeenConditionOutcome(proof.at(),
-                        proof.held()))).answers().at(proof),
+        assertEquals(Set.of(), proven.asRunWith(Set.of(), Set.of(new SeenConditionOutcome(
+                        proof.at(), !proof.held()))).contradicted().places(),
+                "and nothing it says is shown wrong");
+        PathReachability.Answers.AsRun ran = proven.asRunWith(Set.of(),
+                Set.of(new SeenConditionOutcome(proof.at(), proof.held())));
+        assertInstanceOf(Reachability.Reachable.class, ran.answers().at(proof),
                 "a row seeing it come out that way takes the proof back");
+        assertEquals(Set.of(proof), ran.contradicted().places(),
+                "and the reading keeps which proof that was, as it does for an arm");
     }
 
     /** The words the decision's excluded rules were settled by, one per rule. */
