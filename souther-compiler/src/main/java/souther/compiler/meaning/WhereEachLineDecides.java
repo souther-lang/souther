@@ -426,52 +426,61 @@ public final class WhereEachLineDecides {
                 return null;
             }
             left -= (int) places;
-            switch (element) {
-                case Proposition.Always(boolean always) when !always -> {
-                    return element;
-                }
+            return switch (element) {
+                case Proposition.Always(boolean always) when !always -> element;
                 case Proposition.Any any -> {
                     List<Proposition> each = new ArrayList<>();
                     for (Proposition one : any.parts()) {
                         Proposition said = some(container, one);
                         if (said == null) {
-                            return null;
+                            yield null;
                         }
                         each.add(said);
                     }
-                    return Proposition.any(each);
+                    yield Proposition.any(each);
                 }
                 case Proposition.All all -> {
                     List<Proposition> ofTheRow = new ArrayList<>();
                     List<Proposition> rest = new ArrayList<>();
                     all.parts().forEach(part -> (part.mayTurnOnAnElementOf(container) ? rest
                             : ofTheRow).add(part));
-                    if (!ofTheRow.isEmpty()) {
-                        Proposition said = some(container, Proposition.all(rest));
-                        if (said == null) {
-                            return null;
-                        }
-                        ofTheRow.add(said);
-                        return Proposition.all(ofTheRow);
+                    if (ofTheRow.isEmpty()) {
+                        yield eachWay(container, all);
                     }
-                }
-                default -> {
-                    if (!element.mayTurnOnAnElementOf(container)) {
-                        return Proposition.all(List.of(element,
-                                new Proposition.Some(container, new Proposition.Always(true),
-                                        true)));
+                    Proposition said = some(container, Proposition.all(rest));
+                    if (said == null) {
+                        yield null;
                     }
+                    ofTheRow.add(said);
+                    yield Proposition.all(ofTheRow);
                 }
-            }
-            Proposition row = aboutNoElement(element, container);
+                // One part, about the element or not; what holds everywhere is about none, and
+                // some element meeting it is the container holding one.
+                default -> element.mayTurnOnAnElementOf(container)
+                        ? new Proposition.Some(container, element, true)
+                        : Proposition.all(List.of(element, new Proposition.Some(container,
+                                new Proposition.Always(true), true)));
+            };
+        }
+
+        /**
+         * Some element meeting {@code all}, every part of which may be about the element: said
+         * once with the first part of the row inside it held, and once with it failing.
+         *
+         * <p>A conjunction holds no part that comes out one way for every row, since joining one
+         * leaves it out ({@link Proposition#all}), so the part taken is one that is held and fails,
+         * and each way leaves a statement without it.
+         */
+        private Proposition eachWay(DecisionSubject container, Proposition.All all) {
+            Proposition row = aboutNoElement(all, container);
             if (row == null) {
-                return new Proposition.Some(container, element, true);
+                return new Proposition.Some(container, all, true);
             }
-            Proposition held = some(container, with(element, row, true));
+            Proposition held = some(container, with(all, row, true));
             if (held == null) {
                 return null;
             }
-            Proposition failing = some(container, with(element, row, false));
+            Proposition failing = some(container, with(all, row, false));
             if (failing == null) {
                 return null;
             }
@@ -490,20 +499,14 @@ public final class WhereEachLineDecides {
             };
         }
 
-        /**
-         * The first part of {@code element}, held, about no element of {@code container}, or null
-         * where every part may be.
-         *
-         * <p>A statement that comes out one way for every row is no part of it: there is nothing
-         * to say once held and once failing, and said so it is the same statement again.
-         */
+        /** The first part of {@code element}, held, about no element of {@code container}, or
+         *  null where every part may be. */
         private static Proposition aboutNoElement(Proposition element,
                                                   DecisionSubject container) {
             Map<String, Proposition> parts = new TreeMap<>();
             gather(element, parts, new TreeMap<>());
             return parts.values().stream()
-                    .filter(part -> !(part instanceof Proposition.Always)
-                            && !part.mayTurnOnAnElementOf(container))
+                    .filter(part -> !part.mayTurnOnAnElementOf(container))
                     .findFirst().orElse(null);
         }
     }
@@ -527,6 +530,9 @@ public final class WhereEachLineDecides {
         private final int whole;
         /** Which ways the parts can come out together ({@link #possible}). */
         private final int possible;
+        /** The values the statement asks the case of more than once, which are what leaves some
+         *  ways out of {@link #possible} and what the statement is read under the cases of. */
+        private final List<AskedTwice> twice;
         /** Whether some part has asked for the statement under each case of a value. */
         private boolean readUnderEachCase;
         /** The statement under each case of a value, once some part asked for it — null where it
@@ -548,6 +554,7 @@ public final class WhereEachLineDecides {
             for (int i = 0; i < named.size(); i++) {
                 index.put(named.get(i).key(), i);
             }
+            this.twice = askedTwice(named);
             this.ways = new WhatAStatementComesTo();
             if (!lifted) {
                 this.whole = WhatAStatementComesTo.NOT_WORKED_OUT;
@@ -557,7 +564,7 @@ public final class WhereEachLineDecides {
             WhatAStatementComesTo.Asking asking =
                     ways.asking(CompositionBudget.STEPS_A_STATEMENT_IS_READ_IN.maximum());
             int comesTo = comesTo(stated, asking);
-            int canBe = possible(named, asking);
+            int canBe = possible(twice, asking);
             boolean read = comesTo >= 0 && canBe >= 0;
             this.whole = read ? comesTo : WhatAStatementComesTo.NOT_WORKED_OUT;
             this.possible = read ? canBe : WhatAStatementComesTo.NOT_WORKED_OUT;
@@ -616,28 +623,15 @@ public final class WhereEachLineDecides {
          * <p>The cases the parts name need not be every case of the value, so a value none of them
          * names is a case as well: every way holding none of them is possible.
          */
-        private static int possible(List<Proposition> named, WhatAStatementComesTo.Asking asking) {
-            Map<DecisionSubject, List<Integer>> byValue = new LinkedHashMap<>();
-            for (int i = 0; i < named.size(); i++) {
-                if (named.get(i) instanceof Proposition.InCases cases && oneValueOfTheRow(cases)) {
-                    byValue.computeIfAbsent(cases.of(), _ -> new ArrayList<>()).add(i);
-                }
-            }
+        private int possible(List<AskedTwice> twice, WhatAStatementComesTo.Asking asking) {
             int out = WhatAStatementComesTo.ALWAYS;
-            for (List<Integer> parts : byValue.values()) {
-                if (parts.size() < 2) {
-                    continue;
-                }
-                List<Refinement> atoms = new ArrayList<>();
-                for (int each : parts) {
-                    ((Proposition.InCases) named.get(each)).cases().atoms().stream()
-                            .filter(atom -> !atoms.contains(atom)).forEach(atoms::add);
-                }
+            for (AskedTwice value : twice) {
+                List<Integer> parts = value.parts();
                 // Which of the parts hold for a value that is each case; and none of them for a
                 // value that is a case none of them names.
                 Set<Set<Integer>> holding = new LinkedHashSet<>();
                 holding.add(Set.of());
-                for (Refinement atom : atoms) {
+                for (Refinement atom : value.atoms()) {
                     Set<Integer> those = new HashSet<>();
                     for (int each : parts) {
                         if (((Proposition.InCases) named.get(each)).cases().atoms()
@@ -686,7 +680,7 @@ public final class WhereEachLineDecides {
                         .toList();
             }
             if (lifted && !readUnderEachCase) {
-                underEachCase = WhereEachLineDecides.underEachCase(stated, named);
+                underEachCase = WhereEachLineDecides.underEachCase(stated, twice);
                 readUnderEachCase = true;
             }
             List<DecidingCase> ofAValue = underEachCase == null ? null
@@ -706,8 +700,9 @@ public final class WhereEachLineDecides {
                         case TakenApart.MoreThan _ ->
                                 CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO;
                         case TakenApart.RanOut _ -> CompositionBudget.STEPS_A_STATEMENT_IS_READ_IN;
-                        // A way two parts cannot come out together is a value asked twice, and
-                        // a value asked twice is read under each of its cases.
+                        // No one part tells the cases apart only where some ways are left out of
+                        // what is possible, which only a value in twice leaves out; and
+                        // the statement is read under each case of the first of those.
                         case TakenApart.ByNoOnePart _, TakenApart.Taken _ ->
                                 throw new IllegalStateException("where " + part + " decides in "
                                         + stated + " was told apart by no one part, and the"
@@ -1022,30 +1017,57 @@ public final class WhereEachLineDecides {
     private record UnderACase(Proposition is, Reading reading) {}
 
     /**
+     * A value of the row a statement asks the case of more than once: the parts that ask it, by
+     * where they stand among the statement's parts, and every case they name.
+     *
+     * <p>One answer for the two things that turn on it. Those parts are not free of each other
+     * ({@link Reading#possible}), and so where the line decides may be told apart by no one part;
+     * read under each case of the value instead ({@link #underEachCase}), they come out one way
+     * each. Each asking which values those are on its own, the second answer was the first's only
+     * by both being written alike.
+     */
+    private record AskedTwice(DecisionSubject value, List<Integer> parts, List<Refinement> atoms) {}
+
+    /** Every value of the row {@code named} asks the case of more than once, in the order they are
+     *  first asked. */
+    private static List<AskedTwice> askedTwice(List<Proposition> named) {
+        Map<DecisionSubject, List<Integer>> byValue = new LinkedHashMap<>();
+        for (int i = 0; i < named.size(); i++) {
+            if (named.get(i) instanceof Proposition.InCases cases && oneValueOfTheRow(cases)) {
+                byValue.computeIfAbsent(cases.of(), _ -> new ArrayList<>()).add(i);
+            }
+        }
+        List<AskedTwice> out = new ArrayList<>();
+        byValue.forEach((value, parts) -> {
+            if (parts.size() < 2) {
+                return;
+            }
+            List<Refinement> atoms = new ArrayList<>();
+            for (int each : parts) {
+                ((Proposition.InCases) named.get(each)).cases().atoms().stream()
+                        .filter(atom -> !atoms.contains(atom)).forEach(atoms::add);
+            }
+            out.add(new AskedTwice(value, List.copyOf(parts), List.copyOf(atoms)));
+        });
+        return List.copyOf(out);
+    }
+
+    /**
      * {@code stated} read under each case of the first value it asks the case of more than once,
      * and under that value being none of them — or null where it asks no value's case twice.
      *
      * <p>The same for every part of the statement, so worked out once for the statement and asked
      * of by each of its parts. A value inside the elements or the keys of a container is not one
      * value of the row, and is not read this way.
+     *
+     * @param twice the values {@code stated} asks the case of more than once ({@link #askedTwice})
      */
-    private static List<UnderACase> underEachCase(Proposition stated, List<Proposition> named) {
-        Map<DecisionSubject, List<Refinement>> asked = new LinkedHashMap<>();
-        Map<DecisionSubject, Integer> times = new LinkedHashMap<>();
-        for (Proposition each : named) {
-            if (each instanceof Proposition.InCases cases && oneValueOfTheRow(cases)) {
-                times.merge(cases.of(), 1, Integer::sum);
-                List<Refinement> atoms = asked.computeIfAbsent(cases.of(), _ -> new ArrayList<>());
-                cases.cases().atoms().stream().filter(atom -> !atoms.contains(atom))
-                        .forEach(atoms::add);
-            }
-        }
-        DecisionSubject value = times.entrySet().stream().filter(each -> each.getValue() > 1)
-                .map(Map.Entry::getKey).findFirst().orElse(null);
-        if (value == null) {
+    private static List<UnderACase> underEachCase(Proposition stated, List<AskedTwice> twice) {
+        if (twice.isEmpty()) {
             return null;
         }
-        List<Refinement> atoms = asked.get(value);
+        DecisionSubject value = twice.getFirst().value();
+        List<Refinement> atoms = twice.getFirst().atoms();
         List<UnderACase> out = new ArrayList<>();
         for (Refinement atom : atoms) {
             out.add(new UnderACase(new Proposition.InCases(value, CasesLeft.of(atom), true),
