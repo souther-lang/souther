@@ -247,7 +247,8 @@ class ARowInACaseTheLineTurnsNothingInMeetsNoPointOfItTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         assertTrue(compilation.errors().isEmpty(), () -> "compiles: " + compilation.errors()
-                .stream().map(e -> e.diagnostic().code() + " " + e.diagnostic()).toList());
+                .stream().map(e -> e.diagnostic().code() + " " + e.diagnostic().titleKey())
+                .toList());
         return AdequacyReport.of(compilation);
     }
 

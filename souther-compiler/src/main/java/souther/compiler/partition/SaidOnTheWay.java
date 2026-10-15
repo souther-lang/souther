@@ -59,6 +59,33 @@ public record SaidOnTheWay(Map<OnTheWay, List<ModelOccurrence>> entries,
         return by == null ? List.of() : by;
     }
 
+    /**
+     * What put the entries of {@code way} on it, and what was asked of the answers, and nothing
+     * else this says: what put an entry on another way read with this one is no account of this
+     * one.
+     *
+     * <p>Asked where several ways were walked as one reading and are filed one by one — a
+     * comparison and each case of where a line of it decides. Every copy a reader is told put
+     * something on a line's way is then a copy that put something on that way.
+     */
+    public SaidOnTheWay along(List<OnTheWay> way) {
+        Map<OnTheWay, List<ModelOccurrence>> on = new LinkedHashMap<>();
+        alongInto(way, on);
+        return new SaidOnTheWay(on, stated, unstated);
+    }
+
+    private void alongInto(List<OnTheWay> way, Map<OnTheWay, List<ModelOccurrence>> on) {
+        for (OnTheWay each : way) {
+            List<ModelOccurrence> by = entries.get(each);
+            if (by != null) {
+                on.putIfAbsent(each, by);
+            }
+            if (each instanceof OnTheWay.OneOf several) {
+                several.alternatives().forEach(one -> alongInto(one, on));
+            }
+        }
+    }
+
     /** Every copy anything on the way was read off, each once, in the order met. */
     public List<ModelOccurrence> copies() {
         Set<ModelOccurrence> out = new LinkedHashSet<>();

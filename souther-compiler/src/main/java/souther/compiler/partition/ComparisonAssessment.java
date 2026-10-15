@@ -336,10 +336,11 @@ sealed interface ComparisonAssessment {
      * row the statement answers the same way on both sides, so a line taken without it would be
      * owed rows that prove nothing about it.
      *
-     * <p>Once a run's way is taken in, one line may be two parts: what its cases showed, and beside
-     * it, in the same place, the cases of it nobody worked out
-     * ({@link BlockReason.WhereALineDecidesNotWorkedOut}). Each is what it is about a different set
-     * of the line's cases, so neither speaks for the other.
+     * <p>Once a run's way is taken in, one line may be two parts: the line in the cases its cases
+     * showed it turns in, and beside it, in the same place, the line not worked out for the cases
+     * nobody worked out ({@link BlockReason.WhereALineDecidesNotWorkedOut}). The first is what a
+     * row is asked to be at; the second is said at the line's places and asks no row of any case,
+     * so neither speaks for the other.
      */
     record Several(List<Part> parts) implements ComparisonAssessment {
 
@@ -358,7 +359,9 @@ sealed interface ComparisonAssessment {
          *              never several again
          * @param cases where the statement turns on it, as cases any one of which is enough: every
          *              case where it was read, and once the way to it is taken in, the cases a row
-         *              arriving there can be in
+         *              arriving there can be in. None where {@code line} is no line on the input
+         *              space ({@link #isALine}): a case is where a row at the line is asked to be,
+         *              and where there is no line there is no row to ask it of
          */
         public record Part(PlaceOfALine id, ComparisonAssessment line,
                            List<DecidingCase> cases) {
@@ -370,6 +373,29 @@ sealed interface ComparisonAssessment {
                     throw new IllegalArgumentException(
                             "a line of a statement is what one line comes to: " + line);
                 }
+                if (!isALine(line) && !cases.isEmpty()) {
+                    throw new IllegalArgumentException("what is no line is read in no case: "
+                            + line);
+                }
+            }
+
+            /**
+             * {@code line} where it comes to a line, read in {@code cases}; and with no case where
+             * it does not.
+             */
+            static Part ofCases(PlaceOfALine id, ComparisonAssessment line,
+                                List<DecidingCase> cases) {
+                return new Part(id, line, isALine(line) ? cases : List.of());
+            }
+
+            /**
+             * Whether {@code line} is a line on the input space, which is what a row can be asked
+             * to stand at, in a case or not: one on a position, or one on a form over several.
+             * Every other answer is a line refused, outside what the declarations leave, one
+             * nothing arrives at or the statement never turns on, or one nobody worked out.
+             */
+            static boolean isALine(ComparisonAssessment line) {
+                return line instanceof AtAPosition || line instanceof AcrossPositions;
             }
 
             /**
@@ -574,7 +600,7 @@ sealed interface ComparisonAssessment {
                                                    InputReading read, boolean drawnByAnInvariant,
                                                    Supplier<ComparisonAssessment> aboutNoPosition) {
         return new Several(lines.parts().stream()
-                .map(part -> new Several.Part(part.id(), aLine(part.line(), at, read,
+                .map(part -> Several.Part.ofCases(part.id(), aLine(part.line(), at, read,
                         drawnByAnInvariant, aboutNoPosition), part.cases()))
                 .toList());
     }
@@ -773,9 +799,9 @@ sealed interface ComparisonAssessment {
         ComparisonAssessment arrived = narrowedByWhatArrives(part.line(), way, _ -> way,
                 wayToACase, arrivals, drawnByAnInvariant, reading);
         // Only where it is a line at all: a line refused, outside what the declarations leave, or
-        // one nothing arrives at, is that whatever the cases are.
-        if (!(arrived instanceof AtAPosition || arrived instanceof AcrossPositions)) {
-            return List.of(new Several.Part(part.id(), arrived, part.cases()));
+        // one nothing arrives at, is that whatever the cases are, and is read in none of them.
+        if (!Several.Part.isALine(arrived)) {
+            return List.of(new Several.Part(part.id(), arrived, List.of()));
         }
         // Each case where a row on each side of the line can stand in it. Rows on the two sides in
         // one case differ in this line alone, so the statement turns between them; a case only one
@@ -791,7 +817,6 @@ sealed interface ComparisonAssessment {
         // and in no other, so that a row in one it turns nothing in is not counted at its points.
         // Counted for each such case on its own, so that what one case spent decides nothing about
         // another.
-        List<DecidingCase> notWorkedOut = new ArrayList<>();
         Set<CompositionBudget> stoppedAt = EnumSet.noneOf(CompositionBudget.class);
         for (DecidingCase each : part.cases()) {
             if (each.saidAlone()) {
@@ -813,15 +838,13 @@ sealed interface ComparisonAssessment {
                         ? wayToAPart.apply(new WhereAPartDecides(part.id(), each.condition()))
                         : wayToACase.apply(one.condition()), arrivals));
             }
-            if (!found.notWorkedOut().isEmpty()) {
-                stoppedAt.addAll(found.notWorkedOut());
-                notWorkedOut.add(each);
-            }
+            stoppedAt.addAll(found.notWorkedOut());
         }
         // The cases nobody worked out are neither ones the line turns in, owed rows where it may
         // decide nothing, nor ones dropped for a proof nobody finished: they are the line not
         // worked out there, naming every figure any of them stopped at, beside whatever the other
-        // cases showed.
+        // cases showed. Said at the line's places and read in no case: no row is asked to be at a
+        // line nobody worked out, so which cases those were is not something a reader is told.
         List<Several.Part> out = new ArrayList<>();
         if (!reached.isEmpty()) {
             out.add(new Several.Part(part.id(), arrived instanceof AcrossPositions across
@@ -832,7 +855,7 @@ sealed interface ComparisonAssessment {
             out.add(new Several.Part(part.id(), new Unread(atEachOf(cutting.over(),
                     new BlockReason.WhereALineDecidesNotWorkedOut(stoppedAt.stream()
                             .map(CompositionBudget::figure).toList()))),
-                    notWorkedOut));
+                    List.of()));
         }
         if (out.isEmpty()) {
             out.add(new Several.Part(part.id(), new TurnsNothing(cutting), List.of()));

@@ -182,8 +182,8 @@ class ALineIsDroppedByAProofAtEveryPlaceItIsWatchedTest {
         assertEquals(List.of(new BlockReason.WhereALineDecidesNotWorkedOut(
                         CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.figure())),
                 List.copyOf(unread.why().values()), "and the figure that left them whole");
-        assertEquals(read.parts().getFirst().cases(), narrowed.parts().getFirst().cases(),
-                "and the cases it was read in, none of them taken for one it turns nothing in");
+        assertEquals(List.of(), narrowed.parts().getFirst().cases(),
+                "and read in no case: none of them is taken for one it turns in");
         assertEquals(read.parts().getLast(), narrowed.parts().getLast(),
                 "the line beside it is read as it would be alone");
         // And the statement says so at the place, though the line beside it divides that place:
@@ -230,11 +230,61 @@ class ALineIsDroppedByAProofAtEveryPlaceItIsWatchedTest {
                                                     CompositionBudget
                                                             .CASES_A_LINE_IS_TAKEN_APART_INTO
                                                             .figure()))),
-                                    List.of(unworked))),
+                                    List.of())),
                     narrowed.parts(),
                     () -> "the line in the case that showed it, and not worked out in the other,"
                             + " asked in the order " + cases);
         }
+    }
+
+    /**
+     * One case said for several, of which one divides rows, one divides none, and the rest nobody
+     * took apart: the line is the line in the one that divides rows and in no other, and beside it
+     * the line is not worked out, said at its places. A row in the one that divides rows is asked
+     * for; no row is asked to be in the others; and the place is not settled, since the cases
+     * nobody worked out may divide it further.
+     */
+    @Test
+    void aCaseOfWhichSomeDivideSomeDoNotAndSomeStoppedIsTheLineInThoseThatDivide() {
+        PlaceOfALine at = new PlaceOfALine(PartOfAComparison.of(WrittenLine.THE_COMPARISON),
+                "mixed");
+        Proposition dividing = new Proposition.Truth(new DecisionSubject.AnInput(
+                TermPath.of("a")), true);
+        Proposition dividingNone = new Proposition.Truth(new DecisionSubject.AnInput(
+                TermPath.of("b")), true);
+        Proposition said = new Proposition.Truth(new DecisionSubject.AnInput(TermPath.of("s")),
+                true);
+        DecidingCase mixed = new DecidingCase(said, new DecidingCase.Cases.EachOf(List.of(
+                new DecidingCase.Cases.One(dividing), new DecidingCase.Cases.One(dividingNone),
+                new DecidingCase.Cases.MoreThanWereTakenApart())));
+        Set<Proposition> reached = Set.of(said, dividing);
+        ComparisonAssessment.Several read = new ComparisonAssessment.Several(List.of(
+                new ComparisonAssessment.Several.Part(at, line(), List.of(mixed))));
+
+        ComparisonAssessment.Several narrowed = assertInstanceOf(
+                ComparisonAssessment.Several.class,
+                ComparisonAssessment.narrowedByWhatArrives(read, untouched(), _ -> untouched(),
+                        condition -> reached.contains(condition) ? untouched()
+                                : new Reachability.NothingReaches(
+                                        new Reachability.TwoAtOnce.Truths(N)),
+                        List.of(new ComparisonArrival.NoProjection()), false, reading()));
+        BlockReason.WhereALineDecidesNotWorkedOut stopped =
+                new BlockReason.WhereALineDecidesNotWorkedOut(
+                        CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.figure());
+        assertEquals(List.of(
+                        new ComparisonAssessment.Several.Part(at, line(),
+                                List.of(DecidingCase.alone(dividing))),
+                        new ComparisonAssessment.Several.Part(at, new ComparisonAssessment.Unread(
+                                ComparisonAssessment.atEachOf(line().cutting().over(), stopped)),
+                                List.of())),
+                narrowed.parts(), "the line in the case that divides rows, and not worked out");
+        assertEquals(List.of(new WhereAPartDecides(at, dividing)),
+                narrowed.parts().stream().flatMap(part -> part.readings().stream()).toList(),
+                "a row is asked to be in the one case that divides rows and in no other");
+        assertTrue(narrowed.whatEachPlaceIsLeftWith().stream()
+                        .anyMatch(left -> left.why().equals(stopped)),
+                () -> "and the place says it was not worked out: "
+                        + narrowed.whatEachPlaceIsLeftWith());
     }
 
     /**
@@ -284,8 +334,8 @@ class ALineIsDroppedByAProofAtEveryPlaceItIsWatchedTest {
             assertEquals(List.of(new BlockReason.WhereALineDecidesNotWorkedOut(figures)),
                     List.copyOf(unread.why().values()),
                     () -> "not worked out at both figures, asked in the order " + cases);
-            assertEquals(Set.copyOf(cases), Set.copyOf(narrowed.parts().getFirst().cases()),
-                    "both cases nobody worked out");
+            assertEquals(List.of(), narrowed.parts().getFirst().cases(),
+                    "and no row is asked to be in either");
             assertEquals(List.of(figures), narrowed.whatEachPlaceIsLeftWith().stream()
                             .map(left -> assertInstanceOf(BlockReason.RuleReadingStopped.class,
                                     left.why()).figures())

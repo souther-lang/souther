@@ -737,10 +737,11 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
                      SaidOnTheWay said) {
             // And who put each entry there, beside the entries: every way that reaches the line
             // is one a row may come by, so what each says put an entry on it is said of the line.
-            saidByLine.merge(new ALine(states, Optional.empty()), said, SaidOnTheWay::and);
-            whereEachDecides.keySet().forEach(part ->
-                    saidByLine.merge(new ALine(states, Optional.of(part)), said,
-                            SaidOnTheWay::and));
+            // What put an entry on the way to one line, and not on the way to another read with
+            // it, is said of the first alone: {@code said} is told of the comparison and all of
+            // its lines together.
+            saidByLine.merge(new ALine(states, Optional.empty()), said.along(assumed),
+                    SaidOnTheWay::and);
             // A comparison inside a non-recursive helper is read once per call of it and each of
             // those calls is a construct of its own. A comparison inside a closure is the one the
             // author wrote, met through each copy an application of the closure makes. A run
@@ -754,6 +755,8 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
                 way.addAll(decides);
                 byLine.merge(new ALine(states, Optional.of(part)), List.copyOf(way),
                         Collected::commonTo);
+                saidByLine.merge(new ALine(states, Optional.of(part)), said.along(way),
+                        SaidOnTheWay::and);
             });
         }
 
