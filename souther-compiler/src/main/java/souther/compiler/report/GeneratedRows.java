@@ -904,7 +904,10 @@ public final class GeneratedRows {
         // What each place a row was looked for came to, and what the search met of this compiler's
         // where it met anything. This is where a class says what it came to, so a stop that named
         // no figure here named one nowhere.
-        for (CameToNothing each : filling.composed().unresolved()) {
+        // Joined under what the line shows, so two searches the line cannot tell apart are one
+        // line holding what both met rather than one line twice with half of it apiece.
+        for (CameToNothing each : CameToNothing.joinedAsShown(filling.composed().unresolved(),
+                GeneratedRows::shownForWhatItIsAbout)) {
             say(out, said, String.format("// no row for `%s` in `%s`: %s%n",
                     each.why().subject(), behavior, saidOf(each, rendering, places)));
         }
@@ -932,20 +935,27 @@ public final class GeneratedRows {
                 // a point a row already stands at — printed, it reads as a row missing where one
                 // is written. A rewrite is named for the finding as well: what it is about is two
                 // arms of one fork, and the search's words are where it looked for a row.
-                case GenerationOutcome.CannotGenerate cannot -> cannot.why().forEach(came ->
+                // And joined under what the line shows, which leaves out what a search was about
+                // where the line is named for the finding.
+                case GenerationOutcome.CannotGenerate cannot -> {
+                    boolean named = switch (each.finding().about()) {
+                        case About.AnArmNoRowGoesThrough _,
+                                About.ALineTheRowsDoNotTellFromAnother _,
+                                About.ARewriteNoRowTellsApart _,
+                                About.ARuleNoRowTakes _,
+                                About.ACombinationNoRowMakes _ -> true;
+                        default -> false;
+                    };
+                    for (CameToNothing came : CameToNothing.joinedAsShown(cannot.why(), named
+                            ? GeneratedRows::shownUnderItsFinding
+                            : GeneratedRows::shownForWhatItIsAbout)) {
                         say(out, saidOf, Owed.by(each.finding()), String.format(
                                 "// no row for %s in `%s`: %s%n",
-                                switch (each.finding().about()) {
-                                    case About.AnArmNoRowGoesThrough _,
-                                            About.ALineTheRowsDoNotTellFromAnother _,
-                                            About.ARewriteNoRowTellsApart _,
-                                            About.ARuleNoRowTakes _,
-                                            About.ACombinationNoRowMakes _ ->
-                                            called(each.finding(), db, module, rendering, places)
-                                                    .quoted();
-                                    default -> "`" + came.why().subject() + "`";
-                                },
-                                behavior, saidOf(came, rendering, places))));
+                                named ? called(each.finding(), db, module, rendering, places)
+                                        .quoted() : "`" + came.why().subject() + "`",
+                                behavior, saidOf(came, rendering, places)));
+                    }
+                }
                 // Told apart from the one above it in its own words. A strategy that tried and
                 // composed nothing and a finding nothing takes are different pieces of news: the
                 // first says what the attempt came to, and whether a row can be written at all is
@@ -1165,6 +1175,25 @@ public final class GeneratedRows {
     }
 
     /**
+     * What a line naming what a search was about is made from, beside what the search met: what
+     * it was about, its own sentence or its word ({@link #saidOf(Generator.UnresolvedCombination,
+     * SourceRendering, PublishedRuleHandle.WhereARuleIs)}), and what else its offer was short of
+     * ({@link #beside}). Changed with those and never apart from them.
+     */
+    static List<Object> shownForWhatItIsAbout(Generator.UnresolvedCombination why) {
+        return List.of(why.subject(), sentenceOrWord(why), why.alsoShort());
+    }
+
+    /** The same, of a line named for its finding, which does not say what the search was about. */
+    static List<Object> shownUnderItsFinding(Generator.UnresolvedCombination why) {
+        return List.of(sentenceOrWord(why), why.alsoShort());
+    }
+
+    private static Object sentenceOrWord(Generator.UnresolvedCombination why) {
+        return why.said().<Object>map(sentence -> sentence).orElse(why.reason());
+    }
+
+    /**
      * The same, of a search that says what it met of this compiler's.
      *
      * <p>What was met comes first and the word follows it, the same way round the report opens on
@@ -1176,7 +1205,7 @@ public final class GeneratedRows {
     private static String saidOf(CameToNothing came,
                                  SourceRendering rendering,
                                  PublishedRuleHandle.WhereARuleIs places) {
-        return Reasons.met(came.met()) + saidOf(came.why(), rendering, places);
+        return Reasons.met(came) + saidOf(came.why(), rendering, places);
     }
 
     /**

@@ -1,10 +1,12 @@
 package souther.compiler.partition;
 
-import java.util.ArrayList;
 import java.util.Collection;
+import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.SequencedMap;
+import java.util.Set;
+import java.util.function.Function;
 
 /**
  * What a search that composed nothing came back with.
@@ -20,19 +22,30 @@ import java.util.SequencedMap;
  * ({@link Generator.UnresolvedCombination.Reason#wordFor}), so a word that carried them would be
  * one answer kept twice and free to part from itself.
  *
- * @param why what the search says, in the words a report prints
- * @param met what of this compiler's it met, and nothing where it met nothing
+ * <p><b>What the search met and what it was handed are two things.</b> A figure that stopped the
+ * search is met on the way and the word is the answer of a search that did not finish. A figure
+ * that cut the plan the search ran over short, or left it no plan at all, is not met by the search:
+ * the search ran to the end of what it was handed, or never ran, and its word is about less than
+ * the point had. Both are numbers an author could raise, and a reader told the second as the first
+ * is told a search stopped that did not.
+ *
+ * @param why     what the search says, in the words a report prints
+ * @param met     what of this compiler's it met on the way, and nothing where it met nothing
+ * @param planCut the figures that cut short the plan it ran over, or left it none, and nothing
+ *                where it ran over the whole of the point
  */
-public record CameToNothing(Generator.UnresolvedCombination why, CompositionShortfall met) {
+public record CameToNothing(Generator.UnresolvedCombination why, CompositionShortfall met,
+                            Set<CompositionBudget> planCut) {
 
     public CameToNothing {
         if (why == null) {
             throw new IllegalArgumentException("a search that came to nothing says what happened");
         }
-        if (met == null) {
-            throw new IllegalArgumentException(
-                    "a search says what of this compiler's it met, or that it met none: " + why);
+        if (met == null || planCut == null) {
+            throw new IllegalArgumentException("a search says what of this compiler's it met and"
+                    + " what cut its plan short, or that there was none: " + why);
         }
+        planCut = Set.copyOf(planCut);
     }
 
     /**
@@ -54,18 +67,33 @@ public record CameToNothing(Generator.UnresolvedCombination why, CompositionShor
      * <p>In the order the words were first met, which is the order a search met them in.
      */
     public static List<CameToNothing> joined(Collection<CameToNothing> all) {
-        SequencedMap<Generator.UnresolvedCombination, CompositionShortfall> under =
-                new LinkedHashMap<>();
-        for (CameToNothing each : all) {
-            under.merge(each.why(), each.met(), CompositionShortfall::and);
-        }
-        List<CameToNothing> out = new ArrayList<>();
-        under.forEach((why, met) -> out.add(new CameToNothing(why, met)));
-        return List.copyOf(out);
+        return joinedAsShown(all, why -> why);
     }
 
     /**
-     * One that met nothing of this compiler's on the way.
+     * The same law, for a reader that shows less of a word than the word holds.
+     *
+     * <p>Two words that differ only in what a reader does not show are one word to that reader,
+     * and written as two they are one sentence said twice with half of what was met apiece. So a
+     * reader joins under what it shows, and what each met adds up under it as it does under the
+     * whole word. The word kept is the first one's, which differs from the rest only in what is not
+     * shown.
+     *
+     * @param shown what the reader's sentence for a word is made from — the parts of it the reader
+     *              prints, and not the sentence, which would join two words worded alike
+     */
+    public static List<CameToNothing> joinedAsShown(
+            Collection<CameToNothing> all,
+            Function<Generator.UnresolvedCombination, ?> shown) {
+        SequencedMap<Object, CameToNothing> under = new LinkedHashMap<>();
+        for (CameToNothing each : all) {
+            under.merge(shown.apply(each.why()), each, CameToNothing::and);
+        }
+        return List.copyOf(under.values());
+    }
+
+    /**
+     * One that met nothing of this compiler's on the way and was handed the whole of the point.
      *
      * <p>Named rather than left as the shorter of two constructors, so that a caller saying it is
      * saying it. A search that met a figure and was written this way is the figure dropped again,
@@ -73,6 +101,14 @@ public record CameToNothing(Generator.UnresolvedCombination why, CompositionShor
      * answer.
      */
     public static CameToNothing metNothing(Generator.UnresolvedCombination why) {
-        return new CameToNothing(why, CompositionShortfall.NONE);
+        return new CameToNothing(why, CompositionShortfall.NONE, Set.of());
+    }
+
+    /** This and another search with a word shown alike, as one answer holding what both met. */
+    private CameToNothing and(CameToNothing other) {
+        Set<CompositionBudget> cut = EnumSet.noneOf(CompositionBudget.class);
+        cut.addAll(planCut);
+        cut.addAll(other.planCut());
+        return new CameToNothing(why, met.and(other.met()), cut);
     }
 }

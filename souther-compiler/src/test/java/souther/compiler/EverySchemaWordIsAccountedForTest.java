@@ -28,7 +28,13 @@ import souther.compiler.query.ReplacementEvidence;
 import souther.compiler.query.RowDisposition;
 import souther.compiler.query.UnaskedReasons;
 import souther.compiler.query.WritabilityKnowledge;
+import souther.compiler.numeric.UnheldNumber;
+import souther.compiler.partition.CompositionBudget;
+import souther.compiler.partition.CompositionCapacity;
+import souther.compiler.partition.CompositionRepertoire;
+import souther.compiler.partition.Generator;
 import souther.compiler.partition.ReadingGap;
+import souther.compiler.partition.ReportedShortfall;
 import souther.compiler.partition.StandingAtAPoint;
 import souther.compiler.check.BehaviorContract;
 import souther.compiler.check.BehaviorImplementation;
@@ -482,33 +488,63 @@ class EverySchemaWordIsAccountedForTest {
             // And which answer it was. Its own field beside that one because the two are different
             // questions: whether a row is owed is what a bar and a count act on, and what the
             // search came to is what a page groups the rules it is not asking for by.
-            new Vocabulary("decision.obligations[].because",
+            new Vocabulary("decision.obligations[].because[]",
                     List.of("$defs", "decision", "properties", "obligations", "items",
-                            "properties", "because"),
+                            "properties", "because", "items"),
                     requirementBecauseWords()),
             // And what the composing fell short on, which is the other axis. Held against the
             // vocabulary every search of this compiler answers in, so a reason added there is
             // carried without anybody editing the schema by hand.
-            new Vocabulary("decision.obligations[].synthesisShortfall",
+            new Vocabulary("decision.obligations[].synthesisShortfalls[].reason",
                     List.of("$defs", "decision", "properties", "obligations", "items",
-                            "properties", "synthesisShortfall"),
-                    souther.compiler.partition.Generator.UnresolvedCombination.Reason.class),
+                            "properties", "synthesisShortfalls", "items", "properties", "reason"),
+                    Generator.UnresolvedCombination.Reason.class),
+            // And what each word's searches met of this compiler's, in the three vocabularies a
+            // search meets things in. Held against the types themselves, so a figure added to this
+            // compiler is one the document admits without anybody editing the schema by hand.
+            new Vocabulary("$defs.compositionBudget", List.of("$defs", "compositionBudget"),
+                    CompositionBudget.class),
+            new Vocabulary("decision.obligations[].synthesisShortfalls[].figures[]",
+                    List.of("$defs", "decision", "properties", "obligations", "items",
+                            "properties", "synthesisShortfalls", "items", "properties", "figures",
+                            "items"),
+                    CompositionBudget.class),
+            new Vocabulary("decision.obligations[].synthesisShortfalls[].planCut[]",
+                    List.of("$defs", "decision", "properties", "obligations", "items",
+                            "properties", "synthesisShortfalls", "items", "properties", "planCut",
+                            "items"),
+                    CompositionBudget.class),
+            new Vocabulary("decision.obligations[].synthesisShortfalls[].populations[]",
+                    List.of("$defs", "decision", "properties", "obligations", "items",
+                            "properties", "synthesisShortfalls", "items", "properties",
+                            "populations", "items"),
+                    CompositionRepertoire.class),
+            new Vocabulary("decision.obligations[].synthesisShortfalls[].unheld[].where",
+                    List.of("$defs", "decision", "properties", "obligations", "items",
+                            "properties", "synthesisShortfalls", "items", "properties", "unheld",
+                            "items", "properties", "where"),
+                    CompositionCapacity.Where.class),
+            new Vocabulary("decision.obligations[].synthesisShortfalls[].unheld[].why",
+                    List.of("$defs", "decision", "properties", "obligations", "items",
+                            "properties", "synthesisShortfalls", "items", "properties", "unheld",
+                            "items", "properties", "why"),
+                    UnheldNumber.class),
             // What the shortfall is attributed to, which is the axis the word above is not. Held
             // against the document's own vocabulary rather than against the shapes this compiler
             // records: what a consumer keys on is where an author goes about it, and how those are
             // arranged here is nothing a consumer was promised.
-            new Vocabulary("decision.obligations[].synthesisShortfallCauses[].attribution",
+            new Vocabulary("decision.obligations[].synthesisShortfalls[].causes[].attribution",
                     List.of("$defs", "decision", "properties", "obligations", "items",
-                            "properties", "synthesisShortfallCauses", "items",
-                            "properties", "attribution"),
-                    souther.compiler.partition.ReportedShortfall.Attribution.class),
+                            "properties", "synthesisShortfalls", "items", "properties", "causes",
+                            "items", "properties", "attribution"),
+                    ReportedShortfall.Attribution.class),
             // And which limit refused it, where one did. Apart from the reasons a reading stops,
             // which the entry beside this writes in the vocabulary `notRead` already has.
-            new Vocabulary("decision.obligations[].synthesisShortfallCauses[].limit",
+            new Vocabulary("decision.obligations[].synthesisShortfalls[].causes[].limit",
                     List.of("$defs", "decision", "properties", "obligations", "items",
-                            "properties", "synthesisShortfallCauses", "items",
-                            "properties", "limit"),
-                    souther.compiler.partition.ReportedShortfall.Limit.class),
+                            "properties", "synthesisShortfalls", "items", "properties", "causes",
+                            "items", "properties", "limit"),
+                    ReportedShortfall.Limit.class),
             new Vocabulary("findings[].kind",
                     List.of("$defs", "findings", "items", "properties", "kind"),
                     Adequacy.Kind.class),

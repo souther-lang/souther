@@ -1,7 +1,8 @@
 package souther.compiler.query;
 
 import souther.compiler.partition.CompositionAccount;
-import souther.compiler.partition.Generator;
+
+import java.util.List;
 
 /**
  * What one search of a rule of a decision came to.
@@ -93,15 +94,21 @@ public record RuleSettlement(RuleRequirement requirement, RuleSearch search,
         return new RuleSettlement(requirement, new RuleSearch.Composed(), account);
     }
 
-    /** A search whose composing produced no candidate, in the words the composing came back with. */
+    /**
+     * A search whose composings produced no candidate, in what they came back with.
+     *
+     * <p>Every way's answer and not the one a walk met first. Ways that had nothing to try are
+     * alike as an account of the rule, and what each of them met is not: one stopped at a figure
+     * and another walked some of a population leave an author two things to raise.
+     */
     public static RuleSettlement nothingToTryWith(
-            Generator.UnresolvedCombination why,
+            RuleSearch.CameToNothing came,
             CompositionAccount account) {
-        if (why == null) {
+        if (came == null) {
             throw new IllegalArgumentException("a composing that came to nothing says what of");
         }
         return new RuleSettlement(new RuleRequirement.Unsettled.NothingWasComposedToTry(),
-                RuleSearch.CameToNothing.by(why), account);
+                came, account);
     }
 
     /**
@@ -118,15 +125,16 @@ public record RuleSettlement(RuleRequirement requirement, RuleSearch search,
     }
 
     /**
-     * What the composing fell short on, or null where it did not fall short.
+     * What the composings fell short on, each word with what was met on the way to it, or nothing
+     * where they did not fall short.
      *
      * <p>A shortfall is a composing that came to nothing without settling anything, which is the
      * one of the three searches a reader can act on by raising what this compiler writes. A
      * composing that proved the rule leaves no value came to nothing and fell short of nothing, and
      * a search nobody made has nothing to say either.
      */
-    public Generator.UnresolvedCombination synthesisShortfall() {
+    public List<RuleSearch.Came> synthesisShortfalls() {
         return requirement instanceof RuleRequirement.Unsettled.NothingWasComposedToTry
-                && search instanceof RuleSearch.CameToNothing came ? came.only() : null;
+                && search instanceof RuleSearch.CameToNothing came ? came.ways() : List.of();
     }
 }

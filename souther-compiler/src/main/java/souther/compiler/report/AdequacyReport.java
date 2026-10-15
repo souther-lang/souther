@@ -103,6 +103,7 @@ import souther.compiler.query.RuleRequirement;
 import souther.compiler.query.RuleSearch;
 import souther.compiler.query.RuleSettlement;
 import souther.compiler.query.SearchOutcomes;
+import souther.compiler.query.SettledAcross;
 import souther.compiler.query.SettledAt;
 import souther.compiler.query.Weakening;
 import souther.compiler.query.WeakeningSet;
@@ -605,8 +606,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      *                  can open it says only that its writing module places it, so every one of
      *                  them would be one key — what makes the question whole is the rule it is
      *                  about, which is what a handle is
-     * @param ruleSettlements what the search came to about each rule no row took, with the place it
-     *                  was searched at, or empty where nothing asked it. Beside the findings rather
+     * @param ruleSettlements what the search came to about each rule no row took, with the places
+     *                  that answer it, or empty where nothing asked it. Beside the findings rather
      *                  than among them: a finding is an obligation and a rule nothing could show a
      *                  row for is owed none, while a page or a document that showed only the
      *                  findings would say a rule count and put fewer lines under it than the count
@@ -629,7 +630,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                                  Map<RuleCitation.Written, Citation> rulePlaces,
                                  Map<RuleSite, Citation> partPlaces,
                                  Map<DecisionReading.Ruled, List<ShownCondition>> ruleReadings,
-                                 Map<DecisionRule, SettledAt> ruleSettlements,
+                                 Map<DecisionRule, SettledAcross> ruleSettlements,
                                  Map<ObligationIdentity.OfACombinationOfDecisions,
                                          List<List<ShownCondition>>> combinationReadings,
                                  Map<RowRef, WhereARowIs.Shown> rowPlaces) {
@@ -1028,7 +1029,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // What the search of the rules no row took came to. Asked where the account asks it
             // and under the same guard, so a page costs a module nothing the findings did not
             // already pay for.
-            Map<DecisionRule, SettledAt> requirements = ruleSettlements(compilation, name,
+            Map<DecisionRule, SettledAcross> requirements = ruleSettlements(compilation, name,
                     behavior.name(),
                     decisions == null ? null : decisions.get(behavior.name()));
             // The measures this behavior was made of, held as one value before the page is: what
@@ -1148,7 +1149,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      */
     private static Map<DecisionReading.Ruled, List<ShownCondition>> ruleReadings(
             Compilation compilation, String module, String behavior, DecisionEvidence decision,
-            List<ReportedFinding> reported, Map<DecisionRule, SettledAt> settled) {
+            List<ReportedFinding> reported, Map<DecisionRule, SettledAcross> settled) {
         if (decision == null) {
             return Map.of();
         }
@@ -1160,9 +1161,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         }
         // And the rules nothing settled. What is owed no row is counted under its reason rather
         // than written out, so describing one would be work for a line nobody reads.
-        for (SettledAt each : settled.values()) {
-            if (each.settlement().requirement() instanceof RuleRequirement.Unsettled) {
-                about.add(each.at());
+        // Every place that answers it, since the page says each of them.
+        for (SettledAcross each : settled.values()) {
+            if (each.requirement() instanceof RuleRequirement.Unsettled) {
+                each.places().forEach(place -> about.add(place.at()));
             }
         }
         // And the rules only rows that do not hold take, which a page names the same way.
@@ -1310,13 +1312,15 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * missing a holder, and is raised rather than shown naming no call.
      */
     private static Map<ModelOccurrence, CopyShown> copiesShown(
-            Compilation compilation, String module, Map<DecisionRule, SettledAt> settled,
+            Compilation compilation, String module, Map<DecisionRule, SettledAcross> settled,
             List<BorderAssessment> lines, List<ReportedFinding> reported) {
         List<ModelOccurrence> copies = new ArrayList<>();
-        for (SettledAt each : settled.values()) {
-            copies.addAll(each.at().saidOnTheWay().copies());
-            for (RuleStep step : each.at().steps()) {
-                step.seen().forEach(seen -> seen.copy().ifPresent(copies::add));
+        for (SettledAcross rule : settled.values()) {
+            for (SettledAt each : rule.places()) {
+                copies.addAll(each.at().saidOnTheWay().copies());
+                for (RuleStep step : each.at().steps()) {
+                    step.seen().forEach(seen -> seen.copy().ifPresent(copies::add));
+                }
             }
         }
         for (BorderAssessment line : lines) {
@@ -1477,7 +1481,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * not a set of anything, and a rule this compiler never looked for a row at is not one it
      * looked for and did not find.
      */
-    private static Map<DecisionRule, SettledAt> ruleSettlements(Compilation compilation,
+    private static Map<DecisionRule, SettledAcross> ruleSettlements(Compilation compilation,
                                                                  String module,
                                                                  String behavior,
                                                                  DecisionEvidence decision) {
@@ -1485,7 +1489,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 || decision.notTakenByRows().isEmpty()) {
             return Map.of();
         }
-        Map<DecisionRule, SettledAt> settled = compilation.db()
+        Map<DecisionRule, SettledAcross> settled = compilation.db()
                 .ask(new Adequacy.DecisionSearch(module, behavior)).value();
         return settled == null ? Map.of() : settled;
     }
@@ -1583,22 +1587,24 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      */
     private static ConditionsShown conditionPlaces(
             Compilation compilation, String module, List<BorderAssessment> lines,
-            Map<DecisionRule, SettledAt> settled, List<ReportedFinding> reported) {
+            Map<DecisionRule, SettledAcross> settled, List<ReportedFinding> reported) {
         Map<ConditionReportAnchor, Citation> places = new LinkedHashMap<>();
         // What a search for a rule of the decision was arrived at without, which is named on the
         // decision's own line and is about the same conditions the points below name. Every
         // search's, and not the ones a page prints: which of them is worth a sentence is decided
         // where the sentence is written, for the reason above. Of the place each search was made
         // at, which is the only place whose conditions it went without.
-        for (SettledAt came : settled.values()) {
-            for (ConditionGap gap : came.leftOut()) {
-                // Asked as an answer that may be missing. What a way met is not always something
-                // the readings hold a place for — a shape this compiler had no words for is one —
-                // and a reader is owed the word for such a condition whether or not there is
-                // somewhere to send them.
-                Citation at = Sites.placeIfKnown(compilation.db(), gap.anchor());
-                if (at != null) {
-                    places.putIfAbsent(gap.anchor(), at);
+        for (SettledAcross rule : settled.values()) {
+            for (SettledAt came : rule.places()) {
+                for (ConditionGap gap : came.leftOut()) {
+                    // Asked as an answer that may be missing. What a way met is not always
+                    // something the readings hold a place for — a shape this compiler had no words
+                    // for is one — and a reader is owed the word for such a condition whether or
+                    // not there is somewhere to send them.
+                    Citation at = Sites.placeIfKnown(compilation.db(), gap.anchor());
+                    if (at != null) {
+                        places.putIfAbsent(gap.anchor(), at);
+                    }
                 }
             }
         }
@@ -4032,21 +4038,29 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         // decide it is the reader — a row written by hand, a reason the way cannot be taken, a
         // model written differently — and every one of those starts from which way it is and what
         // the search went without on it.
+        //
+        // One entry per place the rule is stated at that the model leaves open. Each was searched
+        // along its own way — a helper's rule stands once per call of it — and what one search
+        // came to and went without is not what another did, nor where an author would write the
+        // row for it.
         for (DecisionReading.Stated stated : decision.read().stated()) {
-            SettledAt came = behavior.ruleSettlements().get(stated.rule());
-            if (came == null
-                    || !(came.settlement().requirement() instanceof RuleRequirement.Unsettled)) {
+            SettledAcross rule = behavior.ruleSettlements().get(stated.rule());
+            if (rule == null || !(rule.requirement() instanceof RuleRequirement.Unsettled)) {
                 continue;
             }
-            out.append(String.format("      ? nothing could show a row can be written at a"
-                    + " decision rule — %s%n", whatItCameTo(came.settlement(), rendering,
-                            behavior.rulePlace()).text()));
-            // The place the search was made at, which is the one whose conditions it went without.
-            for (ShownCondition read : behavior.readingsOf(came.at())) {
-                out.append(String.format("          · %s%n", said(read, declaredIn, rendering)));
-            }
-            for (String left : leftOut(came, behavior, rendering, declaredIn)) {
-                out.append(String.format("          · not composed against: %s%n", left));
+            for (SettledAt came : rule.places()) {
+                out.append(String.format("      ? nothing could show a row can be written at a"
+                        + " decision rule — %s%n", whatItCameTo(came.settlement(), rendering,
+                                behavior.rulePlace()).text()));
+                // The place the search was made at, which is the one whose conditions it went
+                // without.
+                for (ShownCondition read : behavior.readingsOf(came.at())) {
+                    out.append(String.format("          · %s%n",
+                            said(read, declaredIn, rendering)));
+                }
+                for (String left : leftOut(came, behavior, rendering, declaredIn)) {
+                    out.append(String.format("          · not composed against: %s%n", left));
+                }
             }
         }
         // And the rules the model owes no row, counted rather than listed. There is nothing for a
@@ -4117,14 +4131,17 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         Set<Said> order = new java.util.TreeSet<>(Said.IN_ORDER);
         Map<String, Integer> counted = new LinkedHashMap<>();
         int all = 0;
-        // Each rule once, however many places state it: what is counted is the rules.
+        // Each rule once, however many places state it: what is counted is the rules. And said with
+        // what left each of its places no row, each once — the model may leave two calls of a
+        // helper no row for two different reasons, and the first place's alone would be one of
+        // them.
         for (DecisionReading.Stated stated : decision.read().stated()) {
-            SettledAt came = behavior.ruleSettlements().get(stated.rule());
-            if (came == null
-                    || !(came.settlement().requirement() instanceof RuleRequirement.Excluded)) {
+            SettledAcross rule = behavior.ruleSettlements().get(stated.rule());
+            if (rule == null || !(rule.requirement() instanceof RuleRequirement.Excluded)) {
                 continue;
             }
-            Said said = said(came, rendering, places, behavior.conditionPlaces(), declaredIn);
+            Said said = everyReason(rule.places().stream().map(came -> said(came, rendering,
+                    places, behavior.conditionPlaces(), declaredIn)).toList());
             order.add(said);
             counted.merge(said.text(), 1, Integer::sum);
             all++;
@@ -4148,6 +4165,23 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     }
 
     /**
+     * What every place of one rule says, each once, said where the first of them is said.
+     *
+     * <p>The first is the place the rule's answer was read off, so the rule is counted where that
+     * answer is; the rest are what left its other places no row, which a reader is owed as much.
+     */
+    static Said everyReason(List<Said> atEach) {
+        List<String> reasons = new ArrayList<>();
+        atEach.forEach(each -> {
+            if (!reasons.contains(each.text())) {
+                reasons.add(each.text());
+            }
+        });
+        return new Said(atEach.getFirst().family(), atEach.getFirst().within(),
+                String.join("; ", reasons));
+    }
+
+    /**
      * What one answer of the search says, and where it is said among the others.
      *
      * <p>The order travels with the sentence because the two are one decision. Kept beside it, a
@@ -4159,7 +4193,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * is that kind's own order to give — asked of {@link PublicationOrders} the way every other
      * plurality this report says together is.
      */
-    private record Said(int family, int within, String text) {
+    record Said(int family, int within, String text) {
 
         /**
          * The order these are said in: by what kind of answer, then within it.
@@ -4218,10 +4252,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     new Said(0, 1, "a row was composed and run, and what it was composed against"
                             + " was less than the way asks");
             case RuleRequirement.Unsettled.NothingWasComposedToTry _ ->
-                    new Said(1, PublicationOrders.positionOf(
-                                    came.synthesisShortfall().reason()),
-                            GeneratedRows.beside(saidOrWhy(came.synthesisShortfall()),
-                                    came.synthesisShortfall(), rendering, places));
+                    nothingToTry(came.synthesisShortfalls(), rendering, places);
             case RuleRequirement.Unsettled.CouldNotTellWhereTheRowWent(var reading) ->
                     new Said(2, PublicationOrders.positionOf(reading), switch (reading) {
                         case NO_RULE_IS_RECOGNISABLE ->
@@ -4286,6 +4317,51 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     }
 
     /**
+     * What a rule nothing was composed to try is said as.
+     *
+     * <p>A clause per word, each opening on what its searches met of this compiler's, the way a
+     * point this compiler stopped at opens. Told the word first, a reader has already read a search
+     * that had everything and reached nothing; told the figure first, they read the word as the
+     * answer of a search that did not finish, and know what to raise.
+     *
+     * <p>One clause for each thing the page shows, holding what every word shown alike met
+     * ({@link #shownOnThePage}). Two words that differ in what the page leaves out would otherwise
+     * be one clause twice, each with half of the figures.
+     *
+     * <p>Where the sentence sits among the others is the first word's place, as for a proof.
+     */
+    static Said nothingToTry(List<RuleSearch.Came> came, SourceRendering rendering,
+                             PublishedRuleHandle.WhereARuleIs places) {
+        List<String> clauses = new ArrayList<>();
+        for (RuleSearch.Came each
+                : RuleSearch.Came.joinedAsShown(came, AdequacyReport::shownOnThePage)) {
+            clauses.add(Reasons.met(each.figures(), each.populations(), each.unheld(),
+                    each.planCut())
+                    + GeneratedRows.beside(saidOrWhy(each.why()), each.why(), rendering, places));
+        }
+        return new Said(1, PublicationOrders.positionOf(came.get(0).why().reason()),
+                String.join("; ", clauses));
+    }
+
+    /**
+     * What the page's sentence for a word is made from: its own sentence where it said one, the
+     * word and what it is about where it did not ({@link #saidOrWhy}), and what else the offer was
+     * short of ({@link GeneratedRows#beside}). Changed with those two and never apart from them.
+     */
+    static List<Object> shownOnThePage(Generator.UnresolvedCombination why) {
+        return why.said().isPresent() ? List.of(why.said().get(), why.alsoShort())
+                : List.of(why.reason(), why.subject(), why.alsoShort());
+    }
+
+    /**
+     * What the document's entry for a word is made from: the word and the causes of its offer
+     * ({@link #synthesisShortfalls}). Not the sentence beside the word, and not what it is about.
+     */
+    static List<Object> shownInTheDocument(Generator.UnresolvedCombination why) {
+        return List.of(why.reason(), why.alsoShort());
+    }
+
+    /**
      * What a rule the composings proved no value takes is said as.
      *
      * <p>A clause per word and never one per way. How many ways came back with a word is how many
@@ -4298,13 +4374,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     private static Said proved(RuleSearch.CameToNothing proofs, SourceRendering rendering,
                                PublishedRuleHandle.WhereARuleIs places) {
         List<String> clauses = new ArrayList<>();
-        for (Generator.UnresolvedCombination why : proofs.ways()) {
-            String clause = GeneratedRows.beside(saidOrWhy(why), why, rendering, places);
-            if (!clauses.contains(clause)) {
-                clauses.add(clause);
-            }
+        for (RuleSearch.Came proof
+                : RuleSearch.Came.joinedAsShown(proofs.ways(), AdequacyReport::shownOnThePage)) {
+            Generator.UnresolvedCombination why = proof.why();
+            clauses.add(GeneratedRows.beside(saidOrWhy(why), why, rendering, places));
         }
-        return new Said(7, PublicationOrders.positionOf(proofs.ways().get(0).reason()),
+        return new Said(7, PublicationOrders.positionOf(proofs.ways().get(0).why().reason()),
                 String.join("; ", clauses));
     }
 
@@ -7412,30 +7487,29 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // Whether a row is owed here at all, where something asked. Beside `taken` and not
             // folded into it: a rule no row took and nothing could show a row for is not a gap,
             // and a consumer reading `taken` alone would count it as one.
-            SettledAt settled = behavior.ruleSettlements().get(stated.rule());
-            RuleSettlement came = settled == null ? null : settled.settlement();
-            if (came != null) {
-                one.put("requirement", wire(came.requirement()));
+            SettledAcross settled = behavior.ruleSettlements().get(stated.rule());
+            if (settled != null) {
+                one.put("requirement", wire(settled.requirement()));
                 // And which answer it was, rule by rule. The page counts the rules the model owes
                 // no row under their reason rather than writing one line apiece, so a consumer that
                 // could not tell two of them apart could not arrive at the page from this document
                 // — and a projection nobody can take is the two surfaces agreeing by coincidence.
-                String because = because(came.requirement());
-                if (because != null) {
-                    one.put("because", because);
+                //
+                // Of every place that answers it, each once. This document names a rule and not
+                // the places it is stated at, so what the places came to is said of the rule —
+                // and the first place's alone would leave out what the others came to.
+                List<String> because = becauseOf(settled);
+                List<RuleSearch.Came> shortfalls = shortfallsOf(settled);
+                if (!because.isEmpty()) {
+                    ArrayNode words = one.putArray("because");
+                    because.forEach(words::add);
                 }
                 // And what the composing managed, which is a different axis and gets a field of
                 // its own. A row this compiler could not compose is its shortfall and says nothing
                 // about whether the model owes one there, so a consumer reading `requirement` is
                 // never handed a generator's failure as the answer to that question.
-                if (came.synthesisShortfall() != null) {
-                    one.put("synthesisShortfall", word(came.synthesisShortfall().reason()));
-                    // And why the offer it was refusing was not everything the rules leave, where
-                    // anything made it short. Beside the word and not spelled into it: the word is
-                    // what the search came to and this is what it was given to try, and a consumer
-                    // told the first alone counts a rule this compiler never read as a rule the
-                    // values were refused by.
-                    causes(one, came.synthesisShortfall(), sources, behavior.rulePlace());
+                if (!shortfalls.isEmpty()) {
+                    synthesisShortfalls(one, shortfalls, sources, behavior.rulePlace());
                 }
             }
         }
@@ -7512,6 +7586,88 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 }
             }
         });
+    }
+
+    /**
+     * How every place that answers a rule came to its answer, each word once, in the order the
+     * places answer it — the requirement's own first. Nothing for a rule something stood in, whose
+     * answer is the row.
+     */
+    static List<String> becauseOf(SettledAcross rule) {
+        List<String> out = new ArrayList<>();
+        for (SettledAt place : rule.places()) {
+            String word = because(place.settlement().requirement());
+            if (word != null && !out.contains(word)) {
+                out.add(word);
+            }
+        }
+        return out;
+    }
+
+    /**
+     * What the composings at every place of a rule came back with where they had nothing to try,
+     * place after place. Joined as the document shows them where they are written
+     * ({@link #synthesisShortfalls}), which tells no place from another.
+     */
+    static List<RuleSearch.Came> shortfallsOf(SettledAcross rule) {
+        List<RuleSearch.Came> out = new ArrayList<>();
+        rule.places().forEach(place -> out.addAll(place.settlement().synthesisShortfalls()));
+        return out;
+    }
+
+    /**
+     * What the composings for a rule came back with where none had a candidate to try, one entry
+     * for each thing the document shows of a word ({@link #shownInTheDocument}).
+     *
+     * <p>Each word with what its searches met of this compiler's, in the document's own words: a
+     * figure that stopped one, a figure that cut short the plan one ran over, a population one
+     * writes some of, and a number one could not hold. A word alone sends a consumer to rewrite a
+     * rule where a figure was the whole of it.
+     *
+     * <p>Two words the document shows alike are one entry holding what both met. The document
+     * says neither the sentence beside a word nor what it is about, so written as two, a consumer
+     * reads one entry twice and cannot say what makes them two.
+     *
+     * <p>And why the offer each was refusing was not everything the rules leave, where anything
+     * made it short. Beside the word and not spelled into it: the word is what the search came to
+     * and this is what it was given to try, and a consumer told the first alone counts a rule this
+     * compiler never read as a rule the values were refused by. On the entry and not beside the
+     * list, because it is that word's offer it is about.
+     *
+     * <p>Every array absent where it would be empty, so an entry with no {@code figures} is one
+     * that met no figure rather than one nobody asked.
+     */
+    private static void synthesisShortfalls(ObjectNode into, List<RuleSearch.Came> came,
+                                            DocumentSources sources,
+                                            PublishedRuleHandle.WhereARuleIs places) {
+        ArrayNode all = into.putArray("synthesisShortfalls");
+        for (RuleSearch.Came each
+                : RuleSearch.Came.joinedAsShown(came, AdequacyReport::shownInTheDocument)) {
+            ObjectNode one = all.addObject();
+            one.put("reason", word(each.why().reason()));
+            if (!each.figures().isEmpty()) {
+                ArrayNode figures = one.putArray("figures");
+                each.figures().written().forEach(figure -> figures.add(word(figure)));
+            }
+            if (!each.planCut().isEmpty()) {
+                ArrayNode planCut = one.putArray("planCut");
+                each.planCut().written().forEach(figure -> planCut.add(word(figure)));
+            }
+            if (!each.populations().isEmpty()) {
+                ArrayNode populations = one.putArray("populations");
+                each.populations().written()
+                        .forEach(population -> populations.add(word(population)));
+            }
+            if (!each.unheld().isEmpty()) {
+                ArrayNode unheld = one.putArray("unheld");
+                for (CompositionCapacity number : each.unheld().written()) {
+                    ObjectNode said = unheld.addObject();
+                    said.put("where", word(number.where()));
+                    said.put("why", word(number.why()));
+                }
+            }
+            causes(one, each.why(), sources, places);
+        }
     }
 
     /**

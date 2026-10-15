@@ -143,11 +143,11 @@ class HowManyCandidatesFitIsADecisionOverTheCasesTest {
                 .mapToObj(each -> "W" + each).toList();
         for (List<String> candidates : List.of(THREE, many)) {
             Compilation compilation = measured(model(candidates, candidates));
-            Map<DecisionRule, SettledAt> searched = compilation.db()
+            Map<DecisionRule, SettledAcross> searched = compilation.db()
                     .ask(new Adequacy.DecisionSearch("probe.clues", "f")).value();
             assertEquals(3, searched.size(), () -> "each way is searched: " + searched);
             searched.forEach((rule, settled) -> assertInstanceOf(RuleRequirement.Required.class,
-                    settled.settlement().requirement(),
+                    settled.requirement(),
                     () -> "a row is composed and seen taking " + rule + " among "
                             + candidates.size() + " candidates"));
         }

@@ -3480,7 +3480,7 @@
           },
           "taken" : false,
           "requirement" : "unsettled",
-          "because" : "a_composed_row_was_short_of_the_way"
+          "because" : [ "a_composed_row_was_short_of_the_way" ]
         }, {
           "obligationId" : {
             "behavior" : "apportion",
@@ -4477,7 +4477,7 @@
           },
           "taken" : false,
           "requirement" : "unsettled",
-          "because" : "a_composed_row_was_short_of_the_way"
+          "because" : [ "a_composed_row_was_short_of_the_way" ]
         }, {
           "obligationId" : {
             "behavior" : "apportionExactly",

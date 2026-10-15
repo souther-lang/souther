@@ -70,7 +70,7 @@ class ADemandNoRegionCarriesIsNotComposedAgainstTest {
         assertFalse(behavior.ruleSettlements().isEmpty(),
                 "the body decides, so it has rules a row is looked for at");
         behavior.ruleSettlements().forEach((rule, at) -> {
-            RuleSettlement settled = at.settlement();
+            RuleSettlement settled = at.answer().settlement();
             assertInstanceOf(RuleRequirement.Unsettled.NothingWasComposedToTry.class,
                     settled.requirement(),
                     () -> "nothing was composed for " + rule + ": " + settled);
@@ -99,7 +99,7 @@ class ADemandNoRegionCarriesIsNotComposedAgainstTest {
     /** The reasons a search that came to nothing came back with. */
     private static List<Generator.UnresolvedCombination.Reason> reasons(RuleSettlement settled) {
         return settled.search() instanceof RuleSearch.CameToNothing(var ways)
-                ? ways.stream().map(Generator.UnresolvedCombination::reason).toList()
+                ? ways.stream().map(each -> each.why().reason()).toList()
                 : List.of();
     }
 

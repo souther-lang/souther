@@ -219,17 +219,40 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
      *  one. */
     public List<OnTheWay.Declined> declined() {
         List<OnTheWay.Declined> out = new ArrayList<>();
-        declined(onTheWay, out);
+        for (OnTheWay each : stated()) {
+            if (each instanceof OnTheWay.Declined left) {
+                out.add(left);
+            }
+        }
         return List.copyOf(out);
     }
 
-    private static void declined(List<OnTheWay> entries, List<OnTheWay.Declined> into) {
+    /**
+     * Every condition the way states, in the order it states them: a condition of several ways,
+     * and after it what each of its alternatives states, in the order they are kept.
+     *
+     * <p>The one walk of the way's conditions that goes inside an alternative, so that a reader
+     * placing something on the way and a reader asking what it declined go inside it alike. Placed
+     * by the conditions on top alone, two conditions inside one alternative and inside another
+     * would be at no place of the way, and what came of them in whatever order it was put
+     * together in.
+     */
+    public List<OnTheWay> stated() {
+        List<OnTheWay> out = new ArrayList<>();
+        stated(onTheWay, out);
+        return List.copyOf(out);
+    }
+
+    private static void stated(List<OnTheWay> entries, List<OnTheWay> into) {
         for (OnTheWay each : entries) {
+            into.add(each);
             switch (each) {
-                case OnTheWay.Declined left -> into.add(left);
                 case OnTheWay.OneOf several ->
-                        several.alternatives().forEach(one -> declined(one, into));
-                case OnTheWay.TakenIn _, OnTheWay.Narrowed _, OnTheWay.Settled _ -> { }
+                        several.alternatives().forEach(one -> stated(one, into));
+                // A narrowing's alternatives are the cases it leaves, each made afresh as a
+                // narrowing to that case; they state nothing the narrowing did not.
+                case OnTheWay.Narrowed _, OnTheWay.Declined _, OnTheWay.TakenIn _,
+                     OnTheWay.Settled _ -> { }
             }
         }
     }

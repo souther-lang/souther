@@ -168,9 +168,10 @@ class WhatTheOfferWasShortOfReachesTheAccountTest {
 
         assertFalse(owed.isEmpty(), "both ways of this body had nothing composed to try");
         for (JsonNode each : owed) {
-            assertEquals("all_candidates_rejected", each.get("synthesisShortfall").stringValue(),
+            JsonNode word = onlyShortfall(each);
+            assertEquals("all_candidates_rejected", word.get("reason").stringValue(),
                     () -> "every value the rules leave was tried: " + each);
-            assertNull(each.get("synthesisShortfallCauses"),
+            assertNull(word.get("causes"),
                     () -> "and nothing was short of anything: " + each);
         }
         assertFalse(whereNothingCouldShowARow(human(NOTHING_WAS_SHORT)).contains("gave none of"),
@@ -194,10 +195,12 @@ class WhatTheOfferWasShortOfReachesTheAccountTest {
         for (String document : List.of(json(model(NOTHING_READS_IT)),
                 json(model(MORE_THAN_A_WITNESS_MAY_SPEND)), json(NOTHING_WAS_SHORT))) {
             for (JsonNode owed : withAShortfall(document)) {
-                JsonNode causes = owed.get("synthesisShortfallCauses");
-                if (causes != null) {
-                    causes.forEach(seen::add);
-                }
+                owed.get("synthesisShortfalls").forEach(word -> {
+                    JsonNode causes = word.get("causes");
+                    if (causes != null) {
+                        causes.forEach(seen::add);
+                    }
+                });
             }
         }
 
@@ -342,7 +345,7 @@ class WhatTheOfferWasShortOfReachesTheAccountTest {
         JsonNode behaviors = JSON.readTree(document).get("modules").get(0).get("behaviors");
         List<JsonNode> found = new ArrayList<>();
         behaviors.forEach(behavior -> behavior.get("decision").get("obligations").forEach(rule -> {
-            if (rule.get("synthesisShortfall") != null) {
+            if (rule.get("synthesisShortfalls") != null) {
                 found.add(rule);
             }
         }));
@@ -356,13 +359,20 @@ class WhatTheOfferWasShortOfReachesTheAccountTest {
         return found.get(0);
     }
 
+    /** The one word a rule's searches came back with, where these models have one. */
+    private static JsonNode onlyShortfall(JsonNode rule) {
+        JsonNode words = rule.get("synthesisShortfalls");
+        assertEquals(1, words.size(), () -> "the searches came back with one word: " + words);
+        return words.get(0);
+    }
+
     private static String shortfallWord(String document) {
-        return unsettled(document).get("synthesisShortfall").stringValue();
+        return onlyShortfall(unsettled(document)).get("reason").stringValue();
     }
 
     /** The one thing that gave that search's offer no value. */
     private static JsonNode onlyCause(String document) {
-        JsonNode causes = unsettled(document).get("synthesisShortfallCauses");
+        JsonNode causes = onlyShortfall(unsettled(document)).get("causes");
         assertNotNull(causes, "the offer was short of something");
         assertEquals(1, causes.size(), () -> "one rule gave it no value: " + causes);
         return causes.get(0);

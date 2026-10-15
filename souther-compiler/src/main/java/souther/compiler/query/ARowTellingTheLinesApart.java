@@ -16,6 +16,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Set;
 import java.util.Map;
 import java.util.Optional;
 
@@ -232,7 +233,7 @@ public record ARowTellingTheLinesApart(List<AtOneReading> each) {
      * <p>Exhaustive with no {@code default}, so an outcome added later is answered here rather than
      * inheriting whichever answer sat under a catch-all.
      */
-    private static CameToNothing cameToNothing(ItemAssessment.Attempt attempt) {
+    static CameToNothing cameToNothing(ItemAssessment.Attempt attempt) {
         return switch (attempt) {
             // A row was composed, which is the answer above rather than a search that came to
             // nothing. And nothing could be built to look with, which is not the line's answer
@@ -242,15 +243,17 @@ public record ARowTellingTheLinesApart(List<AtOneReading> each) {
             case ItemAssessment.Attempt.Unresolved it -> CameToNothing.metNothing(it.why());
             case ItemAssessment.Attempt.Stopped it -> new CameToNothing(it.why(),
                     CompositionShortfall.of(it.stoppedBy().written(), it.notAllOf().written(),
-                            it.unheld().written()));
+                            it.unheld().written()), Set.of());
             case ItemAssessment.Attempt.Unexhausted it -> new CameToNothing(it.why(),
                     CompositionShortfall.of(List.of(), it.notAllOf().written(),
-                            it.unheld().written()));
+                            it.unheld().written()), Set.of());
+            // What limited it cut the plan it ran over short, which it did not meet on the way;
+            // what it wrote some of and could not hold, it did.
             case ItemAssessment.Attempt.Limited it -> new CameToNothing(it.why(),
-                    CompositionShortfall.of(it.limitedBy().written(), it.notAllOf().written(),
-                            it.unheld().written()));
+                    CompositionShortfall.of(List.of(), it.notAllOf().written(),
+                            it.unheld().written()), Set.copyOf(it.limitedBy().written()));
             case ItemAssessment.Attempt.Unplanned it -> new CameToNothing(it.why(),
-                    CompositionShortfall.of(it.limitedBy().written()));
+                    CompositionShortfall.NONE, Set.copyOf(it.limitedBy().written()));
         };
     }
 }
