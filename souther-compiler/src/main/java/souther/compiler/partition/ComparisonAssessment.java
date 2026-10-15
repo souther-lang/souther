@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.check.StatedComparison;
+import souther.compiler.check.UnreadComparison;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.Arrivals;
 import souther.compiler.diag.Citation;
@@ -264,18 +265,6 @@ sealed interface ComparisonAssessment {
             if (cutting == null) {
                 throw new IllegalArgumentException("a line outside the domain is still a line");
             }
-        }
-
-        /**
-         * What a place whose quantity a line does not reach is left with.
-         *
-         * <p>Said here once, for the two that say it: this assessment, at every coordinate of the
-         * quantity it read, and the filing of a name, at the one position it moved the line to
-         * and found short of it. The second is a fact about that position and not about the
-         * quantity the line was moved onto, whose other coordinates the line reaches elsewhere.
-         */
-        static BlockReason.RuleWithoutLineReason leaves() {
-            return new BlockReason.ComparisonCuttingOutsideDomain();
         }
     }
 
@@ -1135,7 +1124,7 @@ sealed interface ComparisonAssessment {
             case AgainstAnotherValue against ->
                     relatingAt(against.filedAt(), against.undivided());
             case CutsNothing _ -> sameAtEachPlace(new BlockReason.ComparisonCuttingNothing());
-            case OutsideTheDomain _ -> sameAtEachPlace(OutsideTheDomain.leaves());
+            case OutsideTheDomain _ -> sameAtEachPlace(UnreadComparison.outsideWhatTheQuantityHolds());
             // Not the reason above: there the declarations never run as far as the line, and here
             // they do — what stops short of it is the values that arrive at the comparison, ruled
             // out by the guards on the way. An author reading the first would look at one rule for

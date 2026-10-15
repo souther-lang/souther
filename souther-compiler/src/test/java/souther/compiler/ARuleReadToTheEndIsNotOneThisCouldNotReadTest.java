@@ -327,4 +327,160 @@ class ARuleReadToTheEndIsNotOneThisCouldNotReadTest {
                 "and nothing stands unanswered about a position no row reaches: "
                         + measured.weakening());
     }
+
+    /**
+     * An equality on a number taken of a position, which the reading of those numbers reads whole.
+     *
+     * <p>{@code String.length(name) == 2} names no end of the position's own order and no set of
+     * strings, so the reading of ends and the reading of values both have no word for it. It leaves
+     * the length the one value two, and that is read by the reading of the numbers an operation
+     * answers — which is a reading that took the rule in, and a report that said nothing did would
+     * send an author to a clause doing exactly what they wrote.
+     *
+     * <p>Whichever side the number is written on, since that is spelling.
+     *
+     * <p>The model's one row has a name of one letter, so it does not hold and the measurement is
+     * partial for that. What is asked here is the account of the rule alone.
+     */
+    @Test
+    void anEqualityOnANumberTakenOfAPositionIsMeasuredWhole() {
+        for (String clause : List.of("String.length(name) == 2", "2 == String.length(name)")) {
+            Measured measured = of("    invariant " + clause);
+
+            assertFalse(measured.kinds().contains("rule_unaccounted"), clause + ": "
+                    + measured.kinds());
+            assertFalse(measured.weakening().contains("question_unanswered"), clause + ": "
+                    + measured.weakening());
+            assertFalse(measured.says("written in a form this compiler does not read"),
+                    clause + "\n" + measured.human());
+        }
+    }
+
+    /**
+     * And it reports what the two bounds leaving the same length report, line for line.
+     *
+     * <p>The two clauses leave one set of lengths. What differs is what the comparison states — one
+     * names a value, the other places two ends — and that is no part of whether the rule was read
+     * or of what a row is owed.
+     */
+    @Test
+    void anEqualityReportsWhatTheTwoBoundsLeavingTheSameNumberReport() {
+        Measured named = of("    invariant String.length(name) == 2");
+        Measured bounded = of("    invariant String.length(name) >= 2 && String.length(name) <= 2");
+
+        assertEquals(bounded.human(), named.human());
+    }
+
+    /**
+     * And beside a bound it makes no difference to, which it was read in all the same.
+     *
+     * <p>The second conjunct moves no end the first has not already placed. That a rule is
+     * redundant is not that nothing read it.
+     */
+    @Test
+    void anEqualityARuleBesideItMakesRedundantIsStillRead() {
+        for (String clause : List.of(
+                "String.length(name) == 2 && String.length(name) <= 2",
+                "String.length(name) == 2 && String.length(name) == 2")) {
+            Measured measured = of("    invariant " + clause);
+
+            assertFalse(measured.kinds().contains("rule_unaccounted"), clause + ": "
+                    + measured.kinds());
+            assertFalse(measured.weakening().contains("question_unanswered"), clause + ": "
+                    + measured.weakening());
+        }
+    }
+
+    /**
+     * And beside a conjunct another reading takes in, each part read by the reading that has a
+     * word for it.
+     *
+     * <p>{@code name /= "x"} is the values' and the equality is the numbers'. Neither reading reads
+     * both, and the rule is still read whole, part by part — as the same rule with the equality
+     * written as two bounds is.
+     */
+    @Test
+    void anEqualityBesideAConjunctAnotherReadingTakesInIsRead() {
+        for (String clause : List.of(
+                "name /= \"x\" && String.length(name) == 2",
+                "String.length(name) == 2 && name /= \"x\"")) {
+            Measured measured = of("    invariant " + clause);
+
+            assertFalse(measured.kinds().contains("rule_unaccounted"), clause + ": "
+                    + measured.kinds() + "\n" + measured.human());
+        }
+    }
+
+    /**
+     * And one rule of two conjuncts is accounted for as the two written as two rules are.
+     *
+     * <p>Every conjunct read by some reading is what a conjunction needs, and not one reading that
+     * read them all. Asked the second way, {@code name == "ab"} read by the values and the
+     * equality read by the numbers an operation answers left the one rule as read by nothing while
+     * the same two clauses written apart were each read.
+     */
+    @Test
+    void aConjunctionOfTwoReadingsIsAccountedForAsTheTwoRulesWrittenApartAre() {
+        Measured together = of("    invariant name == \"ab\" && String.length(name) == 2");
+        Measured apart = of("    invariant name == \"ab\"\n"
+                + "    invariant String.length(name) == 2");
+
+        assertFalse(together.kinds().contains("rule_unaccounted"), together.human());
+        assertEquals(apart.kinds().contains("rule_unaccounted"),
+                together.kinds().contains("rule_unaccounted"));
+        assertEquals(apart.weakening().contains("question_unanswered"),
+                together.weakening().contains("question_unanswered"));
+    }
+
+    /**
+     * Of any operation answering a number of a position, and not of a string's length.
+     *
+     * <p>The reading is of the numbers an operation answers, and the length of a list is one.
+     */
+    @Test
+    void anEqualityOnTheLengthOfAListIsMeasuredWhole() {
+        Compilation compilation = Compilation.ofSource("""
+                module m
+
+                data Pair = List<Int>
+                    invariant List.length(value) == 2
+
+                behavior first : (p: Pair) -> Int
+                let first (p) = 0
+
+                example first
+                    | "one" : (Pair([1, 2])) -> 0
+                """, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        String human = AdequacyReport.of(compilation)
+                .human(SourceRendering.namedByIdentity(compilation.texts()));
+
+        assertFalse(human.contains("not accounted for"), human);
+        assertTrue(human.contains("measurement: complete"), human);
+    }
+
+    /**
+     * And only where the whole of what the rule states is what that reading holds.
+     *
+     * <p>Under a choice it holds the run between what the alternatives leave, which is not the rule:
+     * {@code == 2 || == 4} leaves no length three, and a reading holding every length from two to
+     * four did not read it. Beside a conjunct nothing reads, the rule is half read. And a
+     * disequality leaves a hole that reading has no word for. Each of these is a rule this compiler
+     * is short of, and is said so.
+     */
+    @Test
+    void anEqualityThatIsNotTheWholeOfWhatTheRuleStatesIsNotReadByIt() {
+        for (String clause : List.of(
+                "String.length(name) == 2 || String.length(name) == 4",
+                "String.length(name) <= 1 || String.length(name) >= 3",
+                "String.length(name) == 2 && String.length(name) <= 3 - 0",
+                "String.length(name) /= 2",
+                "name /= \"x\" && String.length(name) /= 2")) {
+            Measured measured = of("    invariant " + clause);
+
+            assertTrue(measured.kinds().contains("rule_unaccounted"), clause + ": "
+                    + measured.kinds() + "\n" + measured.human());
+        }
+    }
 }

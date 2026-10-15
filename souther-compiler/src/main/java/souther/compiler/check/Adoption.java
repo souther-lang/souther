@@ -95,9 +95,15 @@ record Adoption<A, L extends ReadingLanguage>(Set<A> read, Set<A> settled, Set<A
         }
     }
 
+    /** What every clause a reading has no word for comes to, made once: it holds nothing of any
+     *  position, so one of them serves every name a position has and every reading. */
+    private static final Adoption<?, ?> NOTHING =
+            new Adoption<>(Set.of(), Set.of(), Set.of(), false, Set.of());
+
     /** What a clause this reading has no word for comes to. */
+    @SuppressWarnings("unchecked")
     static <A, L extends ReadingLanguage> Adoption<A, L> nothing() {
-        return new Adoption<>(Set.of(), Set.of(), Set.of(), false, Set.of());
+        return (Adoption<A, L>) NOTHING;
     }
 
     /**
@@ -191,6 +197,14 @@ record Adoption<A, L extends ReadingLanguage>(Set<A> read, Set<A> settled, Set<A
      * nothing about {@code x} — so an opening reached here outlives the conjunction it is under.
      */
     Adoption<A, L> both(Adoption<A, L> other) {
+        // Beside an account of nothing, a conjunction is the other account: every set here is a
+        // union and the flag is an or, and nothing adds nothing to either.
+        if (other == NOTHING) {
+            return this;
+        }
+        if (this == NOTHING) {
+            return other;
+        }
         return new Adoption<>(union(read, other.read), union(settled, other.settled),
                 union(missed, other.missed), hasUnreadPart || other.hasUnreadPart,
                 union(opened, other.opened));
@@ -215,6 +229,25 @@ record Adoption<A, L extends ReadingLanguage>(Set<A> read, Set<A> settled, Set<A
         });
         return new Adoption<>(constrained, union(settled, other.settled),
                 union(missed, other.missed), hasUnreadPart || other.hasUnreadPart, nowOpen);
+    }
+
+    /**
+     * Either part holding, for a reading whose state has no join that keeps what a choice says.
+     *
+     * <p>Every position either branch was about is one this reading missed. That is not a choice
+     * being something such a reading cannot read: what it holds of a choice is an envelope, and an
+     * envelope does not in general show the choice exact. Two alternatives naming one length each
+     * leave every length between them, and a rule that names two lengths read as the run between
+     * them is not read whole. Taken from either branch's account instead, the choice would be
+     * credited to a reading that holds a different set from the one the rule states. A join that
+     * kept what a choice says would be the place to take some of them in.
+     *
+     * <p>What a dead alternative settled stays settled. Such a choice is composed at {@link #both}
+     * and never arrives here, and a dead branch deeper in either side still imposes nothing.
+     */
+    Adoption<A, L> eitherWithoutAJoin(Adoption<A, L> other) {
+        return new Adoption<>(Set.of(), union(settled, other.settled),
+                union(union(read, missed), union(other.read, other.missed)), true, Set.of());
     }
 
     /** Whether this reading settled what the whole of the clause does to {@code position}. */
