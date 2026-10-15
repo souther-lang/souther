@@ -787,7 +787,8 @@ public final class Generator {
                              ALTERNATIVES_A_PATH_TRIES,
                              // They stop the working out of where a line decides, and what they
                              // stopped is carried as a line nobody worked out, naming them.
-                             CASES_A_LINE_IS_TAKEN_APART_INTO, CASES_A_LINE_IS_ASKED_IN,
+                             STEPS_A_STATEMENT_IS_READ_IN, CASES_A_LINE_IS_TAKEN_APART_INTO,
+                             CASES_A_LINE_IS_ASKED_IN,
                              // Past either the way is looked along whole, the row is composed
                              // either way, and what was not looked along is carried with the row's
                              // account.

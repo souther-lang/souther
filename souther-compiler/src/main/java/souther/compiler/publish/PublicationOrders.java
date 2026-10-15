@@ -343,7 +343,9 @@ public final class PublicationOrders {
                     CompositionBudget.PARTS_A_DERIVATION_CONCLUDES,
                     CompositionBudget.ALTERNATIVES_A_PATH_TRIES,
                     // After the reading of a condition, as the reading of where one line of a
-                    // statement it made decides: the cases taken apart, then each of them asked.
+                    // statement it made decides: the statement read, the cases taken apart, then
+                    // each of them asked.
+                    CompositionBudget.STEPS_A_STATEMENT_IS_READ_IN,
                     CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO,
                     CompositionBudget.CASES_A_LINE_IS_ASKED_IN,
                     CompositionBudget.DEPTH_A_CONSTRUCTION_PLAN_DESCENDS));

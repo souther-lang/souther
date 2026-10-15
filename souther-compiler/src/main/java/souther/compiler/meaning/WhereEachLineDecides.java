@@ -6,9 +6,10 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.partition.CompositionBudget;
 
 import java.util.ArrayList;
-import java.util.Arrays;
+import java.util.BitSet;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -48,26 +49,6 @@ import java.util.TreeMap;
  * can be in it, which is asked of the rows and not here.
  */
 public final class WhereEachLineDecides {
-
-    /**
-     * How many distinct parts a statement can have and still be read part against part.
-     *
-     * <p>Every way the parts can come out is asked, which doubles with each part. Past this, where a
-     * line decides is said as one case: the statement with the line held against the statement with
-     * it failing, which is the same condition with nothing taken apart for a reader to compose
-     * against.
-     */
-    private static final int MOST_PARTS_READ_TOGETHER = 12;
-
-    /**
-     * How many places parts stand at, over every way the parts can come out, the statement is read
-     * at before it is said as one case instead.
-     *
-     * <p>The work of reading it part against part is every way times every place a part stands, and
-     * a statement can be long over few parts as readily as short over many. Bounded by the parts
-     * alone, a statement written out over a dozen of them took as long to read as a module.
-     */
-    private static final long MOST_PLACES_READ = 1L << 17;
 
     /**
      * How many cases where a line decides is said in before it is said as one.
@@ -117,11 +98,21 @@ public final class WhereEachLineDecides {
      * that one, and two things no element is at once but two elements are would read as a
      * statement no row turns. So a relation that stands inside several quantifiers is a line in
      * each of them, and decides wherever it decides in any.
+     *
+     * <p>Read with every part a quantifier holds that is about no element it chose said outside it
+     * ({@link Lifting}), so that each part is one part of what it stands in. Where that is more
+     * than is read, nothing is taken apart, and every line is where its statement turns, said for
+     * cases nobody took apart.
      */
     public static List<Decides> in(Proposition writtenAs) {
         Map<String, Proposition.Compared> lines = new TreeMap<>();
         Map<String, List<List<List<DecidingCase>>>> standings = new TreeMap<>();
-        read(writtenAs, writtenAs, null, List.of(), lines, standings);
+        Proposition lifted = new Lifting().of(writtenAs);
+        if (lifted != null) {
+            read(lifted, lifted, null, List.of(), true, lines, standings);
+        } else {
+            read(writtenAs, writtenAs, null, List.of(), false, lines, standings);
+        }
         List<Decides> out = new ArrayList<>();
         lines.forEach((key, line) -> out.add(new Decides(line,
                 whereItStands(line, casesOf(standings.get(key))))));
@@ -308,27 +299,33 @@ public final class WhereEachLineDecides {
      * what it stands in.
      *
      * <p>A relation inside a quantifier and not about the element it chose is about the row, and
-     * stands wherever it is written — so it is asked of the statement whole, every quantifier it
-     * stands in moved with it.
+     * stands wherever it is written. Lifted out of the quantifier, it is a part of what holds the
+     * quantifier and is read there; only where the statement was more than is lifted does it stand
+     * inside one still, and then it is asked of the statement whole, every quantifier it stands in
+     * moved with it — as nothing taken apart, since nothing is.
      *
      * @param whole   the statement as written
      * @param element the container whose element {@code stated} is said of, or null where
      *                {@code stated} is the statement itself
      * @param around  where each quantifier {@code stated} is inside turns what holds it
+     * @param lifted  whether every part a quantifier holds that is about no element it chose was
+     *                said outside it ({@link Lifting}), and so whether the statement is read at all
      */
     private static void read(Proposition stated, Proposition whole, DecisionSubject element,
-                             List<List<DecidingCase>> around,
+                             List<List<DecidingCase>> around, boolean lifted,
                              Map<String, Proposition.Compared> lines,
                              Map<String, List<List<List<DecidingCase>>>> standings) {
-        Reading reading = Reading.of(stated);
+        Reading reading = lifted ? Reading.of(stated) : Reading.unread(stated);
         for (Proposition part : reading.named()) {
             if (part instanceof Proposition.Compared line) {
                 List<List<DecidingCase>> factors = new ArrayList<>(around);
                 if (element == null || line.mayTurnOnAnElementOf(element)) {
                     factors.add(reading.turnsOn(line));
+                } else if (lifted) {
+                    throw new IllegalStateException(line + " is about no element of " + element
+                            + ", and was not lifted out of the quantifier over it");
                 } else {
-                    factors = List.of(List.of(
-                            DecidingCase.alone(heldAgainstItsDenial(whole, line))));
+                    factors = List.of(Reading.unread(whole).turnsOn(line));
                 }
                 lines.putIfAbsent(line.key(), line);
                 standings.computeIfAbsent(line.key(), k -> new ArrayList<>()).add(factors);
@@ -336,14 +333,189 @@ public final class WhereEachLineDecides {
                     && statesARelation(some.ofTheElement())) {
                 List<List<DecidingCase>> inside = new ArrayList<>(around);
                 inside.add(reading.turnsOn(some));
-                read(some.ofTheElement(), whole, some.container(), inside, lines, standings);
+                read(some.ofTheElement(), whole, some.container(), inside, lifted, lines,
+                        standings);
             }
         }
     }
 
     /**
-     * One statement read part against part: the parts it joins, each place one stands, and what
-     * it comes to every way they can come out — or no table where that is more than is read.
+     * A statement with every part a quantifier holds that is about no element it chose said outside
+     * the quantifier — or nothing, where that is more than is said.
+     *
+     * <p>Such a part is the same thing of the same row whichever element the quantifier looks at,
+     * so some element meeting what holds it is that part holding and some element meeting the rest
+     * with it held, or the part failing and some element meeting the rest with it failing. Said that
+     * way, the part is one part of what the quantifier stands in, beside the quantifier and the
+     * others there, and the quantifiers left ask of their element alone. Read as a part of the
+     * quantifier instead, the quantifier is one part and the part inside it is not, and where it
+     * also stands outside, the two places are one part the statement cannot hold still at one and
+     * move at the other.
+     *
+     * <p>A part about no element of an inner quantifier and about an element of an outer one is
+     * said outside the inner one and inside the outer one, which is what it is about.
+     *
+     * <p>Said without taking cases where the statement lets it be: some element meeting one of
+     * several things is some element meeting the first or some meeting another, and some element
+     * meeting a part of the row and the rest is that part and some element meeting the rest. Only a
+     * part of the row under a choice the element makes, as in {@code (p || e) && (q || f)}, is said
+     * once held and once failing.
+     *
+     * <p>Each place a quantifier said writes out is a step against
+     * {@link CompositionBudget#STEPS_A_STATEMENT_IS_READ_IN}: saying it is writing what it holds
+     * again. A quantifier with several parts of the row under choices of what its element meets is
+     * said once for every way they come out, which doubles with each of them.
+     */
+    private static final class Lifting {
+
+        private int left = CompositionBudget.STEPS_A_STATEMENT_IS_READ_IN.maximum();
+
+        /** {@code stated}, every quantifier in it said this way — itself where none has a part to
+         *  say outside, and null where the steps ran out. */
+        Proposition of(Proposition stated) {
+            return switch (stated) {
+                case Proposition.All all -> {
+                    List<Proposition> parts = each(all.parts());
+                    yield parts == null ? null
+                            : parts == all.parts() ? stated : Proposition.all(parts);
+                }
+                case Proposition.Any any -> {
+                    List<Proposition> parts = each(any.parts());
+                    yield parts == null ? null
+                            : parts == any.parts() ? stated : Proposition.any(parts);
+                }
+                case Proposition.Some some -> {
+                    Proposition element = of(some.ofTheElement());
+                    if (element == null) {
+                        yield null;
+                    }
+                    if (element == some.ofTheElement()
+                            && aboutNoElement(element, some.container()) == null) {
+                        yield stated;
+                    }
+                    Proposition said = some(some.container(), element);
+                    yield said == null ? null : some.holds() ? said : said.denied();
+                }
+                default -> stated;
+            };
+        }
+
+        /** Each of {@code parts} said this way — {@code parts} itself where none changed, and null
+         *  where the steps ran out. */
+        private List<Proposition> each(List<Proposition> parts) {
+            List<Proposition> out = new ArrayList<>();
+            boolean changed = false;
+            for (Proposition part : parts) {
+                Proposition said = of(part);
+                if (said == null) {
+                    return null;
+                }
+                changed |= said != part;
+                out.add(said);
+            }
+            return changed ? out : parts;
+        }
+
+        /** Some element of {@code container} meeting {@code element}, with every part of
+         *  {@code element} about no element of it said outside — {@code element} already said
+         *  this way inside. */
+        private Proposition some(DecisionSubject container, Proposition element) {
+            long places = placesIn(element);
+            if (places > left) {
+                left = 0;
+                return null;
+            }
+            left -= (int) places;
+            return switch (element) {
+                case Proposition.Always(boolean always) when !always -> element;
+                case Proposition.Any any -> {
+                    List<Proposition> each = new ArrayList<>();
+                    for (Proposition one : any.parts()) {
+                        Proposition said = some(container, one);
+                        if (said == null) {
+                            yield null;
+                        }
+                        each.add(said);
+                    }
+                    yield Proposition.any(each);
+                }
+                case Proposition.All all -> {
+                    List<Proposition> ofTheRow = new ArrayList<>();
+                    List<Proposition> rest = new ArrayList<>();
+                    all.parts().forEach(part -> (part.mayTurnOnAnElementOf(container) ? rest
+                            : ofTheRow).add(part));
+                    if (ofTheRow.isEmpty()) {
+                        yield eachWay(container, all);
+                    }
+                    Proposition said = some(container, Proposition.all(rest));
+                    if (said == null) {
+                        yield null;
+                    }
+                    ofTheRow.add(said);
+                    yield Proposition.all(ofTheRow);
+                }
+                // One part, about the element or not; what holds everywhere is about none, and
+                // some element meeting it is the container holding one.
+                default -> element.mayTurnOnAnElementOf(container)
+                        ? new Proposition.Some(container, element, true)
+                        : Proposition.all(List.of(element, new Proposition.Some(container,
+                                new Proposition.Always(true), true)));
+            };
+        }
+
+        /**
+         * Some element meeting {@code all}, every part of which may be about the element: said
+         * once with the first part of the row inside it held, and once with it failing.
+         *
+         * <p>A conjunction holds no part that comes out one way for every row, since joining one
+         * leaves it out ({@link Proposition#all}), so the part taken is one that is held and fails,
+         * and each way leaves a statement without it.
+         */
+        private Proposition eachWay(DecisionSubject container, Proposition.All all) {
+            Proposition row = aboutNoElement(all, container);
+            if (row == null) {
+                return new Proposition.Some(container, all, true);
+            }
+            Proposition held = some(container, with(all, row, true));
+            if (held == null) {
+                return null;
+            }
+            Proposition failing = some(container, with(all, row, false));
+            if (failing == null) {
+                return null;
+            }
+            return Proposition.any(List.of(Proposition.all(List.of(row, held)),
+                    Proposition.all(List.of(row.denied(), failing))));
+        }
+
+        /** How many places a part stands at in {@code stated}, inside the quantifiers it holds as
+         *  well: what saying a quantifier over it again writes out. */
+        private static long placesIn(Proposition stated) {
+            return switch (stated) {
+                case Proposition.All all -> all.parts().stream().mapToLong(Lifting::placesIn).sum();
+                case Proposition.Any any -> any.parts().stream().mapToLong(Lifting::placesIn).sum();
+                case Proposition.Some some -> 1 + placesIn(some.ofTheElement());
+                default -> 1;
+            };
+        }
+
+        /** The first part of {@code element}, held, about no element of {@code container}, or
+         *  null where every part may be. */
+        private static Proposition aboutNoElement(Proposition element,
+                                                  DecisionSubject container) {
+            Map<String, Proposition> parts = new TreeMap<>();
+            gather(element, parts, new TreeMap<>());
+            return parts.values().stream()
+                    .filter(part -> !part.mayTurnOnAnElementOf(container))
+                    .findFirst().orElse(null);
+        }
+    }
+
+    /**
+     * One statement read part against part: the parts it joins, each place one stands, and what it
+     * comes to every way they can come out ({@link WhatAStatementComesTo}) — or not read, where
+     * that took more steps than a statement is read in, or where the statement it stands in was
+     * more than is lifted ({@link Lifting}).
      */
     private static final class Reading {
 
@@ -351,74 +523,164 @@ public final class WhereEachLineDecides {
         private final List<Proposition> named;
         private final Map<String, Integer> index;
         private final Map<String, Literal> leaves;
-        private final boolean[] table;
-        private final boolean[] possible;
+        /** Whether the statement was lifted, so that each part is one part of it. */
+        private final boolean lifted;
+        private final WhatAStatementComesTo ways;
+        /** What the statement comes to, or {@link WhatAStatementComesTo#NOT_WORKED_OUT}. */
+        private final int whole;
+        /** Which ways the parts can come out together ({@link #possible}). */
+        private final int possible;
+        /** The values the statement asks the case of more than once, which are what leaves some
+         *  ways out of {@link #possible} and what the statement is read under the cases of. */
+        private final List<AskedTwice> twice;
         /** Whether some part has asked for the statement under each case of a value. */
         private boolean readUnderEachCase;
         /** The statement under each case of a value, once some part asked for it — null where it
          *  asks no value's case twice. */
         private List<UnderACase> underEachCase;
 
-        private Reading(Proposition stated, List<Proposition> named, Map<String, Integer> index,
-                        Map<String, Literal> leaves, boolean[] table, boolean[] possible) {
+        private Reading(Proposition stated, boolean lifted) {
             this.stated = stated;
-            this.named = named;
-            this.index = index;
-            this.leaves = leaves;
-            this.table = table;
-            this.possible = possible;
+            this.lifted = lifted;
+            // In the order they first stand, which keeps the parts one conjunction or disjunction
+            // joins next to each other: asked in that order, a statement of several such joined
+            // together is left as few statements as it has joins, where asked with the parts of
+            // each apart it is left as a different one for every way the earlier ones come out.
+            Map<String, Proposition> parts = new LinkedHashMap<>();
+            this.leaves = new TreeMap<>();
+            gather(stated, parts, leaves);
+            this.named = List.copyOf(parts.values());
+            this.index = new TreeMap<>();
+            for (int i = 0; i < named.size(); i++) {
+                index.put(named.get(i).key(), i);
+            }
+            this.twice = askedTwice(named);
+            this.ways = new WhatAStatementComesTo();
+            if (!lifted) {
+                this.whole = WhatAStatementComesTo.NOT_WORKED_OUT;
+                this.possible = WhatAStatementComesTo.NOT_WORKED_OUT;
+                return;
+            }
+            WhatAStatementComesTo.Asking asking =
+                    ways.asking(CompositionBudget.STEPS_A_STATEMENT_IS_READ_IN.maximum());
+            int comesTo = comesTo(stated, asking);
+            int canBe = possible(twice, asking);
+            boolean read = comesTo >= 0 && canBe >= 0;
+            this.whole = read ? comesTo : WhatAStatementComesTo.NOT_WORKED_OUT;
+            this.possible = read ? canBe : WhatAStatementComesTo.NOT_WORKED_OUT;
         }
 
-        /** The parts the statement joins, held, in the order of their spellings. */
+        /** {@code stated} read, lifted. */
+        static Reading of(Proposition stated) {
+            return new Reading(stated, true);
+        }
+
+        /** {@code stated}, its parts named and nothing read of it. */
+        static Reading unread(Proposition stated) {
+            return new Reading(stated, false);
+        }
+
+        /** The parts the statement joins, held, in the order they first stand in it. */
         List<Proposition> named() {
             return named;
         }
 
-        static Reading of(Proposition stated) {
-            Map<String, Proposition> parts = new TreeMap<>();
-            Map<String, Literal> leaves = new TreeMap<>();
-            gather(stated, parts, leaves);
-            List<Proposition> named = List.copyOf(parts.values());
-            Map<String, Integer> index = new TreeMap<>();
-            for (int i = 0; i < named.size(); i++) {
-                index.put(named.get(i).key(), i);
+        /** What {@code stated} comes to as a statement of {@link #ways}, built by {@code asking}. */
+        private int comesTo(Proposition stated, WhatAStatementComesTo.Asking asking) {
+            return switch (stated) {
+                case Proposition.All all -> {
+                    int out = WhatAStatementComesTo.ALWAYS;
+                    for (Proposition part : all.parts()) {
+                        out = asking.both(out, comesTo(part, asking));
+                    }
+                    yield out;
+                }
+                case Proposition.Any any -> {
+                    int out = WhatAStatementComesTo.NEVER;
+                    for (Proposition part : any.parts()) {
+                        out = asking.either(out, comesTo(part, asking));
+                    }
+                    yield out;
+                }
+                default -> {
+                    Literal leaf = leaves.get(stated.key());
+                    yield asking.part(index.get(leaf.part()), leaf.held());
+                }
+            };
+        }
+
+        /**
+         * Which ways the parts can come out together, as a statement of {@link #ways}.
+         *
+         * <p>Parts that say which cases one value of the input is are not free of each other: the
+         * value is one case, so a way is one a row can be only where some one case is in every set
+         * of cases held there and in none failing there. Kept in, a way where it is two at once is
+         * a way where a line decides or does not, and what tells it from the rest is asked as a
+         * part: {@code month.value <= minimum(term)} states its line at 12 where {@code term} is
+         * {@code OneYear} and its line at 24 where it is {@code TwoYear}, and with a way where it
+         * is both, the line at 12 decided only where the month is not above 24 as well.
+         *
+         * <p>The cases the parts name need not be every case of the value, so a value none of them
+         * names is a case as well: every way holding none of them is possible.
+         */
+        private int possible(List<AskedTwice> twice, WhatAStatementComesTo.Asking asking) {
+            int out = WhatAStatementComesTo.ALWAYS;
+            for (AskedTwice value : twice) {
+                List<Integer> parts = value.parts();
+                // Which of the parts hold for a value that is each case; and none of them for a
+                // value that is a case none of them names.
+                Set<Set<Integer>> holding = new LinkedHashSet<>();
+                holding.add(Set.of());
+                for (Refinement atom : value.atoms()) {
+                    Set<Integer> those = new HashSet<>();
+                    for (int each : parts) {
+                        if (((Proposition.InCases) named.get(each)).cases().atoms()
+                                .contains(atom)) {
+                            those.add(each);
+                        }
+                    }
+                    holding.add(those);
+                }
+                int ofTheValue = WhatAStatementComesTo.NEVER;
+                for (Set<Integer> those : holding) {
+                    int way = WhatAStatementComesTo.ALWAYS;
+                    for (int each : parts) {
+                        way = asking.both(way, asking.part(each, those.contains(each)));
+                    }
+                    ofTheValue = asking.either(ofTheValue, way);
+                }
+                out = asking.both(out, ofTheValue);
             }
-            boolean[] table = named.size() <= MOST_PARTS_READ_TOGETHER
-                    && (1L << named.size()) * placesIn(stated) <= MOST_PLACES_READ
-                    ? tabulated(stated, leaves, index, named.size()) : null;
-            return new Reading(stated, named, index, leaves, table,
-                    table == null ? null : possible(named));
+            return out;
         }
 
         /**
          * Where {@code part} turns the statement, as cases.
          *
-         * <p>The table holds each part as one thing that comes out one way, which a part standing
-         * as well inside a quantifier it is not about is not: there it is the same thing of the
-         * same row, and comes out the way the part does. Said as one case then, which moves it
-         * everywhere it stands.
+         * <p>Said one by one where the cases taken apart are as few as that. Where they are not —
+         * more cases than are said one by one, no one part telling them apart, or more steps than
+         * the statement is read in — the statement is read under each case of a value it asks the
+         * case of, which leaves out the ways where the value is two cases as the taking apart
+         * does.
          *
-         * <p>Where the table says nothing — there is none, or more cases than are said one by one
-         * — the statement is read under each case of a value it asks the case of, which leaves out
-         * the ways where the value is two cases as the table does; and only past that as one case.
-         *
-         * <p>Said as one, it stands for the cases it is said for: the ones the table was taken
-         * apart into, or the ones read under each case of a value — or, where the table holds more
-         * than are taken apart, the fact that there were more.
+         * <p>Past both, where the line decides is said as one case, the statement with the line
+         * held against the statement with it failing, standing for the cases it is said for: the
+         * ones taken apart, as far as a line is taken apart into, or the ones read under each case
+         * of a value — or, where neither came to the end, cases nobody took apart, naming the
+         * figure that stopped it.
          */
         List<DecidingCase> turnsOn(Proposition part) {
-            if (insideAWholeQuantifier(stated, part)) {
-                return List.of(DecidingCase.alone(heldAgainstItsDenial(stated, part)));
-            }
-            // Taken apart as far as is said one by one first, and further only where nothing short
-            // of that says them: every case found walks the table again.
-            OffTheTable few = offTheTable(part, MOST_CASES);
-            if (few instanceof OffTheTable.Taken(var cases)) {
+            // Taken apart once, as far as a line is: a case costs what tells it from the rest
+            // and not a walk of every way, so a second taking apart past the first few would
+            // only find those again.
+            TakenApart taken = takenApart(part,
+                    CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.maximum());
+            if (taken instanceof TakenApart.Taken(var cases) && cases.size() <= MOST_CASES) {
                 return cases.stream().map(each -> DecidingCase.alone(Proposition.all(each)))
                         .toList();
             }
-            if (!readUnderEachCase) {
-                underEachCase = WhereEachLineDecides.underEachCase(stated, named);
+            if (lifted && !readUnderEachCase) {
+                underEachCase = WhereEachLineDecides.underEachCase(stated, twice);
                 readUnderEachCase = true;
             }
             List<DecidingCase> ofAValue = underEachCase == null ? null
@@ -427,29 +689,114 @@ public final class WhereEachLineDecides {
                 return ofAValue;
             }
             Proposition said = heldAgainstItsDenial(stated, part);
-            if (few instanceof OffTheTable.MoreThan) {
-                switch (offTheTable(part,
-                        CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.maximum())) {
-                    case OffTheTable.Taken(var cases) -> {
-                        return List.of(new DecidingCase(said,
-                                DecidingCase.Cases.ofConjunctions(cases)));
-                    }
-                    case OffTheTable.MoreThan _ -> {
-                        return List.of(new DecidingCase(said,
-                                new DecidingCase.Cases.MoreThanWereTakenApart()));
-                    }
-                    case OffTheTable.NotSaidThisWay _ -> { }
-                }
+            if (taken instanceof TakenApart.Taken(var cases)) {
+                return List.of(new DecidingCase(said, DecidingCase.Cases.ofConjunctions(cases)));
             }
-            return List.of(ofAValue == null ? DecidingCase.alone(said)
-                    : new DecidingCase(said, DecidingCase.eachOf(ofAValue)));
+            if (ofAValue != null) {
+                return List.of(new DecidingCase(said, DecidingCase.eachOf(ofAValue)));
+            }
+            return List.of(new DecidingCase(said, new DecidingCase.Cases.NotTakenApart(
+                    switch (taken) {
+                        case TakenApart.MoreThan _ ->
+                                CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO;
+                        case TakenApart.RanOut _ -> CompositionBudget.STEPS_A_STATEMENT_IS_READ_IN;
+                        // No one part tells the cases apart only where some ways are left out of
+                        // what is possible, which only a value in twice leaves out; and
+                        // the statement is read under each case of the first of those.
+                        case TakenApart.ByNoOnePart _, TakenApart.Taken _ ->
+                                throw new IllegalStateException("where " + part + " decides in "
+                                        + stated + " was told apart by no one part, and the"
+                                        + " statement asks no value's case twice");
+                    })));
         }
 
-        /** Where {@code part} decides, as the table says it, taken apart into {@code most} cases
-         *  at most. */
-        private OffTheTable offTheTable(Proposition part, int most) {
-            return table == null ? new OffTheTable.NotSaidThisWay()
-                    : casesOf(table, possible, index.get(part.key()), named, most);
+        /** Where {@code part} decides, taken apart into {@code most} cases at most. */
+        private TakenApart takenApart(Proposition part, int most) {
+            if (whole < 0) {
+                return new TakenApart.RanOut();
+            }
+            WhatAStatementComesTo.Asking asking =
+                    ways.asking(CompositionBudget.STEPS_A_STATEMENT_IS_READ_IN.maximum());
+            int at = index.get(part.key());
+            int decides = asking.oneNotTheOther(asking.with(whole, at, true),
+                    asking.with(whole, at, false));
+            List<List<Proposition>> cases = new ArrayList<>();
+            return switch (split(asking, decides, possible, new ArrayList<>(), most, cases)) {
+                case NOT -> new TakenApart.Taken(cases);
+                case PAST_THE_FIGURE -> new TakenApart.MoreThan();
+                case BY_NO_ONE_PART -> new TakenApart.ByNoOnePart();
+                case OUT_OF_STEPS -> new TakenApart.RanOut();
+            };
+        }
+
+        /**
+         * The cases under {@code asked}, {@code decides} and {@code possible} said with the parts
+         * in it come out as it says them — stopped as soon as
+         * there are more than {@code most}, so the limit bounds the work and not only what is
+         * kept.
+         *
+         * <p>The line decides at a way its other parts come out where the statement comes out
+         * differently with the line held and with it failing. The cases are taken by asking the
+         * other parts one at a time, in order, each only where what is left still turns on it: a
+         * part every way left decides under, or none does, says nothing more. Asked only of the
+         * ways the parts can come out together: what a way no row is comes to says nothing about
+         * where a row has to be.
+         *
+         * <p>Stopped as well where no one part tells the ways the line decides at from the rest.
+         * Every way being possible, some part always does; with ways no row is left out, the two
+         * may be apart in two parts at once, and the cases are not said this way.
+         */
+        private Stopped split(WhatAStatementComesTo.Asking asking, int decides, int possible,
+                              List<Proposition> asked, int most, List<List<Proposition>> into) {
+            int some = asking.both(decides, possible);
+            int notEvery = asking.both(asking.not(decides), possible);
+            if (some < 0 || notEvery < 0) {
+                return Stopped.OUT_OF_STEPS;
+            }
+            if (some == WhatAStatementComesTo.NEVER) {
+                return Stopped.NOT;
+            }
+            if (notEvery == WhatAStatementComesTo.NEVER) {
+                into.add(List.copyOf(asked));
+                return into.size() <= most ? Stopped.NOT : Stopped.PAST_THE_FIGURE;
+            }
+            // Only the parts where the line decides still asks: a part it does not ask turns
+            // nothing of it, and a part asked before and the line are none of them. With every
+            // way possible, the first it asks turns it, since it is held only where it does.
+            BitSet parts = possible == WhatAStatementComesTo.ALWAYS
+                    ? ways.firstPartAsked(decides) : ways.partsAsked(decides);
+            for (int part = parts.nextSetBit(0); part >= 0; part = parts.nextSetBit(part + 1)) {
+                int turns = splitsOn(asking, decides, possible, part);
+                if (turns < 0) {
+                    return Stopped.OUT_OF_STEPS;
+                }
+                if (turns == WhatAStatementComesTo.NEVER) {
+                    continue;
+                }
+                List<Proposition> held = new ArrayList<>(asked);
+                held.add(named.get(part));
+                Stopped holding = split(asking, asking.with(decides, part, true),
+                        asking.with(possible, part, true), held, most, into);
+                if (holding != Stopped.NOT) {
+                    return holding;
+                }
+                List<Proposition> failing = new ArrayList<>(asked);
+                failing.add(named.get(part).denied());
+                return split(asking, asking.with(decides, part, false),
+                        asking.with(possible, part, false), failing, most, into);
+            }
+            return Stopped.BY_NO_ONE_PART;
+        }
+
+        /** Where, between two ways both possible that differ in {@code part} alone, whether the
+         *  line decides differs: {@link WhatAStatementComesTo#NEVER} where nowhere. */
+        private static int splitsOn(WhatAStatementComesTo.Asking asking, int decides,
+                                    int possible, int part) {
+            return asking.both(
+                    asking.both(asking.with(possible, part, false),
+                            asking.with(possible, part, true)),
+                    asking.oneNotTheOther(asking.with(decides, part, false),
+                            asking.with(decides, part, true)));
         }
 
         /** Whether {@code quantifier} stands held somewhere in the statement. */
@@ -527,21 +874,6 @@ public final class WhereEachLineDecides {
                         chosen.stream().map(DecidingCase::standsFor).toList()));
     }
 
-    /** Whether {@code part} stands inside a quantifier {@code stated} joins that it is not about
-     *  the element of. */
-    private static boolean insideAWholeQuantifier(Proposition stated, Proposition part) {
-        return switch (stated) {
-            case Proposition.All all -> all.parts().stream()
-                    .anyMatch(each -> insideAWholeQuantifier(each, part));
-            case Proposition.Any any -> any.parts().stream()
-                    .anyMatch(each -> insideAWholeQuantifier(each, part));
-            case Proposition.Some some when !standsAs(some, part) ->
-                    !part.mayTurnOnAnElementOf(some.container())
-                            && !with(some.ofTheElement(), part, true).equals(some.ofTheElement());
-            default -> false;
-        };
-    }
-
     /** Whether {@code leaf} is {@code part}, held or denied. */
     private static boolean standsAs(Proposition leaf, Proposition part) {
         return leaf.getClass() == part.getClass() && held(leaf).key().equals(part.key());
@@ -601,55 +933,19 @@ public final class WhereEachLineDecides {
         return holds ? part : part.denied();
     }
 
-    /** How many places a part stands at in {@code stated}, each counted every time it stands. */
-    private static long placesIn(Proposition stated) {
-        return switch (stated) {
-            case Proposition.All all ->
-                    all.parts().stream().mapToLong(WhereEachLineDecides::placesIn).sum();
-            case Proposition.Any any ->
-                    any.parts().stream().mapToLong(WhereEachLineDecides::placesIn).sum();
-            default -> 1;
-        };
-    }
-
-    /** What {@code stated} comes to for every way its {@code count} parts can come out, the
-     *  {@code i}th part held where bit {@code i} is set. */
-    private static boolean[] tabulated(Proposition stated, Map<String, Literal> leaves,
-                                       Map<String, Integer> index, int count) {
-        boolean[] table = new boolean[1 << count];
-        for (int ways = 0; ways < table.length; ways++) {
-            table[ways] = holds(stated, leaves, index, ways);
-        }
-        return table;
-    }
-
-    private static boolean holds(Proposition stated, Map<String, Literal> leaves,
-                                 Map<String, Integer> index, int ways) {
-        return switch (stated) {
-            case Proposition.All all -> all.parts().stream()
-                    .allMatch(part -> holds(part, leaves, index, ways));
-            case Proposition.Any any -> any.parts().stream()
-                    .anyMatch(part -> holds(part, leaves, index, ways));
-            default -> {
-                Literal leaf = leaves.get(stated.key());
-                yield (((ways >> index.get(leaf.part())) & 1) == 1) == leaf.held();
-            }
-        };
-    }
-
     /**
-     * Where a line decides, as the table says it: the cases, each the parts it asks; more than
-     * were taken apart; or not said this way at all.
+     * Where a line decides, taken apart: the cases, each the parts it asks; more than were taken
+     * apart; no one part telling them apart; or more steps than a statement is read in.
      *
-     * <p>Three answers and not a list that is sometimes long and sometimes absent. More cases
-     * than a figure lets be taken apart is a stop at that figure, and a table that says them no
-     * way it can is something about the statement; told apart by how many cases came back, the
-     * two were one reading's guess about the other.
+     * <p>Four answers and not a list that is sometimes long and sometimes absent. More cases than a
+     * figure lets be taken apart and more steps than another lets be taken are stops at two
+     * figures, and ways that no one part tells apart are something about the statement; told
+     * apart by how many cases came back, they were one reading's guess about another.
      */
-    private sealed interface OffTheTable {
+    private sealed interface TakenApart {
 
         /** The cases, each the parts it asks. */
-        record Taken(List<List<Proposition>> cases) implements OffTheTable {
+        record Taken(List<List<Proposition>> cases) implements TakenApart {
 
             public Taken {
                 cases = List.copyOf(cases);
@@ -657,167 +953,26 @@ public final class WhereEachLineDecides {
         }
 
         /** More cases than were taken apart. */
-        record MoreThan() implements OffTheTable {}
+        record MoreThan() implements TakenApart {}
 
-        /** Not said off the table: there is none, or no one part tells where the line decides from
-         *  the rest ({@link #split}). */
-        record NotSaidThisWay() implements OffTheTable {}
+        /** No one part tells where the line decides from the rest ({@link Reading#split}). */
+        record ByNoOnePart() implements TakenApart {}
+
+        /** More steps than a statement is read in
+         *  ({@link CompositionBudget#STEPS_A_STATEMENT_IS_READ_IN}). */
+        record RanOut() implements TakenApart {}
     }
 
-    /**
-     * How a taking apart of the table ({@link #split}) stopped, where it did not come to the end.
-     */
+    /** How a taking apart ({@link Reading#split}) stopped, where it did not come to the end. */
     private enum Stopped {
         /** At the end, every case taken. */
         NOT,
         /** One case past the figure. */
         PAST_THE_FIGURE,
         /** Where no one part tells the ways the line decides at from the rest. */
-        BY_NO_ONE_PART
-    }
-
-    /**
-     * Where the {@code at}th part decides, read off what the statement comes to every way its parts
-     * can come out, taken apart into {@code most} cases at most.
-     *
-     * <p>The line decides at a way its other parts come out where the statement comes out
-     * differently with the line held and with it failing. The cases are taken by asking the other
-     * parts one at a time, in order, each only where what is left still turns on it: a part every
-     * way left decides under, or none does, says nothing more.
-     *
-     * <p>Asked only of the ways the parts can come out together ({@link #possible}): what a way no
-     * row is comes to says nothing about where a row has to be.
-     */
-    private static OffTheTable casesOf(boolean[] table, boolean[] possible, int at,
-                                       List<Proposition> named, int most) {
-        int line = 1 << at;
-        boolean[] decides = new boolean[table.length];
-        for (int ways = 0; ways < table.length; ways++) {
-            decides[ways] = (ways & line) == 0 && table[ways] != table[ways | line];
-        }
-        List<List<Proposition>> cases = new ArrayList<>();
-        return switch (split(decides, possible, line, 0, 0, new ArrayList<>(), named, at, most,
-                cases)) {
-            case NOT -> new OffTheTable.Taken(cases);
-            case PAST_THE_FIGURE -> new OffTheTable.MoreThan();
-            case BY_NO_ONE_PART -> new OffTheTable.NotSaidThisWay();
-        };
-    }
-
-    /**
-     * The cases under {@code asked}, the parts whose bits are {@code fixed} coming out as
-     * {@code values} says — stopped as soon as there are more than {@code most}, so the limit
-     * bounds the work and not only what is kept.
-     *
-     * <p>Stopped as well where no one part tells the ways the line decides at from the rest. Every
-     * way being possible, some part always does; with ways no row is left out, the two may be apart
-     * in two parts at once, and the cases are not said this way.
-     */
-    private static Stopped split(boolean[] decides, boolean[] possible, int line, int fixed,
-                                 int values, List<Proposition> asked, List<Proposition> named,
-                                 int at, int most, List<List<Proposition>> into) {
-        boolean some = false;
-        boolean every = true;
-        for (int ways = 0; ways < decides.length; ways++) {
-            if ((ways & line) == 0 && (ways & fixed) == values && possible[ways]) {
-                some |= decides[ways];
-                every &= decides[ways];
-            }
-        }
-        if (!some) {
-            return Stopped.NOT;
-        }
-        if (every) {
-            into.add(List.copyOf(asked));
-            return into.size() <= most ? Stopped.NOT : Stopped.PAST_THE_FIGURE;
-        }
-        for (int part = 0; part < named.size(); part++) {
-            int its = 1 << part;
-            if (part == at || (fixed & its) != 0
-                    || !turnsOn(decides, possible, line, fixed, values, its)) {
-                continue;
-            }
-            List<Proposition> held = new ArrayList<>(asked);
-            held.add(named.get(part));
-            Stopped holding = split(decides, possible, line, fixed | its, values | its, held,
-                    named, at, most, into);
-            if (holding != Stopped.NOT) {
-                return holding;
-            }
-            List<Proposition> failing = new ArrayList<>(asked);
-            failing.add(named.get(part).denied());
-            return split(decides, possible, line, fixed | its, values, failing, named, at, most,
-                    into);
-        }
-        return Stopped.BY_NO_ONE_PART;
-    }
-
-    /** Whether, the parts at {@code fixed} coming out as {@code values}, where the line decides
-     *  turns on the part at {@code its} between two ways both possible. */
-    private static boolean turnsOn(boolean[] decides, boolean[] possible, int line, int fixed,
-                                   int values, int its) {
-        for (int ways = 0; ways < decides.length; ways++) {
-            if ((ways & line) == 0 && (ways & its) == 0 && (ways & fixed) == values
-                    && possible[ways] && possible[ways | its]
-                    && decides[ways] != decides[ways | its]) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    /**
-     * Which ways the parts can come out together, the {@code i}th part held where bit {@code i}
-     * is set.
-     *
-     * <p>Parts that say which cases one value of the input is are not free of each other: the
-     * value is one case, so a way is one a row can be only where some one case is in every set of
-     * cases held there and in none failing there. Kept in the table, a way where it is two at once
-     * is a way where a line decides or does not, and what tells it from the rest is asked as a
-     * part: {@code month.value <= minimum(term)} states its line at 12 where {@code term} is
-     * {@code OneYear} and its line at 24 where it is {@code TwoYear}, and with a way where it is
-     * both, the line at 12 decided only where the month is not above 24 as well.
-     *
-     * <p>The cases the parts name need not be every case of the value, so a value none of them
-     * names is a case as well: every way holding none of them is possible.
-     */
-    private static boolean[] possible(List<Proposition> named) {
-        Map<DecisionSubject, List<Integer>> byValue = new LinkedHashMap<>();
-        for (int i = 0; i < named.size(); i++) {
-            if (named.get(i) instanceof Proposition.InCases cases && oneValueOfTheRow(cases)) {
-                byValue.computeIfAbsent(cases.of(), _ -> new ArrayList<>()).add(i);
-            }
-        }
-        boolean[] out = new boolean[1 << named.size()];
-        Arrays.fill(out, true);
-        for (List<Integer> parts : byValue.values()) {
-            if (parts.size() < 2) {
-                continue;
-            }
-            List<Refinement> atoms = new ArrayList<>();
-            for (int each : parts) {
-                ((Proposition.InCases) named.get(each)).cases().atoms().stream()
-                        .filter(atom -> !atoms.contains(atom)).forEach(atoms::add);
-            }
-            // Which of the parts hold for a value that is each case, as bits; and none of them
-            // for a value that is a case none of them names.
-            Set<Integer> holding = new HashSet<>();
-            holding.add(0);
-            for (Refinement atom : atoms) {
-                int bits = 0;
-                for (int each : parts) {
-                    if (((Proposition.InCases) named.get(each)).cases().atoms().contains(atom)) {
-                        bits |= 1 << each;
-                    }
-                }
-                holding.add(bits);
-            }
-            int mask = parts.stream().mapToInt(each -> 1 << each).reduce(0, (a, b) -> a | b);
-            for (int ways = 0; ways < out.length; ways++) {
-                out[ways] &= holding.contains(ways & mask);
-            }
-        }
-        return out;
+        BY_NO_ONE_PART,
+        /** Out of steps. */
+        OUT_OF_STEPS
     }
 
     /**
@@ -833,14 +988,14 @@ public final class WhereEachLineDecides {
     }
 
     /**
-     * Where {@code part} decides in a statement the table does not say it of, read in each case
-     * of one value the statement asks the case of, which may be more cases than are said one by
-     * one.
+     * Where {@code part} decides in a statement whose cases taking apart does not say, read in each
+     * case of one value the statement asks the case of, which may be more cases than are said one
+     * by one.
      *
-     * <p>The cases of one value are never two at once, and a statement too large for a table, or
-     * one whose table says too much, is read under each case of the value instead: every part
-     * asking which case it is comes out one way, and what is left is a statement of the parts
-     * that case has. {@code days <= limit(s)} with {@code limit} choosing one of eight numbers is,
+     * <p>The cases of one value are never two at once, and a statement whose cases are more than
+     * are said one by one, or that no one part tells apart, or that took more steps than are
+     * taken, is read under each case of the value instead: every part asking which case it is
+     * comes out one way, and what is left is a statement of the parts that case has. {@code days <= limit(s)} with {@code limit} choosing one of eight numbers is,
      * where {@code s} is the sixth stage, {@code days <= 20} and nothing else. And past every case
      * the statement names, the value being none of them.
      *
@@ -862,30 +1017,57 @@ public final class WhereEachLineDecides {
     private record UnderACase(Proposition is, Reading reading) {}
 
     /**
+     * A value of the row a statement asks the case of more than once: the parts that ask it, by
+     * where they stand among the statement's parts, and every case they name.
+     *
+     * <p>One answer for the two things that turn on it. Those parts are not free of each other
+     * ({@link Reading#possible}), and so where the line decides may be told apart by no one part;
+     * read under each case of the value instead ({@link #underEachCase}), they come out one way
+     * each. Each asking which values those are on its own, the second answer was the first's only
+     * by both being written alike.
+     */
+    private record AskedTwice(DecisionSubject value, List<Integer> parts, List<Refinement> atoms) {}
+
+    /** Every value of the row {@code named} asks the case of more than once, in the order they are
+     *  first asked. */
+    private static List<AskedTwice> askedTwice(List<Proposition> named) {
+        Map<DecisionSubject, List<Integer>> byValue = new LinkedHashMap<>();
+        for (int i = 0; i < named.size(); i++) {
+            if (named.get(i) instanceof Proposition.InCases cases && oneValueOfTheRow(cases)) {
+                byValue.computeIfAbsent(cases.of(), _ -> new ArrayList<>()).add(i);
+            }
+        }
+        List<AskedTwice> out = new ArrayList<>();
+        byValue.forEach((value, parts) -> {
+            if (parts.size() < 2) {
+                return;
+            }
+            List<Refinement> atoms = new ArrayList<>();
+            for (int each : parts) {
+                ((Proposition.InCases) named.get(each)).cases().atoms().stream()
+                        .filter(atom -> !atoms.contains(atom)).forEach(atoms::add);
+            }
+            out.add(new AskedTwice(value, List.copyOf(parts), List.copyOf(atoms)));
+        });
+        return List.copyOf(out);
+    }
+
+    /**
      * {@code stated} read under each case of the first value it asks the case of more than once,
      * and under that value being none of them — or null where it asks no value's case twice.
      *
      * <p>The same for every part of the statement, so worked out once for the statement and asked
      * of by each of its parts. A value inside the elements or the keys of a container is not one
      * value of the row, and is not read this way.
+     *
+     * @param twice the values {@code stated} asks the case of more than once ({@link #askedTwice})
      */
-    private static List<UnderACase> underEachCase(Proposition stated, List<Proposition> named) {
-        Map<DecisionSubject, List<Refinement>> asked = new LinkedHashMap<>();
-        Map<DecisionSubject, Integer> times = new LinkedHashMap<>();
-        for (Proposition each : named) {
-            if (each instanceof Proposition.InCases cases && oneValueOfTheRow(cases)) {
-                times.merge(cases.of(), 1, Integer::sum);
-                List<Refinement> atoms = asked.computeIfAbsent(cases.of(), _ -> new ArrayList<>());
-                cases.cases().atoms().stream().filter(atom -> !atoms.contains(atom))
-                        .forEach(atoms::add);
-            }
-        }
-        DecisionSubject value = times.entrySet().stream().filter(each -> each.getValue() > 1)
-                .map(Map.Entry::getKey).findFirst().orElse(null);
-        if (value == null) {
+    private static List<UnderACase> underEachCase(Proposition stated, List<AskedTwice> twice) {
+        if (twice.isEmpty()) {
             return null;
         }
-        List<Refinement> atoms = asked.get(value);
+        DecisionSubject value = twice.getFirst().value();
+        List<Refinement> atoms = twice.getFirst().atoms();
         List<UnderACase> out = new ArrayList<>();
         for (Refinement atom : atoms) {
             out.add(new UnderACase(new Proposition.InCases(value, CasesLeft.of(atom), true),
@@ -919,7 +1101,7 @@ public final class WhereEachLineDecides {
      * holding nowhere where none is left. A value it only holds out of some cases is left asked
      * that.
      *
-     * <p>A case read off the table says the parts asked before it failing beside the one that
+     * <p>A case taken apart says the parts asked before it failing beside the one that
      * holds: where the term is not the first case and is the second. Of one value, the first says
      * nothing the second does not, and said apart it keeps two cases that differ in which case the
      * value is from being said as one ({@link #joinedOverAValue}).
