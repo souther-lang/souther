@@ -28,7 +28,6 @@ import souther.compiler.inputs.TypeBounds;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.values.AdmissibleSet;
 import souther.compiler.values.Allowance;
-import souther.compiler.values.Value;
 import souther.compiler.values.ValueSet;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.FilingCoordinate;
@@ -820,7 +819,7 @@ public final class Partitions {
                         Intervals.of(reachable, within == null ? null : within.min(),
                                 within == null ? null : within.max(), carrier),
                         points, term, type, reading, ruleReading, within,
-                        at.position().admits(), PatternPlan.Budget.OF_A_WITNESS::meter)),
+                        PatternPlan.Budget.OF_A_WITNESS::meter)),
                 made.divides(),
                 // A cut is a place on the order the values are counted on, and a class that is a
                 // set has no answer to where it lies — so a position whose classes are sets
@@ -2288,9 +2287,8 @@ public final class Partitions {
     }
 
     /**
-     * A string of exactly {@code size} characters the rules on {@code view} admit — every one of
-     * them where the rules name the strings — or nothing where they say nothing about its strings
-     * or leave none of that many.
+     * A string of exactly {@code size} characters the rules on {@code view} admit, or nothing where
+     * they say nothing about its strings or leave none of that many.
      *
      * <p>For a caller that has a count to meet and the position's reading in hand. What a value of
      * a shape counting that many looks like is {@link Witnesses}'s, asked of the shape and shared
@@ -2299,10 +2297,6 @@ public final class Partitions {
      * different questions: whether a string of that length exists at all is a claim about strings,
      * and a reading of it that had consulted one type's format would be that claim taken from an
      * opinion about that type.
-     *
-     * <p>Where the rules of the names name finitely many strings, the ones of that many code points
-     * among them. Those are every string the position can hold, so a string a format admits beside
-     * them is one the rules refuse, and a string of that length nobody named is none.
      */
     static List<FixtureTemplate> admittedStringOfSize(TypeView view, RuleReadingContext reading,
                                                       int size) {
@@ -2318,18 +2312,6 @@ public final class Partitions {
     static List<FixtureTemplate> admittedStringsOfSizes(TypeView view, RuleReadingContext reading,
                                                         Collection<Integer> sizes) {
         List<FixtureTemplate> out = new ArrayList<>();
-        if (PartitionClasses.admittedByItsNames(view, reading).approximation()
-                instanceof ValueSet.Finite named) {
-            for (int size : sizes) {
-                for (Value each : named.values()) {
-                    if (each instanceof Value.Text(String text)
-                            && text.codePointCount(0, text.length()) == size) {
-                        out.add(FixtureTemplate.string(text));
-                    }
-                }
-            }
-            return out;
-        }
         RulesRead rules = rulesReadOn(view, reading);
         if (rules == null) {
             return out;

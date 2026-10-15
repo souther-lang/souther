@@ -11,7 +11,6 @@ import souther.compiler.numeric.Place;
 import souther.compiler.numeric.PlacesApart;
 import net.unit8.notation199x.pattern.Meter;
 import souther.compiler.types.Type;
-import souther.compiler.values.ValueSet;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -48,18 +47,13 @@ final class OrderedClasses {
      * @param runs   the runs the lines leave, as {@link Intervals#of} answers them: none where the
      *               lines leave fewer than two
      * @param within where the rules leave the number
-     * @param admits which values the declarations leave standing at the position. Beside
-     *               {@code within} and not instead of it: a rule about how many a value holds is
-     *               about another number of the same place, and what it leaves is said of the values
-     *               rather than of this number — so a representative worked out from the range alone
-     *               is one the declarations may refuse
      * @param perWitness what writing one value beside the ones singled out may cost, named by the
      *                   caller that pays for witnesses
      */
     static List<PartitionClass> of(List<Band> runs, List<GuardThresholds.Guards.Singled> points,
                                    NumericTerm.FromOnePosition term, Type type,
                                    Quantities reading, RuleReadingContext ruleReading,
-                                   NumericDomain.Bounds within, ValueSet admits,
+                                   NumericDomain.Bounds within,
                                    Supplier<Meter> perWitness) {
         // Asked here rather than handed in beside the term. A term and a pair of orders are two
         // arguments, and two arguments can be about two terms; the reading is one argument that
@@ -79,7 +73,7 @@ final class OrderedClasses {
         if (runs.isEmpty()) {
             if (!values.isEmpty()) {
                 classes.addAll(singledOut(values, orders, type, reading, ruleReading, within,
-                        admits, perWitness, held));
+                        perWitness, held));
             }
         } else {
             // Every value singled out is in one run. The runs divide what the position holds and
@@ -146,7 +140,7 @@ final class OrderedClasses {
     private static List<PartitionClass> singledOut(List<Place> values, TermOrders orders,
                                                    Type type, Quantities reading,
                                                    RuleReadingContext ruleReading,
-                                                   NumericDomain.Bounds within, ValueSet admits,
+                                                   NumericDomain.Bounds within,
                                                    Supplier<Meter> perWitness, HeldValues held) {
         Carrier carrier = orders.answered();
         List<PartitionClass> classes = new ArrayList<>();
@@ -161,8 +155,11 @@ final class OrderedClasses {
         // Out of what writing one value costs, as every witness for a row is. Which number beside
         // the ones singled out to write is chosen here; what a value standing at that number looks
         // like is asked of the one reader that answers it, so the number and the value it is
-        // written into are not two spellings of one thing.
-        Place other = carrier.somethingOtherThan(PlacesApart.of(values), within, admits,
+        // written into are not two spellings of one thing. Out of what the declarations hold the
+        // number to, which is a set on the order it is answered on: the strings a position is held
+        // to say nothing of which lengths to try until they are read through the term, and put to
+        // the lengths as they are they admit none.
+        Place other = carrier.somethingOtherThan(PlacesApart.of(values), within, held.named(),
                 perWitness.get());
         String label = "/= " + String.join(", ",
                 values.stream().map(carrier::written).toList());

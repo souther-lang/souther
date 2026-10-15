@@ -288,23 +288,74 @@ class ABorderSaysWhyItOwesNoRowAtAPointTest {
      * <p>Three is a length {@code "bbb"} has, and a string of three nobody named is one the rules
      * refuse. Offered that string, the point would come back as one every value tried at was
      * refused.
+     *
+     * <p>Whichever rules name the values: the string's own type, or the record holding it as a
+     * field, whose rules the type of the field knows nothing of.
      */
     @Test
     void aNumberTheValuesNamedComeToIsOfferedOneOfThem() {
-        Compilation compiled = compiled(naming("Code", "String",
-                "value == \"a\" || value == \"bbb\"", "String.length(c.value) < 3"));
+        assertEquals(List.of("Code(\"bbb\")"), offeredAt(naming("Code", "String",
+                        "value == \"a\" || value == \"bbb\"", "String.length(c.value) < 3"),
+                "String.length(c) = 3", PointRole.OFF));
+        assertEquals(List.of("Request { code = \"bbb\" }"), offeredAt("""
+                        module example.owed
+
+                        data Request = { code: String }
+                            invariant code == "a" || code == "bbb"
+
+                        data Ok
+                        data No
+                        data Verdict = Ok | No
+
+                        behavior take : (r: Request) -> Verdict
+                        let take (r) = if String.length(r.code) < 3 then No else Ok
+                        """, "String.length(r.code) = 3", PointRole.OFF));
+    }
+
+    /**
+     * The same of a remainder: two is left by eight and not by four, so the row offered at two
+     * holds eight rather than the first whole number that leaves two.
+     */
+    @Test
+    void aRemainderTheValuesNamedLeaveIsOfferedTheOneThatLeavesIt() {
+        assertEquals(List.of("Code(8)"), offeredAt(naming("Code", "Int",
+                        "value == 4 || value == 8", "Int.floorMod(c.value, 3) < 2"),
+                "Int.floorMod(c, 3) = 2", PointRole.OFF));
+    }
+
+    /**
+     * A set that is not finitely many values holds a number taken of it to nothing, so the points
+     * the rules leave values at are owed as they are of any string.
+     *
+     * <p>Every string but {@code "a"} includes the empty one, and a pattern of letters includes
+     * strings one long.
+     */
+    @Test
+    void aSetThatIsNotFinitelyManyValuesRefusesNoPointOfANumberTakenOfIt() {
+        assertTrue(lineOf(naming("Code", "String", "value /= \"a\"",
+                        "String.length(c.value) < 1"), "String.length(c) = 0")
+                .at(PointRole.ON) instanceof ItemAssessment.Owed);
+        assertTrue(lineOf(naming("Code", "String", "String.matches(\"[a-z]+\", value)",
+                        "String.length(c.value) < 2"), "String.length(c) = 2")
+                .at(PointRole.ON) instanceof ItemAssessment.Owed);
+    }
+
+    /** Each row offered at {@code role} of the border of {@code model} at {@code label}, as its
+     *  inputs are written. */
+    private static List<String> offeredAt(String model, String label, PointRole role) {
+        Compilation compiled = compiled(model);
         BorderAssessment line = Adequacy.searchedBoundariesOf(compiled.db(), "example.owed")
                 .values().stream().flatMap(List::stream)
-                .filter(each -> each.label().equals("String.length(c) = 3")).findFirst()
-                .orElseThrow();
+                .filter(each -> each.label().equals(label)).findFirst()
+                .orElseThrow(() -> new AssertionError("no border at " + label));
         List<String> offered = new ArrayList<>();
-        for (ItemAssessment.Attempt attempt : line.owedAt(PointRole.OFF).searches().each()) {
+        for (ItemAssessment.Attempt attempt : line.owedAt(role).searches().each()) {
             if (attempt instanceof ItemAssessment.Attempt.Built built) {
                 offered.add(String.join(", ",
                         built.row().inputs().stream().map(FixtureTemplate::text).toList()));
             }
         }
-        assertEquals(List.of("Code(\"bbb\")"), offered);
+        return offered;
     }
 
     /**

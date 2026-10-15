@@ -33,6 +33,8 @@ import souther.compiler.semantics.CodePointClass;
 import souther.compiler.semantics.TakenArguments;
 import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.Type;
+import souther.compiler.values.Value;
+import souther.compiler.values.ValueSet;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -1248,6 +1250,18 @@ final class TermRealizations {
         // this reading has no type for would come back as a group nothing solves — which is a
         // sentence about what this compiler cannot compose, said of a question nobody asked.
         assert sourceType != null : "a group is realized at the type its caller settled";
+        // Numbers of one location, some of them taken of its value: chosen among the values its
+        // rules name, where they name finitely many. Nothing inside such a value is composed, so a
+        // group asking for that is left to the way that composes it.
+        if (inside.isEmpty()) {
+            SequencedMap<TermOrders, NumericSet> numbers = numbersOf(demands, measuring);
+            if (numbers != null) {
+                Realization named = amongTheValuesNamed(sourceType, numbers, within, reading);
+                if (named != null) {
+                    return named;
+                }
+            }
+        }
         return switch (jointRealizationOf(demands.keySet())) {
             // Which population, and no detail beside it: nothing was walked here, so there is
             // nothing this found to tell a reader.
@@ -1257,6 +1271,29 @@ final class TermRealizations {
                     builder.from(sourceType, keptApart, demands, measuring, within, reading,
                             inside);
         };
+    }
+
+    /**
+     * Each number of {@code demands} by the orders it is read on and the set asked of it, where
+     * every demand is a number read of one place and one of them is taken of its value — or null
+     * where that is not so.
+     *
+     * <p>A group of nothing but the value itself is chosen out of the region already, as one
+     * number of it is ({@link #standing}).
+     */
+    private static SequencedMap<TermOrders, NumericSet> numbersOf(
+            SequencedMap<RealizationTarget, AskedAt> demands, Quantities measuring) {
+        SequencedMap<TermOrders, NumericSet> out = new LinkedHashMap<>();
+        boolean takenOfIt = false;
+        for (Map.Entry<RealizationTarget, AskedAt> each : demands.entrySet()) {
+            if (!(each.getKey() instanceof RealizationTarget.OfANumber number)
+                    || number.term().atOnePosition() == null) {
+                return null;
+            }
+            takenOfIt |= !(number.term() instanceof NumericTerm.ValueOf);
+            out.put(measuring.ordersOf(number.term()), each.getValue().walking());
+        }
+        return takenOfIt ? out : null;
     }
 
     /**
@@ -1358,8 +1395,95 @@ final class TermRealizations {
     static Realization satisfying(Type sourceType, TermOrders orders, AskedAt asked,
                                   SearchRegion within,
                                   RuleReadingContext reading) {
+        // A value of the position itself is chosen out of the region already ({@link #standing}).
+        if (!(orders.term() instanceof NumericTerm.ValueOf)) {
+            SequencedMap<TermOrders, NumericSet> one = new LinkedHashMap<>();
+            one.put(orders, asked.walking());
+            Realization named = amongTheValuesNamed(sourceType, one, within, reading);
+            if (named != null) {
+                return named;
+            }
+        }
         return satisfying(sourceType, List.of(), orders, asked, within, reading,
                 DemandsInside.NOTHING);
+    }
+
+    /**
+     * The values the location's rules name that answer every number asked of it, or null where
+     * there are none to choose among.
+     *
+     * <p>Where the reading admits finitely many values at the location, those are every value a
+     * row can write there, whichever rules narrowed them — the location's own type, a record
+     * holding it, the element of a container. So a number taken of the location is written by
+     * choosing among them, each read through its term as a row holding it would be
+     * ({@link TermOrders#readOf}); a value written for the number alone is one those rules refuse.
+     * The set is the one a border on the number is refused by ({@code HeldValues}), so a number a
+     * border owes a row at is one some value of it comes to.
+     *
+     * <p>Every value of the set is tried, and the set holds every value the location can hold, so
+     * none answering is an answer about the model.
+     *
+     * <p>Null where the numbers are not all of one location, where the location admits no finite
+     * set, or where a value of it is read as no number of a term asked: the accounts write values
+     * there as they would anywhere.
+     *
+     * @param asked each number asked of the location, by the orders it is read on
+     */
+    private static Realization amongTheValuesNamed(Type sourceType,
+                                                   SequencedMap<TermOrders, NumericSet> asked,
+                                                   SearchRegion within,
+                                                   RuleReadingContext reading) {
+        if (sourceType == null || within == null || asked.isEmpty()) {
+            return null;
+        }
+        TermOrders first = asked.firstEntry().getKey();
+        NumericTerm.FromOnePosition at = first.term().atOnePosition();
+        Carrier observed = first.observed();
+        if (at == null || observed == null) {
+            return null;
+        }
+        for (TermOrders each : asked.keySet()) {
+            if (each.term().atOnePosition() == null
+                    || !each.term().atOnePosition().position().equals(at.position())) {
+                return null;
+            }
+        }
+        if (!(within.admittedAt(new NumericTerm.ValueOf(at.position()))
+                instanceof ValueSet.Finite named)) {
+            return null;
+        }
+        List<Place> answering = new ArrayList<>();
+        for (Value each : named.values()) {
+            boolean answers = true;
+            for (Map.Entry<TermOrders, NumericSet> one : asked.entrySet()) {
+                if (!(one.getKey().readOf(each)
+                        instanceof NumericTerm.Reading.Number(Place number))) {
+                    return null;
+                }
+                answers &= one.getValue().holds(number, one.getKey().answered());
+            }
+            if (answers) {
+                answering.add(observed.placeOf(each));
+            }
+        }
+        RuleReadingSource ruleSource = reading.source();
+        WornNames wears = namesOf(sourceType, ruleSource);
+        if (!(wears instanceof WornNames.Spelled worn)) {
+            return new Realization.None(
+                    Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
+                    ((WornNames.Unwritable) wears).why());
+        }
+        List<FixtureTemplate> out = new ArrayList<>();
+        for (Place each : answering) {
+            FixtureTemplate bare = FixtureTemplate.on(observed, each,
+                    ruleSource.symbols().scope()::reach);
+            if (bare != null) {
+                out.add(RepresentativeSource.under(worn.names(), bare));
+            }
+        }
+        return out.isEmpty()
+                ? new Realization.None(Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE)
+                : Realization.Built.whole(out);
     }
 
     /** The same, with the value asked to hold {@code inside} at positions inside it as well, and

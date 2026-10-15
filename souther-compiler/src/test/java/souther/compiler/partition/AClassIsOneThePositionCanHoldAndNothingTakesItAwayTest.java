@@ -20,6 +20,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
@@ -569,6 +570,41 @@ class AClassIsOneThePositionCanHoldAndNothingTakesItAwayTest {
         assertEquals(List.of("String.length(c)/0 <= x < 2", "String.length(c)/2 <= x < 3",
                         "String.length(c)/3 <= x"),
                 lengthClasses("value == \"a\" || value == \"bb\" || value == \"bbb\""));
+    }
+
+    /**
+     * What is left of a number taken of the position once a value is singled out of it is stood for
+     * by a value the rules name.
+     *
+     * <p>{@code "a"} is the one value whose length is not two, and the number written beside the
+     * one singled out is chosen out of the lengths the values come to. Chosen out of the strings
+     * themselves as though they were lengths, no number was chosen and the class had nothing
+     * standing for it.
+     */
+    @Test
+    void theRestOfANumberTakenOfTheValuesNamedIsStoodForByOneOfThem() {
+        String model = """
+                module g
+
+                data Code = String
+                    invariant value == "a" || value == "bb"
+
+                data Accepted = { at: String }
+
+                behavior classify : (c: Code) -> Accepted
+                    constructs Accepted
+
+                let classify (c) = if String.length(c.value) == 2 then Accepted { at = "x" }
+                    else Accepted { at = "y" }
+                """;
+        PartitionClass rest = drawnByTheBody(model, "classify").axes().stream()
+                .flatMap(axis -> axis.classes().stream())
+                .filter(each -> each.id().equals("String.length(c)//= 2"))
+                .findFirst().orElseThrow(() -> new AssertionError("no class beside the length two"));
+        RepresentativeSource.Values values = assertInstanceOf(RepresentativeSource.Values.class,
+                rest.representatives(), rest::toString);
+        assertEquals(List.of("Code(\"a\")"),
+                values.written().stream().map(FixtureTemplate::text).toList());
     }
 
     /** The classes of a string's length, held by {@code named} and parted at two and three by the

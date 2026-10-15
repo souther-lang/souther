@@ -124,24 +124,34 @@ public final class TermOrders {
      * number: a set leaving one of them out would refuse a number a value comes to.
      */
     public ValueSet readOfEach(ValueSet admitted) {
-        if (term.atOnePosition() == null || observed == null || answered == null
-                || !(admitted instanceof ValueSet.Finite finite)) {
+        if (answered == null || !(admitted instanceof ValueSet.Finite finite)) {
             return ValueSet.ANY;
         }
         Set<Value> numbers = new LinkedHashSet<>();
         for (Value each : finite.values()) {
-            Place at = observed.placeOf(each);
-            if (at == null || !(read(observed.valueOf(at))
-                    instanceof NumericTerm.Reading.Number(Place number))) {
-                return ValueSet.ANY;
-            }
-            Value comesTo = answered.valueAt(number);
+            Value comesTo = readOf(each) instanceof NumericTerm.Reading.Number(Place number)
+                    ? answered.valueAt(number) : null;
             if (comesTo == null) {
                 return ValueSet.ANY;
             }
             numbers.add(comesTo);
         }
         return ValueSet.oneOf(numbers);
+    }
+
+    /**
+     * The number this term reads of {@code written}, a value a rule names at the term's position —
+     * or null where that is no value of the order a value there is observed on.
+     *
+     * <p>Read as a row holding the value would be read: the value is put on the order a value at
+     * the position is observed on, and the term is read of what stands there. So what a number
+     * taken of the position comes to is what {@link #read} says of a row, and nothing here works
+     * out a length or a remainder a second time.
+     */
+    public NumericTerm.Reading readOf(Value written) {
+        Place at = observed == null || term.atOnePosition() == null ? null
+                : observed.placeOf(written);
+        return at == null ? null : read(observed.valueOf(at));
     }
 
     /**
