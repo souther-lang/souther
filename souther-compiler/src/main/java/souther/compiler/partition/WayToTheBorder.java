@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.BooleanSupplier;
 
 /**
  * How a row for one border came to be looked for where it is: every condition on the way, in the
@@ -116,9 +117,12 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
      * figure proves nothing, and neither does a group of choices closing beside a group that was
      * not looked at. Numbers inside a container are not taken in, since a region reads such a term
      * as the one element there and the way may be about two.
+     *
+     * <p>{@code takesIn} is asked before each condition is taken into the region, and a condition
+     * it refuses is taken in as nothing: the region stays as it was, which proves nothing past it.
      */
-    Optional<NoInputTakesIt> takenByNoInput(SearchRegion declarations) {
-        return OneOfEach.walk(onTheWay, numbered(declarations),
+    Optional<NoInputTakesIt> takenByNoInput(SearchRegion declarations, BooleanSupplier takesIn) {
+        return OneOfEach.walk(onTheWay, numbered(declarations, takesIn),
                 CompositionBudget.CHOICES_ON_A_WAY_LOOKED_AT,
                 CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG)
                 instanceof OneOfEach.Walked.Closed<OnTheWay, NoInputTakesIt>(var _, var why)
@@ -129,9 +133,9 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
     private record Numbered(HeldTogether held, SearchRegion region) {}
 
     /** {@link #ASKED_OF_A_ROW}, with what the numbers of each entry leave of {@code declarations}
-     *  taken in as well. */
+     *  taken in as well, wherever {@code takesIn} lets one more be. */
     private static OneOfEach.Vocabulary<OnTheWay, Numbered, NoInputTakesIt> numbered(
-            SearchRegion declarations) {
+            SearchRegion declarations, BooleanSupplier takesIn) {
         return new OneOfEach.Vocabulary<>() {
 
             @Override
@@ -162,7 +166,7 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
                                         "a way taken in closes on why nothing reaches it");
                             }));
                     case Step.Held<HeldTogether, Reachability>(var held) -> {
-                        SearchRegion region = ofOnePosition(entry)
+                        SearchRegion region = ofOnePosition(entry) && takesIn.getAsBoolean()
                                 ? narrowedBy(so.region(), entry) : so.region();
                         Optional<EmptyInput> empty = region == so.region() ? Optional.empty()
                                 : region.emptiness();

@@ -267,18 +267,24 @@ public enum CompositionBudget {
     PATHS_OF_A_DECISION_READ(4096),
 
     /**
-     * How many ways the reading of one body's decision asks whether some input takes, in all —
-     * every way joined, every way the reading ends at, and every way a proof is said of fewer
-     * conditions in, counting each set of conditions once however often it is asked.
+     * How many conditions the reading of one body's decision takes into what the declarations
+     * leave of the input, in all, asking whether some input takes its ways — every way joined,
+     * every way the reading ends at, and every way a proof is said of fewer conditions in.
      *
-     * <p>Over the whole reading and not each way. One way asked is one walk under its own figures
-     * ({@link #CHOICES_ON_A_WAY_LOOKED_AT}); this is what bounds how many walks a body makes.
+     * <p>What it counts is the work. Each condition taken in is a region narrowed and asked whether
+     * anything is left, which is what a proof costs; the ways asked are as many as the ways joined,
+     * which double along a chain, and one way's walk looks at as many alternatives as
+     * {@link #CHOICES_ON_A_WAY_LOOKED_AT} lets, each taking its conditions in again. A figure on
+     * either of those alone leaves their product unbounded.
      *
-     * <p><b>Reaching it proves nothing and stops nothing.</b> Past it no way is asked, and a way not
-     * asked is a way kept: the rules past it are read as rules, and a rule no run takes among them
-     * is what the reading of reach says of it, as it would be with no proof at all.
+     * <p>Over the whole reading and not each way, since what multiplies is how many ways are asked.
+     *
+     * <p><b>Reaching it proves nothing and stops nothing.</b> Past it no condition is taken in and
+     * no way is asked, and a way not proved is a way kept: the rules past it are read as rules, and
+     * a rule no run takes among them is what the reading of reach says of it, as it would be with
+     * no proof at all.
      */
-    WAYS_A_DECISION_ASKS_AN_INPUT_TAKES(4096),
+    CONDITIONS_A_DECISION_TAKES_IN_TO_PROVE(4096),
 
     /**
      * How many readings of one condition the reading of what it means makes: one per application
@@ -592,8 +598,9 @@ public enum CompositionBudget {
             case VALUES_A_POINT_IS_TRIED_WITH -> "how many values a point is tried with";
             case DEPTH_A_CONSTRUCTION_PLAN_DESCENDS -> "how deep a value is built";
             case PATHS_OF_A_DECISION_READ -> "how many paths through one body a decision is read for";
-            case WAYS_A_DECISION_ASKS_AN_INPUT_TAKES ->
-                    "how many ways through one body are asked whether some input takes them";
+            case CONDITIONS_A_DECISION_TAKES_IN_TO_PROVE ->
+                    "how many conditions are taken in asking whether some input takes a way through"
+                            + " one body";
             case READINGS_OF_ONE_CONDITION ->
                     "how many times one condition is read, once per value or case";
             case TOTAL_READINGS_OF_ONE_CONDITION ->
@@ -666,7 +673,7 @@ public enum CompositionBudget {
                  ASSIGNMENTS_A_SEARCH_COMPOSES, VALUES_OF_AN_UNBOUNDED_PROGRESSION_TRIED,
                  LEVELS_A_SIDE_IS_ASKED_AT, TIMES_THE_RULES_ARE_ASKED_AGAIN,
                  VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT, VALUES_A_POINT_IS_TRIED_WITH,
-                 PATHS_OF_A_DECISION_READ, WAYS_A_DECISION_ASKS_AN_INPUT_TAKES,
+                 PATHS_OF_A_DECISION_READ, CONDITIONS_A_DECISION_TAKES_IN_TO_PROVE,
                  READINGS_OF_ONE_CONDITION,
                  TOTAL_READINGS_OF_ONE_CONDITION, PARTS_A_DERIVATION_CONCLUDES,
                  ALTERNATIVES_A_PATH_TRIES, STEPS_A_STATEMENT_IS_READ_IN,
