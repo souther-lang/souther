@@ -733,17 +733,20 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
          *
          * <p>The readings a border is drawn in, which are known once the line is narrowed by what
          * arrives at it, and are what {@link #wayTo} is asked by.
+         *
+         * <p>Each case with what it put on the way and who put each of those there, and not those
+         * of every case told together. One thing may be put on the ways to two cases by two
+         * copies, and told together it would be filed under both copies for both cases — a line
+         * told of a call a row at it never goes through.
+         *
+         * @param said who put each entry of {@code assumed} there
          */
         void reached(ModelOccurrence states, List<OnTheWay> assumed,
-                     Map<WhereAPartDecides, List<OnTheWay>> whereEachDecides,
+                     Map<WhereAPartDecides, Stating> whereEachDecides,
                      SaidOnTheWay said) {
             // And who put each entry there, beside the entries: every way that reaches the line
             // is one a row may come by, so what each says put an entry on it is said of the line.
-            // What put an entry on the way to one line, and not on the way to another read with
-            // it, is said of the first alone: {@code said} is told of the comparison and all of
-            // its lines together.
-            saidByLine.merge(new ALine(states, Optional.empty()), said.along(assumed),
-                    SaidOnTheWay::and);
+            saidByLine.merge(new ALine(states, Optional.empty()), said, SaidOnTheWay::and);
             // A comparison inside a non-recursive helper is read once per call of it and each of
             // those calls is a construct of its own. A comparison inside a closure is the one the
             // author wrote, met through each copy an application of the closure makes. A run
@@ -754,10 +757,10 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
                     Collected::commonTo);
             whereEachDecides.forEach((part, decides) -> {
                 List<OnTheWay> way = new ArrayList<>(assumed);
-                way.addAll(decides);
+                way.addAll(decides.entries());
                 byLine.merge(new ALine(states, Optional.of(part)), List.copyOf(way),
                         Collected::commonTo);
-                saidByLine.merge(new ALine(states, Optional.of(part)), said.along(way),
+                saidByLine.merge(new ALine(states, Optional.of(part)), said.and(decides.by()),
                         SaidOnTheWay::and);
             });
         }

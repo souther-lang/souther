@@ -354,15 +354,9 @@ public final class GuardThresholds {
                                 ComparisonReadings.Reading each,
                                 List<WhereAPartDecides> readings,
                                 Function<Proposition, ReachingCuts.Stating> aCase) {
-        Map<WhereAPartDecides, List<OnTheWay>> decides = new LinkedHashMap<>();
-        List<SaidOnTheWay> said = new ArrayList<>();
-        said.add(each.saidOnTheWay());
-        for (WhereAPartDecides reading : readings) {
-            ReachingCuts.Stating stating = aCase.apply(reading.decides());
-            decides.put(reading, stating.entries());
-            said.add(stating.by());
-        }
-        cuts.reached(stated, each.assumed(), decides, SaidOnTheWay.allOf(said));
+        Map<WhereAPartDecides, ReachingCuts.Stating> decides = new LinkedHashMap<>();
+        readings.forEach(reading -> decides.put(reading, aCase.apply(reading.decides())));
+        cuts.reached(stated, each.assumed(), decides, each.saidOnTheWay());
     }
 
     /** Each reading of each line of {@code assessed}, where it is a statement of several. */

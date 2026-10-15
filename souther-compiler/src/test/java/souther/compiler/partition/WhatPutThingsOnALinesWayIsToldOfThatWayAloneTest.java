@@ -26,10 +26,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * another way read with it.
  *
  * <p>One reading walks the way to a comparison and puts each case of where a line of it decides on
- * that way, and says who put each entry there of all of them together. The comparison and each
- * case are filed as lines of their own, each a way a row is looked for along; a copy told of one
- * that put something only on another, or on a case the line is no longer read in, sends a reader to
- * a call the row never goes through.
+ * that way. The comparison and each case are filed as lines of their own, each a way a row is
+ * looked for along; a copy told of one that put something only on another sends a reader to a call
+ * the row never goes through.
  */
 class WhatPutThingsOnALinesWayIsToldOfThatWayAloneTest {
 
@@ -51,25 +50,29 @@ class WhatPutThingsOnALinesWayIsToldOfThatWayAloneTest {
                 new DecisionSubject.AnInput(TermPath.of(which)), true));
     }
 
+    /** {@code entries}, each put on the way by {@code by}. */
+    private static ReachingCuts.Stating put(List<OnTheWay> entries, ModelOccurrence by) {
+        return ReachingCuts.Stating.of(entries, ModelOccurrences.of(by));
+    }
+
+    /**
+     * Each case is told what put its own way there, and the comparison what put the way to it
+     * there — however alike what the cases put on their ways is. One thing put on the ways to two
+     * cases by two copies is told of each case by the copy that put it on that case's way.
+     */
     @Test
     void eachLineIsToldWhatPutThingsOnItsOwnWay() {
         ModelOccurrence states = copy(0);
         OnTheWay toTheComparison = entry(1);
         OnTheWay inOne = entry(2);
-        OnTheWay inTheOther = entry(3);
-        OnTheWay inACaseNotRead = entry(4);
-        Map<OnTheWay, ModelOccurrences> by = new LinkedHashMap<>();
-        by.put(toTheComparison, ModelOccurrences.of(copy(11)));
-        by.put(inOne, ModelOccurrences.of(copy(12)));
-        by.put(inTheOther, ModelOccurrences.of(copy(13)));
-        by.put(inACaseNotRead, ModelOccurrences.of(copy(14)));
-        Map<WhereAPartDecides, List<OnTheWay>> cases = new LinkedHashMap<>();
-        cases.put(aCase("one"), List.of(inOne));
-        cases.put(aCase("other"), List.of(inTheOther));
+        OnTheWay inBoth = entry(3);
+        Map<WhereAPartDecides, ReachingCuts.Stating> cases = new LinkedHashMap<>();
+        cases.put(aCase("one"), put(List.of(inOne, inBoth), copy(12)));
+        cases.put(aCase("other"), put(List.of(inBoth), copy(13)));
 
         ReachingCuts.Collected collected = new ReachingCuts.Collected();
         collected.reached(states, List.of(toTheComparison), cases,
-                new SaidOnTheWay(by, Map.of(), Map.of()));
+                put(List.of(toTheComparison), copy(11)).by());
         ReachingCuts made = collected.made();
 
         assertEquals(List.of(copy(11)), told(made, states, Optional.empty()),
@@ -77,7 +80,8 @@ class WhatPutThingsOnALinesWayIsToldOfThatWayAloneTest {
         assertEquals(List.of(copy(11), copy(12)), told(made, states, Optional.of(aCase("one"))),
                 "one case, by that and what put the case on it");
         assertEquals(List.of(copy(11), copy(13)), told(made, states,
-                Optional.of(aCase("other"))), "and the other, by that and what put it on");
+                Optional.of(aCase("other"))), "and the other, by that and what put it on, though"
+                + " one of the things it put there is one the first case has too");
     }
 
     private static List<ModelOccurrence> told(ReachingCuts made, ModelOccurrence states,
