@@ -3,6 +3,7 @@ package souther.compiler.reach;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.types.TypeSymbol;
+import souther.compiler.values.ValueSet;
 
 import java.util.List;
 
@@ -55,12 +56,22 @@ public sealed interface Proof
          * author reading the general form would be sent to look at the guards above, and there is
          * nothing there to find.
          *
+         * <p>What the position holds is said two ways, because the rules say it two ways: where its
+         * value runs between, and which values they name. A branch written between two values a
+         * rule names is inside the range and outside the values, so the range alone would tell an
+         * author the branch asks for something the range plainly holds.
+         *
          * @param position  where the value the branch turns on sits
-         * @param admits    what the rules leave that position
+         * @param admits    where the rules leave that position's value running, or null where they
+         *                  leave it no range
+         * @param named     the values the rules leave that position, or null where they name no
+         *                  finitely many; never null where {@code admits} is. Finitely many and
+         *                  nothing wider, because a set is held here to be said and a proof is
+         *                  an answer compared by its value — a pattern's machine is neither
          * @param departure the condition, and the way this branch takes it
          */
         T outsideInputDomain(TermPath position, NumericDomain.Bounds admits,
-                             PathDecision departure);
+                             ValueSet.Finite named, PathDecision departure);
 
         /**
          * Every case the arm is written for is one the rules refuse at the position matched on.
@@ -154,8 +165,8 @@ public sealed interface Proof
     /** The position would have to hold a value its input domain does not admit; see
      *  {@link Words#outsideInputDomain}. */
     static Proof outsideInputDomain(TermPath position, NumericDomain.Bounds admits,
-                                    PathDecision departure) {
-        return new OutsideInputDomain(position, admits, departure);
+                                    ValueSet.Finite named, PathDecision departure) {
+        return new OutsideInputDomain(position, admits, named, departure);
     }
 
     /** Every case the position could hold was refused; see {@link Words#everyCaseRefused}. */
@@ -298,19 +309,20 @@ record ConditionsThatCannotAllHold(List<PathDecision> decisions) implements Proo
     }
 }
 
-record OutsideInputDomain(TermPath position, NumericDomain.Bounds admits, PathDecision departure)
+record OutsideInputDomain(TermPath position, NumericDomain.Bounds admits, ValueSet.Finite named,
+                          PathDecision departure)
         implements Proof {
 
     OutsideInputDomain {
-        if (position == null || admits == null || departure == null) {
-            throw new IllegalArgumentException(
-                    "a position outside what it holds, with no position, no bounds or no branch");
+        if (position == null || departure == null || (admits == null && named == null)) {
+            throw new IllegalArgumentException("a position outside what it holds, with no"
+                    + " position, nothing said of what it holds, or no branch");
         }
     }
 
     @Override
     public <T> T said(Words<T> words) {
-        return words.outsideInputDomain(position, admits, departure);
+        return words.outsideInputDomain(position, admits, named, departure);
     }
 }
 

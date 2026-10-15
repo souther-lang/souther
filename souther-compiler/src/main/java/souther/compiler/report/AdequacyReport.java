@@ -4274,6 +4274,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // The model's own answers, after the ones that are about what this compiler managed.
             case RuleRequirement.Excluded.OnePositionCannotBeBoth one -> new Said(4, 0, readOff(one));
             case RuleRequirement.Excluded.AnArmNothingReaches arm -> new Said(5, 0, readOff(arm));
+            // The same reading as the arm's, asked where a comparison comes out one way.
+            case RuleRequirement.Excluded.AComparisonOutcomeNothingReaches outcome ->
+                    new Said(5, 0, readOff(outcome));
             case RuleRequirement.Excluded.AConditionNeverComesOutThatWay never ->
                     new Said(6, 0, readOff(never));
             // In the words the composings were said in, which are the model's. The other two here
@@ -4307,6 +4310,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case RuleRequirement.Excluded.AnArmNothingReaches _ ->
                     "its way goes through an arm, but " + NoValue.reaches("that arm")
                             + ", so the branch count is made without it";
+            case RuleRequirement.Excluded.AComparisonOutcomeNothingReaches _ ->
+                    "its way needs a comparison to come out one way, but "
+                            + NoValue.reaches("it coming out so");
             case RuleRequirement.Excluded.AConditionNeverComesOutThatWay _ ->
                     "its way goes past a condition that comes out the other way for every row, so "
                             + NoValue.goesThatWay();
@@ -5162,8 +5168,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         + " which a path knows only as the cases it may still be";
                 case A_PATH_KNOWS_NO_SAMENESS_OF_VALUES -> "two values being one, which no fact a"
                         + " path knows says";
-                case A_PATH_KNOWS_NO_PLACE_ON_AN_ORDER -> "a place on an order, which no fact a"
-                        + " path knows says";
+                case A_PATH_KNOWS_NO_PLACE_ON_AN_ORDER -> "a place on an order no range says,"
+                        + " which no fact a path knows says";
                 case A_PATH_KNOWS_NO_COUNT_OF_ELEMENTS -> "how many elements of a container meet"
                         + " something, which no fact a path knows says";
                 case A_PATH_KNOWS_NO_NUMBER_OVER_ELEMENTS -> "how many different values the"
@@ -7749,6 +7755,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case RuleRequirement.Excluded.OnePositionCannotBeBoth _ ->
                     "the_way_needs_one_position_to_be_two";
             case RuleRequirement.Excluded.AnArmNothingReaches _ -> "an_arm_nothing_reaches";
+            case RuleRequirement.Excluded.AComparisonOutcomeNothingReaches _ ->
+                    "a_comparison_outcome_nothing_reaches";
             case RuleRequirement.Excluded.AConditionNeverComesOutThatWay _ ->
                     "a_condition_never_comes_out_that_way";
             case RuleRequirement.Excluded.NoValueCanTakeIt _ -> "no_value_can_take_it";

@@ -9,6 +9,7 @@ import souther.compiler.reach.PathDecision;
 import souther.compiler.reach.Proof;
 import souther.compiler.reach.WhyUnsettled;
 import souther.compiler.types.TypeSymbol;
+import souther.compiler.values.ValueSet;
 
 import java.util.List;
 
@@ -35,6 +36,7 @@ final class WhatAnAnswerSays {
             @Override
             public List<PathDecision> outsideInputDomain(TermPath position,
                                                          NumericDomain.Bounds admits,
+                                                         ValueSet.Finite named,
                                                          PathDecision departure) {
                 return List.of();
             }
@@ -89,6 +91,7 @@ final class WhatAnAnswerSays {
             @Override
             public List<TypeSymbol> outsideInputDomain(TermPath position,
                                                        NumericDomain.Bounds admits,
+                                                       ValueSet.Finite named,
                                                        PathDecision departure) {
                 return List.of();
             }
@@ -143,7 +146,7 @@ final class WhatAnAnswerSays {
 
             @Override
             public String outsideInputDomain(TermPath position, NumericDomain.Bounds admits,
-                                             PathDecision departure) {
+                                             ValueSet.Finite named, PathDecision departure) {
                 // The ends and not a rendering of them: how a report words a range is the
                 // renderer's, and a test asserting on that would be asserting on it twice.
                 return position + " " + admits.min().at() + ".." + admits.max().at();
@@ -199,6 +202,7 @@ final class WhatAnAnswerSays {
             @Override
             public List<String> outsideInputDomain(TermPath position,
                                                    NumericDomain.Bounds admits,
+                                                   ValueSet.Finite named,
                                                    PathDecision departure) {
                 return List.of();
             }

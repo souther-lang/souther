@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.coverage.ArmProbe;
+import souther.compiler.coverage.SeenConditionOutcome;
 import souther.compiler.coverage.NumberingIdentity;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
@@ -24,6 +25,11 @@ import souther.compiler.inputs.Position;
 import souther.compiler.inputs.PositionBounds;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.OrderedIntervals;
+import souther.compiler.values.AdmittedPlan;
+import souther.compiler.values.Allowance;
+import souther.compiler.values.PlannedValues;
+import souther.compiler.values.ValueSet;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.reach.ComparisonArrival;
 import souther.compiler.reach.PathDecision;
@@ -187,26 +193,45 @@ public final class PathReachability {
          * neither is derivable from the other afterwards: the corrected answers no longer say which
          * arms were corrected, and the corrections do not say what everything else came to.
          *
-         * @param lit the probes a row was recorded at, which are places of the numbering this
-         *            reading was made under. A probe of another is one no arm here answers to, so
-         *            the run would correct nothing and every proof would stand — the same answer as
-         *            a run that went nowhere
+         * <p>A condition a row saw come out one way came out that way, by the same argument. Both
+         * kinds of place are corrected here, in one act, because every reader of these answers
+         * reads them corrected: a measure counting arms and one excluding a rule because a
+         * comparison never comes out its way would otherwise stand on two different accounts of
+         * what the rows did.
+         *
+         * @param lit  the probes a row was recorded at, which are places of the numbering this
+         *             reading was made under. A probe of another is one no arm here answers to, so
+         *             the run would correct nothing and every proof would stand — the same answer
+         *             as a run that went nowhere
+         * @param seen the ways a row saw a condition come out, of the same numbering
          */
-        public AsRun asRunWith(java.util.Set<ArmProbe> lit) {
+        public AsRun asRunWith(java.util.Set<ArmProbe> lit,
+                               java.util.Set<SeenConditionOutcome> seen) {
             lit.forEach(probe -> requireNumbering(probe.numbering()));
+            seen.forEach(outcome -> requireNumbering(outcome.at().numbering()));
             Map<ControlPlace, Reachability> out = new LinkedHashMap<>(found);
             java.util.Set<ArmProbe> provedWrong =
                     new java.util.LinkedHashSet<>();
             found.forEach((where, said) -> {
-                if (!(where instanceof ControlPlace.Arm arm)
-                        || arm.probe().isEmpty() || !lit.contains(arm.probe().get())) {
-                    return;
+                switch (where) {
+                    case ControlPlace.Arm arm when arm.probe().isPresent()
+                            && lit.contains(arm.probe().get()) -> {
+                        if (said instanceof Reachability.Unreachable) {
+                            provedWrong.add(arm.probe().get());
+                        }
+                        out.put(where, new Reachability.Reachable(
+                                Witness.aRunWentThrough(arm.probe().get())));
+                    }
+                    // Not among the arms a proof was shown wrong at. What a measure is weakened by
+                    // is an arm counted again, and the arm this condition leads to, where it leads
+                    // to one, was lit by the same row.
+                    case ControlPlace.Outcome outcome
+                            when seen.contains(new SeenConditionOutcome(outcome.at(),
+                                    outcome.held())) ->
+                            out.put(where, new Reachability.Reachable(
+                                    Witness.aRunWentThrough(outcome.at())));
+                    default -> { }
                 }
-                if (said instanceof Reachability.Unreachable) {
-                    provedWrong.add(arm.probe().get());
-                }
-                out.put(where, new Reachability.Reachable(
-                        Witness.aRunWentThrough(arm.probe().get())));
             });
             // The arrivals as they were: a run corrects what an arm's denominator counts, and the
             // geometry the arrivals decide was settled from the model before any row ran.
@@ -309,6 +334,8 @@ public final class PathReachability {
         }
         Map<String, BindingId> parameters = new LinkedHashMap<>();
         read.parameterReads().forEach((binding, name) -> parameters.put(name, binding));
+        in = new PathEngine.Entered(admitted(in.known(), read, parameters, engine.terms(),
+                ruleReading.policy()), in.at());
         PathReachability walker =
                 new PathReachability(engine, plan, reading, ruleReading.source().symbols(),
                         ruleReading.source().newtypes(), out,
@@ -817,11 +844,54 @@ public final class PathReachability {
                 entered, reads, holds).known().reachesNothing()) {
             TermPath position = comparedPositionIn(cond, reads);
             NumericDomain.Bounds admits = position == null ? null : valueBoundsAt(position);
-            if (admits != null && !under.isEmpty()) {
-                return Proof.outsideInputDomain(position, admits, under.get(under.size() - 1));
+            ValueSet.Finite named = position != null && read.at(position) != null
+                    && read.at(position).admitted().approximation()
+                    instanceof ValueSet.Finite finite ? finite : null;
+            if ((admits != null || named != null) && !under.isEmpty()) {
+                return Proof.outsideInputDomain(position, admits, named,
+                        under.get(under.size() - 1));
             }
         }
         return Proof.conditionsThatCannotAllHold(under);
+    }
+
+    /**
+     * {@code k} with the values the declarations leave each position of the input that is a chain
+     * of fields from a parameter.
+     *
+     * <p>The reading's answer and not a second reading of the rules: what a position admits is
+     * {@link Position#admitted}, an upper bound in every case, so what it rules out is ruled out
+     * however much of the rules the reading took in. Under the subject a condition on the position
+     * names, which is the subject the numbers of it are held under too — so a range a path takes in
+     * and the values the rules name meet at one place.
+     *
+     * <p>A position under a case, an optional or a container stands somewhere only on the rows that
+     * reach it, and is left out. So is one whose rules leave it nothing: no row exists to take any
+     * way through the body, and that is said where the declaration is, not at every arm.
+     */
+    private static Known admitted(Known k, InputDomain read, Map<String, BindingId> parameters,
+                                  Terms terms, ReadingPolicy policy) {
+        Confinement.Planned<FactSubject> said = null;
+        for (Position each : read.positions()) {
+            ValueSet named = each.admitted().approximation();
+            BindingId parameter = parameters.get(each.path().head());
+            RuleKey fields = each.path().ruleKey();
+            Carrier carrier = Carrier.ofValue(each.type(), terms.declarations());
+            if (named.isAny() || named.isEmpty() || parameter == null || fields == null
+                    || carrier == null) {
+                continue;
+            }
+            FactSubject place = terms.under(terms.placeSubject(parameter), fields);
+            Confinement.Planned<FactSubject> one = new Confinement.Planned<>(
+                    PlannedValues.at(place, AdmittedPlan.of(named)), OrderedIntervals.top(),
+                    Map.of(place, carrier));
+            said = said == null ? one : said.meet(one);
+        }
+        if (said == null) {
+            return k;
+        }
+        Allowance<FactSubject> sets = policy.allowanceForAdmittedValues();
+        return k.admitting(said.resolve(sets), sets);
     }
 
     /** The position a comparison turns on, where it turns on exactly one this reading knows. */

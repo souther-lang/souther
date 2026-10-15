@@ -28,11 +28,13 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.coverage.AlignedObservation;
 import souther.compiler.coverage.ArmProbe;
 import souther.compiler.coverage.ArmReplacements;
+import souther.compiler.coverage.ComparisonEmissionIndex;
 import souther.compiler.coverage.ControlPlace;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.coverage.OutcomeName;
 import souther.compiler.coverage.RunBodies;
 import souther.compiler.coverage.RunRecord;
+import souther.compiler.coverage.SeenConditionOutcome;
 import souther.compiler.coverage.SiteNumbering;
 import souther.compiler.coverage.SourceOutcome;
 import souther.compiler.reach.PathDecision;
@@ -152,6 +154,8 @@ import souther.compiler.reading.WayIn;
 import souther.compiler.types.Type;
 import souther.compiler.types.SourceConstruct;
 import souther.compiler.types.TypeSymbol;
+import souther.compiler.values.Value;
+import souther.compiler.values.ValueSet;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -1863,10 +1867,29 @@ public final class Adequacy {
             @Override
             public souther.compiler.diag.Diagnostic.Builder outsideInputDomain(
                     TermPath position,
-                    souther.compiler.numeric.NumericDomain.Bounds admits,
+                    souther.compiler.numeric.NumericDomain.Bounds admits, ValueSet.Finite named,
                     souther.compiler.reach.PathDecision departure) {
                 return said.hint(new DeadBranchMessage.ThePositionStopsShortOfIt(
-                        position.toString(), shown(admits)));
+                        position.toString(), named != null ? shown(named) : shown(admits)));
+            }
+
+            /**
+             * The values the rules name, which say more than the range they run between: a branch
+             * written between two of them is inside the range.
+             */
+            private static String shown(ValueSet.Finite named) {
+                return "one of " + named.values().stream().map(DeadBranchProofWords::shown)
+                        .collect(java.util.stream.Collectors.joining(", "));
+            }
+
+            /** One value as it is written in a model. */
+            private static String shown(Value value) {
+                return switch (value) {
+                    case Value.Number number -> number.value().toPlainString();
+                    case Value.Text text -> "\"" + text.value() + "\"";
+                    case Value.Truth truth -> Boolean.toString(truth.value());
+                    case Value.Case named -> named.data().name();
+                };
             }
 
             /**
@@ -2010,14 +2033,17 @@ public final class Adequacy {
             // account keeps them apart. The questions are different: whether anything can get here
             // is about the machine, and whether anything says what it answers is about the rows.
             Set<ArmProbe> lit = new LinkedHashSet<>();
+            Set<SeenConditionOutcome> seen = new LinkedHashSet<>();
             for (RowReading observed : db.ask(new RowReadings(name)).value().values()) {
                 for (RowOutcome row : observed.rowsSeen()) {
                     lit.addAll(armsSeenIn(row, numbering));
+                    seen.addAll(outcomesSeenIn(row, numbering));
                 }
             }
             Map<String, souther.compiler.check.PathReachability.Answers.AsRun> out =
                     new LinkedHashMap<>();
-            proven.value().forEach((behavior, answers) -> out.put(behavior, answers.asRunWith(lit)));
+            proven.value().forEach((behavior, answers) ->
+                    out.put(behavior, answers.asRunWith(lit, seen)));
             return Answer.of(Ordered.map(out));
         }
     }
@@ -2597,9 +2623,14 @@ public final class Adequacy {
             // count is made by, so the two cannot disagree about an arm.
             Map<String, souther.compiler.check.PathReachability.Answers.AsRun> arrivals =
                     db.ask(new Arrived(name)).value();
-            Set<CoverageSites.AsWritten> unreachedArms = arrivals == null ? Set.of()
-                    : BranchEvidence.unreached(checked.value().plan().arms(behavior),
-                            arrivals.getOrDefault(behavior, NOTHING_PROVEN));
+            souther.compiler.check.PathReachability.Answers.AsRun arrived = arrivals == null
+                    ? null : arrivals.getOrDefault(behavior, NOTHING_PROVEN);
+            NothingReaches unreached = arrived == null ? NothingReaches.NOTHING
+                    : new NothingReaches(
+                            BranchEvidence.unreached(checked.value().plan().arms(behavior),
+                                    arrived),
+                            ComparisonEmissionIndex.ofBody(emitted, checked.value().plan()),
+                            checked.value().plan(), arrived.answers());
             // Asked once, because what it answers is one list and asking it per rule would walk the
             // rules once for every rule.
             Set<DecisionRule> toSettle = new LinkedHashSet<>(evidence.notTakenByRows());
@@ -2613,7 +2644,7 @@ public final class Adequacy {
                 List<SettledAt> atEach = new ArrayList<>();
                 for (souther.compiler.partition.DecisionReading.Ruled each
                         : stated.occurrences()) {
-                    RuleSettlement here = whatSettles(each, probe, taken, declared, unreachedArms,
+                    RuleSettlement here = whatSettles(each, probe, taken, declared, unreached,
                             everyRowAborts);
                     atEach.add(here == null ? null : new SettledAt(each, here));
                 }
@@ -2689,12 +2720,14 @@ public final class Adequacy {
                 souther.compiler.partition.DecisionReading.Ruled ruled, Coverages.Probe probe,
                 RunPlacement taken,
                 souther.compiler.inputs.SearchRegion declared,
-                Set<CoverageSites.AsWritten> unreachedArms, boolean everyRowAborts) {
-            CoverageSites.AsWritten unreached = armNothingReaches(ruled, unreachedArms);
-            if (unreached != null) {
-                return RuleSettlement.read(new RuleRequirement.Excluded.AnArmNothingReaches(
-                        unreached));
+                NothingReaches unreached, boolean everyRowAborts) {
+            CoverageSites.AsWritten arm = unreached.armOnTheWay(ruled);
+            if (arm != null) {
+                return RuleSettlement.read(new RuleRequirement.Excluded.AnArmNothingReaches(arm));
             }
+            // What the way states read against the declarations comes before a comparison's
+            // outcome: both are the model's, and the way's own reading names what it asks of a
+            // position, where the outcome says only that nothing arrives coming out so.
             return switch (souther.compiler.partition.Reachability.of(ruled.states(), declared)) {
                 case souther.compiler.partition.Reachability.NothingReaches nothing ->
                         RuleSettlement.read(new RuleRequirement.Excluded.OnePositionCannotBeBoth(
@@ -2703,42 +2736,122 @@ public final class Adequacy {
                         RuleSettlement.read(
                                 new RuleRequirement.Excluded.AConditionNeverComesOutThatWay(
                                         never.condition()));
-                case souther.compiler.partition.Reachability.Reaching reaching -> everyRowAborts
-                        ? null : whatASearchFinds(ruled, probe, taken, reaching);
+                case souther.compiler.partition.Reachability.Reaching reaching -> {
+                    RuleRequirement.Excluded outcome = unreached.outcomeOnTheWay(ruled);
+                    yield outcome != null ? RuleSettlement.read(outcome)
+                            : everyRowAborts ? null
+                            : whatASearchFinds(ruled, probe, taken, reaching);
+                }
             };
         }
 
         /**
-         * The arm of this way nothing arrives at, or null where none of them is one.
+         * What the reading of one body's reach proved nothing arrives at, asked of the places a
+         * rule's way is seen at.
          *
-         * <p>Asked of the arms the branch count left out, which is the one answer to it. An arm the
-         * author wrote stands at a place per call site of whatever carries it, and what a rule's
-         * way names is the arm — so a reading that took one place for the arm would settle the way
-         * by whichever copy it met first, and a model whose helper is reachable from one call site
-         * and not from another would be answered by the order the copies were written in.
+         * <p>The answers the branch count is made by, corrected by what the rows did, and nothing
+         * worked out again. An arm is out where the count left it out. A comparison coming out one
+         * way is out where every copy of it the tree that runs holds was proven to come out that
+         * way nowhere — a helper's comparison is one construct and one copy per call, and a copy
+         * one call cannot reach coming out so is one another may.
          *
-         * <p>Matched on what the author wrote, which is all a rule of the decision has: the
-         * construct and which of its arms the way went down. What that names may be more than one
-         * obligation, which is why the answer it is looked up in is one an arm is in only where
-         * every obligation it names is out.
+         * @param arms        the arms the branch count leaves out, as the author wrote them
+         * @param comparisons every copy of each comparison of the model in the tree that runs
+         * @param plan        the plan that numbered the places those copies come out at
+         * @param answers     what the reading proved of each place, as the rows corrected it
          */
-        private static CoverageSites.AsWritten armNothingReaches(
-                souther.compiler.partition.DecisionReading.Ruled ruled,
-                Set<CoverageSites.AsWritten> unreached) {
-            for (ShownBy each : ruled.shownBy()) {
-                CoverageSites.AsWritten arm = switch (each) {
-                    case ShownBy.AtAnArm(var fork, var part) ->
-                            new CoverageSites.AsWritten(fork.origin(), part);
-                    case ShownBy.AtAnArmShortOf(var fork, var part, var _) ->
-                            new CoverageSites.AsWritten(fork.origin(), part);
-                    case ShownBy.AtAnOutcome _, ShownBy.ShortOf _, ShownBy.NothingIsRecorded _ ->
-                            null;
-                };
-                if (arm != null && unreached.contains(arm)) {
-                    return arm;
+        record NothingReaches(Set<CoverageSites.AsWritten> arms,
+                              ComparisonEmissionIndex comparisons,
+                              CoverageSites.Plan plan,
+                              souther.compiler.check.PathReachability.Answers answers) {
+
+            /** Held to the plan where it is made, before any place is looked up: an answer of
+             *  another plan's reading says nothing arrives at a place its walk never came to. */
+            NothingReaches {
+                if (answers != null) {
+                    answers.requireNumbering(plan.identity());
                 }
             }
-            return null;
+
+            /** Nothing proven, for a behavior whose reach was not read. */
+            static final NothingReaches NOTHING = new NothingReaches(Set.of(), null, null, null);
+
+            /**
+             * The arm on {@code ruled}'s way nothing arrives at, or null where none of them is one.
+             *
+             * <p>Every place each step was seen at and not the first of them: a step met at
+             * several places is passed at each by a run taking the way, so any of them out of
+             * reach is the way out of reach. The same of {@link #outcomeOnTheWay}.
+             *
+             * <p>Matched on what the author wrote, which is all a rule of the decision has. An arm
+             * names the construct and which of its arms the way went down, and what that names may
+             * be more than one obligation — which is why the arms it is looked up in are the ones
+             * every obligation of which is out.
+             */
+            CoverageSites.AsWritten armOnTheWay(
+                    souther.compiler.partition.DecisionReading.Ruled ruled) {
+                for (ShownBy each : seenOnTheWay(ruled)) {
+                    CoverageSites.AsWritten arm = switch (each) {
+                        case ShownBy.AtAnArm(var fork, var part) ->
+                                new CoverageSites.AsWritten(fork.origin(), part);
+                        case ShownBy.AtAnArmShortOf(var fork, var part, var _) ->
+                                new CoverageSites.AsWritten(fork.origin(), part);
+                        case ShownBy.AtAnOutcome _, ShownBy.ShortOf _,
+                             ShownBy.NothingIsRecorded _ -> null;
+                    };
+                    if (arm != null && arms.contains(arm)) {
+                        return arm;
+                    }
+                }
+                return null;
+            }
+
+            /** A comparison on {@code ruled}'s way that comes out the way it needs nowhere, said
+             *  as the reason the way is out, or null where none of them does. */
+            RuleRequirement.Excluded outcomeOnTheWay(
+                    souther.compiler.partition.DecisionReading.Ruled ruled) {
+                for (ShownBy each : seenOnTheWay(ruled)) {
+                    if (each instanceof ShownBy.AtAnOutcome(var construct, var held)
+                            && comesOutSoNowhere(construct, held)) {
+                        return new RuleRequirement.Excluded.AComparisonOutcomeNothingReaches(
+                                construct, held);
+                    }
+                }
+                return null;
+            }
+
+            /** Every place a run taking {@code ruled}'s way is seen at, step by step. */
+            private static List<ShownBy> seenOnTheWay(
+                    souther.compiler.partition.DecisionReading.Ruled ruled) {
+                return ruled.steps().stream().flatMap(step -> step.seen().stream()).toList();
+            }
+
+            /**
+             * Whether every copy of {@code construct} was proven to come out {@code held} nowhere.
+             *
+             * <p>False where there is no copy, or a copy with no place it comes out at: a place
+             * nothing numbered is one nothing was proven about, and no copy at all is an
+             * application or a construct the tree that runs does not hold — neither of them a
+             * proof.
+             */
+            private boolean comesOutSoNowhere(ModelOccurrence construct, boolean held) {
+                if (answers == null) {
+                    return false;
+                }
+                List<ComparisonEmissionIndex.EmittedComparison> made =
+                        comparisons.madeFor(construct);
+                if (made.isEmpty()) {
+                    return false;
+                }
+                for (ComparisonEmissionIndex.EmittedComparison each : made) {
+                    Optional<ControlPlace.Outcome> where = plan.outcomeOf(each.occurrence(), held);
+                    if (where.isEmpty() || !(answers.at(where.get())
+                            instanceof souther.compiler.reach.Reachability.Unreachable)) {
+                        return false;
+                    }
+                }
+                return true;
+            }
         }
 
         /**
@@ -9412,6 +9525,16 @@ public final class Adequacy {
     static Set<ArmProbe> armsSeenIn(RowOutcome row, Optional<SiteNumbering> numbering) {
         return switch (ObservedInputs.of(row, numbering).watched()) {
             case Generator.Watched.Ran(var account) -> account.arms();
+            case Generator.Watched.NoAccount _ -> Set.of();
+        };
+    }
+
+    /** The ways {@code row}'s conditions came out, read the same way and under the same
+     *  numbering — and none where the run's account was not read. */
+    static Set<SeenConditionOutcome> outcomesSeenIn(RowOutcome row,
+                                                    Optional<SiteNumbering> numbering) {
+        return switch (ObservedInputs.of(row, numbering).watched()) {
+            case Generator.Watched.Ran(var account) -> account.outcomes();
             case Generator.Watched.NoAccount _ -> Set.of();
         };
     }
