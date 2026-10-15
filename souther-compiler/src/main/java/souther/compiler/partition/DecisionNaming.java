@@ -13,6 +13,7 @@ import souther.compiler.inputs.WhatAConditionRuns;
 import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.ModelOccurrence;
 
+import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
@@ -231,14 +232,30 @@ final class DecisionNaming implements Naming<DecisionPath> {
         if (stated == null) {
             return way;
         }
-        Set<ModelOccurrence> alwaysRun = new LinkedHashSet<>();
+        // Worked out at the first condition settled short of an operand, which most ways have none
+        // of, and not once for every way into the arm.
+        List<Set<ModelOccurrence>> alwaysRun = new ArrayList<>(1);
+        return way.seenAgain(shown -> {
+            if (!(shown instanceof ShownBy.ShortOf(var _, var notReached))) {
+                return shown;
+            }
+            if (alwaysRun.isEmpty()) {
+                alwaysRun.add(alwaysRun(fork, part));
+            }
+            return alwaysRun.getFirst().contains(notReached)
+                    ? new ShownBy.AtAnArmShortOf(stated, part, notReached) : shown;
+        });
+    }
+
+    /** The operands every run down arm {@code part} of {@code fork} ran, where a run through one
+     *  is recorded at the operand itself. */
+    private Set<ModelOccurrence> alwaysRun(Core.If fork, int part) {
+        Set<ModelOccurrence> out = new LinkedHashSet<>();
         for (Core right : WhatAConditionRuns.whenItCameOut(fork.cond(), part == 0, reads,
                 meanings.states().symbols(), meanings.states().newtypes()).mayNotRun()) {
-            recordedAsItself(right).ifPresent(alwaysRun::add);
+            recordedAsItself(right).ifPresent(out::add);
         }
-        return way.seenAgain(shown -> shown instanceof ShownBy.ShortOf(var _, var notReached)
-                && alwaysRun.contains(notReached)
-                ? new ShownBy.AtAnArmShortOf(stated, part, notReached) : shown);
+        return out;
     }
 
     /**

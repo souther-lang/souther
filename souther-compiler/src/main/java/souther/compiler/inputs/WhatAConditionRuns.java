@@ -6,7 +6,9 @@ import souther.compiler.core.Core;
 import souther.compiler.core.Evaluated;
 
 import java.util.ArrayList;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.function.Function;
 
@@ -98,6 +100,7 @@ public record WhatAConditionRuns(List<Core> mayNotRun, List<Settled> settled, bo
         private final DeclarationNewtypes newtypes;
         private final List<Core> mayNotRun = new ArrayList<>();
         private final List<Settled> settled = new ArrayList<>();
+        private final Map<Core, Optional<Boolean>> worked = new IdentityHashMap<>();
         private boolean whole = true;
 
         Walk(Function<Core, Optional<Boolean>> told, Symbols symbols,
@@ -134,9 +137,25 @@ public record WhatAConditionRuns(List<Core> mayNotRun, List<Settled> settled, bo
             whole = false;
         }
 
-        /** How the way says {@code e} came out, worked out from how it says its parts did; empty
-         *  where it does not say. */
+        /**
+         * How the way says {@code e} came out, worked out from how it says its parts did; empty
+         * where it does not say.
+         *
+         * <p>Kept by the node: a walk down a chain of operators asks it of each left in turn, and
+         * each of those is the chain below it asked again. A node occurs once, so what its names
+         * read is the same each time.
+         */
         Optional<Boolean> cameOut(Core e, InputReads reads) {
+            Optional<Boolean> already = worked.get(e);
+            if (already != null) {
+                return already;
+            }
+            Optional<Boolean> out = cameOutAfresh(e, reads);
+            worked.put(e, out);
+            return out;
+        }
+
+        private Optional<Boolean> cameOutAfresh(Core e, InputReads reads) {
             InputTruth.Asked asked = InputTruth.asked(e, true, reads, symbols, newtypes);
             Evaluated.Step.OnlyWhere some = onlySometimes(asked.value());
             Optional<Boolean> value;

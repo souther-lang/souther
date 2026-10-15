@@ -15,11 +15,13 @@ import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.SequencedMap;
 import java.util.SequencedSet;
 import java.util.Set;
 import java.util.function.Function;
@@ -902,7 +904,8 @@ public final class ValueArrivals<P> {
         if (!(waysAt(iff.cond()) instanceof Paths.Held<P> held)) {
             return new Ways.Unknown<>();
         }
-        List<P> paths = new ArrayList<>();
+        // Each once: two arrivals the arm writes down alike are one way into it.
+        SequencedSet<P> paths = new LinkedHashSet<>();
         for (Arrival<P> each : held.arrivals()) {
             // A way whose value this reading could not work out may come out either, so it is one
             // of the ways here.
@@ -918,7 +921,7 @@ public final class ValueArrivals<P> {
         if (paths.isEmpty() && comesAt(iff.cond()).mayCome(want)) {
             return new Ways.Unknown<>();
         }
-        return new Ways.Known<>(paths);
+        return new Ways.Known<>(List.copyOf(paths));
     }
 
     /**
@@ -1059,8 +1062,13 @@ public final class ValueArrivals<P> {
          * everything gathered so far for every candidate: a naming whose equality is worked out
          * from what the way consulted pays that search once per pair, and the cost of gathering
          * one body's ways grew with their square.
+         *
+         * <p>Keyed by each as a way ({@link Provenance#asAWay}), and holding the way with the truths
+         * every run gathered under that key kept. Keyed with the truths, ways that differ only in
+         * how a truth nothing names came out would be told apart, which is as many ways as there
+         * are combinations of those truths, and the bound would be spent on what no naming wrote.
          */
-        private final SequencedSet<Arrival<P>> ways = new LinkedHashSet<>();
+        private final SequencedMap<Arrival<P>, Arrival<P>> ways = new LinkedHashMap<>();
         private boolean beyond;
 
         boolean isBeyond() {
@@ -1073,12 +1081,17 @@ public final class ValueArrivals<P> {
 
         /** One way, where it is not one this already holds and there is still room for it. */
         void add(Arrival<P> way) {
-            // Asked and kept in one look: a way is hashed from everything it consulted, and two
-            // looks pay that twice for every candidate.
-            if (beyond || !ways.add(way)) {
+            if (beyond) {
                 return;
             }
-            if (ways.size() > naming.mostArrivals()) {
+            // Asked and kept in one look: a way is hashed from everything it consulted, and two
+            // looks pay that twice for every candidate.
+            Provenance<P> asAWay = way.provenance().asAWay();
+            int before = ways.size();
+            ways.merge(asAWay == way.provenance() ? way : new Arrival<>(way.value(), asAWay), way,
+                    (held, again) -> new Arrival<>(held.value(),
+                            held.provenance().sharedWith(again.provenance())));
+            if (ways.size() > before && ways.size() > naming.mostArrivals()) {
                 beyond = true;
                 ways.clear();
             }
@@ -1098,7 +1111,7 @@ public final class ValueArrivals<P> {
         }
 
         Paths<P> paths() {
-            return beyond ? new Paths.Beyond<>() : new Paths.Held<>(List.copyOf(ways));
+            return beyond ? new Paths.Beyond<>() : new Paths.Held<>(List.copyOf(ways.values()));
         }
     }
 

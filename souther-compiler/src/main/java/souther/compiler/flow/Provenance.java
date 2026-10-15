@@ -44,6 +44,25 @@ public record Provenance<P>(P path, Completeness completeness, List<UnwordedTrut
         return new Provenance<>(path, Completeness.PARTIAL, more);
     }
 
+    /**
+     * The way with no truth kept on it: what it is as a way. Two ways that differ only in a truth
+     * they had no words for are one way, as they were before either was kept.
+     */
+    public Provenance<P> asAWay() {
+        return unworded.isEmpty() ? this : new Provenance<>(path, completeness, List.of());
+    }
+
+    /** The same way, keeping only the truths {@code other} kept too: one way standing for runs on
+     *  both knows of a truth only what both know. */
+    public Provenance<P> sharedWith(Provenance<P> other) {
+        if (unworded.equals(other.unworded)) {
+            return this;
+        }
+        List<UnwordedTruth> both = new ArrayList<>(unworded);
+        both.retainAll(Set.copyOf(other.unworded));
+        return new Provenance<>(path, completeness, both);
+    }
+
     /** The same way written as {@code path}, missing what it was missing. */
     public Provenance<P> writtenAs(P path) {
         return new Provenance<>(path, completeness, unworded);
@@ -54,9 +73,17 @@ public record Provenance<P>(P path, Completeness completeness, List<UnwordedTrut
      * either had none for.
      */
     public Provenance<P> then(P path, Provenance<P> after) {
+        Completeness either = completeness.and(after.completeness);
+        // Asked of every way under every arm, and almost every one of them has nothing unworded.
+        if (after.unworded.isEmpty()) {
+            return new Provenance<>(path, either, unworded);
+        }
+        if (unworded.isEmpty()) {
+            return new Provenance<>(path, either, after.unworded);
+        }
         Set<UnwordedTruth> both = new LinkedHashSet<>(unworded);
         both.addAll(after.unworded);
-        return new Provenance<>(path, completeness.and(after.completeness), List.copyOf(both));
+        return new Provenance<>(path, either, List.copyOf(both));
     }
 
     public boolean isComplete() {

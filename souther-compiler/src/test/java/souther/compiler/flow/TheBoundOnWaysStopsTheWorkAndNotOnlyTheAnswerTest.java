@@ -12,6 +12,7 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -72,7 +73,7 @@ class TheBoundOnWaysStopsTheWorkAndNotOnlyTheAnswerTest {
     @Test
     void aValueSettledMoreWaysThanTheBoundHoldsIsNotBuiltFirst() {
         Core body = bodyOf(source());
-        Counting naming = new Counting();
+        Counting naming = new Counting(true);
         ValueArrivals<Marks> reading = ValueArrivals.ofBody(body, naming);
 
         assertTrue(reading.waysAt(body) instanceof Paths.Beyond,
@@ -94,11 +95,38 @@ class TheBoundOnWaysStopsTheWorkAndNotOnlyTheAnswerTest {
     @Test
     void whatTheBodyDoesIsReadWhateverTheBoundSays() {
         Core body = bodyOf(source());
-        ValueArrivals<Marks> reading = ValueArrivals.ofBody(body, new Counting());
+        ValueArrivals<Marks> reading = ValueArrivals.ofBody(body, new Counting(true));
 
         assertEquals(new Comes(java.util.Set.of(Truth.UNREAD)).truths(),
                 reading.comesAt(body).truths(),
                 "the value arrives, and which truth is not a question about a whole number");
+    }
+
+    /**
+     * Ways that differ only in how a truth no naming wrote came out are one way, and the bound is
+     * not spent on them.
+     *
+     * <p>Kept apart, a condition on truths the body was handed would be read as many ways as there
+     * are combinations of them, every one written the same, and past the bound none of them.
+     */
+    @Test
+    void waysThatDifferOnlyInATruthNothingWroteAreOneWay() {
+        Core body = bodyOf("""
+                module example.wide
+
+                behavior fee : (a1: Bool, a2: Bool, a3: Bool, a4: Bool) -> Int
+
+                let fee (a1, a2, a3, a4) = if (a1 || a2) && (a3 || a4) then 1 else 0
+                """);
+        ValueArrivals<Marks> reading = ValueArrivals.ofBody(body, new Counting(false));
+        Core cond = ((Core.If) Core.withoutStanding(body)).cond();
+
+        assertInstanceOf(Paths.Held.class, reading.waysAt(cond),
+                "the condition's ways are held apart: " + reading.waysAt(cond));
+        assertEquals(java.util.Set.of(Truth.TRUE, Truth.FALSE),
+                reading.waysAt(cond).orNone().stream().map(Arrival::value)
+                        .collect(Collectors.toSet()),
+                "one way to each truth: " + reading.waysAt(cond));
     }
 
     private static Core bodyOf(String source) {
@@ -118,9 +146,15 @@ class TheBoundOnWaysStopsTheWorkAndNotOnlyTheAnswerTest {
     /** A naming that holds two ways apart and counts how often it is asked to put two together. */
     private static final class Counting implements Naming<Marks> {
 
+        /** Whether this has words for a value coming out a way. */
+        private final boolean worded;
         private int joins;
         private final java.util.IdentityHashMap<Core, Integer> numbered =
                 new java.util.IdentityHashMap<>();
+
+        Counting(boolean worded) {
+            this.worded = worded;
+        }
 
         @Override
         public Marks nowhere() {
@@ -142,7 +176,7 @@ class TheBoundOnWaysStopsTheWorkAndNotOnlyTheAnswerTest {
 
         @Override
         public Marks side(Core value, boolean held) {
-            return mark(value, "cmp", held ? 1 : 0);
+            return worded ? mark(value, "cmp", held ? 1 : 0) : null;
         }
 
         @Override

@@ -319,7 +319,12 @@ final class CoverageNaming implements Naming<Outcome> {
         for (UnwordedTruth each : way.provenance().unworded()) {
             InputTruth.Asked asked = InputTruth.asked(each.truth(), each.held(), reads, symbols,
                     newtypes);
-            unworded.put(asked.value(), asked.holding());
+            // Two spellings of one truth, a name and what it stands for, said two ways is a way
+            // nothing here can write down.
+            Boolean already = unworded.put(asked.value(), asked.holding());
+            if (already != null && already != asked.holding()) {
+                return null;
+            }
         }
         WhatAConditionRuns ran = WhatAConditionRuns.alongAWay(fork.cond(), part == 0,
                 each -> told(way.path(), unworded, each), reads, symbols, newtypes);
