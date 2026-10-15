@@ -74,6 +74,37 @@ class WhereALineDecidesOnlyWhereARowCanBeTest {
                 () -> "the last term is no case the line decides in: " + cases);
     }
 
+    /**
+     * Cases that differ only in which case of one value they ask are one case: the table says the
+     * first term, the second where it is not the first, and the third where it is neither, and a
+     * term that is the second is never the first.
+     */
+    @Test
+    void casesOfOneValueAreSaidAsOne() {
+        Proposition stated = Proposition.any(List.of(
+                Proposition.all(List.of(inCases("T0"), above(12).denied())),
+                Proposition.all(List.of(inCases("T1"), above(12).denied())),
+                Proposition.all(List.of(inCases("T2"), above(12).denied()))));
+        assertEquals(List.of(inCases("T0", "T1", "T2")), casesOf(stated, above(12)));
+    }
+
+    /**
+     * Where a line read on each of seventeen applications decides is one case when each
+     * application decides in one case of a value: the value being any of those cases.
+     */
+    @Test
+    void whatEachApplicationDecidesOnIsSaidAsOneOverAValue() {
+        List<WhereAnApplicationIsMade.OnOne> readings = new ArrayList<>();
+        List<String> leaves = new ArrayList<>();
+        for (int i = 0; i < 17; i++) {
+            readings.add(new WhereAnApplicationIsMade.OnOne(List.of(inCases("T" + i)),
+                    new Proposition.Always(true)));
+            leaves.add("T" + i);
+        }
+        assertEquals(List.of(inCases(leaves.toArray(String[]::new))),
+                WhereAnApplicationIsMade.decidesOn(readings));
+    }
+
     /** Where {@code line} decides in {@code stated}. */
     private static List<Proposition> casesOf(Proposition stated, Proposition.Compared line) {
         for (WhereEachLineDecides.Decides each : WhereEachLineDecides.in(stated)) {

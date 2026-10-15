@@ -782,35 +782,35 @@ public final class WhereEachLineDecides {
         if (taken instanceof Proposition.Always(boolean holds) && holds) {
             return cases;
         }
-        List<Proposition> out = new ArrayList<>();
-        for (Proposition each : cases) {
-            Proposition both = metOverValues(Proposition.all(List.of(each, taken)));
-            if (!(both instanceof Proposition.Always(boolean holds) && !holds)) {
-                out.add(both);
-            }
-        }
-        return joinedOverAValue(out);
+        return joinedOverAValue(cases.stream()
+                .map(each -> Proposition.all(List.of(each, taken))).toList());
     }
 
     /**
-     * {@code stated} with the cases it asks each value of the row to be said as the cases they
-     * share, less the cases it asks the value not to be — or holding nowhere where none is left.
-     * A value it asks only not to be some cases is left asked that.
+     * {@code stated} with what it asks each value of the row to be said as the cases left: the
+     * cases every set it holds the value to shares, less the cases it holds the value out of — or
+     * holding nowhere where none is left. A value it only holds out of some cases is left asked
+     * that.
+     *
+     * <p>A case read off the table says the parts asked before it failing beside the one that
+     * holds: where the term is not the first case and is the second. Of one value, the first says
+     * nothing the second does not, and said apart it keeps two cases that differ in which case the
+     * value is from being said as one ({@link #joinedOverAValue}).
      */
-    private static Proposition metOverValues(Proposition stated) {
+    private static Proposition leftOfEachValue(Proposition stated) {
         List<Proposition> parts = stated instanceof Proposition.All all ? all.parts()
                 : List.of(stated);
-        Map<DecisionSubject, CasesLeft> met = new LinkedHashMap<>();
+        Map<DecisionSubject, CasesLeft> held = new LinkedHashMap<>();
         Map<DecisionSubject, List<Refinement>> outside = new LinkedHashMap<>();
         List<Proposition> rest = new ArrayList<>();
         for (Proposition part : parts) {
             if (part instanceof Proposition.InCases asked && oneValueOfTheRow(asked)) {
-                CasesLeft before = met.get(asked.of());
+                CasesLeft before = held.get(asked.of());
                 CasesLeft both = before == null ? asked.cases() : before.meet(asked.cases());
                 if (both == null) {
                     return new Proposition.Always(false);
                 }
-                met.put(asked.of(), both);
+                held.put(asked.of(), both);
             } else if (part instanceof Proposition.InCases denied && !denied.holds()
                     && aValueOfTheRow(denied.of())) {
                 outside.computeIfAbsent(denied.of(), _ -> new ArrayList<>())
@@ -819,16 +819,15 @@ public final class WhereEachLineDecides {
                 rest.add(part);
             }
         }
-        for (Map.Entry<DecisionSubject, List<Refinement>> each : outside.entrySet()) {
-            if (!met.containsKey(each.getKey())) {
-                rest.add(new Proposition.InCases(each.getKey(),
-                        CasesLeft.ofEach(each.getValue()), false));
+        outside.forEach((value, atoms) -> {
+            if (!held.containsKey(value)) {
+                rest.add(new Proposition.InCases(value, CasesLeft.ofEach(atoms), false));
             }
-        }
-        for (Map.Entry<DecisionSubject, CasesLeft> each : met.entrySet()) {
+        });
+        for (Map.Entry<DecisionSubject, CasesLeft> each : held.entrySet()) {
+            List<Refinement> out = outside.getOrDefault(each.getKey(), List.of());
             List<Refinement> left = each.getValue().atoms().stream()
-                    .filter(atom -> !outside.getOrDefault(each.getKey(), List.of()).contains(atom))
-                    .toList();
+                    .filter(atom -> !out.contains(atom)).toList();
             if (left.isEmpty()) {
                 return new Proposition.Always(false);
             }
@@ -849,7 +848,14 @@ public final class WhereEachLineDecides {
      */
     static List<Proposition> joinedOverAValue(List<Proposition> cases) {
         Map<String, Joined> joined = new LinkedHashMap<>();
-        for (Proposition each : cases) {
+        for (Proposition written : cases) {
+            // Said as the cases left of each value first, so that what two cases ask of a value is
+            // one set each and the two are told apart by that alone. A case leaving no value is
+            // no case.
+            Proposition each = leftOfEachValue(written);
+            if (each instanceof Proposition.Always(boolean holds) && !holds) {
+                continue;
+            }
             List<Proposition> parts = each instanceof Proposition.All all ? all.parts()
                     : List.of(each);
             Proposition.InCases asked = parts.stream()
