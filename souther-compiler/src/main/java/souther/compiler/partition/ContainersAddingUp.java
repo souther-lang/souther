@@ -853,6 +853,13 @@ final class ContainersAddingUp {
         if (many == 0) {
             return total.signum() == 0 ? new Split.Some(List.of()) : new Split.None();
         }
+        // No element moves further than the end it is heading for, and what is owed shrinks toward
+        // nothing without changing sign, so a total past what that many reach together is one the
+        // walk below would end owing something on. Asked first, since a walk up the counts meets
+        // every count past the last that reaches, and each would otherwise be walked to its end.
+        if (!ends.reaches(total, many)) {
+            return new Split.None();
+        }
         // Held in ratios throughout the sharing out, and narrowed to a written decimal only where an
         // element's own value is built. Every step below that can go unheld says so as
         // {@link Split.NotWorkedOut} rather than {@link Split.None}: a shape the exact arithmetic
