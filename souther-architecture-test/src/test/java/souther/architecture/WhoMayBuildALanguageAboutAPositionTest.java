@@ -105,7 +105,8 @@ class WhoMayBuildALanguageAboutAPositionTest {
      * budget. So the askers are counted too. One answer is one allowance, and the place a reading
      * is made is the place that asks — {@code InvariantChecker} where a declaration's positions are
      * read, the two input readers that read a declaration's rules for a behavior's inputs, and the
-     * reading of a body's reach, which takes in what those inputs admit once, where its walk enters.
+     * seeding of a value a walk enters, which takes in what that value's declaration leaves its
+     * names.
      *
      * <p><b>How many times each of them asks, and not just that it does.</b> Two calls in one class
      * reach the constant pool once, so a walk over the names it mentions sees the same row for one
@@ -115,7 +116,7 @@ class WhoMayBuildALanguageAboutAPositionTest {
     private static final List<String> ASKING_FOR_AN_ALLOWANCE = List.of(
             "souther/compiler/check/InvariantChecker allowanceForAdmittedValues x1",
             "souther/compiler/check/InvariantChecker allowanceForWhatARuleLeaves x1",
-            "souther/compiler/check/PathReachability allowanceForAdmittedValues x1",
+            "souther/compiler/check/PathEngine allowanceForAdmittedValues x1",
             "souther/compiler/inputs/PlacedRules allowanceForAdmittedValues x1",
             "souther/compiler/inputs/ReadQuantities allowanceForAdmittedValues x1");
 

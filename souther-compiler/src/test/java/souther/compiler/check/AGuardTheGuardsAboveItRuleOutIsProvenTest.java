@@ -185,6 +185,29 @@ class AGuardTheGuardsAboveItRuleOutIsProvenTest {
     }
 
     /**
+     * And a departure at the value a declaration refuses is shown by that refusal.
+     *
+     * <p>Nothing bounds a {@code Level} at either end, so there is no range to name, and nothing
+     * stands above the guard either: said as the conditions on the way, the proof would send an
+     * author to look for a guard that is not there.
+     */
+    @Test
+    void aDepartureAtAValueADeclarationRefusesIsShownByTheRefusal() {
+        List<Proof> proven = provenIn("""
+                module d
+
+                data Level = Int invariant value /= 5
+                behavior charge : (x: Level) -> String
+                let charge (x) = if x.value == 5 then "never" else "other"
+                """);
+
+        assertEquals(1, proven.size(), "no `Level` is five");
+        String said = WhatAnAnswerSays.positionOutrunIn(proven.get(0));
+        assertTrue(said != null && said.startsWith("x ") && said.endsWith("~[5]"),
+                () -> "the position, and the value its rule refuses: " + said);
+    }
+
+    /**
      * The two proofs are told apart, and by what does the work rather than by the shape of the
      * model.
      *

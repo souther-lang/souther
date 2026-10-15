@@ -126,17 +126,24 @@ record Known(ConstraintState<FactSubject> constraints, List<Quantified> quantifi
     }
 
     /**
-     * This, with the values the declarations leave each position of the input taken in.
+     * This, with the values a declaration leaves the names of one value taken in.
      *
-     * <p>Of the value and not of the path: what a position's rules admit is true wherever the
-     * value is named. Taken in once, where a walk enters the input, and as a reading of the
-     * values rather than as numbers — {@code value == 1 || value == 3} leaves a gap between two
-     * values that no range holds, and it is the values beside the ranges a path takes in that
-     * show an arm written for the gap is one nothing enters ({@link ConstraintState#isBottom}).
+     * <p>Of the value and not of the path: what a declaration's rules admit is true wherever a
+     * value of it is named. Taken in as a reading of the values rather than as numbers —
+     * {@code value == 1 || value == 3} leaves a gap between two values that no range holds, and it
+     * is the values beside the ranges a path takes in that show an arm written for the gap is one
+     * nothing enters ({@link ConstraintState#isBottom}).
+     *
+     * <p>Met with what is known rather than read into it. Every value a walk enters says what its
+     * declaration leaves it, so this is a conjunction of many such readings, one per value, and a
+     * conjunction is what {@link ConstraintState#meet} is: readings about different values are held
+     * apart and pay nothing for each other.
      */
     Known admitting(Confinement.Worked<FactSubject> read, Allowance<FactSubject> sets) {
-        return new Known(constraints.takingRead(read, sets), quantified, spoken,
-                new Unguarded(unguarded.constraints().takingRead(read, sets)), cases);
+        ConstraintState<FactSubject> values =
+                ConstraintState.top(FactSubject.inOneOrder()).takingRead(read, sets);
+        return new Known(constraints.meet(values, sets), quantified, spoken,
+                new Unguarded(unguarded.constraints().meet(values, sets)), cases);
     }
 
     /**

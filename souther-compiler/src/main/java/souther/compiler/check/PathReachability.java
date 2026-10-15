@@ -25,11 +25,7 @@ import souther.compiler.inputs.Position;
 import souther.compiler.inputs.PositionBounds;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.NumericDomain;
-import souther.compiler.numeric.OrderedIntervals;
-import souther.compiler.values.AdmittedPlan;
-import souther.compiler.values.Allowance;
-import souther.compiler.values.PlannedValues;
-import souther.compiler.values.ValueSet;
+import souther.compiler.reach.ValuesNamed;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.reach.ComparisonArrival;
 import souther.compiler.reach.PathDecision;
@@ -222,9 +218,9 @@ public final class PathReachability {
                         out.put(where, new Reachability.Reachable(
                                 Witness.aRunWentThrough(arm.probe().get())));
                     }
-                    // Not among the arms a proof was shown wrong at. What a measure is weakened by
-                    // is an arm counted again, and the arm this condition leads to, where it leads
-                    // to one, was lit by the same row.
+                    // Not among the arms a proof was shown wrong at, which is the branch count's
+                    // own account: what it doubts is the set of arms it is made over, and a
+                    // condition coming out a way is no arm of that set.
                     case ControlPlace.Outcome outcome
                             when seen.contains(new SeenConditionOutcome(outcome.at(),
                                     outcome.held())) ->
@@ -334,8 +330,6 @@ public final class PathReachability {
         }
         Map<String, BindingId> parameters = new LinkedHashMap<>();
         read.parameterReads().forEach((binding, name) -> parameters.put(name, binding));
-        in = new PathEngine.Entered(admitted(in.known(), read, parameters, engine.terms(),
-                ruleReading.policy()), in.at());
         PathReachability walker =
                 new PathReachability(engine, plan, reading, ruleReading.source().symbols(),
                         ruleReading.source().newtypes(), out,
@@ -844,56 +838,14 @@ public final class PathReachability {
                 entered, reads, holds).known().reachesNothing()) {
             TermPath position = comparedPositionIn(cond, reads);
             NumericDomain.Bounds admits = position == null ? null : valueBoundsAt(position);
-            ValueSet.Finite named = position != null && read.at(position) != null
-                    && read.at(position).admitted().approximation()
-                    instanceof ValueSet.Finite finite ? finite : null;
+            ValuesNamed named = position == null || read.at(position) == null ? null
+                    : ValuesNamed.of(read.at(position).admitted().approximation());
             if ((admits != null || named != null) && !under.isEmpty()) {
                 return Proof.outsideInputDomain(position, admits, named,
                         under.get(under.size() - 1));
             }
         }
         return Proof.conditionsThatCannotAllHold(under);
-    }
-
-    /**
-     * {@code k} with the values the declarations leave each position of the input that is a chain
-     * of fields from a parameter.
-     *
-     * <p>The reading's answer and not a second reading of the rules: what a position admits is
-     * {@link Position#admitted}, an upper bound in every case, so what it rules out is ruled out
-     * however much of the rules the reading took in. Under the subject a condition on the position
-     * names, which is the subject the numbers of it are held under too — so a range a path takes in
-     * and the values the rules name meet at one place.
-     *
-     * <p>A position under a case, an optional or a container stands somewhere only on the rows that
-     * reach it, and is left out. So is one whose rules leave it nothing: no row exists to take any
-     * way through the body, and that is said where the declaration is, not at every arm.
-     */
-    private static Known admitted(Known k, InputDomain read, Map<String, BindingId> parameters,
-                                  Terms terms, ReadingPolicy policy) {
-        Confinement.Planned<FactSubject> said = null;
-        for (Position each : read.positions()) {
-            ValueSet named = each.admitted().approximation();
-            BindingId parameter = parameters.get(each.path().head());
-            RuleKey fields = each.path().ruleKey();
-            if (named.isAny() || named.isEmpty() || parameter == null || fields == null) {
-                continue;
-            }
-            Carrier carrier = Carrier.ofValue(each.type(), terms.declarations());
-            if (carrier == null) {
-                continue;
-            }
-            FactSubject place = terms.under(terms.placeSubject(parameter), fields);
-            Confinement.Planned<FactSubject> one = new Confinement.Planned<>(
-                    PlannedValues.at(place, AdmittedPlan.of(named)), OrderedIntervals.top(),
-                    Map.of(place, carrier));
-            said = said == null ? one : said.meet(one);
-        }
-        if (said == null) {
-            return k;
-        }
-        Allowance<FactSubject> sets = policy.allowanceForAdmittedValues();
-        return k.admitting(said.resolve(sets), sets);
     }
 
     /** The position a comparison turns on, where it turns on exactly one this reading knows. */

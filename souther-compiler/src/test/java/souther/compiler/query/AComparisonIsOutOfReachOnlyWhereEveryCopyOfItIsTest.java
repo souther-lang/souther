@@ -60,7 +60,7 @@ class AComparisonIsOutOfReachOnlyWhereEveryCopyOfItIsTest {
         NothingReaches reading = with(Map.of(
                 COMPILED.twice().get(0), unreachable(), COMPILED.twice().get(1), unsettled()));
 
-        assertNull(reading.outcomeOnTheWay(seenAt(at(COMPILED.writtenTwice()))),
+        assertNull(reading.onTheWay(seenAt(at(COMPILED.writtenTwice()))),
                 "a run may bring the key's comparison out true at the copy nothing was proven of");
     }
 
@@ -71,7 +71,7 @@ class AComparisonIsOutOfReachOnlyWhereEveryCopyOfItIsTest {
 
         assertEquals(new RuleRequirement.Excluded.AComparisonOutcomeNothingReaches(
                         COMPILED.writtenTwice(), true),
-                reading.outcomeOnTheWay(seenAt(at(COMPILED.writtenTwice()))));
+                reading.onTheWay(seenAt(at(COMPILED.writtenTwice()))));
     }
 
     /** No copy proven of at all is the same answer as one left open, and the control for both
@@ -80,7 +80,7 @@ class AComparisonIsOutOfReachOnlyWhereEveryCopyOfItIsTest {
     void nothingProvenKeepsTheRuleIn() {
         NothingReaches reading = with(Map.of());
 
-        assertNull(reading.outcomeOnTheWay(seenAt(at(COMPILED.writtenTwice()))));
+        assertNull(reading.onTheWay(seenAt(at(COMPILED.writtenTwice()))));
     }
 
     /**
@@ -95,7 +95,7 @@ class AComparisonIsOutOfReachOnlyWhereEveryCopyOfItIsTest {
 
         assertEquals(new RuleRequirement.Excluded.AComparisonOutcomeNothingReaches(
                         COMPILED.writtenTwice(), true),
-                reading.outcomeOnTheWay(seenAt(at(COMPILED.writtenOnce()),
+                reading.onTheWay(seenAt(at(COMPILED.writtenOnce()),
                         at(COMPILED.writtenTwice()))));
     }
 

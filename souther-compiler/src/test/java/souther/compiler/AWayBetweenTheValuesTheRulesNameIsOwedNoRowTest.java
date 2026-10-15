@@ -97,6 +97,43 @@ class AWayBetweenTheValuesTheRulesNameIsOwedNoRowTest {
         assertTrue(page.contains("branch      3/3"), () -> page);
     }
 
+    /**
+     * The same of a value an arm binds, which is no position of the input.
+     *
+     * <p>What a declaration leaves a value holds wherever a value of it is named — a parameter, what
+     * a {@code match} arm binds, what a call answers — so the gap is one nothing enters whichever
+     * of them the condition is written on.
+     */
+    @Test
+    void aWayBetweenTheValuesOfAValueAnArmBindsIsOutTheSameWay() {
+        String model = """
+                module example.bound
+
+                data Low
+                data High
+                data Odd = Int
+                    invariant value == 1 || value == 3 || value == 7
+                data Blank
+                data Choice = Odd | Blank
+
+                behavior pick : (p: Choice) -> Low | High
+                let pick (p) = match p with
+                    | Odd as o -> if o.value < 2 then High else if o.value < 3 then Low else High
+                    | Blank -> High
+
+                example pick
+                    | "one" : (Odd(1)) -> High
+                    | "three" : (Odd(3)) -> High
+                    | "seven" : (Odd(7)) -> High
+                    | "blank" : (Blank) -> High
+                """;
+
+        assertEquals(List.of("a_comparison_outcome_nothing_reaches"), excludedBecause(model));
+        String page = human(model);
+        assertTrue(page.contains("branch      5/5"), () -> page);
+        assertFalse(page.contains("no row expects `Low`"), () -> page);
+    }
+
     /** The control: one value of the three lies under the bound. Without it the two above would
      *  hold of a measure that had stopped owing the inner `then` anything at all. */
     @Test
@@ -191,9 +228,16 @@ class AWayBetweenTheValuesTheRulesNameIsOwedNoRowTest {
 
     @Test
     void aHelpersComparisonIsOutAtACallOnlyByWhatThatCallHandsIt() {
-        assertEquals(3, excludedBecause(twoCalls("e")).size(),
+        // By the reading of reach and not by a search: a search finds the same ways empty where it
+        // composes a row for each, and counted without the word this would hold of a compiler that
+        // had stopped reading what a call's copy is handed.
+        assertEquals(List.of("a_comparison_outcome_nothing_reaches",
+                        "a_comparison_outcome_nothing_reaches",
+                        "a_comparison_outcome_nothing_reaches"),
+                excludedBecause(twoCalls("e")),
                 "the three ways through the first call's middle, and none through the second's");
-        assertEquals(5, excludedBecause(twoCalls("d.value")).size(),
+        assertEquals(5, excludedBecause(twoCalls("d.value")).stream()
+                        .filter("a_comparison_outcome_nothing_reaches"::equals).count(),
                 "the three through either call's middle, the one through both counted once");
     }
 

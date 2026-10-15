@@ -10,7 +10,7 @@ import souther.compiler.reach.Proof;
 import souther.compiler.reach.WhyUnsettled;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.values.Value;
-import souther.compiler.values.ValueSet;
+import souther.compiler.reach.ValuesNamed;
 
 import java.util.List;
 
@@ -37,7 +37,7 @@ final class WhatAnAnswerSays {
             @Override
             public List<PathDecision> outsideInputDomain(TermPath position,
                                                          NumericDomain.Bounds admits,
-                                                         ValueSet.Finite named,
+                                                         ValuesNamed named,
                                                          PathDecision departure) {
                 return List.of();
             }
@@ -92,7 +92,7 @@ final class WhatAnAnswerSays {
             @Override
             public List<TypeSymbol> outsideInputDomain(TermPath position,
                                                        NumericDomain.Bounds admits,
-                                                       ValueSet.Finite named,
+                                                       ValuesNamed named,
                                                        PathDecision departure) {
                 return List.of();
             }
@@ -135,6 +135,16 @@ final class WhatAnAnswerSays {
         });
     }
 
+    /** The values a proof says a position holds, listed, or the ones it refuses after a {@code ~}. */
+    private static String valuesOf(ValuesNamed named) {
+        return switch (named) {
+            case ValuesNamed.Held held ->
+                    held.values().stream().map(WhatAnAnswerSays::valueOf).toList().toString();
+            case ValuesNamed.Refused refused -> "~" + refused.values().stream()
+                    .map(WhatAnAnswerSays::valueOf).toList();
+        };
+    }
+
     /** One value a rule names, as its own content: a number at its digits, a text as it is. */
     private static String valueOf(Value value) {
         return switch (value) {
@@ -157,7 +167,7 @@ final class WhatAnAnswerSays {
 
             @Override
             public String outsideInputDomain(TermPath position, NumericDomain.Bounds admits,
-                                             ValueSet.Finite named, PathDecision departure) {
+                                             ValuesNamed named, PathDecision departure) {
                 // The ends and the values and not a rendering of them: how a report words either
                 // is the renderer's, and a test asserting on that would be asserting on it twice.
                 // Each where the proof holds it, which is one or both.
@@ -165,8 +175,7 @@ final class WhatAnAnswerSays {
                         + (admits == null ? "" : " "
                                 + (admits.min() == null ? "" : admits.min().at()) + ".."
                                 + (admits.max() == null ? "" : admits.max().at()))
-                        + (named == null ? "" : " " + named.values().stream()
-                                .map(WhatAnAnswerSays::valueOf).toList());
+                        + (named == null ? "" : " " + valuesOf(named));
             }
 
             @Override
@@ -219,7 +228,7 @@ final class WhatAnAnswerSays {
             @Override
             public List<String> outsideInputDomain(TermPath position,
                                                    NumericDomain.Bounds admits,
-                                                   ValueSet.Finite named,
+                                                   ValuesNamed named,
                                                    PathDecision departure) {
                 return List.of();
             }

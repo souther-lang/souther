@@ -40,6 +40,7 @@ import souther.compiler.coverage.SiteNumbering;
 import souther.compiler.coverage.SourceOutcome;
 import souther.compiler.reach.PathDecision;
 import souther.compiler.reach.Reachability;
+import souther.compiler.reach.ValuesNamed;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.Region;
@@ -156,7 +157,6 @@ import souther.compiler.types.Type;
 import souther.compiler.types.SourceConstruct;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.values.Value;
-import souther.compiler.values.ValueSet;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -1868,18 +1868,26 @@ public final class Adequacy {
             @Override
             public souther.compiler.diag.Diagnostic.Builder outsideInputDomain(
                     TermPath position,
-                    souther.compiler.numeric.NumericDomain.Bounds admits, ValueSet.Finite named,
+                    souther.compiler.numeric.NumericDomain.Bounds admits, ValuesNamed named,
                     souther.compiler.reach.PathDecision departure) {
                 return said.hint(new DeadBranchMessage.ThePositionStopsShortOfIt(
                         position.toString(), named != null ? shown(named) : shown(admits)));
             }
 
             /**
-             * The values the rules name, which say more than the range they run between: a branch
-             * written between two of them is inside the range.
+             * The values the rules name or refuse, which say more than the range they run between:
+             * a branch written between two values named is inside the range, and one written at a
+             * value refused is inside a range with no end.
              */
-            private static String shown(ValueSet.Finite named) {
-                return "one of " + named.values().stream().map(DeadBranchProofWords::shown)
+            private static String shown(ValuesNamed named) {
+                return switch (named) {
+                    case ValuesNamed.Held held -> "one of " + listed(held.values());
+                    case ValuesNamed.Refused refused -> "any value but " + listed(refused.values());
+                };
+            }
+
+            private static String listed(Set<Value> values) {
+                return values.stream().map(DeadBranchProofWords::shown)
                         .collect(java.util.stream.Collectors.joining(", "));
             }
 
@@ -2726,13 +2734,10 @@ public final class Adequacy {
                 RunPlacement taken,
                 souther.compiler.inputs.SearchRegion declared,
                 NothingReaches unreached, boolean everyRowAborts) {
-            CoverageSites.AsWritten arm = unreached.armOnTheWay(ruled);
-            if (arm != null) {
-                return RuleSettlement.read(new RuleRequirement.Excluded.AnArmNothingReaches(arm));
-            }
-            // What the way states read against the declarations comes before a comparison's
-            // outcome: both are the model's, and the way's own reading names what it asks of a
-            // position, where the outcome says only that nothing arrives coming out so.
+            // What the way states read against the declarations comes first, and the reading of
+            // reach after it: both are the model's, and the way's own reading names what it asks of
+            // a position, where reach says only that nothing arrives — at an arm or at a comparison
+            // coming out a way, which are one reading and are asked together.
             return switch (souther.compiler.partition.Reachability.of(ruled.states(), declared)) {
                 case souther.compiler.partition.Reachability.NothingReaches nothing ->
                         RuleSettlement.read(new RuleRequirement.Excluded.OnePositionCannotBeBoth(
@@ -2742,8 +2747,8 @@ public final class Adequacy {
                                 new RuleRequirement.Excluded.AConditionNeverComesOutThatWay(
                                         never.condition()));
                 case souther.compiler.partition.Reachability.Reaching reaching -> {
-                    RuleRequirement.Excluded outcome = unreached.outcomeOnTheWay(ruled);
-                    yield outcome != null ? RuleSettlement.read(outcome)
+                    RuleRequirement.Excluded out = unreached.onTheWay(ruled);
+                    yield out != null ? RuleSettlement.read(out)
                             : everyRowAborts ? null
                             : whatASearchFinds(ruled, probe, taken, reaching);
                 }
@@ -2782,53 +2787,48 @@ public final class Adequacy {
             static final NothingReaches NOTHING = new NothingReaches(Set.of(), null, null, null);
 
             /**
-             * The arm on {@code ruled}'s way nothing arrives at, or null where none of them is one.
+             * The place on {@code ruled}'s way nothing arrives at, said as the reason the way is
+             * out — an arm, or a comparison coming out the way the rule needs — or null where none
+             * of them is one.
              *
              * <p>Every place each step was seen at and not the first of them: a step met at
              * several places is passed at each by a run taking the way, so any of them out of
-             * reach is the way out of reach. The same of {@link #outcomeOnTheWay}.
+             * reach is the way out of reach. In the order the way meets them, arms and comparisons
+             * alike, since both are one reading of reach.
              *
              * <p>Matched on what the author wrote, which is all a rule of the decision has. An arm
              * names the construct and which of its arms the way went down, and what that names may
              * be more than one obligation — which is why the arms it is looked up in are the ones
              * every obligation of which is out.
              */
-            CoverageSites.AsWritten armOnTheWay(
+            RuleRequirement.Excluded onTheWay(
                     souther.compiler.partition.DecisionReading.Ruled ruled) {
-                for (ShownBy each : seenOnTheWay(ruled)) {
-                    CoverageSites.AsWritten arm = switch (each) {
-                        case ShownBy.AtAnArm(var fork, var part) ->
-                                new CoverageSites.AsWritten(fork.origin(), part);
-                        case ShownBy.AtAnArmShortOf(var fork, var part, var _) ->
-                                new CoverageSites.AsWritten(fork.origin(), part);
-                        case ShownBy.AtAnOutcome _, ShownBy.ShortOf _,
-                             ShownBy.NothingIsRecorded _ -> null;
-                    };
-                    if (arm != null && arms.contains(arm)) {
-                        return arm;
+                for (RuleStep step : ruled.steps()) {
+                    for (ShownBy each : step.seen()) {
+                        RuleRequirement.Excluded out = switch (each) {
+                            case ShownBy.AtAnArm(var fork, var part) ->
+                                    armOutOfReach(new CoverageSites.AsWritten(fork.origin(), part));
+                            case ShownBy.AtAnArmShortOf(var fork, var part, var _) ->
+                                    armOutOfReach(new CoverageSites.AsWritten(fork.origin(), part));
+                            case ShownBy.AtAnOutcome(var construct, var held) ->
+                                    comesOutSoNowhere(construct, held)
+                                            ? new RuleRequirement.Excluded
+                                                    .AComparisonOutcomeNothingReaches(construct, held)
+                                            : null;
+                            case ShownBy.ShortOf _, ShownBy.NothingIsRecorded _ -> null;
+                        };
+                        if (out != null) {
+                            return out;
+                        }
                     }
                 }
                 return null;
             }
 
-            /** A comparison on {@code ruled}'s way that comes out the way it needs nowhere, said
-             *  as the reason the way is out, or null where none of them does. */
-            RuleRequirement.Excluded outcomeOnTheWay(
-                    souther.compiler.partition.DecisionReading.Ruled ruled) {
-                for (ShownBy each : seenOnTheWay(ruled)) {
-                    if (each instanceof ShownBy.AtAnOutcome(var construct, var held)
-                            && comesOutSoNowhere(construct, held)) {
-                        return new RuleRequirement.Excluded.AComparisonOutcomeNothingReaches(
-                                construct, held);
-                    }
-                }
-                return null;
-            }
-
-            /** Every place a run taking {@code ruled}'s way is seen at, step by step. */
-            private static List<ShownBy> seenOnTheWay(
-                    souther.compiler.partition.DecisionReading.Ruled ruled) {
-                return ruled.steps().stream().flatMap(step -> step.seen().stream()).toList();
+            /** {@code arm} as the reason a way is out, where every obligation it names is. */
+            private RuleRequirement.Excluded armOutOfReach(CoverageSites.AsWritten arm) {
+                return arms.contains(arm) ? new RuleRequirement.Excluded.AnArmNothingReaches(arm)
+                        : null;
             }
 
             /**
