@@ -527,8 +527,9 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                     numbering.saidOnTheWay(ways)));
         }
         // A fork the reading of the runs takes a way out of, under the closures the walk is in, and
-        // what each closure written as an argument is passed to. A value standing as a wider type
-        // is no fork, and a fork under it is met one step down.
+        // what each closure is passed to — written as the argument, or given a name by a `let`
+        // first. A value standing as a wider type is no fork, and a fork under it is met one step
+        // down.
         switch (e) {
             case Core.If iff -> in.forkMet(iff.occurrence());
             case Core.Match match -> in.forkMet(match.occurrence());
@@ -536,14 +537,17 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
             case Core.Binary binary when binary.op().stopsWhenItsAnswerIsSettled() ->
                     in.forkMet(binary.occurrence());
             case Core.Call call -> in.oneApplication().passing(call.args(),
-                    call.fn() instanceof Core.Reached reached
+                    () -> call.fn() instanceof Core.Reached reached
                             ? calledAs(reached.denotes(), call.fn().rendered(), symbols)
                             : call.fn().rendered(),
                     call.occurrence().lineage(), symbols.module(),
-                    arg -> closureOf(arg, reads, in));
+                    expanded -> expandedAs(expanded, symbols));
             case Core.PreservedCall call -> in.oneApplication().passing(call.args(),
-                    calledAs(call.declared().operation(), call.declared().toString(), symbols),
-                    call.place().lineage(), symbols.module(), arg -> closureOf(arg, reads, in));
+                    () -> calledAs(call.declared().operation(), call.declared().toString(),
+                            symbols),
+                    call.place().lineage(), symbols.module(),
+                    expanded -> expandedAs(expanded, symbols));
+            case Core.LetIn let -> in.oneApplication().binding(let);
             case Core.Widen _ -> { }
             default -> { }
         }
@@ -794,18 +798,6 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         }
     }
 
-    /** The closure {@code arg} stands for where {@code reads} are the names: one written there, or
-     *  one a name in force there was given. Null where it stands for none. */
-    private static Core.Block closureOf(Core arg, InputReads reads, Body in) {
-        Core written = Core.withoutStanding(arg);
-        if (written instanceof Core.Block block) {
-            return block;
-        }
-        return written instanceof Core.Read
-                && Core.withoutStanding(reads.standing(written, in.symbols(), in.newtypes())
-                        .value()) instanceof Core.Block block ? block : null;
-    }
-
     /** The operation a call of {@code called}, said as {@code rendered}, applies as the author
      *  wrote it: the sugar, where the call is of what the library rewrote one to
      *  ({@link souther.compiler.stdlib.Stdlib#writtenAs}). */
@@ -816,6 +808,13 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                     .orElse(rendered);
         }
         return rendered;
+    }
+
+    /** What a body the walk is in a copy of was expanded from, as the author of this module wrote
+     *  it. */
+    private static String expandedAs(ValueName expanded, Symbols symbols) {
+        return calledAs(expanded, expanded instanceof ValueName.Stdlib library
+                ? library.qualified() : expanded.saidIn(symbols.module()), symbols);
     }
 
     /**

@@ -7,6 +7,7 @@ import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.PathResolution;
 import souther.compiler.semantics.HowAClosureIsApplied;
+import souther.compiler.types.BindingId;
 import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.OccurrenceLineage;
@@ -14,6 +15,7 @@ import souther.compiler.types.ValueName;
 
 import java.util.ArrayDeque;
 import java.util.Deque;
+import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -22,6 +24,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
+import java.util.function.Supplier;
 
 /**
  * The forks a run gets to within one application of each closure around them, and under nothing
@@ -118,37 +121,69 @@ public record WithinOneApplication(Set<ModelOccurrence> forks,
          *  met where the name is given, before the call it is passed to, so this is read once the
          *  walk is over. */
         private final Map<Core.Block, String> passedTo = new IdentityHashMap<>();
+        /** The closure each {@code let} the walk met gave its name. */
+        private final Map<BindingId, Core.Block> bound = new HashMap<>();
         private final Set<ModelOccurrence> within = new LinkedHashSet<>();
         private final Set<ModelOccurrence> notWithin = new LinkedHashSet<>();
         /** For each fork met inside a closure not applied so, the outermost such closure. */
         private final Map<ModelOccurrence, Core.Block> readAsAWhole = new LinkedHashMap<>();
 
+        /** That the walk met {@code let}, which gives its name {@code block} where its value is a
+         *  closure. */
+        void binding(Core.LetIn let) {
+            if (Core.withoutStanding(let.value()) instanceof Core.Block block) {
+                bound.put(let.binder().binding(), block);
+            }
+        }
+
+        /** The closure {@code arg} is: one written there, or one a {@code let} the walk met gave
+         *  the name it reads. Null where it is neither. */
+        private Core.Block closureOf(Core arg) {
+            return switch (Core.withoutStanding(arg)) {
+                case Core.Block block -> block;
+                case Core.Read read -> bound.get(read.binding());
+                default -> null;
+            };
+        }
+
         /**
          * That the walk met a call of {@code own} on {@code args}, in the copy {@code lineage}
-         * says, which passes it each closure among them — where {@code closure} says which closure
-         * an argument stands for, or null where it stands for none.
+         * says, which passes it each closure among them.
          *
          * <p>What a closure is passed to is the call the author of {@code module} wrote. A call
          * inside the body of a helper of another module, expanded where the author called it, is
          * one the author never wrote: what they called is the first helper the copy was expanded
          * from that is not one of {@code module}'s own, whose bodies the author wrote too.
+         *
+         * <p>The name is worked out where a closure is among the arguments and nowhere else: this
+         * is asked of every call the walk meets, and most pass no closure. And a name an argument
+         * reads is looked up among the closures {@code let}s gave a name, and not followed through
+         * the bindings: what is had here is a label for a report.
          */
-        void passing(List<Core> args, String own, OccurrenceLineage lineage, String module,
-                     Function<Core, Core.Block> closure) {
-            String operation = own;
+        void passing(List<Core> args, Supplier<String> own, OccurrenceLineage lineage,
+                     String module, Function<ValueName, String> said) {
+            String operation = null;
+            for (Core each : args) {
+                Core.Block block = closureOf(each);
+                if (block == null || passedTo.containsKey(block)) {
+                    continue;
+                }
+                if (operation == null) {
+                    operation = calledAs(own, lineage, module, said);
+                }
+                passedTo.put(block, operation);
+            }
+        }
+
+        /** What the author called, {@code said} as they would write it. */
+        private static String calledAs(Supplier<String> own, OccurrenceLineage lineage,
+                                       String module, Function<ValueName, String> said) {
             for (ValueName each : expandedFrom(lineage)) {
                 if (!(each instanceof ValueName.Helper helper && helper.module().equals(module))) {
-                    operation = each instanceof ValueName.Stdlib library
-                            ? library.qualified() : each.saidIn(module);
-                    break;
+                    return said.apply(each);
                 }
             }
-            for (Core each : args) {
-                Core.Block block = closure.apply(each);
-                if (block != null) {
-                    passedTo.putIfAbsent(block, operation);
-                }
-            }
+            return own.get();
         }
 
         /** What each copy {@code lineage} stands in was expanded from, the outermost first. */
@@ -205,12 +240,11 @@ public record WithinOneApplication(Set<ModelOccurrence> forks,
             Set<ModelOccurrence> out = new LinkedHashSet<>(within);
             out.removeAll(notWithin);
             Map<ModelOccurrence, WhyKept.AFunctionReadAsAWhole> said = new LinkedHashMap<>();
-            readAsAWhole.forEach((fork, block) -> {
-                Citation at = Citation.of(block.pos());
-                said.put(fork, new WhyKept.AFunctionReadAsAWhole(at,
-                        at instanceof Citation.Elsewhere ? Optional.empty()
-                                : Optional.ofNullable(passedTo.get(block))));
-            });
+            readAsAWhole.forEach((fork, block) -> said.put(fork,
+                    new WhyKept.AFunctionReadAsAWhole(block.pos(),
+                            Citation.of(block.pos()) instanceof Citation.Elsewhere
+                                    ? Optional.empty()
+                                    : Optional.ofNullable(passedTo.get(block)))));
             return new WithinOneApplication(out, said);
         }
     }

@@ -3262,7 +3262,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     // Under each, what kept it where no way read whole brings its two classes
                     // together: a reader sent after a row is told whether the body reads the two
                     // together or the reading did not get far enough to rule it out.
-                    Map<ObligationIdentity.OfAFallbackPairCell, Set<WhyKept>> kept =
+                    Map<ObligationIdentity.OfAFallbackPairCell, List<WhyKept>> kept =
                             partition.pairs().kept(behavior.name());
                     for (ReportedFinding f : behavior.reported()) {
                         if (f.finding().about() instanceof
@@ -3270,7 +3270,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                             out.append(String.format("      %s %sis in %s%s%n",
                                     mark(f.finding()), noRow(f.finding()),
                                     twoClasses(combination), onAPremise(f.finding())));
-                            for (WhyKept why : kept.getOrDefault(combination, Set.of())) {
+                            for (WhyKept why : kept.getOrDefault(combination, List.of())) {
                                 out.append(String.format("          · kept: %s%n",
                                         whyKept(why, rendering, declaredIn)));
                             }
@@ -3856,11 +3856,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      */
     private static String whyKept(WhyKept why, SourceRendering rendering, SourceId declaredIn) {
         return switch (why) {
-            case WhyKept.AFunctionReadAsAWhole(var at, var operation) ->
+            case WhyKept.AFunctionReadAsAWhole function ->
                     "the ways inside the function "
-                            + operation.map(name -> "passed to `" + name + "` (" + at.said(
-                                    rendering, declaredIn) + ")")
-                                    .orElseGet(() -> "at " + at.said(rendering, declaredIn))
+                            + function.operation().map(name -> "passed to `" + name + "` ("
+                                    + function.at().said(rendering, declaredIn) + ")")
+                                    .orElseGet(() -> "at "
+                                            + function.at().said(rendering, declaredIn))
                             + " were read as a whole: it is not applied once to each element of"
                             + " a position of the input";
             case WhyKept.AWayReadInPart(var cause) -> wayReadInPart(cause)
@@ -6783,10 +6784,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      */
     private static void whyKept(ObjectNode into, WhyKept why, DocumentSources sources) {
         switch (why) {
-            case WhyKept.AFunctionReadAsAWhole(var at, var operation) -> {
+            case WhyKept.AFunctionReadAsAWhole function -> {
                 into.put("reason", "a_function_read_as_a_whole");
-                operation.ifPresent(name -> into.put("passedTo", name));
-                PublishedAt.of(at).ifPresent(place -> at(into, place, sources));
+                function.operation().ifPresent(name -> into.put("passedTo", name));
+                PublishedAt.of(function.at()).ifPresent(place -> at(into, place, sources));
             }
             case WhyKept.AWayReadInPart(var cause) -> {
                 into.put("reason", "a_way_read_in_part");
@@ -7232,10 +7233,15 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 said.put("total", pair.total());
                 // What kept each of them that no way of the body read whole reads. A fact about
                 // the body and not about the rows, so written whether or not anybody counted.
-                if (pair.owed() instanceof PartitionEvidence.PairSpace.Owed.Listed(var _,
+                // In the order the combinations are owed in, which is the relation's own.
+                if (pair.owed() instanceof PartitionEvidence.PairSpace.Owed.Listed(var cells,
                         var kept) && !kept.isEmpty()) {
                     ArrayNode keptBy = said.putArray("kept");
-                    kept.forEach((cell, why) -> {
+                    for (PartitionEvidence.PairSpace.Cell cell : cells) {
+                        List<WhyKept> why = kept.get(cell);
+                        if (why == null) {
+                            continue;
+                        }
                         ObjectNode one = keptBy.addObject();
                         one.put("one", cell.one());
                         one.put("other", cell.other());
@@ -7243,7 +7249,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         for (WhyKept each : why) {
                             whyKept(by.addObject(), each, sources);
                         }
-                    });
+                    }
                 }
                 if (partition.pairs().counted().made().isPresent()) {
                     said.put("covered", partition.pairs().counts().covered(pair.between()));

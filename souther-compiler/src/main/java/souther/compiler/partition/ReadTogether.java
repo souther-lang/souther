@@ -182,12 +182,15 @@ public sealed interface ReadTogether {
         BitSet readWith(int oneClass);
 
         /**
-         * Why the {@code oneClass}th class of the first is read with the {@code otherClass}th of
-         * the second, where no way read whole reads the two together: what the reading could not
-         * say of the ways that do. Empty where a way read whole reads them, and where nothing was
-         * read at all.
+         * Why each class of the second is read with the {@code oneClass}th of the first, where no
+         * way read whole reads the two together: what the reading could not say of the ways that
+         * do, keyed by the class of the second in the caller's order. A class a way read whole
+         * reads with it is not there, and nor is one nothing was read about at all.
+         *
+         * <p>A class of the first at a time, as {@link #readWith} is, so that the ways are walked
+         * once for a row of the combinations and not once for each of them.
          */
-        Set<WhyKept> keptBy(int oneClass, int otherClass);
+        Map<Integer, Set<WhyKept>> keptWith(int oneClass);
 
         static Between every(int otherClasses) {
             return new All(otherClasses);
@@ -207,8 +210,8 @@ public sealed interface ReadTogether {
             }
 
             @Override
-            public Set<WhyKept> keptBy(int oneClass, int otherClass) {
-                return Set.of();
+            public Map<Integer, Set<WhyKept>> keptWith(int oneClass) {
+                return Map.of();
             }
         }
 
@@ -225,8 +228,6 @@ public sealed interface ReadTogether {
             /** For each class of the second as the reading holds them, its place among the
              *  caller's. */
             private final int[] heldOther;
-            /** For each class of the second as the caller holds them, its place in the reading. */
-            private final int[] askedOther;
             private final int otherClasses;
             /** Why every combination is read whatever the ways say, where one is. */
             private final Set<WhyKept> everyCombination;
@@ -238,27 +239,39 @@ public sealed interface ReadTogether {
                 this.other = other;
                 this.askedOne = askedOne.clone();
                 this.heldOther = heldOther.clone();
-                this.askedOther = new int[heldOther.length];
-                for (int held = 0; held < heldOther.length; held++) {
-                    this.askedOther[heldOther[held]] = held;
-                }
                 this.otherClasses = otherClasses;
                 this.everyCombination = Collections.unmodifiableSet(
                         new LinkedHashSet<>(everyCombination));
             }
 
             @Override
-            public Set<WhyKept> keptBy(int oneClass, int otherClass) {
+            public Map<Integer, Set<WhyKept>> keptWith(int oneClass) {
                 int at = askedOne[oneClass];
-                int there = askedOther[otherClass];
-                Set<WhyKept> out = new LinkedHashSet<>(everyCombination);
-                for (Way each : ways) {
-                    if (each.classes().get(one).get(at) && each.classes().get(other).get(there)) {
-                        if (each.kept().isEmpty()) {
-                            return Set.of();
-                        }
-                        out.addAll(each.kept());
+                BitSet whole = new BitSet(otherClasses);
+                Map<Integer, Set<WhyKept>> out = new HashMap<>();
+                if (!everyCombination.isEmpty()) {
+                    for (int asked = 0; asked < otherClasses; asked++) {
+                        out.put(asked, new LinkedHashSet<>(everyCombination));
                     }
+                }
+                for (Way each : ways) {
+                    if (!each.classes().get(one).get(at)) {
+                        continue;
+                    }
+                    BitSet there = each.classes().get(other);
+                    for (int held = there.nextSetBit(0); held >= 0;
+                            held = there.nextSetBit(held + 1)) {
+                        if (each.kept().isEmpty()) {
+                            whole.set(heldOther[held]);
+                        } else {
+                            out.computeIfAbsent(heldOther[held],
+                                    _ -> new LinkedHashSet<>()).addAll(each.kept());
+                        }
+                    }
+                }
+                for (int asked = whole.nextSetBit(0); asked >= 0;
+                        asked = whole.nextSetBit(asked + 1)) {
+                    out.remove(asked);
                 }
                 return out;
             }

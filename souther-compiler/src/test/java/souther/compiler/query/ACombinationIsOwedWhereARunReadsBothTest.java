@@ -815,6 +815,80 @@ class ACombinationIsOwedWhereARunReadsBothTest {
     }
 
     /**
+     * A helper that calls itself over a list stops where an element ends its walk, so it goes on
+     * to an element only where the ones before did not — which is what they read, the plan among
+     * it. Called inside a function applied to each element, the forks in it are still reached past
+     * the elements before, and nothing about them is narrowed: what is owed of the plan with a
+     * leg's destination is every combination of them, or nothing where the two are not measured
+     * together at all.
+     */
+    @Test
+    void aHelperThatStopsAtAnElementInsideAFunctionNarrowsNothing() {
+        Measured total = measured("""
+                module probe.legs
+
+                data Free
+                data Paid
+                data Plan = Free | Paid
+                data Normal
+                data Premium
+                data Dest = Normal | Premium
+                data Leg = { dest: Dest }
+                data Call = { legs: List<Leg> }
+                data Yen = Int
+
+                behavior total : (plan: Plan, calls: List<Call>) -> Yen
+                    constructs Yen
+
+                let total (plan, calls) =
+                    Yen(List.fold((sum, c) -> sum + firstPaid(plan, c.legs), 0, calls))
+
+                partial let firstPaid (plan: Plan, legs: List<Leg>): Int =
+                    match List.get(0, legs) with
+                        | Some leg ->
+                            match leg.dest with
+                                | Premium -> 5
+                                | Normal ->
+                                    match plan with
+                                        | Free -> firstPaid(plan, List.drop(1, legs))
+                                        | Paid -> 1
+                        | None -> 0
+
+                example total
+                    | (Free, [Call { legs = [Leg { dest = Premium }] }]) -> Yen(5)
+                """, "total");
+
+        Set<String> owed = total.owed();
+        assertTrue(owed.isEmpty() || owed.containsAll(EVERY_PLAN_WITH_EVERY_DESTINATION),
+                () -> "a premium leg is reached past the normal legs a free plan went on from: "
+                        + owed);
+    }
+
+    /**
+     * What kept a combination is said in one order whatever order it was found in, so that two
+     * readings holding the same reasons say them alike.
+     */
+    @Test
+    void whatKeptACombinationIsSaidInOneOrder() {
+        PartitionEvidence.PairSpace.Between between = new PartitionEvidence.PairSpace.Between(
+                new AxisId("order", "one"), new AxisId("order", "other"));
+        PartitionEvidence.PairSpace.Cell cell =
+                new PartitionEvidence.PairSpace.Cell(between, "a", "b");
+        WhyKept rule = new WhyKept.ARuleNoDecisionReads(between.one());
+        WhyKept named = new WhyKept.ADecisionNothingNames();
+        WhyKept unread = new WhyKept.AWayReadInPart(
+                PathAccess.Unsupported.Why.MORE_WAYS_IN_THAN_ARE_READ);
+
+        List<WhyKept> one = new PartitionEvidence.PairSpace.Owed.Listed(List.of(cell),
+                Map.of(cell, List.of(rule, named, unread))).kept().get(cell);
+        List<WhyKept> other = new PartitionEvidence.PairSpace.Owed.Listed(List.of(cell),
+                Map.of(cell, List.of(unread, rule, named, unread))).kept().get(cell);
+
+        assertEquals(List.of(unread, named, rule), one);
+        assertEquals(one, other, "found in another order, said in the same one, each once");
+    }
+
+    /**
      * A function is said to be passed to the operation the author wrote, and not to what the
      * library expanded that operation into: {@code Set.fold} hands its function to a fold over a
      * list it makes of the set, which no author wrote.
@@ -1039,7 +1113,7 @@ class ACombinationIsOwedWhereARunReadsBothTest {
                 PartitionEvidence.PairSpace.Owed.Listed listed = assertInstanceOf(
                         PartitionEvidence.PairSpace.Owed.Listed.class, pair.owed());
                 listed.kept().forEach((cell, why) ->
-                        out.put(cell.one() + " × " + cell.other(), why));
+                        out.put(cell.one() + " × " + cell.other(), Set.copyOf(why)));
             }
             return out;
         }

@@ -676,10 +676,12 @@ final class Coverages {
         // combinations and not all of them.
         ReadTogether.Between read = together.between(ones.id(), oneClasses, others.id(),
                 otherClasses);
-        Map<PartitionEvidence.PairSpace.Cell, Set<WhyKept>> kept = new LinkedHashMap<>();
+        Map<PartitionEvidence.PairSpace.Cell, List<WhyKept>> kept = new LinkedHashMap<>();
         long count = 0;
         for (int here = 0; here < oneClasses.size(); here++) {
             BitSet readWith = read.readWith(here);
+            // Asked once for the row, where one of it is listed.
+            Map<Integer, Set<WhyKept>> keptWith = null;
             for (int there = readWith.nextSetBit(0); there >= 0;
                     there = readWith.nextSetBit(there + 1)) {
                 if (!among.canHoldTogether(one, here, other, there)) {
@@ -692,9 +694,12 @@ final class Coverages {
                     PartitionEvidence.PairSpace.Cell cell =
                             new PartitionEvidence.PairSpace.Cell(between, oneClass, otherClass);
                     cells.add(cell);
-                    Set<WhyKept> why = read.keptBy(here, there);
-                    if (!why.isEmpty()) {
-                        kept.put(cell, why);
+                    if (keptWith == null) {
+                        keptWith = read.keptWith(here);
+                    }
+                    Set<WhyKept> why = keptWith.get(there);
+                    if (why != null) {
+                        kept.put(cell, List.copyOf(why));
                     }
                 }
             }
@@ -714,7 +719,7 @@ final class Coverages {
      */
     private record OwedBetween(int one, int other, PartitionEvidence.PairSpace.Between between,
                                long count, SequencedSet<PartitionEvidence.PairSpace.Cell> cells,
-                               Map<PartitionEvidence.PairSpace.Cell, Set<WhyKept>> kept) {
+                               Map<PartitionEvidence.PairSpace.Cell, List<WhyKept>> kept) {
     }
 
     /**

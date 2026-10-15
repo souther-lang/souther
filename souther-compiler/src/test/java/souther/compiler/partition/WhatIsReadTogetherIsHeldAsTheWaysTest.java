@@ -6,6 +6,7 @@ import souther.compiler.reading.PathAccess;
 import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -84,9 +85,9 @@ class WhatIsReadTogetherIsHeldAsTheWaysTest {
 
         ReadTogether.Between between =
                 read.between(one, List.of("a", "b"), other, List.of("c", "d"));
-        assertEquals(Set.of(), between.keptBy(0, 0), "a way read whole reads a with c");
-        assertEquals(Set.of(unread), between.keptBy(0, 1));
-        assertEquals(Set.of(unread), between.keptBy(1, 1));
+        assertEquals(Map.of(1, Set.of(unread)), between.keptWith(0),
+                "a way read whole reads a with c");
+        assertEquals(Map.of(0, Set.of(unread), 1, Set.of(unread)), between.keptWith(1));
     }
 
     /** A rule no decision reads keeps every combination of its position, and says so beside what
@@ -105,8 +106,9 @@ class WhatIsReadTogetherIsHeldAsTheWaysTest {
         ReadTogether.Between between =
                 read.between(one, List.of("a", "b"), other, List.of("c", "d"));
         assertEquals(2, between.readWith(1).cardinality());
-        assertEquals(Set.of(), between.keptBy(0, 0), "a way read whole reads a with c");
-        assertEquals(Set.of(new WhyKept.ARuleNoDecisionReads(other)), between.keptBy(1, 0));
+        Set<WhyKept> ruled = Set.of(new WhyKept.ARuleNoDecisionReads(other));
+        assertEquals(Map.of(1, ruled), between.keptWith(0), "a way read whole reads a with c");
+        assertEquals(Map.of(0, ruled, 1, ruled), between.keptWith(1));
     }
 
     private static List<String> classes(String of) {
