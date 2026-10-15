@@ -101,15 +101,15 @@ class APointTheRulesLeaveNoValueAtIsCountedAsAnsweredTest {
     /**
      * And the rules of the decision the same proof reaches are said the same way.
      *
-     * <p>The other account of the same body. A rule of the decision is owed a row where something
-     * can stand in it, and the search for one comes back with the same word — so a rule it proves
-     * the rules leave nothing for is one no row is owed at, and not one this compiler had nothing
-     * to try.
+     * <p>The other account of the same body. The two guards closing between them is a way no input
+     * takes, proved where the ways are read, and the two rules past it — the third guard holding or
+     * not — are that one way, owed no row, and not one this compiler had nothing to try.
      */
     @Test
     void theRulesOfTheDecisionThatProofReachesAreSaidAsAnsweredToo() {
-        assertTrue(report().contains("· no row is owed at 2 decision rules"),
-                () -> "the two ways the guards close between them are owed no row:\n" + report());
+        assertTrue(report().contains("· no input takes 1 way through this body, and no row is owed"
+                        + " at a rule past it"),
+                () -> "the way the guards close between them is owed no row:\n" + report());
         assertFalse(report().contains("nothing could show a row can be written at a decision"),
                 () -> "nothing was composed because there is nothing to compose, which is the"
                         + " model's answer and not this compiler's:\n" + report());

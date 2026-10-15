@@ -5381,6 +5381,30 @@
           "$ref": "#/$defs/weakening",
           "description": "What the reading of the rules themselves went without, which is about this list rather than about any entry: a reading that stopped states the ways it reached and the rest are in no document."
         },
+        "waysNoInputTakes": {
+          "type": "array",
+          "minItems": 1,
+          "description": "The ways through the body the reading proved no input takes, apart from the rules: each is the conditions a way consulted and came out as, said of as few of them as still prove it, and stands for every rule that goes on from it — a rule consulting each of these conditions as the way did. None of those rules is in `obligations` and none is counted in `coverage`; a way here is not a rule however many rules it stands for, and no two of these stand one for the other. `because` is what the proof was had from: `the_conditions_on_the_way_clash` is conditions asking for two cases of one value, two answers of one truth or counts that leave none in common, whatever the numbers; `the_numbers_on_the_way_leave_none` is conditions that each leave values and leave none together once what the declarations hold is taken in with them. Absent where no way was proved one no input takes.",
+          "items": {
+            "type": "object",
+            "required": [
+              "way",
+              "because"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "way": {
+                "$ref": "#/$defs/ruleObligationId"
+              },
+              "because": {
+                "enum": [
+                  "the_conditions_on_the_way_clash",
+                  "the_numbers_on_the_way_leave_none"
+                ]
+              }
+            }
+          }
+        },
         "obligations": {
           "type": "array",
           "description": "One entry per rule the body states.",

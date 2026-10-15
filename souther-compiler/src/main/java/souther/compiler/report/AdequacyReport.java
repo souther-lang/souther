@@ -54,6 +54,7 @@ import souther.compiler.meaning.WhyNotTaken;
 import souther.compiler.meaning.WhyUnread;
 import souther.compiler.meaning.WrittenLine;
 import souther.compiler.partition.DecisionReading;
+import souther.compiler.partition.NoInputTakesIt;
 import souther.compiler.partition.DecisionRule;
 import souther.compiler.partition.DomainPoint;
 import souther.compiler.partition.LeftOutPoint;
@@ -1190,7 +1191,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 : CoveredOnlyByRowsThatDoNotHold.rulesOf(decision)) {
             about.add(taken.obligation().display());
         }
-        if (about.isEmpty()) {
+        // And every way no input takes, each of which the page writes out as a rule's conditions.
+        List<DecisionReading.Ruled> ways = decision.read().impossible().stream()
+                .map(DecisionReading.ImpossiblePath::way).toList();
+        if (about.isEmpty() && ways.isEmpty()) {
             return Map.of();
         }
         DecisionRuleReading.Places places = placesFor(compilation.db(), module, behavior);
@@ -1199,6 +1203,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             if (about.contains(rule)) {
                 out.put(rule, conditionsOf(compilation.db(), module, places, rule));
             }
+        }
+        for (DecisionReading.Ruled way : ways) {
+            out.put(way, conditionsOf(compilation.db(), module, places, way));
         }
         return out;
     }
@@ -4164,6 +4171,44 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         // backlog. The numbers close over the count all the same, so nothing is lost and the rules
         // themselves are in the document.
         excluded(out, behavior, decision, rendering, behavior.rulePlace(), declaredIn);
+        noInputTakes(out, behavior, decision, rendering, declaredIn);
+    }
+
+    /**
+     * The ways through the body no input takes, each with the conditions it came to and why.
+     *
+     * <p>Ways and not rules, and counted apart from them. A way no input takes stands for every
+     * rule that goes on from it, which is no rule the reading holds: the count above is of the rules
+     * left, and a way here is not one more of them however many rules it stands for. Each is written
+     * as a rule is, so that what a reader is shown is which conditions came out which way.
+     */
+    private static void noInputTakes(StringBuilder out, BehaviorReport behavior,
+                                     DecisionEvidence decision, SourceRendering rendering,
+                                     SourceId declaredIn) {
+        List<DecisionReading.ImpossiblePath> impossible = decision.read().impossible();
+        if (impossible.isEmpty()) {
+            return;
+        }
+        out.append(String.format("      · no input takes %d way%s through this body, and no row"
+                + " is owed at a rule past %s%n", impossible.size(),
+                impossible.size() == 1 ? "" : "s", impossible.size() == 1 ? "it" : "them"));
+        for (DecisionReading.ImpossiblePath each : impossible) {
+            out.append(String.format("          · %s:%n", whyNoInputTakes(each.why())));
+            for (ShownCondition read : behavior.readingsOf(each.way())) {
+                out.append(String.format("              · %s%n",
+                        said(read, declaredIn, rendering)));
+            }
+        }
+    }
+
+    /** Why no input takes a way, in the words the page says it in. */
+    private static String whyNoInputTakes(NoInputTakesIt why) {
+        return switch (why) {
+            case NoInputTakesIt.TheConditionsClash _ ->
+                    "the conditions on the way ask for what no input is at once";
+            case NoInputTakesIt.TheNumbersLeaveNone _ ->
+                    "the declarations and the conditions on the way leave no value";
+        };
     }
 
     /**
@@ -7681,6 +7726,21 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     ArrayNode proofs = one.putArray("reachProofsContradicted");
                     settled.shownWrong().forEach(place -> reachProof(proofs.addObject(), place));
                 }
+            }
+        }
+        // And the ways no input takes, apart from the rules: each stands for every rule past it,
+        // none of which is an obligation above, and written as a rule's conditions are so that a
+        // consumer tells which rules those are by the conditions they consult.
+        List<DecisionReading.ImpossiblePath> impossible = decision.read().impossible();
+        if (!impossible.isEmpty()) {
+            ArrayNode ways = out.putArray("waysNoInputTakes");
+            for (DecisionReading.ImpossiblePath each : impossible) {
+                ObjectNode one = ways.addObject();
+                ruleId(one.putObject("way"), behavior.name(), each.way().rule());
+                one.put("because", switch (each.why()) {
+                    case NoInputTakesIt.TheConditionsClash _ -> "the_conditions_on_the_way_clash";
+                    case NoInputTakesIt.TheNumbersLeaveNone _ -> "the_numbers_on_the_way_leave_none";
+                });
             }
         }
     }
