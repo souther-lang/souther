@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.coverage.ArmProbe;
+import souther.compiler.coverage.ConditionOutcomeSite;
 import souther.compiler.coverage.SeenConditionOutcome;
 import souther.compiler.coverage.NumberingIdentity;
 import souther.compiler.core.Core;
@@ -84,15 +85,21 @@ public final class PathReachability {
      *                  say about it is a reading and answers for that plan, while what a caller
      *                  holds where a module's reading could not be made is no reading and answers
      *                  for none. The two are the same map and are not the same fact
+     * @param recordedAt where a row coming to each construct {@code arriving} answers for is
+     *                  recorded, which is the plan's and is kept with the reading so a run can be
+     *                  read against it. A comparison's way out and an application's answer are
+     *                  both recorded there, and a row recorded there either way came to it
      */
     public record Answers(Optional<NumberingIdentity> numbering,
                           Map<ControlPlace, Reachability> found,
                           Map<ConstructOccurrence,
-                                  souther.compiler.reach.ComparisonArrival> arriving) {
+                                  souther.compiler.reach.ComparisonArrival> arriving,
+                          Map<ConstructOccurrence, ConditionOutcomeSite> recordedAt) {
 
         /** No reading, which every consumer takes the way it takes a place nothing was found
          *  about, and which goes with any plan because it says nothing about one. */
-        public static final Answers NONE = new Answers(Optional.empty(), Map.of(), Map.of());
+        public static final Answers NONE =
+                new Answers(Optional.empty(), Map.of(), Map.of(), Map.of());
 
         public Answers {
             if (numbering == null) {
@@ -110,6 +117,7 @@ public final class PathReachability {
             // JVM — a diagnostic whose place in the output is not a function of the source.
             found = java.util.Collections.unmodifiableMap(new LinkedHashMap<>(found));
             arriving = java.util.Collections.unmodifiableMap(new LinkedHashMap<>(arriving));
+            recordedAt = Collections.unmodifiableMap(new LinkedHashMap<>(recordedAt));
         }
 
         /**
@@ -199,9 +207,12 @@ public final class PathReachability {
          * what the rows did.
          *
          * <p>And a row that came to a comparison arrived at it. A row seen bringing a comparison
-         * out either way shows wrong a proof that nothing arrives there, and what arrives is
-         * answered then with what restricts nothing ({@link ComparisonArrival.NoProjection}): the
-         * run says a row came, and not which values did.
+         * out either way — or an application answering either way — shows wrong a proof that
+         * nothing arrives there, and what arrives is answered then with what restricts nothing
+         * ({@link ComparisonArrival.NoProjection}): the run says a row came, and not which values
+         * did. Asked where the reading says such a row is recorded ({@link #recordedAt}), which
+         * holds an application as well as a comparison, and not of the places filed above, which
+         * hold comparisons only.
          *
          * <p>Every place is held to one rule — seen, and proven unreachable, is a proof shown wrong
          * — and what that weakens is each measure's to say by what it rests on, not this reading's.
@@ -216,7 +227,6 @@ public final class PathReachability {
             lit.forEach(probe -> requireNumbering(probe.numbering()));
             seen.forEach(outcome -> requireNumbering(outcome.at().numbering()));
             Map<ControlPlace, Reachability> out = new LinkedHashMap<>(found);
-            Map<ConstructOccurrence, ComparisonArrival> arrived = new LinkedHashMap<>(arriving);
             Set<ControlPlace> places = new LinkedHashSet<>();
             Set<ConstructOccurrence> emptyArrivals = new LinkedHashSet<>();
             found.forEach((where, said) -> {
@@ -235,14 +245,22 @@ public final class PathReachability {
                     places.add(where);
                 }
                 out.put(where, new Reachability.Reachable(ran.get()));
-                if (where instanceof ControlPlace.Outcome outcome
-                        && arriving.get(outcome.occurrence())
-                                instanceof ComparisonArrival.NothingArrives) {
-                    emptyArrivals.add(outcome.occurrence());
-                    arrived.put(outcome.occurrence(), new ComparisonArrival.NoProjection());
+            });
+            recordedAt.forEach((construct, site) -> {
+                if (arriving.get(construct) instanceof ComparisonArrival.NothingArrives
+                        && (seen.contains(new SeenConditionOutcome(site, true))
+                                || seen.contains(new SeenConditionOutcome(site, false)))) {
+                    emptyArrivals.add(construct);
                 }
             });
-            return new AsRun(new Answers(numbering, out, arrived),
+            if (places.isEmpty() && emptyArrivals.isEmpty()) {
+                return new AsRun(new Answers(numbering, out, arriving, recordedAt),
+                        Contradictions.NONE);
+            }
+            Map<ConstructOccurrence, ComparisonArrival> arrived = new LinkedHashMap<>(arriving);
+            emptyArrivals.forEach(comparison ->
+                    arrived.put(comparison, new ComparisonArrival.NoProjection()));
+            return new AsRun(new Answers(numbering, out, arrived, recordedAt),
                     new Contradictions(places, emptyArrivals));
         }
 
@@ -290,6 +308,17 @@ public final class PathReachability {
             public boolean isEmpty() {
                 return places.isEmpty() && emptyArrivals.isEmpty();
             }
+        }
+
+        /**
+         * What arrives at each comparison, and nothing about any place.
+         *
+         * <p>For a reader that asks only {@link #arrivalAt}, so that what it is handed changes only
+         * where that does. Every place answers unsettled here, which is the fail-open answer and
+         * the one a reader of no place never meets.
+         */
+        public Answers arrivalsOnly() {
+            return new Answers(numbering, Map.of(), arriving, recordedAt);
         }
 
         /** Whether this reading proved nothing arrives anywhere, which is what a walk that would
@@ -395,7 +424,12 @@ public final class PathReachability {
             InvariantChecker.gaveUp("reachability",
                     WhatTheCheckCannotRead.theWalkLeftAnAnswerUnmade(unmade.get()));
         }
-        return new Answers(Optional.of(plan.identity()), out, arriving);
+        // Where a row coming to each of them is recorded, asked of the plan while it is in hand: a
+        // run read against this reading later has the recordings and no plan.
+        Map<ConstructOccurrence, ConditionOutcomeSite> recordedAt = new LinkedHashMap<>();
+        arriving.keySet().forEach(construct -> plan.outcomeOf(construct, true)
+                .ifPresent(way -> recordedAt.put(construct, way.at())));
+        return new Answers(Optional.of(plan.identity()), out, arriving, recordedAt);
     }
 
     /**
@@ -817,6 +851,7 @@ public final class PathReachability {
         if (which == null) {
             return;
         }
+        arriving.put(which, arrivalAt(comparison, k, at, reads));
         for (boolean result : new boolean[] {true, false}) {
             Optional<ControlPlace.Outcome> where =
                     plan.outcomeOf(which, result);
@@ -830,9 +865,6 @@ public final class PathReachability {
                             with(decided, taken, comparison.pos(), result)))
                     : new Reachability.Unsettled(whyNot(taken, comparison)));
         }
-        // After both ways, so a comparison with an arrival filed has both of its ways filed too: a
-        // row seen at either way is what shows an empty arrival wrong, and is asked of the ways.
-        arriving.put(which, arrivalAt(comparison, k, at, reads));
     }
 
     /**

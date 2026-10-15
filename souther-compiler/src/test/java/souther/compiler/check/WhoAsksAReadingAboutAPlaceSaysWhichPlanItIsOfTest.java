@@ -106,9 +106,11 @@ class WhoAsksAReadingAboutAPlaceSaysWhichPlanItIsOfTest {
                     "whether an arm or a copy of a comparison coming out a way is one nothing"
                             + " arrives at, asked of places of the plan the arms and the copies"
                             + " were found in — as the rows corrected it, and with the proofs they"
-                            + " took back put back for what a rule no longer rests on. The reading"
-                            + " is held to that plan's numbering where the pair is put together,"
-                            + " before any place is looked up"));
+                            + " took back put back for what a rule no longer rests on. The arms, the"
+                            + " copies and the reading come out of the store under one module name"
+                            + " in the one method that asks for them, as the branch count's do, and"
+                            + " the reading is held to the plan's numbering where the pair is put"
+                            + " together"));
 
     @Test
     void everyReaderThatAsksAReadingAboutAPlaceIsWrittenDownWithWhatMakesItSafe() {

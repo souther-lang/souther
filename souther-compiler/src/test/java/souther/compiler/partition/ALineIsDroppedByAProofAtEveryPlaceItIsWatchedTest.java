@@ -31,9 +31,18 @@ import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
 import souther.compiler.reach.ComparisonArrival;
 
+import souther.compiler.check.PathReachability;
+import souther.compiler.coverage.ConditionOutcomeSite;
+import souther.compiler.coverage.ControlPlace;
+import souther.compiler.coverage.SeenConditionOutcome;
+import souther.compiler.types.ConstructOccurrence;
+
 import java.math.BigDecimal;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -153,8 +162,52 @@ class ALineIsDroppedByAProofAtEveryPlaceItIsWatchedTest {
 
         assertNotNull(compilation.db().ask(new Adequacy.Divided(module, "size")).value(),
                 "the body is divided");
-        assertTrue(compilation.db().isComputed(new Adequacy.Arrived(module)),
-                "by what arrives once the rows have run");
+        assertTrue(compilation.db().isComputed(new Adequacy.ArrivedAtComparisons(module)),
+                "by what arrives once the rows have run, at the comparisons alone");
+    }
+
+    /**
+     * An application's line is dropped by what arrives at it as a comparison's is, and a row
+     * recorded answering there came to it. So a proof that nothing arrives at it is taken back
+     * like a comparison's, though an application files no way out of it among the places.
+     */
+    @Test
+    void aRowAtAnApplicationTakesBackThatNothingArrivesThere() {
+        Compilation compilation = Compilation.ofSources(List.of("""
+                module g
+
+                data Small
+                data Large
+
+                behavior size : (xs: List<Int>) -> Small | Large
+                let size (xs) = if List.isEmpty(xs) then Small else Large
+                """), ModulePath.EMPTY);
+        String module = compilation.modules().get(0);
+        PathReachability.Answers read =
+                compilation.db().ask(new Adequacy.PathReached(module)).value().get("size");
+        Set<ConstructOccurrence> comparisons = new LinkedHashSet<>();
+        read.found().keySet().forEach(place -> {
+            if (place instanceof ControlPlace.Outcome outcome) {
+                comparisons.add(outcome.occurrence());
+            }
+        });
+        Map.Entry<ConstructOccurrence, ConditionOutcomeSite> application =
+                read.recordedAt().entrySet().stream()
+                        .filter(each -> !comparisons.contains(each.getKey()))
+                        .findFirst().orElseThrow(() -> new AssertionError(
+                                "the emptiness check is an application: " + read.recordedAt()));
+        Map<ConstructOccurrence, ComparisonArrival> nothing = new LinkedHashMap<>(read.arriving());
+        nothing.put(application.getKey(), new ComparisonArrival.NothingArrives());
+        PathReachability.Answers proven = new PathReachability.Answers(read.numbering(),
+                read.found(), nothing, read.recordedAt());
+
+        PathReachability.Answers.AsRun run = proven.asRunWith(Set.of(),
+                Set.of(new SeenConditionOutcome(application.getValue(), false)));
+
+        assertEquals(Set.of(application.getKey()), run.contradicted().emptyArrivals(),
+                "a row answered there, so it came there");
+        assertInstanceOf(ComparisonArrival.NoProjection.class,
+                run.answers().arrivalAt(application.getKey()), "and what arrives restricts nothing");
     }
 
     private static InputReading reading() {

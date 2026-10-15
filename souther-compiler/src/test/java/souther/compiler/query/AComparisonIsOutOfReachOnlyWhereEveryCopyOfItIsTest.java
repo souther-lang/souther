@@ -8,6 +8,7 @@ import souther.compiler.coverage.ControlPlace;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.partition.AnswersDemanded;
+import souther.compiler.partition.CompositionAccount;
 import souther.compiler.partition.DecisionReading;
 import souther.compiler.partition.DecisionRule;
 import souther.compiler.partition.RuleStep;
@@ -32,6 +33,7 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -162,6 +164,29 @@ class AComparisonIsOutOfReachOnlyWhereEveryCopyOfItIsTest {
                 "a place excluded by a proof that stands rests on no proof taken back");
     }
 
+    /**
+     * What a place of a rule is settled with: a place left open names the proof taken back on its
+     * way, and a place still excluded names none, whatever its way passed.
+     */
+    @Test
+    void aPlaceIsSettledWithTheProofsItNoLongerRestsOn() {
+        ControlPlace.Outcome first = COMPILED.twice().get(0);
+        NothingReaches reading = reading(proven(Map.of(
+                first, unreachable(), COMPILED.twice().get(1), unreachable()), Map.of())
+                .asRunWith(Set.of(), Set.of(seen(first))));
+        DecisionReading.Ruled way = seenAt(at(COMPILED.writtenTwice()));
+
+        assertEquals(Set.of(first), Adequacy.DecisionSearch.settledAt(way,
+                        RuleSettlement.of(new RuleRequirement.Unsettled.AComposedRowWentElsewhere(),
+                                CompositionAccount.NOTHING), reading).shownWrong(),
+                "a place now searched names what would have left it out");
+        assertEquals(Set.of(), Adequacy.DecisionSearch.settledAt(way,
+                        RuleSettlement.read(new RuleRequirement.Excluded
+                                .AComparisonOutcomeNothingReaches(COMPILED.writtenOnce(), true)),
+                        reading).shownWrong(),
+                "and a place excluded by something that stands names nothing");
+    }
+
     /** The controls: no row, and a row at a place nothing was proven of, take nothing back. */
     @Test
     void aRowWhereNothingWasProvenTakesNothingBack() {
@@ -227,6 +252,25 @@ class AComparisonIsOutOfReachOnlyWhereEveryCopyOfItIsTest {
         assertNull(ran.onTheWay(way), "a row went through it");
         assertEquals(Set.of(high.place()), ran.shownWrongOnTheWay(way),
                 "and the rule names the proof that would have left it no row");
+    }
+
+    /**
+     * What a body is divided by is the same whichever arms and ways the rows went through, where
+     * no row came to a comparison proven to be arrived at by nothing — so a run that goes
+     * somewhere new divides nothing again. The places themselves do move: a row is a witness.
+     */
+    @Test
+    void whatArrivesAtTheComparisonsMovesOnlyWhereAnArrivalIsTakenBack() {
+        CoverageSites.ArmSite high = COMPILED.arms().getFirst();
+        ControlPlace.Outcome first = COMPILED.twice().get(0);
+        PathReachability.Answers proven = proven(Map.of(), Map.of());
+        PathReachability.Answers.AsRun none = proven.asRunWith(Set.of(), Set.of());
+        PathReachability.Answers.AsRun somewhere = proven.asRunWith(Set.of(high.index()),
+                Set.of(seen(first)));
+
+        assertNotEquals(none.answers(), somewhere.answers(), "the rows went somewhere");
+        assertEquals(none.answers().arrivalsOnly(), somewhere.answers().arrivalsOnly(),
+                "and what arrives at the comparisons is what it was");
     }
 
     // --- what the compile made, and answers put over it --------------------------------------------
@@ -314,7 +358,8 @@ class AComparisonIsOutOfReachOnlyWhereEveryCopyOfItIsTest {
         Map<ConstructOccurrence, ComparisonArrival> arrivals =
                 new LinkedHashMap<>(COMPILED.answers().arriving());
         arrivals.putAll(arriving);
-        return new PathReachability.Answers(COMPILED.answers().numbering(), found, arrivals);
+        return new PathReachability.Answers(COMPILED.answers().numbering(), found, arrivals,
+                COMPILED.answers().recordedAt());
     }
 
     /** A row seen bringing the comparison out the way {@code place} is. */

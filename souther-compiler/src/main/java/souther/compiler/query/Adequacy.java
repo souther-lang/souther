@@ -128,6 +128,7 @@ import souther.compiler.inputs.InputUses;
 import souther.compiler.core.Contract;
 import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.types.BindingId;
+import souther.compiler.partition.DecisionReading;
 import souther.compiler.partition.DecisionRule;
 import souther.compiler.partition.GenerationOutcome;
 import souther.compiler.partition.FixtureTemplate;
@@ -1036,6 +1037,13 @@ public final class Adequacy {
             Map<String, PathReachability.Answers.AsRun> read, Hir.SpecBehavior spec) {
         PathReachability.Answers.AsRun asRun = read == null ? null : read.get(spec.name());
         return asRun == null ? PathReachability.Answers.NONE : asRun.answers();
+    }
+
+    /** The same, of what arrives at the comparisons alone ({@link ArrivedAtComparisons}). */
+    private static PathReachability.Answers atTheComparisonsOf(
+            Map<String, PathReachability.Answers> read, Hir.SpecBehavior spec) {
+        return read == null ? PathReachability.Answers.NONE
+                : read.getOrDefault(spec.name(), PathReachability.Answers.NONE);
     }
 
     /**
@@ -2017,6 +2025,37 @@ public final class Adequacy {
 
 
     /**
+     * What arrives at each comparison of every behavior of one module, once the rows have run, and
+     * nothing about any arm or outcome.
+     *
+     * <p>Its own answer because the division of a body reads this and nothing else of the reading,
+     * and {@link Arrived} changes whenever the rows go somewhere new: a place a row went through is
+     * answered with the run that went there. Read off that, every division of the module was made
+     * again for a row that lit another arm, over arrivals that had not moved. This changes only
+     * where a row came to a comparison proven to be arrived at by nothing.
+     */
+    public record ArrivedAtComparisons(String name)
+            implements Key<Map<String, PathReachability.Answers>> {
+
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Map<String, PathReachability.Answers>> compute(Db db) {
+            Answer<Map<String, PathReachability.Answers.AsRun>> arrived = db.ask(new Arrived(name));
+            if (!arrived.present()) {
+                return Answer.absent();
+            }
+            Map<String, PathReachability.Answers> out = new LinkedHashMap<>();
+            arrived.value().forEach((behavior, run) ->
+                    out.put(behavior, run.answers().arrivalsOnly()));
+            return Answer.of(Ordered.map(out));
+        }
+    }
+
+    /**
      * The effective reachability of every behavior of one module.
      *
      * <p>Derived once and read by both of the measures that exclude by it. Asked separately they
@@ -2555,7 +2594,7 @@ public final class Adequacy {
                     // rule about the strings at a position still stands as the author wrote it.
                     bodyReading(db, name, checked, behavior),
                     plan,
-                    arrivalsOf(db.ask(new Arrived(name)).value(), spec),
+                    atTheComparisonsOf(db.ask(new ArrivedAtComparisons(name)).value(), spec),
                     statedOf(db.ask(new Bodies.StatedContracts(name)).value(), spec),
                     // One allowance for this measure, made here and handed on. Asked for again
                     // further in, a position would be allowed its machines once per caller and what
@@ -2666,12 +2705,7 @@ public final class Adequacy {
                         : stated.occurrences()) {
                     RuleSettlement here = whatSettles(each, probe, taken, declared, unreached,
                             everyRowAborts);
-                    // What would have left the place no row before the run and no longer does. A
-                    // place still excluded is excluded by something that stands, whatever else
-                    // was taken back on its way.
-                    atEach.add(here == null ? null : new SettledAt(each, here,
-                            here.requirement() instanceof RuleRequirement.Excluded ? Set.of()
-                                    : unreached.shownWrongOnTheWay(each)));
+                    atEach.add(here == null ? null : settledAt(each, here, unreached));
                 }
                 SettledAcross settled = acrossThePlaces(atEach);
                 if (settled != null) {
@@ -2679,6 +2713,19 @@ public final class Adequacy {
                 }
             }
             return Answer.of(Ordered.map(out));
+        }
+
+        /**
+         * What one place of a rule came to, with the proofs a row took back that would have left
+         * it no row before the run and no longer do.
+         *
+         * <p>None for a place still excluded: it is excluded by something that stands, whatever
+         * else was taken back on its way.
+         */
+        static SettledAt settledAt(DecisionReading.Ruled at, RuleSettlement here,
+                                   NothingReaches unreached) {
+            return new SettledAt(at, here, here.requirement() instanceof RuleRequirement.Excluded
+                    ? Set.of() : unreached.shownWrongOnTheWay(at));
         }
 
         /**
@@ -2781,15 +2828,17 @@ public final class Adequacy {
          * asked for one thing: which proofs a row took back would have put a way out, so a rule
          * that is owed a row because of it can say so ({@link #shownWrongOnTheWay}).
          *
-         * @param arms        the arms the branch count leaves out, as the author wrote them
-         * @param sites       every arm of the behavior, which is what says which places an arm as
-         *                    the author wrote it stands at
-         * @param comparisons every copy of each comparison of the model in the tree that runs
-         * @param plan        the plan that numbered the places those copies come out at
-         * @param run         what the reading proved of each place, as the rows corrected it, and
-         *                    the proofs they took back
+         * @param arms             the arms the branch count leaves out, as the author wrote them
+         * @param armsBeforeTheRun the arms it would have left out with no proof taken back
+         * @param sites            every arm of the behavior, which is what says which places an
+         *                         arm as the author wrote it stands at
+         * @param comparisons      every copy of each comparison of the model in the tree that runs
+         * @param plan             the plan that numbered the places those copies come out at
+         * @param run              what the reading proved of each place, as the rows corrected it,
+         *                         and the proofs they took back
          */
         record NothingReaches(Set<CoverageSites.AsWritten> arms,
+                              Set<CoverageSites.AsWritten> armsBeforeTheRun,
                               List<CoverageSites.ArmSite> sites,
                               ComparisonEmissionIndex comparisons,
                               CoverageSites.Plan plan,
@@ -2805,15 +2854,22 @@ public final class Adequacy {
 
             /** Nothing proven, for a behavior whose reach was not read. */
             static final NothingReaches NOTHING =
-                    new NothingReaches(Set.of(), List.of(), null, null, null);
+                    new NothingReaches(Set.of(), Set.of(), List.of(), null, null, null);
 
-            /** What {@code run} proved of {@code sites} and of the copies of the comparisons. */
+            /**
+             * What {@code run} proved of {@code sites} and of the copies of the comparisons.
+             *
+             * <p>What the count would have left out before the run is worked out once, and only
+             * where a row took a proof back: otherwise it is what the count leaves out now.
+             */
             static NothingReaches of(List<CoverageSites.ArmSite> sites,
                                      ComparisonEmissionIndex comparisons,
                                      CoverageSites.Plan plan,
                                      PathReachability.Answers.AsRun run) {
-                return new NothingReaches(BranchEvidence.unreached(sites, run), sites,
-                        comparisons, plan, run);
+                Set<CoverageSites.AsWritten> now = BranchEvidence.unreached(sites, run);
+                Set<CoverageSites.AsWritten> before = run.contradicted().places().isEmpty() ? now
+                        : BranchEvidence.unreached(sites, where -> provedBeforeTheRun(run, where));
+                return new NothingReaches(now, before, sites, comparisons, plan, run);
             }
 
             /** Whether {@code run}'s reading, as the rows corrected it, proved nothing arrives at
@@ -2843,29 +2899,22 @@ public final class Adequacy {
              * these would have been a reason on its own, and a reader asking why the rule is owed
              * a row is owed all of them. Asked only of a way nothing still puts out: one that is
              * still out is out by a proof that stands.
-             *
-             * <p>What the count would have left out before the run is worked out here and not kept:
-             * it is asked only where a row took a proof back, which a reading that holds never
-             * meets.
              */
-            Set<ControlPlace> shownWrongOnTheWay(
-                    souther.compiler.partition.DecisionReading.Ruled ruled) {
+            Set<ControlPlace> shownWrongOnTheWay(DecisionReading.Ruled ruled) {
                 if (run == null || run.contradicted().places().isEmpty()) {
                     return Set.of();
                 }
                 Set<ControlPlace> taken = run.contradicted().places();
-                Set<CoverageSites.AsWritten> before = BranchEvidence.unreached(sites,
-                        where -> provedBeforeTheRun(run, where));
                 Set<ControlPlace> out = new LinkedHashSet<>();
                 for (RuleStep step : ruled.steps()) {
                     for (ShownBy each : step.seen()) {
                         switch (each) {
                             case ShownBy.AtAnArm(var fork, var part) ->
                                     armShownWrong(new CoverageSites.AsWritten(fork.origin(), part),
-                                            before, taken, out);
+                                            taken, out);
                             case ShownBy.AtAnArmShortOf(var fork, var part, var _) ->
                                     armShownWrong(new CoverageSites.AsWritten(fork.origin(), part),
-                                            before, taken, out);
+                                            taken, out);
                             case ShownBy.AtAnOutcome(var construct, var held) -> {
                                 if (comesOutSoNowhere(construct, held,
                                         where -> provedBeforeTheRun(run, where))) {
@@ -2881,11 +2930,10 @@ public final class Adequacy {
             }
 
             /** The places of {@code arm} a row took a proof back at, where without that the arm
-             *  would have been out ({@code before}) and is not now. */
-            private void armShownWrong(CoverageSites.AsWritten arm,
-                                       Set<CoverageSites.AsWritten> before,
-                                       Set<ControlPlace> taken, Set<ControlPlace> into) {
-                if (!before.contains(arm) || arms.contains(arm)) {
+             *  would have been out and is not now. */
+            private void armShownWrong(CoverageSites.AsWritten arm, Set<ControlPlace> taken,
+                                       Set<ControlPlace> into) {
+                if (!armsBeforeTheRun.contains(arm) || arms.contains(arm)) {
                     return;
                 }
                 for (CoverageSites.ArmSite site : sites) {

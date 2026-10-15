@@ -45,9 +45,12 @@ class AProofOfReachARowWentAgainstIsWrittenWhereItIsTest {
             let size (n) = if n > 10 then Large else Small
             """;
 
+    /** The model compiled once for the class: nothing here changes it. */
+    private static final Places PLACES = places();
+
     @Test
     void eachKindIsWrittenAsThePlaceItWasAbout() {
-        Places places = places();
+        Places places = PLACES;
         ObjectNode into = JSON.createObjectNode();
 
         AdequacyReport.reachProofsContradicted(into, places.contradictions());
@@ -80,7 +83,7 @@ class AProofOfReachARowWentAgainstIsWrittenWhereItIsTest {
     /** Both places it is written are places the schema declares it, with every key it has. */
     @Test
     void theSchemaDeclaresItOnTheBehaviorAndOnARule() {
-        Places places = places();
+        Places places = PLACES;
         ObjectNode written = JSON.createObjectNode();
         AdequacyReport.reachProofsContradicted(written, places.contradictions());
         ArrayNode proofs = (ArrayNode) written.get("reachProofsContradicted");
