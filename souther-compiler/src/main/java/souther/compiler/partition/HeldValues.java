@@ -53,22 +53,16 @@ record HeldValues(Carrier on, Congruences class_, ValueSet named) {
      * of it.
      */
     static HeldValues of(SearchRegion region, TermOrders orders) {
-        HeldValues held = switch (orders.term()) {
-            case NumericTerm.ValueOf value -> new HeldValues(orders.answered(),
-                    region.valueClassAt(value), region.admittedAt(value));
-            case NumericTerm.TakenOf _, NumericTerm.CodePointClassCount _ ->
-                    takenOf(region, orders);
-            // No one position's values are what these are read of.
-            case NumericTerm.TakenOver _ -> NONE;
-            case NumericTerm.Multiplicity _ -> NONE;
-        };
+        NumericTerm.FromOnePosition one = orders.term().atOnePosition();
+        if (one == null) {
+            return NONE;
+        }
+        HeldValues held = one instanceof NumericTerm.ValueOf value
+                ? new HeldValues(orders.answered(), region.valueClassAt(value),
+                        region.admittedAt(value))
+                : new HeldValues(orders.answered(), null, orders.readOfEach(
+                        region.admittedAt(new NumericTerm.ValueOf(one.position()))));
         return held.holdsAnything() ? held : NONE;
-    }
-
-    /** What the number {@code orders} is of, taken of the value at one position, is held to. */
-    private static HeldValues takenOf(SearchRegion region, TermOrders orders) {
-        NumericTerm.ValueOf value = new NumericTerm.ValueOf(orders.term().atOnePosition().position());
-        return new HeldValues(orders.answered(), null, orders.readOfEach(region.admittedAt(value)));
     }
 
     /**

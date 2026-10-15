@@ -2399,11 +2399,9 @@ final class TermRealizations {
     private static List<String> admittedStrings(TypeView holder, RuleReadingContext reading,
                                                 Collection<Integer> lengths) {
         List<String> out = new ArrayList<>();
-        for (int length : lengths) {
-            for (FixtureTemplate each : Partitions.admittedStringOfSize(holder, reading, length)) {
-                if (each.value() instanceof Hir.StringLit written) {
-                    out.add(written.value());
-                }
+        for (FixtureTemplate each : Partitions.admittedStringsOfSizes(holder, reading, lengths)) {
+            if (each.value() instanceof Hir.StringLit written) {
+                out.add(written.value());
             }
         }
         return out;

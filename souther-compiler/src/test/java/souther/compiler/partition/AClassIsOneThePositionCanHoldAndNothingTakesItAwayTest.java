@@ -73,6 +73,11 @@ class AClassIsOneThePositionCanHoldAndNothingTakesItAwayTest {
 
     /** And the same with what the behavior's own body draws taken in. */
     private static List<String> withBody(String source, String behavior) {
+        return classesOf(drawnByTheBody(source, behavior));
+    }
+
+    /** Every axis of the behavior, with what its own body draws taken in. */
+    private static Partitions.Partitioning drawnByTheBody(String source, String behavior) {
         Read read = of(source, behavior);
         Bodies.Elaborated checked =
                 read.compilation().db().ask(new Bodies.Checked(read.module())).value();
@@ -87,12 +92,12 @@ class AClassIsOneThePositionCanHoldAndNothingTakesItAwayTest {
                 checked.plan(), inputs, read.rules());
         Partitions.Partitioning base =
                 Partitions.of(read.behavior(), inputs.reading(read.rules()), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
-        return classesOf(ThresholdFixtures.withThresholds(base, inputs.quantities(read.rules()),
+        return ThresholdFixtures.withThresholds(base, inputs.quantities(read.rules()),
                 guards.thresholds(),
                 RuleReadingContext.unshared(read.rules(),
                         souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
                 guards.noLine(), guards.singled(), guards.between(),
-                souther.compiler.values.Allowance.of(souther.compiler.regex.PatternPlan.Budget.OF_BEHAVIOR_DISTINCTIONS)));
+                souther.compiler.values.Allowance.of(souther.compiler.regex.PatternPlan.Budget.OF_BEHAVIOR_DISTINCTIONS));
     }
 
     /**
@@ -547,6 +552,46 @@ class AClassIsOneThePositionCanHoldAndNothingTakesItAwayTest {
                 withBody(over(" && value /= 2 && value /= 3 && value /= 4", singled), "classify"));
         assertEquals(List.of("c/= 1", "c/= 5", "c//= 1, 5"),
                 withBody(over("", singled), "classify"));
+    }
+
+    /**
+     * A run of a number taken of the position that none of the values its rules name comes to is
+     * no class either.
+     *
+     * <p>{@code "a"} and {@code "bbb"} are one and three long, so the run from two to three holds a
+     * length no value of the position has. Against the same lines over a position that also holds
+     * {@code "bb"}, where that run is a class.
+     */
+    @Test
+    void aRunOfANumberTakenOfTheValuesNamedThatNoneComesToIsNoClass() {
+        assertEquals(List.of("String.length(c)/0 <= x < 2", "String.length(c)/3 <= x"),
+                lengthClasses("value == \"a\" || value == \"bbb\""));
+        assertEquals(List.of("String.length(c)/0 <= x < 2", "String.length(c)/2 <= x < 3",
+                        "String.length(c)/3 <= x"),
+                lengthClasses("value == \"a\" || value == \"bb\" || value == \"bbb\""));
+    }
+
+    /** The classes of a string's length, held by {@code named} and parted at two and three by the
+     *  body. */
+    private static List<String> lengthClasses(String named) {
+        String model = """
+                module g
+
+                data Code = String
+                    invariant %s
+
+                data Accepted = { at: String }
+
+                behavior classify : (c: Code) -> Accepted
+                    constructs Accepted
+
+                let classify (c) = if String.length(c.value) < 2 then Accepted { at = "x" }
+                    else if String.length(c.value) < 3 then Accepted { at = "y" }
+                    else Accepted { at = "z" }
+                """.formatted(named);
+        return drawnByTheBody(model, "classify").axes().stream()
+                .flatMap(axis -> axis.classes().stream()).map(PartitionClass::id)
+                .filter(id -> id.startsWith("String.length")).toList();
     }
 
     /** A position held between one and five, and by {@code more} besides, decided on by

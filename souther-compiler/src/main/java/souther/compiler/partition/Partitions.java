@@ -56,6 +56,7 @@ import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeReachName;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -2287,8 +2288,9 @@ public final class Partitions {
     }
 
     /**
-     * A string of exactly {@code size} characters the rules on {@code view} admit, or nothing where
-     * they say nothing about its strings or leave none of that many.
+     * A string of exactly {@code size} characters the rules on {@code view} admit — every one of
+     * them where the rules name the strings — or nothing where they say nothing about its strings
+     * or leave none of that many.
      *
      * <p>For a caller that has a count to meet and the position's reading in hand. What a value of
      * a shape counting that many looks like is {@link Witnesses}'s, asked of the shape and shared
@@ -2304,33 +2306,49 @@ public final class Partitions {
      */
     static List<FixtureTemplate> admittedStringOfSize(TypeView view, RuleReadingContext reading,
                                                       int size) {
-        if (size < 0) {
-            return List.of();
-        }
+        return admittedStringsOfSizes(view, reading, List.of(size));
+    }
+
+    /**
+     * The same for each of {@code sizes}, in the order they are given.
+     *
+     * <p>The rules on {@code view} are read once for all of them: they are the same rules whatever
+     * size is asked, and a caller walking several sizes would otherwise read them again for each.
+     */
+    static List<FixtureTemplate> admittedStringsOfSizes(TypeView view, RuleReadingContext reading,
+                                                        Collection<Integer> sizes) {
+        List<FixtureTemplate> out = new ArrayList<>();
         if (PartitionClasses.admittedByItsNames(view, reading).approximation()
                 instanceof ValueSet.Finite named) {
-            List<FixtureTemplate> out = new ArrayList<>();
-            for (Value each : named.values()) {
-                if (each instanceof Value.Text(String text)
-                        && text.codePointCount(0, text.length()) == size) {
-                    out.add(FixtureTemplate.string(text));
+            for (int size : sizes) {
+                for (Value each : named.values()) {
+                    if (each instanceof Value.Text(String text)
+                            && text.codePointCount(0, text.length()) == size) {
+                        out.add(FixtureTemplate.string(text));
+                    }
                 }
             }
             return out;
         }
         RulesRead rules = rulesReadOn(view, reading);
         if (rules == null) {
-            return List.of();
+            return out;
         }
-        // That many and no other is one more count the rules leave, met with the one they wrote.
-        DeclaredBounds.CountRange exactly = new DeclaredBounds.CountRange(
-                Math.max(rules.characters().least(), size),
-                Math.min(rules.characters().most(), size));
-        return reading.revision()
-                .settled(new StringsTheRulesAdmit(new RulesRead(rules.stated(), exactly), 1))
-                .stream()
-                .map(FixtureTemplate::string)
-                .toList();
+        for (int size : sizes) {
+            if (size < 0) {
+                continue;
+            }
+            // That many and no other is one more count the rules leave, met with the one they
+            // wrote.
+            DeclaredBounds.CountRange exactly = new DeclaredBounds.CountRange(
+                    Math.max(rules.characters().least(), size),
+                    Math.min(rules.characters().most(), size));
+            for (String each : reading.revision().settled(
+                    new StringsTheRulesAdmit(new RulesRead(rules.stated(), exactly), 1))) {
+                out.add(FixtureTemplate.string(each));
+            }
+        }
+        return out;
     }
 
     /**
