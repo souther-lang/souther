@@ -291,7 +291,11 @@ public final class ReportedReason {
             // between, which is a question about the model and not about the form it was written in.
             case BlockReason.CasePairingNotDetermined _ ->
                     UndividedPosition.Reason.UNRESOLVED_CASE_PAIRING;
-            case BlockReason.SeveralLinesInOneRule _ ->
+            // One word for a rule of several lines whose lines are not drawn, whether nothing could
+            // hold where they decide or where one decides was not worked out. Which of the two it
+            // was is told apart by the sensitivity and the figure beside the word.
+            case BlockReason.SeveralLinesInOneRule _,
+                 BlockReason.WhereALineDecidesNotWorkedOut _ ->
                     UndividedPosition.Reason.SEVERAL_LINES_IN_ONE_RULE;
             case BlockReason.RelationNotShownToReachEveryValue _ ->
                     UndividedPosition.Reason.RELATION_NOT_SHOWN_TO_REACH_EVERY_VALUE;

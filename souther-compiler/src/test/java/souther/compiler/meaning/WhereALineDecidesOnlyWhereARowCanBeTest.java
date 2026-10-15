@@ -17,6 +17,7 @@ import souther.compiler.types.TypeSymbols;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -97,19 +98,46 @@ class WhereALineDecidesOnlyWhereARowCanBeTest {
         List<WhereAnApplicationIsMade.OnOne> readings = new ArrayList<>();
         List<String> leaves = new ArrayList<>();
         for (int i = 0; i < 17; i++) {
-            readings.add(new WhereAnApplicationIsMade.OnOne(List.of(inCases("T" + i)),
-                    new Proposition.Always(true)));
+            readings.add(new WhereAnApplicationIsMade.OnOne(
+                    List.of(DecidingCase.alone(inCases("T" + i))), new Proposition.Always(true)));
             leaves.add("T" + i);
         }
-        assertEquals(List.of(inCases(leaves.toArray(String[]::new))),
+        assertEquals(List.of(DecidingCase.alone(inCases(leaves.toArray(String[]::new)))),
                 WhereAnApplicationIsMade.decidesOn(readings));
+    }
+
+    /**
+     * Two cases that differ only in which case a value is, each said for several, are joined as
+     * one standing for what each stood for with the value read as either: which case the value is
+     * tells no two cases apart here, as it does not where each was said alone.
+     */
+    @Test
+    void casesSaidForSeveralJoinedOverAValueReadTheValueAsEither() {
+        Proposition either = Proposition.any(List.of(above(12), above(24)));
+        DecidingCase.Cases eitherApart = new DecidingCase.Cases.EachOf(List.of(
+                new DecidingCase.Cases.One(above(12)), new DecidingCase.Cases.One(above(24))));
+        List<DecidingCase> written = new ArrayList<>();
+        for (String leaf : List.of("A", "B")) {
+            written.add(new DecidingCase(Proposition.all(List.of(inCases(leaf), either)),
+                    new DecidingCase.Cases.Together(List.of(
+                            new DecidingCase.Cases.One(inCases(leaf)), eitherApart))));
+        }
+
+        List<DecidingCase> joined = WhereEachLineDecides.joinedOverAValue(written);
+        assertEquals(1, joined.size(), () -> "one case: " + joined);
+        assertEquals(Proposition.all(List.of(inCases("A", "B"), either)),
+                joined.getFirst().condition(), "the value either case, and the rest");
+        assertEquals(Set.of(Proposition.all(List.of(inCases("A", "B"), above(12))),
+                        Proposition.all(List.of(inCases("A", "B"), above(24)))),
+                Set.copyOf(DecidingCases.eachOf(joined.getFirst().standsFor())),
+                "each case of the rest, with the value either case");
     }
 
     /** Where {@code line} decides in {@code stated}. */
     private static List<Proposition> casesOf(Proposition stated, Proposition.Compared line) {
         for (WhereEachLineDecides.Decides each : WhereEachLineDecides.in(stated)) {
             if (each.line().key().equals(line.key())) {
-                return each.cases();
+                return each.cases().stream().map(DecidingCase::condition).toList();
             }
         }
         throw new AssertionError(line + " is a line of " + stated);

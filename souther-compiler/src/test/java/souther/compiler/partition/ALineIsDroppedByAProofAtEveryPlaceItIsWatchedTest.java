@@ -3,8 +3,13 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.carrier.Membership;
+import souther.compiler.inputs.BlockReason;
 import souther.compiler.meaning.AuthoredPointMapping;
+import souther.compiler.meaning.DecidingCase;
+import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Derivation;
+import souther.compiler.meaning.Proposition;
+import souther.compiler.meaning.WhereAnApplicationIsMade;
 import souther.compiler.meaning.WrittenLine;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.ComparisonClaim;
@@ -25,6 +30,7 @@ import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Towards;
+import souther.compiler.observe.Figure;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
@@ -38,11 +44,13 @@ import souther.compiler.coverage.SeenConditionOutcome;
 import souther.compiler.types.ConstructOccurrence;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -114,7 +122,8 @@ class ALineIsDroppedByAProofAtEveryPlaceItIsWatchedTest {
     void oneProofAmongSeveralPlacesTakesNoLineAway() {
         ComparisonAssessment read = line();
 
-        assertEquals(read, ComparisonAssessment.narrowedByWhatArrives(read, untouched(), _ -> untouched(),
+        assertEquals(read, ComparisonAssessment.narrowedByWhatArrives(read, untouched(),
+                        _ -> untouched(), _ -> untouched(),
                         List.of(new ComparisonArrival.NothingArrives(),
                                 new ComparisonArrival.NoProjection()),
                         false, reading()),
@@ -125,7 +134,7 @@ class ALineIsDroppedByAProofAtEveryPlaceItIsWatchedTest {
     void everyPlaceProvingItTakesTheLineAway() {
         assertInstanceOf(ComparisonAssessment.NothingArrivesAtItsLine.class,
                 ComparisonAssessment.narrowedByWhatArrives(line(), untouched(), _ -> untouched(),
-                        List.of(new ComparisonArrival.NothingArrives(), misses()), false,
+                        _ -> untouched(), List.of(new ComparisonArrival.NothingArrives(), misses()), false,
                         reading()),
                 "no run answers through the rule at any place it is watched");
     }
@@ -134,11 +143,155 @@ class ALineIsDroppedByAProofAtEveryPlaceItIsWatchedTest {
     void onePlaceReachingItKeepsTheLine() {
         ComparisonAssessment read = line();
 
-        assertEquals(read, ComparisonAssessment.narrowedByWhatArrives(read, untouched(), _ -> untouched(),
+        assertEquals(read, ComparisonAssessment.narrowedByWhatArrives(read, untouched(),
+                        _ -> untouched(), _ -> untouched(),
                         List.of(new ComparisonArrival.NothingArrives(),
                                 new ComparisonArrival.Values(N, NumericDomain.Bounds.OPEN)),
                         false, reading()),
                 "a run reaches the line at one of the places the rule is watched at");
+    }
+
+    /**
+     * A line of several whose cases nobody worked out is neither kept nor dropped: it is a line
+     * where it decides was not worked out, naming the figure, and the line beside it in the same
+     * statement is read as it would be alone.
+     *
+     * <p>Rows reach the condition the cases were said as on both sides of the line, so the
+     * condition is no proof that the line turns nothing; and nothing showed that it turns
+     * anything in any one of the cases.
+     */
+    @Test
+    void aLineWhoseCasesWereNotWorkedOutIsNeitherKeptNorDropped() {
+        Proposition anywhere = WhereAnApplicationIsMade.nothingAsked();
+        ComparisonAssessment.Several read = new ComparisonAssessment.Several(List.of(
+                new ComparisonAssessment.Several.Part(new PlaceOfALine(
+                        PartOfAComparison.of(WrittenLine.THE_COMPARISON), "unworked"), line(),
+                        List.of(new DecidingCase(anywhere,
+                                new DecidingCase.Cases.MoreThanWereTakenApart()))),
+                new ComparisonAssessment.Several.Part(new PlaceOfALine(
+                        PartOfAComparison.of(WrittenLine.THE_COMPARISON), "worked"), line(),
+                        List.of(DecidingCase.alone(anywhere)))));
+
+        ComparisonAssessment.Several narrowed = assertInstanceOf(
+                ComparisonAssessment.Several.class,
+                ComparisonAssessment.narrowedByWhatArrives(read, untouched(), _ -> untouched(),
+                        _ -> untouched(), List.of(new ComparisonArrival.NoProjection()), false,
+                        reading()));
+        ComparisonAssessment.Unread unread = assertInstanceOf(ComparisonAssessment.Unread.class,
+                narrowed.parts().getFirst().line(), "the line whose cases nobody took apart");
+        assertEquals(List.of(new BlockReason.WhereALineDecidesNotWorkedOut(
+                        CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.figure())),
+                List.copyOf(unread.why().values()), "and the figure that left them whole");
+        assertEquals(read.parts().getFirst().cases(), narrowed.parts().getFirst().cases(),
+                "and the cases it was read in, none of them taken for one it turns nothing in");
+        assertEquals(read.parts().getLast(), narrowed.parts().getLast(),
+                "the line beside it is read as it would be alone");
+        // And the statement says so at the place, though the line beside it divides that place:
+        // a line nobody worked out may divide it further, so the place's classes are not settled
+        // by the one that was.
+        assertEquals(unread.why().entrySet().stream()
+                        .map(each -> new ComparisonAssessment.LeftAt(each.getKey(),
+                                each.getValue()))
+                        .toList(),
+                narrowed.whatEachPlaceIsLeftWith(),
+                "what the statement leaves its place is what stopped the reading there");
+    }
+
+    /**
+     * A line one of whose cases showed it decides is the line it is in that case, whatever became
+     * of another case of it: the case nobody worked out is the line not worked out there, beside
+     * it, naming the figure — neither owed rows nor dropped. Whichever of the two is asked first,
+     * the answer is the same.
+     */
+    @Test
+    void aLineAnotherCaseShowsDecidesIsTheLineThereAndNotWorkedOutBeside() {
+        PlaceOfALine both = new PlaceOfALine(PartOfAComparison.of(WrittenLine.THE_COMPARISON),
+                "both");
+        DecidingCase unworked = new DecidingCase(
+                new Proposition.Truth(new DecisionSubject.AnInput(N), true),
+                new DecidingCase.Cases.MoreThanWereTakenApart());
+        DecidingCase shown = DecidingCase.alone(WhereAnApplicationIsMade.nothingAsked());
+        for (List<DecidingCase> cases : List.of(List.of(unworked, shown),
+                List.of(shown, unworked))) {
+            ComparisonAssessment.Several read = new ComparisonAssessment.Several(List.of(
+                    new ComparisonAssessment.Several.Part(both, line(), cases)));
+
+            ComparisonAssessment.Several narrowed = assertInstanceOf(
+                    ComparisonAssessment.Several.class,
+                    ComparisonAssessment.narrowedByWhatArrives(read, untouched(),
+                            _ -> untouched(), _ -> untouched(),
+                            List.of(new ComparisonArrival.NoProjection()), false, reading()));
+            assertEquals(List.of(new ComparisonAssessment.Several.Part(both, line(),
+                                    List.of(shown)),
+                            new ComparisonAssessment.Several.Part(both,
+                                    new ComparisonAssessment.Unread(ComparisonAssessment.atEachOf(
+                                            line().cutting().over(),
+                                            new BlockReason.WhereALineDecidesNotWorkedOut(
+                                                    CompositionBudget
+                                                            .CASES_A_LINE_IS_TAKEN_APART_INTO
+                                                            .figure()))),
+                                    List.of(unworked))),
+                    narrowed.parts(),
+                    () -> "the line in the case that showed it, and not worked out in the other,"
+                            + " asked in the order " + cases);
+        }
+    }
+
+    /**
+     * Two cases of a line stopped at two different figures are the line not worked out at both,
+     * whichever is asked first, and the statement says both at the place: neither figure is hidden
+     * by the other having been met first.
+     */
+    @Test
+    void casesOfALineStoppedAtTwoFiguresSayBothInEitherOrder() {
+        PlaceOfALine both = new PlaceOfALine(PartOfAComparison.of(WrittenLine.THE_COMPARISON),
+                "both");
+        DecidingCase notTakenApart = new DecidingCase(
+                new Proposition.Truth(new DecisionSubject.AnInput(N), true),
+                new DecidingCase.Cases.MoreThanWereTakenApart());
+        // More cases than are asked, none of which any row reaches, under a condition every row
+        // does: the asking runs out of questions before it finds that none divides rows.
+        List<Proposition> each = new ArrayList<>();
+        for (int i = 0; i <= CompositionBudget.CASES_A_LINE_IS_ASKED_IN.maximum(); i++) {
+            each.add(new Proposition.Truth(new DecisionSubject.AnInput(TermPath.of("t" + i)),
+                    true));
+        }
+        DecidingCase tooMany = new DecidingCase(Proposition.any(each),
+                new DecidingCase.Cases.EachOf(each.stream()
+                        .<DecidingCase.Cases>map(DecidingCase.Cases.One::new).toList()));
+        // Rows reach where some one of either's cases holds, and none of the many alone.
+        Set<Proposition> reached = Set.of(notTakenApart.condition(),
+                tooMany.standsFor().holdingInSome().orElseThrow());
+        Function<Proposition, Reachability> reachingOnlyEveryRow = condition ->
+                reached.contains(condition) ? untouched()
+                        : new Reachability.NothingReaches(new Reachability.TwoAtOnce.Truths(N));
+        List<Figure> figures = Figure.inOrder(List.of(
+                CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.figure(),
+                CompositionBudget.CASES_A_LINE_IS_ASKED_IN.figure()));
+        for (List<DecidingCase> cases : List.of(List.of(notTakenApart, tooMany),
+                List.of(tooMany, notTakenApart))) {
+            ComparisonAssessment.Several read = new ComparisonAssessment.Several(List.of(
+                    new ComparisonAssessment.Several.Part(both, line(), cases)));
+
+            ComparisonAssessment.Several narrowed = assertInstanceOf(
+                    ComparisonAssessment.Several.class,
+                    ComparisonAssessment.narrowedByWhatArrives(read, untouched(),
+                            _ -> untouched(), reachingOnlyEveryRow,
+                            List.of(new ComparisonArrival.NoProjection()), false, reading()));
+            assertEquals(1, narrowed.parts().size(), () -> "one part: " + narrowed);
+            ComparisonAssessment.Unread unread = assertInstanceOf(
+                    ComparisonAssessment.Unread.class, narrowed.parts().getFirst().line());
+            assertEquals(List.of(new BlockReason.WhereALineDecidesNotWorkedOut(figures)),
+                    List.copyOf(unread.why().values()),
+                    () -> "not worked out at both figures, asked in the order " + cases);
+            assertEquals(Set.copyOf(cases), Set.copyOf(narrowed.parts().getFirst().cases()),
+                    "both cases nobody worked out");
+            assertEquals(List.of(figures), narrowed.whatEachPlaceIsLeftWith().stream()
+                            .map(left -> assertInstanceOf(BlockReason.RuleReadingStopped.class,
+                                    left.why()).figures())
+                            .toList(),
+                    "and the statement says both at the place, as a reading that stopped at both");
+        }
     }
 
     /**
@@ -211,7 +364,7 @@ class ALineIsDroppedByAProofAtEveryPlaceItIsWatchedTest {
     /** {@link #line()} as the one place it is watched at has {@code arrives} arriving there. */
     private static ComparisonAssessment assessedOn(ComparisonArrival arrives) {
         return ComparisonAssessment.narrowedByWhatArrives(line(), untouched(), _ -> untouched(),
-                List.of(arrives), false, reading());
+                _ -> untouched(), List.of(arrives), false, reading());
     }
 
     /**

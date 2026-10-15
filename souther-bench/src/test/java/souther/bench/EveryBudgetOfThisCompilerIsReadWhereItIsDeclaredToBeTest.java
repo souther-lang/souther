@@ -481,6 +481,31 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/meaning/Proposition;)J",
                     "counts the parts a statement comes to written out no further than one past"
                             + " the figure"),
+            // Where one line of a statement of several decides: its cases taken apart, and each
+            // asked whether rows stand on both sides of the line. Past either figure the line is
+            // one where it decides was not worked out, naming the figure.
+            Map.entry("souther.compiler.meaning.WhereEachLineDecides$Reading#turnsOn("
+                            + "Lsouther/compiler/meaning/Proposition;)Ljava/util/List;",
+                    "how many cases where a line decides are taken apart, past which the cases"
+                            + " are kept as more than were taken apart"),
+            Map.entry("souther.compiler.meaning.CasesOfALineAsked#<init>("
+                            + "Ljava/util/function/Predicate;)V",
+                    "how many times the cases one case was said for are asked, which every"
+                            + " question spends"),
+            Map.entry("souther.compiler.meaning.CasesOfALineAsked#<clinit>()V",
+                    "what the asking comes to past either figure: not worked out, naming it"),
+            Map.entry("souther.compiler.meaning.CasesOfALineAsked#pastTheSteps("
+                            + "Ljava/util/List;)"
+                            + "Lsouther/compiler/meaning/CasesOfALineAsked$Found$NotWorkedOut;",
+                    "out of steps, naming them and the cases left nobody took apart"),
+            Map.entry("souther.compiler.partition.ComparisonAssessment#aPartNarrowed("
+                            + "Lsouther/compiler/partition/ComparisonAssessment$Several$Part;"
+                            + "Lsouther/compiler/partition/Reachability;"
+                            + "Ljava/util/function/Function;Ljava/util/function/Function;"
+                            + "Ljava/util/List;ZLsouther/compiler/inputs/InputReading;)"
+                            + "Ljava/util/List;",
+                    "hands the figure the asking stopped at to the line, as one where it decides"
+                            + " in those cases was not worked out"),
             // What a path takes in of a condition: the parts of a disjunction taken alone, across
             // every disjunction inside another. Past the figure the disjunction is declined,
             // naming it.

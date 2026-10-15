@@ -293,6 +293,7 @@ public sealed interface BlockReason {
                     case NO_RELATION_OF_NUMBERS -> 22;
                 };
                 case RelationNotShownToReachEveryValue _ -> 23;
+                case WhereALineDecidesNotWorkedOut _ -> 24;
             };
         }
 
@@ -311,6 +312,8 @@ public sealed interface BlockReason {
                         Figure.compare(stoppedAt, ((PatternTooCostly) other).stoppedAt());
                 case OrderedExtentTooCostly(Meter.Stopped stopped) ->
                         stopped.compareTo(((OrderedExtentTooCostly) other).stopped());
+                case WhereALineDecidesNotWorkedOut(List<Figure> stoppedAt) -> Figure.compare(
+                        stoppedAt, ((WhereALineDecidesNotWorkedOut) other).stoppedAt());
                 // The rank says which statement it is.
                 case WhatItStatesIsNoLine _ -> 0;
                 case UnreadComparisonForm _, UnreadComparisonDomain _, RuleAboutADerivedValue _,
@@ -351,6 +354,9 @@ public sealed interface BlockReason {
                 // values were read. What the position admits is what the rules leave; the line
                 // through them is what nobody worked out.
                 case EndLeftOpenByAChoice _ -> false;
+                // And where one line of several decides was not worked out, which is a question
+                // about the line and asks nothing of the values the rules leave.
+                case WhereALineDecidesNotWorkedOut _ -> false;
                 // And the same operator read the other way does widen it, which is the whole
                 // difference between the two: what the alternatives admit was not read here, so
                 // the position holds whatever a value taking the unread branch may hold.
@@ -378,6 +384,9 @@ public sealed interface BlockReason {
                 // into, and the machines that say where the strings it admits stop. A run allowed
                 // more of either need not stop at the same rule.
                 case PatternTooCostly _, OrderedExtentTooCostly _ -> RunSensitivity.MAY_CHANGE;
+                // And the cases where one line of several decides, taken apart and asked one at a
+                // time as far as a figure lets them be.
+                case WhereALineDecidesNotWorkedOut _ -> RunSensitivity.MAY_CHANGE;
                 // And the readings of what a statement means, which stop at a figure only where
                 // the part they declined stopped at one.
                 case WhatItStatesIsNoLine(var why) -> why.figure().isPresent()
@@ -417,6 +426,7 @@ public sealed interface BlockReason {
                 // and nothing hands it another ({@code TextExtents}), so which limit refused is
                 // the whole of what varies.
                 case OrderedExtentTooCostly it -> List.of(TextExtents.refusedAt(it.stopped()));
+                case WhereALineDecidesNotWorkedOut it -> it.stoppedAt();
                 // The figure the part it declined stopped at, which that part's reason says.
                 case WhatItStatesIsNoLine(var why) -> why.figure().map(List::of).orElseGet(List::of);
                 case UnreadComparisonForm _, UnreadComparisonDomain _, RuleAboutADerivedValue _,
@@ -521,7 +531,7 @@ public sealed interface BlockReason {
      */
     sealed interface MetAtFigures extends BlockReason
             permits PatternTooCostly, ExactValuesTooCostly, BehaviorDistinctionsTooCostly,
-                    RulesNotHandedOnAsSets {
+                    RulesNotHandedOnAsSets, WhereALineDecidesNotWorkedOut {
 
         /** Every figure it was met at, each once and in {@link Figure#inOrder}. */
         List<Figure> stoppedAt();
@@ -563,6 +573,8 @@ public sealed interface BlockReason {
             case RulesNotHandedOnAsSets it -> new RulesNotHandedOnAsSets(
                     Figure.inOrder(both(it, (MetAtFigures) other)),
                     it.alsoAtNoFigure() || ((RulesNotHandedOnAsSets) other).alsoAtNoFigure());
+            case WhereALineDecidesNotWorkedOut it -> new WhereALineDecidesNotWorkedOut(
+                    both(it, (MetAtFigures) other));
             default -> one;
         };
         return (R) out;
@@ -1192,6 +1204,39 @@ public sealed interface BlockReason {
      * meaning was read perfectly well.
      */
     record SeveralLinesInOneRule() implements RuleReadingStopped {}
+
+    /**
+     * What the rule states was read in full, and it is several lines held together, and for one of
+     * them whether the statement turns on it in some of its cases was not worked out: those cases
+     * were said as one, and asking each case they stand for whether a row stands on both sides of
+     * the line stopped at {@code stoppedAt}.
+     *
+     * <p>Not cases the line turns in, and not cases it turns nothing in. Held as the first, the
+     * line is owed rows in cases it may turn nothing in, which no row an author writes discharges;
+     * held as the second, they are dropped for a proof that was never finished. What other cases of
+     * the line showed is the line's all the same, and this is said beside it: the line may divide
+     * the position further in the cases nobody worked out, so the position's classes are not
+     * settled by the ones that were. What the rules leave the position is read as it was.
+     *
+     * <p>Met at every figure the asking stopped at, which may be more than one: one case nobody
+     * took apart and another that ran out of questions are one line not worked out, at two figures.
+     * The figures are what happened on the way and not what the reason is
+     * ({@link MetAtFigures}), so which of them was met first decides nothing.
+     *
+     * @param stoppedAt every figure the asking stopped at, each once and in {@link Figure#inOrder}
+     */
+    record WhereALineDecidesNotWorkedOut(List<Figure> stoppedAt)
+            implements RuleReadingStopped, MetAtFigures {
+
+        public WhereALineDecidesNotWorkedOut {
+            stoppedAt = metAtSome(stoppedAt, "a line not worked out stopped at some figure");
+        }
+
+        /** Stopped at one figure. */
+        public WhereALineDecidesNotWorkedOut(Figure figure) {
+            this(List.of(figure));
+        }
+    }
 
     /**
      * What the rule states was read in full, and it relates the value here to another value that is

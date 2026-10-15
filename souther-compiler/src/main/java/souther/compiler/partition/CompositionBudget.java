@@ -343,6 +343,45 @@ public enum CompositionBudget {
     ALTERNATIVES_A_PATH_TRIES(1024),
 
     /**
+     * How many cases where a line of a statement of several decides are taken apart, where they are
+     * more than are said one by one.
+     *
+     * <p>Past how many cases are said one by one, the cases are said as one condition and kept
+     * beside it ({@link souther.compiler.meaning.DecidingCase}), for a reader to ask whether the
+     * line decides in any of them. What this bounds is the taking apart: each case is a way the
+     * statement's other parts come out, and finding them walks every way the parts can come out
+     * once for each case found.
+     *
+     * <p><b>Reaching it gives the cases up and says so.</b> The condition is kept, said for cases
+     * nobody took apart ({@link souther.compiler.meaning.DecidingCase.Cases.MoreThanWereTakenApart}).
+     * Where rows on both sides of the line reach the condition, which is all that says where the
+     * cases hold, the line is not worked out in them
+     * ({@link souther.compiler.inputs.BlockReason.WhereALineDecidesNotWorkedOut}) — never owed
+     * rows where the statement may turn nothing, and never dropped for a proof nobody finished.
+     */
+    CASES_A_LINE_IS_TAKEN_APART_INTO(256),
+
+    /**
+     * How many steps the cases one case of where a line of a statement of several decides was said
+     * for are taken through, asking whether a row stands on each side of the line in them: each
+     * alternative chosen and each part asked.
+     *
+     * <p>Every step counted, and not the questions alone. A question is the way to the line with
+     * what one case has chosen so far taken in, and a case chosen part by part is asked after each
+     * part, so that a part leaving no row on one side settles every case chosen past it. Choosing
+     * among alternatives asks nothing of its own, and alternatives below alternatives are as many as
+     * the product of them; counted by the questions, a choosing that asks nothing — of cases nobody
+     * took apart, or past the last question allowed — would run as far as that product. Counted for
+     * each case said as one on its own, so what one of them spent decides nothing about another.
+     *
+     * <p><b>Reaching it gives that case up and says so.</b> Its cases are neither ones the line
+     * turns in nor ones it turns nothing in, so they are where the line was not worked out
+     * ({@link souther.compiler.inputs.BlockReason.WhereALineDecidesNotWorkedOut}), beside whatever
+     * the line's other cases showed.
+     */
+    CASES_A_LINE_IS_ASKED_IN(256),
+
+    /**
      * How deep a construction plan descends.
      *
      * <p><b>Reaching it stops no search: what it shortens is the plan.</b> The composing runs
@@ -508,6 +547,11 @@ public enum CompositionBudget {
             case ALTERNATIVES_A_PATH_TRIES ->
                     "how many parts of one of several things a path takes alone, to know which of"
                             + " them it leaves";
+            case CASES_A_LINE_IS_TAKEN_APART_INTO ->
+                    "how many cases where a line of a statement decides are taken apart";
+            case CASES_A_LINE_IS_ASKED_IN ->
+                    "how many steps the cases where a line of a statement decides are taken"
+                            + " through, asking whether a row stands on each side of it";
             case NUMBERS_OF_A_SET_TRIED -> "how many of the numbers a class admits are tried";
             case CODE_POINTS_A_STRING_IS_SEARCHED_IN_FULL ->
                     "how many code points of a class a string is searched for in full";
@@ -565,7 +609,8 @@ public enum CompositionBudget {
                  VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT, VALUES_A_POINT_IS_TRIED_WITH,
                  PATHS_OF_A_DECISION_READ, READINGS_OF_ONE_CONDITION,
                  TOTAL_READINGS_OF_ONE_CONDITION, PARTS_A_DERIVATION_CONCLUDES,
-                 ALTERNATIVES_A_PATH_TRIES,
+                 ALTERNATIVES_A_PATH_TRIES, CASES_A_LINE_IS_TAKEN_APART_INTO,
+                 CASES_A_LINE_IS_ASKED_IN,
                  WAYS_A_WAY_IS_LOOKED_ALONG,
                  DEPTH_A_CONSTRUCTION_PLAN_DESCENDS, NUMBERS_OF_A_SET_TRIED,
                  CODE_POINTS_A_STRING_IS_SEARCHED_IN_FULL,

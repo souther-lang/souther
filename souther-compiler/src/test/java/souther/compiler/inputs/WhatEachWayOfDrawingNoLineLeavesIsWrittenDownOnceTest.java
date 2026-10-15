@@ -170,6 +170,10 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
         // unknown; what is missing is a division of the input by more than one line of one rule,
         // and a run allowed more of everything meets the same statement.
         table.put("SeveralLinesInOneRule", "SEVERAL_LINES_IN_ONE_RULE/UNAFFECTED");
+        // The same word, and stopped at a figure: where one line of the statement decides was
+        // taken apart and asked case by case as far as a figure lets it be, and a run allowed more
+        // may finish it.
+        table.put("WhereALineDecidesNotWorkedOut", "SEVERAL_LINES_IN_ONE_RULE/MAY_CHANGE");
         // Read to the end, and a relation whose other side is not shown to reach every value here.
         // What it states is known; which values here settle it on their own is what is missing,
         // and a run allowed more of everything meets the same relation.
@@ -521,6 +525,7 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
                 new BlockReason.ValueRuleRelatingElements(),
                 new BlockReason.CasePairingNotDetermined(),
                 new BlockReason.SeveralLinesInOneRule(),
+                new BlockReason.WhereALineDecidesNotWorkedOut(AT_A_FIGURE),
                 new BlockReason.RelationNotShownToReachEveryValue(),
                 new BlockReason.ComparisonCuttingNothing(),
                 new BlockReason.ComparisonCuttingOutsideDomain(),
