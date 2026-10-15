@@ -6,6 +6,7 @@ import souther.compiler.partition.DomainPoint;
 import souther.compiler.partition.OwedPoint;
 import souther.compiler.partition.PointAttribution;
 import souther.compiler.partition.PointRole;
+import souther.compiler.partition.ReadingSeat;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -63,8 +64,10 @@ public final class OwedBoundaryPoint {
         // And the thing owed is a thing owed at that point of that line. Checked rather than
         // trusted: the line and the place say where a report writes this, and what is owed says what
         // a row here answers, so a value whose halves named different points would be a finding
-        // about one line printed at another.
-        if (!owed.line().equals(at.border().obligation()) || !owed.point().equals(point)) {
+        // about one line printed at another. A comparison a body wrote owes its author's point,
+        // which this reading stands at here; a declaration's line owes this point itself.
+        if (!owed.line().equals(at.border().obligation())
+                || (owed.line().at().isPresent() && !owed.point().equals(point))) {
             throw new IllegalArgumentException("a point of " + at.border().label() + " at " + point
                     + " owed for something at another point: " + owed);
         }
@@ -125,6 +128,11 @@ public final class OwedBoundaryPoint {
                     // answers as there are accounts. Asked as "is it this one", an arm added later
                     // would fall out of both accounts and be measured nowhere, and both producers
                     // would go on compiling.
+                    // A reading not tied to the point it is filed under is no place a row for that
+                    // point is composed at: a row there stands where a caller's choice turns.
+                    if (!(owed.seat() instanceof ReadingSeat.At)) {
+                        continue;
+                    }
                     switch (owed.attribution()) {
                         case PointAttribution.TheReading _ ->
                                 out.add(new OwedBoundaryPoint(each, point, owed.point()));

@@ -148,6 +148,13 @@ public enum WeakeningWord {
      */
     ITEMS_PLACE_NOT_WORKED_OUT,
 
+    /**
+     * A reading of a comparison a body wrote that could not be tied to the line its author drew:
+     * the comparison turns there because a caller's choice does, and what rows came to there is not
+     * counted for or against a point of the author's line.
+     */
+    A_READING_NOT_TIED_TO_ITS_LINE,
+
     /** A rule of the model that a reader set aside. */
     RULE_UNREAD,
 

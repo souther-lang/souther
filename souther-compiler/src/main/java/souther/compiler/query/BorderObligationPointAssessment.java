@@ -1,10 +1,12 @@
 package souther.compiler.query;
 
+import souther.compiler.partition.AuthoredPlacement;
 import souther.compiler.partition.BorderObligationPoint;
 import souther.compiler.partition.BorderQuantity;
 import souther.compiler.partition.Demand;
 import souther.compiler.partition.DomainPoint;
 import souther.compiler.partition.PointRole;
+import souther.compiler.partition.ReadingSeat;
 import souther.compiler.partition.WhereNothingIsAnswered;
 import souther.compiler.check.RuleCitations;
 import souther.compiler.check.RuleReportAnchor;
@@ -18,6 +20,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.LinkedHashSet;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
 
@@ -59,20 +62,29 @@ import java.util.function.Function;
  * is the exception the author makes: there the quantity is one they wrote, and {@link #said(String)}
  * takes it from them.
  *
- * <p><b>What is owed is the same at every reading, and that is checked rather than folded.</b> A
- * {@link Demand} is what the point asks — a criterion over the levels of the quantity the line cut,
- * or a reason no row is asked for — and none of it is about where the line was read. So two readings
- * of one point that disagree about it have not disagreed: something has called two points one, and
- * the identity is what is wrong. Joined instead — the stronger demand winning, or the two merged —
- * that mistake would come out as a report asking for a row at a point some other line owns.
+ * <p><b>Of a declaration's line, what is owed is the same at every reading, and that is checked
+ * rather than folded.</b> A {@link Demand} is what the point asks — a criterion over the levels of
+ * the quantity the line cut, or a reason no row is asked for — and none of it is about where the
+ * line was read. So two readings of one point that disagree about it have not disagreed: something
+ * has called two points one, and the identity is what is wrong. Joined instead — the stronger
+ * demand winning, or the two merged — that mistake would come out as a report asking for a row at a
+ * point some other line owns.
+ *
+ * <p><b>Of a comparison a body wrote, there is no such demand.</b> Each call puts the author's line
+ * on a quantity of its own, so each reading asks for the point at its own place
+ * ({@link #owedAt}), and none of those is the point's; {@code demand} is empty, and nothing here
+ * answers for the point with one reading's words. What every reading asks alike is the kind of row,
+ * which is checked.
  */
 public record BorderObligationPointAssessment(BorderObligationPoint point,
                                               souther.compiler.partition.PointAttribution
                                                       attribution,
                                               java.util.Set<RuleReportAnchor> reachedBy,
-                                              Demand demand, ObligationAssessment item,
+                                              Optional<Demand> demand, ObligationAssessment item,
                                               java.util.SequencedMap<Reading, BorderAssessment>
-                                                      met) implements RuleCitations {
+                                                      met,
+                                              Map<Reading, ReadingSeat> seats)
+        implements RuleCitations {
 
     /**
      * Every handle a reader was offered for the rule that drew this line.
@@ -110,24 +122,32 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
      * the pair, and neither is what tells two of them apart; keyed on one, two readings of one line
      * arrived as one and {@link #across} refused a model the compiler can read.
      *
-     * <p><b>So a point and a reading of it are a line and where it was read.</b> A point carries
-     * the authored line ({@link souther.compiler.partition.BorderObligationId#line}), this carries
-     * the target, and the two together are the {@link souther.compiler.partition.BoundaryLine} the
-     * readings of one behavior were folded under ({@code Coverages.merged}). That is why the fold
-     * and this cannot come apart: they are one equivalence written once, rather than two that agree
-     * while every quantity has one position.
+     * <p><b>And how its points stand to the author's.</b> One comparison put at one place facing
+     * its author's sides two ways is two readings there ({@link AuthoredPlacement}): what a row
+     * showed about the run on one side is about one of the author's points in the one and another in
+     * the other.
+     *
+     * <p><b>So a point and a reading of it are a line and where and how it was read.</b> A point
+     * carries the authored line ({@link souther.compiler.partition.BorderObligationId#line}), this
+     * carries the target and the placement, and the two together are the
+     * {@link souther.compiler.partition.BoundaryLine} the readings of one behavior were folded under
+     * ({@code Coverages.merged}). That is why the fold and this cannot come apart: they are one
+     * equivalence written once, rather than two that agree while every quantity has one position
+     * and every call faces the author's line one way.
      */
-    public record Reading(souther.compiler.partition.BoundaryTarget target) {
+    public record Reading(souther.compiler.partition.BoundaryTarget target,
+                          AuthoredPlacement placement) {
 
         public Reading {
-            if (target == null) {
-                throw new IllegalArgumentException("a reading is of some line, somewhere");
+            if (target == null || placement == null) {
+                throw new IllegalArgumentException("a reading is of some line, somewhere, facing"
+                        + " it some way");
             }
         }
 
         /** The reading made where {@code line} was met. */
         public static Reading of(souther.compiler.partition.Border line) {
-            return new Reading(line.cut());
+            return new Reading(line.cut(), line.placement());
         }
 
         /**
@@ -163,8 +183,49 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
                     "a point owed a row asks for one, came to something, is owed to somebody and"
                             + " is found somewhere: " + point);
         }
+        if (demand.isPresent() == point.line().at().isEmpty()) {
+            throw new IllegalArgumentException("a point asks one thing of a row exactly where its"
+                    + " line is at one level for every reading: " + point);
+        }
         reachedBy = java.util.Set.copyOf(reachedBy);
         met = java.util.Collections.unmodifiableSequencedMap(new LinkedHashMap<>(met));
+        seats = Map.copyOf(seats);
+        if (!seats.keySet().equals(met.keySet())) {
+            throw new IllegalArgumentException("every reading of a point stands somewhere with"
+                    + " respect to it: " + point);
+        }
+    }
+
+    /**
+     * Where {@code reading} stands with respect to this point: which of its own points it was asked
+     * at, and whether that is shown to be this one ({@link ReadingSeat}).
+     *
+     * <p>Every reading of a declaration's line stands at the point itself, which is one place on
+     * the type's own values. A comparison a body wrote is read on whatever quantity each call put
+     * it on, so this point is a different place at each reading, and what a reading came to here is
+     * its own place's answer.
+     */
+    public ReadingSeat seatOf(Reading reading) {
+        ReadingSeat seat = seats.get(reading);
+        if (seat == null) {
+            throw new IllegalArgumentException("not a reading of this point: " + reading);
+        }
+        return seat;
+    }
+
+    /** The same, of the reading {@code at} is. */
+    public ReadingSeat seatOf(BorderAssessment at) {
+        return seatOf(Reading.of(at.border()));
+    }
+
+    /** Which of its own points {@code at} was asked at for this one. */
+    public DomainPoint askedAt(BorderAssessment at) {
+        return seatOf(at).asked();
+    }
+
+    /** What {@code at}, one of this point's readings, came to where it was asked for this one. */
+    public ItemAssessment.Owed owedAt(BorderAssessment at) {
+        return at.owedAt(askedAt(at));
     }
 
     /**
@@ -198,6 +259,7 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
             Function<BorderAssessment, List<WhereNothingIsAnswered.Premise>> premisesOf) {
         Map<BorderObligationPoint, java.util.SequencedMap<Reading, BorderAssessment>> byPoint =
                 new LinkedHashMap<>();
+        Map<BorderObligationPoint, Map<Reading, ReadingSeat>> seats = new LinkedHashMap<>();
         Map<BorderObligationPoint, souther.compiler.partition.PointAttribution> attribution =
                 new LinkedHashMap<>();
         // The lines alone, not filed under behaviors. Which behavior read a line is the line's own
@@ -217,6 +279,14 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
                         souther.compiler.partition.PointAttribution::and);
                 BorderAssessment already = byPoint
                         .computeIfAbsent(owed, _ -> new LinkedHashMap<>()).put(where, reading);
+                seats.computeIfAbsent(owed, _ -> new LinkedHashMap<>())
+                        .merge(where, each.seat(), ReadingSeat::closer);
+                // A comparison a body wrote owes its author's points from each of its own: one
+                // reading comes to one of the author's points from more than one of its own
+                // where it cannot tie them, and from one where it can. One point, one reading.
+                if (already != null && owed.line().at().isEmpty()) {
+                    continue;
+                }
                 if (already != null) {
                     // One line, one behavior, one place, twice — which the lines handed in were
                     // folded on and so cannot be. What is wrong is upstream: these are the
@@ -230,9 +300,24 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
                 }
             }
         }
+        // A reading not shown to be a place of the author's line is held against a point some
+        // other reading owes, and is no evidence that one is owed: it adds no point of its own, and
+        // tells nobody about the points it joins. Asked once every reading has said what it owes,
+        // so that which of them the walk met first is no part of it.
+        for (BorderAssessment reading : readings) {
+            Reading where = Reading.of(reading.border());
+            for (souther.compiler.partition.OwedPoint each : reading.border().holdsOpen()) {
+                java.util.SequencedMap<Reading, BorderAssessment> met = byPoint.get(each.point());
+                if (met == null) {
+                    continue;
+                }
+                met.putIfAbsent(where, reading);
+                seats.get(each.point()).merge(where, each.seat(), ReadingSeat::closer);
+            }
+        }
         List<BorderObligationPointAssessment> out = new ArrayList<>();
         byPoint.forEach((point, met) ->
-                out.add(of(point, attribution.get(point), met, premisesOf)));
+                out.add(of(point, attribution.get(point), met, seats.get(point), premisesOf)));
         return List.copyOf(out);
     }
 
@@ -253,12 +338,13 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
             BorderObligationPoint point,
             souther.compiler.partition.PointAttribution attribution,
             java.util.SequencedMap<Reading, BorderAssessment> met,
+            Map<Reading, ReadingSeat> seats,
             Function<BorderAssessment, List<WhereNothingIsAnswered.Premise>> premisesOf) {
         List<BorderAssessment> readings = List.copyOf(met.values());
-        Demand asked = asked(point, readings);
+        Optional<Demand> asked = asked(point, met, seats);
         return new BorderObligationPointAssessment(point, attribution,
                 reachedBy(point, readings), asked,
-                came(point.point(), readings, asked, premisesOf), met);
+                came(met, seats, asked, premisesOf), met, seats);
     }
 
     /**
@@ -364,8 +450,16 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
         return point.point();
     }
 
-    /** Which of the four it is, which the line it is a point of answers. */
+    /**
+     * Which of the four it is, which the line it is a point of answers.
+     *
+     * <p>Of a comparison a body wrote, the author's line answers: a reading faces it whichever way
+     * its call's quantity runs, and the point is the author's.
+     */
     public PointRole role() {
+        if (point.line().at().isEmpty()) {
+            return point.role();
+        }
         return met.firstEntry().getValue().border().roleOf(at());
     }
 
@@ -378,18 +472,49 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
      * reading's words and is said under the mark rather than in it.
      */
     public String whichSide() {
-        return met.firstEntry().getValue().border().whichSide(at());
+        // Of a comparison a body wrote, the point is a side of the author's line, and a reading's
+        // own side of the place it was put at is the other one wherever the call turned the
+        // quantity round.
+        if (point.line().at().isEmpty()) {
+            return souther.compiler.partition.Border.whichSideOf(point.line().line().facts(),
+                    point.point());
+        }
+        Map.Entry<Reading, BorderAssessment> said = met.firstEntry();
+        return said.getValue().border().whichSide(seats.get(said.getKey()).asked());
     }
 
     /**
-     * What the point asks, which every reading of it says the same way.
+     * What the point asks, which every reading of it says the same way — or nothing, for a
+     * comparison a body wrote, whose readings each ask it at a place of their own.
      *
      * <p>Checked here, because this is where two readings of one point first stand beside each
      * other. A disagreement is not something to resolve: it says the two are not one point, and the
      * identity that put them together is the defect. What it names is both readings, since which of
-     * them is the wrong one is exactly what is not known.
+     * them is the wrong one is exactly what is not known. Of a comparison a body wrote, what the
+     * readings have to agree on is that a row is owed and the kind of row it is.
      */
-    private static Demand asked(BorderObligationPoint point, List<BorderAssessment> readings) {
+    private static Optional<Demand> asked(BorderObligationPoint point,
+                                          java.util.SequencedMap<Reading, BorderAssessment> met,
+                                          Map<Reading, ReadingSeat> seats) {
+        if (point.line().at().isEmpty()) {
+            String kind = null;
+            for (Map.Entry<Reading, BorderAssessment> each : met.entrySet()) {
+                Demand here = each.getValue().border().demand(seats.get(each.getKey()).asked());
+                if (!(here instanceof Demand.Owed owed)) {
+                    throw new IllegalStateException("a reading filed under a point owed a row owes"
+                            + " none at its own place for it: " + point + " at " + each.getKey());
+                }
+                String also = owed.criterion().operator();
+                if (kind != null && !kind.equals(also)) {
+                    throw new IllegalStateException("two readings of one point ask for two kinds"
+                            + " of row, so they are not one point: " + point + " asks " + kind
+                            + " and " + also + " at " + each.getKey());
+                }
+                kind = also;
+            }
+            return Optional.empty();
+        }
+        List<BorderAssessment> readings = List.copyOf(met.values());
         Demand asked = readings.get(0).border().demand(point.point());
         for (BorderAssessment reading : readings) {
             Demand also = reading.border().demand(point.point());
@@ -400,7 +525,7 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
                         + " and " + also + " at " + reading.border().cut().named());
             }
         }
-        return asked;
+        return Optional.of(asked);
     }
 
     /**
@@ -420,13 +545,14 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
      * to undo. What it is here for is that a value at the point was built, which is evidence the
      * point exists.
      */
-    private static ObligationAssessment came(DomainPoint role,
-                                             List<BorderAssessment> readings,
-                                             Demand asked,
+    private static ObligationAssessment came(java.util.SequencedMap<Reading, BorderAssessment> met,
+                                             Map<Reading, ReadingSeat> seats,
+                                             Optional<Demand> asked,
                                              Function<BorderAssessment,
                                                      List<WhereNothingIsAnswered.Premise>>
                                                      premisesOf) {
-        if (asked instanceof Demand.NotOwed not) {
+        List<BorderAssessment> readings = List.copyOf(met.values());
+        if (asked.isPresent() && asked.get() instanceof Demand.NotOwed not) {
             throw new IllegalStateException(
                     "a point nobody is owed a row at, assessed as one that is: " + not.reason());
         }
@@ -442,11 +568,20 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
         // says about itself, so the weaker of them stands only where nothing proved anything.
         ItemAssessment.WritabilityProjection projection =
                 ItemAssessment.WritabilityProjection.NOT_COMPUTED;
-        for (BorderAssessment reading : readings) {
-            ItemAssessment.Owed owed = reading.owedAt(role);
+        for (Map.Entry<Reading, BorderAssessment> each : met.entrySet()) {
+            BorderAssessment reading = each.getValue();
+            ReadingSeat seat = seats.get(each.getKey());
+            ItemAssessment.Owed owed = reading.owedAt(seat.asked());
             if (owed == null) {
                 throw new IllegalStateException(
-                        "a reading owing nothing at a point it owes one at: " + role);
+                        "a reading owing nothing at a point it owes one at: " + seat);
+            }
+            // A reading not tied to the point found something about the line and nothing that
+            // settles this point: its rows are not counted for it or against it, and it holds the
+            // point undecided only where nothing tied to it settles it.
+            if (!(seat instanceof ReadingSeat.At)) {
+                coverage.add(ItemAssessment.notTiedTo(reading.border()));
+                continue;
             }
             coverage.add(owed.coverage());
             // Each search already says where the reading it was made for was read, which was said
@@ -455,7 +590,7 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
             searched = searched.plus(owed.searches());
             projection = projection.and(owed.projection());
         }
-        return new ObligationAssessment(asked.criterion(),
+        return new ObligationAssessment(asked.map(Demand::criterion),
                 ObligationCoverage.acrossTheReadings(coverage), projection, searched,
                 ObligationDisposition.openOn(premisesAt(readings, premisesOf)));
     }
@@ -553,9 +688,15 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
         return met.keySet().stream().anyMatch(each -> behaviors.contains(each.behavior()));
     }
 
-    /** How this point relates a row's value to what it is against. */
+    /**
+     * How this point relates a row's value to what it is against: the kind of row, which every
+     * reading asks alike ({@link #asked}), as the first of them asks it.
+     */
     public String operator() {
-        return demand.criterion().operator();
+        return demand.map(asked -> asked.criterion().operator()).orElseGet(() -> {
+            BorderAssessment first = met.firstEntry().getValue();
+            return first.border().operator(askedAt(first));
+        });
     }
 
     /**
@@ -600,8 +741,11 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
      */
     public List<ReadingSaid> readingsSaid() {
         List<ReadingSaid> out = new ArrayList<>();
-        met.forEach((where, at) -> out.add(new ReadingSaid(where, at.axis(),
-                new BorderAssessment.Point(at, at(), at.at(at())).asked(), at.readAt())));
+        met.forEach((where, at) -> {
+            DomainPoint asked = seats.get(where).asked();
+            out.add(new ReadingSaid(where, at.axis(),
+                    new BorderAssessment.Point(at, asked, at.at(asked)).asked(), at.readAt()));
+        });
         out.sort(java.util.Comparator.comparing((ReadingSaid said) -> said.at())
                 .thenComparing(ReadingSaid::asks));
         return List.copyOf(out);
@@ -632,9 +776,10 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
         for (BorderAssessment reading : met.values()) {
             BorderQuantity of = reading.border().cut().of();
             // Which quantity this is is the line's and not this reading's; every reading of one
-            // point cuts one carrier at one place, which is checked where their demands are.
-            return of.statesADeclarationRelativeLevel()
-                    ? demand.criterion().written(of, axis) : null;
+            // point cuts one carrier at one place, which is checked where their demands are. A
+            // comparison a body wrote has no level in the author's words to write.
+            return of.statesADeclarationRelativeLevel() && demand.isPresent()
+                    ? demand.get().criterion().written(of, axis) : null;
         }
         return null;
     }

@@ -20,9 +20,11 @@ import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Towards;
 import souther.compiler.partition.AuthoredLine;
+import souther.compiler.partition.AuthoredPlacement;
 import souther.compiler.partition.BorderQuantity;
 import souther.compiler.partition.BoundaryLine;
 import souther.compiler.partition.BoundaryTarget;
+import souther.compiler.partition.DomainPoint;
 import souther.compiler.partition.Level;
 import souther.compiler.partition.LineFacts;
 import souther.compiler.partition.WhichLine;
@@ -47,6 +49,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -138,9 +141,11 @@ class ALineIsWrittenByEveryPartThatTellsItApartTest {
         BorderQuantity quantity = new BorderQuantity.OfACoordinate("b", cost,
                 TermOrdersFixtures.itself(cost, Carrier.DENSE));
         BoundaryLine unspelled = new BoundaryLine(BoundaryTarget.at(quantity,
-                new Level.OnACarrier(Carrier.DENSE, Count.of(new BigDecimal("0")))), drawn(0));
+                new Level.OnACarrier(Carrier.DENSE, Count.of(new BigDecimal("0")))), drawn(0),
+                AS_WRITTEN);
         BoundaryLine spelled = new BoundaryLine(BoundaryTarget.at(quantity,
-                new Level.OnACarrier(Carrier.DENSE, Count.of(new BigDecimal("0.00")))), drawn(0));
+                new Level.OnACarrier(Carrier.DENSE, Count.of(new BigDecimal("0.00")))), drawn(0),
+                AS_WRITTEN);
 
         assertEquals(unspelled, spelled, "one line");
         assertEquals(idOf(unspelled), idOf(spelled), "written one way");
@@ -173,6 +178,8 @@ class ALineIsWrittenByEveryPartThatTellsItApartTest {
                 at(cost, whole(0), drawn(0)),
                 // The line: which line of the model was drawn there.
                 at(cost, whole(0), drawn(1)),
+                // The placement: how the points of the line drawn there are the author's.
+                new BoundaryLine(at(cost, whole(0), drawn(0)).target(), drawn(0), TURNED),
                 // The target: which behavior's input the quantity is on.
                 coordinate("other", cost, TermOrdersFixtures.itself(cost, Carrier.WHOLE),
                         whole(0)),
@@ -183,14 +190,19 @@ class ALineIsWrittenByEveryPartThatTellsItApartTest {
                 new BoundaryLine(BoundaryTarget.at(new BorderQuantity.OverAForm("b",
                         LinearForm.<NumericTerm>atom(cost), Map.<NumericTerm, TermOrders>of(cost,
                                 TermOrdersFixtures.itself(cost, Carrier.WHOLE))), whole(0)),
-                        drawn(0)),
+                        drawn(0), AS_WRITTEN),
                 // The quantity: which terms, which way and by how much.
                 at(fee, whole(0), drawn(0)),
-                new BoundaryLine(BoundaryTarget.at(apart(cost, fee), count(0)), drawn(0)),
-                new BoundaryLine(BoundaryTarget.at(apart(fee, cost), count(0)), drawn(0)),
-                new BoundaryLine(BoundaryTarget.at(form(cost, 2, fee, 1), count(9)), drawn(0)),
-                new BoundaryLine(BoundaryTarget.at(form(cost, 3, fee, 1), count(9)), drawn(0)),
-                new BoundaryLine(BoundaryTarget.at(form(cost, 2, fee, 3), count(9)), drawn(0)),
+                new BoundaryLine(BoundaryTarget.at(apart(cost, fee), count(0)), drawn(0),
+                        AS_WRITTEN),
+                new BoundaryLine(BoundaryTarget.at(apart(fee, cost), count(0)), drawn(0),
+                        AS_WRITTEN),
+                new BoundaryLine(BoundaryTarget.at(form(cost, 2, fee, 1), count(9)), drawn(0),
+                        AS_WRITTEN),
+                new BoundaryLine(BoundaryTarget.at(form(cost, 3, fee, 1), count(9)), drawn(0),
+                        AS_WRITTEN),
+                new BoundaryLine(BoundaryTarget.at(form(cost, 2, fee, 3), count(9)), drawn(0),
+                        AS_WRITTEN),
                 // The orders a term stands on: what it is read on, and what it is measured on.
                 coordinate("b", cost, TermOrdersFixtures.orders(cost, Carrier.DENSE, Carrier.WHOLE),
                         whole(0)),
@@ -212,15 +224,33 @@ class ALineIsWrittenByEveryPartThatTellsItApartTest {
                 at(thirded, whole(0), drawn(0)),
                 // A number taken over a run: of which values.
                 new BoundaryLine(BoundaryTarget.at(form(totalOfLines, 2, fee, 1), count(9)),
-                        drawn(0)),
+                        drawn(0), AS_WRITTEN),
                 new BoundaryLine(BoundaryTarget.at(form(totalOfFees, 2, fee, 1), count(9)),
-                        drawn(0)));
+                        drawn(0), AS_WRITTEN));
+    }
+
+    /** A reading of {@link #drawn} facing the sides its author wrote as they were written. */
+    private static final AuthoredPlacement AS_WRITTEN = placed(Towards.BELOW, Towards.ABOVE);
+
+    /** And one facing them the other way round, as a call turning the quantity does. */
+    private static final AuthoredPlacement TURNED = placed(Towards.ABOVE, Towards.BELOW);
+
+    /** A reading whose run below the line is the author's run on side {@code below}, and whose run
+     *  above it is the author's on side {@code above}. */
+    private static AuthoredPlacement placed(Towards below, Towards above) {
+        return new AuthoredPlacement.Placed(Map.of(
+                new DomainPoint.AtTheLine(), Optional.of(new DomainPoint.AtTheLine()),
+                new DomainPoint.InTheRegion(Towards.BELOW),
+                Optional.of(new DomainPoint.InTheRegion(below)),
+                new DomainPoint.InTheRegion(Towards.ABOVE),
+                Optional.of(new DomainPoint.InTheRegion(above))));
     }
 
     private static BoundaryLine coordinate(String behavior, NumericTerm.FromOnePosition term,
                                            TermOrders orders, Level level) {
         return new BoundaryLine(BoundaryTarget.at(
-                new BorderQuantity.OfACoordinate(behavior, term, orders), level), drawn(0));
+                new BorderQuantity.OfACoordinate(behavior, term, orders), level), drawn(0),
+                AS_WRITTEN);
     }
 
     private static NumericTerm.TakenOf lengthOf(TermPath path) {
@@ -254,7 +284,7 @@ class ALineIsWrittenByEveryPartThatTellsItApartTest {
     private static BoundaryLine at(NumericTerm.FromOnePosition term, Level level,
                                    AuthoredLine line) {
         return new BoundaryLine(BoundaryTarget.at(new BorderQuantity.OfACoordinate("b", term,
-                TermOrdersFixtures.itself(term, Carrier.WHOLE)), level), line);
+                TermOrdersFixtures.itself(term, Carrier.WHOLE)), level), line, AS_WRITTEN);
     }
 
     private static BorderQuantity apart(NumericTerm.ValueOf on, NumericTerm.ValueOf against) {

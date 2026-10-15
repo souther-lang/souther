@@ -1,5 +1,7 @@
 package souther.compiler.partition;
 
+import java.util.Optional;
+
 /**
  * One thing a row is owed for: a point of a line the author wrote, once, however many positions
  * carry it.
@@ -77,10 +79,16 @@ public sealed interface BorderObligationPoint {
     /**
      * A row in the region on one side of the line, as far as {@code region} stops it.
      *
+     * <p>No region for a comparison a body wrote. Where its run stops is where a call put the
+     * comparison, among the lines and ends of that call's values, and the author wrote one region
+     * beside the line however many calls stop it in how many places. Each reading keeps where its
+     * own run stops, and the point is the author's.
+     *
      * @param region what settled the region beside the line, which is what tells this from the same
-     *               point of the same line where something else stopped it
+     *               point of the same line where something else stopped it; nothing for a
+     *               comparison a body wrote
      */
-    record InRegion(BorderObligationId line, DomainPoint point, FarEnd region)
+    record InRegion(BorderObligationId line, DomainPoint point, Optional<FarEnd> region)
             implements BorderObligationPoint {
 
         public InRegion {
@@ -92,6 +100,11 @@ public sealed interface BorderObligationPoint {
             if (point == null || point.againstTheLine()) {
                 throw new IllegalArgumentException("a point in a region is one of the runs beside"
                         + " the line, and " + point + " is at a value of it");
+            }
+            if (region.isPresent() == line.at().isEmpty()) {
+                throw new IllegalArgumentException("a region is stopped somewhere where the line is"
+                        + " at a value of its own, and nowhere the author's where a call put it: "
+                        + line + " " + region);
             }
         }
     }

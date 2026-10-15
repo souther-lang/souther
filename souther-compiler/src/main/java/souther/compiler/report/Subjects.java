@@ -60,6 +60,9 @@ final class Subjects {
             // carried in the words a report writes about the border's own items, not in a second
             // place to send a reader.
             case Weakening.ItemsPlaceNotWorkedOut it -> atThe(it.border());
+            // The border the reading is: which point it could not be tied to is the point's, and
+            // the reading is what a reader is sent to.
+            case Weakening.AReadingNotTiedToItsLine it -> atThe(it.border());
             case Weakening.ModelReadingIncomplete it -> of(it.cause());
             // Named by the behavior, which is what this answer is of.
             case Weakening.BodyNotInEvaluation it ->

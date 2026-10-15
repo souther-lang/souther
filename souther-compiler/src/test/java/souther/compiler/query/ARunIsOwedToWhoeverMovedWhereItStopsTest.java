@@ -71,7 +71,7 @@ class ARunIsOwedToWhoeverMovedWhereItStopsTest {
         BorderObligationPoint point = pointOf(PointRole.IN, "value in 0 < value <= 50");
 
         assertInstanceOf(FarEnd.AtTheDomain.class,
-                ((BorderObligationPoint.InRegion) point).region(),
+                ((BorderObligationPoint.InRegion) point).region().orElseThrow(),
                 "the run stops where every rule about the position leaves it, which is nobody's"
                         + " line — so the point names the place and not the record");
     }

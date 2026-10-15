@@ -69,7 +69,7 @@ class WhatAFigureLeftOpenAtAPointIsSettledByTest {
                   what keeps it open
                     stopped at a figure of this compiler     1
                     stopped at no figure                     0
-                      the comparison = 3 (in the region, above) — the search stopped at how many \
+                      the comparison (in the region, above) — the search stopped at how many \
                 values a point is tried with (VALUES_A_POINT_IS_TRIED_WITH, 8), which no option \
                 sets: write a row there, or a rule that leaves no value there
                 """), human(report));

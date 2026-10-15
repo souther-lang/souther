@@ -189,6 +189,11 @@ public sealed interface Proposition {
             key = (holds ? "" : "!") + relation;
         }
 
+        /** The spelling of the relation held, whichever way round this is: one for one relation. */
+        public String heldKey() {
+            return holds ? key : key.substring(1);
+        }
+
         @Override
         public Proposition denied() {
             return new Compared(relation, !holds);

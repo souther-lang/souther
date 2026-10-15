@@ -3,6 +3,8 @@ package souther.compiler.query;
 import souther.compiler.partition.Criterion;
 import souther.compiler.publish.CanonicalSelection;
 
+import java.util.Optional;
+
 /**
  * What became of one point of an authored line, over every reading of that line.
  *
@@ -16,6 +18,9 @@ import souther.compiler.publish.CanonicalSelection;
  * rows showed is read off what this compilation ran, what the rules prove about a value existing
  * here is read off the rules, and what a search did is what a search did.
  *
+ * @param criterion  what a row at the point has to do, where every reading asks it alike — a line a
+ *                   declaration drew. Nothing for a comparison a body wrote, whose readings each ask
+ *                   for the point at a place of their own
  * @param projection what reading the rules reaching the value this point sits in established about a
  *                   value being there
  * @param searches   what building a value here came to under each reading of the line, and empty
@@ -27,7 +32,7 @@ import souther.compiler.publish.CanonicalSelection;
  *                   and not off the readings: every row at it, by every reading, reaching an
  *                   {@code unreachable}. Nothing where one can be as far as anything here says
  */
-public record ObligationAssessment(Criterion criterion, ObligationCoverage coverage,
+public record ObligationAssessment(Optional<Criterion> criterion, ObligationCoverage coverage,
                                    ItemAssessment.WritabilityProjection projection,
                                    SearchOutcomes searches,
                                    CanonicalSelection<ObligationDisposition.Uncertainty> open) {

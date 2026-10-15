@@ -71,7 +71,9 @@ class AMeasureIsIntroducedInOnePlaceTest {
      * two answers a point nobody is owed a row at can have: settled, where the rules decided it,
      * and not worked out, where the exact arithmetic could not say where the point's own place on
      * the order is. Both are answers about the model rather than readings of it, which is why
-     * neither goes through a reading.
+     * neither goes through a reading. It also makes what a reading of a point's line that could not
+     * be tied to the point measured there, which is a fact about how the reading stands to the
+     * author's line and not something its own search found.
      */
     private static final Map<String, Integer> INTRODUCED_BY = new LinkedHashMap<>(
             Map.ofEntries(
@@ -165,6 +167,7 @@ class AMeasureIsIntroducedInOnePlaceTest {
             Map.entry("souther.compiler.query.PartitionEvidence$AxisCoverage#notAsked(Lsouther/compiler/partition/AxisId;Ljava/lang/String;Ljava/util/List;Ljava/util/List;Lsouther/compiler/partition/BodyDistinction;Lsouther/compiler/partition/InputUse;Lsouther/compiler/query/PartitionEvidence$AxisCoverage$Reading;)Lsouther/compiler/query/PartitionEvidence$AxisCoverage;", 1),
             Map.entry("souther.compiler.query.PartitionEvidence$PairSpace#notAsked(Ljava/util/List;)Lsouther/compiler/query/PartitionEvidence$PairSpace;", 1),
             Map.entry("souther.compiler.query.ItemAssessment#weakeningSource(Lsouther/compiler/partition/Border;)Lsouther/compiler/query/Measurement;", 2),
+            Map.entry("souther.compiler.query.ItemAssessment#notTiedTo(Lsouther/compiler/partition/Border;)Lsouther/compiler/query/Measurement;", 1),
             // A behavior missing something its boundary is made of — its signature, or the reading
             // of what it takes. Every measure of it is short of the same one thing, so the state is
             // made here and each of them hands its own type parameter to it — five factories and

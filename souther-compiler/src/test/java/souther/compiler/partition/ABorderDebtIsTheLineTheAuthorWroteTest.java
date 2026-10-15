@@ -2,6 +2,9 @@ package souther.compiler.partition;
 
 import souther.compiler.carrier.Membership;
 import souther.compiler.coverage.Numberings;
+import souther.compiler.meaning.AuthoredPointMapping;
+import souther.compiler.meaning.Derivation;
+import souther.compiler.meaning.WrittenLine;
 import souther.compiler.coverage.SiteNumbering;
 import souther.compiler.numeric.Towards;
 import souther.compiler.types.ExpansionLineage;
@@ -27,17 +30,25 @@ import souther.compiler.check.TypeCardinality;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
+import souther.compiler.query.BorderObligationPointAssessment;
 import souther.compiler.query.Compilation;
+import souther.compiler.query.GenerationScope;
+import souther.compiler.query.HowALineIsRead;
 import souther.compiler.query.ReadAs;
 
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.TreeSet;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * What a row is owed for is the line the author wrote, and neither the rule it came from nor the
@@ -218,6 +229,284 @@ class ABorderDebtIsTheLineTheAuthorWroteTest {
                 "and two rules the author wrote, each owed a row of its own");
     }
 
+    /**
+     * A helper's statement of two relations is a line for each of them, whatever the calls hand
+     * it.
+     *
+     * <p>{@code fits} states {@code Int.max(x, y) <= g}: a line where {@code x} meets {@code g} and
+     * one where {@code y} does. Called on {@code p, q} and on {@code q, s}, the line on {@code x} is
+     * read at {@code p} and at {@code q}, and the line on {@code y} at {@code q} and at {@code s}.
+     * Which values a caller hands the helper is no part of what its author wrote, so the two calls
+     * read two lines between them and {@code q} is a place of each.
+     */
+    @Test
+    void aHelperStatingTwoRelationsOwesALineForEachWhateverItIsHanded() {
+        assertEquals(Set.of(Set.of("p = g", "q = g"), Set.of("q = g", "s = g")),
+                readingsOfEachDebt(OVERLAPPING_CALLS),
+                "a line for x read at p and q, and one for y read at q and s");
+    }
+
+    /**
+     * The same, where the relation is what a closure states on each value it is applied to.
+     *
+     * <p>The author wrote {@code v <= g} once, and every application of it, at every call, is a
+     * reading of that one line.
+     */
+    @Test
+    void aClosureAppliedToEveryValueItIsHandedOwesTheOneLineItStates() {
+        assertEquals(Set.of(Set.of("p = g", "q = g", "s = g")),
+                readingsOfEachDebt(OVERLAPPING_APPLICATIONS),
+                "one line, read at each value either call handed the closure");
+    }
+
+    /**
+     * Two calls putting one comparison at two different values on two numbers are one debt.
+     *
+     * <p>{@code check} draws its line where {@code x} meets {@code limit}. One call puts that at
+     * {@code a = 10} and the other at {@code b = 20}, and a row at either is a row at the line the
+     * author wrote.
+     */
+    @Test
+    void twoCallsPuttingOneComparisonAtTwoValuesAreOneDebt() {
+        assertEquals(Set.of(Set.of("a = 10", "b = 20")),
+                readingsOfEachDebt("""
+                        module example.overlap
+
+                        behavior admit : (a: Int, b: Int) -> Bool
+                        let admit (a, b) = check(a, 10) && check(b, 20)
+
+                        let check (x: Int, limit: Int): Bool = x <= limit
+                        """),
+                "one comparison, read at two places");
+    }
+
+    /**
+     * A call that turns the comparison's quantity round reads the author's points on the other
+     * side.
+     *
+     * <p>{@code check(20 - b, 10)} holds where {@code b >= 10}: the values on which {@code x} is
+     * below its limit are the values above ten on {@code b}. The point inside the region where
+     * {@code check} holds is one point of the author's line, and each reading is asked for it on its
+     * own side — below ten on {@code a}, above it on {@code b}.
+     */
+    @Test
+    void aCallTurningTheQuantityRoundReadsTheAuthorsPointsOnTheOtherSide() {
+        List<BorderObligationPointAssessment> points = pointsOf("""
+                module example.overlap
+
+                behavior admit : (a: Int, b: Int) -> Bool
+                let admit (a, b) = check(a, 10) && check(20 - b, 10)
+
+                let check (x: Int, limit: Int): Bool = x <= limit
+                """);
+        assertEquals(1, points.stream().map(BorderObligationPointAssessment::id).distinct().count(),
+                () -> "one comparison, so one line: " + points);
+        BorderObligationPointAssessment holding = points.stream()
+                .filter(each -> each.at().equals(new DomainPoint.InTheRegion(Towards.BELOW)))
+                .findFirst().orElseThrow(() -> new AssertionError(
+                        "the author's line owes the region it holds on: " + points));
+
+        Map<String, DomainPoint> asked = new LinkedHashMap<>();
+        holding.readings().forEach(each -> asked.put(each.border().label(),
+                holding.askedAt(each)));
+        assertEquals(Map.of("a = 10", new DomainPoint.InTheRegion(Towards.BELOW),
+                        "b = 10", new DomainPoint.InTheRegion(Towards.ABOVE)), asked,
+                "read on a below the line, and on b above it");
+    }
+
+    /**
+     * One reading can be evidence for two lines.
+     *
+     * <p>{@code fits(p, p, g)} hands {@code p} as both {@code x} and {@code y}, so the one line on
+     * {@code p} this call draws is where each of the author's two lines is read. The debts are the
+     * author's two; the reading is one place of each.
+     */
+    @Test
+    void oneReadingIsEvidenceForBothLinesWhereACallHandsOneValueTwice() {
+        assertEquals(List.of(Set.of("p = g"), Set.of("p = g")),
+                List.copyOf(readingsOfEachDebtInOrder("""
+                        module example.overlap
+
+                        behavior admit : (p: Int, g: Int) -> Bool
+                        let admit (p, g) = fits(p, p, g)
+
+                        let fits (x: Int, y: Int, g: Int): Bool = Int.max(x, y) <= g
+                        """).values()),
+                "two lines the author wrote, each read at p");
+    }
+
+    /**
+     * Where a caller's choice decides what the comparison is handed, the line the choice draws is
+     * no line of the comparison.
+     *
+     * <p>{@code check(if a > 0 then 10 else 11)} parts {@code a} at zero, and on either side the
+     * comparison is of two constants. What tells the rows apart there is the caller's {@code if},
+     * which is a line of {@code admit}'s, and {@code check} owes nothing for it.
+     */
+    @Test
+    void aChoiceOfWhatTheComparisonIsHandedIsNoLineOfTheComparisons() {
+        assertEquals(Set.of("admit"), definitionsOwed("""
+                        module example.overlap
+
+                        behavior admit : (a: Int) -> Bool
+                        let admit (a) = check(if a > 0 then 10 else 11)
+
+                        let check (x: Int): Bool = x <= 10
+                        """),
+                "the line at a = 0 is the caller's, and no point of check's is owed at it");
+    }
+
+    /**
+     * A reading where the caller's choice turns the comparison is no evidence the comparison owes
+     * a row.
+     *
+     * <p>Handed {@code if a > 0 then a + 20 else a}, {@code check} holds at {@code a = 0} and fails
+     * just above it: the comparison's answer turns at zero, and what turns it is the caller's
+     * {@code if}. Whether zero is a place of the line {@code x <= 10} is not something this reading
+     * shows, and on no value of {@code a} is that line itself crossed — so the author's line is
+     * read nowhere, and {@code check} is owed nothing.
+     */
+    @Test
+    void aReadingWhereTheCallersChoiceTurnsTheComparisonAddsNoDebt() {
+        assertEquals(Set.of("admit"), definitionsOwed("""
+                        module example.overlap
+
+                        behavior admit : (a: Int) -> Bool
+                        let admit (a) = check(if a > 0 then a + 20 else a)
+
+                        let check (x: Int): Bool = x <= 10
+                        """),
+                "the line at a = 0 is not shown to be check's, and nothing else reads it");
+    }
+
+    /**
+     * And beside a reading of the line, such a reading is held against the line's points without
+     * standing at any of them.
+     *
+     * <p>Handed {@code if a > 0 then a else 11}, {@code check} reads its line at {@code a = 10}.
+     * At {@code a = 0} the caller's choice turns between that line and a constant: what a row
+     * there shows is not shown to be about the author's line, so it settles none of its points and
+     * is still beside them, where a row nothing else settles them with leaves them undecided.
+     */
+    @Test
+    void aReadingNotShownToBeOfTheLineIsHeldAgainstThePointsTheLineOwes() {
+        List<BorderObligationPointAssessment> points = pointsOf("""
+                module example.overlap
+
+                behavior admit : (a: Int) -> Bool
+                let admit (a) = check(if a > 0 then a else 11)
+
+                let check (x: Int): Bool = x <= 10
+                """).stream().filter(each -> each.id().provenance() instanceof RuleRef.Comparison c
+                        && c.origin().owner().equals(
+                                new WrittenOwner.Body("example.overlap", "check")))
+                .toList();
+
+        assertFalse(points.isEmpty(), "the line at ten is owed rows");
+        for (BorderObligationPointAssessment each : points) {
+            assertTrue(each.readings().stream().anyMatch(reading ->
+                            each.seatOf(reading) instanceof ReadingSeat.At),
+                    () -> each.at() + " is owed where a reading stands at it: " + each.seats());
+        }
+        assertTrue(points.stream().anyMatch(each -> each.readings().stream().anyMatch(reading ->
+                        each.seatOf(reading) instanceof ReadingSeat.Unresolved)),
+                () -> "and the reading at nought is held against them: " + points.stream()
+                        .map(BorderObligationPointAssessment::seats).toList());
+    }
+
+    /**
+     * A count of statements about values written out is a line its readings stand at.
+     *
+     * <p>{@code length(filter(w -> any(x -> meets(x, w), xs), wanted)) == 2} counts which of the
+     * two wants some element meets, and is read as the statements it counts: an A above nought and
+     * a B above nought. Those are not the count's two sides, so the line on an A's number is not
+     * faced as the count is — it is where the comparison comes to hold, and a row at it is a row at
+     * the author's point. Faced as the count, the line's points were tied to nothing, and no row
+     * could ever meet them.
+     */
+    @Test
+    void aCountOfStatementsWrittenOutIsALineItsReadingsStandAt() {
+        List<BorderObligationPointAssessment> points = pointsOf("""
+                module example.overlap
+
+                import List ( filter, any, length )
+
+                data A = { n: Int }
+                data B = { n: Int }
+                data Item = A | B
+                data Wanted = WantA | WantB
+                data Both
+                data NotBoth
+
+                let wanted = [ WantA, WantB ]
+
+                let meets (x: Item, w: Wanted): Bool =
+                    match x with
+                        | A { n } -> w == WantA && n > 0
+                        | B { n } -> w == WantB && n > 0
+
+                behavior f : (xs: List<Item>) -> Both | NotBoth
+
+                let f (xs) =
+                    if length(filter(w -> any(x -> meets(x, w), xs), wanted)) == 2
+                    then Both else NotBoth
+                """).stream().filter(each -> each.id().provenance() instanceof RuleRef.Comparison c
+                        && c.origin().owner().equals(new WrittenOwner.Body("example.overlap", "f")))
+                .toList();
+
+        assertFalse(points.isEmpty(), "the count is owed rows");
+        for (BorderObligationPointAssessment each : points) {
+            for (BorderAssessment reading : each.readings()) {
+                ReadingSeat.At at = assertInstanceOf(ReadingSeat.At.class, each.seatOf(reading),
+                        () -> each.at() + " is stood at by " + reading.border().label());
+                // Where the comparison holds on the reading is where it holds on the author's
+                // line: the value at which an A starts to meet its want is the ON point of both.
+                assertEquals(reading.border().roleOf(at.asked()), each.role(),
+                        () -> each.at() + " of the author's line is " + at.asked() + " at "
+                                + reading.border().label());
+            }
+        }
+    }
+
+    /** Each debt the comparisons of the model owe, by the labels of the readings of it. */
+    private static Set<Set<String>> readingsOfEachDebt(String model) {
+        return Set.copyOf(readingsOfEachDebtInOrder(model).values());
+    }
+
+    private static Map<BorderObligationId, Set<String>> readingsOfEachDebtInOrder(String model) {
+        Map<BorderObligationId, Set<String>> debts = new LinkedHashMap<>();
+        for (BorderObligationPointAssessment each : pointsOf(model)) {
+            Set<String> labels = debts.computeIfAbsent(each.id(), _ -> new TreeSet<>());
+            each.readings().forEach(reading -> labels.add(reading.border().label()));
+        }
+        return debts;
+    }
+
+    /** Which definitions the comparisons owing a point were written in. */
+    private static Set<String> definitionsOwed(String model) {
+        Set<String> out = new TreeSet<>();
+        for (BorderObligationPointAssessment each : pointsOf(model)) {
+            if (each.id().provenance() instanceof RuleRef.Comparison c
+                    && c.origin().owner() instanceof WrittenOwner.Body body) {
+                out.add(body.definition());
+            }
+        }
+        return out;
+    }
+
+    /** The points the comparisons of {@code example.overlap} owe, as the account holds them. */
+    private static List<BorderObligationPointAssessment> pointsOf(String model) {
+        Compilation compilation = Compilation.ofSource(model, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        List<BorderObligationPointAssessment> points = compilation.db().ask(
+                new Adequacy.Obligations("example.overlap", new GenerationScope.Module(),
+                        HowALineIsRead.VALUES_COMPOSED)).value();
+        assertNotNull(points, "the model under test compiles");
+        return points.stream()
+                .filter(each -> each.id().provenance() instanceof RuleRef.Comparison).toList();
+    }
+
     /** What the rules leave the quantity, where they leave it everything. */
     private static final souther.compiler.numeric.NumericDomain.Bounds ANYWHERE =
             new souther.compiler.numeric.NumericDomain.Bounds(null, null);
@@ -260,7 +549,10 @@ class ABorderDebtIsTheLineTheAuthorWroteTest {
                         new RuleReportAnchor.ByTheModuleThatWroteIt(),
                         List.of(WHERE.outcome(occurrence)), ElementsMetOn.EVERY),
                 Optional.empty(),
-                new LineFacts(new ComparisonClaim.Cut(Towards.BELOW, true)));
+                new LineFacts(new ComparisonClaim.Cut(Towards.BELOW, true)),
+                new AuthoredPointMapping.Proven(WrittenLine.THE_COMPARISON,
+                        new ComparisonClaim.Cut(Towards.BELOW, true),
+                        Derivation.AComparisonRead.Facing.NOTHING_WRITTEN, true));
     }
 
     /** The one statement of the first conjunct of {@code clause}, which is only an identity
@@ -508,6 +800,26 @@ class ABorderDebtIsTheLineTheAuthorWroteTest {
 
             example touch
                 | "a" : (Task { owner = UserId("x") }) -> Ok
+            """;
+
+    /** One helper stating two relations, called twice with one argument in common. */
+    private static final String OVERLAPPING_CALLS = """
+            module example.overlap
+
+            behavior admit : (p: Int, q: Int, s: Int, g: Int) -> Bool
+            let admit (p, q, s, g) = fits(p, q, g) && fits(q, s, g)
+
+            let fits (x: Int, y: Int, g: Int): Bool = Int.max(x, y) <= g
+            """;
+
+    /** The same two calls, where the helper states its relations as a closure applied to each. */
+    private static final String OVERLAPPING_APPLICATIONS = """
+            module example.overlap
+
+            behavior admit : (p: Int, q: Int, s: Int, g: Int) -> Bool
+            let admit (p, q, s, g) = fits(p, q, g) && fits(q, s, g)
+
+            let fits (x: Int, y: Int, g: Int): Bool = List.all(v -> v <= g, [x, y])
             """;
 
     /** One type's invariant carried twice by one behavior. */

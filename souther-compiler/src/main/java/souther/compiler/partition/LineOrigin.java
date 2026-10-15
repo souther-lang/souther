@@ -9,6 +9,7 @@ import souther.compiler.check.RuleCitation;
 import souther.compiler.check.RuleRef;
 import souther.compiler.check.RuleReportAnchor;
 import souther.compiler.coverage.ConditionOutcomeSite;
+import souther.compiler.meaning.AuthoredPointMapping;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.publish.PublishedRuleHandle;
 import souther.compiler.publish.PublishedSentence;
@@ -134,15 +135,20 @@ public sealed interface LineOrigin extends RuleEvidenceOrigin {
      *              line is part of the identity ({@link #authoredLine}); where it decides is this
      *              reading's, as everything beside the rule is. Empty where the comparison is one
      *              line
-     * @param facts what the rule placed on the values ({@link souther.compiler.check.ComparisonClaim
-     *              ComparisonClaim}), which decides which neighbour is the other class's edge:
-     *              {@code <= 3000} leaves 3001 over there, {@code < 3000} leaves 2999
+     * @param facts    what the rule placed on the values as this reading drew it
+     *                 ({@link souther.compiler.check.ComparisonClaim ComparisonClaim}), which
+     *                 decides which neighbour is the other class's edge: {@code <= 3000} leaves 3001
+     *                 over there, {@code < 3000} leaves 2999
+     * @param authored how this reading's line stands to the line of its author's it is a place of,
+     *                 and what that line claims. The author's claim is what the debt is about; this
+     *                 reading's facing of it is not ({@link #authoredLine})
      */
-    record ComparisonOrigin(Read read, Optional<WhereAPartDecides> part, LineFacts facts)
+    record ComparisonOrigin(Read read, Optional<WhereAPartDecides> part, LineFacts facts,
+                            AuthoredPointMapping authored)
             implements LineOrigin {
 
         public ComparisonOrigin {
-            if (read == null || part == null || facts == null) {
+            if (read == null || part == null || facts == null || authored == null) {
                 throw new IllegalArgumentException("a line is what some comparison placed");
             }
         }
@@ -508,13 +514,18 @@ public sealed interface LineOrigin extends RuleEvidenceOrigin {
                             lineFacts(), List.of());
             // The rule and nothing under it. A comparison is a rule apiece — a condition holding
             // three comparisons is three rules — so there is no second line of it to tell this one
-            // from, and a number here would be one this reading made up to fill a field. Unless it
-            // states several, where which of them this is was named by the reading that found them.
-            case ComparisonOrigin g -> new AuthoredLine(g.part()
-                    .<WhichLine>map(part ->
-                            new WhichLine.OfAPartOfAComparison(g.rule(), part.part()))
-                    .orElseGet(() -> new WhichLine.OfAComparison(g.rule())),
-                    lineFacts(), List.of());
+            // from, and a number here would be one this reading made up to fill a field. Unless its
+            // author drew several with it, where which of them this is was named by the reading
+            // that found them; a place a call put the comparison's one line is that line.
+            // Which of them is what the reading that took the statement apart found the relation a
+            // place of, which it carries with what it drew. And what that line claims, faced the
+            // one way, rather than what this reading drew: two calls can draw one line facing two
+            // ways, and they are one line.
+            case ComparisonOrigin g -> new AuthoredLine(g.authored().line().arms().isEmpty()
+                    ? new WhichLine.OfAComparison(g.rule())
+                    : new WhichLine.OfAPartOfAComparison(g.rule(),
+                            PartOfAComparison.of(g.authored().line())),
+                    new LineFacts(g.authored().claims()), List.of());
             // The line this reading was drawn for, handed back. Taken apart into a rule and a
             // number and put together again here, the two halves would be free to be joined
             // differently from the way they were named.

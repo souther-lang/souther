@@ -307,7 +307,8 @@ class WhatADerivationConcludesIsWhatItsRuleComputesTest {
         Derivation ofTheSecond = comparison(second, INDEX, LENGTH);
         Derivation aSourceRelation = new Derivation.AComparisonRead(
                 Derivation.ComparisonReading.BY_A_LAW, new Relation.Affine(
-                        LinearForm.atom(LENGTH), Rel.GT), false, CHOICES);
+                        LinearForm.atom(LENGTH), Rel.GT), false, CHOICES,
+                Derivation.AComparisonRead.Facing.NOTHING_WRITTEN);
         Derivation ofAnother = comparison(another, INDEX, LENGTH);
         Derivation aChoiceOfAnotherCase = new Derivation.AComparisonOfAChoice(
                 new Derivation.IfThenElse(truthAt(A), comparison(first, INDEX, LENGTH),
@@ -440,7 +441,8 @@ class WhatADerivationConcludesIsWhatItsRuleComputesTest {
                 relationOf(NUMBER_AT_A, NUMBER_AT_B, Rel.GE),
                 relationOf(NUMBER_AT_B, NUMBER_AT_A, Rel.GT),
                 new Derivation.AComparisonRead(Derivation.ComparisonReading.BY_A_LAW,
-                        new Relation.Affine(LinearForm.atom(NUMBER_AT_A), Rel.GT), true, CHOICES),
+                        new Relation.Affine(LinearForm.atom(NUMBER_AT_A), Rel.GT), true, CHOICES,
+                        Derivation.AComparisonRead.Facing.NOTHING_WRITTEN),
                 relationOf(NUMBER_AT_A, LENGTH, Rel.GT),
                 truthAt(A))) {
             assertThrows(IllegalArgumentException.class, () -> new Derivation.AnOrderOfItsArguments(
@@ -474,7 +476,7 @@ class WhatADerivationConcludesIsWhatItsRuleComputesTest {
         for (Derivation notTheOrder : List.of(truthAt(A), new Derivation.WrittenOut(true),
                 new Derivation.AComparisonRead(Derivation.ComparisonReading.BY_A_LAW,
                         new Relation.Affine(LinearForm.atom(NUMBER_AT_A), Rel.GT), true,
-                        CHOICES))) {
+                        CHOICES, Derivation.AComparisonRead.Facing.NOTHING_WRITTEN))) {
             assertThrows(IllegalArgumentException.class, () -> new Derivation.AnOrderOfItsArguments(
                     compareWithItself, aboveNought, notTheOrder), () -> "refused: " + notTheOrder);
         }
@@ -606,7 +608,8 @@ class WhatADerivationConcludesIsWhatItsRuleComputesTest {
         Relation.OneWay<Quantity> one = Relation.OneWay.of(new LinearForm<>(ExactRatio.ZERO,
                 Map.of(first, ExactRatio.ONE, second, ExactRatio.of(-1))), states);
         return new Derivation.AComparisonRead(Derivation.ComparisonReading.BY_A_LAW,
-                new Relation.Affine(one.form(), one.proposition()), one.holds(), CHOICES);
+                new Relation.Affine(one.form(), one.proposition()), one.holds(), CHOICES,
+                Derivation.AComparisonRead.Facing.NOTHING_WRITTEN);
     }
 
     private static final ValueName.Stdlib LIST_ANY = new ValueName.Stdlib.Operation("List", "any");

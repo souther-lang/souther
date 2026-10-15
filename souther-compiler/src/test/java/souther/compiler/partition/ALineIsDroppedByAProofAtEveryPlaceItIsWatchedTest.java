@@ -3,6 +3,9 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.carrier.Membership;
+import souther.compiler.meaning.AuthoredPointMapping;
+import souther.compiler.meaning.Derivation;
+import souther.compiler.meaning.WrittenLine;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.DeclaredSig;
@@ -78,7 +81,9 @@ class ALineIsDroppedByAProofAtEveryPlaceItIsWatchedTest {
                 new Level.OnACarrier(WHOLE, new Count(BigDecimal.TEN)),
                 new ComparisonClaim.Cut(Towards.BELOW, false), null);
         return new ComparisonAssessment.AtAPosition(cutting, n, null,
-                ComparisonAssessment.Places.AT_NO_VALUE);
+                ComparisonAssessment.Places.AT_NO_VALUE, new AuthoredPointMapping.Proven(
+                        WrittenLine.THE_COMPARISON, cutting.claim(),
+                        Derivation.AComparisonRead.Facing.NOTHING_WRITTEN, true));
     }
 
     /** Nothing on the way, over what the declarations leave. */

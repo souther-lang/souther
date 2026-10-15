@@ -75,9 +75,10 @@ class EveryKindOfSubjectIsWrittenTheWayTheSchemaSaysTest {
         facts.put("holdsAtTheValue", true);
         facts.put("singles", false);
         line.putArray("narrowedWithin");
+        // A point of it carries no level: where each call puts the comparison is the reading's.
         ObjectNode obligationId = JSON.createObjectNode();
         obligationId.set("line", line);
-        ObjectNode level = obligationId.putObject("level");
+        ObjectNode level = JSON.createObjectNode();
         level.put("kind", "on_a_carrier");
         level.putObject("carrier").put("kind", "whole");
         level.put("at", "0");
@@ -97,6 +98,12 @@ class EveryKindOfSubjectIsWrittenTheWayTheSchemaSaysTest {
         weighed.put("coefficient", "1");
         target.set("level", level.deepCopy());
         lineId.set("line", line.deepCopy());
+        // And how the points of the line drawn there are the comparison's own.
+        ObjectNode placement = lineId.putObject("placement");
+        placement.put("kind", "placed");
+        ObjectNode atTheLine = placement.putArray("points").addObject();
+        atTheLine.putObject("point").put("kind", "at_the_line");
+        atTheLine.putObject("authored").put("kind", "at_the_line");
         return List.of(
                 new PublishedSubject.OfAModule("m"),
                 new PublishedSubject.OfABehavior("b"),

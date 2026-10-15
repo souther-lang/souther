@@ -344,6 +344,9 @@ public sealed interface ObligationDisposition {
                      // on before any reading of one could be asked for — a question this sentence's
                      // reading never reached, and not a gap in the reading itself.
                      Weakening.ItemsPlaceNotWorkedOut _,
+                     // And a reading of the line that could not be tied to the point: what it came
+                     // to is about the line, and this sentence's reading is not short of it.
+                     Weakening.AReadingNotTiedToItsLine _,
                      Weakening.ModelReadingIncomplete _,
                      // A body this image does not carry says nothing about a point of a line
                      // either: whether a row stands at one is not what it is short of.

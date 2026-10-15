@@ -1,5 +1,8 @@
 package souther.cli;
 
+import souther.compiler.meaning.AuthoredPointMapping;
+import souther.compiler.meaning.Derivation;
+import souther.compiler.meaning.WrittenLine;
 import souther.compiler.query.WeakeningSet;
 import souther.compiler.types.WrittenOwner;
 import souther.compiler.query.Weakening;
@@ -138,7 +141,10 @@ final class AReportOfOneBorder {
                         new souther.compiler.check.RuleReportAnchor.ByTheModuleThatWroteIt(),
                         List.of(WHERE), ElementsMetOn.EVERY),
                 Optional.empty(),
-                new LineFacts(new ComparisonClaim.Cut(Towards.BELOW, true)));
+                new LineFacts(new ComparisonClaim.Cut(Towards.BELOW, true)),
+                new AuthoredPointMapping.Proven(WrittenLine.THE_COMPARISON,
+                        new ComparisonClaim.Cut(Towards.BELOW, true),
+                        Derivation.AComparisonRead.Facing.NOTHING_WRITTEN, true));
         return Border.at(
                 BoundaryTarget.at(
                         new BorderQuantity.OfACoordinate("weigh", AT_W_A,

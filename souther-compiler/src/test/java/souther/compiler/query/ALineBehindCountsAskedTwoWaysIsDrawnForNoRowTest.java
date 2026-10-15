@@ -72,7 +72,7 @@ class ALineBehindCountsAskedTwoWaysIsDrawnForNoRowTest {
         assertNotNull(edges, "the lines of this behavior were searched");
         assertTrue(edges.stream().noneMatch(each ->
                         each.border().origin().comparisonAt().isPresent()
-                                && each.border().obligation().at()
+                                && each.border().cut().at()
                                         instanceof Level.OnACarrier(_, var at)
                                 && at instanceof Count count
                                 && count.compareTo(BEHIND_THE_CONDITIONS) == 0),

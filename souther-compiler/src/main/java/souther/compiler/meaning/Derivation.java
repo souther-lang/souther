@@ -26,6 +26,7 @@ import souther.compiler.semantics.LawSubject;
 import souther.compiler.semantics.OperationLaw;
 import souther.compiler.semantics.SideAnswered;
 import souther.compiler.semantics.TakenAs;
+import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.ValueName;
 
@@ -199,6 +200,77 @@ public sealed interface Derivation {
         @Override
         public List<Derivation> oneOf() {
             return each;
+        }
+    }
+
+    /**
+     * A choice a construct of the model makes, and what it states.
+     *
+     * <p>What the choice states is the choice's, so this concludes nothing of its own. It says where
+     * the construct stands, which is what tells a choice the author of a comparison wrote from one
+     * in a value a caller handed in: each arm of the first is a line the author drew, and each arm
+     * of the second is one more place the same line was put ({@link WrittenChoice}). Which of those
+     * a choice is, is the comparison's question and is asked by whoever reads one
+     * ({@link WrittenLines}); the same choice is read under many comparisons.
+     *
+     * <p>And a law an operation is read by, which chooses as a choice does: what the law joins are
+     * the ways the answer comes out, and each is a line where the author applied the operation.
+     *
+     * @param at     the construct, in the copy of the body it stands in
+     * @param choice the step the construct was read as: an {@code if}, a {@code match}, the cases
+     *               of an operation or of a size, or an operation's law
+     */
+    record AChoiceAt(ConstructOccurrence at, Derivation choice) implements Derivation {
+
+        public AChoiceAt {
+            Objects.requireNonNull(at, "a choice is made by some construct");
+            if (!(choice instanceof IfThenElse || choice instanceof MatchArms
+                    || choice instanceof AnOperationsCases || choice instanceof ASizeInCases
+                    || choice instanceof ByALaw)) {
+                throw new IllegalArgumentException("a choice is an if, a match, the cases of an"
+                        + " operation or a size, or a law: " + choice);
+            }
+        }
+
+        @Override
+        public Proposition conclusion(Conclusion numbering) {
+            return numbering.of(choice);
+        }
+
+        @Override
+        public List<Derivation> oneOf() {
+            return List.of(choice);
+        }
+    }
+
+    /**
+     * A comparison a construct of the model writes, read inside what another statement states, and
+     * what it states.
+     *
+     * <p>Concludes what the comparison does. It says which comparison the relations under it are
+     * the relations of: one a reading met inside a value — the condition of an {@code if} a caller
+     * handed in, a guard of an earlier call whose answer this one was given — states its own
+     * relation, and a place where that relation turns the statement round is no place the
+     * statement's own comparison was written at ({@link WrittenLines}). The comparison a reading
+     * was asked of has none of these above its own relation.
+     *
+     * @param at the comparison, in the copy of the body it stands in
+     */
+    record AComparisonAt(ConstructOccurrence at, Derivation read) implements Derivation {
+
+        public AComparisonAt {
+            Objects.requireNonNull(at, "a comparison is some construct");
+            Objects.requireNonNull(read, "and is read as something");
+        }
+
+        @Override
+        public Proposition conclusion(Conclusion numbering) {
+            return numbering.of(read);
+        }
+
+        @Override
+        public List<Derivation> oneOf() {
+            return List.of(read);
         }
     }
 
@@ -1241,7 +1313,7 @@ public sealed interface Derivation {
                     .toList();
             return new AComparisonRead(ComparisonReading.BY_A_LAW,
                     new Relation.Affine(one.form(), one.proposition()), one.holds(), named,
-                    mostChoices).conclusion(numbering);
+                    mostChoices, AComparisonRead.Facing.NOTHING_WRITTEN).conclusion(numbering);
         }
     }
 
@@ -2434,19 +2506,49 @@ public sealed interface Derivation {
      *
      * @param mostChoices how many choices of which statements hold the reading writes one
      *                    comparison out as
+     * @param facing      which way the relation faces the sides the comparison was written with
      */
     record AComparisonRead(ComparisonReading by, Relation relation, boolean holds,
-                           List<Counted> counts, long mostChoices)
+                           List<Counted> counts, long mostChoices, Facing facing)
             implements Derivation {
 
         public AComparisonRead(ComparisonReading by, Relation relation, boolean holds,
-                               long mostChoices) {
-            this(by, relation, holds, List.of(), mostChoices);
+                               long mostChoices, Facing facing) {
+            this(by, relation, holds, List.of(), mostChoices, facing);
+        }
+
+        /**
+         * Which way a relation faces the comparison it was read off.
+         *
+         * <p>A relation is written facing one way whichever side an author put first
+         * ({@link Relation.OneWay}), so {@code a >= b} and {@code b <= a} are one relation. Which
+         * of the comparison's two sides is above the other on either side of its line is then the
+         * reading's to say, and it says it here: where the relation's form is the left side less
+         * the right, above the line is where the left is above, and where it was turned to face the
+         * one way, the other way about. A relation no comparison's two sides were read into — what
+         * a law states, a term against a place on an order — faces nothing written.
+         */
+        public enum Facing {
+
+            /** The form is the left side less the right. */
+            AS_WRITTEN,
+
+            /** The form is the right side less the left. */
+            TURNED,
+
+            /** No two written sides were read into the form. */
+            NOTHING_WRITTEN;
+
+            /** How {@code form}, the left side less the right, came to face the one way. */
+            public static Facing of(boolean turned) {
+                return turned ? TURNED : AS_WRITTEN;
+            }
         }
 
         public AComparisonRead {
             Objects.requireNonNull(by, "a comparison is read by something");
             Objects.requireNonNull(relation, "a comparison states a relation");
+            Objects.requireNonNull(facing, "a relation faces its comparison some way, or none");
             counts = List.copyOf(counts);
             if (pastTheChoicesRead(relation, mostChoices)) {
                 throw new IllegalArgumentException("a comparison written out as more choices than"

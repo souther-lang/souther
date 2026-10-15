@@ -91,14 +91,15 @@ class ARuleInsideAWalkOverAWrittenListIsALineWithPointsTest {
     }
 
     /**
-     * And a list whose members state two numbers is a line on each application, owed rows only
-     * where a run gets to it.
+     * And a list whose members state two numbers is the one line read on each application a run
+     * gets to.
      *
      * <p>Beside the one above and differing in one number. {@code List.any} reaches the second
      * member only where the first answered false, which is below a hundred thousand, and no row
-     * there is anywhere near two hundred thousand: that line is one no run that reaches it
+     * there is anywhere near two hundred thousand: that reading is one no run that reaches it
      * crosses. {@code List.all} reaches the second member only where the first held, and there the
-     * line at two hundred thousand is crossed.
+     * line is read again at two hundred thousand — the author wrote one comparison, so its four
+     * points are owed once and each is asked at both places.
      */
     @Test
     void aRuleAgainstTwoNumbersIsALineOnEachApplicationARunGetsTo() {
@@ -110,8 +111,7 @@ class ARuleInsideAWalkOverAWrittenListIsALineWithPointsTest {
         String at = "comparison@0:13:37";
         assertEquals("[n/x < 100000, n/100000 <= x < 200000, n/200000 <= x] unread [] points ["
                 + "ON point of " + at + ", OFF point of " + at + ", IN point of " + at + ", "
-                + "OUT point of " + at + ", ON point of " + at + ", OFF point of " + at + ", "
-                + "IN point of " + at + ", OUT point of " + at + "]", reading("""
+                + "OUT point of " + at + "]", reading("""
                 {
                         let ks = [ AtMost { threshold = 100000 }, AtMost { threshold = 200000 } ]
                         if List.all((k) -> reaches(n, k), ks) then Yes else No

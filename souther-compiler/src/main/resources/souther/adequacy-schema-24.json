@@ -244,6 +244,7 @@
           "no_reachable_distinguisher_for_a_border",
           "a_borders_fault_family_not_worked_out",
           "items_place_not_worked_out",
+          "a_reading_not_tied_to_its_line",
           "rule_unread",
           "position_not_read",
           "question_unanswered",
@@ -639,13 +640,70 @@
     },
     "boundaryLineId": {
       "type": "object",
-      "description": "One line a row can be written at: where it was drawn, and which line of the model was drawn there. Both, because either alone names more than one line. One line of a type is drawn at every position the type stands at, and those lines share `line`; one rule draws several lines at one place, and those share `target`. Which reading of the model drew the line is not part of it, so a line one helper draws once per call is one line here. Two of these are one line exactly when they are equal as JSON values.",
+      "description": "One line a row can be written at: where it was drawn, and which line of the model was drawn there. Both, because either alone names more than one line. One line of a type is drawn at every position the type stands at, and those lines share `line`; one rule draws several lines at one place, and those share `target`. Which reading of the model drew the line is not part of it, so a line one helper draws once per call is one line here. A comparison written in a body carries `placement` as well, which is how the points of the line drawn here are the points of the line its author wrote: one comparison put at one place facing its author's sides two ways — `check(a, 10)` and `check(20 - a, 10)` — is two lines here, because the run on one side of the place is one of the author's points in one and another in the other. Two of these are one line exactly when they are equal as JSON values.",
       "required": [
         "target",
         "line"
       ],
       "additionalProperties": false,
       "properties": {
+        "placement": {
+          "type": "object",
+          "description": "`placed` is a line shown to be a place of the author's line, with each of its own points (`point`) and the author's point it is (`authored`), or no `authored` where the reading cannot tell which of the author's sides it is on. `no_place_of_the_line` is a line a caller's choice draws between values the comparison comes out one way for. `not_shown` is a line where a caller's choice turns the comparison, which is not shown to be a place of the author's line or not to be one.",
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "enum": [
+                "placed",
+                "no_place_of_the_line",
+                "not_shown"
+              ]
+            },
+            "points": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "point"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "point": {
+                    "$ref": "#/$defs/location"
+                  },
+                  "authored": {
+                    "$ref": "#/$defs/location"
+                  }
+                }
+              }
+            }
+          },
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "placed"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "required": [
+              "points"
+            ]
+          },
+          "else": {
+            "not": {
+              "required": [
+                "points"
+              ]
+            }
+          }
+        },
         "target": {
           "type": "object",
           "description": "Where the line was drawn: the behavior whose input it is on, the quantity it cuts and the level it cuts it at.",
@@ -669,6 +727,53 @@
         },
         "line": {
           "$ref": "#/$defs/authoredLineId"
+        }
+      },
+      "if": {
+        "properties": {
+          "line": {
+            "properties": {
+              "which": {
+                "anyOf": [
+                  {
+                    "properties": {
+                      "kind": {
+                        "const": "comparison"
+                      }
+                    }
+                  },
+                  {
+                    "properties": {
+                      "kind": {
+                        "const": "part_of_comparison"
+                      }
+                    }
+                  }
+                ],
+                "required": [
+                  "kind"
+                ]
+              }
+            },
+            "required": [
+              "which"
+            ]
+          }
+        },
+        "required": [
+          "line"
+        ]
+      },
+      "then": {
+        "required": [
+          "placement"
+        ]
+      },
+      "else": {
+        "not": {
+          "required": [
+            "placement"
+          ]
         }
       }
     },
@@ -943,10 +1048,9 @@
     },
     "obligationId": {
       "type": "object",
-      "description": "What tells one thing a row is owed for from every other, which is not what a reader is shown. A key within this document: a `partition.obligations` entry carries it and so does every finding about one, and a consumer joins them on it. Which of the four points it is is not in here — a rule that names a value owes a row outside it on each side, so two of these can be the same `role` and the role tells them apart nowhere. What does is where the point is (`location`) and, for a run, where it stops (`stops`): a guard on a name two cases spread, whose cases stop the run in different places, owes two runs of one rule at one level on one side.",
+      "description": "What tells one thing a row is owed for from every other, which is not what a reader is shown. A key within this document: a `partition.obligations` entry carries it and so does every finding about one, and a consumer joins them on it. Which of the four points it is is not in here — a rule that names a value owes a row outside it on each side, so two of these can be the same `role` and the role tells them apart nowhere. What does is where the point is (`location`) and, for a line a declaration drew, the level and where a run stops (`stops`): a declaration's line read at two positions whose types stop the run in different places owes two runs at one level on one side. A comparison written in a body carries neither: the level and the far end of a run are where each call put the comparison, which is the reading's and not the author's, so a point of its line is one point however many places it is read at, and each reading says its own under `readings`.",
       "required": [
         "line",
-        "level",
         "location"
       ],
       "additionalProperties": false,
@@ -1104,35 +1208,96 @@
       },
       "allOf": [
         {
-          "description": "A point away from the line asks for a row in the run beside it, and where that run stops is part of what the point is. A point at a value of the quantity has no run.",
+          "description": "A line a comparison written in a body draws carries no level and no far end; every other line carries its level.",
           "if": {
             "properties": {
-              "location": {
+              "line": {
                 "properties": {
-                  "kind": {
-                    "const": "in_the_region"
+                  "which": {
+                    "anyOf": [
+                      {
+                        "properties": {
+                          "kind": {
+                            "const": "comparison"
+                          }
+                        }
+                      },
+                      {
+                        "properties": {
+                          "kind": {
+                            "const": "part_of_comparison"
+                          }
+                        }
+                      }
+                    ],
+                    "required": [
+                      "kind"
+                    ]
                   }
                 },
                 "required": [
-                  "kind"
+                  "which"
                 ]
               }
             },
             "required": [
-              "location"
+              "line"
             ]
           },
           "then": {
-            "required": [
-              "stops"
-            ]
-          },
-          "else": {
             "not": {
-              "required": [
-                "stops"
+              "anyOf": [
+                {
+                  "required": [
+                    "level"
+                  ]
+                },
+                {
+                  "required": [
+                    "stops"
+                  ]
+                }
               ]
             }
+          },
+          "else": {
+            "required": [
+              "level"
+            ],
+            "allOf": [
+              {
+                "description": "A point away from a declaration's line asks for a row in the run beside it, and where that run stops is part of what the point is. A point at a value of the quantity has no run.",
+                "if": {
+                  "properties": {
+                    "location": {
+                      "properties": {
+                        "kind": {
+                          "const": "in_the_region"
+                        }
+                      },
+                      "required": [
+                        "kind"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "location"
+                  ]
+                },
+                "then": {
+                  "required": [
+                    "stops"
+                  ]
+                },
+                "else": {
+                  "not": {
+                    "required": [
+                      "stops"
+                    ]
+                  }
+                }
+              }
+            ]
           }
         }
       ]
@@ -1601,7 +1766,7 @@
           ]
         },
         {
-          "description": "A comparison written in a body, which is a rule apiece: a condition holding three of them is three rules, each with a line of its own, so there is no second line of this one to be told from and no number under the rule to say which. Two lines of it at one value are told apart by `facts`, the way two lines of one part are.",
+          "description": "A comparison written in a body, which is a rule apiece: a condition holding three of them is three rules, each with a line of its own. Where its definition writes no choice on the way to it, the comparison is one line, read wherever a call puts it: two calls of a helper read it at two places, and a row at either is a row at the line the author wrote.",
           "properties": {
             "kind": {
               "const": "comparison"
@@ -1618,7 +1783,7 @@
           "additionalProperties": false
         },
         {
-          "description": "One of the lines a comparison written in a body states, where it states several relations held together: `Int.max(a, b) > 5` is one rule with a line on `a` and a line on `b`, and a row at one says nothing about the other. `part` is which of them this is, counted from zero over the relations the statement holds, each once and in one order, and it means something only beside the rule. Each line is owed rows only where the statement turns on it.",
+          "description": "One of the lines a comparison written in a body draws, where its definition writes a choice on the way to it: `Int.max(a, b) > 5` is one rule with a line under each arm of `max`, and a row at one says nothing about the other. `arms` is which of them this is: the arm taken at each choice the comparison's definition writes, outermost first, in the source's coordinates. What a caller hands the definition is no part of it, so every call of a helper reads the same lines, each at the places that call puts it. Each line is owed rows only where the statement turns on it.",
           "properties": {
             "kind": {
               "const": "part_of_comparison"
@@ -1631,17 +1796,117 @@
                 }
               }
             },
-            "part": {
-              "type": "integer",
-              "minimum": 0
+            "arms": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "$ref": "#/$defs/writtenArm"
+              }
             }
           },
           "additionalProperties": false,
           "required": [
-            "part"
+            "arms"
           ]
         }
       ]
+    },
+    "writtenArm": {
+      "type": "object",
+      "description": "One arm the author of a comparison took on the way to one of its lines. `construct` is the choice the source wrote — an `if`, a `match`, or an operation applied whose answer is one of its arguments — and `through` the calls and references the comparison's definition makes to reach it, outermost first; a choice reached through a function a caller handed in is no arm of the comparison's and is not written here. `arm` is which arm, numbered from zero in the order the source writes them, and `selects` says the line is drawn by what selects that arm rather than by what the arm answers.",
+      "required": [
+        "construct",
+        "through",
+        "arm",
+        "selects"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "construct": {
+          "$ref": "#/$defs/writtenConstruct"
+        },
+        "through": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "description": "A call by where it is written (`at`), or a name written where a value goes by which reference of which definition it is.",
+            "required": [
+              "kind"
+            ],
+            "oneOf": [
+              {
+                "properties": {
+                  "kind": {
+                    "const": "call"
+                  },
+                  "at": {
+                    "$ref": "#/$defs/writtenConstruct"
+                  }
+                },
+                "additionalProperties": false,
+                "required": [
+                  "at"
+                ]
+              },
+              {
+                "properties": {
+                  "kind": {
+                    "const": "reference"
+                  },
+                  "declaredIn": {
+                    "type": "string"
+                  },
+                  "definition": {
+                    "type": "string"
+                  },
+                  "ordinal": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "additionalProperties": false,
+                "required": [
+                  "declaredIn",
+                  "ordinal"
+                ]
+              }
+            ]
+          }
+        },
+        "arm": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "selects": {
+          "type": "boolean"
+        }
+      }
+    },
+    "writtenConstruct": {
+      "type": "object",
+      "description": "A construct a source wrote: the module, the definition where a body wrote it, the number the definition counted its constructs by, and which fork a lowering made of it. Not a place in a source, which `sources` answers for.",
+      "required": [
+        "declaredIn",
+        "ordinal",
+        "lowered"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "declaredIn": {
+          "type": "string"
+        },
+        "definition": {
+          "type": "string"
+        },
+        "ordinal": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "lowered": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
     },
     "ruleId": {
       "type": "object",
@@ -4431,10 +4696,9 @@
     },
     "borderObligationId": {
       "type": "object",
-      "description": "What tells one line a rule draws, held against one line of its fault family, from every other such obligation, where what is owed is of the whole line rather than of a point on it. The line, the level it is read at, and the line of the family, and no place: a point of the line is somewhere, and a line held against a line beside it is nowhere in particular — what would answer it is an input that rules the other line out, which is not a point this line owns. A key within this document: it names an entry of `besides` under a `partition.boundaries` entry, and a consumer joins a `boundary_not_told_from_another` finding to the line it is about on it.",
+      "description": "What tells one line a rule draws, held against one line of its fault family, from every other such obligation, where what is owed is of the whole line rather than of a point on it. The line, the level it is read at, and the line of the family, and no place: a point of the line is somewhere, and a line held against a line beside it is nowhere in particular — what would answer it is an input that rules the other line out, which is not a point this line owns. A key within this document: it names an entry of `besides` under a `partition.boundaries` entry, and a consumer joins a `boundary_not_told_from_another` finding to the line it is about on it. A comparison written in a body carries no level: the value each call puts it at is the reading's, and the line is the one its author wrote.",
       "required": [
         "line",
-        "level",
         "direction"
       ],
       "additionalProperties": false,
@@ -4449,6 +4713,53 @@
           "type": "string",
           "description": "The line of the family, spelled as an author writes a form and with no threshold: where the rows leave the threshold moves with every row written, and the obligation does not. One obligation per line of the family, because a row ruling one of them out need not rule out another."
         }
+      },
+      "if": {
+        "properties": {
+          "line": {
+            "properties": {
+              "which": {
+                "anyOf": [
+                  {
+                    "properties": {
+                      "kind": {
+                        "const": "comparison"
+                      }
+                    }
+                  },
+                  {
+                    "properties": {
+                      "kind": {
+                        "const": "part_of_comparison"
+                      }
+                    }
+                  }
+                ],
+                "required": [
+                  "kind"
+                ]
+              }
+            },
+            "required": [
+              "which"
+            ]
+          }
+        },
+        "required": [
+          "line"
+        ]
+      },
+      "then": {
+        "not": {
+          "required": [
+            "level"
+          ]
+        }
+      },
+      "else": {
+        "required": [
+          "level"
+        ]
       }
     },
     "outputCaseObligationId": {

@@ -1,48 +1,58 @@
 package souther.compiler.partition;
 
+import souther.compiler.meaning.WrittenLine;
+
+import java.util.Objects;
+
 /**
- * Which of the lines one comparison states is this one, as the reading that took the comparison
- * apart named it.
+ * Which of the lines one comparison states is this one: one its author drew.
  *
- * <p>A comparison states one rule, and a rule stating several relations held together draws a line
- * for each of them: {@code Int.max(a, b) <= g} is one rule with a line on {@code a} and one on
- * {@code b}. Which of the two a line is is the answer of the reading that found them, and only
- * that reading makes one — so nothing that meets a line afterwards can number the lines of a
- * comparison by a count of its own, and a reader handed one can only have been handed it.
+ * <p>A comparison states one rule, and its author can draw more than one line with it:
+ * {@code Int.max(a, b) <= g} is one rule with a line on {@code a} and one on {@code b}. Those are
+ * the arms the comparison's definition takes on the way to a relation ({@link WrittenLine}), and
+ * they are the same in every copy of a helper the comparison is read in. What a call hands the
+ * definition puts a line somewhere on the behavior's input, and one line can land in many places —
+ * one for each case of a value the caller chose — so those places are readings of this line and
+ * not lines of their own.
  *
- * <p>Counted over the relations the statement holds, each once and in the order of their
- * spellings ({@link souther.compiler.meaning.WhereEachLineDecides}). Not over where each was
- * written: one relation stated twice is one line.
+ * <p>Named by the arms alone, read off how the statement was derived ({@code WrittenLines}): what a
+ * call hands the definition never splits one of these or joins two.
  */
 public final class PartOfAComparison {
 
-    private final int ordinal;
+    private final WrittenLine line;
 
-    PartOfAComparison(int ordinal) {
-        if (ordinal < 0) {
-            throw new IllegalArgumentException("the lines of a comparison are counted from nought: "
-                    + ordinal);
-        }
-        this.ordinal = ordinal;
+    private PartOfAComparison(WrittenLine line) {
+        this.line = line;
     }
 
-    /** Which of the comparison's lines this is, counted from nought. */
-    public int ordinal() {
-        return ordinal;
+    /** The line the arms of {@code line} lead to. */
+    public static PartOfAComparison of(WrittenLine line) {
+        return new PartOfAComparison(Objects.requireNonNull(line, "a part is some written line"));
+    }
+
+    /** Which line of the author's this is. */
+    public WrittenLine line() {
+        return line;
+    }
+
+    /** Whether this is the comparison itself, which its author drew as one line. */
+    public boolean isTheComparison() {
+        return line.arms().isEmpty();
     }
 
     @Override
     public boolean equals(Object other) {
-        return other instanceof PartOfAComparison that && ordinal == that.ordinal;
+        return other instanceof PartOfAComparison that && line.equals(that.line);
     }
 
     @Override
     public int hashCode() {
-        return Integer.hashCode(ordinal);
+        return line.hashCode();
     }
 
     @Override
     public String toString() {
-        return "line " + ordinal;
+        return "line " + line.arms();
     }
 }

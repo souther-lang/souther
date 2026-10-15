@@ -14,6 +14,7 @@ import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.types.ExpansionLineage;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactAnswer;
@@ -23,6 +24,7 @@ import souther.compiler.numeric.Place;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.Towards;
+import souther.compiler.meaning.AuthoredPointMapping;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Derivation;
@@ -32,6 +34,8 @@ import souther.compiler.meaning.Relation;
 import souther.compiler.meaning.WhereAnApplicationIsMade;
 import souther.compiler.meaning.WhereEachLineDecides;
 import souther.compiler.meaning.WhyUnread;
+import souther.compiler.meaning.WrittenLine;
+import souther.compiler.meaning.WrittenLines;
 import souther.compiler.reach.ComparisonArrival;
 
 import java.math.BigInteger;
@@ -95,11 +99,27 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      */
     sealed interface Read {
 
-        /** The line it draws. */
-        record Cuts(Cutting cutting) implements Read {
+        /**
+         * The line it draws.
+         *
+         * @param authored how the line stands to the line of its author's it is a place of: the
+         *                 author's line put on the input, facing the sides the comparison wrote a
+         *                 known way or none, or a place the statement turns that is not shown to be
+         *                 it ({@link AuthoredPointMapping}). Drawn off a relation, it is that
+         *                 relation's line until the reading that took the statement apart says which
+         *                 of its author's lines the relation is a place of and how
+         */
+        record Cuts(Cutting cutting, AuthoredPointMapping authored) implements Read {
 
             public Cuts {
                 Objects.requireNonNull(cutting, "a comparison that cuts has a line");
+                Objects.requireNonNull(authored, "and stands to its author's line some way");
+            }
+
+            /** The line, as the relation it was drawn off states it. */
+            Cuts(Cutting cutting) {
+                this(cutting, new AuthoredPointMapping.Proven(WrittenLine.THE_COMPARISON,
+                        cutting.claim(), Derivation.AComparisonRead.Facing.NOTHING_WRITTEN, true));
             }
         }
 
@@ -243,13 +263,13 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             /**
              * One line of the statement.
              *
-             * @param id    which of the statement's lines it is
+             * @param id    which of the author's lines it is a place of, and which place
              * @param line  the line it draws, or the refusal to place it; never a reading that
              *              stopped, since the statement was read to the end
              * @param cases where the statement turns on it, as cases any one of which is enough;
              *              empty where it turns on it nowhere
              */
-            record Part(PartOfAComparison id, Read line, List<Proposition> cases) {
+            record Part(PlaceOfALine id, Read line, List<Proposition> cases) {
 
                 public Part {
                     Objects.requireNonNull(id, "a line of a statement is one of its lines");
@@ -277,6 +297,84 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      */
     boolean lineIsPlaced() {
         return of.identity() != null && CutPosition.holdsWhereItFalls(at, per());
+    }
+
+    /**
+     * Whether this line's quantity rises where {@code relation}'s form does, or falls — or nothing
+     * where the two are not over a number this can hold them against each other on.
+     *
+     * <p>Asked of one number both are over, which is enough: the line was drawn off the relation,
+     * so its quantity is the form, turned or not, with the constant moved out.
+     */
+    Optional<Boolean> risesWith(Relation relation) {
+        // A term against a place on its order rises as the term does, which is the position's own
+        // values where the line is on them.
+        if (relation instanceof Relation.Ordered(DecisionAtom.OfTheInput(var term), var _, var _)
+                && of instanceof BorderQuantity.OfACoordinate coordinate) {
+            return coordinate.term().equals(term) ? Optional.of(true) : Optional.empty();
+        }
+        if (!(relation instanceof Relation.Affine affine)) {
+            return Optional.empty();
+        }
+        // A count, or what a division leaves, rises as that number does: the line is drawn on the
+        // number itself, and the relation weighs it by its coefficient.
+        if (of instanceof BorderQuantity.HowMany || of instanceof BorderQuantity.RemainderOfAForm) {
+            for (Map.Entry<Quantity, ExactRatio> each : affine.form().coefs().entrySet()) {
+                if ((each.getKey() instanceof Quantity.HowManyMeet
+                        && of instanceof BorderQuantity.HowMany)
+                        || (each.getKey() instanceof Quantity.RemainderOfADividend
+                                && of instanceof BorderQuantity.RemainderOfAForm)) {
+                    return each.getValue().signum() == 0 ? Optional.empty()
+                            : Optional.of(each.getValue().signum() > 0);
+                }
+            }
+            return Optional.empty();
+        }
+        Map<NumericTerm, ExactRatio> mine = switch (of) {
+            case BorderQuantity.OfACoordinate coordinate -> Map.of(coordinate.term(), ExactRatio.ONE);
+            case BorderQuantity.OverAForm form -> form.form().coefs();
+            default -> Map.of();
+        };
+        for (Map.Entry<NumericTerm, ExactRatio> each : mine.entrySet()) {
+            ExactRatio theirs = affine.form().coefs().get(new DecisionAtom.OfTheInput(each.getKey()));
+            if (theirs != null && theirs.signum() != 0 && each.getValue().signum() != 0) {
+                return Optional.of(theirs.signum() == each.getValue().signum());
+            }
+        }
+        return Optional.empty();
+    }
+
+    /**
+     * {@code drawn}, said to stand to the line of its author's as {@code mapping} says, and facing
+     * the sides the comparison wrote the way its own quantity faces them: the relation it was drawn
+     * off faces them as {@code mapping} has it, and the quantity faces the relation as
+     * {@link #risesWith} says.
+     */
+    private static Read authored(Read drawn, AuthoredPointMapping mapping,
+                                 Proposition.Compared relation) {
+        if (!(drawn instanceof Read.Cuts cuts)) {
+            return drawn;
+        }
+        AuthoredPointMapping faced = mapping;
+        if (mapping instanceof AuthoredPointMapping.Proven(
+                var line, var claims, var facing, var itsOwn)) {
+            Optional<Boolean> rises = facing == Derivation.AComparisonRead.Facing.NOTHING_WRITTEN
+                    ? Optional.empty() : cuts.cutting().risesWith(relation.relation());            // A line the comparison's own relation draws claims what the comparison wrote. One
+            // something else written in its definition draws — how an arm is selected, a
+            // comparison written inside it, what a law says — has no two sides of the
+            // comparison's written for it, and claims what this reading drew, as the comparison
+            // holds or fails across it there.
+            boolean selects = !line.arms().isEmpty() && line.arms().getLast().selects();
+            boolean drawsItsOwn = itsOwn && !selects;
+            faced = new AuthoredPointMapping.Proven(line, drawsItsOwn ? claims
+                    : AuthoredPointMapping.facedTheOneWay(cuts.cutting().claim()),
+                    !drawsItsOwn || rises.isEmpty()
+                            ? Derivation.AComparisonRead.Facing.NOTHING_WRITTEN
+                            : Derivation.AComparisonRead.Facing.of(rises.get()
+                                    != (facing == Derivation.AComparisonRead.Facing.AS_WRITTEN)),
+                    drawsItsOwn);
+        }
+        return new Read.Cuts(cuts.cutting(), faced);
     }
 
     /** The line, or the refusal to place it when the number it falls at has no representation. */
@@ -308,10 +406,16 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      *
      * <p>The reason a reading stopped is settled here, where it stopped, and not asked for
      * afterwards by whoever met the absence.
+     *
+     * @param writtenIn the copy of its body the comparison stands in, where it is a comparison a
+     *                  body wrote: what tells the lines its author drew from the places a call put
+     *                  them ({@link PartOfAComparison}). Nothing for a clause, whose several lines
+     *                  are not drawn
      */
     static Read read(String behavior, StatedComparison comparison,
                      InputReading read, InputReads reads, ClosureApplications applying,
-                     Arrivals answering, WhatConditionsState conditions) {
+                     Arrivals answering, WhatConditionsState conditions,
+                     Optional<ExpansionLineage> writtenIn) {
         List<ClosureApplications.Application> each = switch (applying) {
             case ClosureApplications.Each(var made) -> made;
             // A comparison inside a closure no run applies is read on no application, and comes
@@ -320,9 +424,11 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             case ClosureApplications.Outside _, ClosureApplications.NotSaid _ -> null;
         };
         if (each == null) {
-            return readOnce(behavior, comparison, read, reads, answering, conditions);
+            return readOnce(behavior, comparison, read, reads, answering,
+                    conditions.comparison(comparison, reads, read), writtenIn);
         }
-        Read drawn = onEachApplication(behavior, comparison, read, each, answering, conditions);
+        Read drawn = onEachApplication(behavior, comparison, read, each, answering, conditions,
+                writtenIn);
         // Where an application is made, and where a line decides on it, is part of what the line
         // is; said in anything but what a row's own numbers answer, a row could not be asked
         // whether it is somewhere the line decides, and none of the lines is drawn.
@@ -333,6 +439,18 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
     }
 
     /**
+     * One line an application of a closure draws: which of the author's lines it is a place of,
+     * and what reading it came to there.
+     *
+     * <p>Both, because each answers a different half of whether two applications drew one line.
+     * The drawing is a quantity cut at a level, and two of the author's lines can be cut at one
+     * level of one quantity; which of them it is, is what the line is owed for
+     * ({@link PartOfAComparison}), and one of them drawn two ways is two readings to keep rather
+     * than one to choose between.
+     */
+    private record ALineRead(PlaceOfALine id, Read read) {}
+
+    /**
      * What a comparison inside a closure states on each application it is handed: one rule, with
      * a line for each line some application draws.
      *
@@ -340,6 +458,10 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * where it decides on one of them, met where a run makes that one
      * ({@link WhereAnApplicationIsMade#decidesOn}). Drawn on every application where it decides
      * everywhere, it is the line a comparison outside every closure would be.
+     *
+     * <p>One line is one of the author's lines, drawn the same way ({@link ALineRead}). The values
+     * the closure is applied to are the caller's, so the places they put one of the author's lines
+     * are readings of that line.
      *
      * <p>Every application's statement is a line or none of them is drawn, as with the relations of
      * one statement: where one application's reading stopped, the comparison stops there with that
@@ -353,19 +475,22 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
     private static Read onEachApplication(String behavior, StatedComparison comparison,
                                           InputReading read,
                                           List<ClosureApplications.Application> each,
-                                          Arrivals answering, WhatConditionsState conditions) {
+                                          Arrivals answering, WhatConditionsState conditions,
+                                          Optional<ExpansionLineage> writtenIn) {
         SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped> stopped =
                 new LinkedHashMap<>();
         List<FilingCoordinate> settled = new ArrayList<>();
         List<FilingCoordinate> against = new ArrayList<>();
         List<UndividedByARelation> relations = new ArrayList<>();
-        Map<Read, List<WhereAnApplicationIsMade.OnOne>> lines = new LinkedHashMap<>();
+        Map<ALineRead, List<WhereAnApplicationIsMade.OnOne>> lines = new LinkedHashMap<>();
         InputReads statingNoRelation = null;
         for (ClosureApplications.Application one : each) {
             if (one.reached() instanceof Proposition.Always(boolean made) && !made) {
                 continue;
             }
-            switch (readOnce(behavior, comparison, read, one.reads(), answering, conditions)) {
+            Pullback.OnTheInput onTheInput = conditions.comparison(comparison, one.reads(), read);
+            switch (readOnce(behavior, comparison, read, one.reads(), answering, onTheInput,
+                    writtenIn)) {
                 case Read.Stopped alone -> alone.why().forEach(stopped::putIfAbsent);
                 case Read.StatesNoRelation _ -> {
                     if (statingNoRelation == null) {
@@ -386,9 +511,15 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                     relations.addAll(alone.relations());
                 }
                 case Read.Several several -> several.parts().forEach(part -> lines
-                        .computeIfAbsent(part.line(), _ -> new ArrayList<>())
+                        .computeIfAbsent(new ALineRead(part.id(), part.line()),
+                                _ -> new ArrayList<>())
                         .add(new WhereAnApplicationIsMade.OnOne(part.cases(), one.reached())));
-                case Read line -> lines.computeIfAbsent(line, _ -> new ArrayList<>())
+                case Read line -> lines.computeIfAbsent(new ALineRead(new PlaceOfALine(
+                                        line instanceof Read.Cuts cuts
+                                                ? PartOfAComparison.of(cuts.authored().line())
+                                                : THE_COMPARISON,
+                                        spelled(onTheInput.stated().proposition())),
+                                        line), _ -> new ArrayList<>())
                         .add(WhereAnApplicationIsMade.OnOne.wherever(one.reached()));
             }
         }
@@ -410,13 +541,21 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             return new Read.CutsNothing(settled);
         }
         List<Read.Several.Part> parts = new ArrayList<>();
-        lines.forEach((line, readings) -> parts.add(new Read.Several.Part(
-                new PartOfAComparison(parts.size()), line,
+        lines.forEach((line, readings) -> parts.add(new Read.Several.Part(line.id(), line.read(),
                 WhereAnApplicationIsMade.decidesOn(readings))));
         if (parts.size() == 1 && WhereAnApplicationIsMade.everywhere(parts.getFirst().cases())) {
             return parts.getFirst().line();
         }
         return new Read.Several(parts);
+    }
+
+    /** The comparison as its author drew it, where its definition chooses nothing on the way. */
+    private static final PartOfAComparison THE_COMPARISON =
+            PartOfAComparison.of(WrittenLine.THE_COMPARISON);
+
+    /** A statement that is one line, as the place of a line it is: the relation, held. */
+    private static String spelled(Proposition stated) {
+        return stated instanceof Proposition.Compared compared ? compared.heldKey() : stated.key();
     }
 
     /**
@@ -559,11 +698,72 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         return drawn == null ? null : cutsOrRefused(drawn);
     }
 
-    /** What {@code comparison} states read once, in {@code reads}. */
+    /**
+     * What {@code comparison} states read once, in {@code reads}, with each line it draws named as
+     * the line of its author's it is a place of.
+     *
+     * <p>A statement that is one relation is one line, and still a place of each line the author
+     * drew that it was reached under: {@code Int.max(x, y) <= g} called on {@code p} and {@code p}
+     * states {@code p <= g} alone, and that is where both of the author's lines landed.
+     *
+     * @param onTheInput what the comparison states there, put on the input
+     */
     private static Read readOnce(String behavior, StatedComparison comparison,
                                  InputReading read, InputReads reads, Arrivals answering,
-                                 WhatConditionsState conditions) {
-        Pullback.OnTheInput onTheInput = conditions.comparison(comparison, reads, read);
+                                 Pullback.OnTheInput onTheInput,
+                                 Optional<ExpansionLineage> writtenIn) {
+        Pullback.Pulled stated = onTheInput.stated();
+        Supplier<Optional<Map<String, Map<WrittenLine, AuthoredPointMapping>>>> lines =
+                new Pullback.Once<>(() -> writtenIn.map(at -> WrittenLines.of(
+                        stated.meaning().how(), at, Optional.empty(),
+                        Optional.of(comparison.claim()))));
+        Read drawn = readAsAWhole(behavior, comparison, read, reads, answering, onTheInput, lines);
+        if (writtenIn.isEmpty() || !(stated.proposition() instanceof Proposition.Compared compared)
+                || !(drawn instanceof Read.Cuts || drawn instanceof Read.NoOrderToCountOn
+                        || drawn instanceof Read.NumberNoRatioHolds)) {
+            return drawn;
+        }
+        Map<PartOfAComparison, AuthoredPointMapping> of =
+                authorsLines(lines.get().orElseThrow(), compared, comparison.claim());
+        // A place of one of the author's lines is that line's one reading here, whichever line it
+        // is; the line it is a place of is carried with it. A place of several is a line of each.
+        if (of.size() == 1) {
+            return authored(drawn, of.values().iterator().next(), compared);
+        }
+        List<Read.Several.Part> parts = new ArrayList<>();
+        of.forEach((line, mapping) -> parts.add(new Read.Several.Part(
+                new PlaceOfALine(line, compared.heldKey()), authored(drawn, mapping, compared),
+                List.of(WhereAnApplicationIsMade.nothingAsked()))));
+        return new Read.Several(parts);
+    }
+
+    /**
+     * Which of the author's lines {@code relation} is a place of, and how it stands to each, as
+     * {@code lines} says: the comparison itself where nothing the derivation made it under was the
+     * author's choice, and not shown to be its line where no step was seen making it at all.
+     *
+     * @param written what the comparison claims, as its author wrote it
+     */
+    private static Map<PartOfAComparison, AuthoredPointMapping> authorsLines(
+            Map<String, Map<WrittenLine, AuthoredPointMapping>> lines,
+            Proposition.Compared relation, ComparisonClaim written) {
+        Map<WrittenLine, AuthoredPointMapping> under = lines.get(relation.heldKey());
+        Map<PartOfAComparison, AuthoredPointMapping> out = new LinkedHashMap<>();
+        if (under == null || under.isEmpty()) {
+            out.put(THE_COMPARISON,
+                    new AuthoredPointMapping.Undetermined(WrittenLine.THE_COMPARISON, written));
+        } else {
+            under.forEach((line, mapping) -> out.put(PartOfAComparison.of(line), mapping));
+        }
+        return out;
+    }
+
+    /** What {@code comparison} states read once, in {@code reads}, as the reading drew it. */
+    private static Read readAsAWhole(String behavior, StatedComparison comparison,
+                                     InputReading read, InputReads reads, Arrivals answering,
+                                     Pullback.OnTheInput onTheInput,
+                                     Supplier<Optional<Map<String,
+                                             Map<WrittenLine, AuthoredPointMapping>>>> lines) {
         Pullback.Pulled stated = onTheInput.stated();
         // A form put on the input's numbers, where what is stated is one over them.
         LinearForm<NumericTerm> overTheInput =
@@ -615,8 +815,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                     when statesNoRelation(stated.proposition()) -> new Read.StatesNoRelation();
             case Proposition.All _, Proposition.Any _
                     when !Proposition.leavesSomethingUnread(stated.proposition()) -> {
-                Read several =
-                        several(behavior, comparison.left(), stated.proposition(), read, reads);
+                Read several = several(behavior, comparison.left(), stated.proposition(), read,
+                        reads, lines.get());
                 yield several != null ? several
                         : severalNotDrawn(comparison, read, reads, answering);
             }
@@ -626,7 +826,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             // the same parts, read there.
             case Proposition.Some some when some.holds()
                     && !Proposition.leavesSomethingUnread(some) -> {
-                Read several = several(behavior, comparison.left(), some, read, reads);
+                Read several = several(behavior, comparison.left(), some, read, reads,
+                        lines.get());
                 yield several != null ? several
                         : severalNotDrawn(comparison, read, reads, answering);
             }
@@ -911,10 +1112,15 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      *
      * <p>And {@code Set.contains(p, s)} holds where some element of {@code s} is {@code p}, which
      * relates the values at two positions and divides neither ({@link #valuesItRelates}).
+     *
+     * @param authors which of the lines the author of the application drew each relation it states
+     *                is a place of, and how it stands to each ({@link WrittenLines})
      */
     static Read ofAnApplication(String behavior, Core application, Proposition stated,
-                                InputReading read, InputReads reads) {
-        if (several(behavior, application, stated, read, reads) instanceof Read.Several lines) {
+                                InputReading read, InputReads reads,
+                                Map<String, Map<WrittenLine, AuthoredPointMapping>> authors) {
+        if (several(behavior, application, stated, read, reads, Optional.of(authors))
+                instanceof Read.Several lines) {
             return lines;
         }
         List<FilingCoordinate> related = valuesItRelates(stated);
@@ -1036,9 +1242,13 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * one of the relations is no line on the input, or there is none.
      *
      * <p>One rule, read as many lines as it holds relations, each named by this reading and nothing
-     * else ({@link PartOfAComparison}). Where each decides is part of what the line is: a row at
-     * {@code a = g} under {@code Int.max(a, b) <= g} with {@code b} above {@code g} is answered the
-     * same way on both sides of the line, so it is no row for it.
+     * else: as each line of its author's it is a place of ({@link PartOfAComparison}). Where each
+     * decides is part of what the line is: a row at {@code a = g} under {@code Int.max(a, b) <= g}
+     * with {@code b} above {@code g} is answered the same way on both sides of the line, so it is
+     * no row for it.
+     *
+     * <p>A relation that is a place of two of the author's lines is drawn for each: a row at it
+     * meets both, and each is owed its own row.
      *
      * <p>Every relation of the statement is a line or none of them is drawn. A relation over
      * something no row writes — what a dependency answered — has no line on the input to be; the
@@ -1051,9 +1261,14 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      *
      * @param written the construct the rule is written as, asked only which position it names
      *                first, which is the way each line is faced
+     * @param authors which of the author's lines each relation is a place of, and how it stands to
+     *                each ({@link WrittenLines}); nothing for a clause, which no body wrote and
+     *                whose lines are its own relations
      */
     private static Read several(String behavior, Core written,
-                                Proposition stated, InputReading read, InputReads reads) {
+                                Proposition stated, InputReading read, InputReads reads,
+                                Optional<Map<String, Map<WrittenLine, AuthoredPointMapping>>>
+                                        authors) {
         if (!onlyRelations(stated) && !drawsLines(stated)) {
             return null;
         }
@@ -1062,13 +1277,20 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             return null;
         }
         List<Read.Several.Part> parts = new ArrayList<>();
-        for (int i = 0; i < lines.size(); i++) {
-            Read line = lineOf(behavior, lines.get(i).line(), written, read, reads);
+        for (WhereEachLineDecides.Decides each : lines) {
+            Read line = lineOf(behavior, each.line(), written, read, reads);
             if (line == null) {
                 return null;
             }
-            parts.add(new Read.Several.Part(new PartOfAComparison(i), line,
-                    lines.get(i).cases()));
+            if (authors.isEmpty()) {
+                parts.add(new Read.Several.Part(new PlaceOfALine(THE_COMPARISON,
+                        each.line().key()), line, each.cases()));
+                continue;
+            }
+            authorsLines(authors.get(), each.line(), WrittenLines.claimOf(each.line()))
+                    .forEach((of, mapping) -> parts.add(
+                    new Read.Several.Part(new PlaceOfALine(of, each.line().key()),
+                            authored(line, mapping, each.line()), each.cases())));
         }
         return new Read.Several(parts);
     }

@@ -3,6 +3,9 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.AReadingOfAPosition;
+import souther.compiler.meaning.AuthoredPointMapping;
+import souther.compiler.meaning.Derivation;
+import souther.compiler.meaning.WrittenLine;
 import souther.compiler.check.RuleReportAnchor;
 import souther.compiler.coverage.Numberings;
 import souther.compiler.types.ExpansionLineage;
@@ -60,16 +63,16 @@ class OneBorderReadTwiceIsOneReadingTest {
     private static final Carrier WHOLE = new Carrier.Whole();
 
     /**
-     * A run stopping where the rules leave the quantity and one stopping there at a line as well are
-     * two readings.
+     * A comparison's run stopping where the rules leave the quantity and one stopping there at a
+     * line as well are one reading.
      *
      * <p>The values are the same values — the line is where the rules already stop it — so what a
-     * row has to do is the same, and a reader comparing the demands alone would call them one. What
-     * differs is what a row inside is owed to: with the line there, it answers for that rule as well
-     * as for the end, and those are two things to be told about.
+     * row has to do is the same. What differs is what else a row inside answers for, and for a
+     * comparison a body wrote, where the run beside its line stops is the reading's and no part of
+     * the author's point: the two issue the same points, and are one reading of the line.
      */
     @Test
-    void arunOwedToMoreThingsIsAnotherReading() {
+    void aComparisonsRunOwedToMoreThingsIsTheSameReading() {
         Border rulesOnly = compared(List.of());
         Border andALine = compared(List.of(Parting.by(
                 HeldSeams.of(space(), at(1000), Towards.BELOW), aComparison())));
@@ -79,10 +82,9 @@ class OneBorderReadTwiceIsOneReadingTest {
         assertNotEquals(rulesOnly.answer(PointRole.IN).bases(),
                 andALine.answer(PointRole.IN).bases(),
                 "and a row inside it answers for more once the line is there");
-        assertFalse(rulesOnly.sameReadingAs(andALine),
-                "so the two are not one reading of one line");
-        assertTrue(rulesOnly.sameReadingAs(compared(List.of())),
-                "while a reading against itself is one reading");
+        assertTrue(rulesOnly.sameReadingAs(andALine),
+                "which is no part of the comparison's point, so the two are one reading");
+        assertTheReadingIsItsPoints(rulesOnly, andALine);
     }
 
     /**
@@ -370,7 +372,10 @@ class OneBorderReadTwiceIsOneReadingTest {
                         new RuleReportAnchor.ByTheModuleThatWroteIt(),
                         List.of(Numberings.comparison(1, 0)), ElementsMetOn.EVERY),
                 Optional.empty(),
-                new LineFacts(new ComparisonClaim.Cut(Towards.ABOVE, true)));
+                new LineFacts(new ComparisonClaim.Cut(Towards.ABOVE, true)),
+                new AuthoredPointMapping.Proven(WrittenLine.THE_COMPARISON,
+                        new ComparisonClaim.Cut(Towards.ABOVE, true),
+                        Derivation.AComparisonRead.Facing.NOTHING_WRITTEN, true));
     }
 
     /** A line of a body, for a place to be parted by something other than the line read. */

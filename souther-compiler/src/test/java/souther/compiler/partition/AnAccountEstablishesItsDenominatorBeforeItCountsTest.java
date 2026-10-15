@@ -1,7 +1,11 @@
 package souther.compiler.partition;
 
+import souther.compiler.check.ComparisonClaim;
 import souther.compiler.coverage.ConditionOutcomeSite;
 import souther.compiler.coverage.Numberings;
+import souther.compiler.meaning.AuthoredPointMapping;
+import souther.compiler.meaning.Derivation;
+import souther.compiler.meaning.WrittenLine;
 import souther.compiler.types.ExpansionLineage;
 import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.SourceConstruct;
@@ -116,6 +120,9 @@ class AnAccountEstablishesItsDenominatorBeforeItCountsTest {
                         new RuleReportAnchor.ByTheModuleThatWroteIt(),
                         List.of(WHERE), ElementsMetOn.EVERY),
                 Optional.empty(),
-                new LineFacts(new souther.compiler.check.ComparisonClaim.Cut(Towards.BELOW, true)));
+                new LineFacts(new ComparisonClaim.Cut(Towards.BELOW, true)),
+                new AuthoredPointMapping.Proven(WrittenLine.THE_COMPARISON,
+                        new ComparisonClaim.Cut(Towards.BELOW, true),
+                        Derivation.AComparisonRead.Facing.NOTHING_WRITTEN, true));
     }
 }

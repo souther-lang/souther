@@ -21,6 +21,7 @@ public final class OwedPoint {
 
     private final BorderObligationPoint point;
     private final PointAttribution attribution;
+    private final ReadingSeat seat;
 
     /**
      * Made where a border says what it owes, and nowhere else.
@@ -29,14 +30,18 @@ public final class OwedPoint {
      * that settled the point ({@link PointAttribution#of}), and a value anybody could assemble is a
      * way to hand an account an answer that classifier never gave — the arm chosen by whoever was
      * writing rather than by what the model says.
+     *
+     * @param seat where this reading stands with respect to the point: which of its own points is
+     *             that point, or none it can tie to it ({@link ReadingSeat})
      */
-    OwedPoint(BorderObligationPoint point, PointAttribution attribution) {
-        if (point == null || attribution == null) {
+    OwedPoint(BorderObligationPoint point, PointAttribution attribution, ReadingSeat seat) {
+        if (point == null || attribution == null || seat == null) {
             throw new IllegalArgumentException(
                     "a point owed a row is owed for something, by somebody: " + point);
         }
         this.point = point;
         this.attribution = attribution;
+        this.seat = seat;
     }
 
     /** What a row here is owed for, which two readings of it share. */
@@ -49,19 +54,24 @@ public final class OwedPoint {
         return attribution;
     }
 
+    /** Where this reading stands with respect to the point. */
+    public ReadingSeat seat() {
+        return seat;
+    }
+
     @Override
     public boolean equals(Object other) {
-        return other instanceof OwedPoint that
-                && point.equals(that.point) && attribution.equals(that.attribution);
+        return other instanceof OwedPoint that && point.equals(that.point)
+                && attribution.equals(that.attribution) && seat.equals(that.seat);
     }
 
     @Override
     public int hashCode() {
-        return java.util.Objects.hash(point, attribution);
+        return java.util.Objects.hash(point, attribution, seat);
     }
 
     @Override
     public String toString() {
-        return point + " owed to " + attribution;
+        return point + " owed to " + attribution + " from " + seat;
     }
 }

@@ -13,6 +13,8 @@ import souther.compiler.check.CoverageObligation;
 import souther.compiler.check.PartId;
 import souther.compiler.publish.InputUseWord;
 import souther.compiler.types.CanonicalNameOrder;
+import souther.compiler.types.ExpansionLineage;
+import souther.compiler.types.ExpansionSite;
 import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.StepOfACopy;
 import souther.compiler.types.SourceConstructOrigin;
@@ -26,6 +28,7 @@ import souther.compiler.partition.AuthoredLine;
 import souther.compiler.partition.BorderObligationPoint;
 import souther.compiler.partition.BorderQuantity;
 import souther.compiler.partition.LinearQuantity;
+import souther.compiler.partition.AuthoredPlacement;
 import souther.compiler.partition.BoundaryLine;
 import souther.compiler.partition.InteractionRequirements;
 import souther.compiler.partition.ObligationIdentity;
@@ -45,6 +48,7 @@ import souther.compiler.partition.DecisionCondition;
 import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.WhyNotTaken;
 import souther.compiler.meaning.WhyUnread;
+import souther.compiler.meaning.WrittenLine;
 import souther.compiler.partition.DecisionReading;
 import souther.compiler.partition.DecisionRule;
 import souther.compiler.partition.DomainPoint;
@@ -1922,7 +1926,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             out.append(String.format("      · %s%n", cannotBeWritten(pointOf(each,
                     RuleHandleProse.said(each.debt().describe(places), rendering, null)))));
             readings(out, each.debt(), _ -> true, at -> whatWasTried(
-                    at.owedAt(each.debt().at()).searches(),
+                    each.debt().owedAt(at).searches(),
                     module.owedByDeclarations().conditionPlaces().along(at.saidOnTheWay()),
                     rendering, null),
                     Map.of(), rendering, null);
@@ -1934,7 +1938,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 out.append(String.format("      ? %s%n", said));
             }
             readings(out, each.debt(), _ -> true, at -> whatWasTried(
-                    at.owedAt(each.debt().at()).searches(),
+                    each.debt().owedAt(at).searches(),
                     module.owedByDeclarations().conditionPlaces().along(at.saidOnTheWay()),
                     rendering, null),
                     Map.of(), rendering, null);
@@ -3334,7 +3338,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             out.append(String.format("      · %s%n", cannotBeWritten(point.role() + " point ("
                     + RuleHandleProse.said(point.describe(places), rendering, declaredIn) + ")")));
             readings(out, point, _ -> true, at -> whatWasTried(
-                    at.owedAt(point.at()).searches(),
+                    point.owedAt(at).searches(),
                     behavior.conditionPlaces().along(at.saidOnTheWay()), rendering, declaredIn),
                     behavior.conditionPlaces().copies(), rendering, declaredIn);
         }
@@ -3345,7 +3349,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 out.append(String.format("      ? %s%n", said));
             }
             readings(out, point, _ -> true, at -> whatWasTried(
-                    at.owedAt(point.at()).searches(),
+                    point.owedAt(at).searches(),
                     behavior.conditionPlaces().along(at.saidOnTheWay()), rendering, declaredIn),
                     behavior.conditionPlaces().copies(), rendering, declaredIn);
         }
@@ -3410,12 +3414,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         // than as work a strict build refuses over.
         for (BorderObligationPointAssessment point : owed.met()) {
             if (point.readings().stream().anyMatch(
-                    at -> !at.owedAt(point.at()).hasRowWitness())) {
+                    at -> !point.owedAt(at).hasRowWitness())) {
                 out.append(String.format("      · the %s point (%s) is answered, and not at every"
                                 + " reading of the line%n",
                         point.role(),
                         RuleHandleProse.said(point.describe(places), rendering, declaredIn)));
-                readings(out, point, at -> !at.owedAt(point.at()).hasRowWitness(), _ -> "",
+                readings(out, point, at -> !point.owedAt(at).hasRowWitness(), _ -> "",
                         behavior.conditionPlaces().copies(), rendering, declaredIn);
             }
         }
@@ -5596,7 +5600,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // obligation does not.
             case ObligationIdentity.OfABorder(var line, var direction) -> {
                 authoredLineId(into.putObject("line"), line.line());
-                level(into.putObject("level"), line.at());
+                line.at().ifPresent(at -> level(into.putObject("level"), at));
                 into.put("direction", OrderedAffineBoundary.spelled(direction.direction()));
             }
             case ObligationIdentity.OfAnArm(var arm) -> armId(into, arm, sources);
@@ -5946,11 +5950,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     private static void obligationId(ObjectNode into,
                                      BorderObligationPoint point) {
         authoredLineId(into.putObject("line"), point.line().line());
-        level(into.putObject("level"), point.line().at());
+        // Absent for a comparison a body wrote, which is at whatever value a call put it at.
+        point.line().at().ifPresent(at -> level(into.putObject("level"), at));
         location(into.putObject("location"), point.point());
-        // Absent for a point at a value of the quantity, which has no run to be stopped.
-        if (point instanceof BorderObligationPoint.InRegion region) {
-            farEnd(into.putObject("stops"), region.region());
+        // Absent for a point at a value of the quantity, which has no run to be stopped, and for a
+        // comparison a body wrote, whose run stops wherever each call's values stop it.
+        if (point instanceof BorderObligationPoint.InRegion(var _, var _, var region)) {
+            region.ifPresent(stops -> farEnd(into.putObject("stops"), stops));
         }
     }
 
@@ -5995,7 +6001,33 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         quantityId(target.putObject("quantity"), line.target().of());
         level(target.putObject("level"), line.target().at());
         authoredLineId(into.putObject("line"), line.line());
+        // A declaration's line is read in the type's own values, and its points are the line's.
+        switch (line.placement()) {
+            case AuthoredPlacement.ItsOwn _ -> { }
+            case AuthoredPlacement.Placed placed -> {
+                ObjectNode placement = into.putObject("placement");
+                placement.put("kind", "placed");
+                ArrayNode points = placement.putArray("points");
+                for (DomainPoint each : EVERY_POINT) {
+                    if (!placed.points().containsKey(each)) {
+                        continue;
+                    }
+                    ObjectNode one = points.addObject();
+                    location(one.putObject("point"), each);
+                    placed.of(each).ifPresent(of -> location(one.putObject("authored"), of));
+                }
+            }
+            case AuthoredPlacement.NoPlaceOfTheLine _ ->
+                    into.putObject("placement").put("kind", "no_place_of_the_line");
+            case AuthoredPlacement.NotShown _ ->
+                    into.putObject("placement").put("kind", "not_shown");
+        }
     }
+
+    /** Every point a line can have, in the order the technique names them. */
+    private static final List<DomainPoint> EVERY_POINT = List.of(new DomainPoint.AtTheLine(),
+            new DomainPoint.BesideTheLine(Towards.BELOW), new DomainPoint.BesideTheLine(Towards.ABOVE),
+            new DomainPoint.InTheRegion(Towards.BELOW), new DomainPoint.InTheRegion(Towards.ABOVE));
 
     /**
      * What a line was drawn on, by every part a quantity is equal by, out of what the quantity
@@ -6220,12 +6252,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 which.put("kind", "comparison");
                 ruleId(which.putObject("rule"), it.rule());
             }
-            // Which of the comparison's lines, as the reading that took the statement apart named
-            // it, and never a count this made of the lines it was handed.
+            // Which of the lines the author drew, as the arms the comparison's definition takes on
+            // the way to it — in the source's coordinates, which every call of a helper shares.
             case WhichLine.OfAPartOfAComparison it -> {
                 which.put("kind", "part_of_comparison");
                 ruleId(which.putObject("rule"), it.rule());
-                which.put("part", it.part().ordinal());
+                ArrayNode arms = which.putArray("arms");
+                it.part().line().arms().forEach(arm -> writtenArm(arms.addObject(), arm));
             }
         }
         ObjectNode facts = into.putObject("facts");
@@ -6370,6 +6403,52 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 into.put("kind", "at_the_order_end");
                 into.put("towards", word(towards));
             }
+        }
+    }
+
+    /**
+     * One arm the author of a comparison took on the way to one of its lines: the choice, by the
+     * construct the source wrote and the calls the comparison's definition makes to get there, and
+     * which of its arms.
+     */
+    private static void writtenArm(ObjectNode into, WrittenLine.Arm arm) {
+        constructAt(into.putObject("construct"), arm.at().origin());
+        ArrayNode through = into.putArray("through");
+        for (ExpansionLineage.Step step : arm.at().within()) {
+            ObjectNode call = through.addObject();
+            switch (step.at()) {
+                case ExpansionSite.Written(var origin) -> {
+                    call.put("kind", "call");
+                    constructAt(call.putObject("at"), origin);
+                }
+                case ExpansionSite.Named(var origin) -> {
+                    call.put("kind", "reference");
+                    ownerOf(call, origin.owner());
+                    call.put("ordinal", origin.ordinal());
+                }
+                // A function a caller handed in is the caller's, and a choice reached through one
+                // is no arm of the comparison's ({@link WrittenChoice}).
+                case ExpansionSite.Supplied supplied -> throw new IllegalStateException(
+                        "an arm of a comparison is reached through calls its definition writes: "
+                                + supplied);
+            }
+        }
+        into.put("arm", arm.arm());
+        into.put("selects", arm.selects());
+    }
+
+    /** A construct, by what wrote it and where it was numbered there. */
+    private static void constructAt(ObjectNode into, SourceConstructOrigin origin) {
+        ownerOf(into, origin.owner());
+        into.put("ordinal", origin.ordinal());
+        into.put("lowered", origin.lowered());
+    }
+
+    /** What wrote a construct: the module, and the definition where a body is what wrote it. */
+    private static void ownerOf(ObjectNode into, WrittenOwner owner) {
+        into.put("declaredIn", owner.module());
+        if (owner instanceof WrittenOwner.Body body) {
+            into.put("definition", body.definition());
         }
     }
 
@@ -7695,9 +7774,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 ObjectNode r = readings.addObject();
                 r.put("behavior", said.where().behavior());
                 r.put("axis", said.at());
-                r.put("relation", at.border().operator(point.at()));
-                r.put("against", at.border().against(point.at()));
-                measured(r, at.owedAt(point.at()).coverage(), (node, coverage) ->
+                r.put("relation", at.border().operator(point.askedAt(at)));
+                r.put("against", at.border().against(point.askedAt(at)));
+                measured(r, point.owedAt(at).coverage(), (node, coverage) ->
                         node.put("hit", ItemAssessment.Coverage.hit(coverage)));
             }
         }
@@ -7781,7 +7860,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             ObjectNode one = out.addObject();
             ObjectNode id = one.putObject("lineId");
             authoredLineId(id.putObject("line"), line.line().line());
-            level(id.putObject("level"), line.line().at());
+            level(id.putObject("level"), line.level());
             ruleId(one.putObject("ruleId"), line.line().provenance());
             one.put("label", line.said());
             ArrayNode none = one.putArray("noPoint");
@@ -7809,7 +7888,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             ObjectNode one = out.addObject();
             ObjectNode id = one.putObject("pointId");
             authoredLineId(id.putObject("line"), each.point().line().line());
-            level(id.putObject("level"), each.point().line().at());
+            level(id.putObject("level"), each.level());
             location(id.putObject("location"), each.point().point());
             ArrayNode stops = id.putArray("stops");
             each.point().stops().forEach(end -> farEnd(stops.addObject(), end));
@@ -8440,8 +8519,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // All three: what a report calls a line leaves out where it stands, on purpose, and two
             // points of one behavior's comparisons are told apart by nothing else — which is the
             // shape this whole array was written to stop repeating.
+            // A comparison a body wrote is at whatever value a call put it at, and what tells two
+            // of its points apart is the line and where on it the point is.
             case Subject.AtAPoint it -> it.point().line().saidWithoutAPlace()
-                    + " = " + it.point().line().at() + placeOn(it.point().point());
+                    + it.point().line().at().map(at -> " = " + at).orElse("")
+                    + placeOn(it.point().point());
             case Subject.AtAFork it -> "a fork of " + it.fork().module();
             case Subject.AtAnArm it -> "an arm of " + it.arm().writtenIn().definition();
             case Subject.OfAMeasure it ->
@@ -8717,6 +8799,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // was read against it — apart from `BorderValueUnreadable`, which is a row's value once
             // a line already known to ask for one.
             case Weakening.ItemsPlaceNotWorkedOut _ -> WeakeningWord.ITEMS_PLACE_NOT_WORKED_OUT;
+            case Weakening.AReadingNotTiedToItsLine _ ->
+                    WeakeningWord.A_READING_NOT_TIED_TO_ITS_LINE;
             case Weakening.ModelReadingIncomplete it -> switch (it.cause()) {
                 case ClosureGap.PositionNotReachedInto _ ->
                         WeakeningWord.POSITION_NOT_READ;

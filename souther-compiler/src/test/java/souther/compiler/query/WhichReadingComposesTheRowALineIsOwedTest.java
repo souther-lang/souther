@@ -9,6 +9,7 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.Limits;
+import souther.compiler.partition.AuthoredPlacement;
 import souther.compiler.partition.BorderQuantity;
 import souther.compiler.partition.BoundaryTarget;
 import souther.compiler.partition.Criterion;
@@ -19,6 +20,7 @@ import souther.compiler.query.BorderObligationPointAssessment.Reading;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.SequencedMap;
 import java.util.Set;
 
@@ -188,8 +190,8 @@ class WhichReadingComposesTheRowALineIsOwedTest {
      */
     @Test
     void twoReadingsInOneBehaviorAreTwoReadings() {
-        Reading first = new Reading(aLineAt("one", "x.a"));
-        Reading second = new Reading(aLineAt("one", "x.b"));
+        Reading first = new Reading(aLineAt("one", "x.a"), ITS_OWN);
+        Reading second = new Reading(aLineAt("one", "x.b"), ITS_OWN);
         SearchCoverage coverage = coverageOf(Map.of(
                         first, new SearchCoverage.ReadingSearch.Attempted(nothingThere()),
                         second, new SearchCoverage.ReadingSearch.Attempted(refused())),
@@ -278,7 +280,8 @@ class WhichReadingComposesTheRowALineIsOwedTest {
     @Test
     void aPointARowAlreadyStandsAtIsNotSearchedFor() {
         PointResolution resolved = PointResolver.resolveAt(
-                new ObligationAssessment(new Criterion.AtTheLevel(Level.OfTheQuantity.of(1)),
+                new ObligationAssessment(
+                        Optional.of(new Criterion.AtTheLevel(Level.OfTheQuantity.of(1))),
                         new ObligationCoverage.Witnessed(RowWitnesses.ANOTHER_ROW),
                         ItemAssessment.WritabilityProjection.PROVEN, SearchOutcomes.none(),
                         ObligationDisposition.openOn(List.of())),
@@ -303,8 +306,11 @@ class WhichReadingComposesTheRowALineIsOwedTest {
 
     /** A reading of the line: one behavior at its one position carrying the type. */
     private static Reading at(String behavior) {
-        return new Reading(aLineAt(behavior, behavior + ".value"));
+        return new Reading(aLineAt(behavior, behavior + ".value"), ITS_OWN);
     }
+
+    /** How a reading of a declaration's line stands to it: at the line's own points. */
+    private static final AuthoredPlacement ITS_OWN = new AuthoredPlacement.ItsOwn();
 
     /** Where a line was read: one position of one behavior, cut at one value. */
     private static BoundaryTarget aLineAt(String behavior, String path) {
@@ -318,7 +324,8 @@ class WhichReadingComposesTheRowALineIsOwedTest {
     /** A point a row is owed at, measured and missed, so a search of it would tell somebody
      *  something. */
     private static ObligationAssessment owed() {
-        return new ObligationAssessment(new Criterion.AtTheLevel(Level.OfTheQuantity.of(1)),
+        return new ObligationAssessment(
+                Optional.of(new Criterion.AtTheLevel(Level.OfTheQuantity.of(1))),
                 new ObligationCoverage.Missed(),
                 ItemAssessment.WritabilityProjection.PROVEN, SearchOutcomes.none(),
                 ObligationDisposition.openOn(List.of()));

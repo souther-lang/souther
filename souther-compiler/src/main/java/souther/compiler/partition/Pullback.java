@@ -33,12 +33,14 @@ import souther.compiler.check.StringPredicates;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TheSignOfAnOrder;
 import souther.compiler.check.WholeUnitsBetween;
+import souther.compiler.core.ACopyOfAnApplication;
 import souther.compiler.core.Core;
 import souther.compiler.core.WhatABodyReads;
 import souther.compiler.check.AnIndexedMap;
 import souther.compiler.inputs.AnIdentityMap;
 import souther.compiler.inputs.CaseCompared;
 import souther.compiler.inputs.CasesLeft;
+import souther.compiler.inputs.ComparedNumber;
 import souther.compiler.inputs.Denotation;
 import souther.compiler.inputs.ElementsMet;
 import souther.compiler.inputs.InputNumber;
@@ -555,10 +557,12 @@ final class Pullback {
             case Core.If iff -> {
                 Derivation cond = observe(iff.cond(), AnswerAspect.TRUTH, reads);
                 Derivation then = observe(iff.then(), asked, reads);
-                return new Derivation.IfThenElse(cond, then, observe(iff.els(), asked, reads));
+                return madeBy(iff,
+                        new Derivation.IfThenElse(cond, then, observe(iff.els(), asked, reads)));
             }
             case Core.Match match -> {
-                return armsOf(match, reads, (body, inside) -> observe(body, asked, inside));
+                return madeBy(match,
+                        armsOf(match, reads, (body, inside) -> observe(body, asked, inside)));
             }
             default -> { }
         }
@@ -595,8 +599,9 @@ final class Pullback {
                     return subject == null ? null
                             : leaf(new Derivation.ATruthOfASubject(subject, true), e, reads);
                 },
-                () -> BooleanMeaning.asAComparison(e).map(stated -> comparison(stated,
-                        new Denotation(e, reads), fixed(e, reads), reads)).orElse(null),
+                () -> BooleanMeaning.asAComparison(e).map(stated -> aComparisonAt(e,
+                        comparison(stated, new Denotation(e, reads), fixed(e, reads), reads)))
+                        .orElse(null),
                 () -> applied == null ? null
                         : new ALawRead(applied, e, reads).aCharacterInAClass(),
                 () -> byALaw(applied, e, AnswerAspect.TRUTH, reads, new Denotation(e, reads)),
@@ -1238,9 +1243,9 @@ final class Pullback {
                     fixed(e, reads)), stopsAt);
             case BoundOperationFacts.Settled.ByALaw(
                     OperationLaw.Observation<DeclaredArgument> law, var _) ->
-                    new Derivation.ByALaw(callOf(operation, applied, reads,
+                    madeBy(e, new Derivation.ByALaw(callOf(operation, applied, reads,
                             LawArguments.named(law.equivalentTo())), aspect,
-                            new ALawRead(applied, e, reads).of(law.equivalentTo()));
+                            new ALawRead(applied, e, reads).of(law.equivalentTo())));
             case BoundOperationFacts.Settled.ByALaw(OperationLaw.Size<DeclaredArgument> _, var _) ->
                     throw new IllegalStateException(operation + " settles a side of its answer"
                             + " with how many it holds");
@@ -1532,8 +1537,8 @@ final class Pullback {
         }
         Set<DeclaredArgument> named = new HashSet<>();
         sized.law().cases().forEach(each -> named.addAll(LawArguments.named(each.where())));
-        return new Derivation.ASizeInCases(
-                callOf(sized.operation(), sized.applied(), sized.reads(), named), arms);
+        return madeBy(sized.e(), new Derivation.ASizeInCases(
+                callOf(sized.operation(), sized.applied(), sized.reads(), named), arms));
     }
 
     /**
@@ -2767,14 +2772,14 @@ final class Pullback {
                         read.rules().newtypes());
                 switch (Core.withoutStanding(stands.value())) {
                     case Core.If iff -> {
-                        return new Derivation.IfThenElse(
+                        return madeBy(iff, new Derivation.IfThenElse(
                                 observe(iff.cond(), AnswerAspect.TRUTH, stands.at()),
                                 asTheElement(container, iff.then(), stands.at(), compared),
-                                asTheElement(container, iff.els(), stands.at(), compared));
+                                asTheElement(container, iff.els(), stands.at(), compared)));
                     }
                     case Core.Match match -> {
-                        return armsOf(match, stands.at(), (body, inside) ->
-                                asTheElement(container, body, inside, compared));
+                        return madeBy(match, armsOf(match, stands.at(), (body, inside) ->
+                                asTheElement(container, body, inside, compared)));
                     }
                     default -> { }
                 }
@@ -3710,7 +3715,8 @@ final class Pullback {
             return new Derivation.ACutThatCutsNothing(states.holds(form.constant().signum()),
                     ofTheInputIn(sides));
         }
-        return aRelation(Derivation.ComparisonReading.OVER_BOUND_VALUES, form, states, counting);
+        return aRelation(Derivation.ComparisonReading.OVER_BOUND_VALUES, form, states, counting,
+                Derivation.AComparisonRead.Facing.AS_WRITTEN);
     }
 
     /** The two sides of a comparison read with what an operation answers, and the form they come
@@ -3864,11 +3870,17 @@ final class Pullback {
         return true;
     }
 
-    /** {@code form states 0}, read by {@code by}, written the one way every writing of a relation
-     *  comes to ({@link Relation.OneWay}). */
+    /**
+     * {@code form states 0}, read by {@code by}, written the one way every writing of a relation
+     * comes to ({@link Relation.OneWay}).
+     *
+     * @param written how {@code form} faces the two sides of what was written: the left less the
+     *                right, the other way about, or neither where no two written sides were read
+     *                into it
+     */
     private static Derivation aRelation(Derivation.ComparisonReading by, LinearForm<Quantity> form,
-                                        Rel states) {
-        return aRelation(by, form, states, Map.of());
+                                        Rel states, Derivation.AComparisonRead.Facing written) {
+        return aRelation(by, form, states, Map.of(), written);
     }
 
     /**
@@ -3878,8 +3890,17 @@ final class Pullback {
     private static Derivation aRelation(Derivation.ComparisonReading by, LinearForm<Quantity> form,
                                         Rel states,
                                         Map<Quantity.HowManyMeet, Derivation.AComparisonRead.Counted>
-                                                read) {
+                                                read,
+                                        Derivation.AComparisonRead.Facing written) {
         Relation.OneWay<Quantity> one = Relation.OneWay.of(form, states);
+        // Turning the form to face the one way turns it against the written sides as well.
+        Derivation.AComparisonRead.Facing facing = switch (written) {
+            case NOTHING_WRITTEN -> written;
+            case AS_WRITTEN -> Derivation.AComparisonRead.Facing.of(
+                    Relation.OneWay.facesTheOtherWay(form));
+            case TURNED -> Derivation.AComparisonRead.Facing.of(
+                    !Relation.OneWay.facesTheOtherWay(form));
+        };
         Relation.Affine relation = new Relation.Affine(one.form(), one.proposition());
         if (pastTheReadings(relation)) {
             return pastTheReadings(false);
@@ -3891,7 +3912,7 @@ final class Pullback {
             }
         });
         return new Derivation.AComparisonRead(by, relation, one.holds(), named,
-                READINGS.maximum());
+                READINGS.maximum(), facing);
     }
 
     /**
@@ -4298,7 +4319,7 @@ final class Pullback {
     private static Derivation asACut(StatedComparison comparison,
                                      AffineReading.OfAComparison arithmetic, boolean fixed) {
         return switch (arithmetic) {
-            case AffineReading.OfAComparison.Cuts(var affine) -> {
+            case AffineReading.OfAComparison.Cuts(var affine, var mirrored) -> {
                 Rel states = affine.claim().statedRelation();
                 LinearForm<NumericTerm> against;
                 switch (affine.form().minus(LinearForm.constant(affine.cut()))) {
@@ -4308,7 +4329,9 @@ final class Pullback {
                     }
                 }
                 yield aRelation(Derivation.ComparisonReading.AS_A_CUT,
-                        asQuantities(DecisionAtom.ofTheInput(against)), states);
+                        asQuantities(DecisionAtom.ofTheInput(against)), states,
+                        mirrored ? Derivation.AComparisonRead.Facing.TURNED
+                                : Derivation.AComparisonRead.Facing.AS_WRITTEN);
             }
             case AffineReading.OfAComparison.CutsNothing constant ->
                     new Derivation.ACutThatCutsNothing(
@@ -4339,10 +4362,16 @@ final class Pullback {
         }
         Rel states = drawn.claim().statedRelation();
         Rel proposition = states.orItsDenial();
+        // The term against the place it is held at, so above the line is where the term is above
+        // it: the left side where the term was written there, and the right where it was not.
+        Derivation.AComparisonRead.Facing facing =
+                ComparedNumber.writtenOnTheRight(comparison, read, reads)
+                        .map(Derivation.AComparisonRead.Facing::of)
+                        .orElse(Derivation.AComparisonRead.Facing.NOTHING_WRITTEN);
         return new Derivation.AComparisonRead(Derivation.ComparisonReading.ON_AN_ORDER,
                 new Relation.Ordered(new DecisionAtom.OfTheInput(drawn.term()), drawn.value(),
                         proposition),
-                states == proposition, READINGS.maximum());
+                states == proposition, READINGS.maximum(), facing);
     }
 
     /**
@@ -4498,7 +4527,7 @@ final class Pullback {
                             again.apply(on -> on.takingAForm(call, one.answers(),
                                     cases.size()))));
                 }
-                yield new Derivation.AnOperationsCases(operation, each);
+                yield madeBy(call, new Derivation.AnOperationsCases(operation, each));
             }
         };
     }
@@ -4555,7 +4584,8 @@ final class Pullback {
             return new Derivation.ACutThatCutsNothing(
                     stands.rel().holds(form.constant().signum()), Set.of());
         }
-        return aRelation(Derivation.ComparisonReading.OVER_BOUND_VALUES, form, stands.rel());
+        return aRelation(Derivation.ComparisonReading.OVER_BOUND_VALUES, form, stands.rel(),
+                Derivation.AComparisonRead.Facing.AS_WRITTEN);
     }
 
     /**
@@ -5147,7 +5177,8 @@ final class Pullback {
                 LinearForm<Quantity> relation = LinearForm.<Quantity>atom(remainder)
                         .minus(LinearForm.<Quantity>constant(ExactRatio.of(against))).orNull();
                 yield relation == null ? null
-                        : aRelation(Derivation.ComparisonReading.AS_A_CUT, relation, rel);
+                        : aRelation(Derivation.ComparisonReading.AS_A_CUT, relation, rel,
+                                Derivation.AComparisonRead.Facing.AS_WRITTEN);
             }
             // What the range of a remainder leaves a comparison is one line or a settled answer.
             case ConstantComparison.Both _, ConstantComparison.Either _ -> null;
@@ -5375,7 +5406,8 @@ final class Pullback {
             return null;
         }
         InputReads where = chosen.at();
-        return switch (Core.withoutStanding(chosen.value())) {
+        Core node = Core.withoutStanding(chosen.value());
+        Derivation choice = switch (node) {
             case Core.If iff -> new Derivation.IfThenElse(
                     observe(iff.cond(), AnswerAspect.TRUTH, where),
                     compared.apply(new Denotation(iff.then(), where)),
@@ -5396,6 +5428,30 @@ final class Pullback {
             }
             case Core e -> ofAnOperationsCases(e, Choice.of(e), where, at, compared);
         };
+        return choice == null ? null : madeBy(node, choice);
+    }
+
+    /**
+     * What the comparison {@code node} was read as, said to be that comparison's, where the node is
+     * a construct some source wrote ({@link Derivation.AComparisonAt}); the reading alone where it
+     * is not, or where nothing was read.
+     */
+    private static Derivation aComparisonAt(Core node, Derivation read) {
+        ConstructOccurrence at = ACopyOfAnApplication.occurrenceOf(node);
+        return read == null || at == null || !at.isWritten() ? read
+                : new Derivation.AComparisonAt(at, read);
+    }
+
+    /**
+     * {@code choice}, said to be the one {@code node} makes, where the node is a construct some
+     * source wrote ({@link Derivation.AChoiceAt}); {@code choice} alone where it is not.
+     */
+    private static Derivation madeBy(Core node, Derivation choice) {
+        // A call a representation kept standing says where it stands as a call does, whatever
+        // wider type it stands as; the copies of an application are asked of the node's own shape.
+        ConstructOccurrence at = Core.withoutStanding(node) instanceof Core.PreservedCall kept
+                ? kept.occurrence() : ACopyOfAnApplication.occurrenceOf(node);
+        return at == null || !at.isWritten() ? choice : new Derivation.AChoiceAt(at, choice);
     }
 
     /**

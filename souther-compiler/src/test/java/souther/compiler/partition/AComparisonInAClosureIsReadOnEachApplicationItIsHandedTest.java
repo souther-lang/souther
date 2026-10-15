@@ -22,15 +22,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A comparison inside a closure handed the values a container was written with is read on each
- * application, and a line it draws on one application is owed rows only where a run makes that
- * application.
+ * application, and a reading on one application is met only where a run makes that application.
  *
- * <p>{@code List.any(x -> x > 5, [a, b])} is one rule an author wrote, and it draws a line on
- * {@code a} and a line on {@code b}. {@code List.any} answers once one element holds, so the
- * closure is applied to {@code b} only where it answered false of {@code a}: a row at the line on
- * {@code b} with {@code a} above five never meets it. {@code List.all} stops the other way round,
- * and an operation that stops nowhere applies the closure to every value whatever the others
- * answer.
+ * <p>{@code List.any(x -> x > 5, [a, b])} is one line an author wrote, read on {@code a} and on
+ * {@code b}. {@code List.any} answers once one element holds, so the closure is applied to
+ * {@code b} only where it answered false of {@code a}: a row at the line's place on {@code b} with
+ * {@code a} above five never meets it. {@code List.all} stops the other way round, and an operation
+ * that stops nowhere applies the closure to every value whatever the others answer.
  */
 class AComparisonInAClosureIsReadOnEachApplicationItIsHandedTest {
 
@@ -47,17 +45,17 @@ class AComparisonInAClosureIsReadOnEachApplicationItIsHandedTest {
             """;
 
     @Test
-    void eachApplicationDrawsALineOfTheOneRule() {
+    void eachApplicationIsAReadingOfTheOneLine() {
         JsonNode report = reportOf("List.any(x -> x > 5, [a, b])", "");
-        Set<String> rules = new TreeSet<>();
-        Set<Integer> parts = new TreeSet<>();
-        for (JsonNode obligation : obligationsOfParts(report)) {
-            rules.add(obligation.at("/obligationId/line/which/rule").toString());
-            parts.add(obligation.at("/obligationId/line/which/part").asInt());
+        Set<String> lines = new TreeSet<>();
+        for (JsonNode obligation : obligationsOf(report, "comparison")) {
+            lines.add(obligation.at("/obligationId/line").toString());
         }
-        assertEquals(1, rules.size(), () -> "one comparison, one rule: " + rules);
-        assertEquals(Set.of(0, 1), parts, "a line on a and a line on b");
-        assertEquals(Set.of("pick/a", "pick/b"), axesOfParts(report));
+        assertEquals(1, lines.size(), () -> "one comparison, one line: " + lines);
+        assertTrue(obligationsOf(report, "part_of_comparison").isEmpty(),
+                "and no line of a part of it");
+        assertEquals(Set.of("pick/a", "pick/b"), axesOf(report, "comparison"),
+                "read on a and on b");
     }
 
     @Test
@@ -86,16 +84,14 @@ class AComparisonInAClosureIsReadOnEachApplicationItIsHandedTest {
     }
 
     /**
-     * Two applications stating one thing are one line, reached wherever either is made — and the
-     * first is made on every run, so the line is one a comparison outside every closure would be.
+     * Two applications stating one thing are one reading, reached wherever either is made — and
+     * the first is made on every run, so the line is one a comparison outside every closure would
+     * be.
      */
     @Test
     void twoApplicationsStatingOneLineAreOneLine() {
         JsonNode report = reportOf("List.any(x -> x > 5, [a, a])", "");
-        assertTrue(obligationsOfParts(report).isEmpty(),
-                () -> "one line, not one per application: " + obligationsOfParts(report));
-        assertTrue(axesOf(report, "comparison").contains("pick/a"),
-                () -> "drawn on a: " + axesOf(report, "comparison"));
+        assertEquals(Set.of("pick/a"), axesOf(report, "comparison"), "read on a, once");
     }
 
     /**
@@ -148,8 +144,8 @@ class AComparisonInAClosureIsReadOnEachApplicationItIsHandedTest {
                 let pick (a, b, isVip) =
                     if List.any(x -> x > 5 || isVip(a), [a, b]) then High else Low
                 """);
-        assertTrue(obligationsOfParts(report).isEmpty(),
-                () -> "no line is drawn: " + obligationsOfParts(report));
+        assertFalse(axesOf(report, "comparison").contains("pick/b"),
+                () -> "the line is not read on b: " + axesOf(report, "comparison"));
         assertTrue(reasonsAt(report, "b", "comparison").contains("several_lines_in_one_rule"),
                 () -> "and the comparison says why: " + reasonsAt(report, "b", "comparison"));
     }
@@ -170,7 +166,8 @@ class AComparisonInAClosureIsReadOnEachApplicationItIsHandedTest {
                 behavior pick : (a: Int, b: Int, flag: Bool) -> Low | High
                 let pick (a, b, flag) = if List.any(x -> x > 5 || flag, [a, b]) then High else Low
                 """);
-        assertFalse(obligationsOfParts(report).isEmpty(), "the line on b is drawn");
+        assertTrue(axesOf(report, "comparison").contains("pick/b"),
+                () -> "the line is read on b: " + axesOf(report, "comparison"));
         assertFalse(reasonsAt(report, "b", "comparison").contains("several_lines_in_one_rule"),
                 () -> "and not held back: " + reasonsAt(report, "b", "comparison"));
     }
@@ -193,21 +190,22 @@ class AComparisonInAClosureIsReadOnEachApplicationItIsHandedTest {
         assertFalse(reasonsAt(report, "b", "comparison").isEmpty(), "and at b");
     }
 
-    /** Whether the reading at {@code against} on {@code axis} of the comparison's lines was met by
+    /** Whether the reading at {@code against} on {@code axis} of the comparison's line was met by
      *  the row {@code row}. */
     private static boolean metAt(String guard, String row, String axis, String against) {
         JsonNode report = reportOf(guard, """
                 example pick
                     | "the row" : %s -> High
                 """.formatted(row));
-        for (JsonNode obligation : obligationsOfParts(report)) {
-            JsonNode reading = obligation.path("readings").get(0);
-            if (reading.path("axis").asString().equals(axis)
-                    && reading.path("against").asString().equals(against)) {
-                return reading.path("hit").asBoolean();
+        for (JsonNode obligation : obligationsOf(report, "comparison")) {
+            for (JsonNode reading : obligation.path("readings")) {
+                if (reading.path("axis").asString().equals(axis)
+                        && reading.path("against").asString().equals(against)) {
+                    return reading.path("hit").asBoolean();
+                }
             }
         }
-        throw new AssertionError("a line on " + axis + " has a point at " + against + ": "
+        throw new AssertionError("a reading on " + axis + " has a point at " + against + ": "
                 + report);
     }
 
@@ -225,25 +223,20 @@ class AComparisonInAClosureIsReadOnEachApplicationItIsHandedTest {
                 .json(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
     }
 
-    private static Set<String> axesOfParts(JsonNode report) {
-        return axesOf(report, "part_of_comparison");
-    }
-
     /** Every axis an obligation at a line of the kind {@code kind} is read on. */
     private static Set<String> axesOf(JsonNode report, String kind) {
-        List<JsonNode> obligations = new ArrayList<>();
-        collect(report, kind, obligations);
         Set<String> axes = new TreeSet<>();
-        for (JsonNode obligation : obligations) {
-            axes.add(obligation.path("readings").get(0).path("axis").asString());
+        for (JsonNode obligation : obligationsOf(report, kind)) {
+            obligation.path("readings").forEach(reading ->
+                    axes.add(reading.path("axis").asString()));
         }
         return axes;
     }
 
-    /** Every obligation owed at a line of one comparison's several. */
-    private static List<JsonNode> obligationsOfParts(JsonNode report) {
+    /** Every obligation owed at a line of the kind {@code kind}. */
+    private static List<JsonNode> obligationsOf(JsonNode report, String kind) {
         List<JsonNode> out = new ArrayList<>();
-        collect(report, "part_of_comparison", out);
+        collect(report, kind, out);
         return out;
     }
 

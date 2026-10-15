@@ -3077,6 +3077,44 @@
                 "singles" : false
               },
               "narrowedWithin" : [ ]
+            },
+            "placement" : {
+              "kind" : "placed",
+              "points" : [ {
+                "point" : {
+                  "kind" : "at_the_line"
+                },
+                "authored" : {
+                  "kind" : "at_the_line"
+                }
+              }, {
+                "point" : {
+                  "kind" : "beside_the_line",
+                  "side" : "below"
+                },
+                "authored" : {
+                  "kind" : "beside_the_line",
+                  "side" : "below"
+                }
+              }, {
+                "point" : {
+                  "kind" : "in_the_region",
+                  "side" : "below"
+                },
+                "authored" : {
+                  "kind" : "in_the_region",
+                  "side" : "below"
+                }
+              }, {
+                "point" : {
+                  "kind" : "in_the_region",
+                  "side" : "above"
+                },
+                "authored" : {
+                  "kind" : "in_the_region",
+                  "side" : "above"
+                }
+              } ]
             }
           },
           "axis" : "apportion/among",
@@ -3157,13 +3195,6 @@
               },
               "narrowedWithin" : [ ]
             },
-            "level" : {
-              "kind" : "on_a_carrier",
-              "carrier" : {
-                "kind" : "whole"
-              },
-              "at" : "1"
-            },
             "location" : {
               "kind" : "at_the_line"
             }
@@ -3212,13 +3243,6 @@
                 "singles" : false
               },
               "narrowedWithin" : [ ]
-            },
-            "level" : {
-              "kind" : "on_a_carrier",
-              "carrier" : {
-                "kind" : "whole"
-              },
-              "at" : "1"
             },
             "location" : {
               "kind" : "beside_the_line",
@@ -3270,20 +3294,9 @@
               },
               "narrowedWithin" : [ ]
             },
-            "level" : {
-              "kind" : "on_a_carrier",
-              "carrier" : {
-                "kind" : "whole"
-              },
-              "at" : "1"
-            },
             "location" : {
               "kind" : "in_the_region",
               "side" : "above"
-            },
-            "stops" : {
-              "kind" : "at_the_order_end",
-              "towards" : "above"
             }
           },
           "point" : "in",
@@ -3543,13 +3556,6 @@
               "singles" : false
             },
             "narrowedWithin" : [ ]
-          },
-          "level" : {
-            "kind" : "on_a_carrier",
-            "carrier" : {
-              "kind" : "whole"
-            },
-            "at" : "1"
           },
           "location" : {
             "kind" : "at_the_line"
@@ -4010,6 +4016,44 @@
                 "singles" : false
               },
               "narrowedWithin" : [ ]
+            },
+            "placement" : {
+              "kind" : "placed",
+              "points" : [ {
+                "point" : {
+                  "kind" : "at_the_line"
+                },
+                "authored" : {
+                  "kind" : "at_the_line"
+                }
+              }, {
+                "point" : {
+                  "kind" : "beside_the_line",
+                  "side" : "below"
+                },
+                "authored" : {
+                  "kind" : "beside_the_line",
+                  "side" : "below"
+                }
+              }, {
+                "point" : {
+                  "kind" : "in_the_region",
+                  "side" : "below"
+                },
+                "authored" : {
+                  "kind" : "in_the_region",
+                  "side" : "below"
+                }
+              }, {
+                "point" : {
+                  "kind" : "in_the_region",
+                  "side" : "above"
+                },
+                "authored" : {
+                  "kind" : "in_the_region",
+                  "side" : "above"
+                }
+              } ]
             }
           },
           "axis" : "apportionExactly/among",
@@ -4090,13 +4134,6 @@
               },
               "narrowedWithin" : [ ]
             },
-            "level" : {
-              "kind" : "on_a_carrier",
-              "carrier" : {
-                "kind" : "whole"
-              },
-              "at" : "1"
-            },
             "location" : {
               "kind" : "at_the_line"
             }
@@ -4145,13 +4182,6 @@
                 "singles" : false
               },
               "narrowedWithin" : [ ]
-            },
-            "level" : {
-              "kind" : "on_a_carrier",
-              "carrier" : {
-                "kind" : "whole"
-              },
-              "at" : "1"
             },
             "location" : {
               "kind" : "beside_the_line",
@@ -4203,20 +4233,9 @@
               },
               "narrowedWithin" : [ ]
             },
-            "level" : {
-              "kind" : "on_a_carrier",
-              "carrier" : {
-                "kind" : "whole"
-              },
-              "at" : "1"
-            },
             "location" : {
               "kind" : "in_the_region",
               "side" : "above"
-            },
-            "stops" : {
-              "kind" : "at_the_order_end",
-              "towards" : "above"
             }
           },
           "point" : "in",
@@ -4563,13 +4582,6 @@
             },
             "narrowedWithin" : [ ]
           },
-          "level" : {
-            "kind" : "on_a_carrier",
-            "carrier" : {
-              "kind" : "whole"
-            },
-            "at" : "1"
-          },
           "location" : {
             "kind" : "at_the_line"
           }
@@ -4598,13 +4610,6 @@
               "singles" : false
             },
             "narrowedWithin" : [ ]
-          },
-          "level" : {
-            "kind" : "on_a_carrier",
-            "carrier" : {
-              "kind" : "whole"
-            },
-            "at" : "1"
           },
           "location" : {
             "kind" : "beside_the_line",
@@ -6163,6 +6168,44 @@
                 "singles" : false
               },
               "narrowedWithin" : [ ]
+            },
+            "placement" : {
+              "kind" : "placed",
+              "points" : [ {
+                "point" : {
+                  "kind" : "at_the_line"
+                },
+                "authored" : {
+                  "kind" : "at_the_line"
+                }
+              }, {
+                "point" : {
+                  "kind" : "beside_the_line",
+                  "side" : "above"
+                },
+                "authored" : {
+                  "kind" : "beside_the_line",
+                  "side" : "above"
+                }
+              }, {
+                "point" : {
+                  "kind" : "in_the_region",
+                  "side" : "below"
+                },
+                "authored" : {
+                  "kind" : "in_the_region",
+                  "side" : "below"
+                }
+              }, {
+                "point" : {
+                  "kind" : "in_the_region",
+                  "side" : "above"
+                },
+                "authored" : {
+                  "kind" : "in_the_region",
+                  "side" : "above"
+                }
+              } ]
             }
           },
           "axis" : "出荷する/指示.重量",
@@ -6271,6 +6314,44 @@
                 "singles" : false
               },
               "narrowedWithin" : [ ]
+            },
+            "placement" : {
+              "kind" : "placed",
+              "points" : [ {
+                "point" : {
+                  "kind" : "at_the_line"
+                },
+                "authored" : {
+                  "kind" : "at_the_line"
+                }
+              }, {
+                "point" : {
+                  "kind" : "beside_the_line",
+                  "side" : "below"
+                },
+                "authored" : {
+                  "kind" : "beside_the_line",
+                  "side" : "below"
+                }
+              }, {
+                "point" : {
+                  "kind" : "in_the_region",
+                  "side" : "below"
+                },
+                "authored" : {
+                  "kind" : "in_the_region",
+                  "side" : "below"
+                }
+              }, {
+                "point" : {
+                  "kind" : "in_the_region",
+                  "side" : "above"
+                },
+                "authored" : {
+                  "kind" : "in_the_region",
+                  "side" : "above"
+                }
+              } ]
             }
           },
           "axis" : "出荷する/Time.hour(指示.集荷時刻)",
@@ -6347,13 +6428,6 @@
               },
               "narrowedWithin" : [ ]
             },
-            "level" : {
-              "kind" : "on_a_carrier",
-              "carrier" : {
-                "kind" : "whole"
-              },
-              "at" : "30000"
-            },
             "location" : {
               "kind" : "at_the_line"
             }
@@ -6402,13 +6476,6 @@
                 "singles" : false
               },
               "narrowedWithin" : [ ]
-            },
-            "level" : {
-              "kind" : "on_a_carrier",
-              "carrier" : {
-                "kind" : "whole"
-              },
-              "at" : "30000"
             },
             "location" : {
               "kind" : "beside_the_line",
@@ -6460,25 +6527,9 @@
               },
               "narrowedWithin" : [ ]
             },
-            "level" : {
-              "kind" : "on_a_carrier",
-              "carrier" : {
-                "kind" : "whole"
-              },
-              "at" : "30000"
-            },
             "location" : {
               "kind" : "in_the_region",
               "side" : "below"
-            },
-            "stops" : {
-              "kind" : "at_the_domain",
-              "at" : {
-                "kind" : "a_count",
-                "at" : "1"
-              },
-              "per" : "1",
-              "inclusive" : true
             }
           },
           "point" : "in",
@@ -6526,20 +6577,9 @@
               },
               "narrowedWithin" : [ ]
             },
-            "level" : {
-              "kind" : "on_a_carrier",
-              "carrier" : {
-                "kind" : "whole"
-              },
-              "at" : "30000"
-            },
             "location" : {
               "kind" : "in_the_region",
               "side" : "above"
-            },
-            "stops" : {
-              "kind" : "at_the_order_end",
-              "towards" : "above"
             }
           },
           "point" : "out",
@@ -6586,13 +6626,6 @@
                 "singles" : false
               },
               "narrowedWithin" : [ ]
-            },
-            "level" : {
-              "kind" : "on_a_carrier",
-              "carrier" : {
-                "kind" : "whole"
-              },
-              "at" : "12"
             },
             "location" : {
               "kind" : "beside_the_line",
@@ -6644,13 +6677,6 @@
               },
               "narrowedWithin" : [ ]
             },
-            "level" : {
-              "kind" : "on_a_carrier",
-              "carrier" : {
-                "kind" : "whole"
-              },
-              "at" : "12"
-            },
             "location" : {
               "kind" : "at_the_line"
             }
@@ -6700,25 +6726,9 @@
               },
               "narrowedWithin" : [ ]
             },
-            "level" : {
-              "kind" : "on_a_carrier",
-              "carrier" : {
-                "kind" : "whole"
-              },
-              "at" : "12"
-            },
             "location" : {
               "kind" : "in_the_region",
               "side" : "below"
-            },
-            "stops" : {
-              "kind" : "at_the_domain",
-              "at" : {
-                "kind" : "a_count",
-                "at" : "0"
-              },
-              "per" : "1",
-              "inclusive" : true
             }
           },
           "point" : "in",
@@ -6766,25 +6776,9 @@
               },
               "narrowedWithin" : [ ]
             },
-            "level" : {
-              "kind" : "on_a_carrier",
-              "carrier" : {
-                "kind" : "whole"
-              },
-              "at" : "12"
-            },
             "location" : {
               "kind" : "in_the_region",
               "side" : "above"
-            },
-            "stops" : {
-              "kind" : "at_the_domain",
-              "at" : {
-                "kind" : "a_count",
-                "at" : "23"
-              },
-              "per" : "1",
-              "inclusive" : true
             }
           },
           "point" : "out",
@@ -7361,20 +7355,9 @@
             },
             "narrowedWithin" : [ ]
           },
-          "level" : {
-            "kind" : "on_a_carrier",
-            "carrier" : {
-              "kind" : "whole"
-            },
-            "at" : "30000"
-          },
           "location" : {
             "kind" : "in_the_region",
             "side" : "above"
-          },
-          "stops" : {
-            "kind" : "at_the_order_end",
-            "towards" : "above"
           }
         },
         "code" : "E1917"
@@ -7401,13 +7384,6 @@
               "singles" : false
             },
             "narrowedWithin" : [ ]
-          },
-          "level" : {
-            "kind" : "on_a_carrier",
-            "carrier" : {
-              "kind" : "whole"
-            },
-            "at" : "12"
           },
           "location" : {
             "kind" : "beside_the_line",
@@ -7438,13 +7414,6 @@
               "singles" : false
             },
             "narrowedWithin" : [ ]
-          },
-          "level" : {
-            "kind" : "on_a_carrier",
-            "carrier" : {
-              "kind" : "whole"
-            },
-            "at" : "12"
           },
           "location" : {
             "kind" : "at_the_line"
@@ -7995,6 +7964,44 @@
                 "singles" : false
               },
               "narrowedWithin" : [ ]
+            },
+            "placement" : {
+              "kind" : "placed",
+              "points" : [ {
+                "point" : {
+                  "kind" : "at_the_line"
+                },
+                "authored" : {
+                  "kind" : "at_the_line"
+                }
+              }, {
+                "point" : {
+                  "kind" : "beside_the_line",
+                  "side" : "below"
+                },
+                "authored" : {
+                  "kind" : "beside_the_line",
+                  "side" : "below"
+                }
+              }, {
+                "point" : {
+                  "kind" : "in_the_region",
+                  "side" : "below"
+                },
+                "authored" : {
+                  "kind" : "in_the_region",
+                  "side" : "below"
+                }
+              }, {
+                "point" : {
+                  "kind" : "in_the_region",
+                  "side" : "above"
+                },
+                "authored" : {
+                  "kind" : "in_the_region",
+                  "side" : "above"
+                }
+              } ]
             }
           },
           "axis" : "送料を出す/Time.hour(指示.集荷時刻)",
@@ -8071,13 +8078,6 @@
               },
               "narrowedWithin" : [ ]
             },
-            "level" : {
-              "kind" : "on_a_carrier",
-              "carrier" : {
-                "kind" : "whole"
-              },
-              "at" : "12"
-            },
             "location" : {
               "kind" : "beside_the_line",
               "side" : "below"
@@ -8128,13 +8128,6 @@
               },
               "narrowedWithin" : [ ]
             },
-            "level" : {
-              "kind" : "on_a_carrier",
-              "carrier" : {
-                "kind" : "whole"
-              },
-              "at" : "12"
-            },
             "location" : {
               "kind" : "at_the_line"
             }
@@ -8184,25 +8177,9 @@
               },
               "narrowedWithin" : [ ]
             },
-            "level" : {
-              "kind" : "on_a_carrier",
-              "carrier" : {
-                "kind" : "whole"
-              },
-              "at" : "12"
-            },
             "location" : {
               "kind" : "in_the_region",
               "side" : "below"
-            },
-            "stops" : {
-              "kind" : "at_the_domain",
-              "at" : {
-                "kind" : "a_count",
-                "at" : "0"
-              },
-              "per" : "1",
-              "inclusive" : true
             }
           },
           "point" : "in",
@@ -8250,25 +8227,9 @@
               },
               "narrowedWithin" : [ ]
             },
-            "level" : {
-              "kind" : "on_a_carrier",
-              "carrier" : {
-                "kind" : "whole"
-              },
-              "at" : "12"
-            },
             "location" : {
               "kind" : "in_the_region",
               "side" : "above"
-            },
-            "stops" : {
-              "kind" : "at_the_domain",
-              "at" : {
-                "kind" : "a_count",
-                "at" : "23"
-              },
-              "per" : "1",
-              "inclusive" : true
             }
           },
           "point" : "out",
@@ -8837,13 +8798,6 @@
             },
             "narrowedWithin" : [ ]
           },
-          "level" : {
-            "kind" : "on_a_carrier",
-            "carrier" : {
-              "kind" : "whole"
-            },
-            "at" : "12"
-          },
           "location" : {
             "kind" : "beside_the_line",
             "side" : "below"
@@ -8873,13 +8827,6 @@
               "singles" : false
             },
             "narrowedWithin" : [ ]
-          },
-          "level" : {
-            "kind" : "on_a_carrier",
-            "carrier" : {
-              "kind" : "whole"
-            },
-            "at" : "12"
           },
           "location" : {
             "kind" : "at_the_line"
@@ -9225,6 +9172,44 @@
                 "singles" : false
               },
               "narrowedWithin" : [ ]
+            },
+            "placement" : {
+              "kind" : "placed",
+              "points" : [ {
+                "point" : {
+                  "kind" : "at_the_line"
+                },
+                "authored" : {
+                  "kind" : "at_the_line"
+                }
+              }, {
+                "point" : {
+                  "kind" : "beside_the_line",
+                  "side" : "below"
+                },
+                "authored" : {
+                  "kind" : "beside_the_line",
+                  "side" : "below"
+                }
+              }, {
+                "point" : {
+                  "kind" : "in_the_region",
+                  "side" : "below"
+                },
+                "authored" : {
+                  "kind" : "in_the_region",
+                  "side" : "below"
+                }
+              }, {
+                "point" : {
+                  "kind" : "in_the_region",
+                  "side" : "above"
+                },
+                "authored" : {
+                  "kind" : "in_the_region",
+                  "side" : "above"
+                }
+              } ]
             }
           },
           "axis" : "restockByRecursion/shelf.counts[*]",
@@ -9301,13 +9286,6 @@
               },
               "narrowedWithin" : [ ]
             },
-            "level" : {
-              "kind" : "on_a_carrier",
-              "carrier" : {
-                "kind" : "whole"
-              },
-              "at" : "3"
-            },
             "location" : {
               "kind" : "beside_the_line",
               "side" : "below"
@@ -9358,13 +9336,6 @@
               },
               "narrowedWithin" : [ ]
             },
-            "level" : {
-              "kind" : "on_a_carrier",
-              "carrier" : {
-                "kind" : "whole"
-              },
-              "at" : "3"
-            },
             "location" : {
               "kind" : "at_the_line"
             }
@@ -9414,20 +9385,9 @@
               },
               "narrowedWithin" : [ ]
             },
-            "level" : {
-              "kind" : "on_a_carrier",
-              "carrier" : {
-                "kind" : "whole"
-              },
-              "at" : "3"
-            },
             "location" : {
               "kind" : "in_the_region",
               "side" : "below"
-            },
-            "stops" : {
-              "kind" : "at_the_order_end",
-              "towards" : "below"
             }
           },
           "point" : "in",
@@ -9475,20 +9435,9 @@
               },
               "narrowedWithin" : [ ]
             },
-            "level" : {
-              "kind" : "on_a_carrier",
-              "carrier" : {
-                "kind" : "whole"
-              },
-              "at" : "3"
-            },
             "location" : {
               "kind" : "in_the_region",
               "side" : "above"
-            },
-            "stops" : {
-              "kind" : "at_the_order_end",
-              "towards" : "above"
             }
           },
           "point" : "out",
@@ -9650,13 +9599,6 @@
               "singles" : false
             },
             "narrowedWithin" : [ ]
-          },
-          "level" : {
-            "kind" : "on_a_carrier",
-            "carrier" : {
-              "kind" : "whole"
-            },
-            "at" : "3"
           },
           "location" : {
             "kind" : "beside_the_line",
@@ -9822,7 +9764,7 @@
             },
             "line" : {
               "which" : {
-                "kind" : "part_of_comparison",
+                "kind" : "comparison",
                 "rule" : {
                   "kind" : "comparison",
                   "declaredIn" : "conformance.searching",
@@ -9830,8 +9772,7 @@
                   "behavior" : "restockByFold",
                   "ordinal" : 3,
                   "lowered" : 0
-                },
-                "part" : 0
+                }
               },
               "facts" : {
                 "valueBelongsBelow" : false,
@@ -9839,6 +9780,44 @@
                 "singles" : false
               },
               "narrowedWithin" : [ ]
+            },
+            "placement" : {
+              "kind" : "placed",
+              "points" : [ {
+                "point" : {
+                  "kind" : "at_the_line"
+                },
+                "authored" : {
+                  "kind" : "at_the_line"
+                }
+              }, {
+                "point" : {
+                  "kind" : "beside_the_line",
+                  "side" : "below"
+                },
+                "authored" : {
+                  "kind" : "beside_the_line",
+                  "side" : "below"
+                }
+              }, {
+                "point" : {
+                  "kind" : "in_the_region",
+                  "side" : "below"
+                },
+                "authored" : {
+                  "kind" : "in_the_region",
+                  "side" : "below"
+                }
+              }, {
+                "point" : {
+                  "kind" : "in_the_region",
+                  "side" : "above"
+                },
+                "authored" : {
+                  "kind" : "in_the_region",
+                  "side" : "above"
+                }
+              } ]
             }
           },
           "axis" : "restockByFold/shelf.counts[*]",
@@ -9898,7 +9877,7 @@
           "obligationId" : {
             "line" : {
               "which" : {
-                "kind" : "part_of_comparison",
+                "kind" : "comparison",
                 "rule" : {
                   "kind" : "comparison",
                   "declaredIn" : "conformance.searching",
@@ -9906,8 +9885,7 @@
                   "behavior" : "restockByFold",
                   "ordinal" : 3,
                   "lowered" : 0
-                },
-                "part" : 0
+                }
               },
               "facts" : {
                 "valueBelongsBelow" : false,
@@ -9915,13 +9893,6 @@
                 "singles" : false
               },
               "narrowedWithin" : [ ]
-            },
-            "level" : {
-              "kind" : "on_a_carrier",
-              "carrier" : {
-                "kind" : "whole"
-              },
-              "at" : "3"
             },
             "location" : {
               "kind" : "beside_the_line",
@@ -9956,7 +9927,7 @@
           "obligationId" : {
             "line" : {
               "which" : {
-                "kind" : "part_of_comparison",
+                "kind" : "comparison",
                 "rule" : {
                   "kind" : "comparison",
                   "declaredIn" : "conformance.searching",
@@ -9964,8 +9935,7 @@
                   "behavior" : "restockByFold",
                   "ordinal" : 3,
                   "lowered" : 0
-                },
-                "part" : 0
+                }
               },
               "facts" : {
                 "valueBelongsBelow" : false,
@@ -9973,13 +9943,6 @@
                 "singles" : false
               },
               "narrowedWithin" : [ ]
-            },
-            "level" : {
-              "kind" : "on_a_carrier",
-              "carrier" : {
-                "kind" : "whole"
-              },
-              "at" : "3"
             },
             "location" : {
               "kind" : "at_the_line"
@@ -10013,7 +9976,7 @@
           "obligationId" : {
             "line" : {
               "which" : {
-                "kind" : "part_of_comparison",
+                "kind" : "comparison",
                 "rule" : {
                   "kind" : "comparison",
                   "declaredIn" : "conformance.searching",
@@ -10021,8 +9984,7 @@
                   "behavior" : "restockByFold",
                   "ordinal" : 3,
                   "lowered" : 0
-                },
-                "part" : 0
+                }
               },
               "facts" : {
                 "valueBelongsBelow" : false,
@@ -10031,20 +9993,9 @@
               },
               "narrowedWithin" : [ ]
             },
-            "level" : {
-              "kind" : "on_a_carrier",
-              "carrier" : {
-                "kind" : "whole"
-              },
-              "at" : "3"
-            },
             "location" : {
               "kind" : "in_the_region",
               "side" : "below"
-            },
-            "stops" : {
-              "kind" : "at_the_order_end",
-              "towards" : "below"
             }
           },
           "point" : "in",
@@ -10075,7 +10026,7 @@
           "obligationId" : {
             "line" : {
               "which" : {
-                "kind" : "part_of_comparison",
+                "kind" : "comparison",
                 "rule" : {
                   "kind" : "comparison",
                   "declaredIn" : "conformance.searching",
@@ -10083,8 +10034,7 @@
                   "behavior" : "restockByFold",
                   "ordinal" : 3,
                   "lowered" : 0
-                },
-                "part" : 0
+                }
               },
               "facts" : {
                 "valueBelongsBelow" : false,
@@ -10093,20 +10043,9 @@
               },
               "narrowedWithin" : [ ]
             },
-            "level" : {
-              "kind" : "on_a_carrier",
-              "carrier" : {
-                "kind" : "whole"
-              },
-              "at" : "3"
-            },
             "location" : {
               "kind" : "in_the_region",
               "side" : "above"
-            },
-            "stops" : {
-              "kind" : "at_the_order_end",
-              "towards" : "above"
             }
           },
           "point" : "out",

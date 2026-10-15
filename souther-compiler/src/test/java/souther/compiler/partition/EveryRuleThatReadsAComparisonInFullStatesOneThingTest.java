@@ -122,7 +122,9 @@ class EveryRuleThatReadsAComparisonInFullStatesOneThingTest {
                 + byEach);
         Pullback.Pulled pulled = Pullback.ofATruth(reading.truth(), reading.reads(),
                 reading.read(), Optional.empty());
-        assertInstanceOf(Derivation.AnEmptinessCheck.class, pulled.meaning().how(),
+        Derivation.AComparisonAt comparison = assertInstanceOf(Derivation.AComparisonAt.class,
+                pulled.meaning().how(), "said to be the comparison's");
+        assertInstanceOf(Derivation.AnEmptinessCheck.class, comparison.read(),
                 "where no rule reads it all, the first that takes it is kept");
         Proposition.Unread unread = assertInstanceOf(Proposition.Unread.class,
                 pulled.proposition());

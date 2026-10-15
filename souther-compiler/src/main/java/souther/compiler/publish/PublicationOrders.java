@@ -440,6 +440,7 @@ public final class PublicationOrders {
                 WeakeningWord.NO_REACHABLE_DISTINGUISHER_FOR_A_BORDER,
                 WeakeningWord.A_BORDERS_FAULT_FAMILY_NOT_WORKED_OUT,
                 WeakeningWord.ITEMS_PLACE_NOT_WORKED_OUT,
+                WeakeningWord.A_READING_NOT_TIED_TO_ITS_LINE,
                 WeakeningWord.BODY_NOT_IN_EVALUATION,
                 WeakeningWord.BEHAVIOR_INPUT_NOT_READ,
                 WeakeningWord.BEHAVIOR_BOUNDARY_NOT_DERIVED,

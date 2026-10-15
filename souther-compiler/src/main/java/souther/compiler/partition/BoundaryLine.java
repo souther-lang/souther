@@ -40,13 +40,20 @@ import souther.compiler.check.RuleRef;
  * one border two lines, leaving nothing to ask what one border owes. Two readings of one line owe
  * the same four things, which is what makes this the key they are merged under.
  *
- * @param target where the line is
- * @param line   which line of the model was drawn there
+ * <p><b>And how the reading's points stand to the author's.</b> A comparison a body wrote can be put
+ * at one place on one quantity facing its author's sides two ways ({@link AuthoredPlacement}), and
+ * there the run on one side of the place is one of the author's points in one reading and another
+ * in the other. Merged point by point, what a row showed about the one would be counted for the
+ * other. Readings that face the author's line alike are merged, however many calls made them.
+ *
+ * @param target    where the line is
+ * @param line      which line of the model was drawn there
+ * @param placement how the points of the line drawn there are the points of the author's
  */
-public record BoundaryLine(BoundaryTarget target, AuthoredLine line) {
+public record BoundaryLine(BoundaryTarget target, AuthoredLine line, AuthoredPlacement placement) {
 
     /** The line {@code border} is the coverage items of. */
     public static BoundaryLine of(Border border) {
-        return new BoundaryLine(border.cut(), border.origin().authoredLine());
+        return new BoundaryLine(border.cut(), border.origin().authoredLine(), border.placement());
     }
 }

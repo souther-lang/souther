@@ -2668,6 +2668,53 @@
                 "singles" : true
               },
               "narrowedWithin" : [ ]
+            },
+            "placement" : {
+              "kind" : "placed",
+              "points" : [ {
+                "point" : {
+                  "kind" : "at_the_line"
+                },
+                "authored" : {
+                  "kind" : "at_the_line"
+                }
+              }, {
+                "point" : {
+                  "kind" : "beside_the_line",
+                  "side" : "below"
+                },
+                "authored" : {
+                  "kind" : "beside_the_line",
+                  "side" : "below"
+                }
+              }, {
+                "point" : {
+                  "kind" : "beside_the_line",
+                  "side" : "above"
+                },
+                "authored" : {
+                  "kind" : "beside_the_line",
+                  "side" : "above"
+                }
+              }, {
+                "point" : {
+                  "kind" : "in_the_region",
+                  "side" : "below"
+                },
+                "authored" : {
+                  "kind" : "in_the_region",
+                  "side" : "below"
+                }
+              }, {
+                "point" : {
+                  "kind" : "in_the_region",
+                  "side" : "above"
+                },
+                "authored" : {
+                  "kind" : "in_the_region",
+                  "side" : "above"
+                }
+              } ]
             }
           },
           "axis" : "redeem/voucher",
@@ -3074,6 +3121,44 @@
                 "singles" : false
               },
               "narrowedWithin" : [ ]
+            },
+            "placement" : {
+              "kind" : "placed",
+              "points" : [ {
+                "point" : {
+                  "kind" : "at_the_line"
+                },
+                "authored" : {
+                  "kind" : "at_the_line"
+                }
+              }, {
+                "point" : {
+                  "kind" : "beside_the_line",
+                  "side" : "above"
+                },
+                "authored" : {
+                  "kind" : "beside_the_line",
+                  "side" : "above"
+                }
+              }, {
+                "point" : {
+                  "kind" : "in_the_region",
+                  "side" : "below"
+                },
+                "authored" : {
+                  "kind" : "in_the_region",
+                  "side" : "below"
+                }
+              }, {
+                "point" : {
+                  "kind" : "in_the_region",
+                  "side" : "above"
+                },
+                "authored" : {
+                  "kind" : "in_the_region",
+                  "side" : "above"
+                }
+              } ]
             }
           },
           "axis" : "redeem/party",
@@ -3149,13 +3234,6 @@
               },
               "narrowedWithin" : [ ]
             },
-            "level" : {
-              "kind" : "on_a_carrier",
-              "carrier" : {
-                "kind" : "text"
-              },
-              "at" : "spring"
-            },
             "location" : {
               "kind" : "at_the_line"
             }
@@ -3205,20 +3283,9 @@
               },
               "narrowedWithin" : [ ]
             },
-            "level" : {
-              "kind" : "on_a_carrier",
-              "carrier" : {
-                "kind" : "text"
-              },
-              "at" : "spring"
-            },
             "location" : {
               "kind" : "in_the_region",
               "side" : "below"
-            },
-            "stops" : {
-              "kind" : "at_the_order_end",
-              "towards" : "below"
             }
           },
           "point" : "out",
@@ -3266,20 +3333,9 @@
               },
               "narrowedWithin" : [ ]
             },
-            "level" : {
-              "kind" : "on_a_carrier",
-              "carrier" : {
-                "kind" : "text"
-              },
-              "at" : "spring"
-            },
             "location" : {
               "kind" : "in_the_region",
               "side" : "above"
-            },
-            "stops" : {
-              "kind" : "at_the_order_end",
-              "towards" : "above"
             }
           },
           "point" : "out",
@@ -3327,13 +3383,6 @@
                 "singles" : false
               },
               "narrowedWithin" : [ ]
-            },
-            "level" : {
-              "kind" : "on_a_carrier",
-              "carrier" : {
-                "kind" : "whole"
-              },
-              "at" : "4"
             },
             "location" : {
               "kind" : "at_the_line"
@@ -3384,13 +3433,6 @@
                 "singles" : false
               },
               "narrowedWithin" : [ ]
-            },
-            "level" : {
-              "kind" : "on_a_carrier",
-              "carrier" : {
-                "kind" : "whole"
-              },
-              "at" : "4"
             },
             "location" : {
               "kind" : "beside_the_line",
@@ -3443,25 +3485,9 @@
               },
               "narrowedWithin" : [ ]
             },
-            "level" : {
-              "kind" : "on_a_carrier",
-              "carrier" : {
-                "kind" : "whole"
-              },
-              "at" : "4"
-            },
             "location" : {
               "kind" : "in_the_region",
               "side" : "below"
-            },
-            "stops" : {
-              "kind" : "at_the_domain",
-              "at" : {
-                "kind" : "a_count",
-                "at" : "1"
-              },
-              "per" : "1",
-              "inclusive" : true
             }
           },
           "point" : "in",
@@ -3510,25 +3536,9 @@
               },
               "narrowedWithin" : [ ]
             },
-            "level" : {
-              "kind" : "on_a_carrier",
-              "carrier" : {
-                "kind" : "whole"
-              },
-              "at" : "4"
-            },
             "location" : {
               "kind" : "in_the_region",
               "side" : "above"
-            },
-            "stops" : {
-              "kind" : "at_the_domain",
-              "at" : {
-                "kind" : "a_count",
-                "at" : "8"
-              },
-              "per" : "1",
-              "inclusive" : true
             }
           },
           "point" : "out",
@@ -4909,6 +4919,44 @@
                 "singles" : false
               },
               "narrowedWithin" : [ ]
+            },
+            "placement" : {
+              "kind" : "placed",
+              "points" : [ {
+                "point" : {
+                  "kind" : "at_the_line"
+                },
+                "authored" : {
+                  "kind" : "at_the_line"
+                }
+              }, {
+                "point" : {
+                  "kind" : "beside_the_line",
+                  "side" : "above"
+                },
+                "authored" : {
+                  "kind" : "beside_the_line",
+                  "side" : "above"
+                }
+              }, {
+                "point" : {
+                  "kind" : "in_the_region",
+                  "side" : "below"
+                },
+                "authored" : {
+                  "kind" : "in_the_region",
+                  "side" : "below"
+                }
+              }, {
+                "point" : {
+                  "kind" : "in_the_region",
+                  "side" : "above"
+                },
+                "authored" : {
+                  "kind" : "in_the_region",
+                  "side" : "above"
+                }
+              } ]
             }
           },
           "axis" : "seat/party",
@@ -4985,13 +5033,6 @@
               },
               "narrowedWithin" : [ ]
             },
-            "level" : {
-              "kind" : "on_a_carrier",
-              "carrier" : {
-                "kind" : "whole"
-              },
-              "at" : "4"
-            },
             "location" : {
               "kind" : "at_the_line"
             }
@@ -5041,13 +5082,6 @@
                 "singles" : false
               },
               "narrowedWithin" : [ ]
-            },
-            "level" : {
-              "kind" : "on_a_carrier",
-              "carrier" : {
-                "kind" : "whole"
-              },
-              "at" : "4"
             },
             "location" : {
               "kind" : "beside_the_line",
@@ -5100,25 +5134,9 @@
               },
               "narrowedWithin" : [ ]
             },
-            "level" : {
-              "kind" : "on_a_carrier",
-              "carrier" : {
-                "kind" : "whole"
-              },
-              "at" : "4"
-            },
             "location" : {
               "kind" : "in_the_region",
               "side" : "below"
-            },
-            "stops" : {
-              "kind" : "at_the_domain",
-              "at" : {
-                "kind" : "a_count",
-                "at" : "1"
-              },
-              "per" : "1",
-              "inclusive" : true
             }
           },
           "point" : "in",
@@ -5167,25 +5185,9 @@
               },
               "narrowedWithin" : [ ]
             },
-            "level" : {
-              "kind" : "on_a_carrier",
-              "carrier" : {
-                "kind" : "whole"
-              },
-              "at" : "4"
-            },
             "location" : {
               "kind" : "in_the_region",
               "side" : "above"
-            },
-            "stops" : {
-              "kind" : "at_the_domain",
-              "at" : {
-                "kind" : "a_count",
-                "at" : "8"
-              },
-              "per" : "1",
-              "inclusive" : true
             }
           },
           "point" : "out",

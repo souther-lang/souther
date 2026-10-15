@@ -11,6 +11,9 @@ import souther.compiler.coverage.Numberings;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermOrdersFixtures;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.AuthoredPointMapping;
+import souther.compiler.meaning.Derivation;
+import souther.compiler.meaning.WrittenLine;
 import souther.compiler.numeric.Congruences;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
@@ -150,7 +153,10 @@ class WhatTheDeclarationsHoldAValueToIsOneAnswerTest {
                         new RuleReportAnchor.ByTheModuleThatWroteIt(),
                         List.of(Numberings.comparison(1, 0)), ElementsMetOn.EVERY),
                 Optional.empty(),
-                new LineFacts(new ComparisonClaim.Singled(true)));
+                new LineFacts(new ComparisonClaim.Singled(true)),
+                new AuthoredPointMapping.Proven(WrittenLine.THE_COMPARISON,
+                        new ComparisonClaim.Singled(true),
+                        Derivation.AComparisonRead.Facing.NOTHING_WRITTEN, true));
     }
 
     private static LevelInterval between(Level low, Level high) {

@@ -7,6 +7,8 @@ import souther.compiler.check.ComparisonPlacement;
 import souther.compiler.core.Core;
 import souther.compiler.numeric.Place;
 
+import java.util.Optional;
+
 /**
  * One binary of a body, said as the number it is about and what its operator places on that number.
  *
@@ -130,6 +132,21 @@ public record ComparedNumber(NumericTerm term, TermOrders orders, ComparisonPlac
         ComparisonClaim claim = comparison.claim();
         return new DrawnLine(position, side.at(), side.named().orders(),
                 side.turned() ? claim.turned() : claim);
+    }
+
+    /**
+     * Whether the number the line of {@code comparison} is drawn on is the one written on the right,
+     * so that above the line is where the right side is above the left — or nothing where no line
+     * is drawn on one number.
+     *
+     * <p>Asked of the reading {@link #lineOf} makes and not of the claim it hands over, which says
+     * the same of a value singled out whichever side it was written on.
+     */
+    public static Optional<Boolean> writtenOnTheRight(StatedComparison comparison,
+                                                      InputReading read, InputReads reads) {
+        OnASide side = sideOf(comparison.left(), comparison.right(), comparison.claim(), read,
+                reads);
+        return side == null || side.at() == null ? Optional.empty() : Optional.of(side.turned());
     }
 
     /**

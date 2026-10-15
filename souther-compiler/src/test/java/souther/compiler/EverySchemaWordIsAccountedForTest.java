@@ -776,6 +776,14 @@ class EverySchemaWordIsAccountedForTest {
             new Vocabulary("location.side",
                     List.of("$defs", "location", "properties", "side"),
                     souther.compiler.numeric.Towards.class),
+            // How a reading's points are the points of the line its author wrote. One word per
+            // arm a body comparison's line can stand in; a declaration's line is read in its own
+            // values and writes no placement.
+            new Vocabulary("boundaryLineId.placement.kind",
+                    List.of("$defs", "boundaryLineId", "properties", "placement", "properties",
+                            "kind"),
+                    List.of(souther.compiler.partition.AuthoredPlacement.class),
+                    Set.of("placed", "no_place_of_the_line", "not_shown"), Set.of()),
             new Vocabulary("obligationId.stops.kind",
                     List.of("$defs", "obligationId", "properties", "stops", "properties", "kind"),
                     List.of(souther.compiler.partition.FarEnd.class),
@@ -1263,7 +1271,11 @@ class EverySchemaWordIsAccountedForTest {
             // document carries for this is `items_place_not_worked_out`, a `weakening` word held as
             // one above; this reason is `weakeningSource()`'s own, for a reader asking one point's
             // status directly rather than reading a border's weakening set.
-            souther.compiler.query.ItemAssessment.PlaceCouldNotBeWorkedOut.class);
+            souther.compiler.query.ItemAssessment.PlaceCouldNotBeWorkedOut.class,
+            // A reading of a point's line that could not be tied to the point. What a document
+            // carries for this is `a_reading_not_tied_to_its_line`, a `weakening` word held as one
+            // above; this reason is `weakeningSource()`'s own.
+            souther.compiler.query.ItemAssessment.NotTiedToTheAuthorsLine.class);
     }
 
     /**

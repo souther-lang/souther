@@ -517,7 +517,8 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/meaning/Derivation$ComparisonReading;"
                             + "Lsouther/compiler/numeric/LinearForm;"
                             + "Lsouther/compiler/numeric/Rel;"
-                            + "Ljava/util/Map;)"
+                            + "Ljava/util/Map;"
+                            + "Lsouther/compiler/meaning/Derivation$AComparisonRead$Facing;)"
                             + "Lsouther/compiler/meaning/Derivation;",
                     "counts the choices of which values written out meet a statement that a"
                             + " comparison of how many do admits, and past the figure carries the"
