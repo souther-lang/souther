@@ -481,13 +481,19 @@ public final class Front {
          *        author editing either has to be told — an editor marking one file leaves the other
          *        looking clean while the build fails. Empty only where nothing this compile can
          *        quote reached it.
+         * @param reaches the modules it reaches ({@link #reaches(ReadableModule)}), as the path was
+         *        walked by them. Worked out from the module alone, and kept all the same: the walk
+         *        has to have it, and every question after the walk that wants it would otherwise
+         *        walk the module's declarations again.
          */
-        public record OnThePath(ReadableModule read, List<SourcePos> reachedFrom) {
+        public record OnThePath(ReadableModule read, List<SourcePos> reachedFrom,
+                                List<String> reaches) {
 
             /** Copied, for the reason {@link ReadableModule} is: this is remembered, and what is
              *  remembered is a value. */
             public OnThePath {
                 reachedFrom = List.copyOf(reachedFrom);
+                reaches = List.copyOf(reaches);
             }
 
             public Ast.Module module() {
@@ -641,7 +647,8 @@ public final class Front {
             Map<String, List<SourcePos>> reachedFrom = reachedFrom(named, edges);
             Map<String, OnThePath> found = new LinkedHashMap<>();
             read.forEach((name, module) -> found.put(name,
-                    new OnThePath(module, reachedFrom.getOrDefault(name, List.of()))));
+                    new OnThePath(module, reachedFrom.getOrDefault(name, List.of()),
+                            edges.get(name))));
             for (Map.Entry<String, Diagnostic> taken : refused.entrySet()) {
                 reports.add(saidAbout(taken.getKey(), taken.getValue(), reachedFrom));
             }
@@ -1313,7 +1320,9 @@ public final class Front {
             }
             List<Report> reports = new ArrayList<>();
             for (String reached : db.ask(new Linkages.Named(name)).value()) {
-                if (declaredHere(db, reached)) {
+                // A name the path carries too is two modules, and which of them this one reaches is
+                // what that report says is not decided (ShadowsPath); it is not the one here.
+                if (declaredHere(db, reached) && db.ask(new ShadowsPath(reached)).present()) {
                     reports.add(Report.raised(Diagnostic.say(
                                     new ModuleMessage.AModuleOnThePathNeedsOneCompiledHere(name,
                                             reached))

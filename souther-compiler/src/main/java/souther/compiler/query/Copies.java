@@ -344,15 +344,22 @@ public final class Copies {
         return out;
     }
 
+    /** What {@code module} offers to be copied as its classes record it — or null where the path
+     *  does not carry it. */
+    static Map<CopyTarget, CopyRecord> offeredOnThePath(Db db, String module) {
+        Front.FromPath.OnThePath onThePath = Front.onThePath(db, module);
+        return onThePath == null ? null : onThePath.providedCopies();
+    }
+
     /**
      * What {@code module} offers to be copied, as a module built against it copied it: as its classes
      * record it, for a module off the path, and as its classes are about to offer it, for one compiled
      * here — or null where this compilation does not have it, or it did not come out.
      */
     static Map<CopyTarget, CopyRecord> offered(Db db, String module) {
-        Front.FromPath.OnThePath onThePath = Front.onThePath(db, module);
-        if (onThePath != null) {
-            return onThePath.providedCopies();
+        Map<CopyTarget, CopyRecord> recorded = offeredOnThePath(db, module);
+        if (recorded != null) {
+            return recorded;
         }
         if (!Front.declaredHere(db, module)) {
             return null;

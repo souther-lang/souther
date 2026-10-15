@@ -9,6 +9,7 @@ import souther.compiler.diag.msg.ModuleMessage;
 import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Compilation;
+import souther.compiler.query.Db;
 import souther.compiler.source.SourceId;
 
 import org.junit.jupiter.api.Test;
@@ -178,11 +179,69 @@ class AModuleOnThePathNeedsNothingCompiledHereTest {
     }
 
     /** The same program with the dependency taken from the path as well: the path module and what
-     *  it reaches run in one place, and the example holds. */
+     *  it reaches run in one place, and the example holds. That the example is run at all is the
+     *  second half: one that does not hold is refused for that. */
     @Test
     void theSameProgramWithItsDependencyOnThePathRuns() {
-        Compiler.compileModules(List.of(USES_THE_MAKER),
-                builtWith(List.of(COMMON, MAKES_A_TAG), "lib.x", "app.common"));
+        ModulePath path = builtWith(List.of(COMMON, MAKES_A_TAG), "lib.x", "app.common");
+        Compiler.compileModules(List.of(USES_THE_MAKER), path);
+
+        List<Diagnostic> said = refused(path,
+                USES_THE_MAKER.replace("-> Tag(\"ab\")", "-> Tag(\"zz\")"));
+        assertEquals(List.of("E1905"), said.stream().map(Diagnostic::code).toList());
+    }
+
+    /** A name the path carries too is two modules, and which of them a module on the path reaches
+     *  is what that report says is not decided: it is said once, as that. */
+    @Test
+    void aModuleCompiledHereAndOnThePathIsSaidOnlyAsThat() {
+        Compilation compilation = Compilation.ofSources(List.of(COMMON, """
+                        module app.user
+                        import lib.x ( make )
+                        behavior go : (s: String) -> app.common.Tag
+                        let go (s) = make(s)
+                        """), builtWith(List.of(COMMON, MAKES_A_TAG), "lib.x", "app.common"));
+
+        assertEquals(List.of(new ModuleMessage.TheModuleIsCompiledHereAndOnThePath("app.common")),
+                everythingSaid(compilation));
+    }
+
+    /** The module compiled here no longer declares what the path module's declarations name. What
+     *  those names mean against it is not what the module's classes run with, so the refusal is
+     *  said once, and not again as each name it would miss. */
+    @Test
+    void whatTheModuleHereDoesNotDeclareIsNotSaidBesideIt() {
+        String shouts = """
+                module lib.x exposing ( make, shout )
+                import app.common ( Tag )
+                behavior make : (s: String) -> Tag constructs Tag
+                let make (s) = Tag(s)
+                behavior shout : (s: String) -> String
+                let shout (s) = s
+                """;
+        Compilation compilation = Compilation.ofSources(List.of("""
+                        module app.common exposing ( Other )
+                        data Other = String
+                        """, """
+                        module app.user
+                        import lib.x ( shout )
+                        behavior go : (s: String) -> String
+                        let go (s) = shout(s)
+                        """), builtWith(List.of(COMMON, shouts), "lib.x"));
+
+        assertEquals(List.of(new ModuleMessage.AModuleOnThePathNeedsOneCompiledHere("lib.x",
+                "app.common")), everythingSaid(compilation));
+    }
+
+    /** Every report any question of the compilation makes, every question asked: not only what a
+     *  build reads before it stops. */
+    private static List<Object> everythingSaid(Compilation compilation) {
+        compilation.answerEverything();
+        List<Object> out = new ArrayList<>();
+        for (Db.Found found : compilation.db().allReports()) {
+            out.add(found.report().diagnostic().said());
+        }
+        return out;
     }
 
     /** Said at the import line, in the file this compile holds, that reaches the path module. */

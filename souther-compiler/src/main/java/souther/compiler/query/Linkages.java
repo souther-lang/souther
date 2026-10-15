@@ -95,7 +95,7 @@ public final class Linkages {
         public Answer<List<String>> compute(Db db) {
             Front.FromPath.OnThePath onThePath = Front.onThePath(db, name);
             if (onThePath != null) {
-                return Answer.of(List.copyOf(Front.reaches(onThePath.read())));
+                return Answer.of(onThePath.reaches());
             }
             Ast.Module written = db.ask(new Front.Available(name)).value();
             return written == null ? Answer.of(List.of())
@@ -466,7 +466,7 @@ public final class Linkages {
             Map<String, Map<CopyTarget, CopyRecord>> copiesOfferedBy = new HashMap<>();
             CopyAgreement.Held copies = CopyAgreement.of(onThePath.requiredCopies(),
                     module -> copiesOfferedBy.computeIfAbsent(module,
-                            m -> offeredToCopy(db, m)));
+                            m -> Copies.offeredOnThePath(db, m)));
             for (CopyAgreement.Disagreement disagreement : copies.disagreements()) {
                 CopyTarget target = disagreement.target();
                 Diagnostic said = switch (disagreement) {
@@ -493,8 +493,9 @@ public final class Linkages {
             if (!reports.isEmpty()) {
                 return Answer.absent(reports);
             }
-            // A module not in this compilation, or one that did not come out, or a behavior said
-            // missing as a requirement: said where it is found, and not held here.
+            // A module not in this compilation, or one that did not come out, a module compiled here
+            // (Front.NeedsThisCompilation), or a behavior said missing as a requirement: said where it
+            // is found, and not held here.
             return held.complete() && copies.complete() && !saidElsewhere
                     ? Answer.of(Boolean.TRUE) : Answer.absent();
         }
@@ -510,14 +511,6 @@ public final class Linkages {
         Front.FromPath.OnThePath onThePath = Front.onThePath(db, module);
         return onThePath == null ? null : onThePath.provides();
     }
-
-    /** What {@code module} offers to be copied, as its classes record it — or null where the path
-     *  does not carry it, for the reason {@link #offered} answers that. */
-    private static Map<CopyTarget, CopyRecord> offeredToCopy(Db db, String module) {
-        Front.FromPath.OnThePath onThePath = Front.onThePath(db, module);
-        return onThePath == null ? null : onThePath.providedCopies();
-    }
-
     /** One side of a fact that moved, as a report shows it; a dash where that side says nothing. */
     private static String shown(String fact) {
         return fact == null ? "—" : fact;
