@@ -7,11 +7,11 @@ import souther.compiler.observe.RunSensitivity;
 import souther.compiler.partition.ClosureGap;
 import souther.compiler.partition.CompositionBudget;
 import souther.compiler.partition.DecisionReading;
+import souther.compiler.partition.DecisionRule;
 import souther.compiler.partition.Replacement;
 import souther.compiler.types.SourceConstructOrigin;
 
 import java.util.List;
-import java.util.Objects;
 import java.util.Objects;
 
 /**
@@ -93,8 +93,8 @@ public sealed interface Weakening {
                  ItemsPlaceNotWorkedOut _, AReadingNotTiedToItsLine _,
                  ABorderNotHeldAgainstTheLinesBesideIt _,
                  BodyNotInEvaluation _, BoundaryNotDerived _, InputNotRead _,
-                 ProofContradicted _, ArmsUnsettled _, DecisionOfRowUnreadable _,
-                 DecisionRunNotWatched _, DecisionRuleReadShort _,
+                 ProofContradicted _, ProofOfAWayContradicted _, ArmsUnsettled _,
+                 DecisionOfRowUnreadable _, DecisionRunNotWatched _, DecisionRuleReadShort _,
                  KeyedOverwriteCasesUnmeasured _, MeetingsNotPlaced _ -> List.of();
             case BorderValueUnreadable it -> it.why().figures();
             case BorderReadingsNotExhausted it -> it.limits();
@@ -483,6 +483,29 @@ public sealed interface Weakening {
      * token nobody outside the numbering could read.
      */
     record ProofContradicted(CoverageSites.Obligation arm) implements Weakening {
+
+        /** An analysis that does not hold is one that does not hold however much a run allows. */
+        @Override
+        public RunSensitivity runSensitivity() {
+            return RunSensitivity.UNAFFECTED;
+        }
+    }
+
+    /**
+     * A row went down a way through {@code behavior}'s body this compiler had proven no input takes
+     * ({@link DecisionReading#impossible}).
+     *
+     * <p>The same fact as {@link ProofContradicted}, about a way rather than an arm: the proof is
+     * wrong, and the rules counted are short of whatever lies past the way, since none of them was
+     * read. Its own arm because what it is about is a way of the decision, which is the
+     * behavior's, and no arm a reader can be sent to.
+     */
+    record ProofOfAWayContradicted(String behavior, DecisionRule way) implements Weakening {
+
+        public ProofOfAWayContradicted {
+            Objects.requireNonNull(behavior, "a way is some behavior's");
+            Objects.requireNonNull(way, "a proof is of some way");
+        }
 
         /** An analysis that does not hold is one that does not hold however much a run allows. */
         @Override

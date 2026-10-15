@@ -29,6 +29,7 @@ import souther.compiler.partition.Border;
 import souther.compiler.partition.BorderQuantity;
 import souther.compiler.partition.BoundaryTarget;
 import souther.compiler.partition.ClauseStatementId;
+import souther.compiler.partition.DecisionRule;
 import souther.compiler.partition.ClosureGap;
 import souther.compiler.partition.CompositionBudget;
 import souther.compiler.partition.DecisionReading;
@@ -246,6 +247,8 @@ class AWeakeningAWiderRunMayAnswerNamesTheFigureThatStoppedItTest {
                 "b", new SourceConstructOrigin(new WrittenOwner.Body("m", "b"), 2, 0,
                         SourceConstruct.IF),
                 1, new DecidedBy.NotSaid())));
+        out.put("ProofOfAWayContradicted",
+                new Weakening.ProofOfAWayContradicted("b", new DecisionRule(Map.of())));
         out.put("ArmsUnsettled", new Weakening.ArmsUnsettled(new SourceConstructOrigin(
                 new WrittenOwner.Body("m", "b"), 1, 0, SourceConstruct.IF)));
         for (RulesTaken.WhichRule.Why why : RulesTaken.WhichRule.Why.values()) {

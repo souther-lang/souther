@@ -151,9 +151,10 @@ class ARowDownAWayNoInputTakesGoesAgainstTheProofTest {
     private static void assertWeakenedByTheProof(Measure<DecisionEvidence.RowsPlaced> took) {
         assertInstanceOf(Measurement.Partial.class, took,
                 "the rules counted are short of whatever lies past the way");
-        assertTrue(took.weakening().causes().contains(new Weakening.DecisionOfRowUnreadable("f",
-                        RulesTaken.WhichRule.Why.ITS_WAY_IS_PROVED_TO_BE_TAKEN_BY_NO_INPUT)),
-                () -> "and says why: " + took.weakening());
+        assertTrue(took.weakening().causes().stream().anyMatch(each ->
+                        each instanceof Weakening.ProofOfAWayContradicted(var behavior, var _)
+                                && behavior.equals("f")),
+                () -> "and says a proof of a way was gone against: " + took.weakening());
     }
 
     /** A body compiled, its ways no input takes, and where its runs are recorded. */

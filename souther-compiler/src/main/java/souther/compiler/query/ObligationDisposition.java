@@ -355,6 +355,9 @@ public sealed interface ObligationDisposition {
                      Weakening.InputNotRead _,
                      Weakening.PairSpaceTruncated _,
                      Weakening.ProofContradicted _,
+                     // A way of the decision a row went down against its proof is about which rules
+                     // a body has, and not where a value stands against a line.
+                     Weakening.ProofOfAWayContradicted _,
                      Weakening.ArmsUnsettled _,
                      // A run this compiler could not place among the rules of a decision says
                      // nothing about a point of a line: which rule a row took and where its value

@@ -82,6 +82,7 @@ final class Subjects {
             // through it was recorded at is resolved where the sites are, and nothing this far
             // along has them.
             case Weakening.ProofContradicted it -> new Subject.AtAnArm(it.arm());
+            case Weakening.ProofOfAWayContradicted it -> new Subject.OfABehavior(it.behavior());
             case Weakening.ArmsUnsettled it -> new Subject.AtAFork(it.fork());
             // The behavior, and not the rule or the row. A run that could not be placed is one
             // fact about the reading of that behavior's runs, and every rule of its decision rests

@@ -9301,7 +9301,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case Weakening.PairSpaceTruncated _ -> WeakeningWord.PAIR_SPACE_TRUNCATED;
             case Weakening.MeetingsNotWalked _ -> WeakeningWord.MEETINGS_NOT_WALKED;
             case Weakening.MeetingsNotPlaced _ -> WeakeningWord.MEETINGS_NOT_PLACED;
-            case Weakening.ProofContradicted _ -> WeakeningWord.PROOF_CONTRADICTED;
+            case Weakening.ProofContradicted _, Weakening.ProofOfAWayContradicted _ ->
+                    WeakeningWord.PROOF_CONTRADICTED;
             case Weakening.ArmsUnsettled _ -> WeakeningWord.ARMS_UNSETTLED;
             // One word for the three shortfalls the reading can meet. A consumer acts on all of
             // them the same way — a rule nothing was seen taking may be where an unplaced row went

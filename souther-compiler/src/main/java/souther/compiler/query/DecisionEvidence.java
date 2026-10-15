@@ -396,10 +396,6 @@ public record DecisionEvidence(DecisionReading read, Measure<RowsPlaced> took,
         return took.weakening();
     }
 
-    /** What a row that went against a proof weakens the measure by, wherever it was placed: the
-     *  same reason a row placed nowhere for that proof gives. */
-    private static final RulesTaken.WhichRule.Why AGAINST_A_PROOF =
-            RulesTaken.WhichRule.Why.ITS_WAY_IS_PROVED_TO_BE_TAKEN_BY_NO_INPUT;
 
     /**
      * What the rows of one behavior came to, one answer per row.
@@ -458,7 +454,7 @@ public record DecisionEvidence(DecisionReading read, Measure<RowsPlaced> took,
                     for (DecisionRule way : against.proofsGoneAgainst(row)) {
                         wentAgainst.computeIfAbsent(way, _ -> new RowWitnesses.Gathering())
                                 .add(witnessed.by());
-                        whyShort.add(new Weakening.DecisionOfRowUnreadable(behavior, AGAINST_A_PROOF));
+                        whyShort.add(new Weakening.ProofOfAWayContradicted(behavior, way));
                     }
                 }
             }
