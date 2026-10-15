@@ -780,7 +780,7 @@ public final class Generator {
                              PATHS_OF_A_DECISION_READ,
                              // It stops the asking whether an input takes a way, which keeps the
                              // way and composes nothing.
-                             WAYS_A_DECISION_ASKS_AN_INPUT_TAKES,
+                             CONDITIONS_A_DECISION_TAKES_IN_TO_PROVE,
                              // It stops a reading of what a condition means, and what it stopped
                              // is carried as a part nothing read, naming it.
                              READINGS_OF_ONE_CONDITION, TOTAL_READINGS_OF_ONE_CONDITION,

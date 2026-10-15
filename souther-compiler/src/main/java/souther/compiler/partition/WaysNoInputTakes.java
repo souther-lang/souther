@@ -34,12 +34,14 @@ final class WaysNoInputTakes {
      */
     private final Map<DecisionRule, Optional<NoInputTakesIt>> asked = new HashMap<>();
 
-    /** How many more ways this reading asks ({@link CompositionBudget#WAYS_A_DECISION_ASKS_AN_INPUT_TAKES}). */
-    private int waysLeft = CompositionBudget.WAYS_A_DECISION_ASKS_AN_INPUT_TAKES.maximum();
+    /** How many more conditions this reading takes in, in all
+     *  ({@link CompositionBudget#CONDITIONS_A_DECISION_TAKES_IN_TO_PROVE}). */
+    private int takenInLeft = CompositionBudget.CONDITIONS_A_DECISION_TAKES_IN_TO_PROVE.maximum();
 
     /**
      * Why no input takes {@code path}, where that is proved, asked once for what it consulted —
-     * and nothing past the ways this reading asks in all, which is no proof and keeps the way.
+     * and nothing once this reading has taken in as many conditions as it does in all, which is no
+     * proof and keeps the way.
      */
     Optional<NoInputTakesIt> whyNoInputTakes(DecisionRule consulted,
                                              Supplier<Optional<NoInputTakesIt>> proving) {
@@ -47,13 +49,24 @@ final class WaysNoInputTakes {
         if (known != null) {
             return known;
         }
-        if (waysLeft == 0) {
+        if (takenInLeft == 0) {
             return Optional.empty();
         }
-        waysLeft--;
         Optional<NoInputTakesIt> answered = proving.get();
         asked.put(consulted, answered);
         return answered;
+    }
+
+    /**
+     * Whether a proof may take one more condition in, counting it if so. A walk told no takes the
+     * condition in as nothing, which narrows nothing and so proves nothing past it.
+     */
+    boolean takesIn() {
+        if (takenInLeft == 0) {
+            return false;
+        }
+        takenInLeft--;
+        return true;
     }
 
     /** That no input takes {@code path}, for {@code why}. */

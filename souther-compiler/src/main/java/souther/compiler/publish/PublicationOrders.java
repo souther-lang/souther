@@ -336,7 +336,7 @@ public final class PublicationOrders {
                     // stops is the looking for a row that goes further than one already found.
                     CompositionBudget.RUNS_REPAIRING_A_ROW,
                     CompositionBudget.PATHS_OF_A_DECISION_READ,
-                    CompositionBudget.WAYS_A_DECISION_ASKS_AN_INPUT_TAKES,
+                    CompositionBudget.CONDITIONS_A_DECISION_TAKES_IN_TO_PROVE,
                     CompositionBudget.READINGS_OF_ONE_CONDITION,
                     // Beside it: one way down, then every way together, then what a step states of
                     // them, then what a path takes in of what the reading made.
