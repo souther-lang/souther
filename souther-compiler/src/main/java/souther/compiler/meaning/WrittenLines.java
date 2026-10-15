@@ -412,7 +412,8 @@ public final class WrittenLines {
             case Derivation.WhereAnOperationKeepsIt(var _, var _, var handed) -> List.of(handed);
             case Derivation.ALawSettles _, Derivation.TheSameValue _,
                  Derivation.ALawComparison _, Derivation.ASignItsBoundsSettle _,
-                 Derivation.WrittenOut _, Derivation.WhatAWalkCarried _, Derivation.Folded _,
+                 Derivation.WrittenOut _, Derivation.NoRunTakesIt _,
+                 Derivation.WhatAWalkCarried _, Derivation.Folded _,
                  Derivation.ATruthOfASubject _, Derivation.PresentInASubject _,
                  Derivation.CasesOfASubject _, Derivation.CasesWrittenOut _,
                  Derivation.SizeAboveNought _, Derivation.ACharacterInAClass _,

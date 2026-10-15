@@ -67,12 +67,16 @@ final class DecisionNaming implements Naming<DecisionPath> {
 
     private final int mostArrivals;
 
+    /** The ways this reading proved no input takes, shared down every scope as the names are. */
+    private final WaysNoInputTakes proved;
+
     DecisionNaming(DecisionMeanings meanings, InputReads reads, ConditionNumbering numbering,
-                   int mostArrivals) {
+                   int mostArrivals, WaysNoInputTakes proved) {
         this.meanings = meanings;
         this.reads = reads;
         this.numbering = numbering;
         this.mostArrivals = mostArrivals;
+        this.proved = proved;
     }
 
     @Override
@@ -80,9 +84,68 @@ final class DecisionNaming implements Naming<DecisionPath> {
         return DecisionPath.NOWHERE;
     }
 
+    /**
+     * The two as one way, or null where no run takes both.
+     *
+     * <p>Two things show that. One condition answered two ways ({@link DecisionPath#and}); and
+     * conditions that each come out as the way took them, but that what the declarations hold leave
+     * no input to bring out all at once — a remainder past one cap is a number every later cap of
+     * nought or more holds, so a way that went past it and then stopped under the next is no way a
+     * run takes. Asked of the way with its numbers taken in as it is walked
+     * ({@link WayToTheBorder#takenByNoInput}), and only a proof drops a way: what the region
+     * cannot take in, or a walk stopped at a figure, is a way kept.
+     */
     @Override
     public DecisionPath join(DecisionPath held, DecisionPath more) {
-        return held.and(more);
+        DecisionPath joined = held.and(more);
+        // Where one of the two consulted everything the other did, the way is that one's, which
+        // was asked when it was joined.
+        if (joined == null || joined.rule().equals(held.rule())
+                || joined.rule().equals(more.rule())) {
+            return joined;
+        }
+        Optional<NoInputTakesIt> none = noInputTakes(joined);
+        if (none.isEmpty()) {
+            return joined;
+        }
+        proveWithLess(joined, none.get());
+        return null;
+    }
+
+    /**
+     * That no input takes {@code path}, said of as few of its conditions as still prove it.
+     *
+     * <p>A way is joined from what comes after a condition before the condition itself, so the
+     * first way two clashing conditions are on is one with every condition after them on it too.
+     * Each condition the proof is had without is taken off, one at a time: what is left is the way
+     * that stands for every rule past it, and two rules past one clash come to one way.
+     */
+    private void proveWithLess(DecisionPath path, NoInputTakesIt why) {
+        DecisionPath least = path;
+        NoInputTakesIt leastWhy = why;
+        for (DecisionPath.Consulted each : path.consulted()) {
+            List<DecisionPath.Consulted> without = new ArrayList<>(least.consulted());
+            without.remove(each);
+            if (without.isEmpty()) {
+                continue;
+            }
+            DecisionPath less = new DecisionPath(without);
+            Optional<NoInputTakesIt> still = noInputTakes(less);
+            if (still.isPresent()) {
+                least = less;
+                leastWhy = still.get();
+            }
+        }
+        proved.add(least, leastWhy);
+    }
+
+    /** Why no input brings out every condition {@code path} consulted as it did, where that is
+     *  proved. */
+    private Optional<NoInputTakesIt> noInputTakes(DecisionPath path) {
+        List<OnTheWay> stated = new ArrayList<>();
+        path.consulted().forEach(each -> stated.addAll(each.states()));
+        return new WayToTheBorder(stated)
+                .takenByNoInput(meanings.states().read().quantities().region());
     }
 
     @Override
@@ -90,7 +153,7 @@ final class DecisionNaming implements Naming<DecisionPath> {
         InputReads inside =
                 reads.entering(step, meanings.states().symbols(), meanings.states().newtypes());
         return inside == reads ? this
-                : new DecisionNaming(meanings, inside, numbering, mostArrivals);
+                : new DecisionNaming(meanings, inside, numbering, mostArrivals, proved);
     }
 
     /**

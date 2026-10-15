@@ -132,7 +132,8 @@ class ARuleIsEveryPlaceItIsStatedAtTest {
         DecisionReading with(DecisionReading.Ruled... more) {
             List<DecisionReading.Ruled> found = new ArrayList<>(read.found());
             found.addAll(Arrays.asList(more));
-            return new DecisionReading(read.behavior(), found, read.enumeration(), read.metAt());
+            return new DecisionReading(read.behavior(), found, read.impossible(),
+                    read.enumeration(), read.metAt());
         }
     }
 

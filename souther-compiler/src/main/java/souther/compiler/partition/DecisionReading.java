@@ -16,6 +16,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -45,9 +46,18 @@ import java.util.Set;
  * whether anything stands there is settled against the rows and a stated search, and is no part of
  * reading the body.
  *
+ * <p><b>But a way no input takes is not read on.</b> Where the conditions a way has come to are
+ * proved to leave no input at once ({@link DecisionNaming#join}), every rule past it is one no run
+ * takes, and there are as many of those as there are ways to go on. The way is held once, with the
+ * proof, and stands for all of them: written out, a chain of helpers each settling the next would
+ * be a rule for every way the chain cannot go.
+ *
  * @param behavior    whose decision this is
  * @param found       the rules, in the order the reading holds the ways, each with what a run down
  *                    its path would be seen doing
+ * @param impossible  the ways no input takes, each where the proof was had and none narrower than
+ *                    another, in the order the reading met them; the rules past each are in none of
+ *                    {@code found}
  * @param enumeration whether every way was written down
  * @param metAt       where this reading met each condition it places itself, which is what a
  *                    report about one of them is sent to
@@ -55,14 +65,15 @@ import java.util.Set;
  *                    condition is named by the reading that met it, and the same name from
  *                    another reading is another condition
  */
-public record DecisionReading(String behavior, List<Ruled> found, Enumeration enumeration,
-                              Map<ConditionOccurrence, Citation> metAt) {
+public record DecisionReading(String behavior, List<Ruled> found, List<ImpossiblePath> impossible,
+                              Enumeration enumeration, Map<ConditionOccurrence, Citation> metAt) {
 
     /** The figure this reading stops at, read here rather than written here. */
     private static final CompositionBudget PATHS_READ = CompositionBudget.PATHS_OF_A_DECISION_READ;
 
     public DecisionReading {
         found = List.copyOf(found);
+        impossible = List.copyOf(impossible);
         // In the order the reading met them, which is an order nobody reads and the one a copy
         // that kept none would replace with the run's.
         metAt = Collections.unmodifiableMap(new LinkedHashMap<>(metAt));
@@ -134,6 +145,32 @@ public record DecisionReading(String behavior, List<Ruled> found, Enumeration en
                 out = out.and(each.said());
             }
             return out;
+        }
+    }
+
+    /**
+     * A way through the body no input takes, proved.
+     *
+     * <p>The conditions it consulted as the way met them, which is a way and not a rule: the reading
+     * stopped there, so it names the conditions the proof needed and none past them. Every rule that
+     * goes on from it consults these as it did, and is no rule a run takes — this one proof is the
+     * account of all of them, and none of them is counted as a rule.
+     *
+     * @param way what the way consulted, and where a run down it would have been seen doing so
+     * @param why what leaves no input there
+     */
+    public record ImpossiblePath(Ruled way, NoInputTakesIt why) {
+
+        public ImpossiblePath {
+            Objects.requireNonNull(way, "a way no input takes is some way");
+            Objects.requireNonNull(why, "a way no input takes is proved to be one");
+        }
+
+        /** Whether the way consulted {@code rule}'s conditions as {@code rule} did, which makes
+         *  the rule one past it. */
+        public boolean standsFor(DecisionRule rule) {
+            return way.rule().consulted().entrySet().stream().allMatch(each ->
+                    each.getValue().equals(rule.consulted().get(each.getKey())));
         }
     }
 
@@ -254,21 +291,22 @@ public record DecisionReading(String behavior, List<Ruled> found, Enumeration en
         // What a build of a value comes to is what its template does: a value that never answers
         // leaves nothing after its build reached. What is inside the template is not counted as a
         // way of this body — a value takes no input, so it is no rule a row can be written for.
+        WaysNoInputTakes proved = new WaysNoInputTakes();
         ValueArrivals<DecisionPath> arrivals = ValueArrivals.ofBodyWhereTheOperationsStand(body,
                 new DecisionNaming(meanings(read), reads, numbering,
-                        PATHS_READ.maximum()),
+                        PATHS_READ.maximum(), proved),
                 new AnOperationsTruthComesOutAsItCan(reads, read),
                 analysis.templates()::bodyOf);
         if (!(arrivals.waysAt(body) instanceof Paths.Held<DecisionPath> held)) {
-            return new DecisionReading(behavior, List.of(),
+            return new DecisionReading(behavior, List.of(), proved.leastOfThem(),
                     new Enumeration.StoppedAtAFigure(PATHS_READ), Map.of());
         }
         List<Ruled> found = new ArrayList<>();
         for (Arrival<DecisionPath> way : held.arrivals()) {
             found.add(new Ruled(way.path().rule(), way.path().steps(), way.isComplete()));
         }
-        return new DecisionReading(behavior, found, new Enumeration.Complete(),
-                numbering.metAt());
+        return new DecisionReading(behavior, found, proved.leastOfThem(),
+                new Enumeration.Complete(), numbering.metAt());
     }
 
     /** What this body's conditions decide, made once for the whole reading of it. */

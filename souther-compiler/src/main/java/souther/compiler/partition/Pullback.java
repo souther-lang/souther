@@ -50,6 +50,7 @@ import souther.compiler.inputs.InputTruth;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.PathResolution;
 import souther.compiler.inputs.ReadMeaning;
+import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.inputs.WrittenOutElements;
@@ -293,6 +294,13 @@ final class Pullback {
      * application it is split into and every rule tried on each.
      */
     private long readingsLeft = CompositionBudget.TOTAL_READINGS_OF_ONE_CONDITION.maximum();
+    /**
+     * What the input is left as on the way to the arm being read: what the declarations hold of
+     * it, and every condition of an arm taken on the way that holds of a run's own numbers
+     * ({@link #armsLeftBy}). Null until an arm is first decided by one, which is the declarations
+     * alone.
+     */
+    private SearchRegion onTheWay;
 
     /** What a value a walk or a recursion hands back to itself is supposed to be. */
     private sealed interface Supposed permits Carried, Descending, Reaching {}
@@ -4487,6 +4495,29 @@ final class Pullback {
     private Derivation goingIn(Inside inside, InputReads reads, Denotation at, boolean fixed,
                                Function<UnaryOperator<InputReads>, Derivation> again) {
         return switch (inside) {
+            // A choice whose condition stops at a value a reading goes into is read with that value
+            // taken first: its condition then reads as the comparison it is on that way, which is
+            // what the arms taken on the way can settle ({@link #armsLeftBy}). Read in the other
+            // order, the condition is every case of the value it stops at, written out.
+            case Inside.AChoice(Denotation chosen)
+                    when whereTheConditionStops(chosen) instanceof Inside first ->
+                    goingIn(first, reads, at, fixed, again);
+            case Inside.AChoice(Denotation chosen)
+                    when chosenAt(chosen) instanceof Denotation choiceAt
+                    && Core.withoutStanding(choiceAt.value()) instanceof Core.If iff -> {
+                Derivation condition = observe(iff.cond(), AnswerAspect.TRUTH, choiceAt.at());
+                ArmsLeft left = armsLeftBy(condition);
+                // Counted in all and not along the way: an arm no run takes is not read, and the
+                // arms that are read are the work, wherever on the way they stand.
+                WhyUnread past = made(left.read());
+                if (past != null) {
+                    yield partOf(at, new Derivation.Stopped(past, fixed));
+                }
+                Core choice = chosen.value();
+                yield new Derivation.AComparisonOfAChoice(madeBy(iff, armsOf(iff, choiceAt.at(),
+                        condition, left,
+                        arm -> again.apply(on -> on.taking(choice, arm, left.read())))));
+            }
             case Inside.AChoice(Denotation chosen) -> {
                 int arms = Choice.of(Core.withoutStanding(chosen.value())).arms().size();
                 WhyUnread past = splitInto(reads, arms);
@@ -5393,6 +5424,110 @@ final class Pullback {
     }
 
     /**
+     * The value the condition of the choice {@code chosen} stops at, that a reading goes into —
+     * or null where the condition is no comparison, or its arithmetic stops at nothing of the kind.
+     *
+     * <p>A choice or a call: what the condition compares is then one of several values, and read
+     * as it stands the condition is each of them written out. Gone into first, it is one of them,
+     * which is a comparison the arms taken on the way can settle.
+     */
+    private Inside whereTheConditionStops(Denotation chosen) {
+        Denotation choiceAt = chosenAt(chosen);
+        if (choiceAt == null || !(Core.withoutStanding(choiceAt.value()) instanceof Core.If iff)
+                || !(Core.withoutStanding(iff.cond()) instanceof Core.Binary compared)
+                || BooleanMeaning.asAComparison(compared).isEmpty()) {
+            return null;
+        }
+        Inside inside = aWayIn(List.of(new Denotation(compared.left(), choiceAt.at()),
+                new Denotation(compared.right(), choiceAt.at())));
+        return inside instanceof Inside.AChoice || inside instanceof Inside.ACall ? inside : null;
+    }
+
+    /**
+     * Which arms of an {@code if} a run on the way here takes, and what the input is left as down
+     * each.
+     *
+     * @param then      what the way leaves the input taking the arm the condition holding takes,
+     *                  or null where the condition leaves it as it was
+     * @param otherwise the same, of the other arm
+     */
+    private record ArmsLeft(SearchRegion then, boolean thenTaken, SearchRegion otherwise,
+                            boolean otherwiseTaken) {
+
+        /** Both arms, the way left as it was: what nothing here settles. */
+        static final ArmsLeft BOTH = new ArmsLeft(null, true, null, true);
+
+        /** How many arms are read. */
+        int read() {
+            return (thenTaken ? 1 : 0) + (otherwiseTaken ? 1 : 0);
+        }
+    }
+
+    /**
+     * Which arms of a choice decided by {@code condition} a run takes, given the arms taken on the
+     * way here and what the declarations hold.
+     *
+     * <p>An arm is left out only where the input is proved to hold nothing down it: a condition
+     * that does not read as a comparison of the input's own numbers, or one the region cannot take
+     * in, leaves both arms as they were, and so does a way that already holds nothing — that is no
+     * proof about this choice. Numbers inside a container are not taken in: the same position names
+     * every element, and what one element was compared with on the way says nothing of another.
+     */
+    private ArmsLeft armsLeftBy(Derivation condition) {
+        if (!(condition.concludes(Optional.empty()) instanceof Proposition.Compared(
+                Relation.Affine(LinearForm<Quantity> form, Rel relation), boolean holds, var _))) {
+            return ArmsLeft.BOTH;
+        }
+        LinearForm<NumericTerm> onTheInput = WhatTheDeclarationsLeave.ofTheInput(form);
+        if (onTheInput == null || !onTheInput.coefs().keySet().stream().allMatch(term ->
+                term instanceof NumericTerm.ValueOf(TermPath position)
+                        && !position.insideAContainer())) {
+            return ArmsLeft.BOTH;
+        }
+        SearchRegion here = onTheWay != null ? onTheWay : read.quantities().region();
+        Rel holding = holds ? relation : relation.denied();
+        if (!(here.assuming(onTheInput, holding) instanceof SearchRegion.Assumption.Taken(
+                SearchRegion then))
+                || !(here.assuming(onTheInput, holding.denied())
+                        instanceof SearchRegion.Assumption.Taken(SearchRegion otherwise))) {
+            return ArmsLeft.BOTH;
+        }
+        boolean thenTaken = then.emptiness().isEmpty();
+        boolean otherwiseTaken = otherwise.emptiness().isEmpty();
+        return thenTaken || otherwiseTaken
+                ? new ArmsLeft(then, thenTaken, otherwise, otherwiseTaken) : ArmsLeft.BOTH;
+    }
+
+    /**
+     * An {@code if} decided by {@code condition}, with {@code compared} read of what each arm a run
+     * takes answers, the way narrowed to that arm while it is read.
+     */
+    private Derivation armsOf(Core.If iff, InputReads where, Derivation condition, ArmsLeft left,
+                              Function<Denotation, Derivation> compared) {
+        return new Derivation.IfThenElse(condition,
+                left.thenTaken() ? along(left.then(),
+                        () -> compared.apply(new Denotation(iff.then(), where)))
+                        : new Derivation.NoRunTakesIt(),
+                left.otherwiseTaken() ? along(left.otherwise(),
+                        () -> compared.apply(new Denotation(iff.els(), where)))
+                        : new Derivation.NoRunTakesIt());
+    }
+
+    /** {@code reading} read with the way left as {@code there}, or as it was where that is null. */
+    private Derivation along(SearchRegion there, Supplier<Derivation> reading) {
+        if (there == null) {
+            return reading.get();
+        }
+        SearchRegion was = onTheWay;
+        onTheWay = there;
+        try {
+            return reading.get();
+        } finally {
+            onTheWay = was;
+        }
+    }
+
+    /**
      * The choice {@code side} is, with {@code compared} read of what each case answers — or null
      * where {@code side} is chosen by no cases.
      *
@@ -5408,10 +5543,10 @@ final class Pullback {
         InputReads where = chosen.at();
         Core node = Core.withoutStanding(chosen.value());
         Derivation choice = switch (node) {
-            case Core.If iff -> new Derivation.IfThenElse(
-                    observe(iff.cond(), AnswerAspect.TRUTH, where),
-                    compared.apply(new Denotation(iff.then(), where)),
-                    compared.apply(new Denotation(iff.els(), where)));
+            case Core.If iff -> {
+                Derivation condition = observe(iff.cond(), AnswerAspect.TRUTH, where);
+                yield armsOf(iff, where, condition, armsLeftBy(condition), compared);
+            }
             case Core.Match match -> armsOf(match, where,
                     (body, inside) -> compared.apply(new Denotation(body, inside)));
             case Core.IfConstructed attempt -> {
