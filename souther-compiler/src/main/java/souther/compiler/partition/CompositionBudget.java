@@ -276,6 +276,12 @@ public enum CompositionBudget {
      * what multiplies is the nesting and what is counted is the product along one way down — and
      * so what one condition comes to does not turn on how many others beside it were read first.
      *
+     * <p>Not an {@code if} a comparison is read through. Its arms are read only where a run takes
+     * them, so the ways down a chain of them are the ways a run can go, and one of those may pass
+     * as many of them as the chain is long while the ways beside it end at the next; the product
+     * along it counts ways that are not there. What bounds those is the count in all
+     * ({@link #TOTAL_READINGS_OF_ONE_CONDITION}).
+     *
      * <p><b>Reaching it gives the part up and says so.</b> A part that would be read more times
      * than this is not read one by one at all, and is carried out as a part nothing read, naming
      * this as why ({@link souther.compiler.meaning.WhyUnread.MoreReadingsThanAreMade}): a reader is
@@ -298,7 +304,8 @@ public enum CompositionBudget {
      * along one way down, so ways that each stay under it can come to more than it in all — a
      * value chosen by cases holds the conditions that chose it, and a helper called on what the
      * last call answered reads every condition before it again, once more on each way. This one
-     * is what bounds that.
+     * is what bounds that, and the only figure the arms of an {@code if} a comparison is read
+     * through are held to: an arm no run takes is not read and not counted.
      *
      * <p><b>Reaching it gives the part up and says so</b>, as the other does: the part is carried
      * out as one nothing read, naming this as why
