@@ -3,6 +3,7 @@ package souther.compiler;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
 import souther.compiler.diag.CompileException;
+import souther.compiler.diag.msg.DataMessage;
 import souther.compiler.meta.ModulePath;
 
 import souther.compiler.jvm.ClassFileImage;
@@ -16,6 +17,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -108,6 +110,71 @@ class CrossProjectImportTest {
 
         Object bad = Codecs.decoded(loader, "app.order.Req", Map.of("n", -1L));
         assertThrows(ConstraintViolation.class, () -> Codecs.apply(impl, bad));
+    }
+
+    /** A library with a behavior: what it publishes declares {@code double} and carries no body for
+     * it, which stays in its classes. */
+    private static final String DOUBLING = """
+            module shared.doubling exposing ( Code, double )
+            data Code = String
+                invariant lower = String.matches("[a-z]+", value)
+            behavior double : (n: Int) -> Int
+            let double (n) = n * 2
+            """;
+
+    /** The clause is outside the fragment the discharge procedure reasons over, so a constant that
+     * breaks it is refused by running the check — which is what loads the classes. */
+    private static void refusedByRunningTheCheck(CompileException e) {
+        assertInstanceOf(DataMessage.TheWrittenValueViolatesTheClause.class,
+                e.diagnostics().get(0).said(), e.getMessage());
+        assertEquals("lower", e.diagnostics().get(0).values().get("clause"));
+    }
+
+    private static String importerOf(String constant) {
+        return """
+                module app.small
+                import shared.doubling ( Code, double )
+                data Small = Int
+                    invariant value >= 0
+                let one = %s
+                behavior quad : (n: Int) -> Int
+                let quad (n) = double(n) + 1
+                """.formatted(constant);
+    }
+
+    /** A constant is checked against its invariant by loading this compile's classes, and the module
+     * on the path is not one of them: what it published has no body for its behavior to emit. */
+    @Test
+    void aConstantIsCheckedWithoutGeneratingTheModuleOnThePath() {
+        Map<String, ClassFileImage> app = Compiler.compileModules(List.of(importerOf("Small(1)")),
+                published(DOUBLING));
+
+        assertTrue(app.containsKey("app.small.Small"));
+        assertFalse(app.keySet().stream().anyMatch(n -> n.startsWith("shared.doubling.")),
+                app.keySet().toString());
+    }
+
+    /** A constant of the path's type is checked by the path's own class, found under the classes
+     * this compile generates. */
+    @Test
+    void aConstantOfATypeOnThePathIsCheckedByThePathsClass() {
+        Compiler.compileModules(List.of(importerOf("Code(\"ab\")")), published(DOUBLING));
+
+        refusedByRunningTheCheck(assertThrows(CompileException.class,
+                () -> Compiler.compileModules(List.of(importerOf("Code(\"AB\")")),
+                        published(DOUBLING))));
+    }
+
+    /** Compiled together, the same module is this compile's to generate, and the check finds its
+     * class there. */
+    @Test
+    void aConstantOfATypeCompiledBesideItIsCheckedByThatClass() {
+        Map<String, ClassFileImage> both = Compiler.compileModules(
+                List.of(DOUBLING, importerOf("Code(\"ab\")")));
+        assertTrue(both.containsKey("shared.doubling.Code"), both.keySet().toString());
+
+        refusedByRunningTheCheck(assertThrows(CompileException.class,
+                () -> Compiler.compileModules(List.of(DOUBLING, importerOf("Code(\"AB\")")))));
     }
 
     /** An import naming nothing on the path is still the import that is wrong, reported where it is
