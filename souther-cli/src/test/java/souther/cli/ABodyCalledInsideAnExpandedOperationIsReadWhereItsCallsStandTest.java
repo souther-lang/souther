@@ -1,6 +1,8 @@
 package souther.cli;
 
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
@@ -24,21 +26,29 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
  */
 class ABodyCalledInsideAnExpandedOperationIsReadWhereItsCallsStandTest {
 
-    private static final String INLINE = """
-            module probe.i
+    @TempDir
+    static Path sources;
 
-            behavior after : (taxable: Int) -> Int
+    /** The report of the body written inline, which the called forms of it are compared with. */
+    private static Run inline;
 
-            let after (taxable) = Int.max(0, Rational.toInt(DOWN, taxable / 100))
+    @BeforeAll
+    static void reportTheInlineForm() throws Exception {
+        inline = examples("""
+                module probe.i
 
-            example after
-                | (1000000) -> 10000
-            """;
+                behavior after : (taxable: Int) -> Int
+
+                let after (taxable) = Int.max(0, Rational.toInt(DOWN, taxable / 100))
+
+                example after
+                    | (1000000) -> 10000
+                """);
+    }
 
     @Test
     void aCalledBodyReportsWhatTheSameBodyWrittenInlineReports() throws Exception {
-        Run inline = examples(INLINE);
-        Run called = examples("""
+        agree(inline, examples("""
                 module probe.i
 
                 behavior tax : (taxable: Int) -> Int
@@ -51,20 +61,13 @@ class ABodyCalledInsideAnExpandedOperationIsReadWhereItsCallsStandTest {
 
                 example after
                     | (1000000) -> 10000
-                """);
-
-        assertEquals(0, inline.code(), inline::toString);
-        assertEquals(0, called.code(), called::toString);
-        // The agreement below is not two reports that both said nothing of `after`.
-        assertFalse(measured(inline.out()).isEmpty(), inline::toString);
-        assertEquals(measured(inline.out()), measured(called.out()),
-                () -> "inline:\n" + inline + "\ncalled:\n" + called);
+                """));
     }
 
     /** A body reached through another call is read in the same tree as the first. */
     @Test
     void aBodyCalledFromACalledBodyIsReadTheSameWay() throws Exception {
-        Run called = examples("""
+        agree(inline, examples("""
                 module probe.i
 
                 behavior cut : (taxable: Int) -> Int
@@ -81,16 +84,13 @@ class ABodyCalledInsideAnExpandedOperationIsReadWhereItsCallsStandTest {
 
                 example after
                     | (1000000) -> 10000
-                """);
-
-        assertEquals(0, called.code(), called::toString);
-        assertEquals(measured(examples(INLINE).out()), measured(called.out()), called::toString);
+                """));
     }
 
     /** An argument that names no position is read where the call was written, not in the body. */
     @Test
     void anArgumentThatIsNoPositionIsReadWhereTheCallIs() throws Exception {
-        Run inline = examples("""
+        agree(examples("""
                 module probe.i
 
                 behavior after : (taxable: Int) -> Int
@@ -99,8 +99,7 @@ class ABodyCalledInsideAnExpandedOperationIsReadWhereItsCallsStandTest {
 
                 example after
                     | (1000000) -> 9990
-                """);
-        Run called = examples("""
+                """), examples("""
                 module probe.i
 
                 behavior tax : (taxable: Int) -> Int
@@ -113,12 +112,17 @@ class ABodyCalledInsideAnExpandedOperationIsReadWhereItsCallsStandTest {
 
                 example after
                     | (1000000) -> 9990
-                """);
+                """));
+    }
 
-        assertEquals(0, inline.code(), inline::toString);
+    /** Both reports ran to the end and say the same of {@code after}, which is not two reports
+     *  that both said nothing of it. */
+    private static void agree(Run written, Run called) {
+        assertEquals(0, written.code(), written::toString);
         assertEquals(0, called.code(), called::toString);
-        assertEquals(measured(inline.out()), measured(called.out()),
-                () -> "inline:\n" + inline + "\ncalled:\n" + called);
+        assertFalse(measured(written.out()).isEmpty(), written::toString);
+        assertEquals(measured(written.out()), measured(called.out()),
+                () -> "inline:\n" + written + "\ncalled:\n" + called);
     }
 
     /** What the report says about {@code after}. A place in it names its line, which is about the
@@ -147,7 +151,7 @@ class ABodyCalledInsideAnExpandedOperationIsReadWhereItsCallsStandTest {
     }
 
     private static Run examples(String source) throws Exception {
-        Path file = Files.createTempDirectory("souther-called-body").resolve("probe.sou");
+        Path file = Files.createTempDirectory(sources, "run").resolve("probe.sou");
         Files.writeString(file, source);
         PrintStream originalOut = System.out;
         PrintStream originalErr = System.err;
