@@ -21,6 +21,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -270,7 +271,16 @@ class AWayBetweenTheValuesTheRulesNameIsOwedNoRowTest {
                 .json(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
+    /** Each model measured once for the class: several tests read the numeric model, and a test
+     *  reads both reports of one. */
+    private static final Map<String, Compilation> MEASURED = new ConcurrentHashMap<>();
+
     private static Compilation measured(String model) {
+        return MEASURED.computeIfAbsent(model,
+                AWayBetweenTheValuesTheRulesNameIsOwedNoRowTest::measure);
+    }
+
+    private static Compilation measure(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();

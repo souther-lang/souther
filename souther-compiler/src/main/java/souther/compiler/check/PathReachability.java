@@ -876,9 +876,11 @@ public final class PathReachability {
             ValueSet named = each.admitted().approximation();
             BindingId parameter = parameters.get(each.path().head());
             RuleKey fields = each.path().ruleKey();
+            if (named.isAny() || named.isEmpty() || parameter == null || fields == null) {
+                continue;
+            }
             Carrier carrier = Carrier.ofValue(each.type(), terms.declarations());
-            if (named.isAny() || named.isEmpty() || parameter == null || fields == null
-                    || carrier == null) {
+            if (carrier == null) {
                 continue;
             }
             FactSubject place = terms.under(terms.placeSubject(parameter), fields);

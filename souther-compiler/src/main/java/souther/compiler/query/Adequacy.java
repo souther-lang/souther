@@ -2036,8 +2036,9 @@ public final class Adequacy {
             Set<SeenConditionOutcome> seen = new LinkedHashSet<>();
             for (RowReading observed : db.ask(new RowReadings(name)).value().values()) {
                 for (RowOutcome row : observed.rowsSeen()) {
-                    lit.addAll(armsSeenIn(row, numbering));
-                    seen.addAll(outcomesSeenIn(row, numbering));
+                    Generator.Watched watched = ObservedInputs.of(row, numbering).watched();
+                    lit.addAll(armsSeenIn(watched));
+                    seen.addAll(outcomesSeenIn(watched));
                 }
             }
             Map<String, souther.compiler.check.PathReachability.Answers.AsRun> out =
@@ -2625,7 +2626,10 @@ public final class Adequacy {
                     db.ask(new Arrived(name)).value();
             souther.compiler.check.PathReachability.Answers.AsRun arrived = arrivals == null
                     ? null : arrivals.getOrDefault(behavior, NOTHING_PROVEN);
-            NothingReaches unreached = arrived == null ? NothingReaches.NOTHING
+            // Where the reading proved nothing unreached there is no arm or outcome to look up, and
+            // the copies of the comparisons are not walked for.
+            NothingReaches unreached = arrived == null
+                    || arrived.answers().provesNothingUnreached() ? NothingReaches.NOTHING
                     : new NothingReaches(
                             BranchEvidence.unreached(checked.value().plan().arms(behavior),
                                     arrived),
@@ -9523,17 +9527,22 @@ public final class Adequacy {
      * of the row rather than of the arms.
      */
     static Set<ArmProbe> armsSeenIn(RowOutcome row, Optional<SiteNumbering> numbering) {
-        return switch (ObservedInputs.of(row, numbering).watched()) {
+        return armsSeenIn(ObservedInputs.of(row, numbering).watched());
+    }
+
+    /** The same, of a run already read under the numbering — for a caller that reads more of
+     *  the run than its arms, so that the run is put on the numbering's places once. */
+    static Set<ArmProbe> armsSeenIn(Generator.Watched watched) {
+        return switch (watched) {
             case Generator.Watched.Ran(var account) -> account.arms();
             case Generator.Watched.NoAccount _ -> Set.of();
         };
     }
 
-    /** The ways {@code row}'s conditions came out, read the same way and under the same
-     *  numbering — and none where the run's account was not read. */
-    static Set<SeenConditionOutcome> outcomesSeenIn(RowOutcome row,
-                                                    Optional<SiteNumbering> numbering) {
-        return switch (ObservedInputs.of(row, numbering).watched()) {
+    /** The ways a run's conditions came out, read the same way — and none where the run's
+     *  account was not read. */
+    static Set<SeenConditionOutcome> outcomesSeenIn(Generator.Watched watched) {
+        return switch (watched) {
             case Generator.Watched.Ran(var account) -> account.outcomes();
             case Generator.Watched.NoAccount _ -> Set.of();
         };
