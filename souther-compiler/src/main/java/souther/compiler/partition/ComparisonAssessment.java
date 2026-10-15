@@ -15,7 +15,7 @@ import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.FilingCoordinate;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.meaning.AuthoredPointMapping;
-import souther.compiler.meaning.WhereEachLineDecides;
+import souther.compiler.meaning.Proposition;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
@@ -348,13 +348,12 @@ sealed interface ComparisonAssessment {
          * @param id    which of the author's lines it is a place of, and which place
          * @param line  what that line comes to, which is what a comparison of one line comes to and
          *              never several again
-         * @param cases where the statement turns on it, as cases any one of which is enough, each
-         *              with the side of the line the statement holds on there: every case where it
-         *              was read, and once the way to it is taken in, the cases a row arriving there
-         *              can be in
+         * @param cases where the statement turns on it, as cases any one of which is enough: every
+         *              case where it was read, and once the way to it is taken in, the cases a row
+         *              arriving there can be in
          */
         public record Part(PlaceOfALine id, ComparisonAssessment line,
-                           List<WhereEachLineDecides.Case> cases) {
+                           List<Proposition> cases) {
 
             public Part {
                 Objects.requireNonNull(id, "a line of a statement is one of its lines");
@@ -762,7 +761,7 @@ sealed interface ComparisonAssessment {
         // one case differ in this line alone, so the statement turns between them; a case only one
         // side has rows in is a case crossing the line leaves, and turns nothing there.
         Cutting cutting = cuttingOf(arrived);
-        List<WhereEachLineDecides.Case> reached = new ArrayList<>();
+        List<Proposition> reached = new ArrayList<>();
         // And what a relation leaves undivided is asked again in the cases where it decides, which
         // is where its values are what the case leaves them.
         List<Reachability.Reaching> deciding = new ArrayList<>();

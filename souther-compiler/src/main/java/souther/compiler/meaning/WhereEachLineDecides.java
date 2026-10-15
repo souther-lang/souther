@@ -5,6 +5,7 @@ import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.TermPath;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -38,13 +39,6 @@ import java.util.TreeMap;
  * looked for where it decides and nowhere else — and a line no case leaves a row at is one the
  * statement never turns on. None at all is a line that decides nowhere, whatever the row.
  *
- * <p><b>And which way round it turns there.</b> A line is a relation held, and the statement may
- * hold on the side where it fails: {@code month.value <= minimum(term)} holds its line as {@code
- * month.value > 12} where {@code term} is {@code OneYear}, and the statement holds below that line.
- * So each case says which side of the line the statement holds on, and a case is one side or the
- * other and never both: a part that leaves the statement holding with the line at some of its ways
- * and against it at others is a part the cases are told apart by.
- *
  * <p><b>What this says is the relation turning alone, which is not yet a row crossing it.</b> The
  * parts are read as though each could come out either way with the others held still, and two of
  * them over the same number cannot: {@code Int.min(a, 11 - a) > 5} decides on {@code 11 - a > 5}
@@ -74,8 +68,7 @@ public final class WhereEachLineDecides {
      */
     private static final long MOST_PLACES_READ = 1L << 17;
 
-    /** How many cases where a line decides is said in before it is said as one on each side of
-     *  it. */
+    /** How many cases where a line decides is said in before it is said as one. */
     static final int MOST_CASES = 16;
 
     private WhereEachLineDecides() {
@@ -86,10 +79,11 @@ public final class WhereEachLineDecides {
      *
      * @param line  the relation, held: which way round it was written is the statement's and not
      *              the line's
-     * @param cases where it decides, as cases any one of which is enough, each with the side of
-     *              the line the statement holds on there. Empty where it decides nowhere
+     * @param cases where it decides, as cases any one of which is enough: each a part, a conjunction
+     *              of parts, or nothing asked at all. Empty where it decides nowhere. None of them
+     *              names {@code line}
      */
-    public record Decides(Proposition.Compared line, List<Case> cases) {
+    public record Decides(Proposition.Compared line, List<Proposition> cases) {
 
         public Decides {
             Objects.requireNonNull(line, "a line is some relation");
@@ -97,26 +91,6 @@ public final class WhereEachLineDecides {
             if (!line.holds()) {
                 throw new IllegalArgumentException("a line is the relation held: " + line);
             }
-        }
-    }
-
-    /**
-     * One case of where a line decides, and the side of the line the statement holds on there.
-     *
-     * @param where            what holds beside the line in this case: a part, a conjunction of
-     *                         parts, or nothing asked at all. It never names the line
-     * @param holdsWithTheLine whether the statement holds here on the side where the line holds;
-     *                         false where it holds on the side where the line fails
-     */
-    public record Case(Proposition where, boolean holdsWithTheLine) {
-
-        public Case {
-            Objects.requireNonNull(where, "a case of where a line decides is somewhere");
-        }
-
-        /** A line that decides wherever a row is, the statement holding where it does. */
-        public static Case everywhere() {
-            return new Case(new Proposition.Always(true), true);
         }
     }
 
@@ -139,7 +113,7 @@ public final class WhereEachLineDecides {
      */
     public static List<Decides> in(Proposition writtenAs) {
         Map<String, Proposition.Compared> lines = new TreeMap<>();
-        Map<String, List<List<List<Case>>>> standings = new TreeMap<>();
+        Map<String, List<List<List<Proposition>>>> standings = new TreeMap<>();
         read(writtenAs, writtenAs, null, List.of(), lines, standings);
         List<Decides> out = new ArrayList<>();
         lines.forEach((key, line) -> out.add(new Decides(line,
@@ -158,7 +132,8 @@ public final class WhereEachLineDecides {
      * value to be two cases, and is no place the line is. So the one is left out and the other
      * case with it, and every case is said with the case the line is at.
      */
-    private static List<Case> whereItStands(Proposition.Compared line, List<Case> cases) {
+    private static List<Proposition> whereItStands(Proposition.Compared line,
+                                                   List<Proposition> cases) {
         Map<TermPath, CasesLeft> at = casesItIsOver(line);
         if (at.isEmpty()) {
             return cases;
@@ -170,12 +145,12 @@ public final class WhereEachLineDecides {
                 stands.add(standing);
             }
         });
-        List<Case> out = new ArrayList<>();
+        List<Proposition> out = new ArrayList<>();
         cases:
-        for (Case each : cases) {
+        for (Proposition each : cases) {
             List<Proposition> parts = new ArrayList<>();
-            for (Proposition part : each.where() instanceof Proposition.All all ? all.parts()
-                    : List.of(each.where())) {
+            for (Proposition part : each instanceof Proposition.All all ? all.parts()
+                    : List.of(each)) {
                 switch (asked(part, at)) {
                     case OF_ANOTHER_CASE -> { }
                     case NOT_THERE -> {
@@ -185,7 +160,7 @@ public final class WhereEachLineDecides {
                 }
             }
             parts.addAll(stands);
-            out.add(new Case(Proposition.all(parts), each.holdsWithTheLine()));
+            out.add(Proposition.all(parts));
         }
         return out;
     }
@@ -312,13 +287,13 @@ public final class WhereEachLineDecides {
      * @param around  where each quantifier {@code stated} is inside turns what holds it
      */
     private static void read(Proposition stated, Proposition whole, DecisionSubject element,
-                             List<List<Case>> around,
+                             List<List<Proposition>> around,
                              Map<String, Proposition.Compared> lines,
-                             Map<String, List<List<List<Case>>>> standings) {
+                             Map<String, List<List<List<Proposition>>>> standings) {
         Reading reading = Reading.of(stated);
         for (Proposition part : reading.named()) {
             if (part instanceof Proposition.Compared line) {
-                List<List<Case>> factors = new ArrayList<>(around);
+                List<List<Proposition>> factors = new ArrayList<>(around);
                 if (element == null || line.mayTurnOnAnElementOf(element)) {
                     factors.add(reading.turnsOn(line));
                 } else {
@@ -328,7 +303,7 @@ public final class WhereEachLineDecides {
                 standings.computeIfAbsent(line.key(), k -> new ArrayList<>()).add(factors);
             } else if (part instanceof Proposition.Some some && reading.standsHeld(some)
                     && statesARelation(some.ofTheElement())) {
-                List<List<Case>> inside = new ArrayList<>(around);
+                List<List<Proposition>> inside = new ArrayList<>(around);
                 inside.add(reading.turnsOn(some));
                 read(some.ofTheElement(), whole, some.container(), inside, lines, standings);
             }
@@ -389,17 +364,20 @@ public final class WhereEachLineDecides {
          *
          * <p>The table holds each part as one thing that comes out one way, which a part standing
          * as well inside a quantifier it is not about is not: there it is the same thing of the
-         * same row, and comes out the way the part does. Said as one case on each side then, which
-         * moves it everywhere it stands.
+         * same row, and comes out the way the part does. Said as one case then, which moves it
+         * everywhere it stands.
+         *
+         * <p>Where the table says nothing — there is none, or more cases than are said one by one
+         * — the statement is read under each case of a value it asks the case of, which leaves out
+         * the ways where the value is two cases as the table does; and only past that as one case.
          */
-        List<Case> turnsOn(Proposition part) {
+        List<Proposition> turnsOn(Proposition part) {
             if (insideAWholeQuantifier(stated, part)) {
                 return heldAgainstItsDenial(stated, part);
             }
-            List<Case> cases;
-            if (table != null) {
-                cases = casesOf(table, possible, index.get(part.key()), named);
-            } else {
+            List<Proposition> cases = table == null ? null
+                    : casesOf(table, possible, index.get(part.key()), named);
+            if (cases == null) {
                 if (!readUnderEachCase) {
                     underEachCase = WhereEachLineDecides.underEachCase(stated, named);
                     readUnderEachCase = true;
@@ -418,92 +396,47 @@ public final class WhereEachLineDecides {
 
     /**
      * Where a line decides, off each way it stands: a case of what each thing around it is turned
-     * under, taken together — or, where those are more than {@link #MOST_CASES}, said as one case
-     * on each side of the line.
+     * under, taken together — or, where those are more than {@link #MOST_CASES}, each way said as
+     * one case.
      */
-    private static List<Case> casesOf(List<List<List<Case>>> standings) {
-        List<Case> cases = new ArrayList<>();
-        for (List<List<Case>> factors : standings) {
-            List<Case> here = takenTogether(factors);
+    private static List<Proposition> casesOf(List<List<List<Proposition>>> standings) {
+        List<Proposition> cases = new ArrayList<>();
+        for (List<List<Proposition>> factors : standings) {
+            List<Proposition> here = takenTogether(factors);
             if (here == null) {
                 cases = null;
                 break;
             }
             cases.addAll(here);
         }
-        List<Case> each = cases == null ? null : cases.stream().distinct().toList();
+        List<Proposition> each = cases == null ? null : cases.stream().distinct().toList();
         if (each != null && each.size() <= MOST_CASES) {
             return each;
         }
-        // Each thing the line stands inside said as one case on each side, so the ways of taking
-        // them together are two for each thing and not every case of each.
-        List<Proposition> withTheLine = new ArrayList<>();
-        List<Proposition> againstIt = new ArrayList<>();
-        for (List<List<Case>> factors : standings) {
-            for (Case way : together(factors.stream().map(WhereEachLineDecides::oneOnEachSide)
-                    .toList())) {
-                (way.holdsWithTheLine() ? withTheLine : againstIt).add(way.where());
-            }
-        }
-        return heldAndFailing(Proposition.any(withTheLine), Proposition.any(againstIt));
+        return List.of(Proposition.any(standings.stream()
+                .map(factors -> Proposition.all(factors.stream().map(Proposition::any).toList()))
+                .toList()));
     }
 
-    /** {@code cases} said as one case on each side of the line, where there is one there. */
-    private static List<Case> oneOnEachSide(List<Case> cases) {
-        return heldAndFailing(
-                Proposition.any(cases.stream().filter(Case::holdsWithTheLine)
-                        .map(Case::where).toList()),
-                Proposition.any(cases.stream().filter(each -> !each.holdsWithTheLine())
-                        .map(Case::where).toList()));
-    }
-
-    /** A case holding with the line where {@code with} holds and one holding against it where
-     *  {@code against} does, leaving out either where it holds nowhere. */
-    private static List<Case> heldAndFailing(Proposition with, Proposition against) {
-        List<Case> out = new ArrayList<>();
-        if (!(with instanceof Proposition.Always(boolean holds) && !holds)) {
-            out.add(new Case(with, true));
-        }
-        if (!(against instanceof Proposition.Always(boolean holds) && !holds)) {
-            out.add(new Case(against, false));
-        }
-        return out;
-    }
-
-    /** Every way of taking one case of each of {@code factors} together, or null where there
-     *  are more than {@link #MOST_CASES}. */
-    private static List<Case> takenTogether(List<List<Case>> factors) {
-        long ways = 1;
-        for (List<Case> factor : factors) {
-            ways *= factor.size();
-            if (ways > MOST_CASES) {
+    /** Every way of taking one case of each of {@code factors} together, or null as soon as
+     *  there are more than {@link #MOST_CASES}. */
+    private static List<Proposition> takenTogether(List<List<Proposition>> factors) {
+        List<List<Proposition>> ways = List.of(List.of());
+        for (List<Proposition> factor : factors) {
+            if ((long) ways.size() * factor.size() > MOST_CASES) {
                 return null;
             }
-        }
-        return together(factors);
-    }
-
-    /**
-     * Every way of taking one case of each of {@code factors} together.
-     *
-     * <p>Each thing the line stands inside turns what holds it one way round or the other, so the
-     * statement holds with the line where an even number of them turn it the other way: the
-     * statement holding where a quantifier fails, and the quantifier holding where its line fails,
-     * is the statement holding where the line holds.
-     */
-    private static List<Case> together(List<List<Case>> factors) {
-        List<Case> ways = List.of(Case.everywhere());
-        for (List<Case> factor : factors) {
-            List<Case> wider = new ArrayList<>();
-            for (Case way : ways) {
-                for (Case one : factor) {
-                    wider.add(new Case(Proposition.all(List.of(way.where(), one.where())),
-                            way.holdsWithTheLine() == one.holdsWithTheLine()));
+            List<List<Proposition>> wider = new ArrayList<>();
+            for (List<Proposition> way : ways) {
+                for (Proposition one : factor) {
+                    List<Proposition> both = new ArrayList<>(way);
+                    both.add(one);
+                    wider.add(both);
                 }
             }
             ways = wider;
         }
-        return ways;
+        return ways.stream().map(Proposition::all).toList();
     }
 
     /** Whether {@code part} stands inside a quantifier {@code stated} joins that it is not about
@@ -625,35 +558,21 @@ public final class WhereEachLineDecides {
      * parts one at a time, in order, each only where what is left still turns on it: a part every
      * way left decides under, or none does, says nothing more.
      *
-     * <p>Asked once of the ways where the statement holds with the line and once of the ways where
-     * it holds against it, so no case holds some of each. And asked only of the ways the parts can
-     * come out together ({@link #possible}): what a way no row is comes to says nothing about
-     * where a row has to be.
+     * <p>Asked only of the ways the parts can come out together ({@link #possible}): what a way no
+     * row is comes to says nothing about where a row has to be.
      */
-    private static List<Case> casesOf(boolean[] table, boolean[] possible, int at,
-                                      List<Proposition> named) {
+    private static List<Proposition> casesOf(boolean[] table, boolean[] possible, int at,
+                                             List<Proposition> named) {
         int line = 1 << at;
-        boolean[] withTheLine = new boolean[table.length];
-        boolean[] againstIt = new boolean[table.length];
+        boolean[] decides = new boolean[table.length];
         for (int ways = 0; ways < table.length; ways++) {
-            if ((ways & line) == 0 && table[ways] != table[ways | line]) {
-                withTheLine[ways] = table[ways | line];
-                againstIt[ways] = table[ways];
-            }
+            decides[ways] = (ways & line) == 0 && table[ways] != table[ways | line];
         }
         List<List<Proposition>> cases = new ArrayList<>();
-        if (!split(withTheLine, possible, line, 0, 0, new ArrayList<>(), named, at, cases)) {
+        if (!split(decides, possible, line, 0, 0, new ArrayList<>(), named, at, cases)) {
             return null;
         }
-        int held = cases.size();
-        if (!split(againstIt, possible, line, 0, 0, new ArrayList<>(), named, at, cases)) {
-            return null;
-        }
-        List<Case> out = new ArrayList<>();
-        for (int each = 0; each < cases.size(); each++) {
-            out.add(new Case(Proposition.all(cases.get(each)), each < held));
-        }
-        return out;
+        return cases.stream().map(Proposition::all).toList();
     }
 
     /**
@@ -720,91 +639,128 @@ public final class WhereEachLineDecides {
      * Which ways the parts can come out together, the {@code i}th part held where bit {@code i}
      * is set.
      *
-     * <p>Two parts that say which cases one value of the input is are not free of each other. The
-     * value is no two cases that share none, and being one case, it is every set of cases that one
-     * is in. A way asking otherwise is one no row is. Kept in the table, it is a way where a line
-     * decides or does not, and what tells it from the rest is asked as a part:
-     * {@code month.value <= minimum(term)} states its line at 12 where {@code term} is
+     * <p>Parts that say which cases one value of the input is are not free of each other: the
+     * value is one case, so a way is one a row can be only where some one case is in every set of
+     * cases held there and in none failing there. Kept in the table, a way where it is two at once
+     * is a way where a line decides or does not, and what tells it from the rest is asked as a
+     * part: {@code month.value <= minimum(term)} states its line at 12 where {@code term} is
      * {@code OneYear} and its line at 24 where it is {@code TwoYear}, and with a way where it is
      * both, the line at 12 decided only where the month is not above 24 as well.
+     *
+     * <p>The cases the parts name need not be every case of the value, so a value none of them
+     * names is a case as well: every way holding none of them is possible.
      */
     private static boolean[] possible(List<Proposition> named) {
-        List<int[]> neverBoth = new ArrayList<>();
-        List<int[]> neverFirstAlone = new ArrayList<>();
-        for (int one = 0; one < named.size(); one++) {
-            for (int other = 0; other < named.size(); other++) {
-                if (one != other && named.get(one) instanceof Proposition.InCases first
-                        && named.get(other) instanceof Proposition.InCases second
-                        && first.holds() && second.holds() && first.of().equals(second.of())) {
-                    if (first.cases().meet(second.cases()) == null) {
-                        neverBoth.add(new int[] {one, other});
-                    } else if (first.cases().within(second.cases())) {
-                        neverFirstAlone.add(new int[] {one, other});
-                    }
-                }
+        Map<DecisionSubject, List<Integer>> byValue = new LinkedHashMap<>();
+        for (int i = 0; i < named.size(); i++) {
+            if (named.get(i) instanceof Proposition.InCases cases && oneValueOfTheRow(cases)) {
+                byValue.computeIfAbsent(cases.of(), _ -> new ArrayList<>()).add(i);
             }
         }
         boolean[] out = new boolean[1 << named.size()];
-        for (int ways = 0; ways < out.length; ways++) {
-            boolean can = true;
-            for (int[] pair : neverBoth) {
-                can &= ((ways >> pair[0]) & 1) == 0 || ((ways >> pair[1]) & 1) == 0;
+        Arrays.fill(out, true);
+        for (List<Integer> parts : byValue.values()) {
+            if (parts.size() < 2) {
+                continue;
             }
-            for (int[] pair : neverFirstAlone) {
-                can &= ((ways >> pair[0]) & 1) == 0 || ((ways >> pair[1]) & 1) == 1;
+            List<Refinement> atoms = new ArrayList<>();
+            for (int each : parts) {
+                ((Proposition.InCases) named.get(each)).cases().atoms().stream()
+                        .filter(atom -> !atoms.contains(atom)).forEach(atoms::add);
             }
-            out[ways] = can;
+            // Which of the parts hold for a value that is each case, as bits; and none of them
+            // for a value that is a case none of them names.
+            Set<Integer> holding = new HashSet<>();
+            holding.add(0);
+            for (Refinement atom : atoms) {
+                int bits = 0;
+                for (int each : parts) {
+                    if (((Proposition.InCases) named.get(each)).cases().atoms().contains(atom)) {
+                        bits |= 1 << each;
+                    }
+                }
+                holding.add(bits);
+            }
+            int mask = parts.stream().mapToInt(each -> 1 << each).reduce(0, (a, b) -> a | b);
+            for (int ways = 0; ways < out.length; ways++) {
+                out[ways] &= holding.contains(ways & mask);
+            }
         }
         return out;
     }
 
     /**
      * Where {@code part} decides, said as the statement with it held against the statement with it
-     * failing: the first holding and the second not, where the statement holds with the part, and
-     * the other way round where it holds against it.
+     * failing: one of them holding and the other not — or nowhere.
      *
-     * <p>Only the sides the part can turn the statement to. A statement that states the part held
-     * and nowhere denied holds with it wherever it holds without it, so it never holds against it,
-     * and the other way round; said anyway, that side is a conjunction of something and its denial
-     * that nothing here takes apart, and a reader composing rows against it looks for a row no
-     * value is.
+     * <p>Only the ways round the part can turn the statement. A statement that states the part held
+     * and nowhere denied holds with it wherever it holds without it, so it never holds with it
+     * failing, and the other way round; said anyway, that way round is a conjunction of something
+     * and its denial that nothing here takes apart, and a reader composing rows against it looks
+     * for a row no value is.
      */
-    private static List<Case> heldAgainstItsDenial(Proposition stated, Proposition part) {
+    private static List<Proposition> heldAgainstItsDenial(Proposition stated, Proposition part) {
         Proposition held = with(stated, part, true);
         Proposition failing = with(stated, part, false);
         Set<Boolean> stands = new HashSet<>();
         standings(stated, part, true, stands);
-        return heldAndFailing(
-                stands.contains(true) ? Proposition.all(List.of(held, failing.denied()))
-                        : new Proposition.Always(false),
-                stands.contains(false) ? Proposition.all(List.of(held.denied(), failing))
-                        : new Proposition.Always(false));
+        List<Proposition> ways = new ArrayList<>();
+        if (stands.contains(true)) {
+            ways.add(Proposition.all(List.of(held, failing.denied())));
+        }
+        if (stands.contains(false)) {
+            ways.add(Proposition.all(List.of(held.denied(), failing)));
+        }
+        Proposition decides = Proposition.any(ways);
+        return decides instanceof Proposition.Always(boolean holds) && !holds ? List.of()
+                : List.of(decides);
     }
 
     /**
-     * Where {@code part} decides in a statement too large to read part against part, read in each
-     * case of one value the statement asks the case of — or null where it asks no value's case
-     * twice.
+     * Adds to {@code into} whether {@code part} stands held, denied or both in {@code stated}, each
+     * place {@link #with} would set it, read from outside where it stands {@code outside}.
      *
-     * <p>The cases of one value are never two at once, and a table of the whole statement is too
-     * large to leave out the ways where they are. Read under each case of the value instead, every
-     * part asking which case it is comes out one way, and what is left is a statement of the parts
-     * that case has: {@code days <= limit(s)} with {@code limit} choosing one of eight numbers is,
+     * <p>A quantifier denied is no element meeting what it says, so what it says stands the other
+     * way round from it.
+     */
+    private static void standings(Proposition stated, Proposition part, boolean outside,
+                                  Set<Boolean> into) {
+        switch (stated) {
+            case Proposition.All all ->
+                    all.parts().forEach(each -> standings(each, part, outside, into));
+            case Proposition.Any any ->
+                    any.parts().forEach(each -> standings(each, part, outside, into));
+            case Proposition leaf when standsAs(leaf, part) ->
+                    into.add(leaf.key().equals(part.key()) == outside);
+            case Proposition.Some some when !part.mayTurnOnAnElementOf(some.container()) ->
+                    standings(some.ofTheElement(), part, outside == some.holds(), into);
+            default -> { }
+        }
+    }
+
+    /**
+     * Where {@code part} decides in a statement the table does not say it of, read in each case
+     * of one value the statement asks the case of — or null where that is more cases than are
+     * said one by one.
+     *
+     * <p>The cases of one value are never two at once, and a statement too large for a table, or
+     * one whose table says too much, is read under each case of the value instead: every part
+     * asking which case it is comes out one way, and what is left is a statement of the parts
+     * that case has. {@code days <= limit(s)} with {@code limit} choosing one of eight numbers is,
      * where {@code s} is the sixth stage, {@code days <= 20} and nothing else. And past every case
      * the statement names, the value being none of them.
      *
      * @param underEachCase the statement read under each case of the value ({@link #underEachCase})
      */
-    private static List<Case> inEachCaseOfAValue(List<UnderACase> underEachCase,
-                                                 Proposition part) {
-        List<Case> out = new ArrayList<>();
+    private static List<Proposition> inEachCaseOfAValue(List<UnderACase> underEachCase,
+                                                        Proposition part) {
+        List<Proposition> out = new ArrayList<>();
         for (UnderACase each : underEachCase) {
             if (!each.reading().index.containsKey(part.key())) {
                 continue;
             }
-            for (Case one : each.reading().turnsOn(part)) {
-                out.add(new Case(Proposition.all(List.of(each.is(), one.where())),
-                        one.holdsWithTheLine()));
+            for (Proposition one : each.reading().turnsOn(part)) {
+                out.add(Proposition.all(List.of(each.is(), one)));
                 if (out.size() > MOST_CASES) {
                     return null;
                 }
@@ -813,27 +769,23 @@ public final class WhereEachLineDecides {
         return out;
     }
 
-    /**
-     * {@code stated} read under one case of a value: the case, and the reading of what the
-     * statement comes to there.
-     */
+    /** A statement read under one case of a value: the case, and the reading of what the
+     *  statement comes to there. */
     private record UnderACase(Proposition is, Reading reading) {}
 
     /**
      * {@code stated} read under each case of the first value it asks the case of more than once,
      * and under that value being none of them — or null where it asks no value's case twice.
      *
-     * <p>The same for every part of the statement, so worked out once for the statement and
-     * asked of by each of its parts.
+     * <p>The same for every part of the statement, so worked out once for the statement and asked
+     * of by each of its parts. A value inside the elements or the keys of a container is not one
+     * value of the row, and is not read this way.
      */
     private static List<UnderACase> underEachCase(Proposition stated, List<Proposition> named) {
         Map<DecisionSubject, List<Refinement>> asked = new LinkedHashMap<>();
         Map<DecisionSubject, Integer> times = new LinkedHashMap<>();
         for (Proposition each : named) {
-            if (each instanceof Proposition.InCases cases && cases.holds()
-                    && cases.of() instanceof DecisionSubject.AnInput(TermPath at)
-                    && at.steps().stream().noneMatch(step -> step instanceof TermPath.Step.Element
-                            || step instanceof TermPath.Step.Key)) {
+            if (each instanceof Proposition.InCases cases && oneValueOfTheRow(cases)) {
                 times.merge(cases.of(), 1, Integer::sum);
                 List<Refinement> atoms = asked.computeIfAbsent(cases.of(), _ -> new ArrayList<>());
                 cases.cases().atoms().stream().filter(atom -> !atoms.contains(atom))
@@ -857,6 +809,17 @@ public final class WhereEachLineDecides {
     }
 
     /**
+     * Whether {@code cases}, held, asks which case one value of the row is. A value inside the
+     * elements or the keys of a container is one of them, and two parts asking it may ask it of two
+     * elements.
+     */
+    private static boolean oneValueOfTheRow(Proposition.InCases cases) {
+        return cases.holds() && cases.of() instanceof DecisionSubject.AnInput(TermPath at)
+                && at.steps().stream().noneMatch(step -> step instanceof TermPath.Step.Element
+                        || step instanceof TermPath.Step.Key);
+    }
+
+    /**
      * {@code stated} with {@code value} one of {@code atoms} — every part asking which case it is
      * come out the way that answers — or none of the cases asked where {@code atoms} is empty.
      */
@@ -873,28 +836,6 @@ public final class WhereEachLineDecides {
                     assuming(some.ofTheElement(), value, atoms), some.holds());
             default -> stated;
         };
-    }
-
-    /**
-     * Adds to {@code into} whether {@code part} stands held, denied or both in {@code stated}, each
-     * place {@code with} would set it, read from outside where it stands {@code outside}.
-     *
-     * <p>A quantifier denied is no element meeting what it says, so what it says stands the other
-     * way round from it.
-     */
-    private static void standings(Proposition stated, Proposition part, boolean outside,
-                                  Set<Boolean> into) {
-        switch (stated) {
-            case Proposition.All all ->
-                    all.parts().forEach(each -> standings(each, part, outside, into));
-            case Proposition.Any any ->
-                    any.parts().forEach(each -> standings(each, part, outside, into));
-            case Proposition leaf when standsAs(leaf, part) ->
-                    into.add(leaf.key().equals(part.key()) == outside);
-            case Proposition.Some some when !part.mayTurnOnAnElementOf(some.container()) ->
-                    standings(some.ofTheElement(), part, outside == some.holds(), into);
-            default -> { }
-        }
     }
 
     /**

@@ -98,10 +98,9 @@ public final class WhereAnApplicationIsMade {
         return past(outer, Proposition.any(any));
     }
 
-    /** Whether {@code cases} say a line decides wherever a row is, the statement holding where the
-     *  line does. */
-    public static boolean everywhere(List<WhereEachLineDecides.Case> cases) {
-        return cases.equals(List.of(WhereEachLineDecides.Case.everywhere()));
+    /** Whether {@code cases} say a line decides wherever a row is. */
+    public static boolean everywhere(List<Proposition> cases) {
+        return cases.equals(List.of(nothingAsked()));
     }
 
     /** What has to hold to reach a place an application reaches under {@code reached}, past a
@@ -123,63 +122,46 @@ public final class WhereAnApplicationIsMade {
      * hold for a run to make it.
      *
      * @param cases   where the line decides on this application, as cases any one of which is
-     *                enough, each with the side of the line the statement holds on there; empty
-     *                where it decides nowhere on it
+     *                enough; empty where it decides nowhere on it
      * @param reached what has to hold for a run to make this application
      */
-    public record OnOne(List<WhereEachLineDecides.Case> cases, Proposition reached) {
+    public record OnOne(List<Proposition> cases, Proposition reached) {
 
         public OnOne {
             cases = List.copyOf(cases);
             Objects.requireNonNull(reached, "an application is made under something");
         }
 
-        /** A line that decides wherever a row is on the application, the statement holding where
-         *  the line does, made under {@code reached}. */
+        /** A line that decides wherever a row is on the application, made under {@code reached}. */
         public static OnOne wherever(Proposition reached) {
-            return new OnOne(List.of(WhereEachLineDecides.Case.everywhere()), reached);
+            return new OnOne(List.of(nothingAsked()), reached);
         }
     }
 
     /**
      * Where a line read on each of {@code readings} decides, as cases any one of which is enough:
-     * each case of where it decides on one application, met where that application is made, and
-     * holding on the side of the line it holds on there.
+     * each case of where it decides on one application, met where that application is made.
      *
-     * <p>Each case kept once. A case holding wherever a row is makes every other on its side of the
-     * line say nothing more, and one holding nowhere says nothing. Past
-     * {@link WhereEachLineDecides#MOST_CASES}, the cases on each side are said as one: some one of
-     * them holding.
+     * <p>Each case kept once. A case holding wherever a row is makes every other say nothing more,
+     * and one holding nowhere says nothing. Past {@link WhereEachLineDecides#MOST_CASES}, the cases
+     * are said as one: some one of them holding.
      */
-    public static List<WhereEachLineDecides.Case> decidesOn(List<OnOne> readings) {
-        Map<Boolean, Map<String, Proposition>> kept = new LinkedHashMap<>();
-        kept.put(true, new LinkedHashMap<>());
-        kept.put(false, new LinkedHashMap<>());
-        String wherever = nothingAsked().key();
+    public static List<Proposition> decidesOn(List<OnOne> readings) {
+        Map<String, Proposition> kept = new LinkedHashMap<>();
         for (OnOne one : readings) {
-            for (WhereEachLineDecides.Case each : one.cases()) {
-                Map<String, Proposition> side = kept.get(each.holdsWithTheLine());
-                Proposition met = Proposition.all(List.of(each.where(), one.reached()));
-                if (met instanceof Proposition.Always(boolean holds)) {
-                    if (holds) {
-                        side.clear();
-                        side.put(met.key(), met);
+            for (Proposition each : one.cases()) {
+                Proposition met = Proposition.all(List.of(each, one.reached()));
+                switch (met) {
+                    case Proposition.Always(boolean holds) when holds -> {
+                        return List.of(met);
                     }
-                } else if (!side.containsKey(wherever)) {
-                    side.putIfAbsent(met.key(), met);
+                    case Proposition.Always _ -> { }
+                    default -> kept.putIfAbsent(met.key(), met);
                 }
             }
         }
-        List<WhereEachLineDecides.Case> out = new ArrayList<>();
-        int count = kept.get(true).size() + kept.get(false).size();
-        kept.forEach((holds, side) -> {
-            if (count <= WhereEachLineDecides.MOST_CASES) {
-                side.values().forEach(each -> out.add(new WhereEachLineDecides.Case(each, holds)));
-            } else if (!side.isEmpty()) {
-                out.add(new WhereEachLineDecides.Case(
-                        Proposition.any(List.copyOf(side.values())), holds));
-            }
-        });
-        return List.copyOf(out);
+        List<Proposition> cases = List.copyOf(kept.values());
+        return cases.size() <= WhereEachLineDecides.MOST_CASES ? cases
+                : List.of(Proposition.any(cases));
     }
 }

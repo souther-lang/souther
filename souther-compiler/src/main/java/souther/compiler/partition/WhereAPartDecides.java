@@ -7,7 +7,6 @@ import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Proposition;
-import souther.compiler.meaning.WhereEachLineDecides;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -30,17 +29,13 @@ import java.util.stream.Collectors;
  * <p>One case and not all of them. Where a line decides may be one of several things, and each is
  * somewhere a row can be composed to be; the line is read once in each, and a row meets it in any.
  *
- * <p>With the side of the line the statement holds on in that case, which is what the line means
- * there: {@code month.value <= minimum(term)} holds below its line {@code month.value > 12} where
- * {@code term} is {@code OneYear}, so a row inside what the comparison keeps is below it.
- *
  * @param part    which of the author's lines this is a place of, and which place
  * @param decides the case: parts of the statement that hold together beside the line, where
- *                crossing it turns the statement round, and which side of it the statement holds
- *                on. Over the relations the statement holds, every one of them a relation over the
- *                input's own numbers — so a row's values say whether it holds
+ *                crossing it turns the statement round. Over the relations the statement holds,
+ *                every one of them a relation over the input's own numbers — so a row's values say
+ *                whether it holds
  */
-public record WhereAPartDecides(PlaceOfALine part, WhereEachLineDecides.Case decides) {
+public record WhereAPartDecides(PlaceOfALine part, Proposition decides) {
 
     public WhereAPartDecides {
         Objects.requireNonNull(part, "a line of a statement is one of its lines");
@@ -67,8 +62,8 @@ public record WhereAPartDecides(PlaceOfALine part, WhereEachLineDecides.Case dec
      * where the value is that case, and the position it is read at is named through that case.
      */
     public String said(List<TermPath> readAt) {
-        List<Proposition> parts = decides.where() instanceof Proposition.All all ? all.parts()
-                : List.of(decides.where());
+        List<Proposition> parts = decides instanceof Proposition.All all ? all.parts()
+                : List.of(decides);
         List<String> said = new ArrayList<>();
         for (Proposition part : parts) {
             String one = saidOne(part);
@@ -137,7 +132,7 @@ public record WhereAPartDecides(PlaceOfALine part, WhereEachLineDecides.Case dec
      * @param quantities the reading of the input, which says which order each number is on
      */
     AskedOfRows askedOfRows(String behavior, Quantities quantities) {
-        return new AskedOfRows(AStatementAtARow.of(decides.where(), behavior, quantities));
+        return new AskedOfRows(AStatementAtARow.of(decides, behavior, quantities));
     }
 
     /** Where a line decides, ready to be asked of rows. */
