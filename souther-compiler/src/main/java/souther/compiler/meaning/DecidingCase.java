@@ -3,10 +3,13 @@ package souther.compiler.meaning;
 import souther.compiler.partition.CompositionBudget;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
 import java.util.function.Function;
 
 /**
@@ -37,6 +40,60 @@ public record DecidingCase(Proposition condition, Cases standsFor) {
         return new DecidingCase(condition, new Cases.One(condition));
     }
 
+    /**
+     * This and {@code other}, which are said by one condition, as one case.
+     *
+     * <p>Two cases said by one condition are not one case: one may stand for itself alone and the
+     * other for several, and whether the line decides is asked of each case either stands for. So
+     * what they are together is said here, and nowhere else. Where either stands for itself, so do
+     * the two: rows on both sides of the line in a case the other stands for are rows on both sides
+     * of it in the whole condition, which is that one case. Otherwise they stand for every case
+     * either stood for.
+     */
+    DecidingCase and(DecidingCase other) {
+        if (!condition.equals(other.condition)) {
+            throw new IllegalArgumentException("two cases are one where they are said by one"
+                    + " condition: " + condition + " and " + other.condition);
+        }
+        if (saidAlone()) {
+            return this;
+        }
+        if (other.saidAlone()) {
+            return other;
+        }
+        return equals(other) ? this
+                : new DecidingCase(condition, new Cases.EachOf(List.of(standsFor, other.standsFor)));
+    }
+
+    /**
+     * {@code cases}, one for each condition they are said by, in the order the conditions first
+     * come: those said by one condition taken as one ({@link #and}).
+     */
+    static List<DecidingCase> oneForEachCondition(List<DecidingCase> cases) {
+        Map<Proposition, DecidingCase> out = new LinkedHashMap<>();
+        cases.forEach(each -> out.merge(each.condition, each, DecidingCase::and));
+        return List.copyOf(out.values());
+    }
+
+    /**
+     * {@code cases} checked to be one for each condition they are said by.
+     *
+     * <p>A case is read by its condition wherever a row is asked to be in it, so two said by one
+     * condition would be two readings no reader tells apart, and what one of them stood for would
+     * go unasked. Whoever gathers cases takes them as one ({@link #oneForEachCondition}); a
+     * gathering that forgot is stopped here rather than read as one of them.
+     */
+    public static List<DecidingCase> eachByItsOwnCondition(List<DecidingCase> cases) {
+        Set<Proposition> seen = new HashSet<>();
+        for (DecidingCase each : cases) {
+            if (!seen.add(each.condition)) {
+                throw new IllegalArgumentException("two cases said by one condition, which are"
+                        + " one case: " + each.condition);
+            }
+        }
+        return List.copyOf(cases);
+    }
+
     /** {@code cases} said as one: some one of them holding, standing for each of them. */
     static DecidingCase someOneOf(List<DecidingCase> cases) {
         return new DecidingCase(
@@ -46,11 +103,15 @@ public record DecidingCase(Proposition condition, Cases standsFor) {
 
     /** The cases each of {@code cases} stands for, any one of them. */
     static Cases eachOf(List<DecidingCase> cases) {
-        return new Cases.EachOf(cases.stream().map(DecidingCase::standsFor).toList());
+        return cases.size() == 1 ? cases.getFirst().standsFor()
+                : new Cases.EachOf(cases.stream().map(DecidingCase::standsFor).toList());
     }
 
     /** This case where {@code also} holds as well, standing for each of its cases where it does. */
     DecidingCase meeting(Proposition also) {
+        if (also instanceof Proposition.Always(boolean holds) && holds) {
+            return this;
+        }
         Proposition met = Proposition.all(List.of(condition, also));
         return saidAlone() ? alone(met)
                 : new DecidingCase(met, new Cases.Together(List.of(standsFor, new Cases.One(also))));
@@ -119,6 +180,36 @@ public record DecidingCase(Proposition condition, Cases standsFor) {
             byFirst.forEach((first, rests) -> alternatives.add(new Together(
                     List.of(new One(first), ofConjunctions(rests)))));
             return alternatives.size() == 1 ? alternatives.getFirst() : new EachOf(alternatives);
+        }
+
+        /**
+         * Where some one of these holds, written as they were taken apart — or nothing where some
+         * of them were never taken apart, which nothing writes.
+         *
+         * <p>Read off the cases themselves and not off the condition they were said as, so that
+         * the two cannot come to say different things: what is said of a case's parts where the
+         * line stands under a case of a value is said of each case, part by part, and the
+         * condition is said as one part.
+         */
+        default Optional<Proposition> holdingInSome() {
+            return switch (this) {
+                case One(var condition) -> Optional.of(condition);
+                case EachOf(var alternatives) -> joined(alternatives, false);
+                case Together(var factors) -> joined(factors, true);
+                case MoreThanWereTakenApart _ -> Optional.empty();
+            };
+        }
+
+        private static Optional<Proposition> joined(List<Cases> each, boolean every) {
+            List<Proposition> parts = new ArrayList<>();
+            for (Cases one : each) {
+                Optional<Proposition> holding = one.holdingInSome();
+                if (holding.isEmpty()) {
+                    return Optional.empty();
+                }
+                parts.add(holding.get());
+            }
+            return Optional.of(every ? Proposition.all(parts) : Proposition.any(parts));
         }
 
         /** These, each one case of them said as {@code each} says it — no case at all where it

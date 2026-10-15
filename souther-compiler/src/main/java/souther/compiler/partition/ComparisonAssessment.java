@@ -334,6 +334,11 @@ sealed interface ComparisonAssessment {
      * decides is carried with it and never dropped: a row at the line where it decides nothing is a
      * row the statement answers the same way on both sides, so a line taken without it would be
      * owed rows that prove nothing about it.
+     *
+     * <p>Once a run's way is taken in, one line may be two parts: what its cases showed, and beside
+     * it, in the same place, the cases of it nobody worked out
+     * ({@link BlockReason.WhereALineDecidesNotWorkedOut}). Each is what it is about a different set
+     * of the line's cases, so neither speaks for the other.
      */
     record Several(List<Part> parts) implements ComparisonAssessment {
 
@@ -359,7 +364,7 @@ sealed interface ComparisonAssessment {
 
             public Part {
                 Objects.requireNonNull(id, "a line of a statement is one of its lines");
-                cases = List.copyOf(cases);
+                cases = DecidingCase.eachByItsOwnCondition(cases);
                 if (line == null || line instanceof Several) {
                     throw new IllegalArgumentException(
                             "a line of a statement is what one line comes to: " + line);
@@ -655,8 +660,8 @@ sealed interface ComparisonAssessment {
             InputReading reading) {
         if (read instanceof Several several) {
             return new Several(several.parts().stream()
-                    .map(part -> aPartNarrowed(part, way, wayToAPart, wayToACase, arrivals,
-                            drawnByAnInvariant, reading))
+                    .flatMap(part -> aPartNarrowed(part, way, wayToAPart, wayToACase, arrivals,
+                            drawnByAnInvariant, reading).stream())
                     .toList());
         }
         Cutting cutting = switch (read) {
@@ -751,19 +756,24 @@ sealed interface ComparisonAssessment {
         return false;
     }
 
-    /** One line of a statement of several, on the way and then in each case where it decides. */
-    private static Several.Part aPartNarrowed(Several.Part part, Reachability way,
-                                              Function<WhereAPartDecides, Reachability> wayToAPart,
-                                              Function<Proposition, Reachability> wayToACase,
-                                              List<ComparisonArrival> arrivals,
-                                              boolean drawnByAnInvariant,
-                                              InputReading reading) {
+    /**
+     * One line of a statement of several, on the way and then in each case where it decides: the
+     * line, and beside it the same line again for the cases of it nobody worked out, where there
+     * are any.
+     */
+    private static List<Several.Part> aPartNarrowed(Several.Part part, Reachability way,
+                                                    Function<WhereAPartDecides, Reachability>
+                                                            wayToAPart,
+                                                    Function<Proposition, Reachability> wayToACase,
+                                                    List<ComparisonArrival> arrivals,
+                                                    boolean drawnByAnInvariant,
+                                                    InputReading reading) {
         ComparisonAssessment arrived = narrowedByWhatArrives(part.line(), way, _ -> way,
                 wayToACase, arrivals, drawnByAnInvariant, reading);
         // Only where it is a line at all: a line refused, outside what the declarations leave, or
         // one nothing arrives at, is that whatever the cases are.
         if (!(arrived instanceof AtAPosition || arrived instanceof AcrossPositions)) {
-            return new Several.Part(part.id(), arrived, part.cases());
+            return List.of(new Several.Part(part.id(), arrived, part.cases()));
         }
         // Each case where a row on each side of the line can stand in it. Rows on the two sides in
         // one case differ in this line alone, so the statement turns between them; a case only one
@@ -773,52 +783,53 @@ sealed interface ComparisonAssessment {
         // And what a relation leaves undivided is asked again in the cases where it decides, which
         // is where its values are what the case leaves them.
         List<Reachability.Reaching> deciding = new ArrayList<>();
-        // A case said for several is asked of them, one at a time: rows on the two sides of its
-        // condition may be in two of them, and the line turns nothing between those. Counted for
-        // each such case on its own, so that what one case spent decides nothing about another.
-        // Whether the line decides is then what some case was shown to; one whose cases were
-        // not worked out is kept as the condition it was said as where the line decides anyway,
-        // and is the line not worked out where nothing else showed it decides.
-        boolean shown = false;
+        // A case said for several is asked of the cases it stands for, one at a time: rows on the
+        // two sides of its condition may be in two of them, and the line turns nothing between
+        // those ({@link CasesOfALineAsked}). Counted for each such case on its own, so that what
+        // one case spent decides nothing about another.
+        List<DecidingCase> notWorkedOut = new ArrayList<>();
         CompositionBudget stoppedAt = null;
         for (DecidingCase each : part.cases()) {
             Reachability toIt = wayToAPart.apply(new WhereAPartDecides(part.id(),
                     each.condition()));
-            if (!arrivesAtSomePlace(cutting, toIt, arrivals, cutting::crossedIn)) {
-                continue;
-            }
-            if (each.saidAlone()) {
-                shown = true;
-            } else {
-                switch (new CasesOfALineAsked(condition -> arrivesAtSomePlace(cutting,
-                        wayToACase.apply(condition), arrivals, cutting::crossedIn))
-                        .inSomeOf(each.standsFor())) {
-                    case CasesOfALineAsked.Found.InSome _ -> shown = true;
-                    case CasesOfALineAsked.Found.InNone _ -> {
-                        continue;
-                    }
-                    case CasesOfALineAsked.Found.NotWorkedOut(var figure) -> {
-                        if (stoppedAt == null) {
-                            stoppedAt = figure;
+            boolean decides = each.saidAlone()
+                    ? arrivesAtSomePlace(cutting, toIt, arrivals, cutting::crossedIn)
+                    : switch (new CasesOfALineAsked(condition -> arrivesAtSomePlace(cutting,
+                            wayToACase.apply(condition), arrivals, cutting::crossedIn))
+                            .inSomeOf(each)) {
+                        case CasesOfALineAsked.Found.InSome _ -> true;
+                        case CasesOfALineAsked.Found.InNone _ -> false;
+                        case CasesOfALineAsked.Found.NotWorkedOut(var figure) -> {
+                            if (stoppedAt == null) {
+                                stoppedAt = figure;
+                            }
+                            notWorkedOut.add(each);
+                            yield false;
                         }
-                    }
-                }
+                    };
+            if (decides) {
+                reached.add(each);
+                deciding.addAll(waysArrivedBy(toIt, arrivals));
             }
-            reached.add(each);
-            deciding.addAll(waysArrivedBy(toIt, arrivals));
         }
-        // Neither a line it turns on, owed rows where it may decide nothing, nor one dropped for a
-        // proof nobody finished.
-        if (!shown && stoppedAt != null) {
-            return new Several.Part(part.id(), new Unread(atEachOf(cutting.over(),
+        // The cases nobody worked out are neither ones the line turns in, owed rows where it may
+        // decide nothing, nor ones dropped for a proof nobody finished: they are the line not
+        // worked out there, naming the figure, beside whatever the other cases showed.
+        List<Several.Part> out = new ArrayList<>();
+        if (!reached.isEmpty()) {
+            out.add(new Several.Part(part.id(), arrived instanceof AcrossPositions across
+                    && !deciding.isEmpty() ? across.whereRowsArrive(reading, deciding) : arrived,
+                    reached));
+        }
+        if (stoppedAt != null) {
+            out.add(new Several.Part(part.id(), new Unread(atEachOf(cutting.over(),
                     new BlockReason.WhereALineDecidesNotWorkedOut(stoppedAt.figure()))),
-                    part.cases());
+                    notWorkedOut));
         }
-        ComparisonAssessment decided = arrived instanceof AcrossPositions across
-                && !deciding.isEmpty() ? across.whereRowsArrive(reading, deciding) : arrived;
-        return reached.isEmpty()
-                ? new Several.Part(part.id(), new TurnsNothing(cutting), List.of())
-                : new Several.Part(part.id(), decided, reached);
+        if (out.isEmpty()) {
+            out.add(new Several.Part(part.id(), new TurnsNothing(cutting), List.of()));
+        }
+        return List.copyOf(out);
     }
 
     /**

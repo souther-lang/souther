@@ -46,6 +46,85 @@ class ALineReadOnManyApplicationsStandsForEachCaseOfEachTest {
         return Set.copyOf(out);
     }
 
+    private static final Proposition A = truth("a");
+    private static final Proposition B = truth("b");
+    private static final Proposition C = truth("c");
+    private static final Proposition D = truth("d");
+
+    /** One application, made wherever a row is, deciding in {@code cases}. */
+    private static WhereAnApplicationIsMade.OnOne madeEverywhere(DecidingCase... cases) {
+        return new WhereAnApplicationIsMade.OnOne(List.of(cases), new Proposition.Always(true));
+    }
+
+    /**
+     * Two applications deciding under one condition, one where it is a case of its own and one
+     * where it was said for two: what the two decide in is one case, the condition, whichever is
+     * read first. Rows on both sides of the line in {@code a} or in {@code b} are rows on both
+     * sides of it in {@code a || b}, which is a case of its own.
+     */
+    @Test
+    void oneConditionSaidAloneAndForTwoIsTheConditionAloneInEitherOrder() {
+        DecidingCase split = DecidingCase.someOneOf(List.of(DecidingCase.alone(A),
+                DecidingCase.alone(B)));
+        DecidingCase whole = DecidingCase.alone(Proposition.any(List.of(A, B)));
+
+        List<DecidingCase> first = WhereAnApplicationIsMade.decidesOn(
+                List.of(madeEverywhere(split), madeEverywhere(whole)));
+        List<DecidingCase> second = WhereAnApplicationIsMade.decidesOn(
+                List.of(madeEverywhere(whole), madeEverywhere(split)));
+
+        assertEquals(List.of(whole), first, "the condition, standing for itself");
+        assertEquals(first, second, "whichever application is read first");
+    }
+
+    /**
+     * And one condition said for two different pairs of cases stands for every case of both,
+     * whichever is read first: a line deciding in a case of either is one rows divide there.
+     */
+    @Test
+    void oneConditionSaidForTwoWaysOfCasesStandsForEveryCaseOfBoth() {
+        Proposition either = Proposition.any(List.of(A, B, Proposition.all(List.of(C, D))));
+        DecidingCase byA = new DecidingCase(either, new DecidingCase.Cases.EachOf(List.of(
+                new DecidingCase.Cases.One(A),
+                new DecidingCase.Cases.One(Proposition.any(List.of(B,
+                        Proposition.all(List.of(C, D))))))));
+        DecidingCase byB = new DecidingCase(either, new DecidingCase.Cases.EachOf(List.of(
+                new DecidingCase.Cases.One(B),
+                new DecidingCase.Cases.One(Proposition.any(List.of(A,
+                        Proposition.all(List.of(C, D))))))));
+
+        for (List<DecidingCase> order : List.of(List.of(byA, byB), List.of(byB, byA))) {
+            List<DecidingCase> cases = WhereAnApplicationIsMade.decidesOn(order.stream()
+                    .map(ALineReadOnManyApplicationsStandsForEachCaseOfEachTest::madeEverywhere)
+                    .toList());
+            assertEquals(1, cases.size(), () -> "one condition: " + cases);
+            assertEquals(Set.of(A, B,
+                            Proposition.any(List.of(B, Proposition.all(List.of(C, D)))),
+                            Proposition.any(List.of(A, Proposition.all(List.of(C, D))))),
+                    Set.copyOf(DecidingCases.eachOf(cases.getFirst().standsFor())),
+                    () -> "every case of both, read in the order " + order);
+        }
+    }
+
+    /**
+     * A condition holding wherever a row is, said for several cases, is not a line deciding
+     * wherever a row is: neither the cases of another application nor the several it stands for
+     * are said nothing more by it.
+     */
+    @Test
+    void aConditionHoldingEverywhereSaidForSeveralIsNoLineDecidingEverywhere() {
+        DecidingCase everywhereForTwo = new DecidingCase(new Proposition.Always(true),
+                new DecidingCase.Cases.EachOf(List.of(new DecidingCase.Cases.One(A),
+                        new DecidingCase.Cases.One(A.denied()))));
+
+        assertTrue(!WhereAnApplicationIsMade.everywhere(List.of(everywhereForTwo)),
+                "it decides only where rows on both sides are in one of the two");
+        assertEquals(List.of(everywhereForTwo, DecidingCase.alone(C)),
+                WhereAnApplicationIsMade.decidesOn(List.of(madeEverywhere(everywhereForTwo),
+                        madeEverywhere(DecidingCase.alone(C)))),
+                "and the other application's case is still one of its own");
+    }
+
     @Test
     void asManyAsAreSaidOneByOneAreEachTheirOwn() {
         int most = WhereEachLineDecides.MOST_CASES;

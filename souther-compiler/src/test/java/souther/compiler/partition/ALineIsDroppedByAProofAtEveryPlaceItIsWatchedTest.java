@@ -6,6 +6,7 @@ import souther.compiler.carrier.Membership;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.meaning.AuthoredPointMapping;
 import souther.compiler.meaning.DecidingCase;
+import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Derivation;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.WhereAnApplicationIsMade;
@@ -182,30 +183,42 @@ class ALineIsDroppedByAProofAtEveryPlaceItIsWatchedTest {
     }
 
     /**
-     * A line one of whose cases showed it decides is the line it is, whatever became of another
-     * case of it: what was not worked out there is kept as the condition it was said as, and
-     * whichever of the two is asked first, the answer is the same.
+     * A line one of whose cases showed it decides is the line it is in that case, whatever became
+     * of another case of it: the case nobody worked out is the line not worked out there, beside
+     * it, naming the figure — neither owed rows nor dropped. Whichever of the two is asked first,
+     * the answer is the same.
      */
     @Test
-    void aLineAnotherCaseShowsDecidesIsKeptWithTheCaseNobodyWorkedOut() {
-        Proposition anywhere = WhereAnApplicationIsMade.nothingAsked();
-        DecidingCase unworked = new DecidingCase(anywhere,
+    void aLineAnotherCaseShowsDecidesIsTheLineThereAndNotWorkedOutBeside() {
+        PlaceOfALine both = new PlaceOfALine(PartOfAComparison.of(WrittenLine.THE_COMPARISON),
+                "both");
+        DecidingCase unworked = new DecidingCase(
+                new Proposition.Truth(new DecisionSubject.AnInput(N), true),
                 new DecidingCase.Cases.MoreThanWereTakenApart());
-        DecidingCase shown = DecidingCase.alone(anywhere);
+        DecidingCase shown = DecidingCase.alone(WhereAnApplicationIsMade.nothingAsked());
         for (List<DecidingCase> cases : List.of(List.of(unworked, shown),
                 List.of(shown, unworked))) {
             ComparisonAssessment.Several read = new ComparisonAssessment.Several(List.of(
-                    new ComparisonAssessment.Several.Part(new PlaceOfALine(
-                            PartOfAComparison.of(WrittenLine.THE_COMPARISON), "both"), line(),
-                            cases)));
+                    new ComparisonAssessment.Several.Part(both, line(), cases)));
 
             ComparisonAssessment.Several narrowed = assertInstanceOf(
                     ComparisonAssessment.Several.class,
                     ComparisonAssessment.narrowedByWhatArrives(read, untouched(),
                             _ -> untouched(), _ -> untouched(),
                             List.of(new ComparisonArrival.NoProjection()), false, reading()));
-            assertEquals(read.parts().getFirst(), narrowed.parts().getFirst(),
-                    () -> "a line, owed rows in both cases, asked in the order " + cases);
+            assertEquals(List.of(new ComparisonAssessment.Several.Part(both, line(),
+                                    List.of(shown)),
+                            new ComparisonAssessment.Several.Part(both,
+                                    new ComparisonAssessment.Unread(ComparisonAssessment.atEachOf(
+                                            line().cutting().over(),
+                                            new BlockReason.WhereALineDecidesNotWorkedOut(
+                                                    CompositionBudget
+                                                            .CASES_A_LINE_IS_TAKEN_APART_INTO
+                                                            .figure()))),
+                                    List.of(unworked))),
+                    narrowed.parts(),
+                    () -> "the line in the case that showed it, and not worked out in the other,"
+                            + " asked in the order " + cases);
         }
     }
 

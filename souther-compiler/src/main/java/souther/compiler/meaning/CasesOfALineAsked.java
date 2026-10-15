@@ -53,6 +53,14 @@ public final class CasesOfALineAsked {
 
     private static final Found IN_NONE = new Found.InNone();
 
+    /** Out of questions: one more is asked than the figure lets be. */
+    private static final Found PAST_THE_QUESTIONS =
+            new Found.NotWorkedOut(CompositionBudget.CASES_A_LINE_IS_ASKED_IN);
+
+    /** The cases were more than were taken apart, and nothing asks them. */
+    private static final Found NOT_TAKEN_APART =
+            new Found.NotWorkedOut(CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO);
+
     private final Predicate<Proposition> crossedIn;
 
     private int left = CompositionBudget.CASES_A_LINE_IS_ASKED_IN.maximum();
@@ -65,9 +73,26 @@ public final class CasesOfALineAsked {
         this.crossedIn = crossedIn;
     }
 
-    /** Whether the line decides in some one of {@code cases}. */
-    public Found inSomeOf(DecidingCase.Cases cases) {
-        return chosen(List.of(), List.of(cases));
+    /**
+     * Whether the line decides in some one of the cases {@code said} stands for.
+     *
+     * <p>Where some one of them holds is asked first, as one question: where it holds no row on
+     * one side of the line, neither does any one of them, which settles every case at once. Asked
+     * of the cases where they were taken apart, and not of the condition they were said as, which
+     * says where some one holds only as far as it was said the same way; where they were not, the
+     * condition is all that says it.
+     */
+    public Found inSomeOf(DecidingCase said) {
+        if (!aQuestionIsLeft()) {
+            return PAST_THE_QUESTIONS;
+        }
+        if (!crossedIn.test(said.standsFor().holdingInSome().orElse(said.condition()))) {
+            return IN_NONE;
+        }
+        if (said.saidAlone()) {
+            return IN_SOME;
+        }
+        return chosen(List.of(), List.of(said.standsFor()));
     }
 
     /**
@@ -81,10 +106,9 @@ public final class CasesOfALineAsked {
         List<DecidingCase.Cases> rest = toChoose.subList(1, toChoose.size());
         return switch (toChoose.getFirst()) {
             case DecidingCase.Cases.One(var condition) -> {
-                if (left == 0) {
-                    yield new Found.NotWorkedOut(CompositionBudget.CASES_A_LINE_IS_ASKED_IN);
+                if (!aQuestionIsLeft()) {
+                    yield PAST_THE_QUESTIONS;
                 }
-                left--;
                 List<Proposition> more = new ArrayList<>(chosen);
                 more.add(condition);
                 yield crossedIn.test(Proposition.all(more)) ? chosen(more, rest) : IN_NONE;
@@ -106,8 +130,16 @@ public final class CasesOfALineAsked {
                 next.addAll(rest);
                 yield chosen(chosen, next);
             }
-            case DecidingCase.Cases.MoreThanWereTakenApart _ ->
-                    new Found.NotWorkedOut(CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO);
+            case DecidingCase.Cases.MoreThanWereTakenApart _ -> NOT_TAKEN_APART;
         };
+    }
+
+    /** Whether one more question may be asked, counting it where it may. */
+    private boolean aQuestionIsLeft() {
+        if (left == 0) {
+            return false;
+        }
+        left--;
+        return true;
     }
 }

@@ -490,19 +490,18 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + " are kept as more than were taken apart"),
             Map.entry("souther.compiler.meaning.CasesOfALineAsked#<init>("
                             + "Ljava/util/function/Predicate;)V",
-                    "how many times the cases of one line are asked, which every question spends"),
-            Map.entry("souther.compiler.meaning.CasesOfALineAsked#chosen("
-                            + "Ljava/util/List;Ljava/util/List;)"
-                            + "Lsouther/compiler/meaning/CasesOfALineAsked$Found;",
-                    "past either figure says the asking was not worked out, naming the figure"),
+                    "how many times the cases one case was said for are asked, which every"
+                            + " question spends"),
+            Map.entry("souther.compiler.meaning.CasesOfALineAsked#<clinit>()V",
+                    "what the asking comes to past either figure: not worked out, naming it"),
             Map.entry("souther.compiler.partition.ComparisonAssessment#aPartNarrowed("
                             + "Lsouther/compiler/partition/ComparisonAssessment$Several$Part;"
                             + "Lsouther/compiler/partition/Reachability;"
                             + "Ljava/util/function/Function;Ljava/util/function/Function;"
                             + "Ljava/util/List;ZLsouther/compiler/inputs/InputReading;)"
-                            + "Lsouther/compiler/partition/ComparisonAssessment$Several$Part;",
+                            + "Ljava/util/List;",
                     "hands the figure the asking stopped at to the line, as one where it decides"
-                            + " was not worked out"),
+                            + " in those cases was not worked out"),
             // What a path takes in of a condition: the parts of a disjunction taken alone, across
             // every disjunction inside another. Past the figure the disjunction is declined,
             // naming it.

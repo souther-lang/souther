@@ -353,11 +353,11 @@ public enum CompositionBudget {
      * once for each case found.
      *
      * <p><b>Reaching it gives the cases up and says so.</b> The condition is kept, said for cases
-     * nobody took apart ({@link souther.compiler.meaning.DecidingCase.Cases.MoreThanWereTakenApart}),
-     * and a line whose cases nobody took apart is one where it decides was not worked out
-     * ({@link souther.compiler.inputs.BlockReason.WhereALineDecidesNotWorkedOut}) — never a line
-     * owed rows where the statement may turn nothing, and never one dropped for a proof nobody
-     * finished.
+     * nobody took apart ({@link souther.compiler.meaning.DecidingCase.Cases.MoreThanWereTakenApart}).
+     * Where rows on both sides of the line reach the condition, which is all that says where the
+     * cases hold, the line is not worked out in them
+     * ({@link souther.compiler.inputs.BlockReason.WhereALineDecidesNotWorkedOut}) — never owed
+     * rows where the statement may turn nothing, and never dropped for a proof nobody finished.
      */
     CASES_A_LINE_IS_TAKEN_APART_INTO(256),
 
@@ -370,11 +370,10 @@ public enum CompositionBudget {
      * row on one side settles every case chosen past it. Counted for each case said as one on its
      * own, so what one of them spent decides nothing about another.
      *
-     * <p><b>Reaching it gives that case up and says so.</b> Where another case of the line showed
-     * it decides, the line is the line it is and the case is kept as the condition it was said as.
-     * Where none did, the line is neither one the statement turns on nor one it never turns on, so
-     * it is a line where it decides was not worked out
-     * ({@link souther.compiler.inputs.BlockReason.WhereALineDecidesNotWorkedOut}).
+     * <p><b>Reaching it gives that case up and says so.</b> Its cases are neither ones the line
+     * turns in nor ones it turns nothing in, so they are where the line was not worked out
+     * ({@link souther.compiler.inputs.BlockReason.WhereALineDecidesNotWorkedOut}), beside whatever
+     * the line's other cases showed.
      */
     CASES_A_LINE_IS_ASKED_IN(256),
 

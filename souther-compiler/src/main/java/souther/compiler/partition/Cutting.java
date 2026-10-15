@@ -275,7 +275,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
 
                 public Part {
                     Objects.requireNonNull(id, "a line of a statement is one of its lines");
-                    cases = List.copyOf(cases);
+                    cases = DecidingCase.eachByItsOwnCondition(cases);
                     if (!(line instanceof Cuts || line instanceof NoOrderToCountOn
                             || line instanceof NumberNoRatioHolds)) {
                         throw new IllegalArgumentException(

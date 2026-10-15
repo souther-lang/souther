@@ -3,9 +3,7 @@ package souther.compiler.meaning;
 import souther.compiler.semantics.HowAClosureIsApplied;
 
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -98,9 +96,14 @@ public final class WhereAnApplicationIsMade {
         return past(outer, Proposition.any(any));
     }
 
-    /** Whether {@code cases} say a line decides wherever a row is. */
+    /**
+     * Whether {@code cases} say a line decides wherever a row is: one case, holding wherever a row
+     * is and standing for itself. Said for several, it decides only where rows on both sides of
+     * the line are in one of them, which is not wherever a row is.
+     */
     public static boolean everywhere(List<DecidingCase> cases) {
-        return cases.size() == 1 && cases.getFirst().condition().equals(nothingAsked());
+        return cases.size() == 1 && cases.getFirst().saidAlone()
+                && cases.getFirst().condition().equals(nothingAsked());
     }
 
     /** What has to hold to reach a place an application reaches under {@code reached}, past a
@@ -142,28 +145,29 @@ public final class WhereAnApplicationIsMade {
      * Where a line read on each of {@code readings} decides, as cases any one of which is enough:
      * each case of where it decides on one application, met where that application is made.
      *
-     * <p>Each case kept once. A case holding wherever a row is makes every other say nothing more,
-     * and one holding nowhere says nothing. Cases that differ only in which case one value is are
+     * <p>Each case kept once, and two said by one condition taken as one ({@link DecidingCase#and}).
+     * A case holding wherever a row is, and standing for itself, makes every other say nothing
+     * more; one holding nowhere says nothing. Cases that differ only in which case one value is are
      * said as one ({@link WhereEachLineDecides#joinedOverAValue}); past
      * {@link WhereEachLineDecides#MOST_CASES} after that, the cases are said as one: some one of
      * them holding, said for each of them.
      */
     public static List<DecidingCase> decidesOn(List<OnOne> readings) {
-        Map<String, DecidingCase> kept = new LinkedHashMap<>();
+        List<DecidingCase> kept = new ArrayList<>();
         for (OnOne one : readings) {
             for (DecidingCase each : one.cases()) {
                 DecidingCase met = each.meeting(one.reached());
                 switch (met.condition()) {
-                    case Proposition.Always(boolean holds) when holds -> {
+                    case Proposition.Always(boolean holds) when holds && met.saidAlone() -> {
                         return List.of(met);
                     }
-                    case Proposition.Always _ -> { }
-                    default -> kept.putIfAbsent(met.condition().key(), met);
+                    case Proposition.Always(boolean holds) when !holds -> { }
+                    default -> kept.add(met);
                 }
             }
         }
         List<DecidingCase> cases = WhereEachLineDecides.joinedOverAValue(
-                List.copyOf(kept.values()));
+                DecidingCase.oneForEachCondition(kept));
         return cases.size() <= WhereEachLineDecides.MOST_CASES ? cases
                 : List.of(DecidingCase.someOneOf(cases));
     }

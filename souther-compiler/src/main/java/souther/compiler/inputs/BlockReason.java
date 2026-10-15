@@ -1206,14 +1206,16 @@ public sealed interface BlockReason {
 
     /**
      * What the rule states was read in full, and it is several lines held together, and for one of
-     * them where the statement turns on it was not worked out: the cases where it decides were said
-     * as one, asking each of them whether a row stands on both sides of the line stopped at
-     * {@code stoppedAt}, and no other case of the line showed that it decides.
+     * them whether the statement turns on it in some of its cases was not worked out: those cases
+     * were said as one, and asking each case they stand for whether a row stands on both sides of
+     * the line stopped at {@code stoppedAt}.
      *
-     * <p>Not a line, and not a line the statement never turns on. Held as the first, it is owed
-     * rows in cases it may turn nothing in, which no row an author writes discharges; held as the
-     * second, it is dropped for a proof that was never finished. What was not worked out is the
-     * line, and what the rules leave the position is read as it was.
+     * <p>Not cases the line turns in, and not cases it turns nothing in. Held as the first, the
+     * line is owed rows in cases it may turn nothing in, which no row an author writes discharges;
+     * held as the second, they are dropped for a proof that was never finished. What other cases of
+     * the line showed is the line's all the same, and this is said beside it: the line may divide
+     * the position further in the cases nobody worked out, so the position's classes are not
+     * settled by the ones that were. What the rules leave the position is read as it was.
      *
      * @param stoppedAt the figure the asking stopped at
      */
