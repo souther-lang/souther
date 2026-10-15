@@ -65,6 +65,7 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Deque;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -113,9 +114,10 @@ public final class Output {
             }
             // A module that imports one that failed is not emitted: the bodies it would expand from
             // it are ones that were not settled, and emitting them would reach the emitter's own
-            // refusal, which says less than the failure already reported.
-            List<String> reached = db.ask(new Reaches(name)).value();
-            for (String imported : reached == null ? List.<String>of() : reached) {
+            // refusal, which says less than the failure already reported. A module read off the path
+            // was made elsewhere and is not asked.
+            List<String> generated = generatedReach(db, name);
+            for (String imported : generated == null ? List.<String>of() : generated) {
                 if (!imported.equals(name) && failed(db, imported)) {
                     return Answer.absent();
                 }
@@ -143,13 +145,10 @@ public final class Output {
             }
         }
 
-        /** Whether {@code module}, one this compilation is making, did not come out. A module read
-         *  off the path was made elsewhere and is not asked. */
+        /** Whether {@code module}, one this compilation is making, did not come out. */
         private static boolean failed(Db db, String module) {
-            List<String> declared = db.ask(new Front.Declared()).value();
-            return declared != null && declared.contains(module)
-                    && (!db.ask(new Bodies.Sound(module)).present()
-                    || !db.ask(new Bodies.PublishedBodiesRunElsewhere(module)).present());
+            return !db.ask(new Bodies.Sound(module)).present()
+                    || !db.ask(new Bodies.PublishedBodiesRunElsewhere(module)).present();
         }
 
         /**
@@ -475,7 +474,7 @@ public final class Output {
         if (reaches == null) {
             return null;
         }
-        List<String> declared = db.ask(new Front.Declared()).value();
+        Set<String> declared = new HashSet<>(db.ask(new Front.Declared()).value());
         List<String> generated = new ArrayList<>();
         for (int i = reaches.size() - 1; i >= 0; i--) {
             if (declared.contains(reaches.get(i))) {

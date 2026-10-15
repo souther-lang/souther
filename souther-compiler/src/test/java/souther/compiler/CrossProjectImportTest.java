@@ -158,11 +158,11 @@ class CrossProjectImportTest {
      * this compile generates. */
     @Test
     void aConstantOfATypeOnThePathIsCheckedByThePathsClass() {
-        Compiler.compileModules(List.of(importerOf("Code(\"ab\")")), published(DOUBLING));
+        ModulePath path = published(DOUBLING);
+        Compiler.compileModules(List.of(importerOf("Code(\"ab\")")), path);
 
         refusedByRunningTheCheck(assertThrows(CompileException.class,
-                () -> Compiler.compileModules(List.of(importerOf("Code(\"AB\")")),
-                        published(DOUBLING))));
+                () -> Compiler.compileModules(List.of(importerOf("Code(\"AB\")")), path)));
     }
 
     /** Compiled together, the same module is this compile's to generate, and the check finds its
