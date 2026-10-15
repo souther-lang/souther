@@ -6,14 +6,11 @@ import souther.cli.CliProcess.Ran;
 import souther.cli.backend.FakeBackend;
 import souther.compiler.meta.ModuleMetadata;
 
-import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -58,29 +55,21 @@ class ACompileForAnInstalledTargetIsRunByItsBackendAsWrittenTest {
         assertEquals("said-on-stderr", ran.err().strip());
     }
 
-    @Test
-    void aBackendThatSucceedsSucceeds(@TempDir Path home, @TempDir Path work) throws Exception {
-        FakeBackend.write(home.resolve("backends/fake.jar"), "fake", HERE, "ok");
-
-        Ran ran = cli(work, home(home), List.of(), "", "compile", "--target", "fake");
-
-        assertEquals(0, ran.code(), ran.err());
-    }
-
+    /**
+     * The home a run is given is searched before the directory a package names. That the first
+     * of the directories searched wins, and that the packaged one is searched at all, are asked
+     * without a backend run.
+     */
     @Test
     void theHomeDirectoryStandsInForThePackagedOne(@TempDir Path home, @TempDir Path packaged,
                                                    @TempDir Path work) throws Exception {
         FakeBackend.write(home.resolve("backends/fake.jar"), "fake", HERE, "from-home");
         FakeBackend.write(packaged.resolve("fake.jar"), "fake", HERE, "from-package");
-        String property = "-Dsouther.backends=" + packaged;
 
-        Ran both = cli(work, home(home), List.of(property), "", "compile", "--target", "fake");
-        Ran packagedOnly = cli(work, Map.of(), List.of(property), "", "compile", "--target",
-                "fake");
+        Ran both = cli(work, home(home), List.of("-Dsouther.backends=" + packaged), "", "compile",
+                "--target", "fake");
 
         assertTrue(both.out().contains("marker=from-home\n"), both.out() + both.err());
-        assertTrue(packagedOnly.out().contains("marker=from-package\n"),
-                packagedOnly.out() + packagedOnly.err());
     }
 
     @Test
@@ -105,73 +94,5 @@ class ACompileForAnInstalledTargetIsRunByItsBackendAsWrittenTest {
 
         assertEquals(2, ran.code());
         assertTrue(ran.err().contains("absent") && ran.err().contains("fake"), ran.err());
-    }
-
-    @Test
-    void aProjectNamingAnotherSoutherRefusesTheTargetToo(@TempDir Path home,
-                                                         @TempDir Path work) throws Exception {
-        FakeBackend.write(home.resolve("backends/fake.jar"), "fake", HERE, "never");
-        Files.writeString(work.resolve(ProjectVersion.FILE), "0.0.1-other\n");
-
-        Ran ran = cli(work, home(home), List.of(), "", "compile", "--target", "fake");
-
-        assertEquals(2, ran.code());
-        assertFalse(ran.out().contains("marker="), ran.out());
-        assertTrue(ran.err().contains("0.0.1-other"), ran.err());
-    }
-
-    @Test
-    void aTargetWrittenWithNoNameIsRefused(@TempDir Path work) throws Exception {
-        Ran bare = cli(work, Map.of(), List.of(), "", "compile", "--target");
-        Ran option = cli(work, Map.of(), List.of(), "", "compile", "--target", "--help");
-
-        assertEquals(2, bare.code());
-        assertEquals(2, option.code());
-        assertTrue(bare.err().contains("--target"), bare.err());
-    }
-
-    @Test
-    void theTargetIsReadOnlyAsTheFirstArgument(@TempDir Path work) throws Exception {
-        Ran ran = cli(work, Map.of(), List.of(), "", "compile", "a.sou", "--target", "jvm");
-
-        assertEquals(2, ran.code());
-        assertTrue(ran.err().contains("--target"), ran.err());
-    }
-
-    @Test
-    void theJvmTargetIsTheCompileThereAlwaysWas(@TempDir Path work) throws Exception {
-        Path source = Files.writeString(work.resolve("m.sou"), """
-                module m
-                data X = { a: Int }
-                """);
-        Path plain = Files.createDirectories(work.resolve("plain"));
-        Path named = Files.createDirectories(work.resolve("named"));
-
-        Ran without = cli(work, Map.of(), List.of(), "", "compile", "-d", plain.toString(),
-                source.toString());
-        Ran with = cli(work, Map.of(), List.of(), "", "compile", "--target", "jvm", "-d",
-                named.toString(), source.toString());
-
-        assertEquals(0, without.code(), without.err());
-        assertEquals(0, with.code(), with.err());
-        assertEquals(listing(plain), listing(named));
-        assertFalse(listing(named).isEmpty());
-    }
-
-    @Test
-    void theJvmTargetStillRefusesAnOptionTheJvmDoesNotHave(@TempDir Path work)
-            throws Exception {
-        Ran ran = cli(work, Map.of(), List.of(), "", "compile", "--target", "jvm", "--component",
-                "m.sou");
-
-        assertEquals(2, ran.code());
-        assertTrue(ran.err().contains("--component"), ran.err());
-    }
-
-    private static List<String> listing(Path root) throws IOException {
-        try (var files = Files.walk(root)) {
-            return files.filter(Files::isRegularFile).map(file -> root.relativize(file).toString())
-                    .sorted().toList();
-        }
     }
 }

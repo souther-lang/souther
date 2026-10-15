@@ -434,11 +434,11 @@ class ABackendIsFetchedAsTheNewestReleaseBuiltAgainstThisSoutherTest {
     void aJarThatKeepsArrivingIsWaitedForPastTheTimeASmallFileHas() throws Exception {
         repository.metadata(WASM, "0.1.0");
         repository.release(WASM, "0.1.0", "cli", HERE, jar("slow", "wasm", HERE));
-        repository.trickle(LocalRepository.path(WASM, "0.1.0", "cli", "jar"), 8, 150);
+        repository.trickle(LocalRepository.path(WASM, "0.1.0", "cli", "jar"), 6, 60);
 
         BackendFetch.Fetched fetched = assertInstanceOf(BackendFetch.Fetched.class,
                 BackendFetch.whereAbsent(backends, Central.at(repository.uri(),
-                        new Central.Patience(Duration.ofMillis(400), Duration.ofMillis(600))),
+                        new Central.Patience(Duration.ofMillis(100), Duration.ofMillis(400))),
                         "wasm", HERE, release -> { }));
 
         assertEquals(home.resolve("wasm-" + HERE + ".jar"), fetched.backend().jar());
@@ -450,11 +450,19 @@ class ABackendIsFetchedAsTheNewestReleaseBuiltAgainstThisSoutherTest {
         repository.release(WASM, "0.1.0", "cli", HERE, jar("late", "wasm", HERE));
         repository.holdBack(LocalRepository.path(WASM, "0.1.0", "cli", "jar"), 5000);
 
-        Central.Failure failure = failedWaiting(Duration.ofMillis(300), Duration.ofSeconds(60));
+        Duration answer = Duration.ofMillis(300);
+
+        long started = System.nanoTime();
+        Central.Failure failure = failedWaiting(answer, Duration.ofSeconds(60));
+        Duration took = Duration.ofNanos(System.nanoTime() - started);
 
         assertTrue(assertInstanceOf(Central.Failure.Unreachable.class, failure).reason()
                 .startsWith("no answer began"), failure.toString());
         assertEquals(List.of(), held());
+        // Given up at the deadline and not at the next look a long stall's patience takes, which
+        // would be a second; what lies between leaves a loaded machine room.
+        assertTrue(took.compareTo(answer) >= 0 && took.compareTo(answer.multipliedBy(5)
+                .dividedBy(2)) < 0, took.toString());
     }
 
     @Test
@@ -462,7 +470,7 @@ class ABackendIsFetchedAsTheNewestReleaseBuiltAgainstThisSoutherTest {
         repository.metadata(WASM, "0.1.0");
         repository.release(WASM, "0.1.0", "cli", HERE, jar("silent", "wasm", HERE));
         repository.silence(LocalRepository.path(WASM, "0.1.0", "cli", "jar"));
-        Duration stall = Duration.ofSeconds(1);
+        Duration stall = Duration.ofMillis(400);
 
         long started = System.nanoTime();
         Central.Failure failure = failedWaiting(Duration.ofSeconds(60), stall);

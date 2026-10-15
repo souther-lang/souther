@@ -485,8 +485,13 @@ public final class Central implements BackendFetch.Source {
         long had = 0;
         try {
             while (true) {
+                // Until the answer begins, no longer than to the deadline, so that an answer
+                // that never began is given up on when it should have begun and not a tick later.
+                long wait = receiving.begun() ? tick
+                        : Math.max(1, Math.min(tick,
+                                TimeUnit.NANOSECONDS.toMillis(deadline - System.nanoTime())));
                 try {
-                    return answer.get(tick, TimeUnit.MILLISECONDS);
+                    return answer.get(wait, TimeUnit.MILLISECONDS);
                 } catch (ExecutionException e) {
                     receiving.throwUnwritten();
                     throw new Stop(new Failure.Unreachable(at, reason(e.getCause())));
