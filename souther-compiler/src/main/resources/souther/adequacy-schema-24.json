@@ -1470,7 +1470,7 @@
                 },
                 "where": {
                   "type": "string",
-                  "description": "The cases of the input's values the line decides in, which a row at this reading has to be in as well: which case of a sum a value is, whether it holds a value, which truth it is. Absent where the line decides in every case."
+                  "description": "What every row at this reading has to be beside the values: which cases of a sum a value is or is not, whether it holds a value, which truth it is, as the cases the line decides in hold them, less what the position read already names. Absent where those cases hold no value of the input to a case or a truth; the relations they ask beside it are not said here."
                 },
                 "status": {
                   "$ref": "#/$defs/status"

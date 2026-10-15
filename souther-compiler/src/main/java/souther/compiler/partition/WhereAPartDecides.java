@@ -1,11 +1,10 @@
 package souther.compiler.partition;
 
-import souther.compiler.inputs.Case;
 import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.TermPath;
-import souther.compiler.meaning.DecisionSubject;
+import souther.compiler.meaning.CasesHeldTo;
 import souther.compiler.meaning.Proposition;
 
 import java.util.ArrayList;
@@ -58,48 +57,32 @@ public record WhereAPartDecides(PlaceOfALine part, Proposition decides) {
      * statement was taken apart — a part read once held and once failing where one of them is
      * enough — and not anything a row has to do.
      *
+     * <p>What every row in the case is, read through the whole of it ({@link CasesHeldTo}): a case
+     * said as one of several things is where each of them holds, and what they all hold a value
+     * to is what the case does.
+     *
      * <p>Less what the positions already say. A line at a field of one case of a value decides
      * where the value is that case, and the position it is read at is named through that case.
      */
     public String said(List<TermPath> readAt) {
-        List<Proposition> parts = decides instanceof Proposition.All all ? all.parts()
-                : List.of(decides);
         List<String> said = new ArrayList<>();
-        for (Proposition part : parts) {
-            String one = saidOne(part);
-            if (one != null && !saidBy(readAt, part)) {
-                said.add(one);
+        CasesHeldTo.of(decides).forEach((at, held) -> {
+            switch (held) {
+                case CasesHeldTo.Held.OneOf(var cases) -> {
+                    if (readAt.stream().noneMatch(each -> each.isAtOrUnder(at.refine(cases)))) {
+                        said.add(at + " is " + spelled(cases));
+                    }
+                }
+                case CasesHeldTo.Held.NoneOf(var cases) -> said.add(at + " is not "
+                        + spelled(cases));
+                case CasesHeldTo.Held.ATruth(var holds) -> said.add(at + " is " + holds);
             }
-        }
+        });
         return said.isEmpty() ? null : String.join(" and ", said);
     }
 
-    /** Whether one of {@code readAt} is named through the case {@code part} says a value is. */
-    private static boolean saidBy(List<TermPath> readAt, Proposition part) {
-        TermPath narrowed = switch (part) {
-            case Proposition.InCases(DecisionSubject.AnInput(TermPath of), CasesLeft cases,
-                    boolean holds, var _) when holds -> of.refine(cases);
-            case Proposition.Present(DecisionSubject.AnInput(TermPath of), boolean holds, var _) ->
-                    of.refine(Refinement.of(new Case.Presence(holds)));
-            default -> null;
-        };
-        return narrowed != null && readAt.stream().anyMatch(each -> each.isAtOrUnder(narrowed));
-    }
-
-    /** One part of where a line decides, in the words a row is written in — or null where it is
-     *  no case of a value of the input. */
-    private static String saidOne(Proposition part) {
-        return switch (part) {
-            case Proposition.InCases(DecisionSubject.AnInput(TermPath of), CasesLeft cases,
-                    boolean holds, var _) -> of + (holds ? " is " : " is not ")
-                    + cases.atoms().stream().map(Refinement::spelled)
-                            .collect(Collectors.joining(" or "));
-            case Proposition.Truth(DecisionSubject.AnInput(TermPath of), boolean holds, var _) ->
-                    of + " is " + holds;
-            case Proposition.Present(DecisionSubject.AnInput(TermPath of), boolean holds, var _) ->
-                    of + " is " + (holds ? "Some" : "None");
-            default -> null;
-        };
+    private static String spelled(CasesLeft cases) {
+        return cases.atoms().stream().map(Refinement::spelled).collect(Collectors.joining(" or "));
     }
 
     /** Whether a row is somewhere the line decides, or what kept that from being read. */
