@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import souther.compiler.core.Core;
 import souther.compiler.types.BindingId;
+import souther.compiler.types.OccurrenceLineage;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
@@ -14,8 +15,8 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * The containers a closure of a body is applied over, where every application of it is one a
- * library operation makes over one of them.
+ * Every use of each closure of a body ({@link ClosureUses}): the applications library operations
+ * make of it over their containers, and whether anything else uses it.
  *
  * <p>A closure is entered only by an application, and a library operation applies the closure it is
  * handed only where the container it walks holds something. So where the operations are the only
@@ -27,7 +28,8 @@ import java.util.Set;
  * <p>So each use of a closure is accounted for before any is believed. A use is an operation
  * applying it ({@link Combinators#handedTo}), the name or the block it was given standing as the
  * argument that takes the closure; every other place the block or a name bound to it is met is a use
- * that says nothing, and a closure with one is left out.
+ * that says nothing, and a closure with one enters over no container
+ * ({@link ClosureUses#enteredOver}).
  */
 final class ClosureEntries {
 
@@ -42,7 +44,7 @@ final class ClosureEntries {
     }
 
     private final Map<BindingId, Core> held;
-    private final Map<Core.Block, List<Core>> over = new IdentityHashMap<>();
+    private final Map<Core.Block, List<ClosureUses.Application>> over = new IdentityHashMap<>();
     private final Set<Core.Block> used = Collections.newSetFromMap(new IdentityHashMap<>());
 
     private ClosureEntries(Map<BindingId, Core> held) {
@@ -50,23 +52,21 @@ final class ClosureEntries {
     }
 
     /**
-     * For each parameter of each closure written in {@code roots} whose every use is an operation
-     * applying it, the containers those operations walk — one for each operation, any one of which
-     * holding something is what enters the closure.
+     * For each parameter of each closure written in {@code roots} that some operation applies,
+     * every use of the closure: each application an operation makes of it, and whether anything
+     * else uses it too. A closure no operation applies is not here.
      *
      * @param held what each name of the body was bound to
      */
-    static Map<BindingId, List<Core>> of(List<Core> roots, Map<BindingId, Core> held) {
+    static Map<BindingId, ClosureUses> of(List<Core> roots, Map<BindingId, Core> held) {
         ClosureEntries entries = new ClosureEntries(held);
         roots.forEach(root -> entries.visit(root, Standing.ELSEWHERE));
-        Map<BindingId, List<Core>> out = new LinkedHashMap<>();
-        entries.over.forEach((block, containers) -> {
-            if (entries.used.contains(block)) {
-                return;
-            }
+        Map<BindingId, ClosureUses> out = new LinkedHashMap<>();
+        entries.over.forEach((block, applications) -> {
+            ClosureUses uses = new ClosureUses(applications, entries.used.contains(block));
             for (Core.Binder param : block.params()) {
                 if (param != null && param.binding() != null) {
-                    out.put(param.binding(), List.copyOf(containers));
+                    out.put(param.binding(), uses);
                 }
             }
         });
@@ -78,17 +78,14 @@ final class ClosureEntries {
         if (block != null && standing == Standing.ELSEWHERE) {
             used.add(block);
         }
-        ValueName operation = operationOf(e);
-        List<Core> args = argsOf(e);
-        if (operation != null) {
-            Combinators.Handed handed =
-                    Combinators.handedTo(operation, args, closure -> blockOf(closure));
+        Called called = calledAt(e);
+        if (called != null) {
+            Combinators.Handed handed = Combinators.handedTo(called.operation(), called.args(),
+                    closure -> blockOf(closure));
             if (handed != null) {
-                List<Core> containers =
-                        over.computeIfAbsent(handed.step(), _ -> new ArrayList<>());
-                if (containers.stream().noneMatch(each -> each == handed.container())) {
-                    containers.add(handed.container());
-                }
+                over.computeIfAbsent(handed.step(), _ -> new ArrayList<>())
+                        .add(new ClosureUses.Application(called.operation(), called.lineage(),
+                                handed.container(), handed.applied()));
                 Core.forEachChild(e, child -> visit(child,
                         Core.withoutStanding(child) == Core.withoutStanding(handed.closure())
                                 ? Standing.THE_CLOSURE_OF_AN_OPERATION : Standing.ELSEWHERE));
@@ -124,20 +121,20 @@ final class ClosureEntries {
         return at instanceof Core.Block block ? block : null;
     }
 
-    private static ValueName operationOf(Core e) {
+    /**
+     * A call of something a name reached: what it applies, which copy of a body it stands in, and
+     * what it is handed.
+     */
+    private record Called(ValueName operation, OccurrenceLineage lineage, List<Core> args) {}
+
+    /** The call {@code e} is, or null where it is no call of something a name reached. */
+    private static Called calledAt(Core e) {
         return switch (Core.withoutStanding(e)) {
             case Core.Call call when call.fn() instanceof Core.Reached reached ->
-                    reached.denotes();
-            case Core.PreservedCall preserved -> preserved.declared().operation();
+                    new Called(reached.denotes(), call.occurrence().lineage(), call.args());
+            case Core.PreservedCall preserved -> new Called(preserved.declared().operation(),
+                    preserved.place().lineage(), preserved.args());
             default -> null;
-        };
-    }
-
-    private static List<Core> argsOf(Core e) {
-        return switch (Core.withoutStanding(e)) {
-            case Core.Call call -> call.args();
-            case Core.PreservedCall preserved -> preserved.args();
-            default -> List.of();
         };
     }
 }

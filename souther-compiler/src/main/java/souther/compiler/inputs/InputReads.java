@@ -6,6 +6,7 @@ import souther.compiler.check.BoundOperationFacts;
 import souther.compiler.check.CalledBody;
 import souther.compiler.check.CallArguments;
 import souther.compiler.check.Choice;
+import souther.compiler.check.ClosureUses;
 import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.check.DeclaredArgument;
 import souther.compiler.check.DefaultBoundOperationFacts;
@@ -493,6 +494,20 @@ public final class InputReads {
             }
         }
         return List.of();
+    }
+
+    /**
+     * Every use of {@code block}: each application an operation makes of it, and whether anything
+     * else uses it — or null where no operation applies it. What is applied over is read where
+     * these are the names ({@link Denotation}).
+     */
+    public ClosureUses usesOf(Core.Block block) {
+        for (Core.Binder param : block.params()) {
+            if (param != null && param.binding() != null) {
+                return names.usesOf(param.binding());
+            }
+        }
+        return null;
     }
 
     /**

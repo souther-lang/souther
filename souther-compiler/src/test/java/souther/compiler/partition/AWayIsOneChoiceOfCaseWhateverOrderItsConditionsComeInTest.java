@@ -8,9 +8,10 @@ import souther.compiler.query.Compilation;
 import souther.compiler.reading.CoverageRead;
 import souther.compiler.reading.Decision;
 import souther.compiler.reading.WayIn;
+import souther.compiler.reading.WrittenWithout;
 
 import java.util.ArrayList;
-import java.util.LinkedHashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -70,7 +71,7 @@ class AWayIsOneChoiceOfCaseWhateverOrderItsConditionsComeInTest {
         PathReachability.Answers arrives =
                 c.db().ask(new Adequacy.PathReached("probe.order")).value().get("smallOnes");
         BodyInputReading asWritten = BodyInputReading.of(read, subject, arrives);
-        Set<WayIn> turnedInPart = new LinkedHashSet<>();
+        Map<WayIn, Set<WrittenWithout>> turnedInPart = new LinkedHashMap<>();
         List<WayIn> turned = turnedRound(read.taken(), read.saidInPart(), turnedInPart);
         List<WayIn> answeredTurned =
                 turnedRound(read.answeredBy(), read.saidInPart(), turnedInPart);
@@ -88,15 +89,16 @@ class AWayIsOneChoiceOfCaseWhateverOrderItsConditionsComeInTest {
     }
 
     /** Each of {@code ways} with its decisions last first, and those of them {@code inPart} holds
-     *  added to {@code turnedInPart} as turned. */
-    private static List<WayIn> turnedRound(List<WayIn> ways, Set<WayIn> inPart,
-                                           Set<WayIn> turnedInPart) {
+     *  added to {@code turnedInPart} as turned, with what they were written without. */
+    private static List<WayIn> turnedRound(List<WayIn> ways,
+                                           Map<WayIn, Set<WrittenWithout>> inPart,
+                                           Map<WayIn, Set<WrittenWithout>> turnedInPart) {
         List<WayIn> out = new ArrayList<>();
         for (WayIn way : ways) {
             WayIn turned = new WayIn(lastFirst(way));
             out.add(turned);
-            if (inPart.contains(way)) {
-                turnedInPart.add(turned);
+            if (inPart.containsKey(way)) {
+                turnedInPart.put(turned, inPart.get(way));
             }
         }
         return out;

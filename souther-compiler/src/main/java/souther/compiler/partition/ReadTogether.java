@@ -4,8 +4,10 @@ import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Which classes of two positions a run of a behavior's body reads together.
@@ -26,7 +28,9 @@ import java.util.Map;
  * holds on it, and a decision whose subject nothing could name, may be about any position; a rule
  * the body wrote that no decision reads tells its position apart where no way shows it. Each of
  * them leaves every combination it may be part of, since what is not read is no proof that two
- * positions are read apart. And a behavior with no body has nothing to read ({@link Every}).
+ * positions are read apart. A combination kept so says what kept it ({@link WhyKept}), where no
+ * way that was read whole reads it as well. And a behavior with no body has nothing to read
+ * ({@link Every}).
  *
  * <p>Not whether either position is worth a combination at all, nor whether two classes can be in
  * one value. Those are {@link BodyDistinction#makesCombinations()}'s and
@@ -51,8 +55,10 @@ public sealed interface ReadTogether {
      *                a time, or -1. Two positions of one group are read together only by the ways
      *                each choice of the group is ({@link CaseChoices}), so this way, which is all
      *                of the choices at once, reads no combination of them
+     * @param kept    what the reading could not say of the way, which is why it is read at every
+     *                position a row taking it may hold; empty where the way was read whole
      */
-    record Way(List<BitSet> classes, List<Integer> apart) {
+    record Way(List<BitSet> classes, List<Integer> apart, Set<WhyKept> kept) {
 
         public Way {
             List<BitSet> copied = new ArrayList<>();
@@ -61,6 +67,7 @@ public sealed interface ReadTogether {
             }
             classes = Collections.unmodifiableList(copied);
             apart = List.copyOf(apart);
+            kept = Collections.unmodifiableSet(new LinkedHashSet<>(kept));
             if (classes.size() != apart.size()) {
                 throw new IllegalArgumentException("a way says one thing of each position");
             }
@@ -109,14 +116,17 @@ public sealed interface ReadTogether {
         return switch (this) {
             case Every _ -> Between.every(otherClasses.size());
             case Read it -> {
-                if (it.everyOneWith().contains(one) || it.everyOneWith().contains(other)) {
-                    yield Between.every(otherClasses.size());
-                }
                 int first = it.axes().indexOf(one);
                 int second = it.axes().indexOf(other);
                 if (first < 0 || second < 0) {
                     throw new IllegalArgumentException("a combination of positions this reading"
                             + " did not measure: " + one + " with " + other);
+                }
+                Set<WhyKept> everyCombination = new LinkedHashSet<>();
+                for (AxisId each : List.of(one, other)) {
+                    if (it.everyOneWith().contains(each)) {
+                        everyCombination.add(new WhyKept.ARuleNoDecisionReads(each));
+                    }
                 }
                 List<Way> both = new ArrayList<>();
                 for (Way each : it.ways()) {
@@ -127,7 +137,7 @@ public sealed interface ReadTogether {
                 yield new Between.OfTheWays(both, first, second,
                         indexOf(it.classes().get(first), oneClasses, one),
                         positionsOf(it.classes().get(second), otherClasses, other),
-                        otherClasses.size());
+                        otherClasses.size(), everyCombination);
             }
         };
     }
@@ -171,11 +181,25 @@ public sealed interface ReadTogether {
          *  caller's order. */
         BitSet readWith(int oneClass);
 
+        /**
+         * Why each class of the second is read with the {@code oneClass}th of the first, where no
+         * way read whole reads the two together: what the reading could not say of the ways that
+         * do, keyed by the class of the second in the caller's order. A class a way read whole
+         * reads with it is not there, and nor is one nothing was read about at all.
+         *
+         * <p>A class of the first at a time, as {@link #readWith} is, so that the ways are walked
+         * once for a row of the combinations and not once for each of them.
+         */
+        Map<Integer, Set<WhyKept>> keptWith(int oneClass);
+
         static Between every(int otherClasses) {
             return new All(otherClasses);
         }
 
-        /** Every class of the second with every class of the first. */
+        /**
+         * Every class of the second with every class of the first, which is what a behavior with no
+         * body is held to. Nothing was read to keep any of them, so none says why it is kept.
+         */
         record All(int otherClasses) implements Between {
 
             @Override
@@ -184,10 +208,16 @@ public sealed interface ReadTogether {
                 all.set(0, otherClasses);
                 return all;
             }
+
+            @Override
+            public Map<Integer, Set<WhyKept>> keptWith(int oneClass) {
+                return Map.of();
+            }
         }
 
         /** What the ways that read both read, each class of the first against the classes of the
-         *  second each such way admits beside it. */
+         *  second each such way admits beside it — and every class of the second with every class
+         *  of the first where a rule no decision reads divides either position. */
         final class OfTheWays implements Between {
 
             private final List<Way> ways;
@@ -199,20 +229,60 @@ public sealed interface ReadTogether {
              *  caller's. */
             private final int[] heldOther;
             private final int otherClasses;
+            /** Why every combination is read whatever the ways say, where one is. */
+            private final Set<WhyKept> everyCombination;
 
             OfTheWays(List<Way> ways, int one, int other, int[] askedOne, int[] heldOther,
-                      int otherClasses) {
+                      int otherClasses, Set<WhyKept> everyCombination) {
                 this.ways = List.copyOf(ways);
                 this.one = one;
                 this.other = other;
                 this.askedOne = askedOne.clone();
                 this.heldOther = heldOther.clone();
                 this.otherClasses = otherClasses;
+                this.everyCombination = Collections.unmodifiableSet(
+                        new LinkedHashSet<>(everyCombination));
+            }
+
+            @Override
+            public Map<Integer, Set<WhyKept>> keptWith(int oneClass) {
+                int at = askedOne[oneClass];
+                BitSet whole = new BitSet(otherClasses);
+                Map<Integer, Set<WhyKept>> out = new HashMap<>();
+                if (!everyCombination.isEmpty()) {
+                    for (int asked = 0; asked < otherClasses; asked++) {
+                        out.put(asked, new LinkedHashSet<>(everyCombination));
+                    }
+                }
+                for (Way each : ways) {
+                    if (!each.classes().get(one).get(at)) {
+                        continue;
+                    }
+                    BitSet there = each.classes().get(other);
+                    for (int held = there.nextSetBit(0); held >= 0;
+                            held = there.nextSetBit(held + 1)) {
+                        if (each.kept().isEmpty()) {
+                            whole.set(heldOther[held]);
+                        } else {
+                            out.computeIfAbsent(heldOther[held],
+                                    _ -> new LinkedHashSet<>()).addAll(each.kept());
+                        }
+                    }
+                }
+                for (int asked = whole.nextSetBit(0); asked >= 0;
+                        asked = whole.nextSetBit(asked + 1)) {
+                    out.remove(asked);
+                }
+                return out;
             }
 
             @Override
             public BitSet readWith(int oneClass) {
                 BitSet out = new BitSet(otherClasses);
+                if (!everyCombination.isEmpty()) {
+                    out.set(0, otherClasses);
+                    return out;
+                }
                 int at = askedOne[oneClass];
                 for (Way each : ways) {
                     if (!each.classes().get(one).get(at)) {

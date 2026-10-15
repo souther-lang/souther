@@ -4855,6 +4855,203 @@
         }
       }
     },
+    "whyKept": {
+      "type": "object",
+      "description": "What kept a combination owed that no way of the body read whole reads. `a_function_read_as_a_whole` is a function whose ways were read as a whole and not one application at a time, which `shortfalls` says why of. `a_way_read_in_part` is a way holding a step the reading has no words for, which `shortOf` names. `a_decision_nothing_names` is a decision on a way whose subject no position names. `a_rule_no_decision_reads` is a rule the body wrote dividing `position` that no decision on its ways reads.",
+      "required": [
+        "reason"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "reason": {
+          "enum": [
+            "a_function_read_as_a_whole",
+            "a_way_read_in_part",
+            "a_decision_nothing_names",
+            "a_rule_no_decision_reads"
+          ]
+        },
+        "shortfalls": {
+          "type": "array",
+          "minItems": 1,
+          "description": "Each use of the function that is not an operation of the language applying it once to each element of a position of the input, read off the same uses the reading was judged from. `not_only_by_operations` is something other than an operation applying it: applied directly, handed to a function of the author's, kept in a value. `to_some_of_the_elements` is `operation` applying it only as far as `applied` says. `over_no_position` is `operation` applying it over a container that is no position of the input. A function two operations apply names only the one that falls short.",
+          "items": {
+            "type": "object",
+            "required": [
+              "kind"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "not_only_by_operations",
+                  "to_some_of_the_elements",
+                  "over_no_position"
+                ]
+              },
+              "operation": {
+                "type": "string",
+                "description": "The operation, as the author called it."
+              },
+              "applied": {
+                "enum": [
+                  "until_one_holds",
+                  "until_one_fails",
+                  "at_most_one",
+                  "to_some"
+                ]
+              }
+            },
+            "allOf": [
+              {
+                "if": {
+                  "properties": {
+                    "kind": {
+                      "const": "not_only_by_operations"
+                    }
+                  }
+                },
+                "then": {
+                  "not": {
+                    "anyOf": [
+                      {
+                        "required": [
+                          "operation"
+                        ]
+                      },
+                      {
+                        "required": [
+                          "applied"
+                        ]
+                      }
+                    ]
+                  }
+                },
+                "else": {
+                  "required": [
+                    "operation"
+                  ]
+                }
+              },
+              {
+                "if": {
+                  "properties": {
+                    "kind": {
+                      "const": "to_some_of_the_elements"
+                    }
+                  }
+                },
+                "then": {
+                  "required": [
+                    "applied"
+                  ]
+                },
+                "else": {
+                  "not": {
+                    "required": [
+                      "applied"
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "at": {
+          "$ref": "#/$defs/at",
+          "description": "Where the function is written, where this document may say so."
+        },
+        "shortOf": {
+          "enum": [
+            "no_way_in_can_be_named",
+            "ways_not_enumerable",
+            "more_ways_in_than_are_read",
+            "runs_where_something_calls_it",
+            "the_construction_decides_it"
+          ]
+        },
+        "position": {
+          "type": "string",
+          "description": "The position the rule divides, as `axes` names it."
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "reason": {
+                "const": "a_way_read_in_part"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "shortOf"
+            ]
+          },
+          "else": {
+            "not": {
+              "required": [
+                "shortOf"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "reason": {
+                "const": "a_rule_no_decision_reads"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "position"
+            ]
+          },
+          "else": {
+            "not": {
+              "required": [
+                "position"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "reason": {
+                "const": "a_function_read_as_a_whole"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "shortfalls"
+            ]
+          },
+          "else": {
+            "allOf": [
+              {
+                "not": {
+                  "required": [
+                    "shortfalls"
+                  ]
+                }
+              },
+              {
+                "not": {
+                  "required": [
+                    "at"
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
     "onlyWitnessedBy": {
       "type": "array",
       "minItems": 1,
@@ -6285,6 +6482,37 @@
                     "type": "integer",
                     "minimum": 0,
                     "description": "How many combinations of the two are owed a row."
+                  },
+                  "kept": {
+                    "type": "array",
+                    "minItems": 1,
+                    "description": "The combinations among those owed that no way of the body read whole reads together, each by its two classes and beside what kept it: what the reading could not say of the ways that may read them. A combination the body brings together and one the reading did not get far enough to rule out are owed alike, and this tells them apart. Written whether or not a measurement was made, and exactly where there is one; never where the combinations were counted and not listed.",
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "one",
+                        "other",
+                        "by"
+                      ],
+                      "additionalProperties": false,
+                      "properties": {
+                        "one": {
+                          "type": "string",
+                          "description": "The class at the position `one` names."
+                        },
+                        "other": {
+                          "type": "string",
+                          "description": "The class at the position `other` names."
+                        },
+                        "by": {
+                          "type": "array",
+                          "minItems": 1,
+                          "items": {
+                            "$ref": "#/$defs/whyKept"
+                          }
+                        }
+                      }
+                    }
                   },
                   "covered": {
                     "type": "integer",

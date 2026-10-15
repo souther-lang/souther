@@ -106,8 +106,7 @@ final class ThresholdFixtures {
         singled.forEach(each -> evidence.add(new RuleEvidence.Singles(each)));
         return Partitions.withEvidence(base, reading, evidence, List.of(), allowance, ruleReading,
                 rulesWithoutALine, between, reaching,
-                new MeasureClosure.Drawing.FromTheReading(), ArmsNamed.NONE,
-                ForkDependencies.NONE);
+                new MeasureClosure.Drawing.FromTheReading(), WhereTheOperationsStand.NONE);
     }
 
     private ThresholdFixtures() {}

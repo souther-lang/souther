@@ -20,15 +20,18 @@ import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.ValueDefinitions;
 import souther.compiler.meaning.MeaningsOfABody;
 import souther.compiler.partition.MeaningsOfABodyReading;
+import souther.compiler.types.ConstructOccurrence;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.SequencedSet;
 import java.util.Set;
 import java.util.function.Function;
 
@@ -148,8 +151,8 @@ public final class CoverageRead {
     private final Set<WayIn> answeredBy = new LinkedHashSet<>();
 
     /** The ways of {@link #taken} and {@link #answeredBy} written without something that holds on
-     *  them. */
-    private final Set<WayIn> saidInPart = new LinkedHashSet<>();
+     *  them, each with everything it was written without. */
+    private final Map<WayIn, Set<WrittenWithout>> saidInPart = new LinkedHashMap<>();
 
     /** The parts a run arrives at and answers nothing from, in the order the walk met them. */
     private final List<NothingAnsweredHere> answersNothing = new ArrayList<>();
@@ -220,11 +223,14 @@ public final class CoverageRead {
      *                     a run reads together and for nothing about one position, which the ways
      *                     out of the forks already say
      * @param saidInPart   the ways of {@code taken} and {@code answeredBy} written without something
-     *                     that holds on them: a step on the way this reading has no words for, what
-     *                     held above a fork reached more ways than are read, or a value settled more
-     *                     ways than are held apart, which is the way with nothing on it. Each still
-     *                     holds what it says, and says nothing of what else a run on it decided —
-     *                     so which positions a run reads together is not read off one of these
+     *                     that holds on them, each with everything it was written without: a step
+     *                     on the way this reading has no words for, what held above a fork reached
+     *                     more ways than are read, a value settled more ways than are held apart,
+     *                     which is the way with nothing on it, or what a function value the way runs
+     *                     inside was called with. Each still holds what it says, and says nothing of
+     *                     what else a run on it decided — so which positions a run reads together is
+     *                     not read off one of these unless a reader can tell that what it was
+     *                     written without says nothing about them
      * @param restOfTheBlock for each arm by which a run leaves a {@code guard} whose condition did
      *                       not hold, the arm the rest of the block is — which is where a run that
      *                       got past the guard went on — and the comparisons the guard decides by.
@@ -238,7 +244,7 @@ public final class CoverageRead {
                        java.util.SequencedMap<ArmProbe, PathAccess> arms,
                        List<WayIn> taken,
                        List<WayIn> answeredBy,
-                       Set<WayIn> saidInPart,
+                       Map<WayIn, Set<WrittenWithout>> saidInPart,
                        java.util.SequencedMap<ArmProbe, TheRestOfTheBlock> restOfTheBlock,
                        List<NothingAnsweredHere> answersNothing) {
 
@@ -246,13 +252,20 @@ public final class CoverageRead {
             interactions = List.copyOf(interactions);
             taken = List.copyOf(taken);
             answeredBy = List.copyOf(answeredBy);
-            saidInPart = Set.copyOf(saidInPart);
+            Map<WayIn, Set<WrittenWithout>> copied = new LinkedHashMap<>();
+            saidInPart.forEach((way, without) -> copied.put(way,
+                    Collections.unmodifiableSet(new LinkedHashSet<>(without))));
+            saidInPart = Collections.unmodifiableMap(copied);
             Set<WayIn> written = new HashSet<>(taken);
             written.addAll(answeredBy);
-            for (WayIn each : saidInPart) {
-                if (!written.contains(each)) {
+            for (Map.Entry<WayIn, Set<WrittenWithout>> each : saidInPart.entrySet()) {
+                if (!written.contains(each.getKey())) {
                     throw new IllegalArgumentException("a way said in part is a way taken or one"
-                            + " the answer is settled by: " + each);
+                            + " the answer is settled by: " + each.getKey());
+                }
+                if (each.getValue().isEmpty()) {
+                    throw new IllegalArgumentException("a way said in part was written without"
+                            + " something: " + each.getKey());
                 }
             }
             answersNothing = List.copyOf(answersNothing);
@@ -363,7 +376,8 @@ public final class CoverageRead {
         if (!(reading.waysAt(root) instanceof Paths.Held<Outcome>(var arrivals))) {
             WayIn nothingSaid = new WayIn(List.of());
             answeredBy.add(nothingSaid);
-            saidInPart.add(nothingSaid);
+            saidInPart(List.of(nothingSaid), new WrittenWithout.AStep(
+                    PathAccess.Unsupported.Why.MORE_WAYS_IN_THAN_ARE_READ));
             return;
         }
         for (Arrival<Outcome> each : arrivals) {
@@ -372,8 +386,33 @@ public final class CoverageRead {
             // A way the naming could not write down whole holds less than the value owes
             // itself to.
             if (!each.isComplete()) {
-                saidInPart.add(way);
+                saidInPart(List.of(way), new WrittenWithout.AStep(
+                        PathAccess.Unsupported.Why.WAYS_NOT_ENUMERABLE));
             }
+        }
+    }
+
+    /** That each of {@code ways} was written without {@code without}. */
+    private void saidInPart(List<WayIn> ways, WrittenWithout without) {
+        for (WayIn way : ways) {
+            saidInPart.computeIfAbsent(way, _ -> new LinkedHashSet<>()).add(without);
+        }
+    }
+
+    /**
+     * That each of {@code ways}, which a run reaching a place under {@code reach} is known to have
+     * come by, was written without every step nothing states on the way there — the step into a
+     * function value as the function's, where the way goes on to {@code fork} inside it.
+     *
+     * @param fork the fork the ways are taken out of, or null where they end at no fork or at one
+     *             no construct is the occurrence of
+     */
+    private void saidInPart(List<WayIn> ways, Reach.Unnameable reach, ConstructOccurrence fork) {
+        for (PathAccess.Unsupported.Why why : reach.whys()) {
+            saidInPart(ways, why == PathAccess.Unsupported.Why.RUNS_WHERE_SOMETHING_CALLS_IT
+                    && fork != null
+                    ? new WrittenWithout.InAFunction(fork)
+                    : new WrittenWithout.AStep(why));
         }
     }
 
@@ -423,8 +462,10 @@ public final class CoverageRead {
      * kept with what let a run get there; kept on its own it would split values that never reach
      * it. And a way no run takes is none: an arm for a case the way to the fork has already ruled
      * out tells apart cases that never arrive there.
+     *
+     * @param fork the fork, or null where no construct is the occurrence of it
      */
-    private void takes(Reach into, Reach own) {
+    private void takes(Reach into, Reach own, ConstructOccurrence fork) {
         if (!into.someRunArrives()) {
             return;
         }
@@ -435,10 +476,14 @@ public final class CoverageRead {
         List<WayIn> known = pastTheBound ? own.known() : into.known();
         taken.addAll(known);
         // What was left out is said, whichever way it was left out: what held above the fork past
-        // the bound, or a step on the way nothing states. A way that holds less than a run on it
-        // decided is no answer to what that run read together.
-        if (pastTheBound || into instanceof Reach.Unnameable) {
-            saidInPart.addAll(known);
+        // the bound, or each step on the way nothing states. A way that holds less than a run on
+        // it decided is no answer to what that run read together.
+        if (pastTheBound) {
+            saidInPart(known, new WrittenWithout.AStep(
+                    PathAccess.Unsupported.Why.MORE_WAYS_IN_THAN_ARE_READ));
+        }
+        if (into instanceof Reach.Unnameable unnamed) {
+            saidInPart(known, unnamed, fork);
         }
     }
 
@@ -512,10 +557,22 @@ public final class CoverageRead {
      * that what they read together is not read off them as all a run there decided. Not left to the
      * siblings of the part: that another arm of the same fork answers, and says as much, is a fact
      * about the model this reading has no hold on.
+     *
+     * <p>Said in part for every step nothing states, the step into a function value among them:
+     * no fork is taken here, and a way to a part that answers nothing is written without whatever
+     * the part decided before it ended, which is no step a function's caller decides.
      */
     private void endsWithoutAllItHeld(Reach reach) {
         taken.addAll(reach.known());
-        saidInPart.addAll(reach.known());
+        switch (reach) {
+            case Reach.Unnameable unnamed -> saidInPart(reach.known(), unnamed, null);
+            case Reach.Coarse(var _, var why) ->
+                    saidInPart(reach.known(), new WrittenWithout.AStep(why));
+            // Named all the way to a fork whose case the arm is could not be named.
+            case Reach.Ways _ -> saidInPart(reach.known(), new WrittenWithout.AStep(
+                    PathAccess.Unsupported.Why.NO_WAY_IN_CAN_BE_NAMED));
+            case Reach.Nothing _ -> { }
+        }
     }
 
     /**
@@ -629,7 +686,8 @@ public final class CoverageRead {
                             ? unnamed(reach, PathAccess.Unsupported.Why.NO_WAY_IN_CAN_BE_NAMED)
                             : under(reach, new Reach.Ways(List.of(new WayIn(went.holds()))));
                     if (went != null) {
-                        takes(into, new Reach.Ways(List.of(new WayIn(went.holds()))));
+                        takes(into, new Reach.Ways(List.of(new WayIn(went.holds()))),
+                                match.place().occurrence());
                     } else if (observed && !reading.arrivesAt(match.cases().get(part).body())) {
                         answersNothingDown(match, part, naming, reach);
                     }
@@ -664,7 +722,7 @@ public final class CoverageRead {
                     Outcome went = naming.forkArm(constructed, arm);
                     if (went != null) {
                         Reach own = new Reach.Ways(List.of(new WayIn(went.holds())));
-                        takes(under(reach, own), own);
+                        takes(under(reach, own), own, constructed.place().occurrence());
                     }
                 }
                 int part = 0;
@@ -761,7 +819,7 @@ public final class CoverageRead {
         }
         List<WayIn> left = waysOf(through.paths());
         Reach into = under(reach, new Reach.Ways(left));
-        takes(into, new Reach.Ways(left));
+        takes(into, new Reach.Ways(left), binary.occurrence());
         return into.ways().size() > MOST_WAYS_IN
                 ? new Reach.Unnameable(PathAccess.Unsupported.Why.MORE_WAYS_IN_THAN_ARE_READ)
                 : into;
@@ -778,7 +836,7 @@ public final class CoverageRead {
     private Reach waysInTo(Core.If iff, int part, CoverageNaming naming, Reach reach) {
         Reach own = waysInFor(iff, part, naming);
         Reach into = under(reach, own);
-        takes(into, own);
+        takes(into, own, iff.place().occurrence());
         if (into.ways().size() <= MOST_WAYS_IN) {
             return into;
         }
@@ -863,16 +921,19 @@ public final class CoverageRead {
         // named on either side of it still holds wherever a run is — which is what a reading of
         // what the body decides is held to, and what no row is steered by.
         if (above instanceof Reach.Unnameable || step instanceof Reach.Unnameable) {
-            PathAccess.Unsupported.Why why = above instanceof Reach.Unnameable it ? it.why()
-                    : ((Reach.Unnameable) step).why();
+            SequencedSet<PathAccess.Unsupported.Why> whys = unsaidOn(above, step);
             List<WayIn> known = both(above.known(), step.known());
             if (known.isEmpty()) {
                 return new Reach.Nothing(PathAccess.Unreachable.Why.CONTRADICTS_WHAT_ALREADY_HELD);
             }
             // Past the bound what is known is the step's own and nothing above it, which leaves what
             // a run here decided read against more than it was decided in, and never less — and
-            // never drops what the step itself decided.
-            return new Reach.Unnameable(why, known.size() > MOST_WAYS_IN ? step.known() : known);
+            // never drops what the step itself decided. What it leaves out is the bound's.
+            if (known.size() > MOST_WAYS_IN) {
+                whys.add(PathAccess.Unsupported.Why.MORE_WAYS_IN_THAN_ARE_READ);
+                return new Reach.Unnameable(whys, step.known());
+            }
+            return new Reach.Unnameable(whys, known);
         }
         List<WayIn> held = both(above.ways(), step.ways());
         if (held.isEmpty()) {
@@ -903,11 +964,13 @@ public final class CoverageRead {
             return other;
         }
         if (one instanceof Reach.Unnameable || other instanceof Reach.Unnameable) {
-            PathAccess.Unsupported.Why why = one instanceof Reach.Unnameable it ? it.why()
-                    : ((Reach.Unnameable) other).why();
+            SequencedSet<PathAccess.Unsupported.Why> whys = unsaidOn(one, other);
             List<WayIn> known = anyOf(one.known(), other.known());
-            return known.size() > MOST_WAYS_IN ? new Reach.Unnameable(why)
-                    : new Reach.Unnameable(why, known);
+            if (known.size() > MOST_WAYS_IN) {
+                whys.add(PathAccess.Unsupported.Why.MORE_WAYS_IN_THAN_ARE_READ);
+                return new Reach.Unnameable(whys, List.of(new WayIn(List.of())));
+            }
+            return new Reach.Unnameable(whys, known);
         }
         List<WayIn> ways = anyOf(one.ways(), other.ways());
         if (ways.size() > MOST_WAYS_IN) {
@@ -920,6 +983,17 @@ public final class CoverageRead {
             return new Reach.Coarse(ways, why);
         }
         return new Reach.Ways(ways);
+    }
+
+    /** Every step nothing states on either of two reaches, {@code first}'s first. */
+    private static SequencedSet<PathAccess.Unsupported.Why> unsaidOn(Reach first, Reach second) {
+        SequencedSet<PathAccess.Unsupported.Why> out = new LinkedHashSet<>();
+        for (Reach each : List.of(first, second)) {
+            if (each instanceof Reach.Unnameable unnamed) {
+                out.addAll(unnamed.whys());
+            }
+        }
+        return out;
     }
 
     /** The ways of both, each once. */
