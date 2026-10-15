@@ -4,8 +4,12 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.core.Core;
+import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meta.ModulePath;
+import souther.compiler.partition.DecidedCondition;
 import souther.compiler.partition.DecisionReading;
+import souther.compiler.partition.DecisionRule;
+import souther.compiler.partition.NoInputTakesIt;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
@@ -17,6 +21,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -154,9 +159,10 @@ class AnArmOnACaseTheDeclarationAlreadyMakesNarrowsNothingTest {
      * The reproduction: a field already a {@code DecimalPart} handed to a helper over
      * {@code Coefficient}, which matches it and reads the constrained fields of the case.
      *
-     * <p>Measured whole. The arm the declaration already decides is no column, and the one it
-     * leaves no value for is a rule no row is owed — the answer a condition the source settles the
-     * other way gets, and not a rule this compiler could not name.
+     * <p>Measured whole. The arm the declaration already decides is no column, and the way through
+     * the one it leaves no value for is a way no input takes, for the arm's case clashes with what
+     * the field is — the answer a condition the source settles the other way gets, and not a rule
+     * this compiler could not name.
      */
     @Test
     void aConcreteFieldHandedToASumHelperIsMeasured() {
@@ -173,9 +179,16 @@ class AnArmOnACaseTheDeclarationAlreadyMakesNarrowsNothingTest {
         List<DecisionReading.Ruled> rules = decided.read().found();
         assertTrue(rules.stream().allMatch(DecisionReading.Ruled::whole),
                 () -> "every rule is named whole: " + rules);
-        assertEquals(1, rules.stream()
+        List<DecisionReading.ImpossiblePath> ways = decided.read().impossible();
+        assertEquals(List.of(List.of("n@Fraction.coefficient -> WholeDigits")),
+                ways.stream().map(each -> answers(each.way().rule())).toList(),
+                () -> "one way, through the arm no value of the field takes: " + ways);
+        assertInstanceOf(NoInputTakesIt.TheConditionsClash.class, ways.getFirst().why());
+        assertTrue(rules.stream().noneMatch(each -> ways.getFirst().standsFor(each.rule())),
+                () -> "and no rule past it is one of the rules: " + rules);
+        assertEquals(0, rules.stream()
                         .filter(each -> each.states().neverComesOut().isPresent()).count(),
-                () -> "one rule goes through the arm no value of the field takes: " + rules);
+                () -> "nor is any rule left through an arm nothing takes: " + rules);
     }
 
     /** A field the declaration already makes the case is the location it names, unnarrowed. */
@@ -223,9 +236,9 @@ class AnArmOnACaseTheDeclarationAlreadyMakesNarrowsNothingTest {
         assertEquals(Set.of(), underTheField(named("whole"), "x.digits"),
                 "a field that is the case is named unnarrowed: what is under its name is no value"
                         + " the arm can be matching");
-        assertEquals(1, outOfReach("whole"),
+        assertEquals(List.of(List.of("x.digits -> DecimalPart")), outOfReach("whole"),
                 "a field that is the case leaves only the other arm out of reach");
-        assertEquals(0, outOfReach("opened"),
+        assertEquals(List.of(), outOfReach("opened"),
                 "a field holding the sum under a name of its own leaves every arm in reach");
     }
 
@@ -235,40 +248,76 @@ class AnArmOnACaseTheDeclarationAlreadyMakesNarrowsNothingTest {
      * <p>Such a case is one narrowing of nothing, so asked as one narrowing it had no question to
      * put to the declaration. A field the declaration leaves only those leaves is the case already:
      * the arm's name stands at the field, and the arms under it narrow the field to each leaf. A
-     * field the declaration leaves none of them is never the case, and the rules through the arm
-     * are rules no row is owed.
+     * field the declaration leaves none of them is never the case, and the way through the arm is
+     * one no input takes, standing for every rule under it.
      */
     @Test
     void aFieldAlreadyACaseOverSeveralLeavesIsNarrowedByTheArmsUnderIt() {
         assertEquals(Set.of("r.kind@Station", "r.kind@Station.code", "r.kind@Hospital",
                         "r.kind@Hospital.code"),
                 underTheField(named("once"), "r.kind"));
-        assertEquals(1, outOfReach("once"), "only the arm beside the case is out of reach");
+        assertEquals(List.of(List.of("r.kind -> Renkei")), outOfReach("once"),
+                "only the arm beside the case is out of reach");
     }
 
-    /** The other side of the one above: a field none of the case's leaves. */
+    /**
+     * The other side of the one above: a field none of the case's leaves.
+     *
+     * <p>The way is the arm on the case alone. Each arm under it is past it, so the rules through
+     * them are none of the rules, and none is out of reach one by one.
+     */
     @Test
     void aFieldNoneOfTheLeavesOfACaseIsOutOfReachThroughIt() {
-        assertEquals(2, outOfReach("linked"),
-                "a field none of the case's leaves is out of reach through each arm under it");
+        assertEquals(List.of(List.of("l.kind -> {Hospital|Station}")), outOfReach("linked"),
+                "a field none of the case's leaves is out of reach through the case");
     }
 
     /** And a field the declaration leaves every case, which the arms divide as they always did. */
     @Test
     void aFieldOfEveryCaseHasEveryArmInReach() {
-        assertEquals(0, outOfReach("visit"));
+        assertEquals(List.of(), outOfReach("visit"));
     }
 
-    /** How many of {@code behavior}'s rules go through an arm no value of the input takes. */
-    private static long outOfReach(String behavior) {
+    /**
+     * The ways through {@code behavior}'s body that go through an arm no value of the input takes,
+     * each as the case columns it consulted.
+     *
+     * <p>Each is a way no input takes for a clash of what it asks, and stands for every rule past
+     * it: none of those is among the rules, and no rule left goes through an arm nothing takes.
+     */
+    private static List<List<String>> outOfReach(String behavior) {
+        DecisionReading read = decided(behavior).read();
+        for (DecisionReading.ImpossiblePath each : read.impossible()) {
+            assertInstanceOf(NoInputTakesIt.TheConditionsClash.class, each.why(),
+                    () -> "the arm's case clashes with what the field is: " + each);
+            assertTrue(read.found().stream().noneMatch(rule -> each.standsFor(rule.rule())),
+                    () -> "no rule past the way is one of the rules: " + read.found());
+        }
+        assertEquals(0, read.found().stream()
+                        .filter(each -> each.states().neverComesOut().isPresent()).count(),
+                () -> "no rule left goes through an arm nothing takes: " + read.found());
+        return read.impossible().stream().map(each -> answers(each.way().rule())).toList();
+    }
+
+    /** What {@code behavior}'s decision is read as. */
+    private static DecisionEvidence decided(String behavior) {
         Compilation c = Compilation.ofSource(NAMED, "Main");
         c.measure(Adequacy.Asked.warningsAt(Adequacy.Level.ALL));
         c.answerEverything();
         DecisionEvidence decided = c.db().ask(new Adequacy.Decides(c.modules().get(0))).value()
                 .get(behavior);
         assertNotNull(decided, () -> "the rules of " + behavior + " are read");
-        return decided.read().found().stream()
-                .filter(each -> each.states().neverComesOut().isPresent()).count();
+        return decided;
+    }
+
+    /** Each case column of {@code rule}, as its subject and what the rule came out as. */
+    private static List<String> answers(DecisionRule rule) {
+        return rule.inOrder().stream()
+                .filter(each -> each instanceof DecidedCondition.Narrowed)
+                .map(each -> (DecidedCondition.Narrowed) each)
+                .map(each -> ((DecisionSubject.AnInput) each.condition().of()).at() + " -> "
+                        + each.to().spelled())
+                .toList();
     }
 
     /** The locations below {@code field} the body names, spelled. */

@@ -7,7 +7,11 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -283,30 +287,40 @@ class WhatDropsALineIsWhatReachesItsComparisonTest {
 
     /**
      * A case held equal to the value asks which case it is and draws no line on the order, so there
-     * is no line for nothing to arrive at. The way the arm rules out is owed no row, as the case the
-     * arm leaves out: narrowed to one case or to a sum of several.
+     * is no line for nothing to arrive at. The way the arm rules out is one no input takes, for its
+     * conditions clash: the arm leaves the value one case and the comparison asks it to be the case
+     * the arm leaves out — narrowed to one case or to a sum of several.
      */
     @Test
     void aCaseHeldEqualToTheValueIsNoLineToDrop() {
-        for (String body : List.of("""
+        Map<String, List<String>> wayOf = new LinkedHashMap<>();
+        wayOf.put("""
                 let f (r) =
                     match r.level with
                         | Low -> (if r.level == Mid then "never" else "low")
                         | Mid -> "mid"
                         | High -> "high"
-                """, """
+                """, List.of("              · it goes through `case Low` (12:5)",
+                "              · the comparison at 13:30 holds"));
+        wayOf.put("""
                 let f (r) =
                     match r.level with
                         | Lowish -> (if r.level == High then "never" else "low")
                         | High -> "high"
-                """)) {
+                """, List.of("              · it goes through `case Lowish` (12:5)",
+                "              · the comparison at 13:33 holds"));
+        wayOf.forEach((body, conditions) -> {
             String report = reportOf(LEVELS + body);
             assertEquals(0, droppedForNothingArriving(LEVELS + body), report);
             assertTrue(report.contains("border      not applicable"), report);
-            assertTrue(report.contains("no row is owed at 1 decision rule — its way would need one"
-                    + " position to be two things at once"),
-                    () -> "the way the arm rules out is owed no row: " + report);
-        }
+            List<String> said = new ArrayList<>(List.of(
+                    "      · no input takes 1 way through this body, and no row is owed at a rule"
+                            + " past it",
+                    "          · the conditions on the way ask for what no input is at once:"));
+            said.addAll(conditions);
+            assertTrue(Collections.indexOfSubList(report.lines().toList(), said) >= 0,
+                    () -> "the way the arm rules out is one no input takes: " + report);
+        });
     }
 
     /**

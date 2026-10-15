@@ -55,6 +55,7 @@ import souther.compiler.meaning.WhyNotTaken;
 import souther.compiler.meaning.WhyUnread;
 import souther.compiler.meaning.WrittenLine;
 import souther.compiler.partition.DecisionReading;
+import souther.compiler.partition.NoInputTakesIt;
 import souther.compiler.partition.DecisionRule;
 import souther.compiler.partition.DomainPoint;
 import souther.compiler.partition.LeftOutPoint;
@@ -1191,7 +1192,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 : CoveredOnlyByRowsThatDoNotHold.rulesOf(decision)) {
             about.add(taken.obligation().display());
         }
-        if (about.isEmpty()) {
+        // And every way no input takes, each of which the page writes out as a rule's conditions.
+        List<DecisionReading.Ruled> ways = decision.read().impossible().stream()
+                .map(DecisionReading.ImpossiblePath::way).toList();
+        if (about.isEmpty() && ways.isEmpty()) {
             return Map.of();
         }
         DecisionRuleReading.Places places = placesFor(compilation.db(), module, behavior);
@@ -1200,6 +1204,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             if (about.contains(rule)) {
                 out.put(rule, conditionsOf(compilation.db(), module, places, rule));
             }
+        }
+        for (DecisionReading.Ruled way : ways) {
+            out.put(way, conditionsOf(compilation.db(), module, places, way));
         }
         return out;
     }
@@ -4163,6 +4170,44 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         // backlog. The numbers close over the count all the same, so nothing is lost and the rules
         // themselves are in the document.
         excluded(out, behavior, decision, rendering, behavior.rulePlace(), declaredIn);
+        noInputTakes(out, behavior, decision, rendering, declaredIn);
+    }
+
+    /**
+     * The ways through the body no input takes, each with the conditions it came to and why.
+     *
+     * <p>Ways and not rules, and counted apart from them. A way no input takes stands for every
+     * rule that goes on from it, which is no rule the reading holds: the count above is of the rules
+     * left, and a way here is not one more of them however many rules it stands for. Each is written
+     * as a rule is, so that what a reader is shown is which conditions came out which way.
+     */
+    private static void noInputTakes(StringBuilder out, BehaviorReport behavior,
+                                     DecisionEvidence decision, SourceRendering rendering,
+                                     SourceId declaredIn) {
+        List<DecisionReading.ImpossiblePath> impossible = decision.read().impossible();
+        if (impossible.isEmpty()) {
+            return;
+        }
+        out.append(String.format("      · no input takes %d way%s through this body, and no row"
+                + " is owed at a rule past %s%n", impossible.size(),
+                impossible.size() == 1 ? "" : "s", impossible.size() == 1 ? "it" : "them"));
+        for (DecisionReading.ImpossiblePath each : impossible) {
+            out.append(String.format("          · %s:%n", whyNoInputTakes(each.why())));
+            for (ShownCondition read : behavior.readingsOf(each.way())) {
+                out.append(String.format("              · %s%n",
+                        said(read, declaredIn, rendering)));
+            }
+        }
+    }
+
+    /** Why no input takes a way, in the words the page says it in. */
+    private static String whyNoInputTakes(NoInputTakesIt why) {
+        return switch (why) {
+            case NoInputTakesIt.TheConditionsClash _ ->
+                    "the conditions on the way ask for what no input is at once";
+            case NoInputTakesIt.TheNumbersLeaveNone _ ->
+                    "the declarations and the conditions on the way leave no value";
+        };
     }
 
     /**
@@ -4360,6 +4405,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         case MORE_THAN_ONE_RULE_MATCHES ->
                                 "a row was composed and run, and this reading placed it at more"
                                         + " than one rule, which one run cannot have taken";
+                        case ITS_WAY_IS_PROVED_TO_BE_TAKEN_BY_NO_INPUT ->
+                                "a row was composed and run, and it went down a way this reading"
+                                        + " proved no input takes";
                     });
             case RuleRequirement.Unsettled.NothingWatchedTheRow _ ->
                     new Said(3, 0,
@@ -6893,7 +6941,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 decision(b, behavior, sources);
                 interaction(b, behavior, sources);
                 replacement(b, behavior, sources);
-                reachProofsContradicted(b, behavior.reachShownWrong());
+                reachProofsContradicted(b, behavior.name(), behavior.reachShownWrong(),
+                        waysGoneDown(behavior));
                 findings(b, behavior, sources);
             }
         }
@@ -7682,6 +7731,21 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 }
             }
         }
+        // And the ways no input takes, apart from the rules: each stands for every rule past it,
+        // none of which is an obligation above, and written as a rule's conditions are so that a
+        // consumer tells which rules those are by the conditions they consult.
+        List<DecisionReading.ImpossiblePath> impossible = decision.read().impossible();
+        if (!impossible.isEmpty()) {
+            ArrayNode ways = out.putArray("waysNoInputTakes");
+            for (DecisionReading.ImpossiblePath each : impossible) {
+                ObjectNode one = ways.addObject();
+                ruleId(one.putObject("way"), behavior.name(), each.way().rule());
+                one.put("because", switch (each.why()) {
+                    case NoInputTakesIt.TheConditionsClash _ -> "the_conditions_on_the_way_clash";
+                    case NoInputTakesIt.TheNumbersLeaveNone _ -> "the_numbers_on_the_way_leave_none";
+                });
+            }
+        }
     }
 
     /**
@@ -7692,10 +7756,15 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * measure's to say — the arm count of its denominator, a rule of what would have left it no row
      * — and a proof nothing rested on is this compiler having been wrong about the body all the
      * same. Absent where no row went against any.
+     *
+     * <p>And last the ways through the body's decision a row went down that the reading of its
+     * rules proved no input takes, each as the conditions the way consulted. No rule past such a
+     * way was read, so none rested on it, and the rule count is short of whatever lies past it.
      */
-    static void reachProofsContradicted(ObjectNode into,
-                                        PathReachability.Answers.Contradictions shownWrong) {
-        if (shownWrong.isEmpty()) {
+    static void reachProofsContradicted(ObjectNode into, String behavior,
+                                        PathReachability.Answers.Contradictions shownWrong,
+                                        Set<DecisionRule> waysGoneDown) {
+        if (shownWrong.isEmpty() && waysGoneDown.isEmpty()) {
             return;
         }
         ArrayNode all = into.putArray("reachProofsContradicted");
@@ -7705,6 +7774,21 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             one.put("kind", word(ReachProofWord.ARRIVAL));
             constructId(one.putObject("construct"), construct);
         }
+        for (DecisionRule each : waysGoneDown) {
+            ObjectNode one = all.addObject();
+            one.put("kind", word(ReachProofWord.WAY_NO_INPUT_TAKES));
+            ruleId(one.putObject("way"), behavior, each);
+        }
+    }
+
+    /** The ways a row of {@code behavior} went down that its decision's reading proved no input
+     *  takes, in the order the rows met them, or none where the rows were not placed. */
+    private static Set<DecisionRule> waysGoneDown(BehaviorReport behavior) {
+        DecisionEvidence decision = behavior.evidence().decision();
+        return decision == null ? Set.of()
+                : decision.took().made()
+                        .map(placed -> placed.wentAgainst().keySet())
+                        .orElse(Set.of());
     }
 
     /**
@@ -9217,7 +9301,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case Weakening.PairSpaceTruncated _ -> WeakeningWord.PAIR_SPACE_TRUNCATED;
             case Weakening.MeetingsNotWalked _ -> WeakeningWord.MEETINGS_NOT_WALKED;
             case Weakening.MeetingsNotPlaced _ -> WeakeningWord.MEETINGS_NOT_PLACED;
-            case Weakening.ProofContradicted _ -> WeakeningWord.PROOF_CONTRADICTED;
+            case Weakening.ProofContradicted _, Weakening.ProofOfAWayContradicted _ ->
+                    WeakeningWord.PROOF_CONTRADICTED;
             case Weakening.ArmsUnsettled _ -> WeakeningWord.ARMS_UNSETTLED;
             // One word for the three shortfalls the reading can meet. A consumer acts on all of
             // them the same way — a rule nothing was seen taking may be where an unplaced row went

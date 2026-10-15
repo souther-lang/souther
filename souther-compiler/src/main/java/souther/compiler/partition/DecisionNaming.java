@@ -7,6 +7,7 @@ import souther.compiler.core.ACopyOfAnApplication;
 import souther.compiler.core.Core;
 import souther.compiler.flow.Arrival;
 import souther.compiler.flow.Naming;
+import souther.compiler.flow.Paths;
 import souther.compiler.flow.Truth;
 import souther.compiler.flow.WayWritten;
 import souther.compiler.inputs.InputReads;
@@ -67,12 +68,16 @@ final class DecisionNaming implements Naming<DecisionPath> {
 
     private final int mostArrivals;
 
+    /** The ways this reading proved no input takes, shared down every scope as the names are. */
+    private final WaysNoInputTakes proved;
+
     DecisionNaming(DecisionMeanings meanings, InputReads reads, ConditionNumbering numbering,
-                   int mostArrivals) {
+                   int mostArrivals, WaysNoInputTakes proved) {
         this.meanings = meanings;
         this.reads = reads;
         this.numbering = numbering;
         this.mostArrivals = mostArrivals;
+        this.proved = proved;
     }
 
     @Override
@@ -80,9 +85,90 @@ final class DecisionNaming implements Naming<DecisionPath> {
         return DecisionPath.NOWHERE;
     }
 
+    /**
+     * The two as one way, or null where no run takes both.
+     *
+     * <p>Two things show that. One condition answered two ways ({@link DecisionPath#and}); and
+     * conditions that each come out as the way took them, but that what the declarations hold leave
+     * no input to bring out all at once — a remainder past one cap is a number every later cap of
+     * nought or more holds, so a way that went past it and then stopped under the next is no way a
+     * run takes. Asked of the way with its numbers taken in as it is walked
+     * ({@link WayToTheBorder#takenByNoInput}), and only a proof drops a way: what the region
+     * cannot take in, or a walk stopped at a figure, is a way kept.
+     *
+     * <p>A proof never drops every way out of a node. Those ways are one for each way the node's own
+     * conditions come out, so between them they take every input the declarations hold, and a body
+     * naming a type with no value is refused before it is read. Which is what lets a node this
+     * leaves no way out of read as one the naming would not hold apart ({@link Paths.Beyond}) and
+     * not as one no input takes.
+     */
     @Override
     public DecisionPath join(DecisionPath held, DecisionPath more) {
-        return held.and(more);
+        DecisionPath joined = held.and(more);
+        // Asked of every way joined, even one that consults nothing either of the two did not: a
+        // way can come to several conditions without being joined ({@link #takenByNoInput}), and
+        // what is asked is answered once for what it consulted
+        // ({@link WaysNoInputTakes#whyNoInputTakes}).
+        if (joined == null) {
+            return null;
+        }
+        Optional<NoInputTakesIt> none = noInputTakes(joined);
+        if (none.isEmpty()) {
+            return joined;
+        }
+        proveWithLess(joined, none.get());
+        return null;
+    }
+
+    /**
+     * That no input takes {@code path}, said of as few of its conditions as still prove it.
+     *
+     * <p>A way is joined from what comes after a condition before the condition itself, so the
+     * first way two clashing conditions are on is one with every condition after them on it too.
+     * Each condition the proof is had without is taken off, one at a time: what is left is the way
+     * that stands for every rule past it, and two rules past one clash come to one way.
+     */
+    private void proveWithLess(DecisionPath path, NoInputTakesIt why) {
+        DecisionPath least = path;
+        NoInputTakesIt leastWhy = why;
+        for (DecisionPath.Consulted each : path.consulted()) {
+            List<DecisionPath.Consulted> without = new ArrayList<>(least.consulted());
+            without.remove(each);
+            if (without.isEmpty()) {
+                continue;
+            }
+            DecisionPath less = new DecisionPath(without);
+            Optional<NoInputTakesIt> still = noInputTakes(less);
+            if (still.isPresent()) {
+                least = less;
+                leastWhy = still.get();
+            }
+        }
+        proved.add(least, leastWhy);
+    }
+
+    /**
+     * Whether no input takes {@code path}, a way the reading arrived at the end of the body by,
+     * held with the ways joined where it is proved. A way can come to every condition it consulted
+     * without one join that put them together — both sides of an operator that stops when its
+     * answer is settled are one side of it, and a body of one fork is never joined to more — and it
+     * is asked here, where every way ends.
+     */
+    boolean takenByNoInput(DecisionPath path) {
+        Optional<NoInputTakesIt> none = noInputTakes(path);
+        none.ifPresent(why -> proveWithLess(path, why));
+        return none.isPresent();
+    }
+
+    /** Why no input brings out every condition {@code path} consulted as it did, where that is
+     *  proved. */
+    private Optional<NoInputTakesIt> noInputTakes(DecisionPath path) {
+        return proved.whyNoInputTakes(path.rule(), () -> {
+            List<OnTheWay> stated = new ArrayList<>();
+            path.consulted().forEach(each -> stated.addAll(each.states()));
+            return new WayToTheBorder(stated)
+                    .takenByNoInput(meanings.states().read().quantities().region());
+        });
     }
 
     @Override
@@ -90,7 +176,7 @@ final class DecisionNaming implements Naming<DecisionPath> {
         InputReads inside =
                 reads.entering(step, meanings.states().symbols(), meanings.states().newtypes());
         return inside == reads ? this
-                : new DecisionNaming(meanings, inside, numbering, mostArrivals);
+                : new DecisionNaming(meanings, inside, numbering, mostArrivals, proved);
     }
 
     /**

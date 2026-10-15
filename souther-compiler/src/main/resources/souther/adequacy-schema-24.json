@@ -152,6 +152,7 @@
         "assignments_on_the_way_composed_for",
         "values_a_point_is_tried_with",
         "paths_of_a_decision_read",
+        "ways_a_decision_asks_an_input_takes",
         "readings_of_one_condition",
         "total_readings_of_one_condition",
         "parts_a_derivation_concludes",
@@ -2509,7 +2510,7 @@
         "reachProofsContradicted": {
           "type": "array",
           "minItems": 1,
-          "description": "The proofs this compiler made that nothing arrives somewhere in this body, that a row then went against: an arm proven to be gone into by nothing that a row went through, a comparison proven to come out one way for nothing that a row brought out so, a comparison or an application whose answer states a line proven to be arrived at by nothing that a row came to. Nothing about the model is wrong then and the proof is, and every measure here reads the body with it taken back. Of the reading and of no measure: which measures rested on one says so in its own words — `denominatorSettled` and `proof_contradicted` for the arms, `reachProofsContradicted` on a rule of the decision for one the proof would have left no row — and a proof no measure rested on is listed here all the same. Each proof once, however many rules rested on it. Only a place a run is recorded at can be shown wrong here: an arm that answers `unreachable` has no such place, and a row reaching one is E1911, not an entry of this list. Nor is an author's `unreachable` claim judged again here — that is the compile's, read from the model before any row ran. Absent where no row went against any.",
+          "description": "The proofs this compiler made that nothing arrives somewhere in this body, that a row then went against: an arm proven to be gone into by nothing that a row went through, a comparison proven to come out one way for nothing that a row brought out so, a comparison or an application whose answer states a line proven to be arrived at by nothing that a row came to, a way through the decision proven to be taken by no input that a row went down. Nothing about the model is wrong then and the proof is, and every measure here reads the body with it taken back. Of the reading and of no measure: which measures rested on one says so in its own words — `denominatorSettled` and `proof_contradicted` for the arms, `reachProofsContradicted` on a rule of the decision for one the proof would have left no row — and a proof no measure rested on is listed here all the same. Each proof once, however many rules rested on it. Only a place a run is recorded at can be shown wrong here: an arm that answers `unreachable` has no such place, and a row reaching one is E1911, not an entry of this list. Nor is an author's `unreachable` claim judged again here — that is the compile's, read from the model before any row ran. Absent where no row went against any.",
           "items": {
             "$ref": "#/$defs/reachProof"
           }
@@ -2521,10 +2522,9 @@
     },
     "reachProof": {
       "type": "object",
-      "description": "One place a proof that nothing arrives was about, as it stands in the tree that runs: `construct` is the copy of the construct, in the coordinates a combination's decision is written under, so a helper called twice is two copies and what one call cannot reach another may. `arm` is an arm of a fork, by `part`, its place among the fork's arms; `comparison_outcome` a comparison coming out one way, `held` saying which; `arrival` a construct a line is drawn at — a comparison, or an application whose answer states one — proven to be arrived at by nothing as a whole, which is not either way out of a comparison, since both may be rightly proven while this is wrong.",
+      "description": "One place a proof that nothing arrives was about, as it stands in the tree that runs: `construct` is the copy of the construct, in the coordinates a combination's decision is written under, so a helper called twice is two copies and what one call cannot reach another may. `arm` is an arm of a fork, by `part`, its place among the fork's arms; `comparison_outcome` a comparison coming out one way, `held` saying which; `arrival` a construct a line is drawn at — a comparison, or an application whose answer states one — proven to be arrived at by nothing as a whole, which is not either way out of a comparison, since both may be rightly proven while this is wrong. `way_no_input_takes` is a way through the body's decision that its reading proved no input takes, written under `way` as a rule of the decision is identified, by the conditions the way consulted; it carries no `construct`, since a way is the conditions of several, and no rule of the decision rests on it, since none past it was read.",
       "required": [
-        "kind",
-        "construct"
+        "kind"
       ],
       "additionalProperties": false,
       "properties": {
@@ -2532,7 +2532,8 @@
           "enum": [
             "arm",
             "comparison_outcome",
-            "arrival"
+            "arrival",
+            "way_no_input_takes"
           ]
         },
         "construct": {
@@ -2544,6 +2545,9 @@
         },
         "held": {
           "type": "boolean"
+        },
+        "way": {
+          "$ref": "#/$defs/ruleObligationId"
         }
       },
       "allOf": [
@@ -2560,11 +2564,21 @@
           },
           "then": {
             "required": [
+              "construct",
               "part"
             ],
             "not": {
-              "required": [
-                "held"
+              "anyOf": [
+                {
+                  "required": [
+                    "held"
+                  ]
+                },
+                {
+                  "required": [
+                    "way"
+                  ]
+                }
               ]
             }
           }
@@ -2582,11 +2596,21 @@
           },
           "then": {
             "required": [
+              "construct",
               "held"
             ],
             "not": {
-              "required": [
-                "part"
+              "anyOf": [
+                {
+                  "required": [
+                    "part"
+                  ]
+                },
+                {
+                  "required": [
+                    "way"
+                  ]
+                }
               ]
             }
           }
@@ -2603,8 +2627,52 @@
             ]
           },
           "then": {
+            "required": [
+              "construct"
+            ],
             "not": {
               "anyOf": [
+                {
+                  "required": [
+                    "part"
+                  ]
+                },
+                {
+                  "required": [
+                    "held"
+                  ]
+                },
+                {
+                  "required": [
+                    "way"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "way_no_input_takes"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "required": [
+              "way"
+            ],
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "construct"
+                  ]
+                },
                 {
                   "required": [
                     "part"
@@ -5382,6 +5450,30 @@
           "$ref": "#/$defs/weakening",
           "description": "What the reading of the rules themselves went without, which is about this list rather than about any entry: a reading that stopped states the ways it reached and the rest are in no document."
         },
+        "waysNoInputTakes": {
+          "type": "array",
+          "minItems": 1,
+          "description": "The ways through the body the reading proved no input takes, apart from the rules: each is the conditions a way consulted and came out as, said of as few of them as still prove it, and stands for every rule that goes on from it — a rule consulting each of these conditions as the way did. None of those rules is in `obligations` and none is counted in `coverage`; a way here is not a rule however many rules it stands for, and no two of these stand one for the other. `because` is what the proof was had from: `the_conditions_on_the_way_clash` is conditions asking for two cases of one value, two answers of one truth or counts that leave none in common, whatever the numbers; `the_numbers_on_the_way_leave_none` is conditions that each leave values and leave none together once what the declarations hold is taken in with them. Absent where no way was proved one no input takes.",
+          "items": {
+            "type": "object",
+            "required": [
+              "way",
+              "because"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "way": {
+                "$ref": "#/$defs/ruleObligationId"
+              },
+              "because": {
+                "enum": [
+                  "the_conditions_on_the_way_clash",
+                  "the_numbers_on_the_way_leave_none"
+                ]
+              }
+            }
+          }
+        },
         "obligations": {
           "type": "array",
           "description": "One entry per rule the body states.",
@@ -5466,7 +5558,7 @@
               "reachProofsContradicted": {
                 "type": "array",
                 "minItems": 1,
-                "description": "The proofs that nothing arrives that would have left this rule no row before the rows ran, and that a row went against — which is why it was asked at all. Each is an entry of the behavior's `reachProofsContradicted`, written the same way, so a consumer joins the two and counts a proof once however many rules rested on it. Present only beside a `requirement` other than `excluded`: a rule still excluded is excluded by something that stands, whatever was taken back on its way. Absent where no such proof was on its way.",
+                "description": "The proofs that nothing arrives that would have left this rule no row before the rows ran, and that a row went against — which is why it was asked at all. Each is an entry of the behavior's `reachProofsContradicted`, written the same way, so a consumer joins the two and counts a proof once however many rules rested on it. Never a `way_no_input_takes`: no rule of the decision is past such a way. Present only beside a `requirement` other than `excluded`: a rule still excluded is excluded by something that stands, whatever was taken back on its way. Absent where no such proof was on its way.",
                 "items": {
                   "$ref": "#/$defs/reachProof"
                 }

@@ -267,6 +267,20 @@ public enum CompositionBudget {
     PATHS_OF_A_DECISION_READ(4096),
 
     /**
+     * How many ways the reading of one body's decision asks whether some input takes, in all —
+     * every way joined, every way the reading ends at, and every way a proof is said of fewer
+     * conditions in, counting each set of conditions once however often it is asked.
+     *
+     * <p>Over the whole reading and not each way. One way asked is one walk under its own figures
+     * ({@link #CHOICES_ON_A_WAY_LOOKED_AT}); this is what bounds how many walks a body makes.
+     *
+     * <p><b>Reaching it proves nothing and stops nothing.</b> Past it no way is asked, and a way not
+     * asked is a way kept: the rules past it are read as rules, and a rule no run takes among them
+     * is what the reading of reach says of it, as it would be with no proof at all.
+     */
+    WAYS_A_DECISION_ASKS_AN_INPUT_TAKES(4096),
+
+    /**
      * How many readings of one condition the reading of what it means makes: one per application
      * of a closure handed one of the values a container was written with, and one per case of a
      * value chosen by cases that a comparison is split into.
@@ -275,6 +289,12 @@ public enum CompositionBudget {
      * every application of every closure it is in and for every case of each side it compares, so
      * what multiplies is the nesting and what is counted is the product along one way down — and
      * so what one condition comes to does not turn on how many others beside it were read first.
+     *
+     * <p>Not an {@code if} a comparison is read through. Its arms are read only where a run takes
+     * them, so the ways down a chain of them are the ways a run can go, and one of those may pass
+     * as many of them as the chain is long while the ways beside it end at the next; the product
+     * along it counts ways that are not there. What bounds those is the count in all
+     * ({@link #TOTAL_READINGS_OF_ONE_CONDITION}).
      *
      * <p><b>Reaching it gives the part up and says so.</b> A part that would be read more times
      * than this is not read one by one at all, and is carried out as a part nothing read, naming
@@ -298,7 +318,8 @@ public enum CompositionBudget {
      * along one way down, so ways that each stay under it can come to more than it in all — a
      * value chosen by cases holds the conditions that chose it, and a helper called on what the
      * last call answered reads every condition before it again, once more on each way. This one
-     * is what bounds that.
+     * is what bounds that, and the only figure the arms of an {@code if} a comparison is read
+     * through are held to: an arm no run takes is not read and not counted.
      *
      * <p><b>Reaching it gives the part up and says so</b>, as the other does: the part is carried
      * out as one nothing read, naming this as why
@@ -571,6 +592,8 @@ public enum CompositionBudget {
             case VALUES_A_POINT_IS_TRIED_WITH -> "how many values a point is tried with";
             case DEPTH_A_CONSTRUCTION_PLAN_DESCENDS -> "how deep a value is built";
             case PATHS_OF_A_DECISION_READ -> "how many paths through one body a decision is read for";
+            case WAYS_A_DECISION_ASKS_AN_INPUT_TAKES ->
+                    "how many ways through one body are asked whether some input takes them";
             case READINGS_OF_ONE_CONDITION ->
                     "how many times one condition is read, once per value or case";
             case TOTAL_READINGS_OF_ONE_CONDITION ->
@@ -643,7 +666,8 @@ public enum CompositionBudget {
                  ASSIGNMENTS_A_SEARCH_COMPOSES, VALUES_OF_AN_UNBOUNDED_PROGRESSION_TRIED,
                  LEVELS_A_SIDE_IS_ASKED_AT, TIMES_THE_RULES_ARE_ASKED_AGAIN,
                  VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT, VALUES_A_POINT_IS_TRIED_WITH,
-                 PATHS_OF_A_DECISION_READ, READINGS_OF_ONE_CONDITION,
+                 PATHS_OF_A_DECISION_READ, WAYS_A_DECISION_ASKS_AN_INPUT_TAKES,
+                 READINGS_OF_ONE_CONDITION,
                  TOTAL_READINGS_OF_ONE_CONDITION, PARTS_A_DERIVATION_CONCLUDES,
                  ALTERNATIVES_A_PATH_TRIES, STEPS_A_STATEMENT_IS_READ_IN,
                  CASES_A_LINE_IS_TAKEN_APART_INTO, CASES_A_LINE_IS_ASKED_IN,

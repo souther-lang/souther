@@ -121,19 +121,33 @@ public record DecisionEvidence(DecisionReading read, Measure<RowsPlaced> took,
      * @param rowsNotPlaced  rows something watched whose rule this reading could not tell
      * @param rowsNotWatched rows nothing watched, which is this compiler's shortfall and not
      *                       anything about the model
+     * @param wentAgainst    the ways the reading proved no input takes that a row went down, each
+     *                       as the conditions it consulted, and which rows did. Beside the three
+     *                       counts and not one of them: a row that went against a proof may be
+     *                       placed at a rule or placed nowhere, and one row may go against more
+     *                       than one proof. A proof a row went against is this compiler having
+     *                       been wrong about the body, and the rules the count is made of are
+     *                       short of whatever lies past it
      */
     public record RowsPlaced(int rowsRead, Map<DecisionRule, RowWitnesses> taken, int rowsPlaced,
-                             int rowsNotPlaced, int rowsNotWatched) {
+                             int rowsNotPlaced, int rowsNotWatched,
+                             Map<DecisionRule, RowWitnesses> wentAgainst) {
 
         public RowsPlaced {
             // Sealed and not only copied. What the account answers about a behavior is read off
             // this — which rules were covered, which were not — and a map a caller can add to is a
             // value whose answers change after it was made.
             taken = Collections.unmodifiableMap(new LinkedHashMap<>(taken));
+            wentAgainst = Collections.unmodifiableMap(new LinkedHashMap<>(wentAgainst));
             Set<DecisionRule> rules = taken.keySet();
             if (rowsPlaced < 0 || rowsNotPlaced < 0 || rowsNotWatched < 0) {
                 throw new IllegalArgumentException("rows are counted from none: " + rowsPlaced
                         + "/" + rowsNotPlaced + "/" + rowsNotWatched);
+            }
+            // A row that went against a proof was watched, wherever it was placed.
+            if (!wentAgainst.isEmpty() && rowsPlaced + rowsNotPlaced == 0) {
+                throw new IllegalArgumentException("a proof was gone against by no row watched: "
+                        + wentAgainst.keySet());
             }
             if (rowsPlaced + rowsNotPlaced + rowsNotWatched != rowsRead) {
                 throw new IllegalArgumentException("a reading of " + rowsRead
@@ -382,6 +396,7 @@ public record DecisionEvidence(DecisionReading read, Measure<RowsPlaced> took,
         return took.weakening();
     }
 
+
     /**
      * What the rows of one behavior came to, one answer per row.
      *
@@ -399,7 +414,8 @@ public record DecisionEvidence(DecisionReading read, Measure<RowsPlaced> took,
                                          List<WitnessedRow> rows,
                                          WeakeningSet whatTheRowsWentWithout) {
         Map<DecisionRule, RowWitnesses.Gathering> took = new LinkedHashMap<>();
-        List<Weakening> whyNotPlaced = new ArrayList<>();
+        Map<DecisionRule, RowWitnesses.Gathering> wentAgainst = new LinkedHashMap<>();
+        List<Weakening> whyShort = new ArrayList<>();
         int placed = 0;
         int notPlaced = 0;
         int notWatched = 0;
@@ -427,22 +443,30 @@ public record DecisionEvidence(DecisionReading read, Measure<RowsPlaced> took,
                                         WeakeningSet.of(new Weakening.DecisionOfRowUnreadable(
                                                 behavior, it.why())));
                             }
-                            whyNotPlaced.add(
+                            whyShort.add(
                                     new Weakening.DecisionOfRowUnreadable(behavior, it.why()));
                             notPlaced++;
                         }
                     }
+                    // Whatever the row was placed at. A proof the row went against is this
+                    // compiler wrong about the body somewhere, so the rules counted are short of
+                    // whatever lies past the way, and a placement beside it rests on that reading.
+                    for (DecisionRule way : against.proofsGoneAgainst(row)) {
+                        wentAgainst.computeIfAbsent(way, _ -> new RowWitnesses.Gathering())
+                                .add(witnessed.by());
+                        whyShort.add(new Weakening.ProofOfAWayContradicted(behavior, way));
+                    }
                 }
             }
         }
-        WeakeningSet went = WeakeningSet.ofAll(whyNotPlaced).union(whatTheRowsWentWithout);
+        WeakeningSet went = WeakeningSet.ofAll(whyShort).union(whatTheRowsWentWithout);
         if (notWatched > 0) {
             went = went.union(
                     WeakeningSet.of(new Weakening.DecisionRunNotWatched(behavior)));
         }
         RowsPlaced made =
                 new RowsPlaced(rows.size(), RowWitnesses.Gathering.done(took), placed, notPlaced,
-                        notWatched);
+                        notWatched, RowWitnesses.Gathering.done(wentAgainst));
         // A row this reading could not place says what stopped it, and a row nothing watched says
         // what the run went without. Either leaves the placement partial; neither may arrive as a
         // complete reading of the rows.

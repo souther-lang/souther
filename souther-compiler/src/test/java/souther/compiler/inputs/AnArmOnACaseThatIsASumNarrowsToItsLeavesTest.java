@@ -9,6 +9,7 @@ import souther.compiler.diag.SourceRendering;
 import souther.compiler.partition.DecidedCondition;
 import souther.compiler.partition.DecisionReading;
 import souther.compiler.partition.DecisionRule;
+import souther.compiler.partition.NoInputTakesIt;
 import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.partition.OnTheWay;
 import souther.compiler.partition.TakenConstraint;
@@ -152,18 +153,26 @@ class AnArmOnACaseThatIsASumNarrowsToItsLeavesTest {
 
     /**
      * An arm inside the narrowing that the narrowing leaves no value for is an answer to the same
-     * question as its neighbours, and a rule no row takes.
+     * question as its neighbours, and a way no input takes: the arm asks for the case the
+     * narrowing left out.
      */
     @Test
-    void anArmTheNarrowingLeavesNothingForIsARuleNoRowTakes() {
-        DecisionReading.Ruled never = ruledOf("describeEither").stream()
-                .filter(each -> answers(each.rule()).equals(
-                        List.of("v.kind -> {Hospital|Station}", "v.kind -> Renkei")))
+    void anArmTheNarrowingLeavesNothingForIsAWayNoInputTakes() {
+        DecisionReading read = readingOf(MODEL, "describeEither");
+        assertEquals(1, read.impossible().size(), () -> "one way: " + read.impossible());
+        DecisionReading.ImpossiblePath never = read.impossible().getFirst();
+        assertEquals(List.of("v.kind -> Renkei"), answers(never.way().rule()),
+                () -> "the way is the inner Renkei arm: " + never);
+        assertInstanceOf(NoInputTakesIt.TheConditionsClash.class, never.why());
+        DecisionReading.Ruled station = read.found().stream()
+                .filter(each -> answers(each.rule()).contains("v.kind -> Station"))
                 .findFirst().orElse(null);
-        assertNotNull(never, () -> "the inner Renkei arm is a column of the inner question: "
-                + rulesOf("describeEither"));
-        assertTrue(never.states().neverComesOut().isPresent(),
-                () -> "and no row comes out that way: " + never);
+        assertNotNull(station, () -> "a rule goes through Station: " + read.found());
+        assertTrue(station.rule().consulted().keySet()
+                        .containsAll(never.way().rule().consulted().keySet()),
+                () -> "the Renkei arm answers the question the Station arm does: " + never);
+        assertTrue(read.found().stream().noneMatch(each -> never.standsFor(each.rule())),
+                () -> "and no rule through it is one of the rules: " + read.found());
     }
 
     /**
@@ -372,6 +381,13 @@ class AnArmOnACaseThatIsASumNarrowsToItsLeavesTest {
     }
 
     private static List<DecisionReading.Ruled> ruledOf(String model, String behavior) {
+        List<DecisionReading.Ruled> found = readingOf(model, behavior).found();
+        assertTrue(found.stream().allMatch(DecisionReading.Ruled::whole),
+                () -> "every rule is named whole: " + found);
+        return found;
+    }
+
+    private static DecisionReading readingOf(String model, String behavior) {
         Compilation c = Compilation.ofSource(model, "Main");
         c.measure(Adequacy.Asked.warningsAt(Adequacy.Level.ALL));
         c.answerEverything();
@@ -381,10 +397,7 @@ class AnArmOnACaseThatIsASumNarrowsToItsLeavesTest {
         DecisionEvidence decided = c.db().ask(new Adequacy.Decides(c.modules().get(0))).value()
                 .get(behavior);
         assertNotNull(decided, () -> "the rules of " + behavior + " are read");
-        List<DecisionReading.Ruled> found = decided.read().found();
-        assertTrue(found.stream().allMatch(DecisionReading.Ruled::whole),
-                () -> "every rule is named whole: " + found);
-        return found;
+        return decided.read();
     }
 
     /** The locations below {@code field} the body names, spelled. */

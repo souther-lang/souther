@@ -1710,6 +1710,19 @@ public sealed interface Derivation {
 
     // The grounds: a part made from what one kind of thing says, and nothing else.
 
+    /**
+     * An arm of a choice no run takes: what the arms taken on the way to it and the declarations
+     * hold leave no input that brings its condition out its way. Nothing down it holds, which is
+     * not that nothing down it was read — it is no arm of a run at all.
+     */
+    record NoRunTakesIt() implements Derivation {
+
+        @Override
+        public Proposition conclusion(Conclusion numbering) {
+            return new Proposition.Always(false);
+        }
+    }
+
     /** A truth, a container's holding anything or an optional's holding a value, written out. */
     record WrittenOut(boolean holds) implements Derivation {
 

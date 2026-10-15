@@ -27,6 +27,7 @@ import souther.compiler.observe.RunSensitivity;
 import souther.compiler.observe.WorkFigure;
 import souther.compiler.source.SourceId;
 import souther.compiler.partition.Border;
+import souther.compiler.partition.DecisionRule;
 import souther.compiler.partition.Replacement;
 import souther.compiler.partition.BorderQuantity;
 import souther.compiler.partition.BoundaryTarget;
@@ -86,6 +87,7 @@ class WhatEachWeakeningSaysAboutAWiderRunTest {
         table.put("BoundaryNotDerived", "answers/UNAFFECTED");
         table.put("InputNotRead", "answers/UNAFFECTED");
         table.put("ProofContradicted", "answers/UNAFFECTED");
+        table.put("ProofOfAWayContradicted", "answers/UNAFFECTED");
         table.put("ArmsUnsettled", "answers/UNAFFECTED");
         // The one arm that is a figure the query graph hands the analysis.
         table.put("PairSpaceTruncated", "answers/MAY_CHANGE");
@@ -244,7 +246,8 @@ class WhatEachWeakeningSaysAboutAWiderRunTest {
                  Weakening.InputNotRead _, Weakening.PairSpaceTruncated _,
                  Weakening.BorderReadingsNotExhausted _,
                  Weakening.ItemsPlaceNotWorkedOut _, Weakening.AReadingNotTiedToItsLine _,
-                 Weakening.ProofContradicted _, Weakening.ArmsUnsettled _,
+                 Weakening.ProofContradicted _, Weakening.ProofOfAWayContradicted _,
+                 Weakening.ArmsUnsettled _,
                  Weakening.DecisionOfRowUnreadable _, Weakening.DecisionRunNotWatched _,
                  Weakening.MeetingsNotWalked _, Weakening.MeetingsNotPlaced _,
                  Weakening.DecisionReadingIncomplete _,
@@ -277,6 +280,7 @@ class WhatEachWeakeningSaysAboutAWiderRunTest {
                 new SourceConstructOrigin(new WrittenOwner.Body("m", "b"), 2, 0,
                         SourceConstruct.IF),
                 1, new DecidedBy.NotSaid())));
+        out.add(new Weakening.ProofOfAWayContradicted("b", new DecisionRule(Map.of())));
         out.add(new Weakening.ArmsUnsettled(
                 new SourceConstructOrigin(new WrittenOwner.Body("m", "b"), 1, 0,
                         SourceConstruct.IF)));

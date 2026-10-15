@@ -17,6 +17,7 @@ import souther.compiler.types.ModelOccurrence;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 
@@ -52,16 +53,27 @@ import java.util.Set;
  * to have taken it — and a path with none left is matched by every run. A path with no conditions
  * that is whole is another thing: a body that draws no distinction has one rule, and every run
  * takes it.
+ *
+ * <p><b>A run down a way the reading proved no input takes is the proof shown wrong.</b> It is
+ * recognised at the way's conditions as a rule is, and asked apart from where the run is placed
+ * ({@link #proofsGoneAgainst}): where a run is placed among the rules and which proofs it went
+ * against are two facts, and one run can be placed at a rule and go against a proof, or go against
+ * more than one proof. The reading read no rule past such a way ({@link DecisionReading#impossible}),
+ * so a run matching no rule that went against one is placed nowhere for that reason.
  */
 public final class RulesTaken {
 
     /**
      * Which rule a run took, or that this compiler could not tell.
      *
-     * <p>Three answers rather than two, because what a reader does with them differs. A run whose
-     * rule is known is evidence that something stands there; a run whose rule could not be told is
-     * this compiler falling short and says nothing about the model; and a run matching no rule at
-     * all is the reading and the run disagreeing about the body, which is worth knowing.
+     * <p>More answers than two, because what a reader does with them differs. A run whose rule is
+     * known is evidence that something stands there; a run whose rule could not be told is this
+     * compiler falling short and says nothing about the model; a run matching no rule at all is the
+     * reading and the run disagreeing about the body, which is worth knowing.
+     *
+     * <p>Where the run is placed and nothing else. Which proofs that no input takes a way the run
+     * went against is its own question ({@link #proofsGoneAgainst}), answered whatever this one
+     * answers.
      */
     public sealed interface WhichRule {
 
@@ -83,7 +95,12 @@ public final class RulesTaken {
              *  ways, which says it went down more than one path there. */
             A_CONDITION_CAME_OUT_BOTH_WAYS,
             /** More than one rule matched, which one run cannot have done. */
-            MORE_THAN_ONE_RULE_MATCHES
+            MORE_THAN_ONE_RULE_MATCHES,
+            /** No rule matched, and the run took a way the reading proved no input takes: the
+             *  reading read no rule past a way it proved that of, so there is none to place the run
+             *  at. Answered only where no rule matched; a run placed at a rule that also went
+             *  against a proof is placed there. */
+            ITS_WAY_IS_PROVED_TO_BE_TAKEN_BY_NO_INPUT
         }
     }
 
@@ -227,8 +244,13 @@ public final class RulesTaken {
 
     private final List<Recognised> recognisable;
 
-    private RulesTaken(List<Recognised> recognisable) {
+    /** The ways proved to be taken by no input that a run can be recognised at, each as what it
+     *  consulted and where each of its conditions is recorded. */
+    private final List<Recognised> proofs;
+
+    private RulesTaken(List<Recognised> recognisable, List<Recognised> proofs) {
         this.recognisable = recognisable;
+        this.proofs = proofs;
     }
 
     /**
@@ -241,12 +263,13 @@ public final class RulesTaken {
      */
     @Override
     public boolean equals(Object other) {
-        return other instanceof RulesTaken it && recognisable.equals(it.recognisable);
+        return other instanceof RulesTaken it && recognisable.equals(it.recognisable)
+                && proofs.equals(it.proofs);
     }
 
     @Override
     public int hashCode() {
-        return recognisable.hashCode();
+        return Objects.hash(recognisable, proofs);
     }
 
     /**
@@ -261,22 +284,37 @@ public final class RulesTaken {
         ArmEmissionIndex arms = ArmEmissionIndex.ofBody(emitted, plan);
         List<Recognised> recognisable = new ArrayList<>();
         for (DecisionReading.Ruled ruled : read.found()) {
-            if (!ruled.whole()) {
-                continue;
-            }
-            List<ColumnWitness> conditions = new ArrayList<>();
-            boolean everyOne = true;
-            for (ShownBy each : ruled.shownBy()) {
-                Optional<ColumnWitness> seen =
-                        witnessOf(each, ruled.rule(), comparisons, answers, arms, plan);
-                everyOne &= seen.isPresent();
-                seen.ifPresent(conditions::add);
-            }
-            if (everyOne) {
-                recognisable.add(new Recognised(ruled.rule(), List.copyOf(conditions)));
-            }
+            recognised(ruled, comparisons, answers, arms, plan).ifPresent(recognisable::add);
         }
-        return new RulesTaken(List.copyOf(recognisable));
+        // The ways no input takes are recognised as the rules are, condition by condition: a run
+        // that brought out each of them as the way did is the proof shown wrong.
+        List<Recognised> proofs = new ArrayList<>();
+        for (DecisionReading.ImpossiblePath each : read.impossible()) {
+            recognised(each.way(), comparisons, answers, arms, plan).ifPresent(proofs::add);
+        }
+        return new RulesTaken(List.copyOf(recognisable), List.copyOf(proofs));
+    }
+
+    /** Where a run through each condition of {@code ruled} is recorded, or empty where a run
+     *  through it cannot be told. */
+    private static Optional<Recognised> recognised(DecisionReading.Ruled ruled,
+                                                   ComparisonEmissionIndex comparisons,
+                                                   AnswerEmissionIndex answers,
+                                                   ArmEmissionIndex arms,
+                                                   CoverageSites.Plan plan) {
+        if (!ruled.whole()) {
+            return Optional.empty();
+        }
+        List<ColumnWitness> conditions = new ArrayList<>();
+        for (ShownBy each : ruled.shownBy()) {
+            Optional<ColumnWitness> seen =
+                    witnessOf(each, ruled.rule(), comparisons, answers, arms, plan);
+            if (seen.isEmpty()) {
+                return Optional.empty();
+            }
+            conditions.add(seen.get());
+        }
+        return Optional.of(new Recognised(ruled.rule(), List.copyOf(conditions)));
     }
 
     /**
@@ -387,9 +425,6 @@ public final class RulesTaken {
      */
     public WhichRule takenBy(AlignedObservation seen, List<ObservedValue> values,
                              BehaviorInputs inputs) {
-        if (recognisable.isEmpty()) {
-            return new WhichRule.CouldNotTell(WhichRule.Why.NO_RULE_IS_RECOGNISABLE);
-        }
         Run run = new Run(seen, values, inputs);
         DecisionRule took = null;
         boolean butForBothWays = false;
@@ -408,8 +443,45 @@ public final class RulesTaken {
         if (took != null) {
             return new WhichRule.TookThis(took);
         }
+        // No rule matched. A run that went against a proof is placed nowhere because no rule past
+        // the way was read, which is the reason ahead of what the rules recognisable say of it.
+        if (!against(run).isEmpty()) {
+            return new WhichRule.CouldNotTell(
+                    WhichRule.Why.ITS_WAY_IS_PROVED_TO_BE_TAKEN_BY_NO_INPUT);
+        }
+        if (recognisable.isEmpty()) {
+            return new WhichRule.CouldNotTell(WhichRule.Why.NO_RULE_IS_RECOGNISABLE);
+        }
         return new WhichRule.CouldNotTell(butForBothWays
                 ? WhichRule.Why.A_CONDITION_CAME_OUT_BOTH_WAYS
                 : WhichRule.Why.NO_RECOGNISABLE_RULE_MATCHES);
+    }
+
+    /**
+     * Every way the reading proved no input takes that a run went down, given where it went and
+     * the values it was given.
+     *
+     * <p>A way is gone down where the run brought out every one of its conditions as the way did,
+     * as a rule is taken. Every such way and not the first: each is a proof of its own shown wrong,
+     * and one run can show more than one. Asked whatever {@link #takenBy} answers, since a run
+     * placed at a rule can go against a proof as well. In the order of
+     * {@link DecisionReading#impossible}.
+     *
+     * @param values what the row wrote, as {@link #takenBy} takes them
+     * @param inputs what the behavior takes, as {@link #takenBy} takes them
+     */
+    public List<DecisionRule> proofsGoneAgainst(AlignedObservation seen, List<ObservedValue> values,
+                                                BehaviorInputs inputs) {
+        return against(new Run(seen, values, inputs));
+    }
+
+    private List<DecisionRule> against(Run run) {
+        List<DecisionRule> out = new ArrayList<>();
+        for (Recognised each : proofs) {
+            if (each.in(run).stream().allMatch(ExecutionEvidence.AS_THE_RULE_SAYS::equals)) {
+                out.add(each.rule());
+            }
+        }
+        return List.copyOf(out);
     }
 }

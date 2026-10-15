@@ -10,6 +10,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A count held against a number of the row is not proved impossible by the value the number was
@@ -83,13 +84,28 @@ class ACountHeldAgainstANumberOfTheRowIsNotProvedImpossibleByTheValueTriedTest {
     }
 
     /** Proved of the way itself, which asks the one count to be two things before any value is
-     *  put anywhere. */
+     *  put anywhere: a way no input takes, read off the conditions and never searched. */
     @Test
     void aCountAgainstANumberAloneThatLeavesNothingIsStillProved() {
-        List<String> kinds = kinds(COUNTED + " >= 3 && " + COUNTED + " <= 1");
-        assertEquals(1, kinds.stream().filter("OnePositionCannotBeBoth"::equals).count(),
-                () -> "no count is at least three and at most one, which the counts settle by"
-                        + " themselves: " + kinds);
+        String body = COUNTED + " >= 3 && " + COUNTED + " <= 1";
+        List<DecisionReading.ImpossiblePath> ways = impossible(body);
+        assertEquals(1, ways.size(), () -> "no count is at least three and at most one: " + ways);
+        assertTrue(ways.getFirst().why() instanceof NoInputTakesIt.TheConditionsClash(
+                        NoInputTakesIt.Clash.TwoAtOnce(Reachability.TwoAtOnce.Counts _)),
+                () -> "which the counts settle by themselves: " + ways);
+        List<String> kinds = kinds(body);
+        assertEquals(List.of("Required"), kinds,
+                () -> "the rule past it is in no search, and the one left is owed a row: "
+                        + kinds);
+    }
+
+    private static List<DecisionReading.ImpossiblePath> impossible(String body) {
+        Compilation compilation = Compilation.ofSource(THE_INPUT.replace("BODY", body), "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        String module = compilation.modules().getFirst();
+        return compilation.db().ask(new Adequacy.Decides(module)).value().get("f").read()
+                .impossible();
     }
 
     private static List<String> kinds(String body) {

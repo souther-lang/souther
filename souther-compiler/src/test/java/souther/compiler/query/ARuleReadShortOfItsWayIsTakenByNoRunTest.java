@@ -147,7 +147,7 @@ class ARuleReadShortOfItsWayIsTakenByNoRunTest {
     }
 
     private static DecisionReading reading(DecisionReading.Ruled... found) {
-        return new DecisionReading("decides", List.of(found),
+        return new DecisionReading("decides", List.of(found), List.of(),
                 new DecisionReading.Enumeration.Complete(), Map.of());
     }
 

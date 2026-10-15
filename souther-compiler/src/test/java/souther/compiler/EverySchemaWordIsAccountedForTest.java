@@ -32,6 +32,7 @@ import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.partition.CompositionBudget;
 import souther.compiler.partition.CompositionCapacity;
 import souther.compiler.partition.CompositionRepertoire;
+import souther.compiler.partition.NoInputTakesIt;
 import souther.compiler.partition.Generator;
 import souther.compiler.partition.ReadingGap;
 import souther.compiler.partition.ReportedShortfall;
@@ -294,6 +295,20 @@ class EverySchemaWordIsAccountedForTest {
      * be given a word. What the composing fell short on is not among them: that is the other axis
      * and has a field of its own, whose words are an enum's.
      */
+    private static Set<String> noInputTakesItWords() {
+        Map<String, String> spelling = new LinkedHashMap<>();
+        spelling.put("TheConditionsClash", "the_conditions_on_the_way_clash");
+        spelling.put("TheNumbersLeaveNone", "the_numbers_on_the_way_leave_none");
+        Set<String> words = new LinkedHashSet<>();
+        for (Class<?> kind : armsOf(NoInputTakesIt.class)) {
+            assertTrue(spelling.containsKey(kind.getSimpleName()),
+                    kind.getSimpleName() + " is a proof that no input takes a way and this"
+                            + " document has no word for it");
+            words.add(spelling.get(kind.getSimpleName()));
+        }
+        return words;
+    }
+
     private static Set<String> requirementBecauseWords() {
         Map<String, String> spelling = new LinkedHashMap<>();
         spelling.put("OnePositionCannotBeBoth", "the_way_needs_one_position_to_be_two");
@@ -518,6 +533,12 @@ class EverySchemaWordIsAccountedForTest {
                     List.of("$defs", "decision", "properties", "obligations", "items",
                             "properties", "because", "items"),
                     requirementBecauseWords()),
+            // And what a way no input takes was proved from, held against the kinds of proof so a
+            // kind added is one somebody gives a word.
+            new Vocabulary("decision.waysNoInputTakes[].because",
+                    List.of("$defs", "decision", "properties", "waysNoInputTakes", "items",
+                            "properties", "because"),
+                    noInputTakesItWords()),
             // And what the composing fell short on, which is the other axis. Held against the
             // vocabulary every search of this compiler answers in, so a reason added there is
             // carried without anybody editing the schema by hand.

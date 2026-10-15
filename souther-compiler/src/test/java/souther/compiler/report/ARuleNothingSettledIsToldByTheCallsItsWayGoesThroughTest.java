@@ -32,7 +32,15 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>The model calls one helper three times, and the helper's comparison is one place in the
  * source. So the conditions of a rule are three conditions written at one place, and what tells
  * them apart — and the rules apart — is the call each was copied at. A page that sends a reader to
- * the place alone shows four rules the same way and one condition several times.
+ * the place alone shows the rules the same way and one condition several times.
+ *
+ * <p>The amounts carry no bound, so a cap may be below nought and each of the eight ways the three
+ * calls can go is some input's: none is closed as a way no input takes, and a row is owed at every
+ * rule. The rules nothing settles are the ones that fit under a cap and then go past the last. On
+ * those ways the last call's condition is one of several things, and the search for a row looks
+ * past it along the whole way and not along each, which does not find one. With amounts of nought
+ * or more the chain has a rule only for each of the four ways a run takes, and the examples settle
+ * every one, so there is nothing left to tell apart.
  */
 class ARuleNothingSettledIsToldByTheCallsItsWayGoesThroughTest {
 
@@ -42,7 +50,6 @@ class ARuleNothingSettledIsToldByTheCallsItsWayGoesThroughTest {
             module example.draw
 
             data MB = Int
-                invariant value >= 0
             data Held = { carried: MB, plan: MB, extra: MB }
             data Drawn = { fromCarried: MB, fromPlan: MB, fromExtra: MB, throttled: MB }
 

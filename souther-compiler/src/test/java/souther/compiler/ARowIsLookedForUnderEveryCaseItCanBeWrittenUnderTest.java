@@ -151,8 +151,9 @@ class ARowIsLookedForUnderEveryCaseItCanBeWrittenUnderTest {
     }
 
     /**
-     * Where no case holds a deadline above ten, every way of writing the row was shown to leave
-     * nothing, and that is the model's answer about the rule rather than a search that gave up.
+     * Where no case holds a deadline above ten, the way to the rule is one no input takes, and that
+     * is the model's answer about the rule rather than a search that gave up: proved of the way
+     * under every case the row can be, and said once, with the numbers as what leaves it nothing.
      */
     @Test
     void whereEveryCaseLeavesTheRuleNothingNoValueIsSaidToStandThere() {
@@ -160,8 +161,10 @@ class ARowIsLookedForUnderEveryCaseItCanBeWrittenUnderTest {
             String said = report(aboveTen(cases).replace("data Q = { ...C }",
                     "data Q = { ...C }\n    invariant deadline <= 8"));
 
-            assertTrue(said.contains("no row is owed at 1 decision rule — no value can stand"
-                    + " at a rule of the decision"), cases + "\n" + said);
+            assertTrue(said.contains("no input takes 1 way through this body, and no row is owed"
+                    + " at a rule past it"), cases + "\n" + said);
+            assertTrue(said.contains("the declarations and the conditions on the way leave no"
+                    + " value:"), cases + "\n" + said);
             assertFalse(said.contains(NOTHING_COULD_SHOW), cases + "\n" + said);
         }
     }

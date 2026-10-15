@@ -33,6 +33,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>Each condition of the chain is read once along each way the earlier calls could have gone,
  * and every way down stays under how many readings one way makes: so it is the total that grows
  * with the chain, and the total that stops it.
+ *
+ * <p>The amounts are numbers nothing declares a bound on. Every way the earlier calls could have
+ * gone is then some input's, and none is left unread as one no run takes: the chain reads as many
+ * ways as it has, which is what makes it the case for the total. With amounts that cannot fall
+ * below nought most of those ways are closed, and the same chain is read to the end however long
+ * it is ({@link ATakeChainIsReadAlongOnlyTheWaysARunTakesTest}).
  */
 class ACaseChainIsReadNoFurtherInAllThanOneConditionIsReadTest {
 
@@ -63,7 +69,6 @@ class ACaseChainIsReadNoFurtherInAllThanOneConditionIsReadTest {
                 module demo
 
                 data MB = Int
-                    invariant value >= 0
                 data Held = { CAPS }
 
                 behavior draw : (used: MB, held: Held) -> List<MB>

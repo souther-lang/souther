@@ -19,5 +19,8 @@ public enum ReachProofWord {
      * A construct a line is drawn at — a comparison, or an application whose answer states one —
      * proven to be arrived at by nothing at all.
      */
-    ARRIVAL
+    ARRIVAL,
+
+    /** A way through a body's decision, proven to be taken by no input. */
+    WAY_NO_INPUT_TAKES
 }

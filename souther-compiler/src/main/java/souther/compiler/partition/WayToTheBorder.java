@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.inputs.EmptyInput;
 import souther.compiler.inputs.NameReach;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Requirements;
@@ -100,41 +101,124 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
     public SearchRegion narrowing(SearchRegion base) {
         SearchRegion region = base;
         for (OnTheWay each : onTheWay) {
-            // What a narrowing says on the position's own order, which a region can carry: the
-            // cases it leaves out are values no row past it holds.
-            if (each instanceof OnTheWay.Narrowed narrowed) {
-                for (TakenConstraint.AwayFrom hole : narrowed.onItsOrder()) {
-                    region = hole.narrowing(region);
-                }
+            region = narrowedBy(region, each);
+        }
+        return region;
+    }
+
+    /**
+     * Whether no input takes this way, proved: the walk a composer reads ({@link #along}), with the
+     * numbers each condition states taken into {@code declarations} as it goes, so that a way of
+     * several is closed where the numbers chosen along it leave nothing, and not only where two
+     * conditions ask for two cases.
+     *
+     * <p>Only a proof: what the region cannot take in leaves it as it was, a walk stopped by a
+     * figure proves nothing, and neither does a group of choices closing beside a group that was
+     * not looked at. Numbers inside a container are not taken in, since a region reads such a term
+     * as the one element there and the way may be about two.
+     */
+    Optional<NoInputTakesIt> takenByNoInput(SearchRegion declarations) {
+        return OneOfEach.walk(onTheWay, numbered(declarations),
+                CompositionBudget.CHOICES_ON_A_WAY_LOOKED_AT,
+                CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG)
+                instanceof OneOfEach.Walked.Closed<OnTheWay, NoInputTakesIt>(var _, var why)
+                ? Optional.of(why) : Optional.empty();
+    }
+
+    /** What a way holds together so far, beside what its numbers leave of the input. */
+    private record Numbered(HeldTogether held, SearchRegion region) {}
+
+    /** {@link #ASKED_OF_A_ROW}, with what the numbers of each entry leave of {@code declarations}
+     *  taken in as well. */
+    private static OneOfEach.Vocabulary<OnTheWay, Numbered, NoInputTakesIt> numbered(
+            SearchRegion declarations) {
+        return new OneOfEach.Vocabulary<>() {
+
+            @Override
+            public List<List<OnTheWay>> alternatives(OnTheWay entry) {
+                return ASKED_OF_A_ROW.alternatives(entry);
             }
-            if (each instanceof OnTheWay.TakenIn taken) {
-                region = switch (taken.demand()) {
-                    // Taken in, and the region is asked to take it in: an entry here is one the
-                    // region said it could carry when the walk recorded it.
-                    case RowDemand.Relational(var relation) -> relation.narrowing(region);
-                    // That some element meets these says nothing every row past it holds of each
-                    // element, so the region is narrowed only by the container holding one. What
-                    // the element meets is composed where the row is.
-                    case RowDemand.Exists(var _, var _, var holdingOne, var _) ->
-                            holdingOne.constraint().narrowing(region);
-                    // That every element meets these, which a container holding none does. A
-                    // region reads a term inside the elements as the value of one that is there,
-                    // so narrowed on, it would leave nothing where the rules leave the element
-                    // nothing — and the way past an empty container would be proved closed. And
-                    // the container is not held to holding none either, since elements meeting
-                    // these are a way past it too.
-                    case RowDemand.ForAll _ -> region;
-                    // How many elements meet a statement, which is no number a region holds.
-                    case RowDemand.SoMany _ -> region;
-                    // A statement no composer writes toward, which a region holds nothing of.
-                    case RowDemand.ForTheRun _ -> region;
-                    // Which of two values stands at a position no region measures. The row is
-                    // written with it where the row is composed, and the region says nothing of it.
-                    case RowDemand.ATruth _ -> region;
-                    // Two values being one on no order, which no region measures either.
-                    case RowDemand.OneValueAtBoth _ -> region;
+
+            @Override
+            public Set<TermPath> positions(OnTheWay entry) {
+                return ASKED_OF_A_ROW.positions(entry);
+            }
+
+            @Override
+            public Numbered nothing() {
+                return new Numbered(ASKED_OF_A_ROW.nothing(), declarations);
+            }
+
+            @Override
+            public Step<Numbered, NoInputTakesIt> with(Numbered so, OnTheWay entry) {
+                return switch (takenIn(so.held(), entry)) {
+                    case Step.Closed<HeldTogether, Reachability>(var why) ->
+                            new Step.Closed<>(new NoInputTakesIt.TheConditionsClash(switch (why) {
+                                case Reachability.NothingReaches(var what) ->
+                                        new NoInputTakesIt.Clash.TwoAtOnce(what);
+                                case Reachability.NothingComesOutThatWay(var condition) ->
+                                        new NoInputTakesIt.Clash.NeverComesOutSo(condition);
+                                case Reachability.Reaching _ -> throw new IllegalStateException(
+                                        "a way taken in closes on why nothing reaches it");
+                            }));
+                    case Step.Held<HeldTogether, Reachability>(var held) -> {
+                        SearchRegion region = ofOnePosition(entry)
+                                ? narrowedBy(so.region(), entry) : so.region();
+                        Optional<EmptyInput> empty = region == so.region() ? Optional.empty()
+                                : region.emptiness();
+                        yield empty.isPresent()
+                                ? new Step.Closed<>(new NoInputTakesIt.TheNumbersLeaveNone(
+                                        empty.get()))
+                                : new Step.Held<>(new Numbered(held, region));
+                    }
                 };
             }
+        };
+    }
+
+    /** Whether every position {@code entry} asks about is one value of a run's own, outside every
+     *  container. */
+    private static boolean ofOnePosition(OnTheWay entry) {
+        return ASKED_OF_A_ROW.positions(entry).stream().noneMatch(TermPath::insideAContainer);
+    }
+
+    /** {@code region} with what the one entry {@code each} says of a row taken in
+     *  ({@link #narrowing}). */
+    private static SearchRegion narrowedBy(SearchRegion region, OnTheWay each) {
+        // What a narrowing says on the position's own order, which a region can carry: the
+        // cases it leaves out are values no row past it holds.
+        if (each instanceof OnTheWay.Narrowed narrowed) {
+            for (TakenConstraint.AwayFrom hole : narrowed.onItsOrder()) {
+                region = hole.narrowing(region);
+            }
+        }
+        if (each instanceof OnTheWay.TakenIn taken) {
+            region = switch (taken.demand()) {
+                // Taken in, and the region is asked to take it in: an entry here is one the
+                // region said it could carry when the walk recorded it.
+                case RowDemand.Relational(var relation) -> relation.narrowing(region);
+                // That some element meets these says nothing every row past it holds of each
+                // element, so the region is narrowed only by the container holding one. What
+                // the element meets is composed where the row is.
+                case RowDemand.Exists(var _, var _, var holdingOne, var _) ->
+                        holdingOne.constraint().narrowing(region);
+                // That every element meets these, which a container holding none does. A
+                // region reads a term inside the elements as the value of one that is there,
+                // so narrowed on, it would leave nothing where the rules leave the element
+                // nothing — and the way past an empty container would be proved closed. And
+                // the container is not held to holding none either, since elements meeting
+                // these are a way past it too.
+                case RowDemand.ForAll _ -> region;
+                // How many elements meet a statement, which is no number a region holds.
+                case RowDemand.SoMany _ -> region;
+                // A statement no composer writes toward, which a region holds nothing of.
+                case RowDemand.ForTheRun _ -> region;
+                // Which of two values stands at a position no region measures. The row is
+                // written with it where the row is composed, and the region says nothing of it.
+                case RowDemand.ATruth _ -> region;
+                // Two values being one on no order, which no region measures either.
+                case RowDemand.OneValueAtBoth _ -> region;
+            };
         }
         return region;
     }

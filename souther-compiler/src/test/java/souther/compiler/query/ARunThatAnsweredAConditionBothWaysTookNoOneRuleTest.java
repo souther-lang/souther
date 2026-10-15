@@ -112,7 +112,7 @@ class ARunThatAnsweredAConditionBothWaysTookNoOneRuleTest {
                         List.of(new RuleStep(new ShownBy.AtAnArm(fork, partOf(taken[i])),
                                 List.of(), AnswersDemanded.NOTHING, SaidOnTheWay.NONE)), true));
             }
-            return new RunPlacement(RulesTaken.of(new DecisionReading("f", found,
+            return new RunPlacement(RulesTaken.of(new DecisionReading("f", found, List.of(),
                     new DecisionReading.Enumeration.Complete(), Map.of()),
                     checked.behaviorBodies().get("f"), plan), inputs);
         }

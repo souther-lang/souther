@@ -336,6 +336,7 @@ public final class PublicationOrders {
                     // stops is the looking for a row that goes further than one already found.
                     CompositionBudget.RUNS_REPAIRING_A_ROW,
                     CompositionBudget.PATHS_OF_A_DECISION_READ,
+                    CompositionBudget.WAYS_A_DECISION_ASKS_AN_INPUT_TAKES,
                     CompositionBudget.READINGS_OF_ONE_CONDITION,
                     // Beside it: one way down, then every way together, then what a step states of
                     // them, then what a path takes in of what the reading made.
@@ -626,8 +627,8 @@ public final class PublicationOrders {
      *
      * <p>From the reading having nothing to recognise a run by, through a run it recognised and no
      * rule matched, to one that went down more than one path at a condition and one that matched
-     * more than one rule. The same decision as the order above and
-     * held the same way.
+     * more than one rule, and last one that went down a way the reading proved no input takes. The
+     * same decision as the order above and held the same way.
      */
     public static int positionOf(RulesTaken.WhichRule.Why why) {
         return switch (why) {
@@ -635,6 +636,7 @@ public final class PublicationOrders {
             case NO_RECOGNISABLE_RULE_MATCHES -> 1;
             case A_CONDITION_CAME_OUT_BOTH_WAYS -> 2;
             case MORE_THAN_ONE_RULE_MATCHES -> 3;
+            case ITS_WAY_IS_PROVED_TO_BE_TAKEN_BY_NO_INPUT -> 4;
         };
     }
 }

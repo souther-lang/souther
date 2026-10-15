@@ -179,6 +179,10 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
             Map.entry("souther.compiler.partition.WayToTheBorder#along()"
                             + "Lsouther/compiler/partition/OneOfEach$Walked;",
                     "hands both figures to the walk, whose answer says which it stopped at"),
+            Map.entry("souther.compiler.partition.WayToTheBorder#takenByNoInput("
+                            + "Lsouther/compiler/inputs/SearchRegion;)Ljava/util/Optional;",
+                    "hands both figures to the walk, and a walk stopped at either is no proof:"
+                            + " the way is kept"),
             Map.entry("souther.compiler.partition.ElementsWrittenAlike#of("
                             + "Lsouther/compiler/partition/Reachability$Reaching;)"
                             + "Lsouther/compiler/partition/ElementsWrittenAlike$Choices;",
@@ -566,6 +570,9 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + " comparison out as a part nothing read, naming it"),
             Map.entry("souther.compiler.partition.DecisionReading#<clinit>()V",
                     "how many paths through one body a decision is read for"),
+            Map.entry("souther.compiler.partition.WaysNoInputTakes#<init>()V",
+                    "omits no work a reader is owed: a way not asked is a way kept, and the rules"
+                            + " past it are read and said as rules, as with no proof at all"),
             Map.entry("souther.compiler.partition.DecisionReading#of("
                             + "Ljava/lang/String;Lsouther/compiler/check/AnalysisBody;"
                             + "Lsouther/compiler/inputs/InputReading;"
