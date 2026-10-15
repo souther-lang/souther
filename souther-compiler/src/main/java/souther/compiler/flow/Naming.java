@@ -98,14 +98,21 @@ public interface Naming<P> {
 
     /**
      * {@code way}, one of the ways the condition comes out into arm {@code part} of {@code fork},
-     * as a run down the arm is seen taking it.
+     * as a run down the arm is seen taking it, written down whole — or null where this naming has
+     * no words for that.
      *
      * <p>Asked where there may be others, so the arm cannot stand for this way — a run down it may
      * have come by any of them. What it can add is to what the way already says of itself: a way
      * that says an operand was not run says something only where the operator was, and taking an
-     * arm of a fork whose condition runs the operator first says it was.
+     * arm of a fork whose condition runs the operator first says it was. And a way that says how
+     * the parts it went through came out, some as truths it had no words for
+     * ({@link Provenance#unworded}), says with the arm how the condition came out: the arm is
+     * somewhere a run on the way is seen.
+     *
+     * <p>Null leaves every way into the arm unwritten, since a list of them with one missing reads
+     * as all of them.
      */
-    P oneOfTheWaysIn(Core.If fork, int part, P way);
+    P oneOfTheWaysIn(Core.If fork, int part, Arrival<P> way);
 
     /**
      * {@code left}, the one way the left of {@code operator} goes on, as a run that went on into the

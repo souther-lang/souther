@@ -217,9 +217,16 @@ final class DecisionNaming implements Naming<DecisionPath> {
      * Under {@code x > 0 && (flag && n > 0)} the inner {@code &&} runs only where {@code x > 0}
      * held, and a run down the {@code else} arm with {@code n > 0} not run may have stopped at
      * {@code x > 0} and never asked {@code flag}.
+     *
+     * <p>Nothing, for a way this reading could not write down whole or could not value, as for
+     * {@link #seenAtTheArm}: and here the arm is not even the one way's, so it says less still.
      */
     @Override
-    public DecisionPath oneOfTheWaysIn(Core.If fork, int part, DecisionPath way) {
+    public DecisionPath oneOfTheWaysIn(Core.If fork, int part, Arrival<DecisionPath> taken) {
+        if (taken.value() == Truth.UNREAD || !taken.isComplete()) {
+            return null;
+        }
+        DecisionPath way = taken.path();
         ModelOccurrence stated = forkStated(fork);
         if (stated == null) {
             return way;

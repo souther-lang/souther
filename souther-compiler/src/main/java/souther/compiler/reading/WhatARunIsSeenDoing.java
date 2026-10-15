@@ -175,8 +175,11 @@ final class WhatARunIsSeenDoing implements Naming<List<ControlClaim>> {
     // What a run is seen doing on these ways is the claims they hold, and an operand not run or a
     // way among several adds no claim a run is checked against.
     @Override
-    public List<ControlClaim> oneOfTheWaysIn(Core.If fork, int part, List<ControlClaim> way) {
-        return way;
+    public List<ControlClaim> oneOfTheWaysIn(Core.If fork, int part,
+                                             Arrival<List<ControlClaim>> way) {
+        // Nothing here reads which way a part came out off the input, so the arm cannot say which
+        // of the ways into it a run seen there came by, and a way missing something is no way.
+        return way.value() != Truth.UNREAD && way.isComplete() ? way.path() : null;
     }
 
     @Override

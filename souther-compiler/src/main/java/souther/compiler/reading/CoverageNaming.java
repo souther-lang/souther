@@ -12,6 +12,8 @@ import souther.compiler.coverage.CoverageSites;
 import souther.compiler.flow.Arrival;
 import souther.compiler.flow.Naming;
 import souther.compiler.flow.Truth;
+import souther.compiler.flow.Provenance;
+import souther.compiler.flow.UnwordedTruth;
 import souther.compiler.inputs.CaseCompared;
 import souther.compiler.inputs.ComparedNumber;
 import souther.compiler.inputs.ComparedNumbers;
@@ -23,7 +25,9 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -274,24 +278,69 @@ final class CoverageNaming implements Naming<Outcome> {
      */
     @Override
     public Outcome seenAtTheArm(Core.If fork, int part, Arrival<Outcome> onlyWay) {
-        if (onlyWay.value() != Truth.UNREAD && onlyWay.isComplete()) {
-            return onlyWay.path();
+        return atTheArm(fork, part, onlyWay);
+    }
+
+    /**
+     * The way as a run down the arm is seen taking it, read as {@link #seenAtTheArm} reads the one
+     * way in — and here the parts the arm says came out a way are the ones this way says, with the
+     * arm, came out that way.
+     *
+     * <p>A way that says the left of an {@code &&} held says the right ran, and with the arm taken on
+     * the condition failing, that the right failed: the truth there the walk had no words for is
+     * then as known as it is on the one way in. A way that says the left failed says the right never
+     * ran, and it reads nothing of it. Where the way says neither, the arm cannot say which of the
+     * ways a run seen there came by, and this has no words for the way.
+     */
+    @Override
+    public Outcome oneOfTheWaysIn(Core.If fork, int part, Arrival<Outcome> way) {
+        return atTheArm(fork, part, way);
+    }
+
+    /**
+     * {@code way}, one of the ways into arm {@code part} of {@code fork}, with what it left out said
+     * as the arm sees it, or null where the arm does not say it.
+     *
+     * <p>What the arm says is each part of the condition a run on the way down the arm brought out a
+     * known way ({@link WhatAConditionRuns#alongAWay}): known from the arm alone where the condition
+     * came out the way that settles every part, and from what the way itself says of the parts it
+     * went through otherwise — a comparison it named, and a truth it had no words for with the way
+     * that truth came out ({@link Provenance#unworded}).
+     */
+    private Outcome atTheArm(Core.If fork, int part, Arrival<Outcome> way) {
+        if (way.value() != Truth.UNREAD && way.isComplete()) {
+            return way.path();
         }
         ControlClaim claim = claimAt(armPoint(fork, part));
-        WhatAConditionRuns ran = WhatAConditionRuns.whenItCameOut(fork.cond(), part == 0, reads,
-                symbols, newtypes);
-        if (claim == null || !ran.whole()) {
+        if (claim == null) {
             return null;
         }
-        Outcome out = onlyWay.path();
+        Map<Core, Boolean> unworded = new IdentityHashMap<>();
+        for (UnwordedTruth each : way.provenance().unworded()) {
+            InputTruth.Asked asked = InputTruth.asked(each.truth(), each.held(), reads, symbols,
+                    newtypes);
+            unworded.put(asked.value(), asked.holding());
+        }
+        WhatAConditionRuns ran = WhatAConditionRuns.alongAWay(fork.cond(), part == 0,
+                each -> told(way.path(), unworded, each), reads, symbols, newtypes);
+        if (!ran.whole()) {
+            return null;
+        }
+        Outcome out = way.path();
         for (WhatAConditionRuns.Settled each : ran.settled()) {
+            // A way that says a part came out the other way from the one the arm says is a way
+            // that does not come here, and nothing this can write down.
+            Boolean came = unworded.get(each.part());
+            if (came != null && came != each.held()) {
+                return null;
+            }
             // Each part read where it was written, which behind a name is not where the fork is.
             InputTruth truth = InputTruth.of(each.part(), each.held(), each.reads(), symbols,
                     newtypes);
             if (truth != null) {
                 out = join(out, one(new Decision(new Condition.Case(truth.at(),
                         List.of(truth.held() ? "true" : "false")), claim)));
-            } else if (!named(onlyWay.path(), each)) {
+            } else if (!named(way.path(), each)) {
                 return null;
             }
             if (out == null) {
@@ -302,13 +351,35 @@ final class CoverageNaming implements Naming<Outcome> {
     }
 
     /**
+     * How {@code way} says {@code part} came out: a comparison by the claim the walk named it with
+     * ({@link #named}), and a truth it had no words for by the way it came out.
+     */
+    private static Optional<Boolean> told(Outcome way, Map<Core, Boolean> unworded, Core part) {
+        Boolean truth = unworded.get(part);
+        if (truth != null) {
+            return Optional.of(truth);
+        }
+        if (!(Core.withoutStanding(part) instanceof Core.Binary comparison)
+                || comparison.occurrence() == null) {
+            return Optional.empty();
+        }
+        for (Decision each : way.holds()) {
+            if (each.claims().at() instanceof ControlPlace.Outcome outcome
+                    && outcome.occurrence().equals(comparison.occurrence())) {
+                return Optional.of(outcome.held());
+            }
+        }
+        return Optional.empty();
+    }
+
+    /**
      * Whether {@code way} already says {@code part} came out the way it did — a comparison the
      * walk named where it read it.
      *
      * <p>Asked of the way and not read again here. The walk read the comparison once, under what
-     * its names read where it stands, and the way is the one way the condition came out: a
-     * comparison on it the walk had words for is on it, and one it had none for is not, which is
-     * a part this has no words for either.
+     * its names read where it stands, and the way is a way the condition came out: a comparison on
+     * it the walk had words for is on it, and one it had none for is not, which is a part this has
+     * no words for either.
      *
      * <p>Found by the claim and not by the condition. A comparison comes out a side of its number
      * or a set of cases ({@link #side}), and either way its claim is that it came out the way it
@@ -335,13 +406,6 @@ final class CoverageNaming implements Naming<Outcome> {
         InputTruth truth = InputTruth.of(cond, holding, reads, symbols, newtypes);
         return truth == null ? null
                 : new Condition.Case(truth.at(), List.of(truth.held() ? "true" : "false"));
-    }
-
-    // The decisions a row is composed against are the ones these ways hold, and an operand not run
-    // or a way among several places no class.
-    @Override
-    public Outcome oneOfTheWaysIn(Core.If fork, int part, Outcome way) {
-        return way;
     }
 
     @Override

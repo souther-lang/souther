@@ -750,16 +750,16 @@ public final class ValueArrivals<P> {
     private void side(Core value, boolean held, Arrival<P> under, Naming<P> naming, Gathered out) {
         P named = naming.side(value, held);
         if (named == null) {
-            // The way is there and this naming has no words for it.
-            out.add(new Arrival<>(Truth.of(held), under.provenance().partial()));
+            // The way is there and this naming has no words for it. Which way the truth came out is
+            // still known, and is kept for whatever further on sees a run that came this way.
+            out.add(new Arrival<>(Truth.of(held), under.provenance().unworded(value, held)));
             return;
         }
         P both = naming.join(under.path(), named);
         if (both == null) {
             return;
         }
-        out.add(new Arrival<>(Truth.of(held),
-                new Provenance<>(both, under.provenance().completeness())));
+        out.add(new Arrival<>(Truth.of(held), under.provenance().writtenAs(both)));
     }
 
     /**
@@ -796,8 +796,8 @@ public final class ValueArrivals<P> {
                 }
                 if (each == onlyOn) {
                     for (Arrival<P> after : right.orNone()) {
-                        out.under(new Provenance<>(naming.wentOn(binary, each.path(), after),
-                                each.provenance().completeness()), List.of(after), naming);
+                        out.under(each.provenance().writtenAs(
+                                naming.wentOn(binary, each.path(), after)), List.of(after), naming);
                     }
                 } else {
                     out.under(each.provenance(), right.orNone(), naming);
@@ -807,9 +807,8 @@ public final class ValueArrivals<P> {
                     out.add(each);
                 }
             } else if (each == onlyStop) {
-                out.add(new Arrival<>(each.value(), new Provenance<>(
-                        naming.stoppedShort(binary, each.path()),
-                        each.provenance().completeness())));
+                out.add(new Arrival<>(each.value(), each.provenance().writtenAs(
+                        naming.stoppedShort(binary, each.path()))));
             } else {
                 out.add(each);
             }
@@ -884,6 +883,12 @@ public final class ValueArrivals<P> {
      * otherwise. The one way may be one the naming could not write down whole, or one whose value
      * this reading could not work out: what was missing from it is what a run at the arm is seen
      * doing, since the arm is taken exactly where that way is and came out the arm's way.
+     *
+     * <p>Where there are several, each as a run down the arm is seen taking it, and none of them is
+     * left out for another: what the naming could not write of one way is that way's, and a way
+     * into the arm written whole stays written whole beside it. Only the ways into this arm are
+     * asked of — a way the condition comes out the other way by is no way here, whatever it is
+     * missing.
      */
     private Ways<P> intoArm(Core.If iff, int part, Naming<P> naming) {
         boolean want = part == 0;
@@ -894,12 +899,26 @@ public final class ValueArrivals<P> {
                 return new Ways.Known<>(List.of(seen));
             }
         }
-        Ways<P> ways = waysTo(iff.cond(), want);
-        if (ways instanceof Ways.Known<P>(List<P> paths)) {
-            return new Ways.Known<>(paths.stream()
-                    .map(each -> naming.oneOfTheWaysIn(iff, part, each)).toList());
+        if (!(waysAt(iff.cond()) instanceof Paths.Held<P> held)) {
+            return new Ways.Unknown<>();
         }
-        return ways;
+        List<P> paths = new ArrayList<>();
+        for (Arrival<P> each : held.arrivals()) {
+            // A way whose value this reading could not work out may come out either, so it is one
+            // of the ways here.
+            if (each.value() != Truth.of(want) && each.value() != Truth.UNREAD) {
+                continue;
+            }
+            P seen = naming.oneOfTheWaysIn(iff, part, each);
+            if (seen == null) {
+                return new Ways.Unknown<>();
+            }
+            paths.add(seen);
+        }
+        if (paths.isEmpty() && comesAt(iff.cond()).mayCome(want)) {
+            return new Ways.Unknown<>();
+        }
+        return new Ways.Known<>(paths);
     }
 
     /**
@@ -934,7 +953,7 @@ public final class ValueArrivals<P> {
     private Provenance<P> armWay(Core fork, int part, Naming<P> naming) {
         P named = naming.forkArm(fork, part);
         return named == null
-                ? new Provenance<>(naming.nowhere(), Completeness.PARTIAL) : whole(named);
+                ? new Provenance<>(naming.nowhere(), Completeness.PARTIAL, List.of()) : whole(named);
     }
 
     /** Whether the model states the fork that stands at {@code place}, as against one that stands
@@ -973,7 +992,8 @@ public final class ValueArrivals<P> {
             }
             P named = naming.matchCase(match, part);
             Provenance<P> way = named == null
-                    ? new Provenance<>(naming.nowhere(), Completeness.PARTIAL) : whole(named);
+                    ? new Provenance<>(naming.nowhere(), Completeness.PARTIAL, List.of())
+                    : whole(named);
             out.under(way, body.orNone(), naming);
             if (out.isBeyond()) {
                 return out.paths();
@@ -1072,8 +1092,7 @@ public final class ValueArrivals<P> {
                 }
                 P both = naming.join(holds.path(), each.path());
                 if (both != null) {
-                    add(new Arrival<>(each.value(), new Provenance<>(both,
-                            holds.completeness().and(each.provenance().completeness()))));
+                    add(new Arrival<>(each.value(), holds.then(both, each.provenance())));
                 }
             }
         }
@@ -1091,7 +1110,10 @@ public final class ValueArrivals<P> {
      *
      * <p>What the parts of a value come to is not what the value comes to. A thing built out of
      * several is the constructor's answer and no way to it carries a truth of its own, so these
-     * arrive with nothing said about which of the two they are.
+     * arrive with nothing said about which of the two they are — and a truth a part came out that
+     * the naming had no words for is no truth of the value either. What is kept of it is that the
+     * way is missing something: kept as the part's truth, two ways that differ only in a part's
+     * truth would be two ways to a value settled one way.
      *
      * <p>A side this reading will not hold the ways of leaves the product one it will not hold
      * either, and it is answered before the pairing is taken rather than after.
@@ -1107,7 +1129,7 @@ public final class ValueArrivals<P> {
                 if (both != null) {
                     out.add(new Arrival<>(Truth.UNREAD, new Provenance<>(both,
                             one.provenance().completeness()
-                                    .and(other.provenance().completeness()))));
+                                    .and(other.provenance().completeness()), List.of())));
                 }
                 if (out.isBeyond()) {
                     return out.paths();
@@ -1127,7 +1149,7 @@ public final class ValueArrivals<P> {
     }
 
     private Provenance<P> whole(P path) {
-        return new Provenance<>(path, Completeness.COMPLETE);
+        return new Provenance<>(path, Completeness.COMPLETE, List.of());
     }
 
     // ------------------------------------------------------------------- the tree

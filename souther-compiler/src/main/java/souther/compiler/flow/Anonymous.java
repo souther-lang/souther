@@ -56,8 +56,8 @@ public final class Anonymous implements Naming<AnonymousPath> {
     }
 
     @Override
-    public AnonymousPath oneOfTheWaysIn(Core.If fork, int part, AnonymousPath way) {
-        return way;
+    public AnonymousPath oneOfTheWaysIn(Core.If fork, int part, Arrival<AnonymousPath> way) {
+        return way.path();
     }
 
     @Override

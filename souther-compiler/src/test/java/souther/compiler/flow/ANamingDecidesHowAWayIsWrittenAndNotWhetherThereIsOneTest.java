@@ -309,8 +309,8 @@ class ANamingDecidesHowAWayIsWrittenAndNotWhetherThereIsOneTest {
         }
 
         @Override
-        public Marks oneOfTheWaysIn(Core.If fork, int part, Marks way) {
-            return way;
+        public Marks oneOfTheWaysIn(Core.If fork, int part, Arrival<Marks> way) {
+            return way.value() != Truth.UNREAD && way.isComplete() ? way.path() : null;
         }
 
         @Override

@@ -150,11 +150,40 @@ class AnArmOnATruthTheBodyWasHandedIsReachedByThatTruthTest {
             }
             """;
 
-    /** The shapes of the ways into the model's arms that hold {@code open} true. */
+    /**
+     * The arm the condition fails into is reached by each way it fails, and each says what that run
+     * read: a run that stopped at the truth read the truth alone, and a run that went on read the
+     * comparison under it.
+     */
+    @Test
+    void theArmAConjunctionFailsIntoIsReachedByEachWayItFails() {
+        List<List<String>> ways = new ArrayList<>();
+        for (PathAccess each : armsOf("open && amount > 0").values()) {
+            if (each instanceof PathAccess.Ways in && theModels(in) && in.ways().size() > 1) {
+                for (WayIn way : in.ways()) {
+                    ways.add(way.conditions().stream()
+                            .map(condition -> switch (condition) {
+                                case Condition.Case(var at, var names) ->
+                                        "Case(" + at + "=" + String.join("|", names) + ")";
+                                case Condition.Side side -> "Side(" + side.held() + ")";
+                                default -> condition.getClass().getSimpleName();
+                            })
+                            .toList());
+                }
+            }
+        }
+        ways.sort(Comparator.comparing(List::toString));
+        assertEquals(List.of(List.of("Case(open=false)"), List.of("Side(false)", "Case(open=true)")),
+                ways, () -> "the arm `else` is reached by both ways out: "
+                        + armsOf("open && amount > 0").values());
+    }
+
+    /** The shapes of the ways into the model's arms reached one way, that hold {@code open} true:
+     *  the arms the condition holding goes into. */
     private static List<List<String>> underTheTruth(Map<ArmProbe, PathAccess> arms) {
         List<List<String>> out = new ArrayList<>();
         for (PathAccess each : arms.values()) {
-            if (each instanceof PathAccess.Ways ways && theModels(ways)
+            if (each instanceof PathAccess.Ways ways && theModels(ways) && ways.ways().size() == 1
                     && shapes(ways).contains("Case(open=true)")) {
                 out.add(shapes(ways));
             }

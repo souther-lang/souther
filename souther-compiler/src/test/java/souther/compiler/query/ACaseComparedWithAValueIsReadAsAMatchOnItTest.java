@@ -122,51 +122,68 @@ class ACaseComparedWithAValueIsReadAsAMatchOnItTest {
         assertEquals(List.of(), both.borders());
     }
 
+    private static final String WITH_A_TRUTH = DECLARATIONS.formatted(AS_DECLARED).replace(
+            "(account: Account, reason: Reason)",
+            "(account: Account, reason: Reason, urgent: Bool)");
+
+    private static final String ROWS_WITH_A_TRUTH = """
+
+            example apply
+                | (Account { status = Active }, WrongPassword, true) -> Account { status = Locked }
+                | (Account { status = Locked }, WrongPassword, true) -> Account { status = Locked }
+                | (Account { status = Active }, WrongPassword, false) -> Account { status = Active }
+                | (Account { status = Active }, Expired, true) -> Account { status = Active }
+            """;
+
     /**
-     * Beside a truth of the input, which the way does not name, the case the comparison came out
-     * is read where the arm is: as the {@code match} that asks the truth only under the case.
+     * Beside a truth of the input, which no comparison names, the case the comparison came out is
+     * read where the arm is: as the {@code match} that asks the truth only under the case. A run
+     * that stopped at the case never asked the truth, and owes nothing of it.
+     *
+     * <p>However the case and the truth are written: an order on the cases, the denial under
+     * {@code ||}, the truth behind a name.
      */
     @Test
     void aCaseTestedBesideATruthOwesWhatTheMatchUnderItOwes() {
-        String head = DECLARATIONS.formatted(AS_DECLARED).replace(
-                "(account: Account, reason: Reason)",
-                "(account: Account, reason: Reason, urgent: Bool)");
-        String rows = """
-
-                example apply
-                    | (Account { status = Active }, WrongPassword, true) -> Account { status = Locked }
-                    | (Account { status = Locked }, WrongPassword, true) -> Account { status = Locked }
-                    | (Account { status = Active }, WrongPassword, false) -> Account { status = Active }
-                    | (Account { status = Active }, Expired, true) -> Account { status = Active }
-                """;
-        Measured both = measuredSource(head + """
-                let apply (account, reason, urgent) =
-                    if reason == WrongPassword && urgent then lock(account) else account
-                """ + rows);
-        Measured nested = measuredSource(head + """
+        Measured nested = measuredSource(WITH_A_TRUTH + """
                 let apply (account, reason, urgent) =
                     match reason with
                         | WrongPassword -> if urgent then lock(account) else account
                         | Expired | Closed -> account
-                """ + rows);
-        assertEquals(withTheAccount(nested.owed()), withTheAccount(both.owed()));
+                """ + ROWS_WITH_A_TRUTH);
+        for (String body : List.of(
+                "let apply (account, reason, urgent) =\n"
+                        + "    if reason == WrongPassword && urgent then lock(account) else account\n",
+                "let apply (account, reason, urgent) =\n"
+                        + "    if reason < Expired && urgent then lock(account) else account\n",
+                "let apply (account, reason, urgent) =\n"
+                        + "    if reason == WrongPassword && urgent == true then lock(account)"
+                        + " else account\n",
+                "let apply (account, reason, urgent) =\n"
+                        + "    if reason /= WrongPassword || urgent == false then account"
+                        + " else lock(account)\n",
+                "let apply (account, reason, urgent) = {\n"
+                        + "    let asked = urgent\n"
+                        + "    if reason == WrongPassword && asked then lock(account) else account\n"
+                        + "}\n")) {
+            Measured written = measuredSource(WITH_A_TRUTH + body + ROWS_WITH_A_TRUTH);
+            assertEquals(nested.owed(), written.owed(), body);
+        }
     }
 
     /**
-     * The pairs of {@code owed} one of which is a class of the account's status: the ones only the
-     * arm that locks reads.
-     *
-     * <p>Only those, because a way out of the {@code &&} the truth leaves unnamed keeps every
-     * combination of the two positions it is about, whatever the left was written as.
+     * The truth asked first: a run it stops reads nothing of the reason, and a run it lets through
+     * reads the reason under the truth it held.
      */
-    private static Set<String> withTheAccount(Set<String> owed) {
-        Set<String> out = new LinkedHashSet<>();
-        for (String each : owed) {
-            if (each.startsWith("Active ×") || each.startsWith("Locked ×")) {
-                out.add(each);
-            }
-        }
-        return out;
+    @Test
+    void aTruthTestedBeforeACaseOwesTheCasesOnlyUnderTheTruthThatAskedThem() {
+        Measured written = measuredSource(WITH_A_TRUTH + """
+                let apply (account, reason, urgent) =
+                    if urgent && reason == WrongPassword then lock(account) else account
+                """ + ROWS_WITH_A_TRUTH);
+        assertEquals(Set.of("Active × WrongPassword", "Locked × WrongPassword", "Active × true",
+                "Locked × true", "WrongPassword × true", "Expired × true", "Closed × true"),
+                written.owed());
     }
 
     /**
