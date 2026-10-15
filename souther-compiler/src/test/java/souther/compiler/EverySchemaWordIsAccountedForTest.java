@@ -1458,6 +1458,12 @@ class EverySchemaWordIsAccountedForTest {
         // added there does not compile without its word, and held to the schema by the same
         // validation of the corpus documents.
         held.add("/$defs/whyKept/properties/reason");
+        // And which use of a function fell short, by kind and by how far an operation applies it.
+        // Written by a switch over the sealed shortfalls; the words for how far are the enum's
+        // less applying it to every element, which is no shortfall and which a shortfall refuses
+        // to be made of.
+        held.add("/$defs/whyKept/properties/shortfalls/items/properties/kind");
+        held.add("/$defs/whyKept/properties/shortfalls/items/properties/applied");
 
         List<String> unaccounted = paths.stream().filter(p -> !held.contains(p)).toList();
         assertEquals(List.of(), unaccounted,

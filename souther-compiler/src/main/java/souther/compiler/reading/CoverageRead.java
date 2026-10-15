@@ -253,7 +253,8 @@ public final class CoverageRead {
             taken = List.copyOf(taken);
             answeredBy = List.copyOf(answeredBy);
             Map<WayIn, Set<WrittenWithout>> copied = new LinkedHashMap<>();
-            saidInPart.forEach((way, without) -> copied.put(way, Set.copyOf(without)));
+            saidInPart.forEach((way, without) -> copied.put(way,
+                    Collections.unmodifiableSet(new LinkedHashSet<>(without))));
             saidInPart = Collections.unmodifiableMap(copied);
             Set<WayIn> written = new HashSet<>(taken);
             written.addAll(answeredBy);

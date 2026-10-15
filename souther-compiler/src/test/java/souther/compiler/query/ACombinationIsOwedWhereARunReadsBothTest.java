@@ -10,10 +10,12 @@ import souther.compiler.meta.ModulePath;
 import souther.compiler.partition.AdequacyPolicy;
 import souther.compiler.partition.AxisId;
 import souther.compiler.partition.Budgets;
+import souther.compiler.partition.ClassOfAPosition;
 import souther.compiler.partition.WhyKept;
 import souther.compiler.reading.PathAccess;
 import souther.compiler.regex.PatternPlan;
 import souther.compiler.report.AdequacyReport;
+import souther.compiler.semantics.HowAClosureIsApplied;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -21,8 +23,8 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -696,8 +698,8 @@ class ACombinationIsOwedWhereARunReadsBothTest {
 
     /**
      * A combination kept because the ways inside a function were read as a whole says which
-     * function, where it is written and what it is passed to — under each combination no row is
-     * in, and in the document beside every one kept.
+     * function, where it is written and which use of it falls short — under each combination no
+     * row is in, and in the document beside every one kept.
      */
     @Test
     void aCombinationKeptByAFunctionReadAsAWholeSaysWhichFunction() {
@@ -718,7 +720,8 @@ class ACombinationIsOwedWhereARunReadsBothTest {
             assertEquals(1, why.size(), () -> "kept by the function alone: " + why);
             WhyKept.AFunctionReadAsAWhole kept = assertInstanceOf(
                     WhyKept.AFunctionReadAsAWhole.class, why.iterator().next());
-            assertEquals(Optional.of("List.find"), kept.operation());
+            assertEquals(List.of(new WhyKept.Shortfall.ToSomeOfTheElements("List.find",
+                    HowAClosureIsApplied.UNTIL_ONE_HOLDS)), kept.shortfalls());
         }
         assertEquals(EVERY_PLAN_WITH_EVERY_DESTINATION, pick.kept().keySet(),
                 "no way inside the function was read whole");
@@ -728,9 +731,9 @@ class ACombinationIsOwedWhereARunReadsBothTest {
         for (int at = 0; at < lines.size(); at++) {
             if (lines.get(at).contains("no row is in `") && lines.get(at).contains(" with `")) {
                 gaps++;
-                assertEquals("          · kept: the ways inside the function passed to"
-                                + " `List.find` (" + place + ") were read as a whole: it is not"
-                                + " applied once to each element of a position of the input",
+                assertEquals("          · kept: the ways inside the function at " + place
+                                + " were read as a whole: `List.find` applies it to each"
+                                + " element only until one application holds",
                         lines.get(at + 1), "under " + lines.get(at));
             }
         }
@@ -745,7 +748,12 @@ class ACombinationIsOwedWhereARunReadsBothTest {
                     for (JsonNode kept : between.get("kept")) {
                         JsonNode by = kept.get("by").get(0);
                         assertEquals("a_function_read_as_a_whole", by.get("reason").asString());
-                        assertEquals("List.find", by.get("passedTo").asString());
+                        JsonNode shortfall = by.get("shortfalls").get(0);
+                        assertEquals(List.of("to_some_of_the_elements", "List.find",
+                                        "until_one_holds"),
+                                List.of(shortfall.get("kind").asString(),
+                                        shortfall.get("operation").asString(),
+                                        shortfall.get("applied").asString()));
                         assertEquals(place, by.get("at").get("line").asInt() + ":"
                                 + by.get("at").get("column").asInt());
                         written.add(kept.get("one").asString() + " × "
@@ -810,7 +818,7 @@ class ACombinationIsOwedWhereARunReadsBothTest {
 
         assertEquals(EVERY_PLAN_WITH_EVERY_DESTINATION, total.owed(),
                 "a call is charged only on the plan the filter let it through on");
-        assertEquals(Set.of("List.fold"), total.passedTo(),
+        assertEquals(Set.of("List.fold"), total.shortOf(),
                 "the filter is applied to each call, and the fold to what the filter let through");
     }
 
@@ -888,13 +896,172 @@ class ACombinationIsOwedWhereARunReadsBothTest {
         assertEquals(one, other, "found in another order, said in the same one, each once");
     }
 
+    /** {@link #CALLS} with {@code body}, and {@code examples} as its rows in place of its own. */
+    private static String calls(String body, String examples) {
+        String model = CALLS.formatted(body);
+        return model.substring(0, model.indexOf("example total")) + "example total\n" + examples;
+    }
+
+    /** What the fold over the calls reads, in the words {@link #CALLS} takes. */
+    private static final String FOLD =
+            "Yen(List.fold((sum, c) -> sum + charge(plan, c).value, 0, calls))";
+
     /**
-     * A function is said to be passed to the operation the author wrote, and not to what the
-     * library expanded that operation into: {@code Set.fold} hands its function to a fold over a
-     * list it makes of the set, which no author wrote.
+     * A row whose list holds nothing makes no application, so it is in no combination of the plan
+     * with a destination: no call was charged on it.
+     */
+    @Test
+    void aRowWhoseListHoldsNothingIsInNoCombination() {
+        Measured total = measured(calls(FOLD, """
+                    | (Free, [Call { dest = Premium, seconds = 60 }]) -> Yen(60)
+                    | (Free, [Call { dest = Normal, seconds = 60 }]) -> Yen(0)
+                    | (Paid, []) -> Yen(0)
+                """), "total");
+
+        assertEquals(A_NORMAL_CALL_READS_THE_PLAN, total.owed());
+        assertEquals(List.of(Set.of("Paid", "Normal")), total.leftClasses(),
+                "the paid row charged no call, so a normal call on a paid plan is still to write");
+    }
+
+    /**
+     * A list holding a premium call and a normal one is two applications. What each reads is read
+     * apart, so the premium call is not taken as read beside the plan the normal one read.
+     */
+    @Test
+    void twoElementsOfOneListAreTwoApplications() {
+        Measured total = measured(calls(FOLD, """
+                    | (Free, [Call { dest = Premium, seconds = 60 }, Call { dest = Normal, seconds = 60 }])
+                        -> Yen(60)
+                    | (Paid, [Call { dest = Premium, seconds = 60 }, Call { dest = Normal, seconds = 60 }])
+                        -> Yen(120)
+                """), "total");
+
+        assertEquals(A_NORMAL_CALL_READS_THE_PLAN, total.owed(),
+                "no application reads the plan beside a premium call");
+        assertEquals(List.of(), total.leftClasses(), "each list holds a normal call");
+        assertEquals(Map.of(), total.kept());
+    }
+
+    /**
+     * One function two operations apply is read a use at a time: what keeps it whole is the use
+     * that is not each element's, and the one that is is not named for it.
+     */
+    @Test
+    void aFunctionTwoOperationsApplyNamesTheOneThatFallsShort() {
+        Measured pick = measured("""
+                module probe.both
+
+                data Free
+                data Paid
+                data Plan = Free | Paid
+                data Normal
+                data Premium
+                data Dest = Normal | Premium
+                data Call = { dest: Dest, seconds: Int }
+                data Picked = { call: Call?, flags: List<Bool> }
+
+                behavior pick : (plan: Plan, calls: List<Call>) -> Picked
+                    constructs Picked
+
+                let pick (plan, calls) = {
+                    let f: (Call) -> Bool = c -> premiumOrPaid(plan, c)
+                    Picked { call = List.find(f, calls), flags = List.map(f, calls) }
+                }
+
+                let premiumOrPaid (plan: Plan, call: Call): Bool =
+                    match call.dest with
+                        | Premium -> true
+                        | Normal ->
+                            match plan with
+                                | Free -> false
+                                | Paid -> true
+
+                example pick
+                    | (Free, [Call { dest = Premium, seconds = 60 }])
+                        -> Picked { call = Call { dest = Premium, seconds = 60 }, flags = [true] }
+                """, "pick");
+
+        assertEquals(EVERY_PLAN_WITH_EVERY_DESTINATION, pick.owed(),
+                "the find reaches a premium call past the calls that did not hold on the plan");
+        assertEquals(Set.of("List.find"), pick.shortOf(),
+                "the map applies it to each call, and is not why it is read as a whole");
+    }
+
+    /**
+     * A function applied directly as well as by an operation is applied by something that needs
+     * no element, and narrows nothing: every combination stays, and no operation is named as what
+     * kept it — the fold applies it to each call and is not why.
+     *
+     * <p>The application written out is expanded where it is written, and what it decides there
+     * is about the call it was handed, which no position names.
+     */
+    @Test
+    void aFunctionAlsoAppliedDirectlyNarrowsNothing() {
+        Measured total = measured(calls("""
+                {
+                    let step = (sum, c) -> sum + charge(plan, c).value
+                    match List.get(0, calls) with
+                        | Some first -> Yen(List.fold(step, 0, calls) + step(0, first))
+                        | None -> Yen(0)
+                }""", """
+                    | (Free, [Call { dest = Premium, seconds = 60 }]) -> Yen(120)
+                    | (Paid, [Call { dest = Normal, seconds = 60 }]) -> Yen(120)
+                """), "total");
+
+        assertEquals(EVERY_PLAN_WITH_EVERY_DESTINATION, total.owed());
+        assertEquals(EVERY_PLAN_WITH_EVERY_DESTINATION, total.kept().keySet(),
+                "no way read whole reads any of them");
+        assertTrue(total.shortOf().stream().noneMatch("List.fold"::equals),
+                () -> "the fold is not why: " + total.kept());
+    }
+
+    /**
+     * One function applied to each element of two lists of the input is applied to an element of
+     * one of them at a time, and reads within that application what it would over either.
+     */
+    @Test
+    void aFunctionOverTwoListsOfTheInputIsReadAnApplicationAtATime() {
+        Measured total = measured("""
+                module probe.two
+
+                data Free
+                data Paid
+                data Plan = Free | Paid
+                data Normal
+                data Premium
+                data Dest = Normal | Premium
+                data Call = { dest: Dest, seconds: Int }
+                data Yen = Int
+
+                behavior total : (plan: Plan, calls: List<Call>, more: List<Call>) -> Yen
+                    constructs Yen
+
+                let total (plan, calls, more) = {
+                    let step = (sum, c) -> sum + charge(plan, c).value
+                    Yen(List.fold(step, 0, calls) + List.fold(step, 0, more))
+                }
+
+                let charge (plan: Plan, call: Call): Yen =
+                    match call.dest with
+                        | Premium -> Yen(call.seconds)
+                        | Normal ->
+                            match plan with
+                                | Free -> Yen(0)
+                                | Paid -> Yen(call.seconds)
+
+                example total
+                    | (Free, [Call { dest = Premium, seconds = 60 }], []) -> Yen(60)
+                """, "total");
+
+        assertEquals(Map.of(), total.kept(), () -> "kept: " + total.kept());
+    }
+
+    /**
+     * A use that falls short is said by the operation the author wrote: {@code Set.fold}, and not
+     * the fold over a list the library makes of the set, which no author wrote.
      *
      * <p>Over a set made of the input's list, whose elements are no position of the input, so the
-     * ways inside are read as a whole and the function is named.
+     * ways inside are read as a whole.
      */
     @Test
     void aFunctionIsSaidToBePassedToTheOperationTheAuthorWrote() {
@@ -927,7 +1094,7 @@ class ACombinationIsOwedWhereARunReadsBothTest {
                     | (Free, [Premium]) -> Yen(5)
                 """, "total");
 
-        assertEquals(Set.of("Set.fold"), total.passedTo(), () -> "kept: " + total.kept());
+        assertEquals(Set.of("Set.fold"), total.shortOf(), () -> "kept: " + total.kept());
     }
 
     /**
@@ -967,7 +1134,7 @@ class ACombinationIsOwedWhereARunReadsBothTest {
                 """), ModulePath.EMPTY);
         Measured pick = measured(compilation, "probe.picking", "pick");
 
-        assertEquals(Set.of("probe.pickers.firstOver"), pick.passedTo(),
+        assertEquals(Set.of("probe.pickers.firstOver"), pick.shortOf(),
                 () -> "kept: " + pick.kept());
     }
 
@@ -1013,7 +1180,7 @@ class ACombinationIsOwedWhereARunReadsBothTest {
         assertEquals(EVERY_PLAN_WITH_EVERY_DESTINATION,
                 pick.owedBetween("plan", "orders[*].calls[*].dest"),
                 "an order's calls are read only where the orders before it held on none");
-        assertEquals(Set.of("List.find"), pick.passedTo(),
+        assertEquals(Set.of("List.find"), pick.shortOf(),
                 "the fold is applied to each call, inside the function the find stops at");
     }
 
@@ -1118,13 +1285,22 @@ class ACombinationIsOwedWhereARunReadsBothTest {
             return out;
         }
 
-        /** What each function read as a whole that kept a combination is passed to. */
-        Set<String> passedTo() {
+        /** The uses that fall short of each function read as a whole that kept a combination:
+         *  the operation that does, or {@code elsewhere} for a use that is no operation's. */
+        Set<String> shortOf() {
             Set<String> out = new LinkedHashSet<>();
             for (Set<WhyKept> why : kept().values()) {
                 for (WhyKept each : why) {
-                    if (each instanceof WhyKept.AFunctionReadAsAWhole(var _, var operation)) {
-                        out.add(operation.orElse("no operation"));
+                    if (each instanceof WhyKept.AFunctionReadAsAWhole function) {
+                        for (WhyKept.Shortfall shortfall : function.shortfalls()) {
+                            out.add(switch (shortfall) {
+                                case WhyKept.Shortfall.NotOnlyByOperations() -> "elsewhere";
+                                case WhyKept.Shortfall.ToSomeOfTheElements(var operation,
+                                        var _) -> operation;
+                                case WhyKept.Shortfall.OverNoPosition(var operation) ->
+                                        operation;
+                            });
+                        }
                     }
                 }
             }
@@ -1143,6 +1319,15 @@ class ACombinationIsOwedWhereARunReadsBothTest {
 
         List<?> left() {
             return evidence.pairs().left(behavior);
+        }
+
+        /** The combinations no row is in, each as its two classes. */
+        List<Set<String>> leftClasses() {
+            return evidence.pairs().left(behavior).stream()
+                    .map(each -> each.classes().stream()
+                            .map(ClassOfAPosition::classId)
+                            .collect(Collectors.toSet()))
+                    .toList();
         }
 
         CombinationCriterion criterion() {

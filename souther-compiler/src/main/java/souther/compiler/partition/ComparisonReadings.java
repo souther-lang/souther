@@ -526,28 +526,14 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                     decides, applying.elementsMetOn(), stated.written(), in.context(),
                     numbering.saidOnTheWay(ways)));
         }
-        // A fork the reading of the runs takes a way out of, under the closures the walk is in, and
-        // what each closure is passed to — written as the argument, or given a name by a `let`
-        // first. A value standing as a wider type is no fork, and a fork under it is met one step
-        // down.
+        // A fork the reading of the runs takes a way out of, under the closures the walk is in. A
+        // value standing as a wider type is no fork, and a fork under it is met one step down.
         switch (e) {
             case Core.If iff -> in.forkMet(iff.occurrence());
             case Core.Match match -> in.forkMet(match.occurrence());
             case Core.IfConstructed attempt -> in.forkMet(attempt.occurrence());
             case Core.Binary binary when binary.op().stopsWhenItsAnswerIsSettled() ->
                     in.forkMet(binary.occurrence());
-            case Core.Call call -> in.oneApplication().passing(call.args(),
-                    () -> call.fn() instanceof Core.Reached reached
-                            ? calledAs(reached.denotes(), call.fn().rendered(), symbols)
-                            : call.fn().rendered(),
-                    call.occurrence().lineage(), symbols.module(),
-                    expanded -> expandedAs(expanded, symbols));
-            case Core.PreservedCall call -> in.oneApplication().passing(call.args(),
-                    () -> calledAs(call.declared().operation(), call.declared().toString(),
-                            symbols),
-                    call.place().lineage(), symbols.module(),
-                    expanded -> expandedAs(expanded, symbols));
-            case Core.LetIn let -> in.oneApplication().binding(let);
             case Core.Widen _ -> { }
             default -> { }
         }
@@ -726,8 +712,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                         }
                         Denotation seed = new Denotation(seeded.seed(), reads);
                         in.oneApplication().entering(seeded.step(),
-                                WithinOneApplication.eachElementOfAPosition(seeded.step(), inside,
-                                        in.read()));
+                                shortOfEachElement(seeded.step(), inside, in));
                         ScopeStep.forEachChild(seeded.step(), (body, into) -> walk(body, in,
                                 inside.entering(into, symbols, in.newtypes()),
                                 through.into(seeded.step(), into, inside, in.read())
@@ -758,8 +743,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
             // body forks on what the closure answers, that is what the fork turns on
             // ({@link ForkDependencies}).
             case Core.Block block -> {
-                in.oneApplication().entering(block,
-                        WithinOneApplication.eachElementOfAPosition(block, reads, in.read()));
+                in.oneApplication().entering(block, shortOfEachElement(block, reads, in));
                 ScopeStep.forEachChild(block, (child, step) -> {
                     ClosureApplications applied = applying.into(block, step, reads, in.read());
                     if (child == block.body()) {
@@ -798,23 +782,23 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         }
     }
 
-    /** The operation a call of {@code called}, said as {@code rendered}, applies as the author
-     *  wrote it: the sugar, where the call is of what the library rewrote one to
-     *  ({@link souther.compiler.stdlib.Stdlib#writtenAs}). */
-    private static String calledAs(ValueName called, String rendered, Symbols symbols) {
-        if (called instanceof ValueName.Stdlib.Operation operation) {
-            return symbols.library().writtenAs(operation)
-                    .map(ValueName.Stdlib.Operation::qualified)
-                    .orElse(rendered);
-        }
-        return rendered;
+    /** The uses of {@code block}, where {@code reads} are the names, that are not an operation
+     *  applying it once to each element of a position ({@link WithinOneApplication}). */
+    private static List<WhyKept.Shortfall> shortOfEachElement(Core.Block block, InputReads reads,
+                                                              Body in) {
+        return WithinOneApplication.shortOfEachElement(block, reads, in.read(),
+                in.symbols().module(), operation -> asWritten(operation, in.symbols()));
     }
 
-    /** What a body the walk is in a copy of was expanded from, as the author of this module wrote
-     *  it. */
-    private static String expandedAs(ValueName expanded, Symbols symbols) {
-        return calledAs(expanded, expanded instanceof ValueName.Stdlib library
-                ? library.qualified() : expanded.saidIn(symbols.module()), symbols);
+    /** {@code operation} as the author of this module writes it: the sugar, where it is what the
+     *  library rewrote one to ({@link souther.compiler.stdlib.Stdlib#writtenAs}). */
+    private static String asWritten(ValueName operation, Symbols symbols) {
+        return switch (operation) {
+            case ValueName.Stdlib.Operation library -> symbols.library().writtenAs(library)
+                    .orElse(library).qualified();
+            case ValueName.Stdlib library -> library.qualified();
+            default -> operation.saidIn(symbols.module());
+        };
     }
 
     /**

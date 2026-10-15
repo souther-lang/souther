@@ -3857,13 +3857,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     private static String whyKept(WhyKept why, SourceRendering rendering, SourceId declaredIn) {
         return switch (why) {
             case WhyKept.AFunctionReadAsAWhole function ->
-                    "the ways inside the function "
-                            + function.operation().map(name -> "passed to `" + name + "` ("
-                                    + function.at().said(rendering, declaredIn) + ")")
-                                    .orElseGet(() -> "at "
-                                            + function.at().said(rendering, declaredIn))
-                            + " were read as a whole: it is not applied once to each element of"
-                            + " a position of the input";
+                    "the ways inside the function at " + function.at().said(rendering, declaredIn)
+                            + " were read as a whole: " + function.shortfalls().stream()
+                                    .map(AdequacyReport::shortfall)
+                                    .collect(Collectors.joining("; "));
             case WhyKept.AWayReadInPart(var cause) -> wayReadInPart(cause)
                     + ", and what that way reads together was not read";
             case WhyKept.ADecisionNothingNames() -> "a decision on a way of the body is about"
@@ -3872,6 +3869,25 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case WhyKept.ARuleNoDecisionReads(var at) -> "the body wrote a rule dividing " + at
                     + " that no decision on its ways reads, and what " + at + " is read beside"
                     + " was not read";
+        };
+    }
+
+    /** One use of a function that is not an operation applying it once to each element of a
+     *  position, as the line under a combination says it. */
+    private static String shortfall(WhyKept.Shortfall shortfall) {
+        return switch (shortfall) {
+            case WhyKept.Shortfall.NotOnlyByOperations() ->
+                    "something other than an operation of the language applies it";
+            case WhyKept.Shortfall.ToSomeOfTheElements(var operation, var applied) ->
+                    "`" + operation + "` applies it " + switch (applied) {
+                        case TO_EVERY_ELEMENT -> "to every element";
+                        case UNTIL_ONE_HOLDS -> "to each element only until one application holds";
+                        case UNTIL_ONE_FAILS -> "to each element only until one application fails";
+                        case AT_MOST_ONE -> "to one element at most";
+                        case TO_SOME -> "to some of the elements";
+                    };
+            case WhyKept.Shortfall.OverNoPosition(var operation) ->
+                    "`" + operation + "` applies it over what is no position of the input";
         };
     }
 
@@ -6786,8 +6802,24 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         switch (why) {
             case WhyKept.AFunctionReadAsAWhole function -> {
                 into.put("reason", "a_function_read_as_a_whole");
-                function.operation().ifPresent(name -> into.put("passedTo", name));
                 PublishedAt.of(function.at()).ifPresent(place -> at(into, place, sources));
+                ArrayNode shortfalls = into.putArray("shortfalls");
+                for (WhyKept.Shortfall each : function.shortfalls()) {
+                    ObjectNode one = shortfalls.addObject();
+                    switch (each) {
+                        case WhyKept.Shortfall.NotOnlyByOperations() ->
+                                one.put("kind", "not_only_by_operations");
+                        case WhyKept.Shortfall.ToSomeOfTheElements(var operation, var applied) -> {
+                            one.put("kind", "to_some_of_the_elements");
+                            one.put("operation", operation);
+                            one.put("applied", word(applied));
+                        }
+                        case WhyKept.Shortfall.OverNoPosition(var operation) -> {
+                            one.put("kind", "over_no_position");
+                            one.put("operation", operation);
+                        }
+                    }
+                }
             }
             case WhyKept.AWayReadInPart(var cause) -> {
                 into.put("reason", "a_way_read_in_part");

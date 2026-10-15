@@ -3,10 +3,11 @@ package souther.compiler.partition;
 import souther.compiler.diag.Citation;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.reading.PathAccess;
+import souther.compiler.semantics.HowAClosureIsApplied;
 
 import java.util.Comparator;
+import java.util.List;
 import java.util.Objects;
-import java.util.Optional;
 
 /**
  * Why a combination of two classes is owed where no way of the body that was read whole reads the
@@ -32,22 +33,69 @@ public sealed interface WhyKept {
 
     /**
      * The ways inside a function value were read as a whole, and not one application at a time:
-     * something applies the function other than once to each element of a position of the input
-     * ({@link WithinOneApplication}).
+     * some use of the function is other than an operation of the language applying it once to each
+     * element of a position of the input ({@link WithinOneApplication}).
      *
-     * @param written   where the function is
-     * @param operation what it is passed to, where it is passed to one the author wrote
+     * @param written    where the function is
+     * @param shortfalls each use that falls short, read off the uses the judgment was made from
+     *                   ({@link souther.compiler.check.ClosureUses}) — so a function two operations
+     *                   apply names the one that does not apply it so, and not the other
      */
-    record AFunctionReadAsAWhole(SourcePos written, Optional<String> operation) implements WhyKept {
+    record AFunctionReadAsAWhole(SourcePos written, List<Shortfall> shortfalls)
+            implements WhyKept {
 
         public AFunctionReadAsAWhole {
             Objects.requireNonNull(written, "a function is written somewhere");
-            Objects.requireNonNull(operation, "what the function is passed to is said or absent");
+            shortfalls = List.copyOf(shortfalls);
+            if (shortfalls.isEmpty()) {
+                throw new IllegalArgumentException("a function read as a whole is short of"
+                        + " something");
+            }
         }
 
         /** Where the function is, as a report is entitled to say it. */
         public Citation at() {
             return Citation.of(written);
+        }
+    }
+
+    /** One use of a function that is not an operation applying it once to each element of a
+     *  position of the input. */
+    sealed interface Shortfall {
+
+        /** Something other than an operation of the language applies the function, or may: it is
+         *  applied directly, handed to a function of the author's, or kept in a value. */
+        record NotOnlyByOperations() implements Shortfall {}
+
+        /**
+         * {@code operation} applies the function to some of the elements and not each of them.
+         *
+         * @param operation what the author called, as they wrote it
+         * @param applied   how far it goes, which is never to every element
+         */
+        record ToSomeOfTheElements(String operation, HowAClosureIsApplied applied)
+                implements Shortfall {
+
+            public ToSomeOfTheElements {
+                Objects.requireNonNull(operation, "some operation applies it");
+                if (applied == HowAClosureIsApplied.TO_EVERY_ELEMENT) {
+                    throw new IllegalArgumentException("`" + operation + "` applies it to every"
+                            + " element, which falls short of nothing");
+                }
+            }
+        }
+
+        /**
+         * {@code operation} applies the function over a container that is no position of the
+         * input: what another operation answered, or values written out.
+         *
+         * @param operation what the author called, as they wrote it
+         */
+        record OverNoPosition(String operation) implements Shortfall {
+
+            public OverNoPosition {
+                Objects.requireNonNull(operation, "some operation applies it");
+            }
         }
     }
 
@@ -82,8 +130,8 @@ public sealed interface WhyKept {
                     AFunctionReadAsAWhole that = (AFunctionReadAsAWhole) other;
                     int at = SourcePos.IN_WRITTEN_ORDER.compare(function.written(),
                             that.written());
-                    yield at != 0 ? at : function.operation().orElse("")
-                            .compareTo(that.operation().orElse(""));
+                    yield at != 0 ? at : function.shortfalls().toString()
+                            .compareTo(that.shortfalls().toString());
                 }
                 case ADecisionNothingNames _ -> 0;
                 case ARuleNoDecisionReads(var at) ->
