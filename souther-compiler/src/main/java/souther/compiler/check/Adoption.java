@@ -217,6 +217,23 @@ record Adoption<A, L extends ReadingLanguage>(Set<A> read, Set<A> settled, Set<A
                 union(missed, other.missed), hasUnreadPart || other.hasUnreadPart, nowOpen);
     }
 
+    /**
+     * Either part holding, for a reading whose state has no join that keeps what a choice says.
+     *
+     * <p>Every position either branch was about is one this reading missed, and a choice is a part
+     * it did not read. What such a reading makes of a choice is an envelope: two alternatives naming
+     * one length each leave every length between them, and a rule that names two lengths read as the
+     * run between them is not read whole. Taken from either branch's account instead, the choice
+     * would be credited to a reading that holds a different set from the one the rule states.
+     *
+     * <p>What a dead alternative settled stays settled. Such a choice is composed at {@link #both}
+     * and never arrives here, and a dead branch deeper in either side still imposes nothing.
+     */
+    Adoption<A, L> eitherWithoutAJoin(Adoption<A, L> other) {
+        return new Adoption<>(Set.of(), union(settled, other.settled),
+                union(union(read, missed), union(other.read, other.missed)), true, Set.of());
+    }
+
     /** Whether this reading settled what the whole of the clause does to {@code position}. */
     boolean took(A position) {
         return (read.contains(position) || settled.contains(position))

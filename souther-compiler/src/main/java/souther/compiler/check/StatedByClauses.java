@@ -154,6 +154,12 @@ sealed interface StatedByClauses {
      * is what a position was left holding, which is kept once by the carrier that answers for the
      * position and copied nowhere.
      *
+     * @param byDerivedNumbers where the reading of the numbers an operation answers took this part
+     *                         in, which it does at the position a number is answered of. Its own
+     *                         account beside the other two, because it reads what neither of them
+     *                         has a word for: {@code String.length(value) == 3} is no end of the
+     *                         position's order and no set of strings, and it is the one length it
+     *                         leaves
      * @param aboutStrings what this part states about the strings at each position it states a rule
      *                     about. The position is here whether or not the rule was read, because
      *                     which of a position's numbers a rule is written about is settled by the
@@ -203,6 +209,7 @@ sealed interface StatedByClauses {
      */
     record Part(Adoption<FactSubject, ReadingLanguage.Values> byValues,
                 Adoption<FactSubject, ReadingLanguage.Order> byOrder,
+                Adoption<FactSubject, ReadingLanguage.DerivedNumbers> byDerivedNumbers,
                 Set<FactSubject> stopped,
                 Map<FactSubject, StringRestriction> aboutStrings,
                 Set<AdmissibleReading.AskedAt> asked,
@@ -213,7 +220,7 @@ sealed interface StatedByClauses {
 
         /** What a clause of no connective, that no reading has a word for, took in. */
         static Part nothing() {
-            return new Part(Adoption.nothing(), Adoption.nothing(), Set.of(),
+            return new Part(Adoption.nothing(), Adoption.nothing(), Adoption.nothing(), Set.of(),
                     Map.of(), Set.of(), Set.of(),
                     EndsLeftOpen.nothing(), BoundaryState.nothing(), Map.of());
         }
@@ -234,6 +241,7 @@ sealed interface StatedByClauses {
          */
         Part both(Part other) {
             return new Part(byValues.both(other.byValues()), byOrder.both(other.byOrder()),
+                    byDerivedNumbers.both(other.byDerivedNumbers()),
                     // And what either of them stops. A meet with a range covering the order is that
                     // range, so a conjunction stops a position exactly where one of its parts does.
                     stoppedIn(stopped, other.stopped()),
@@ -321,7 +329,7 @@ sealed interface StatedByClauses {
             // be in leaves is nothing anybody is held to, and a reader asking whether this part
             // holds a position down would be told about rules written where nobody is.
             return new Part(byValues.inADeadBranch(), byOrder.inADeadBranch(),
-                    Set.of(), Map.of(),
+                    byDerivedNumbers.inADeadBranch(), Set.of(), Map.of(),
                     Set.of(), Set.of(), EndsLeftOpen.nothing(), BoundaryState.nothing(), Map.of());
         }
 
@@ -334,8 +342,8 @@ sealed interface StatedByClauses {
          * {@code ||} the author wrote.
          */
         Part underACollapsedChoice() {
-            return new Part(byValues, byOrder, stopped, aboutStrings, asked, ruleShortfalls,
-                    endsLeftOpen.underACollapsedChoice(), boundary,
+            return new Part(byValues, byOrder, byDerivedNumbers, stopped, aboutStrings, asked,
+                    ruleShortfalls, endsLeftOpen.underACollapsedChoice(), boundary,
                     underACollapsedChoice(boundsLeftOpen));
         }
 
@@ -384,6 +392,10 @@ sealed interface StatedByClauses {
                     ruleShortfalls, shortfalls);
             return new Part(byValues.either(opening.byValues(), other.byValues()),
                     byOrder.either(opening.byOrder(), other.byOrder()),
+                    // And no opening for the numbers an operation answers: what that reading makes
+                    // of a choice is the envelope of what its branches leave
+                    // ({@link BoundaryState#either}), which is not the rule the choice states.
+                    byDerivedNumbers.eitherWithoutAJoin(other.byDerivedNumbers()),
                     // And what the choice stops, which is not what its alternatives stop between
                     // them: two bounds reaching opposite ends of a carrier stop the position on
                     // each side and leave all of it here. What the pair leaves is worked out where
@@ -741,6 +753,13 @@ sealed interface StatedByClauses {
                     // choice offering an alternative nothing could read.
                     Adoption.at(mentions, said.adoptedAt(), values.gaveUpAt(e)),
                     Adoption.at(mentions, range.boundedAt(), ordered.gaveUpAt(e)),
+                    // And the numbers an operation answers, taken in at the position the number is
+                    // of where the leaf leaves it a range holding a value. A line nothing here
+                    // placed is a leaf this reading gave up on.
+                    Adoption.at(mentions,
+                            bounds instanceof BoundaryReading.Read.Bounded it
+                                    ? it.readWholeAt() : Set.of(),
+                            bounds instanceof BoundaryReading.Read.LeftOpen),
                     // And what the leaf leaves them, beside which of them it was about. The second
                     // is a projection of the first and the two answer different questions: a
                     // reader asking whether the clause holds a position down wants the values, and
@@ -1306,6 +1325,7 @@ sealed interface StatedByClauses {
             took.parts().forEach((each, part) -> parts.put(each, new PartAccount(
                     part.byValues().unbuiltAt(unbuilt),
                     part.byOrder().unbuiltAt(unbuilt),
+                    part.byDerivedNumbers().unbuiltAt(unbuilt),
                     part.stopped(),
                     // What the part's own reading decided, and the machines it asked for that were
                     // refused while the positions were worked out. The second is routed by what the
@@ -1532,6 +1552,7 @@ sealed interface StatedByClauses {
             return mapped(part -> new Part(
                     part.byValues().unbuiltAt(known.unbuilt()),
                     part.byOrder().unbuiltAt(known.unbuilt()),
+                    part.byDerivedNumbers().unbuiltAt(known.unbuilt()),
                     // Where its ends stopped the positions is what it is whether or not a machine
                     // beside them was built: an end is read off the clause and waits on nothing.
                     part.stopped(),
@@ -1931,7 +1952,8 @@ sealed interface StatedByClauses {
             said.forEach((key, mine) -> {
                 Map<ClauseOccurrence, ReadByClauses.OfAPart> here = new LinkedHashMap<>();
                 mine.forEach((each, part) -> here.put(each, new ReadByClauses.OfAPart(
-                        part.byValues(), part.byOrder(), part.stopped(), part.aboutARule(),
+                        part.byValues(), part.byOrder(), part.byDerivedNumbers(),
+                        part.stopped(), part.aboutARule(),
                         admitted(part.aboutStrings(), answers, notHandedOn), part.endsLeftOpen(),
                         part.boundsLeftOpen())));
                 out.put(key, here);
@@ -2008,6 +2030,7 @@ sealed interface StatedByClauses {
      */
     record PartAccount(Adoption<FactSubject, ReadingLanguage.Values> byValues,
                        Adoption<FactSubject, ReadingLanguage.Order> byOrder,
+                       Adoption<FactSubject, ReadingLanguage.DerivedNumbers> byDerivedNumbers,
                        Set<FactSubject> stopped,
                        Set<ReadingShortfall> aboutARule,
                        Map<FactSubject, StringRestriction> aboutStrings,

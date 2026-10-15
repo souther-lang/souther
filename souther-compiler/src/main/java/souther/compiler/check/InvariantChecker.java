@@ -2578,15 +2578,20 @@ public final class InvariantChecker {
                                                 Coordinates byName) {
         Map<FactSubject, DerivedNumber> numbers = new LinkedHashMap<>();
         Map<DerivedNumber, Carrier> carriers = new LinkedHashMap<>();
+        Map<RuleKey, Set<FactSubject>> positions = new LinkedHashMap<>();
         byName.forEach((name, coordinate) -> {
             DerivedNumber number = DerivedNumber.of(coordinate.at());
-            if (number == null || coordinate.carrier() == null) {
+            if (number == null) {
+                positions.computeIfAbsent(coordinate.path(), _ -> new LinkedHashSet<>()).add(name);
+                return;
+            }
+            if (coordinate.carrier() == null) {
                 return;
             }
             numbers.put(name, number);
             carriers.put(number, coordinate.carrier());
         });
-        return BoundaryReading.of(terms, numbers, carriers);
+        return BoundaryReading.of(terms, numbers, carriers, positions);
     }
 
     /**

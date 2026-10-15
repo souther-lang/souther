@@ -1,7 +1,7 @@
 package souther.compiler.check;
 
 /**
- * Which of the two readings a fact about a clause is a fact of.
+ * Which of the readings a fact about a clause is a fact of.
  *
  * <p>A name and nothing else. Nothing of this type is ever made — what it is for is standing in the
  * type of a value so that a fact one reading worked out cannot be handed to the other. The two are
@@ -32,5 +32,18 @@ sealed interface ReadingLanguage {
     final class Order implements ReadingLanguage {
 
         private Order() {}
+    }
+
+    /**
+     * The reading that says where a number an operation answers of a position stops
+     * ({@link BoundaryReading}).
+     *
+     * <p>A third account and not a part of the second. {@code String.length(value) == 3} names no
+     * end of the position's own order and leaves no set of strings the values reading can build, and
+     * it is read whole as the one length it leaves.
+     */
+    final class DerivedNumbers implements ReadingLanguage {
+
+        private DerivedNumbers() {}
     }
 }
