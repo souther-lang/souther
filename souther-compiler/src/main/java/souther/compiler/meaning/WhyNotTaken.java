@@ -161,7 +161,10 @@ public sealed interface WhyNotTaken {
         /** Two values being one, as what a path knows, which is no relation of numbers. */
         A_PATH_KNOWS_NO_SAMENESS_OF_VALUES,
 
-        /** A place on an order that is no number, as what a path knows. */
+        /** A place on an order that is no number, where no range says it: a value other than a
+         *  written place, which leaves a hole rather than a range, and a quantity that is no value
+         *  of the input. A value of the input at or past a written place is a range, and a path
+         *  holds it. */
         A_PATH_KNOWS_NO_PLACE_ON_AN_ORDER,
 
         /** How many elements of a container meet something, as what a path knows: no subject of

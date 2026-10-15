@@ -202,11 +202,11 @@ class AReadingAnswersAboutThePlacesOfOnePlanTest {
         ArmProbe elsewhere = refused.armProvenDead().probe().orElseThrow();
 
         assertEquals(Set.of(),
-                capped.arrives.asRunWith(Set.of()).provedWrong(),
+                capped.arrives.asRunWith(Set.of(), Set.of()).provedWrong(),
                 "no row ran, so this reading is shown wrong nowhere");
 
         IllegalArgumentException refusal = assertThrows(IllegalArgumentException.class,
-                () -> capped.arrives.asRunWith(Set.of(elsewhere)));
+                () -> capped.arrives.asRunWith(Set.of(elsewhere), Set.of()));
 
         assertTrue(refusal.getMessage().contains("was made under"),
                 () -> "the refusal names the two numberings: " + refusal.getMessage());

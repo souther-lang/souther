@@ -43,7 +43,7 @@ class WhatARunSaysAboutAPlaceIsAskedOfTheRunTest {
     private static final String A_RUN = "souther/compiler/coverage/AlignedObservation";
 
     /** The two that hand the places over whole, rather than answering about one. */
-    private static final Set<String> HANDS_THEM_OVER = Set.of("arms", "comparisons");
+    private static final Set<String> HANDS_THEM_OVER = Set.of("arms", "outcomes");
 
     /** A method that may take them, how many times it does, and why it is gathering rather than
      *  asking. */
@@ -53,7 +53,10 @@ class WhatARunSaysAboutAPlaceIsAskedOfTheRunTest {
             new Licence("souther.compiler.query.Adequacy.armsSeenIn -> arms", 1,
                     "the arms some row of the module reached, unioned over the rows: what it is"
                             + " building is a set of places, and it names none of its own to be"
-                            + " wrong about"));
+                            + " wrong about"),
+            new Licence("souther.compiler.query.Adequacy.outcomesSeenIn -> outcomes", 1,
+                    "the ways some row of the module brought a condition out, unioned over the"
+                            + " rows the same way, for the proofs about them a run takes back"));
 
     @Test
     void whatTakesThePlacesWholeIsGatheringThemAndSaysSo() {

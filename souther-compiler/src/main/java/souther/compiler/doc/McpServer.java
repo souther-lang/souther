@@ -61,6 +61,17 @@ public final class McpServer {
             .build();
 
     /**
+     * {@code text} as a JSON string, quotes and escapes and all.
+     *
+     * <p>Written by the writer that puts this server's answers on the wire, so a value written into
+     * a call a reader is told to make is read back by a client as the value it was. Spelled by hand
+     * between two quotes, a term holding a quote or a backslash names a call nobody can send.
+     */
+    static String jsonString(String text) {
+        return JSON.writeValueAsString(text);
+    }
+
+    /**
      * One character that is not a space — written so that a client's regular expressions and this
      * server's read it as the same set.
      *
@@ -630,7 +641,7 @@ public final class McpServer {
      */
     private static String carriesOn(Tool tool, String cursor, int remaining) {
         return "\n… " + remaining + " more characters; ask `" + tool.name() + "` again with the same"
-                + " arguments and `cursor: \"" + cursor + "\"` for what follows\n";
+                + " arguments and `cursor: " + jsonString(cursor) + "` for what follows\n";
     }
 
     private static ObjectNode failed(String said) {

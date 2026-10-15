@@ -142,6 +142,16 @@ public final class GuaranteeWalk {
         /** What the declaration at {@code path} guarantees of the value there. */
         void guaranteed(RuleKey path, TypeGuarantee guarantee);
 
+        /**
+         * That a value was entered as a value of {@code declaration}, with {@code named} readable
+         * off it.
+         *
+         * <p>Told once per value and beside what its clauses guarantee, for a reader that asks the
+         * declaration a question about the value as a whole — which values its rules leave each
+         * name — rather than about one clause at a time.
+         */
+        default void entered(TypeSymbol declaration, List<Named> named) {}
+
         /** Where the walk went no further, and what stood there. */
         default void stopped(RuleKey path, Type type, Stop why) {}
 
@@ -159,6 +169,15 @@ public final class GuaranteeWalk {
          * them, so what they were about is not among what was handed over. */
         default void lostAClause(RuleKey path, List<RuleRef.Invariant> lost) {}
     }
+
+    /**
+     * One name readable off a value, and what that value's own rules call it.
+     *
+     * <p>The rules' name and not the walk's path: a record's field is one step in and a newtype's
+     * {@code value} is the value itself ({@link Location#isStep}), and a declaration asked about its
+     * own names is asked by these.
+     */
+    record Named(TypeGuarantees.At.Readable readable, RuleKey key) {}
 
     /**
      * Why a walk went no further.
@@ -342,6 +361,14 @@ public final class GuaranteeWalk {
         // sum whose cases share a spread.
         if (here.handedOn() instanceof TypeGuarantees.At.HandedOn.ToAnotherReading) {
             reader.handedOn(keyOf(path), root.type());
+        }
+        if (name != null) {
+            List<Named> named = new ArrayList<>(here.readable().size());
+            for (TypeGuarantees.At.Readable each : here.readable()) {
+                named.add(new Named(each, Location.isStep(root.type(), each.name(), newtypes)
+                        ? RuleKey.of(each.name()) : RuleKey.THE_VALUE));
+            }
+            reader.entered(name, named);
         }
         // Entered before anything under it is walked, so that the one name and the other stay
         // paired: a stop taken after entering would leave the name on the path with nothing to take

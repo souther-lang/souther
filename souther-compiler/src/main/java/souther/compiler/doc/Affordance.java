@@ -32,7 +32,7 @@ enum Affordance {
 
         @Override
         String mcp(String argument) {
-            return "doc_read {name: \"" + argument + "\"}";
+            return "doc_read {name: " + McpServer.jsonString(argument) + "}";
         }
     },
 
@@ -45,7 +45,7 @@ enum Affordance {
 
         @Override
         String mcp(String argument) {
-            return "doc_search {term: \"" + argument + "\"}";
+            return "doc_search {term: " + McpServer.jsonString(argument) + "}";
         }
     },
 
@@ -71,7 +71,7 @@ enum Affordance {
 
         @Override
         String mcp(String argument) {
-            return "stdlib_api_source {name: \"" + argument + "\"}";
+            return "stdlib_api_source {name: " + McpServer.jsonString(argument) + "}";
         }
     };
 

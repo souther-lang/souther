@@ -19,6 +19,9 @@ import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.OrderedInterval;
+import souther.compiler.numeric.OrderedIntervals;
+import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Rel;
 import souther.compiler.partition.CompositionBudget;
 import souther.compiler.semantics.Arithmetic;
@@ -52,7 +55,8 @@ import java.util.function.Function;
  * condition.
  *
  * <p><b>What is taken.</b> A comparison over numbers of the input — a value at a position, the size
- * of a container at one — as the relation it states. A truth at a position. Both halves of a
+ * of a container at one — as the relation it states. A value of the input against a written place
+ * on its order, as the range it leaves the value. A truth at a position. Both halves of a
  * conjunction, since both hold. Of a disjunction, the one part what is known leaves, or nothing
  * reached where it leaves none. That some element meets something, as the container holding one.
  * Which cases a value may be, and whether an optional holds one. Nothing at all where the
@@ -61,7 +65,7 @@ import java.util.function.Function;
  * <p><b>What is not.</b> Which of several parts of a disjunction holds, where what is known leaves
  * more than one; which element meets something; what every element meets, which a path holds
  * only as the closure it was written with; a value being none of some cases, two values being one,
- * a place on an order, a count of elements, a place this tree does not read, and a part nothing
+ * a value being other than a place on its order, a count of elements, a place this tree does not read, and a part nothing
  * read. Each is left out with the limit of {@link Known} it meets, which is the sound answer with
  * less: a path that took nothing in has ruled nothing out. And one of several things whose parts,
  * counted with every disjunction inside them, come to more than one reading of a condition takes
@@ -252,8 +256,8 @@ final class MeaningAssumptions {
             case Proposition.Unread unread ->
                     notTaken(new WhyNotTaken.MeaningUnread(unread.why()));
             case Proposition.Carried carried -> throw carried.handedToAReader();
-            case Proposition.Compared(Relation.Ordered _, boolean _, var _) ->
-                    outside(WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_PLACE_ON_AN_ORDER);
+            case Proposition.Compared(Relation.Ordered ordered, boolean holds, var _) ->
+                    onAnOrder(ordered, holds);
             case Proposition.Truth(DecisionSubject.AnAnswer answer, boolean holds, var _) -> {
                 Core standing = answering(answer);
                 if (standing != null) {
@@ -478,6 +482,45 @@ final class MeaningAssumptions {
         RuleKey named = TermPath.ruleKeyOf(bound.steps());
         return value == null || named == null ? null
                 : terms.atomAt(terms.under(value, named), bound.type());
+    }
+
+    /**
+     * A value of the input held against a written place on its order, taken in as the range it
+     * leaves the value on the path.
+     *
+     * <p>Where the value sits on its order and not a number: two strings do not add, so the range
+     * is the whole of what such a comparison says and is held where ranges on an order are, beside
+     * the values the position admits. A value the comparison says is not the place is a hole and no
+     * range, so it is left out with the limit it meets, as is a quantity that is no value of the
+     * input.
+     */
+    private void onAnOrder(Relation.Ordered ordered, boolean holds) {
+        TermPath at = ordered.term() instanceof DecisionAtom.OfTheInput(
+                NumericTerm.ValueOf(TermPath value)) ? value : null;
+        FactSubject place = at == null ? null : placeOf(at);
+        Type type = place == null ? null : places.typeAt().apply(at);
+        Carrier carrier = type == null ? null : Carrier.ofValue(type, terms.declarations());
+        OrderedInterval range = rangeOf(holds ? ordered.proposition()
+                : ordered.proposition().denied(), ordered.at());
+        if (carrier == null || range == null) {
+            outside(WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_PLACE_ON_AN_ORDER);
+            return;
+        }
+        known = known.bounding(OrderedIntervals.at(place, range), Map.of(place, carrier));
+        taken = true;
+    }
+
+    /** What {@code rel} against {@code at} leaves a value on the order, or null where it leaves a
+     *  hole rather than a range. */
+    private static OrderedInterval rangeOf(Rel rel, Place at) {
+        return switch (rel) {
+            case GE -> new OrderedInterval(Endpoint.inclusive(at), null);
+            case GT -> new OrderedInterval(Endpoint.exclusive(at), null);
+            case LE -> new OrderedInterval(null, Endpoint.inclusive(at));
+            case LT -> new OrderedInterval(null, Endpoint.exclusive(at));
+            case EQ -> new OrderedInterval(Endpoint.inclusive(at), Endpoint.inclusive(at));
+            case NE -> null;
+        };
     }
 
     /**

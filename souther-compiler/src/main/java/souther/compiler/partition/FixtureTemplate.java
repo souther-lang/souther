@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import souther.compiler.ast.Hir;
 import souther.compiler.ast.WrittenName;
 import souther.compiler.check.Carrier;
+import souther.compiler.cst.CstLexer;
 import souther.compiler.diag.Region;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Place;
@@ -102,31 +103,8 @@ public record FixtureTemplate(String text, Hir.Expr value) {
      * the line the row is on as well.
      */
     public static FixtureTemplate string(String value) {
-        return new FixtureTemplate(quoted(value), new Hir.StringLit(value, NOWHERE, NO_SOURCE));
-    }
-
-    /**
-     * {@code value} as the language writes a string literal, quotes and escapes and all.
-     *
-     * <p>Here and not at each place that writes one. Every writer of a literal wants the same
-     * escapes for the same reason — what it writes is pasted back and read as the value it was made
-     * from — and a second spelling of the rule is a place where a value with a quote in it comes
-     * out as source that says something else, or does not parse at all.
-     */
-    public static String quoted(String value) {
-        StringBuilder written = new StringBuilder("\"");
-        for (int i = 0; i < value.length(); i++) {
-            char c = value.charAt(i);
-            switch (c) {
-                case '\\' -> written.append("\\\\");
-                case '"' -> written.append("\\\"");
-                case '\n' -> written.append("\\n");
-                case '\t' -> written.append("\\t");
-                case '\r' -> written.append("\\r");
-                default -> written.append(c);
-            }
-        }
-        return written.append('"').toString();
+        return new FixtureTemplate(CstLexer.literalOf(value),
+                new Hir.StringLit(value, NOWHERE, NO_SOURCE));
     }
 
     public static FixtureTemplate bool(boolean value) {
@@ -163,7 +141,7 @@ public record FixtureTemplate(String text, Hir.Expr value) {
         // The namespace applied, which builds a primitive rather than reaching an operation — so
         // the reference says namespace, and no reader that emits calls can be handed it.
         ValueName.Stdlib.Namespace namespace = ValueName.Stdlib.namespace(type);
-        return new FixtureTemplate(type + "(\"" + iso + "\")",
+        return new FixtureTemplate(type + "(" + CstLexer.literalOf(iso) + ")",
                 Hir.Apply.synthetic(type, new ReachName.TheNamespace(namespace), null,
                         new ApplicationOrigin.ComposedFixture(),
                         List.of(new Hir.StringLit(iso, NOWHERE, NO_SOURCE)), NOWHERE, NO_SOURCE));

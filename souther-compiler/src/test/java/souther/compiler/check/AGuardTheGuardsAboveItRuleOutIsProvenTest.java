@@ -159,6 +159,55 @@ class AGuardTheGuardsAboveItRuleOutIsProvenTest {
     }
 
     /**
+     * A departure between the values a declaration names is shown by those values.
+     *
+     * <p>{@code 2} lies inside where the three run between, so the range alone would not rule it
+     * out; the proof carries the values, which do.
+     */
+    @Test
+    void aDepartureBetweenTheValuesADeclarationNamesIsShownByThem() {
+        List<Proof> proven = provenIn("""
+                module d
+
+                data Low
+                data High
+                data Odd = Int
+                    invariant value == 1 || value == 3 || value == 7
+
+                behavior charge : (c: Odd) -> Low | High
+                let charge (c) = if c.value == 2 then Low else High
+                """);
+
+        assertEquals(1, proven.size(), "no `Odd` is two");
+        String said = WhatAnAnswerSays.positionOutrunIn(proven.get(0));
+        assertTrue(said != null && said.startsWith("c ") && said.endsWith("[1, 3, 7]"),
+                () -> "the position, and the values its rule names: " + said);
+    }
+
+    /**
+     * And a departure at the value a declaration refuses is shown by that refusal.
+     *
+     * <p>Nothing bounds a {@code Level} at either end, so there is no range to name, and nothing
+     * stands above the guard either: said as the conditions on the way, the proof would send an
+     * author to look for a guard that is not there.
+     */
+    @Test
+    void aDepartureAtAValueADeclarationRefusesIsShownByTheRefusal() {
+        List<Proof> proven = provenIn("""
+                module d
+
+                data Level = Int invariant value /= 5
+                behavior charge : (x: Level) -> String
+                let charge (x) = if x.value == 5 then "never" else "other"
+                """);
+
+        assertEquals(1, proven.size(), "no `Level` is five");
+        String said = WhatAnAnswerSays.positionOutrunIn(proven.get(0));
+        assertTrue(said != null && said.startsWith("x ") && said.endsWith("~[5]"),
+                () -> "the position, and the value its rule refuses: " + said);
+    }
+
+    /**
      * The two proofs are told apart, and by what does the work rather than by the shape of the
      * model.
      *

@@ -11,7 +11,10 @@ import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.semantics.PieceOfAnElement;
 import souther.compiler.check.SumCases;
 import souther.compiler.check.Symbols;
+import souther.compiler.cst.CstLexer;
 import souther.compiler.cst.SyntaxKind;
+import souther.compiler.numeric.DateTimes;
+import souther.compiler.numeric.Times;
 import souther.compiler.core.IntNegation;
 import souther.compiler.core.Kernel;
 import souther.compiler.observe.AnswerChange;
@@ -901,19 +904,18 @@ public final class FixtureReader {
             return "None";
         }
         if (v instanceof String s) {
-            return "\"" + s + "\"";
+            return CstLexer.literalOf(s);
         }
         // Written by whatever writes the value everywhere else, and not by `toString`. A time of
         // day and a date-time drop their seconds at zero that way, so what came back was shown
         // `Time("16:00")` beside a line the same value named `Time("16:00:00")` — one value in two
         // spellings, in the one report where a reader holds them up against each other.
         String temporal = switch (v) {
-            case java.time.LocalDate at -> "Date(\"" + at + "\")";
-            case java.time.LocalTime at ->
-                    "Time(\"" + souther.compiler.numeric.Times.written(at) + "\")";
+            case java.time.LocalDate at -> "Date(" + CstLexer.literalOf(at.toString()) + ")";
+            case java.time.LocalTime at -> "Time(" + CstLexer.literalOf(Times.written(at)) + ")";
             case java.time.LocalDateTime at ->
-                    "DateTime(\"" + souther.compiler.numeric.DateTimes.written(at) + "\")";
-            case java.time.Instant at -> "Instant(\"" + at + "\")";
+                    "DateTime(" + CstLexer.literalOf(DateTimes.written(at)) + ")";
+            case java.time.Instant at -> "Instant(" + CstLexer.literalOf(at.toString()) + ")";
             default -> null;
         };
         if (temporal != null) {

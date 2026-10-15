@@ -100,7 +100,12 @@ class WhoTakesAPlansNumberingHasItsBodiesTest {
             new Licence("souther.compiler.partition.GuardThresholds.of -> identity", 1,
                     "the rules read off the guards are asked what arrives at comparisons this plan"
                             + " names, so the two are held to being one plan's. Both are handed in,"
-                            + " which is where a caller could put two modules' together"));
+                            + " which is where a caller could put two modules' together"),
+            new Licence("souther.compiler.query.Adequacy.DecisionSearch.NothingReaches.<init>"
+                    + " -> identity", 1,
+                    "the copies of a decision's comparisons are looked up as places of this plan"
+                            + " in the reading of reach, so the reading is held to being this"
+                            + " plan's where the two are put together, before any place is asked"));
 
     @Test
     void everyReaderOfAPlansNumberingIsWrittenDownWithWhatMakesItSafe() {

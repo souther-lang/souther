@@ -189,7 +189,7 @@ class EveryForkIsReadUnderWhatItsBindingCarriesTest {
                 .filter(each -> each.getKey() instanceof ControlPlace.Arm)
                 .map(each -> (ControlPlace.Arm) each.getKey())
                 .findFirst().orElseThrow().probe().orElseThrow();
-        PathReachability.Answers.AsRun ran = answers.asRunWith(Set.of(probe));
+        PathReachability.Answers.AsRun ran = answers.asRunWith(Set.of(probe), Set.of());
         assertEquals(Set.of(probe), ran.provedWrong(),
                 "a row through it is what takes the proof back");
         assertEquals(List.of(), ran.answers().found().entrySet().stream()

@@ -1,6 +1,7 @@
 package souther.compiler.query;
 
 import souther.compiler.check.StandingSignature;
+import souther.compiler.cst.CstLexer;
 import souther.compiler.execute.ExampleExecution;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.observe.RowOutcome;
@@ -804,7 +805,7 @@ public final class Output {
          *  this is a message a reader reads and not source pasted back. */
         private static String shown(ConstantConstruction written) {
             return written.typeName() + "(" + switch (written.value()) {
-                case WrittenValue.Text(String text) -> "\"" + text + "\"";
+                case WrittenValue.Text(String text) -> CstLexer.literalOf(text);
                 case WrittenValue.Whole(long whole) -> String.valueOf(whole);
                 case WrittenValue.Truth(boolean truth) -> String.valueOf(truth);
                 case WrittenValue.Decimal(BigDecimal decimal) -> ExactDecimals.spelledBounded(decimal);
