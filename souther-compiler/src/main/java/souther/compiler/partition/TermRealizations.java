@@ -1420,7 +1420,7 @@ final class TermRealizations {
      * border owes a row at is one some value of it comes to.
      *
      * <p>Every value of the set is tried, each read through every number at once
-     * ({@link SearchRegion#readingsOfEach}), and the set holds every value the location can hold.
+     * ({@link ReadingsOfEachValue}), and the set holds every value the location can hold.
      * So where every number is walked as the whole of what it is asked about, none answering is an
      * answer about the model and is said as one; where a caller picked a number to try, it is an
      * answer about that number, which is no answer about the ones beside it.
@@ -1438,16 +1438,15 @@ final class TermRealizations {
         if (sourceType == null || within == null || asked.isEmpty()) {
             return null;
         }
-        Carrier observed = asked.firstEntry().getKey().observed();
-        List<NumericTerm.FromOnePosition> terms = new ArrayList<>();
-        for (TermOrders each : asked.keySet()) {
-            if (each.term().atOnePosition() == null) {
-                return null;
-            }
-            terms.add(each.term().atOnePosition());
+        TermOrders first = asked.firstEntry().getKey();
+        Carrier observed = first.observed();
+        if (observed == null || first.term().atOnePosition() == null) {
+            return null;
         }
-        ReadingsOfEachValue named = within.readingsOfEach(terms);
-        if (observed == null || named == null) {
+        // Read through the orders this was handed, which are the ones each number was asked on.
+        ReadingsOfEachValue named = ReadingsOfEachValue.of(
+                within.admittedAt(first.term().atOnePosition()), List.copyOf(asked.keySet()));
+        if (named == null) {
             return null;
         }
         List<Place> answering = new ArrayList<>();

@@ -1976,23 +1976,32 @@ final class ReadQuantities implements Quantities {
         if (term instanceof NumericTerm.ValueOf) {
             return admittedAt(term);
         }
-        ReadingsOfEachValue read = readingsOfEach(List.of(term));
-        return read == null ? ValueSet.ANY : read.comeTo(ordersOf(term));
+        if (!(admittedAt(term) instanceof ValueSet.Finite admitted)) {
+            return ValueSet.ANY;
+        }
+        TermOrders orders = ordersOf(term);
+        ReadingsOfEachValue read = ReadingsOfEachValue.of(admitted, List.of(orders));
+        return read == null ? ValueSet.ANY : read.comeTo(orders);
     }
 
     /**
      * Every value the position {@code terms} are taken of was read to admit, each read through every
      * one of them on the orders this reading has it standing on.
+     *
+     * <p>The orders are worked out only where there are finitely many values to read. Most
+     * positions admit no finite set, and working out a term's orders is a derivation each time it
+     * is asked.
      */
     public ReadingsOfEachValue readingsOfEach(List<NumericTerm.FromOnePosition> terms) {
-        if (terms.isEmpty()) {
+        if (terms.isEmpty()
+                || !(admittedAt(terms.getFirst()) instanceof ValueSet.Finite admitted)) {
             return null;
         }
         List<TermOrders> orders = new ArrayList<>();
         for (NumericTerm.FromOnePosition each : terms) {
             orders.add(ordersOf(each));
         }
-        return ReadingsOfEachValue.of(admittedAt(terms.getFirst()), orders);
+        return ReadingsOfEachValue.of(admitted, orders);
     }
 
     /**

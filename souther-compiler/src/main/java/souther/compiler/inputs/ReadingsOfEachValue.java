@@ -59,9 +59,12 @@ public record ReadingsOfEachValue(List<ReadingsOfEachValue.Read> each) {
      * <p>Null and not a shorter list. A value left out would be a value no reading reaches, and a
      * reader holding the rest would take a number that value comes to for one nothing comes to.
      *
+     * <p>For a reader that already holds each term's orders. One that holds only the terms asks
+     * the region ({@link SearchRegion#readingsOfEach}), which works the orders out.
+     *
      * @param orders the orders of each term asked, every one of them taken of one position's value
      */
-    static ReadingsOfEachValue of(ValueSet admitted, List<TermOrders> orders) {
+    public static ReadingsOfEachValue of(ValueSet admitted, List<TermOrders> orders) {
         if (orders.isEmpty() || !(admitted instanceof ValueSet.Finite finite)) {
             return null;
         }
