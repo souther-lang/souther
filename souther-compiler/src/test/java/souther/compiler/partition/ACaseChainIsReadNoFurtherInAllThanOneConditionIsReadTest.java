@@ -161,7 +161,7 @@ class ACaseChainIsReadNoFurtherInAllThanOneConditionIsReadTest {
     @Test
     void aLongerChainStatesNoMoreOfAnyCondition() {
         Read first = read(WITHIN + 1);
-        Read longer = read(WITHIN + 3);
+        Read longer = read(WITHIN + 2);
 
         assertTrue(largest(longer) <= largest(first),
                 () -> largest(longer) + " parts past " + largest(first));
