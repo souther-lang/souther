@@ -16,8 +16,15 @@ import java.util.List;
  */
 public sealed interface Ways<P> {
 
-    /** These ways to that truth, and no others. */
-    record Known<P>(List<P> paths) implements Ways<P> {
+    /**
+     * These ways to that truth, and no others.
+     *
+     * @param seenApart whether what a run is seen doing tells each of them from every other
+     *                  ({@link Naming#toldApart}). Every way here holds what it says, and where this
+     *                  is false a run seen on one may have been on another: what the ways say is
+     *                  what a run read, and is no account of which one it took
+     */
+    record Known<P>(List<P> paths, boolean seenApart) implements Ways<P> {
 
         public Known {
             paths = List.copyOf(paths);

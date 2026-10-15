@@ -255,6 +255,7 @@ class AWeakeningAWiderRunMayAnswerNamesTheFigureThatStoppedItTest {
         out.put("DecisionRunNotWatched", new Weakening.DecisionRunNotWatched("b"));
         out.put("MeetingsNotWalked", new Weakening.MeetingsNotWalked("b", 1,
                 List.of(WorkFigure.COMBINATIONS_OF_A_GROUP_MEASURED.at(4))));
+        out.put("MeetingsNotPlaced", new Weakening.MeetingsNotPlaced("b", 1));
         out.put("DecisionReadingIncomplete", new Weakening.DecisionReadingIncomplete("b",
                 new DecisionReading.Enumeration.StoppedAtAFigure(
                         CompositionBudget.PATHS_OF_A_DECISION_READ)));

@@ -3908,6 +3908,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     "a way of the body goes to a fork no position of the input could be named for";
             case WAYS_NOT_ENUMERABLE ->
                     "the ways to a value the body answers with could not all be written down";
+            case WAYS_NOT_TOLD_APART ->
+                    "a way of the body goes to an arm whose ways in a run is not seen to tell"
+                            + " apart";
             case MORE_WAYS_IN_THAN_ARE_READ ->
                     "a fork of the body has more ways into it than one reading holds at once";
             case RUNS_WHERE_SOMETHING_CALLS_IT ->
@@ -9136,6 +9139,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case Weakening.InputNotRead _ -> WeakeningWord.BEHAVIOR_INPUT_NOT_READ;
             case Weakening.PairSpaceTruncated _ -> WeakeningWord.PAIR_SPACE_TRUNCATED;
             case Weakening.MeetingsNotWalked _ -> WeakeningWord.MEETINGS_NOT_WALKED;
+            case Weakening.MeetingsNotPlaced _ -> WeakeningWord.MEETINGS_NOT_PLACED;
             case Weakening.ProofContradicted _ -> WeakeningWord.PROOF_CONTRADICTED;
             case Weakening.ArmsUnsettled _ -> WeakeningWord.ARMS_UNSETTLED;
             // One word for the three shortfalls the reading can meet. A consumer acts on all of

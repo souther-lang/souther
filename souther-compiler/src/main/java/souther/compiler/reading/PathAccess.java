@@ -108,6 +108,11 @@ public sealed interface PathAccess {
              *  some of them is not the ways here. */
             WAYS_NOT_ENUMERABLE,
 
+            /** The ways in were each written down, and what a run is seen doing does not tell them
+             *  apart: a run seen here may have come by any of them, so none is one a row is held
+             *  to having taken. */
+            WAYS_NOT_TOLD_APART,
+
             /** More ways in than this reading holds at once. What is here is what the limit stopped
              *  short of, and a larger limit reaches it. */
             MORE_WAYS_IN_THAN_ARE_READ,

@@ -16,6 +16,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * The combinations a group of decisions has, as the classes a row filling one may sit in.
@@ -295,11 +296,39 @@ public final class InteractionCells {
      * recorded. A group dropped for its width claims arms, and what was not walked at those arms is
      * something a caller says rather than something a reader has to notice going missing.
      */
-    public record Offered(List<Group> groups, List<NotOffered> notOffered) {
+    public record Offered(List<Group> groups, List<NotOffered> notOffered,
+                          List<NotPlaced> notPlaced) {
 
         public Offered {
             groups = List.copyOf(groups);
             notOffered = List.copyOf(notOffered);
+            notPlaced = List.copyOf(notPlaced);
+        }
+    }
+
+    /**
+     * A group the classes of the input do not place, which is why it was not offered.
+     *
+     * <p>Apart from {@link NotOffered}, which is a group the limit kept back and a wider run walks.
+     * Here a way of settling a factor, or the way to the meeting, narrows no position — the arm
+     * itself, where the ways into it are not ones a run is seen taking one of — or two ways of
+     * settling one factor leave the same classes; so no cell steers a row into one combination
+     * rather than another, and no run allows more of it. Said, because a group dropped without a
+     * word reads as combinations nobody owes.
+     *
+     * @param settles every condition a combination of this group could settle a value by, as
+     *                {@link NotOffered#settles} is
+     */
+    public record NotPlaced(Set<souther.compiler.reading.Condition> settles) {
+
+        public NotPlaced {
+            settles = Set.copyOf(settles);
+        }
+
+        /** Whether this group could have stated {@code settled}, as {@link NotOffered#mightState}
+         *  answers it. */
+        public boolean mightState(Set<souther.compiler.reading.Condition> settled) {
+            return settles.containsAll(settled);
         }
     }
 
@@ -443,13 +472,17 @@ public final class InteractionCells {
                              int mostCellsPerGroup) {
         List<Group> out = new ArrayList<>();
         List<NotOffered> held = new ArrayList<>();
+        List<NotPlaced> unplaced = new ArrayList<>();
         for (Interaction group : groups) {
+            // A group with no cell is one of two things: one whose decisions leave no row
+            // anywhere, which is no path and nothing owed, and one the classes cannot put a row
+            // in, which is said.
             Placed reach = placedBy(group.reach(), axes);
-            if (reach == null) {
-                continue;
-            }
-            List<List<Placed>> placed = factorsOf(group, axes);
+            List<List<Placed>> placed = reach == null ? null : factorsOf(group, axes);
             if (placed == null) {
+                if (classesDoNotPlace(group, axes)) {
+                    unplaced.add(new NotPlaced(conditionsOf(group)));
+                }
                 continue;
             }
             // Past the limit, and said so rather than dropped. What this costs is the combinations
@@ -465,7 +498,58 @@ public final class InteractionCells {
                 out.add(built);
             }
         }
-        return new Offered(out, held);
+        return new Offered(out, held, unplaced);
+    }
+
+    /**
+     * Whether {@code group} has no cell because the classes do not place it: a decision on the way
+     * to it, or on a way of settling one of its factors, narrows no position; or two ways of
+     * settling one factor leave the same classes. Not where the decisions narrow every row away,
+     * which is a group no run makes.
+     */
+    private static boolean classesDoNotPlace(Interaction group, MeasuredInput.MeasuredAxes axes) {
+        if (narrowsNothing(group.reach(), axes)) {
+            return true;
+        }
+        for (Factor factor : group.factors()) {
+            List<Placed> outcomes = new ArrayList<>();
+            for (Outcome outcome : factor.outcomes()) {
+                if (narrowsNothing(outcome.holds(), axes)) {
+                    return true;
+                }
+                Placed at = placedBy(outcome.holds(), axes);
+                if (at != null && alreadyThere(outcomes, at)) {
+                    return true;
+                }
+                if (at != null) {
+                    outcomes.add(at);
+                }
+            }
+        }
+        return false;
+    }
+
+    /** Whether some decision of {@code made} narrows no position at all. */
+    private static boolean narrowsNothing(List<souther.compiler.reading.Decision> made,
+                                          MeasuredInput.MeasuredAxes axes) {
+        for (souther.compiler.reading.Decision each : made) {
+            if (admittedBy(each.constrains(), axes) == null) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Every condition on the way to {@code group} and on every way of settling its factors. */
+    private static Set<souther.compiler.reading.Condition> conditionsOf(Interaction group) {
+        Set<souther.compiler.reading.Condition> out = new java.util.LinkedHashSet<>();
+        group.reach().forEach(each -> out.add(each.constrains()));
+        for (Factor factor : group.factors()) {
+            for (Outcome outcome : factor.outcomes()) {
+                outcome.holds().forEach(each -> out.add(each.constrains()));
+            }
+        }
+        return out;
     }
 
     /**
