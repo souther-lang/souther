@@ -494,6 +494,10 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + " question spends"),
             Map.entry("souther.compiler.meaning.CasesOfALineAsked#<clinit>()V",
                     "what the asking comes to past either figure: not worked out, naming it"),
+            Map.entry("souther.compiler.meaning.CasesOfALineAsked#pastTheSteps("
+                            + "Ljava/util/List;)"
+                            + "Lsouther/compiler/meaning/CasesOfALineAsked$Found$NotWorkedOut;",
+                    "out of steps, naming them and the cases left nobody took apart"),
             Map.entry("souther.compiler.partition.ComparisonAssessment#aPartNarrowed("
                             + "Lsouther/compiler/partition/ComparisonAssessment$Several$Part;"
                             + "Lsouther/compiler/partition/Reachability;"

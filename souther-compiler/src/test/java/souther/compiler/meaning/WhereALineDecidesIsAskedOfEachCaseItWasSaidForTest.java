@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.partition.CompositionBudget;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -12,6 +13,7 @@ import java.util.function.Predicate;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 
 /**
  * Whether a line decides in a case said for several is asked of each of them, and a case chosen
@@ -129,27 +131,61 @@ class WhereALineDecidesIsAskedOfEachCaseItWasSaidForTest {
      */
     @Test
     void pastTheFigureNothingIsProvedAndTheFigureIsSaid() {
-        int most = CompositionBudget.CASES_A_LINE_IS_ASKED_IN.maximum();
-        DecidingCase.Cases many = manyCases(most);
+        DecidingCase.Cases many = manyCases(ALTERNATIVES_THE_STEPS_ALLOW + 1);
         Proposition someOne = many.holdingInSome().orElseThrow();
         Asking asking = new Asking(someOne::equals);
 
         CasesOfALineAsked.Found found = asking.of(many);
         assertEquals(new CasesOfALineAsked.Found.NotWorkedOut(
                         Set.of(CompositionBudget.CASES_A_LINE_IS_ASKED_IN)), found,
-                "one more question than are asked is not a proof that no case divides rows");
-        assertEquals(most, asking.asked().size(), "every question the figure allows was asked");
+                "one more case than the steps allow is not a proof that no case divides rows");
+        assertEquals(ALTERNATIVES_THE_STEPS_ALLOW + 1, asking.asked().size(),
+                "where some one holds, and every case the steps allowed");
     }
 
-    /** And as many questions as the figure allows are asked to the end. */
+    /** And as many cases as the steps allow are asked to the end. */
     @Test
-    void asManyQuestionsAsTheFigureAllowsAreAskedToTheEnd() {
-        DecidingCase.Cases many =
-                manyCases(CompositionBudget.CASES_A_LINE_IS_ASKED_IN.maximum() - 1);
+    void asManyCasesAsTheStepsAllowAreAskedToTheEnd() {
+        DecidingCase.Cases many = manyCases(ALTERNATIVES_THE_STEPS_ALLOW);
         Proposition someOne = many.holdingInSome().orElseThrow();
 
         assertInstanceOf(CasesOfALineAsked.Found.InNone.class,
                 new Asking(someOne::equals).of(many));
+    }
+
+    /**
+     * How many alternatives of one part each the steps allow: one step asks where some one holds,
+     * and each alternative is two, the choosing of it and the asking of its part.
+     */
+    private static final int ALTERNATIVES_THE_STEPS_ALLOW =
+            (CompositionBudget.CASES_A_LINE_IS_ASKED_IN.maximum() - 1) / 2;
+
+    /**
+     * Choosing among alternatives that ask nothing is counted too. Twenty-odd choices of two, one
+     * below the other, over cases nobody took apart are more ways than any run walks; counted by
+     * the questions alone, the one question asked would have left them all to walk. Counted by the
+     * step, the choosing stops where the steps do, and says both figures: the steps, and the cases
+     * nobody took apart that were met and that are left.
+     */
+    @Test
+    void choosingThatAsksNothingRunsOutOfStepsAndStops() {
+        DecidingCase.Cases cases = new DecidingCase.Cases.MoreThanWereTakenApart();
+        for (int i = 0; i < 40; i++) {
+            cases = new DecidingCase.Cases.Together(List.of(
+                    new DecidingCase.Cases.EachOf(List.of(
+                            new DecidingCase.Cases.Together(List.of()),
+                            new DecidingCase.Cases.Together(List.of()))),
+                    cases));
+        }
+        DecidingCase.Cases deep = cases;
+        Asking asking = new Asking(_ -> true);
+
+        CasesOfALineAsked.Found found = assertTimeoutPreemptively(Duration.ofSeconds(10),
+                () -> asking.of(deep), "the choosing stops where the steps do");
+        assertEquals(new CasesOfALineAsked.Found.NotWorkedOut(Set.of(
+                        CompositionBudget.CASES_A_LINE_IS_ASKED_IN,
+                        CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO)), found);
+        assertEquals(List.of(SAID), asking.asked(), "and asked nothing but the condition");
     }
 
     /** {@code count} cases of one truth each. */

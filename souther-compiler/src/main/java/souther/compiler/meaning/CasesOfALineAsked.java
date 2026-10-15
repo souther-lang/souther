@@ -29,10 +29,16 @@ import java.util.function.Predicate;
  * any case chosen past it, and those are not asked. A narrower region holds no more rows on either
  * side than a wider one, which is what makes stopping there a proof.
  *
- * <p><b>Counted, and stopped short as a stop.</b> Every question is counted against
- * {@link CompositionBudget#CASES_A_LINE_IS_ASKED_IN} for the one case they were said as, and where
- * the cases were more than were taken apart nothing is asked of them at all. Either way the answer
- * is that it was not worked out, which is neither a case the line turns in nor one it does not.
+ * <p><b>Counted by the step, and stopped short as a stop.</b> Every step of the choosing is counted
+ * against {@link CompositionBudget#CASES_A_LINE_IS_ASKED_IN} for the one case they were said as:
+ * each alternative taken and each part asked. Counted by the questions alone, the alternatives
+ * would be walked unbounded where nothing is asked — the cases of a choice nobody took apart, or
+ * every way of choosing past the last question allowed — and those are as many as the product of
+ * the choices. Where the steps run out the choosing stops there, and says the figures it met and,
+ * of what it did not walk to, only what is written in the cases already: that some were more than
+ * were taken apart. And where the cases were more than were taken apart nothing is asked of them at
+ * all. Either way the answer is that it was not worked out, which is
+ * neither a case the line turns in nor one it does not.
  *
  * <p>Here, beside where the cases were taken apart, because what a case chosen part by part has
  * chosen so far is a conjunction of the statement's parts, and those are joined where a rule joins
@@ -69,8 +75,8 @@ public final class CasesOfALineAsked {
 
     private static final Found IN_NONE = new Found.InNone();
 
-    /** Out of questions: one more is asked than the figure lets be. */
-    private static final Found.NotWorkedOut PAST_THE_QUESTIONS =
+    /** Out of steps: one more is taken than the figure lets be. */
+    private static final Found.NotWorkedOut PAST_THE_STEPS =
             new Found.NotWorkedOut(Set.of(CompositionBudget.CASES_A_LINE_IS_ASKED_IN));
 
     /** The cases were more than were taken apart, and nothing asks them. */
@@ -99,8 +105,8 @@ public final class CasesOfALineAsked {
      * condition is all that says it.
      */
     public Found inSomeOf(DecidingCase said) {
-        if (!aQuestionIsLeft()) {
-            return PAST_THE_QUESTIONS;
+        if (!aStepIsLeft()) {
+            return pastTheSteps(List.of(said.standsFor()));
         }
         if (!crossedIn.test(said.standsFor().holdingInSome().orElse(said.condition()))) {
             return IN_NONE;
@@ -122,8 +128,8 @@ public final class CasesOfALineAsked {
         List<DecidingCase.Cases> rest = toChoose.subList(1, toChoose.size());
         return switch (toChoose.getFirst()) {
             case DecidingCase.Cases.One(var condition) -> {
-                if (!aQuestionIsLeft()) {
-                    yield PAST_THE_QUESTIONS;
+                if (!aStepIsLeft()) {
+                    yield pastTheSteps(toChoose);
                 }
                 List<Proposition> more = new ArrayList<>(chosen);
                 more.add(condition);
@@ -131,11 +137,20 @@ public final class CasesOfALineAsked {
             }
             // Every alternative, and not the first that stopped: one that stopped shows nothing,
             // and another after it may show the line divides rows. Which stopped first decides
-            // nothing, so every figure met is said.
+            // nothing, so every figure met is said. Each alternative taken is a step, and where
+            // the steps run out the ones not taken are not walked.
             case DecidingCase.Cases.EachOf(var alternatives) -> {
                 Set<CompositionBudget> stopped = new HashSet<>();
                 boolean shown = false;
-                for (DecidingCase.Cases one : alternatives) {
+                for (int at = 0; at < alternatives.size(); at++) {
+                    DecidingCase.Cases one = alternatives.get(at);
+                    if (!aStepIsLeft()) {
+                        List<DecidingCase.Cases> notWalked =
+                                new ArrayList<>(alternatives.subList(at, alternatives.size()));
+                        notWalked.addAll(rest);
+                        stopped.addAll(pastTheSteps(notWalked).figures());
+                        break;
+                    }
                     List<DecidingCase.Cases> next = new ArrayList<>();
                     next.add(one);
                     next.addAll(rest);
@@ -160,8 +175,36 @@ public final class CasesOfALineAsked {
         };
     }
 
-    /** Whether one more question may be asked, counting it where it may. */
-    private boolean aQuestionIsLeft() {
+    /**
+     * Out of steps, with {@code notWalked} left: stopped at the steps, and at how many cases are
+     * taken apart as well where some case left was never taken apart.
+     *
+     * <p>The second is not work this would have done. That the cases were more than were taken
+     * apart was met where they were taken apart, and is written in the cases themselves, so it is
+     * read off them as they stand — once over each, and not by choosing among them.
+     */
+    private static Found.NotWorkedOut pastTheSteps(List<DecidingCase.Cases> notWalked) {
+        return notWalked.stream().anyMatch(CasesOfALineAsked::holdsSomeNotTakenApart)
+                ? new Found.NotWorkedOut(EnumSet.of(CompositionBudget.CASES_A_LINE_IS_ASKED_IN,
+                        CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO))
+                : PAST_THE_STEPS;
+    }
+
+    /** Whether some case {@code cases} stands for is one more than were taken apart. */
+    private static boolean holdsSomeNotTakenApart(DecidingCase.Cases cases) {
+        return switch (cases) {
+            case DecidingCase.Cases.One _ -> false;
+            case DecidingCase.Cases.EachOf(var alternatives) ->
+                    alternatives.stream().anyMatch(CasesOfALineAsked::holdsSomeNotTakenApart);
+            case DecidingCase.Cases.Together(var factors) ->
+                    factors.stream().anyMatch(CasesOfALineAsked::holdsSomeNotTakenApart);
+            case DecidingCase.Cases.MoreThanWereTakenApart _ -> true;
+        };
+    }
+
+    /** Whether one more step may be taken — an alternative chosen or a part asked — counting it
+     *  where it may. */
+    private boolean aStepIsLeft() {
         if (left == 0) {
             return false;
         }

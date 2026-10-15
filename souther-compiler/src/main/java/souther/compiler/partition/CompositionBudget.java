@@ -362,13 +362,17 @@ public enum CompositionBudget {
     CASES_A_LINE_IS_TAKEN_APART_INTO(256),
 
     /**
-     * How many times the cases one case of where a line of a statement of several decides was said
-     * for are asked whether a row stands on each side of the line in them.
+     * How many steps the cases one case of where a line of a statement of several decides was said
+     * for are taken through, asking whether a row stands on each side of the line in them: each
+     * alternative chosen and each part asked.
      *
-     * <p>Every question counted: each is the way to the line with what one case has chosen so far
-     * taken in, and a case chosen part by part is asked after each part, so that a part leaving no
-     * row on one side settles every case chosen past it. Counted for each case said as one on its
-     * own, so what one of them spent decides nothing about another.
+     * <p>Every step counted, and not the questions alone. A question is the way to the line with
+     * what one case has chosen so far taken in, and a case chosen part by part is asked after each
+     * part, so that a part leaving no row on one side settles every case chosen past it. Choosing
+     * among alternatives asks nothing of its own, and alternatives below alternatives are as many as
+     * the product of them; counted by the questions, a choosing that asks nothing — of cases nobody
+     * took apart, or past the last question allowed — would run as far as that product. Counted for
+     * each case said as one on its own, so what one of them spent decides nothing about another.
      *
      * <p><b>Reaching it gives that case up and says so.</b> Its cases are neither ones the line
      * turns in nor ones it turns nothing in, so they are where the line was not worked out
@@ -546,8 +550,8 @@ public enum CompositionBudget {
             case CASES_A_LINE_IS_TAKEN_APART_INTO ->
                     "how many cases where a line of a statement decides are taken apart";
             case CASES_A_LINE_IS_ASKED_IN ->
-                    "how many times the cases where a line of a statement decides are asked whether"
-                            + " a row stands on each side of it";
+                    "how many steps the cases where a line of a statement decides are taken"
+                            + " through, asking whether a row stands on each side of it";
             case NUMBERS_OF_A_SET_TRIED -> "how many of the numbers a class admits are tried";
             case CODE_POINTS_A_STRING_IS_SEARCHED_IN_FULL ->
                     "how many code points of a class a string is searched for in full";
