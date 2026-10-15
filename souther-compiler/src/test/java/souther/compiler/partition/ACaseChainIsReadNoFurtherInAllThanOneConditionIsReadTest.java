@@ -15,7 +15,6 @@ import souther.compiler.meaning.WhyUnread;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
-import souther.compiler.reach.Reachability;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -156,7 +155,7 @@ class ACaseChainIsReadNoFurtherInAllThanOneConditionIsReadTest {
                 compilation.db().ask(new Adequacy.PathReached("demo")).value();
 
         byBehavior.get("draw").found().forEach((place, reached) ->
-                assertFalse(reached instanceof Reachability.Unreachable,
+                assertFalse(reached instanceof souther.compiler.reach.Reachability.Unreachable,
                         () -> place + " is proved unreached on a reading that stopped"));
     }
 
