@@ -354,8 +354,7 @@ public final class Copies {
         if (onThePath != null) {
             return onThePath.providedCopies();
         }
-        List<String> declared = db.ask(new Front.Declared()).value();
-        if (declared == null || !declared.contains(module)) {
+        if (!Front.declaredHere(db, module)) {
             return null;
         }
         Answer<Of> provided = db.ask(new Provided(module));

@@ -1273,9 +1273,8 @@ public final class Front {
 
         @Override
         public Answer<Boolean> compute(Db db) {
-            Layout.Of layout = db.ask(new Layout()).value();
             ModulePath path = db.ask(new Path()).value();
-            if (layout == null || path == null || !layout.idOfModule().containsKey(name)) {
+            if (path == null || !declaredHere(db, name)) {
                 return Answer.of(Boolean.FALSE);
             }
             // Whether the path has the name, and not whether what it has can be read. Two modules
@@ -1324,6 +1323,33 @@ public final class Front {
             return layout == null ? Answer.of(List.of())
                     : Answer.of(List.copyOf(layout.idOfModule().keySet()));
         }
+    }
+
+    /**
+     * Whether a source of this compilation declares {@code name} — whether this compilation is the
+     * one that makes it. A module read off the path was made where it was compiled.
+     *
+     * <p>Asked of one name rather than read off {@link Declared}, which is the list to walk. A reader
+     * that searched the list paid for every module there is on every name it asked about, and
+     * depended on every module there is: one added anywhere recomputed it, while this answer moves
+     * only when the module it is about comes or goes.
+     */
+    public record DeclaredHere(String name) implements Key<Boolean> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Boolean> compute(Db db) {
+            Layout.Of layout = db.ask(new Layout()).value();
+            return Answer.of(layout != null && layout.idOfModule().containsKey(name));
+        }
+    }
+
+    /** Whether this compilation is the one that makes {@code module}. */
+    public static boolean declaredHere(Db db, String module) {
+        return db.ask(new DeclaredHere(module)).value();
     }
 
     /**

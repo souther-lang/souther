@@ -3,19 +3,30 @@ package souther.compiler;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
 import souther.compiler.diag.CompileException;
+import souther.compiler.diag.msg.DataMessage;
 import souther.compiler.meta.ModulePath;
 
+import souther.compiler.generated.EvaluationArtifact;
 import souther.compiler.jvm.ClassFileImage;
+import souther.compiler.observe.ArmObservation;
+import souther.compiler.query.Answer;
+import souther.compiler.query.Compilation;
+import souther.compiler.query.Output;
 import souther.runtime.ConstraintViolation;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -108,6 +119,134 @@ class CrossProjectImportTest {
 
         Object bad = Codecs.decoded(loader, "app.order.Req", Map.of("n", -1L));
         assertThrows(ConstraintViolation.class, () -> Codecs.apply(impl, bad));
+    }
+
+    /** A library with a behavior: what it publishes declares {@code double} and carries no body for
+     * it, which stays in its classes. */
+    private static final String DOUBLING = """
+            module shared.doubling exposing ( Code, double )
+            data Code = String
+                invariant lower = String.matches("[a-z]+", value)
+            behavior double : (n: Int) -> Int
+            let double (n) = n * 2
+            """;
+
+    /** The clause is outside the fragment the discharge procedure reasons over, so a constant that
+     * breaks it is refused by running the check — which is what loads the classes. */
+    private static void refusedByRunningTheCheck(CompileException e) {
+        assertEquals(1, e.diagnostics().size(), e.getMessage());
+        assertInstanceOf(DataMessage.TheWrittenValueViolatesTheClause.class,
+                e.diagnostics().get(0).said(), e.getMessage());
+        assertEquals("lower", e.diagnostics().get(0).values().get("clause"));
+    }
+
+    /** A path that writes down every class its loader defines: what compile-time code took from the
+     * path rather than from this compile. */
+    private static final class LoadedFromThePath implements ModulePath {
+        private final ModulePath path;
+        private final Set<String> defined = ConcurrentHashMap.newKeySet();
+
+        LoadedFromThePath(ModulePath path) {
+            this.path = path;
+        }
+
+        @Override
+        public byte[] bytes(String binaryName) {
+            return path.bytes(binaryName);
+        }
+
+        @Override
+        public ClassLoader loader(ClassLoader parent) {
+            return new ClassLoader(parent) {
+                @Override
+                protected Class<?> findClass(String name) throws ClassNotFoundException {
+                    byte[] bytes = path.bytes(name);
+                    if (bytes == null) {
+                        throw new ClassNotFoundException(name);
+                    }
+                    defined.add(name);
+                    return defineClass(name, bytes, 0, bytes.length);
+                }
+            };
+        }
+    }
+
+    private static Compilation compiledAgainst(ModulePath path, String... sources) {
+        return Compiler.compiled(CompilationSources.modules(List.of(sources)), path,
+                new ArrayList<>());
+    }
+
+    private static Map<String, ClassFileImage> linked(Compilation compilation) {
+        return compilation.db().ask(new Output.Linked("app.small")).value();
+    }
+
+    private static String importerOf(String constant) {
+        return """
+                module app.small
+                import shared.doubling ( Code, double )
+                data Small = Int
+                    invariant value >= 0
+                let one = %s
+                behavior quad : (n: Int) -> Int
+                let quad (n) = double(n) + 1
+                """.formatted(constant);
+    }
+
+    /** A constant is checked against its invariant by loading this compile's classes, and the module
+     * on the path is not one of them: what it published has no body for its behavior to emit. */
+    @Test
+    void aConstantIsCheckedWithoutGeneratingTheModuleOnThePath() {
+        Map<String, ClassFileImage> linked = linked(
+                compiledAgainst(published(DOUBLING), importerOf("Small(1)")));
+
+        assertTrue(linked.containsKey("app.small.Small"), linked.keySet().toString());
+        assertFalse(linked.keySet().stream().anyMatch(n -> n.startsWith("shared.doubling.")),
+                linked.keySet().toString());
+    }
+
+    /** A constant of the path's type is checked by the path's own class, found under the classes
+     * this compile generates. */
+    @Test
+    void aConstantOfATypeOnThePathIsCheckedByThePathsClass() {
+        LoadedFromThePath path = new LoadedFromThePath(published(DOUBLING));
+        compiledAgainst(path, importerOf("Code(\"ab\")"));
+        assertTrue(path.defined.contains(Emitted.ctfe("shared.doubling", "Code")),
+                path.defined.toString());
+
+        refusedByRunningTheCheck(assertThrows(CompileException.class,
+                () -> compiledAgainst(path, importerOf("Code(\"AB\")"))));
+    }
+
+    /** Compiled together, the same module is this compile's to generate, and the check finds its
+     * class there rather than on the path. */
+    @Test
+    void aConstantOfATypeCompiledBesideItIsCheckedByThatClass() {
+        LoadedFromThePath path = new LoadedFromThePath(ModulePath.EMPTY);
+        Map<String, ClassFileImage> linked = linked(
+                compiledAgainst(path, DOUBLING, importerOf("Code(\"ab\")")));
+        assertTrue(linked.containsKey(Emitted.ctfe("shared.doubling", "Code")),
+                linked.keySet().toString());
+
+        refusedByRunningTheCheck(assertThrows(CompileException.class,
+                () -> compiledAgainst(path, DOUBLING, importerOf("Code(\"AB\")"))));
+        assertEquals(Set.of(), path.defined);
+    }
+
+    /** Nothing generates a module from what it published, whoever asks for it: there is nothing of
+     * its own to say about that, so the answer is an absence with no report. */
+    @Test
+    void aModuleOnThePathHasNoClassesHereWhoeverAsks() {
+        Compilation compilation = compiledAgainst(published(DOUBLING), importerOf("Small(1)"));
+
+        Answer<Map<String, ClassFileImage>> classes =
+                compilation.db().ask(new Output.Classes("shared.doubling"));
+        assertNull(classes.value());
+        assertEquals(List.of(), classes.reports());
+
+        Answer<EvaluationArtifact> evaluated = compilation.db()
+                .ask(new Output.Evaluated("shared.doubling", ArmObservation.OMIT));
+        assertNull(evaluated.value());
+        assertEquals(List.of(), evaluated.reports());
     }
 
     /** An import naming nothing on the path is still the import that is wrong, reported where it is

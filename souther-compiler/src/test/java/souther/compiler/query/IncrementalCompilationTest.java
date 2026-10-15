@@ -7,6 +7,7 @@ import souther.compiler.source.SourceId;
 import souther.compiler.ast.Ast;
 import souther.compiler.check.Symbols;
 import souther.compiler.meta.ModulePath;
+import souther.compiler.observe.ArmObservation;
 
 import org.junit.jupiter.api.Test;
 
@@ -118,6 +119,24 @@ class IncrementalCompilationTest {
 
         assertSame(once, c.db().ask(new Output.Classes("shop.cart")),
                 "and neither is changing what `Discount` says");
+    }
+
+    /**
+     * Which of the modules a module reaches are made here is asked of each one it reaches, so the
+     * classes it runs against do not depend on the list of every module: one added anywhere else
+     * leaves each of those answers as it was.
+     */
+    @Test
+    void whatAModuleRunsAgainstIsAskedOfTheModulesItReaches() {
+        Compilation c = started();
+        for (Key<?> linked : List.of(new Output.Linked("shop.cart"),
+                new Output.EvaluationLinked("shop.cart", ArmObservation.OMIT))) {
+            c.db().ask(linked);
+            Set<Key<?>> read = c.db().dependenciesOf(linked);
+            assertTrue(read.contains(new Front.DeclaredHere("shop.prices")), read.toString());
+            assertFalse(read.contains(new Front.Declared()), read.toString());
+            assertFalse(read.contains(new Front.Layout()), read.toString());
+        }
     }
 
     @Test
