@@ -194,6 +194,19 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
+      # A release says what it changed, in the notes the tagged commit holds for its version. Asked
+      # before the build, so a tag without them is refused before anything is spent on it.
+      - name: Find the release notes
+        if: github.ref_type == 'tag'
+        run: |
+          notes="docs/releases/${GITHUB_REF_NAME#v}.md"
+          if [ ! -s "$notes" ]; then
+            echo "::error::$GITHUB_REF_NAME has no release notes: $notes is missing or empty"
+            exit 1
+          fi
+          mkdir -p notes
+          cp "$notes" notes/release-notes.md
+
       - name: Set up JDK 25
         uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6
         with:
@@ -240,6 +253,14 @@ jobs:
           name: souther-release
           path: artifacts/*
 
+      # Apart from the artifacts, so the notes are the release's text and not one of its assets.
+      - name: Upload the release notes to the workflow run
+        if: github.ref_type == 'tag'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: souther-release-notes
+          path: notes/release-notes.md
+
   # The only job holding a write token. It runs no repository code: it takes what `release` built
   # and attaches it, so a branch run of this workflow cannot publish and a build step cannot use
   # the token.
@@ -258,6 +279,12 @@ jobs:
           name: souther-release
           path: artifacts/
 
+      - name: Fetch the release notes
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: souther-release-notes
+          path: notes/
+
       - name: Attest the provenance of the artifacts
         uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3
         with:
@@ -267,6 +294,7 @@ jobs:
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3
         with:
           files: artifacts/*
+          body_path: notes/release-notes.md
           # A tag carrying a pre-release identifier is not what a reader arriving at the repository
           # should be handed as the current release. Semantic versioning puts that identifier after a
           # hyphen and a final version has none, so the tag answers this itself and nothing has to be

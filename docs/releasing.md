@@ -7,17 +7,24 @@ more, and both existed only because develop had been made to claim a number it w
 
 ## Cutting one
 
-1. Open the release pull request, `develop` into `main`, titled `Souther <version>`. What goes in
-   the body is what changed since the last tag —
-   `git log --oneline v<previous>..develop --grep='Merge pull request' | wc -l` counts the pull
-   requests, and `docs/adr/README.md` indexes the decisions with the reasoning behind each.
+1. Write the release notes in `docs/releases/<version>.md` and land them on develop through a pull
+   request of their own, so they are reviewed like anything else a reader is handed. They are the
+   text of the GitHub Release: the release workflow refuses a tag whose commit has no notes for its
+   version before it builds anything. They are for someone using Souther, not someone reading its
+   history — what they can do now that they could not, and what they have to change. A minor
+   release opens with what it is for, one section per headline with an example of it, before
+   anything is listed. What breaks an existing model, jar or report consumer goes under
+   Compatibility. Each ADR is named where its change is.
 
-2. Merge it. develop survives the merge because a repository ruleset refuses to delete it: this
+2. Open the release pull request, `develop` into `main`, titled `Souther <version>`. The notes
+   already say what changed, so the body points at them and says what was checked.
+
+3. Merge it. develop survives the merge because a repository ruleset refuses to delete it: this
    repository deletes a head branch on merge, and the head of a release pull request is develop.
    It was deleted that way once, at `0.1.0-rc5`, and restored by pushing the commit back under the
    name.
 
-3. On `main`, set the version and commit it there:
+4. On `main`, set the version and commit it there:
 
    ```sh
    git switch main && git pull
@@ -34,19 +41,20 @@ more, and both existed only because develop had been made to claim a number it w
    accepting what every release of it accepted, and refuse a release that has no copy or ships a
    schema other than its copy.
 
-4. Tag that commit and push the tag:
+5. Tag that commit and push the tag:
 
    ```sh
    git tag -a v<version> -m "Souther <version>"
    git push origin v<version>
    ```
 
-   The release workflow runs on the tag: it builds, and attaches `souther`, `souther.jar`,
-   `souther-lsp.jar`, `souther.tmLanguage.json` and `SHA256SUMS` to the GitHub Release. A version
+   The release workflow runs on the tag: it builds, attaches `souther`, `souther.jar`,
+   `souther-lsp.jar`, `souther.tmLanguage.json`, the Windows distributions and `SHA256SUMS` to the
+   GitHub Release, and gives the Release `docs/releases/<version>.md` as its text. A version
    with a hyphen in it is published as a prerelease, which the workflow reads off the tag rather
    than being told.
 
-5. Publish to Maven Central from the tag, in any checkout with nothing uncommitted:
+6. Publish to Maven Central from the tag, in any checkout with nothing uncommitted:
 
    ```sh
    git switch --detach v<version>
@@ -72,7 +80,7 @@ more, and both existed only because develop had been made to claim a number it w
    with them, being the pom they name as their parent. The really-executable jar and the language
    server are distributed through GitHub Releases instead.
 
-6. Take main into develop and move develop to the next snapshot, in one commit straight to develop:
+7. Take main into develop and move develop to the next snapshot, in one commit straight to develop:
 
    ```sh
    git switch develop && git pull
