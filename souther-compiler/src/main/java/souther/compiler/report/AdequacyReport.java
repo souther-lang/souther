@@ -4405,6 +4405,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         case MORE_THAN_ONE_RULE_MATCHES ->
                                 "a row was composed and run, and this reading placed it at more"
                                         + " than one rule, which one run cannot have taken";
+                        case ITS_WAY_IS_PROVED_TO_BE_TAKEN_BY_NO_INPUT ->
+                                "a row was composed and run, and it went down a way this reading"
+                                        + " proved no input takes";
                     });
             case RuleRequirement.Unsettled.NothingWatchedTheRow _ ->
                     new Said(3, 0,
@@ -6938,7 +6941,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 decision(b, behavior, sources);
                 interaction(b, behavior, sources);
                 replacement(b, behavior, sources);
-                reachProofsContradicted(b, behavior.reachShownWrong());
+                reachProofsContradicted(b, behavior.name(), behavior.reachShownWrong(),
+                        waysGoneDown(behavior));
                 findings(b, behavior, sources);
             }
         }
@@ -7752,10 +7756,15 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * measure's to say — the arm count of its denominator, a rule of what would have left it no row
      * — and a proof nothing rested on is this compiler having been wrong about the body all the
      * same. Absent where no row went against any.
+     *
+     * <p>And last the ways through the body's decision a row went down that the reading of its
+     * rules proved no input takes, each as the conditions the way consulted. No rule past such a
+     * way was read, so none rested on it, and the rule count is short of whatever lies past it.
      */
-    static void reachProofsContradicted(ObjectNode into,
-                                        PathReachability.Answers.Contradictions shownWrong) {
-        if (shownWrong.isEmpty()) {
+    static void reachProofsContradicted(ObjectNode into, String behavior,
+                                        PathReachability.Answers.Contradictions shownWrong,
+                                        Set<DecisionRule> waysGoneDown) {
+        if (shownWrong.isEmpty() && waysGoneDown.isEmpty()) {
             return;
         }
         ArrayNode all = into.putArray("reachProofsContradicted");
@@ -7765,6 +7774,21 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             one.put("kind", word(ReachProofWord.ARRIVAL));
             constructId(one.putObject("construct"), construct);
         }
+        for (DecisionRule each : waysGoneDown) {
+            ObjectNode one = all.addObject();
+            one.put("kind", word(ReachProofWord.WAY_NO_INPUT_TAKES));
+            ruleId(one.putObject("way"), behavior, each);
+        }
+    }
+
+    /** The ways a row of {@code behavior} went down that its decision's reading proved no input
+     *  takes, in the order the rows met them, or none where the rows were not placed. */
+    private static Set<DecisionRule> waysGoneDown(BehaviorReport behavior) {
+        DecisionEvidence decision = behavior.evidence().decision();
+        return decision == null ? Set.of()
+                : decision.took().made()
+                        .map(placed -> placed.wentAgainst().keySet())
+                        .orElse(Set.of());
     }
 
     /**

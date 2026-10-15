@@ -3286,6 +3286,8 @@ public final class Adequacy {
                         new RuleRequirement.Unsettled.AComposedRowWentElsewhere();
                 case souther.compiler.partition.RulesTaken.WhichRule.CouldNotTell couldNot ->
                         new RuleRequirement.Unsettled.CouldNotTellWhereTheRowWent(couldNot.why());
+                case souther.compiler.partition.RulesTaken.WhichRule.AgainstAProof against ->
+                        new RuleRequirement.Unsettled.CouldNotTellWhereTheRowWent(against.why());
             };
         }
     }

@@ -17,6 +17,7 @@ import souther.compiler.types.ModelOccurrence;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 
@@ -52,16 +53,23 @@ import java.util.Set;
  * to have taken it — and a path with none left is matched by every run. A path with no conditions
  * that is whole is another thing: a body that draws no distinction has one rule, and every run
  * takes it.
+ *
+ * <p><b>A run down a way the reading proved no input takes is the proof shown wrong.</b> The
+ * reading read no rule past such a way ({@link DecisionReading#impossible}), so a run there would
+ * otherwise match no rule and read as one this compiler could not place. It is recognised at the
+ * way's conditions as a rule is, and answered as the proof it went against.
  */
 public final class RulesTaken {
 
     /**
      * Which rule a run took, or that this compiler could not tell.
      *
-     * <p>Three answers rather than two, because what a reader does with them differs. A run whose
-     * rule is known is evidence that something stands there; a run whose rule could not be told is
-     * this compiler falling short and says nothing about the model; and a run matching no rule at
-     * all is the reading and the run disagreeing about the body, which is worth knowing.
+     * <p>More answers than two, because what a reader does with them differs. A run whose rule is
+     * known is evidence that something stands there; a run whose rule could not be told is this
+     * compiler falling short and says nothing about the model; a run matching no rule at all is the
+     * reading and the run disagreeing about the body, which is worth knowing; and a run down a way
+     * proved to be taken by no input is that proof being wrong, which is this compiler's error and
+     * named as the proof.
      */
     public sealed interface WhichRule {
 
@@ -71,6 +79,27 @@ public final class RulesTaken {
         /** No rule this reading can recognise a run at matched, and why that is not a fact about
          *  the model. */
         record CouldNotTell(Why why) implements WhichRule {}
+
+        /**
+         * The run brought out every condition of a way the reading proved no input takes, as the
+         * way did. The proof is wrong then and not the run, and no rule past the way was read, so
+         * the run is placed at none: it is the proof the run went against.
+         *
+         * <p>The way as the conditions it consulted, which is what tells one such way from another
+         * ({@link DecisionReading.ImpossiblePath#way}); what proved it is the reading's, and held
+         * here it would be held by every answer that places a run.
+         */
+        record AgainstAProof(DecisionRule way) implements WhichRule {
+
+            public AgainstAProof {
+                Objects.requireNonNull(way, "a run goes against some proof");
+            }
+
+            /** Why the run's rule could not be told, said as every other run unplaced is. */
+            public Why why() {
+                return Why.ITS_WAY_IS_PROVED_TO_BE_TAKEN_BY_NO_INPUT;
+            }
+        }
 
         /** Why a run's rule could not be told. */
         enum Why {
@@ -83,7 +112,10 @@ public final class RulesTaken {
              *  ways, which says it went down more than one path there. */
             A_CONDITION_CAME_OUT_BOTH_WAYS,
             /** More than one rule matched, which one run cannot have done. */
-            MORE_THAN_ONE_RULE_MATCHES
+            MORE_THAN_ONE_RULE_MATCHES,
+            /** The run took a way the reading proved no input takes, and the reading read no rule
+             *  past a way it proved that of. */
+            ITS_WAY_IS_PROVED_TO_BE_TAKEN_BY_NO_INPUT
         }
     }
 
@@ -227,8 +259,13 @@ public final class RulesTaken {
 
     private final List<Recognised> recognisable;
 
-    private RulesTaken(List<Recognised> recognisable) {
+    /** The ways proved to be taken by no input that a run can be recognised at, each as what it
+     *  consulted and where each of its conditions is recorded. */
+    private final List<Recognised> proofs;
+
+    private RulesTaken(List<Recognised> recognisable, List<Recognised> proofs) {
         this.recognisable = recognisable;
+        this.proofs = proofs;
     }
 
     /**
@@ -241,12 +278,13 @@ public final class RulesTaken {
      */
     @Override
     public boolean equals(Object other) {
-        return other instanceof RulesTaken it && recognisable.equals(it.recognisable);
+        return other instanceof RulesTaken it && recognisable.equals(it.recognisable)
+                && proofs.equals(it.proofs);
     }
 
     @Override
     public int hashCode() {
-        return recognisable.hashCode();
+        return Objects.hash(recognisable, proofs);
     }
 
     /**
@@ -261,22 +299,37 @@ public final class RulesTaken {
         ArmEmissionIndex arms = ArmEmissionIndex.ofBody(emitted, plan);
         List<Recognised> recognisable = new ArrayList<>();
         for (DecisionReading.Ruled ruled : read.found()) {
-            if (!ruled.whole()) {
-                continue;
-            }
-            List<ColumnWitness> conditions = new ArrayList<>();
-            boolean everyOne = true;
-            for (ShownBy each : ruled.shownBy()) {
-                Optional<ColumnWitness> seen =
-                        witnessOf(each, ruled.rule(), comparisons, answers, arms, plan);
-                everyOne &= seen.isPresent();
-                seen.ifPresent(conditions::add);
-            }
-            if (everyOne) {
-                recognisable.add(new Recognised(ruled.rule(), List.copyOf(conditions)));
-            }
+            recognised(ruled, comparisons, answers, arms, plan).ifPresent(recognisable::add);
         }
-        return new RulesTaken(List.copyOf(recognisable));
+        // The ways no input takes are recognised as the rules are, condition by condition: a run
+        // that brought out each of them as the way did is the proof shown wrong.
+        List<Recognised> proofs = new ArrayList<>();
+        for (DecisionReading.ImpossiblePath each : read.impossible()) {
+            recognised(each.way(), comparisons, answers, arms, plan).ifPresent(proofs::add);
+        }
+        return new RulesTaken(List.copyOf(recognisable), List.copyOf(proofs));
+    }
+
+    /** Where a run through each condition of {@code ruled} is recorded, or empty where a run
+     *  through it cannot be told. */
+    private static Optional<Recognised> recognised(DecisionReading.Ruled ruled,
+                                                   ComparisonEmissionIndex comparisons,
+                                                   AnswerEmissionIndex answers,
+                                                   ArmEmissionIndex arms,
+                                                   CoverageSites.Plan plan) {
+        if (!ruled.whole()) {
+            return Optional.empty();
+        }
+        List<ColumnWitness> conditions = new ArrayList<>();
+        for (ShownBy each : ruled.shownBy()) {
+            Optional<ColumnWitness> seen =
+                    witnessOf(each, ruled.rule(), comparisons, answers, arms, plan);
+            if (seen.isEmpty()) {
+                return Optional.empty();
+            }
+            conditions.add(seen.get());
+        }
+        return Optional.of(new Recognised(ruled.rule(), List.copyOf(conditions)));
     }
 
     /**
@@ -387,10 +440,17 @@ public final class RulesTaken {
      */
     public WhichRule takenBy(AlignedObservation seen, List<ObservedValue> values,
                              BehaviorInputs inputs) {
+        Run run = new Run(seen, values, inputs);
+        // Asked first and whatever the rules say: a run down a way no input takes is the proof
+        // shown wrong, and placed at a rule it would be counted as a row the reading expected.
+        for (Recognised each : proofs) {
+            if (each.in(run).stream().allMatch(ExecutionEvidence.AS_THE_RULE_SAYS::equals)) {
+                return new WhichRule.AgainstAProof(each.rule());
+            }
+        }
         if (recognisable.isEmpty()) {
             return new WhichRule.CouldNotTell(WhichRule.Why.NO_RULE_IS_RECOGNISABLE);
         }
-        Run run = new Run(seen, values, inputs);
         DecisionRule took = null;
         boolean butForBothWays = false;
         for (Recognised each : recognisable) {

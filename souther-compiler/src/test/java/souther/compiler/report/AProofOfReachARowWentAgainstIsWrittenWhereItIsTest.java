@@ -6,12 +6,12 @@ import souther.compiler.DocumentShape;
 import souther.compiler.check.PathReachability;
 import souther.compiler.coverage.ControlPlace;
 import souther.compiler.diag.SourceRendering;
+import souther.compiler.partition.DecisionReading;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
-import tools.jackson.databind.node.ArrayNode;
 import tools.jackson.databind.node.ObjectNode;
 
 import java.util.ArrayList;
@@ -35,6 +35,8 @@ class AProofOfReachARowWentAgainstIsWrittenWhereItIsTest {
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
+    /** The inner comparison asks for below 5 on the way that already holds above 10, which the
+     *  reading of the decision proves no input takes. */
     private static final String MODEL = """
             module m
 
@@ -42,7 +44,7 @@ class AProofOfReachARowWentAgainstIsWrittenWhereItIsTest {
             data Large
 
             behavior size : (n: Int) -> Small | Large
-            let size (n) = if n > 10 then Large else Small
+            let size (n) = if n > 10 then (if n < 5 then Small else Large) else Small
             """;
 
     /** The model compiled once for the class: nothing here changes it. */
@@ -53,13 +55,15 @@ class AProofOfReachARowWentAgainstIsWrittenWhereItIsTest {
         Places places = PLACES;
         ObjectNode into = JSON.createObjectNode();
 
-        AdequacyReport.reachProofsContradicted(into, places.contradictions());
+        AdequacyReport.reachProofsContradicted(into, "size", places.contradictions(),
+                Set.of(places.way().way().rule()));
 
         JsonNode written = into.get("reachProofsContradicted");
         List<String> kinds = new ArrayList<>();
         written.forEach(each -> kinds.add(each.get("kind").stringValue()));
-        assertEquals(List.of("arm", "comparison_outcome", "arrival"), kinds,
-                "the places first, in the order the reading found them, and the arrivals after");
+        assertEquals(List.of("arm", "comparison_outcome", "arrival", "way_no_input_takes"), kinds,
+                "the places first, in the order the reading found them, the arrivals after, and"
+                        + " the ways through the decision last");
         assertEquals(places.arm().arm().part(), written.get(0).get("part").intValue(),
                 "an arm says which of the fork's arms");
         assertEquals(places.outcome().held(), written.get(1).get("held").booleanValue(),
@@ -68,40 +72,54 @@ class AProofOfReachARowWentAgainstIsWrittenWhereItIsTest {
                 "and an arrival is about the comparison and neither of its ways");
         assertEquals(written.get(1).get("construct"), written.get(2).get("construct"),
                 "one comparison, written the same way both times");
+        assertFalse(written.get(3).has("construct"), "a way is the conditions of several");
+        assertEquals(places.way().way().rule().consulted().size(),
+                written.get(3).get("way").get("conditions").size(),
+                "and is written by every condition it consulted");
     }
 
     @Test
     void nothingTakenBackWritesNothing() {
         ObjectNode into = JSON.createObjectNode();
 
-        AdequacyReport.reachProofsContradicted(into,
-                PathReachability.Answers.Contradictions.NONE);
+        AdequacyReport.reachProofsContradicted(into, "size",
+                PathReachability.Answers.Contradictions.NONE, Set.of());
 
         assertEquals(Set.of(), Set.copyOf(into.propertyNames()), "absent, and never an empty array");
     }
 
-    /** Both places it is written are places the schema declares it, with every key it has. */
+    /**
+     * Both places it is written are places the schema declares it, with every key it has: every
+     * kind on the behavior, and on a rule the kinds a rule rests on.
+     */
     @Test
     void theSchemaDeclaresItOnTheBehaviorAndOnARule() {
         Places places = PLACES;
-        ObjectNode written = JSON.createObjectNode();
-        AdequacyReport.reachProofsContradicted(written, places.contradictions());
-        ArrayNode proofs = (ArrayNode) written.get("reachProofsContradicted");
+        ObjectNode onTheBehavior = JSON.createObjectNode();
+        AdequacyReport.reachProofsContradicted(onTheBehavior, "size", places.contradictions(),
+                Set.of(places.way().way().rule()));
+        ObjectNode onARule = JSON.createObjectNode();
+        AdequacyReport.reachProofsContradicted(onARule, "size", places.contradictions(),
+                Set.of());
 
         JsonNode document = JSON.readTree(AdequacyReport.of(places.compilation())
                 .json(SourceRendering.namedByIdentity(places.compilation().texts())));
         ObjectNode behavior = (ObjectNode) document.get("modules").get(0).get("behaviors").get(0);
-        behavior.set("reachProofsContradicted", proofs.deepCopy());
+        behavior.set("reachProofsContradicted",
+                onTheBehavior.get("reachProofsContradicted").deepCopy());
         ObjectNode rule = (ObjectNode) behavior.get("decision").get("obligations").get(0);
-        rule.set("reachProofsContradicted", proofs.deepCopy());
+        rule.set("reachProofsContradicted", onARule.get("reachProofsContradicted").deepCopy());
 
         assertEquals(List.of(), DocumentShape.of(document).wrong(),
                 "what the schema shipped beside this refuses");
     }
 
-    /** An arm and a comparison's way out of the compiled body, and the proofs about them. */
+    /**
+     * An arm and a comparison's way out of the compiled body, and the proofs about them, and a way
+     * through its decision proved to be taken by no input.
+     */
     private record Places(Compilation compilation, ControlPlace.Arm arm,
-                          ControlPlace.Outcome outcome) {
+                          ControlPlace.Outcome outcome, DecisionReading.ImpossiblePath way) {
 
         PathReachability.Answers.Contradictions contradictions() {
             return new PathReachability.Answers.Contradictions(
@@ -129,6 +147,11 @@ class AProofOfReachARowWentAgainstIsWrittenWhereItIsTest {
         if (arm == null || outcome == null) {
             throw new AssertionError("the body has an arm and a comparison: " + read.found());
         }
-        return new Places(compilation, arm, outcome);
+        List<DecisionReading.ImpossiblePath> impossible = compilation.db()
+                .ask(new Adequacy.Decides(module)).value().get("size").read().impossible();
+        if (impossible.size() != 1) {
+            throw new AssertionError("the body has one way no input takes: " + impossible);
+        }
+        return new Places(compilation, arm, outcome, impossible.getFirst());
     }
 }

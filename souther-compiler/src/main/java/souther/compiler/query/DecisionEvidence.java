@@ -121,15 +121,27 @@ public record DecisionEvidence(DecisionReading read, Measure<RowsPlaced> took,
      * @param rowsNotPlaced  rows something watched whose rule this reading could not tell
      * @param rowsNotWatched rows nothing watched, which is this compiler's shortfall and not
      *                       anything about the model
+     * @param wentAgainst    the ways the reading proved no input takes that a row went down, each
+     *                       as the conditions it consulted, and which rows did. Those rows are among {@code rowsNotPlaced}, since no
+     *                       rule past such a way was read, and never among the rules taken: a proof
+     *                       a row went against is this compiler having been wrong about the body,
+     *                       and the rules the count is made of are short of whatever lies past it
      */
     public record RowsPlaced(int rowsRead, Map<DecisionRule, RowWitnesses> taken, int rowsPlaced,
-                             int rowsNotPlaced, int rowsNotWatched) {
+                             int rowsNotPlaced, int rowsNotWatched,
+                             Map<DecisionRule, RowWitnesses> wentAgainst) {
 
         public RowsPlaced {
             // Sealed and not only copied. What the account answers about a behavior is read off
             // this — which rules were covered, which were not — and a map a caller can add to is a
             // value whose answers change after it was made.
             taken = Collections.unmodifiableMap(new LinkedHashMap<>(taken));
+            wentAgainst = Collections.unmodifiableMap(new LinkedHashMap<>(wentAgainst));
+            if (rowsNotPlaced < wentAgainst.size()) {
+                throw new IllegalArgumentException("more proofs were gone against than rows went"
+                        + " unplaced: " + wentAgainst.size() + " proofs by " + rowsNotPlaced
+                        + " rows");
+            }
             Set<DecisionRule> rules = taken.keySet();
             if (rowsPlaced < 0 || rowsNotPlaced < 0 || rowsNotWatched < 0) {
                 throw new IllegalArgumentException("rows are counted from none: " + rowsPlaced
@@ -399,6 +411,7 @@ public record DecisionEvidence(DecisionReading read, Measure<RowsPlaced> took,
                                          List<WitnessedRow> rows,
                                          WeakeningSet whatTheRowsWentWithout) {
         Map<DecisionRule, RowWitnesses.Gathering> took = new LinkedHashMap<>();
+        Map<DecisionRule, RowWitnesses.Gathering> wentAgainst = new LinkedHashMap<>();
         List<Weakening> whyNotPlaced = new ArrayList<>();
         int placed = 0;
         int notPlaced = 0;
@@ -431,6 +444,15 @@ public record DecisionEvidence(DecisionReading read, Measure<RowsPlaced> took,
                                     new Weakening.DecisionOfRowUnreadable(behavior, it.why()));
                             notPlaced++;
                         }
+                        // Placed at no rule, since none past the way was read, and kept as the
+                        // proof the row went against rather than lost among the rows unplaced.
+                        case RulesTaken.WhichRule.AgainstAProof it -> {
+                            wentAgainst.computeIfAbsent(it.way(),
+                                    _ -> new RowWitnesses.Gathering()).add(witnessed.by());
+                            whyNotPlaced.add(
+                                    new Weakening.DecisionOfRowUnreadable(behavior, it.why()));
+                            notPlaced++;
+                        }
                     }
                 }
             }
@@ -442,7 +464,7 @@ public record DecisionEvidence(DecisionReading read, Measure<RowsPlaced> took,
         }
         RowsPlaced made =
                 new RowsPlaced(rows.size(), RowWitnesses.Gathering.done(took), placed, notPlaced,
-                        notWatched);
+                        notWatched, RowWitnesses.Gathering.done(wentAgainst));
         // A row this reading could not place says what stopped it, and a row nothing watched says
         // what the run went without. Either leaves the placement partial; neither may arrive as a
         // complete reading of the rows.
