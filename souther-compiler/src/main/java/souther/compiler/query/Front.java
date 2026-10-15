@@ -1294,9 +1294,11 @@ public final class Front {
      * from the path, and the path is where the classes this compilation makes cannot be seen: a
      * name the check resolves to a module compiled here is one the running module never finds.
      *
-     * <p>What it reaches is {@link #reaches(ReadableModule)}, the same answer the path is walked by,
-     * so what its bodies link against counts as much as what its declarations name. Only what it
-     * reaches itself: a module beyond it that reaches one compiled here is said about that module.
+     * <p>What it reaches is {@link Linkages.Named}, which for a module on the path is
+     * {@link #reaches(ReadableModule)}, so what its bodies link against counts as much as what its
+     * declarations name; asked there so the module is walked once whichever question wants it. Only
+     * what it reaches itself: a module beyond it that reaches one compiled here is said about that
+     * module.
      */
     public record NeedsThisCompilation(String name) implements Key<Boolean> {
         @Override
@@ -1306,12 +1308,11 @@ public final class Front {
 
         @Override
         public Answer<Boolean> compute(Db db) {
-            FromPath.OnThePath onThePath = onThePath(db, name);
-            if (onThePath == null) {
+            if (onThePath(db, name) == null) {
                 return Answer.of(Boolean.FALSE);
             }
             List<Report> reports = new ArrayList<>();
-            for (String reached : reaches(onThePath.read())) {
+            for (String reached : db.ask(new Linkages.Named(name)).value()) {
                 if (declaredHere(db, reached)) {
                     reports.add(Report.raised(Diagnostic.say(
                                     new ModuleMessage.AModuleOnThePathNeedsOneCompiledHere(name,
