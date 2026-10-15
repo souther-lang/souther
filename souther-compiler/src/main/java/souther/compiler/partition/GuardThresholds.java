@@ -249,8 +249,8 @@ public final class GuardThresholds {
                 case EmittedComparisonState.NotInstrumented _ -> { }
                 case EmittedComparisonState.Instrumented at -> {
                     // What each case puts on the way, once however many ask it: the lines of one
-                    // statement are asked over the same parts, a case said again is one that was
-                    // asked while it was chosen, and its way is filed under it after that.
+                    // statement are asked over the same parts, a case kept is one that was asked
+                    // while it was chosen, and its way is filed under it after that.
                     Map<Proposition, ReachingCuts.Stating> putOnTheWay = new HashMap<>();
                     Function<Proposition, ReachingCuts.Stating> aCase = decides -> putOnTheWay
                             .computeIfAbsent(decides, _ -> each.aCasePutOnTheWay(decides, read));
@@ -265,9 +265,6 @@ public final class GuardThresholds {
                             ComparisonAssessment arrived =
                                     ComparisonAssessment.narrowedByWhatArrives(admitted.read(),
                                             Reachability.of(new WayToTheBorder(each.assumed()),
-                                                    read.quantities().region()),
-                                            part -> Reachability.of(
-                                                    new WayToTheBorder(each.wayTo(part)),
                                                     read.quantities().region()),
                                             decides -> waysToACase.computeIfAbsent(decides,
                                                     _ -> Reachability.of(new WayToTheBorder(
@@ -360,7 +357,7 @@ public final class GuardThresholds {
         List<SaidOnTheWay> said = new ArrayList<>();
         said.add(each.saidOnTheWay());
         for (WhereAPartDecides reading : readings) {
-            ReachingCuts.Stating stating = each.whereItDecides(reading, aCase);
+            ReachingCuts.Stating stating = aCase.apply(reading.decides());
             decides.put(reading, stating.entries());
             said.add(stating.by());
         }

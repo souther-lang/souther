@@ -395,7 +395,13 @@ sealed interface ComparisonAssessment {
              * nothing arrives at or the statement never turns on, or one nobody worked out.
              */
             static boolean isALine(ComparisonAssessment line) {
-                return line instanceof AtAPosition || line instanceof AcrossPositions;
+                return switch (line) {
+                    case AtAPosition _, AcrossPositions _ -> true;
+                    case AnswerDependent _, OnADependencysAnswer _, StatesNoRelation _, NoInput _,
+                         CutsNothing _, AgainstAnotherValue _, OutsideTheDomain _,
+                         NothingArrivesAtItsLine _, TurnsNothing _, NoFeasibleInput _, Unread _,
+                         Several _ -> false;
+                };
             }
 
             /**
@@ -671,24 +677,22 @@ sealed interface ComparisonAssessment {
      *
      * @param way         what the model states on the way to the comparison, over what the
      *                    declarations leave
-     * @param wayToAPart  the same, with one case of where a line of a statement of several
-     *                    decides taken in beside it
-     * @param wayToACase  the same, with a condition taken in beside it: one of the cases a case
-     *                    of where a line decides was said for, or what choosing one has chosen so
-     *                    far ({@link CasesOfALineAsked})
+     * @param wayToACase  the same, with a case of where a line of a statement of several decides
+     *                    taken in beside it: one it was read in, one of the cases a case said for
+     *                    several stands for, or what choosing one has chosen so far
+     *                    ({@link CasesOfALineAsked})
      * @param reading     the reading of the input the relation's terms are asked of
      */
     static ComparisonAssessment narrowedByWhatArrives(
             ComparisonAssessment read,
             Reachability way,
-            Function<WhereAPartDecides, Reachability> wayToAPart,
             Function<Proposition, Reachability> wayToACase,
             List<ComparisonArrival> arrivals,
             boolean drawnByAnInvariant,
             InputReading reading) {
         if (read instanceof Several several) {
             return new Several(several.parts().stream()
-                    .flatMap(part -> aPartNarrowed(part, way, wayToAPart, wayToACase, arrivals,
+                    .flatMap(part -> aPartNarrowed(part, way, wayToACase, arrivals,
                             drawnByAnInvariant, reading).stream())
                     .toList());
         }
@@ -790,14 +794,12 @@ sealed interface ComparisonAssessment {
      * are any.
      */
     private static List<Several.Part> aPartNarrowed(Several.Part part, Reachability way,
-                                                    Function<WhereAPartDecides, Reachability>
-                                                            wayToAPart,
                                                     Function<Proposition, Reachability> wayToACase,
                                                     List<ComparisonArrival> arrivals,
                                                     boolean drawnByAnInvariant,
                                                     InputReading reading) {
-        ComparisonAssessment arrived = narrowedByWhatArrives(part.line(), way, _ -> way,
-                wayToACase, arrivals, drawnByAnInvariant, reading);
+        ComparisonAssessment arrived = narrowedByWhatArrives(part.line(), way, wayToACase,
+                arrivals, drawnByAnInvariant, reading);
         // Only where it is a line at all: a line refused, outside what the declarations leave, or
         // one nothing arrives at, is that whatever the cases are, and is read in none of them.
         if (!Several.Part.isALine(arrived)) {
@@ -820,8 +822,7 @@ sealed interface ComparisonAssessment {
         Set<CompositionBudget> stoppedAt = EnumSet.noneOf(CompositionBudget.class);
         for (DecidingCase each : part.cases()) {
             if (each.saidAlone()) {
-                Reachability toIt = wayToAPart.apply(new WhereAPartDecides(part.id(),
-                        each.condition()));
+                Reachability toIt = wayToACase.apply(each.condition());
                 if (arrivesAtSomePlace(cutting, toIt, arrivals, cutting::crossedIn)) {
                     reached.add(each);
                     deciding.addAll(waysArrivedBy(toIt, arrivals));
@@ -833,10 +834,7 @@ sealed interface ComparisonAssessment {
                             cutting::crossedIn));
             for (DecidingCase one : found.decidesIn()) {
                 reached.add(one);
-                // The case as it was read is the reading's own, whose way it holds already.
-                deciding.addAll(waysArrivedBy(one.equals(each)
-                        ? wayToAPart.apply(new WhereAPartDecides(part.id(), each.condition()))
-                        : wayToACase.apply(one.condition()), arrivals));
+                deciding.addAll(waysArrivedBy(wayToACase.apply(one.condition()), arrivals));
             }
             stoppedAt.addAll(found.notWorkedOut());
         }
