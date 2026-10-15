@@ -236,9 +236,9 @@ class AnArmOnACaseTheDeclarationAlreadyMakesNarrowsNothingTest {
         assertEquals(Set.of(), underTheField(named("whole"), "x.digits"),
                 "a field that is the case is named unnarrowed: what is under its name is no value"
                         + " the arm can be matching");
-        assertEquals(1, outOfReach("whole"),
+        assertEquals(List.of(List.of("x.digits -> DecimalPart")), outOfReach("whole"),
                 "a field that is the case leaves only the other arm out of reach");
-        assertEquals(0, outOfReach("opened"),
+        assertEquals(List.of(), outOfReach("opened"),
                 "a field holding the sum under a name of its own leaves every arm in reach");
     }
 
@@ -256,40 +256,47 @@ class AnArmOnACaseTheDeclarationAlreadyMakesNarrowsNothingTest {
         assertEquals(Set.of("r.kind@Station", "r.kind@Station.code", "r.kind@Hospital",
                         "r.kind@Hospital.code"),
                 underTheField(named("once"), "r.kind"));
-        assertEquals(1, outOfReach("once"), "only the arm beside the case is out of reach");
+        assertEquals(List.of(List.of("r.kind -> Renkei")), outOfReach("once"),
+                "only the arm beside the case is out of reach");
     }
 
     /**
      * The other side of the one above: a field none of the case's leaves.
      *
      * <p>The way is the arm on the case alone. Each arm under it is past it, so the rules through
-     * them are none of the rules, and none is left to be out of reach one by one.
+     * them are none of the rules, and none is out of reach one by one.
      */
     @Test
     void aFieldNoneOfTheLeavesOfACaseIsOutOfReachThroughIt() {
-        DecisionReading read = decided("linked").read();
-        assertEquals(List.of(List.of("l.kind -> {Hospital|Station}")),
-                read.impossible().stream().map(each -> answers(each.way().rule())).toList(),
-                () -> "a field none of the case's leaves is out of reach through the case: "
-                        + read.impossible());
-        assertInstanceOf(NoInputTakesIt.TheConditionsClash.class,
-                read.impossible().getFirst().why());
-        assertTrue(read.found().stream()
-                        .noneMatch(each -> read.impossible().getFirst().standsFor(each.rule())),
-                () -> "and no rule through an arm under it is one of the rules: " + read.found());
-        assertEquals(0, outOfReach("linked"), "nor is any rule left to be out of reach");
+        assertEquals(List.of(List.of("l.kind -> {Hospital|Station}")), outOfReach("linked"),
+                "a field none of the case's leaves is out of reach through the case");
     }
 
     /** And a field the declaration leaves every case, which the arms divide as they always did. */
     @Test
     void aFieldOfEveryCaseHasEveryArmInReach() {
-        assertEquals(0, outOfReach("visit"));
+        assertEquals(List.of(), outOfReach("visit"));
     }
 
-    /** How many of {@code behavior}'s rules go through an arm no value of the input takes. */
-    private static long outOfReach(String behavior) {
-        return decided(behavior).read().found().stream()
-                .filter(each -> each.states().neverComesOut().isPresent()).count();
+    /**
+     * The ways through {@code behavior}'s body that go through an arm no value of the input takes,
+     * each as the case columns it consulted.
+     *
+     * <p>Each is a way no input takes for a clash of what it asks, and stands for every rule past
+     * it: none of those is among the rules, and no rule left goes through an arm nothing takes.
+     */
+    private static List<List<String>> outOfReach(String behavior) {
+        DecisionReading read = decided(behavior).read();
+        for (DecisionReading.ImpossiblePath each : read.impossible()) {
+            assertInstanceOf(NoInputTakesIt.TheConditionsClash.class, each.why(),
+                    () -> "the arm's case clashes with what the field is: " + each);
+            assertTrue(read.found().stream().noneMatch(rule -> each.standsFor(rule.rule())),
+                    () -> "no rule past the way is one of the rules: " + read.found());
+        }
+        assertEquals(0, read.found().stream()
+                        .filter(each -> each.states().neverComesOut().isPresent()).count(),
+                () -> "no rule left goes through an arm nothing takes: " + read.found());
+        return read.impossible().stream().map(each -> answers(each.way().rule())).toList();
     }
 
     /** What {@code behavior}'s decision is read as. */

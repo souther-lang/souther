@@ -206,6 +206,8 @@ class AWayBetweenTheValuesTheRulesNameIsOwedNoRowTest {
      * <p>The arm the condition fails into is reached by a {@code c} that made the right side false
      * and by one that never ran it, so what is out here is the way the right side comes out true
      * after the left did — and the `else`, which 1 reaches without the right side running, stays.
+     * The way is the two comparisons, proved by the numbers they state, and nothing of the arm:
+     * no rule is left to be put out by the arm nothing reaches.
      */
     @Test
     void aComparisonInsideAConjunctionIsOutAsTheComparisonAndNotAsTheArm() {
@@ -225,9 +227,25 @@ class AWayBetweenTheValuesTheRulesNameIsOwedNoRowTest {
                   | "three" : (Odd(3)) -> High
                 """;
 
-        assertEquals(List.of("a_comparison_outcome_nothing_reaches"), excludedBecause(model),
-                "the one rule out is the one needing both sides true");
+        assertEquals(List.of("the_numbers_on_the_way_leave_none"), waysNoInputTakes(model),
+                "the one way out is the one needing both sides true, by the numbers they state");
+        assertEquals(List.of(), excludedBecause(model),
+                "and no rule is left to be out by the arm");
+        DecisionReading read = reading(model);
+        DecisionReading.ImpossiblePath way = read.impossible().getFirst();
+        assertEquals(2, read.rules().size(),
+                () -> "the rules left are the two into the `else`: " + read.found());
+        assertTrue(read.rules().stream().noneMatch(way::standsFor),
+                () -> "and neither is past the way: " + read.found());
         String page = human(model);
+        assertTrue(saysTheWays(page, List.of(
+                        "      · no input takes 1 way through this body, and no row is owed at a"
+                                + " rule past it",
+                        "          · the declarations and the conditions on the way leave no value:",
+                        "              · the comparison at 9:27 holds",
+                        "              · the comparison at 9:43 holds")),
+                () -> "the way is both sides of the conjunction coming out true:\n" + page);
+        assertTrue(page.contains("decision    rules 2"), () -> page);
         assertTrue(page.contains("branch      1/1"),
                 () -> "the `then` leaves the count and the `else` stays in it:\n" + page);
     }
