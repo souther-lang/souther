@@ -21,21 +21,17 @@ final class WaysNoInputTakes {
     private final Map<DecisionRule, DecisionReading.ImpossiblePath> proved = new LinkedHashMap<>();
 
     /**
-     * What each way asked of comes to, by what it states: the ways a body is joined into, and the
-     * ways a proof is had of as few conditions as still give it, ask about the same conditions
-     * over and over.
+     * What each way asked of comes to, by what it consulted: the ways a body is joined into, and
+     * the ways a proof is had of as few conditions as still give it, ask about the same conditions
+     * over and over, met in one order or another. What a way states is what each condition it
+     * consulted states coming out as it did, which the reading of the body answers once.
      */
-    private final Map<List<OnTheWay>, Optional<NoInputTakesIt>> asked = new HashMap<>();
+    private final Map<DecisionRule, Optional<NoInputTakesIt>> asked = new HashMap<>();
 
-    /** Why no input takes a way stating {@code stated}, where that is proved, asked once. */
-    Optional<NoInputTakesIt> whyNoInputTakes(List<OnTheWay> stated,
-                                             Function<List<OnTheWay>, Optional<NoInputTakesIt>> proving) {
-        Optional<NoInputTakesIt> known = asked.get(stated);
-        if (known == null) {
-            known = proving.apply(stated);
-            asked.put(List.copyOf(stated), known);
-        }
-        return known;
+    /** Why no input takes {@code path}, where that is proved, asked once for what it consulted. */
+    Optional<NoInputTakesIt> whyNoInputTakes(DecisionPath path,
+                                             Function<DecisionPath, Optional<NoInputTakesIt>> proving) {
+        return asked.computeIfAbsent(path.rule(), _ -> proving.apply(path));
     }
 
     /** That no input takes {@code path}, for {@code why}. */
@@ -47,8 +43,9 @@ final class WaysNoInputTakes {
 
     /**
      * The ways proved, none of which another stands for. A way that consulted everything another
-     * did and more is a way past that one, and its rules are the other's already: counted twice,
-     * one set of rules no run takes would be two.
+     * did and more is a way past that one, and its rules are the other's already. Two ways neither
+     * of which stands for the other may still both stand for some rule — two proofs had of
+     * different conditions — and each is a proof of its own, so both are said.
      */
     List<DecisionReading.ImpossiblePath> leastOfThem() {
         List<DecisionReading.ImpossiblePath> out = new ArrayList<>();

@@ -258,9 +258,11 @@ class ATakeChainIsReadAlongOnlyTheWaysARunTakesTest {
         throw new AssertionError("small whole numbers are held: " + answer);
     }
 
+    /** Longer than a chain nothing is left out of is read before the figure stops it
+     *  ({@link ACaseChainIsReadNoFurtherInAllThanOneConditionIsReadTest}). */
     @Test
     void aLongChainOfAmountsNoughtOrMoreReadsEveryConditionToTheEnd() {
-        List<Proposition> stated = stated(chain(20, true));
+        List<Proposition> stated = stated(chain(12, true));
 
         assertFalse(stated.isEmpty());
         for (Proposition each : stated) {

@@ -99,9 +99,9 @@ final class DecisionNaming implements Naming<DecisionPath> {
     public DecisionPath join(DecisionPath held, DecisionPath more) {
         DecisionPath joined = held.and(more);
         // Asked of every way joined, even one that consults nothing either of the two did not: a
-        // way can come to several conditions without being joined — both sides of an operator that
-        // stops when its answer is settled are one side of it — and what is asked is answered once
-        // for what it states ({@link WaysNoInputTakes#whyNoInputTakes}).
+        // way can come to several conditions without being joined ({@link #takenByNoInput}), and
+        // what is asked is answered once for what it consulted
+        // ({@link WaysNoInputTakes#whyNoInputTakes}).
         if (joined == null) {
             return null;
         }
@@ -140,13 +140,28 @@ final class DecisionNaming implements Naming<DecisionPath> {
         proved.add(least, leastWhy);
     }
 
+    /**
+     * Whether no input takes {@code path}, a way the reading arrived at the end of the body by,
+     * held with the ways joined where it is proved. A way can come to every condition it consulted
+     * without one join that put them together — both sides of an operator that stops when its
+     * answer is settled are one side of it, and a body of one fork is never joined to more — and it
+     * is asked here, where every way ends.
+     */
+    boolean takenByNoInput(DecisionPath path) {
+        Optional<NoInputTakesIt> none = noInputTakes(path);
+        none.ifPresent(why -> proveWithLess(path, why));
+        return none.isPresent();
+    }
+
     /** Why no input brings out every condition {@code path} consulted as it did, where that is
      *  proved. */
     private Optional<NoInputTakesIt> noInputTakes(DecisionPath path) {
-        List<OnTheWay> stated = new ArrayList<>();
-        path.consulted().forEach(each -> stated.addAll(each.states()));
-        return proved.whyNoInputTakes(stated, way -> new WayToTheBorder(way)
-                .takenByNoInput(meanings.states().read().quantities().region()));
+        return proved.whyNoInputTakes(path, way -> {
+            List<OnTheWay> stated = new ArrayList<>();
+            way.consulted().forEach(each -> stated.addAll(each.states()));
+            return new WayToTheBorder(stated)
+                    .takenByNoInput(meanings.states().read().quantities().region());
+        });
     }
 
     @Override

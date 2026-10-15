@@ -122,10 +122,11 @@ public record DecisionEvidence(DecisionReading read, Measure<RowsPlaced> took,
      * @param rowsNotWatched rows nothing watched, which is this compiler's shortfall and not
      *                       anything about the model
      * @param wentAgainst    the ways the reading proved no input takes that a row went down, each
-     *                       as the conditions it consulted, and which rows did. Those rows are among {@code rowsNotPlaced}, since no
-     *                       rule past such a way was read, and never among the rules taken: a proof
-     *                       a row went against is this compiler having been wrong about the body,
-     *                       and the rules the count is made of are short of whatever lies past it
+     *                       as the conditions it consulted, and which rows did. Those rows are
+     *                       among {@code rowsNotPlaced}, since no rule past such a way was read,
+     *                       and never among the rules taken: a proof a row went against is this
+     *                       compiler having been wrong about the body, and the rules the count is
+     *                       made of are short of whatever lies past it
      */
     public record RowsPlaced(int rowsRead, Map<DecisionRule, RowWitnesses> taken, int rowsPlaced,
                              int rowsNotPlaced, int rowsNotWatched,
@@ -137,15 +138,15 @@ public record DecisionEvidence(DecisionReading read, Measure<RowsPlaced> took,
             // value whose answers change after it was made.
             taken = Collections.unmodifiableMap(new LinkedHashMap<>(taken));
             wentAgainst = Collections.unmodifiableMap(new LinkedHashMap<>(wentAgainst));
-            if (rowsNotPlaced < wentAgainst.size()) {
-                throw new IllegalArgumentException("more proofs were gone against than rows went"
-                        + " unplaced: " + wentAgainst.size() + " proofs by " + rowsNotPlaced
-                        + " rows");
-            }
             Set<DecisionRule> rules = taken.keySet();
             if (rowsPlaced < 0 || rowsNotPlaced < 0 || rowsNotWatched < 0) {
                 throw new IllegalArgumentException("rows are counted from none: " + rowsPlaced
                         + "/" + rowsNotPlaced + "/" + rowsNotWatched);
+            }
+            if (rowsNotPlaced < wentAgainst.size()) {
+                throw new IllegalArgumentException("more proofs were gone against than rows went"
+                        + " unplaced: " + wentAgainst.size() + " proofs by " + rowsNotPlaced
+                        + " rows");
             }
             if (rowsPlaced + rowsNotPlaced + rowsNotWatched != rowsRead) {
                 throw new IllegalArgumentException("a reading of " + rowsRead

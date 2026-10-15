@@ -68,9 +68,11 @@ import souther.compiler.meaning.WhichCase;
 import souther.compiler.meaning.WhyUnread;
 import souther.compiler.meaning.WrittenOfANode;
 import souther.compiler.meaning.ACarriedValue;
+import souther.compiler.numeric.Count;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.semantics.AnswerAspect;
@@ -4500,23 +4502,25 @@ final class Pullback {
             // what the arms taken on the way can settle ({@link #armsLeftBy}). Read in the other
             // order, the condition is every case of the value it stops at, written out.
             case Inside.AChoice(Denotation chosen)
-                    when whereTheConditionStops(chosen) instanceof Inside first ->
-                    goingIn(first, reads, at, fixed, again);
-            case Inside.AChoice(Denotation chosen)
                     when chosenAt(chosen) instanceof Denotation choiceAt
                     && Core.withoutStanding(choiceAt.value()) instanceof Core.If iff -> {
+                Inside first = whereTheConditionStops(iff, choiceAt.at());
+                if (first != null) {
+                    yield goingIn(first, reads, at, fixed, again);
+                }
                 Derivation condition = observe(iff.cond(), AnswerAspect.TRUTH, choiceAt.at());
                 ArmsLeft left = armsLeftBy(condition);
                 // Counted in all and not along the way: an arm no run takes is not read, and the
-                // arms that are read are the work, wherever on the way they stand.
+                // arms that are read are the work, wherever on the way they stand. Nor is the
+                // reading one of more for being down an arm of it
+                // ({@link CompositionBudget#READINGS_OF_ONE_CONDITION}).
                 WhyUnread past = made(left.read());
                 if (past != null) {
                     yield partOf(at, new Derivation.Stopped(past, fixed));
                 }
                 Core choice = chosen.value();
                 yield new Derivation.AComparisonOfAChoice(madeBy(iff, armsOf(iff, choiceAt.at(),
-                        condition, left,
-                        arm -> again.apply(on -> on.taking(choice, arm, left.read())))));
+                        condition, left, arm -> again.apply(on -> on.taking(choice, arm, 1)))));
             }
             case Inside.AChoice(Denotation chosen) -> {
                 int arms = Choice.of(Core.withoutStanding(chosen.value())).arms().size();
@@ -5424,22 +5428,21 @@ final class Pullback {
     }
 
     /**
-     * The value the condition of the choice {@code chosen} stops at, that a reading goes into —
-     * or null where the condition is no comparison, or its arithmetic stops at nothing of the kind.
+     * The value the condition of {@code iff}, read {@code where} it stands, stops at, that a reading
+     * goes into — or null where the condition is no comparison, or its arithmetic stops at nothing
+     * of the kind.
      *
      * <p>A choice or a call: what the condition compares is then one of several values, and read
      * as it stands the condition is each of them written out. Gone into first, it is one of them,
      * which is a comparison the arms taken on the way can settle.
      */
-    private Inside whereTheConditionStops(Denotation chosen) {
-        Denotation choiceAt = chosenAt(chosen);
-        if (choiceAt == null || !(Core.withoutStanding(choiceAt.value()) instanceof Core.If iff)
-                || !(Core.withoutStanding(iff.cond()) instanceof Core.Binary compared)
+    private Inside whereTheConditionStops(Core.If iff, InputReads where) {
+        if (!(Core.withoutStanding(iff.cond()) instanceof Core.Binary compared)
                 || BooleanMeaning.asAComparison(compared).isEmpty()) {
             return null;
         }
-        Inside inside = aWayIn(List.of(new Denotation(compared.left(), choiceAt.at()),
-                new Denotation(compared.right(), choiceAt.at())));
+        Inside inside = aWayIn(List.of(new Denotation(compared.left(), where),
+                new Denotation(compared.right(), where)));
         return inside instanceof Inside.AChoice || inside instanceof Inside.ACall ? inside : null;
     }
 
@@ -5486,16 +5489,31 @@ final class Pullback {
         }
         SearchRegion here = onTheWay != null ? onTheWay : read.quantities().region();
         Rel holding = holds ? relation : relation.denied();
-        if (!(here.assuming(onTheInput, holding) instanceof SearchRegion.Assumption.Taken(
-                SearchRegion then))
-                || !(here.assuming(onTheInput, holding.denied())
-                        instanceof SearchRegion.Assumption.Taken(SearchRegion otherwise))) {
+        // Where the form runs on the way here, worked out once for both arms: an arm whose
+        // condition the run leaves no value for is one no run takes, and only an arm that is read
+        // has the way narrowed to it.
+        if (!(here.projectionOf(onTheInput) instanceof NumericDomain.FormProjection.Within(
+                NumericDomain.Bounds runs))) {
             return ArmsLeft.BOTH;
         }
-        boolean thenTaken = then.emptiness().isEmpty();
-        boolean otherwiseTaken = otherwise.emptiness().isEmpty();
-        return thenTaken || otherwiseTaken
-                ? new ArmsLeft(then, thenTaken, otherwise, otherwiseTaken) : ArmsLeft.BOTH;
+        boolean thenTaken =
+                !WhatTheDeclarationsLeave.ruledOutByBounds(runs, holding, Count.ZERO);
+        boolean otherwiseTaken =
+                !WhatTheDeclarationsLeave.ruledOutByBounds(runs, holding.denied(), Count.ZERO);
+        if (!thenTaken && !otherwiseTaken) {
+            return ArmsLeft.BOTH;
+        }
+        return new ArmsLeft(thenTaken ? narrowedTo(here, onTheInput, holding) : null, thenTaken,
+                otherwiseTaken ? narrowedTo(here, onTheInput, holding.denied()) : null,
+                otherwiseTaken);
+    }
+
+    /** {@code here} with {@code form rel 0} taken in, or null where it cannot carry it: the way
+     *  is then left as it was. */
+    private static SearchRegion narrowedTo(SearchRegion here, LinearForm<NumericTerm> form,
+                                           Rel rel) {
+        return here.assuming(form, rel) instanceof SearchRegion.Assumption.Taken(
+                SearchRegion narrowed) ? narrowed : null;
     }
 
     /**

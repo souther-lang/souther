@@ -3279,14 +3279,13 @@ public final class Adequacy {
             // where the row went, so a reason added to that reading is a case to decide about here
             // rather than a run quietly reported as having gone elsewhere.
             return switch (taken.takenBy(read.asRun())) {
-                case souther.compiler.partition.RulesTaken.WhichRule.TookThis took
-                        when took.rule().equals(ruled.rule()) ->
+                case RulesTaken.WhichRule.TookThis took when took.rule().equals(ruled.rule()) ->
                         new RuleRequirement.Required(composed);
-                case souther.compiler.partition.RulesTaken.WhichRule.TookThis _ ->
+                case RulesTaken.WhichRule.TookThis _ ->
                         new RuleRequirement.Unsettled.AComposedRowWentElsewhere();
-                case souther.compiler.partition.RulesTaken.WhichRule.CouldNotTell couldNot ->
+                case RulesTaken.WhichRule.CouldNotTell couldNot ->
                         new RuleRequirement.Unsettled.CouldNotTellWhereTheRowWent(couldNot.why());
-                case souther.compiler.partition.RulesTaken.WhichRule.AgainstAProof against ->
+                case RulesTaken.WhichRule.AgainstAProof against ->
                         new RuleRequirement.Unsettled.CouldNotTellWhereTheRowWent(against.why());
             };
         }

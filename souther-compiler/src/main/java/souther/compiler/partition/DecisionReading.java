@@ -292,22 +292,23 @@ public record DecisionReading(String behavior, List<Ruled> found, List<Impossibl
         // leaves nothing after its build reached. What is inside the template is not counted as a
         // way of this body — a value takes no input, so it is no rule a row can be written for.
         WaysNoInputTakes proved = new WaysNoInputTakes();
+        DecisionNaming naming = new DecisionNaming(meanings(read), reads, numbering,
+                PATHS_READ.maximum(), proved);
         ValueArrivals<DecisionPath> arrivals = ValueArrivals.ofBodyWhereTheOperationsStand(body,
-                new DecisionNaming(meanings(read), reads, numbering,
-                        PATHS_READ.maximum(), proved),
-                new AnOperationsTruthComesOutAsItCan(reads, read),
+                naming, new AnOperationsTruthComesOutAsItCan(reads, read),
                 analysis.templates()::bodyOf);
         if (!(arrivals.waysAt(body) instanceof Paths.Held<DecisionPath> held)) {
             return new DecisionReading(behavior, List.of(), proved.leastOfThem(),
                     new Enumeration.StoppedAtAFigure(PATHS_READ), Map.of());
         }
-        // A rule past a way no input takes is no rule a run takes, however the reading came to it:
-        // a way made of several conditions without being joined is asked only where it is joined
-        // to more, and one that is never joined to more is the body's whole way. The proof stands
-        // for it, and the rule is not held beside the proof.
+        // Every way the reading ends at is asked as well, since a way can come to its conditions
+        // without one join that put them together. And a rule past a way no input takes is not held
+        // beside the proof, however the reading came to it: the proof stands for it.
+        List<Arrival<DecisionPath>> arrived = held.arrivals().stream()
+                .filter(way -> !naming.takenByNoInput(way.path())).toList();
         List<ImpossiblePath> impossible = proved.leastOfThem();
         List<Ruled> found = new ArrayList<>();
-        for (Arrival<DecisionPath> way : held.arrivals()) {
+        for (Arrival<DecisionPath> way : arrived) {
             DecisionRule rule = way.path().rule();
             if (impossible.stream().noneMatch(each -> each.standsFor(rule))) {
                 found.add(new Ruled(rule, way.path().steps(), way.isComplete()));
