@@ -242,6 +242,12 @@ public final class Output {
         }
 
         static Inputs inputs(Db db, String name, Elaboration of) {
+            // A module read off the path was generated where it was compiled. What it published
+            // declares its behaviors and carries none of their bodies, so there is nothing here to
+            // generate it from.
+            if (!db.ask(new Front.Declared()).value().contains(name)) {
+                return null;
+            }
             Answer<Bodies.Elaborated> checked = switch (of) {
                 case WHOLE -> db.ask(new Bodies.Checked(name));
                 case OBSERVABLE -> db.ask(new Bodies.Observable(name));
