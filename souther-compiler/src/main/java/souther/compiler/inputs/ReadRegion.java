@@ -80,8 +80,13 @@ record ReadRegion(ReadQuantities within) implements SearchRegion {
     }
 
     @Override
-    public ValueSet admittedAt(NumericTerm.ValueOf place) {
-        return within.admittedAt(place);
+    public ValueSet admittedAt(NumericTerm.FromOnePosition term) {
+        return within.admittedAt(term);
+    }
+
+    @Override
+    public ValueSet heldAt(NumericTerm.FromOnePosition term) {
+        return within.heldAt(term);
     }
 
     @Override

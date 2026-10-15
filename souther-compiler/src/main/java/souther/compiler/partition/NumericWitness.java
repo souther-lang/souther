@@ -407,7 +407,7 @@ final class NumericWitness {
         // The three narrowings this position stands under, read once and handed to the walk whole.
         // What the arithmetic leaves the number is one of them; the walk is held to the other two
         // at every place it reaches, and not only at the one it starts from.
-        ValueSet admits = admittedAt(term, looking);
+        ValueSet admits = admittedAt(term, looking, within);
         PlacesApart apart = apartAt(term, within);
         Place first = carrier.somethingOtherThan(apart, runs, admits, looking.meter());
         if (first == null) {
@@ -469,9 +469,10 @@ final class NumericWitness {
      * values may be written at it, and no value is written at such a number. What the rules leave
      * it is the region's, which the walk is held to already.
      */
-    private static ValueSet admittedAt(NumericTerm term, WitnessSearch looking) {
+    private static ValueSet admittedAt(NumericTerm term, WitnessSearch looking,
+                                       SearchRegion within) {
         return switch (term) {
-            case NumericTerm.FromOnePosition one -> looking.toNarrowBy(one);
+            case NumericTerm.FromOnePosition one -> looking.toNarrowBy(one, within);
             case NumericTerm.TakenOver _, NumericTerm.Multiplicity _ -> ValueSet.ANY;
         };
     }
