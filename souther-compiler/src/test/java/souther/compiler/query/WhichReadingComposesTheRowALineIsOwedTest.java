@@ -19,6 +19,7 @@ import souther.compiler.query.BorderObligationPointAssessment.Reading;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.SequencedMap;
 import java.util.Set;
 
@@ -278,7 +279,8 @@ class WhichReadingComposesTheRowALineIsOwedTest {
     @Test
     void aPointARowAlreadyStandsAtIsNotSearchedFor() {
         PointResolution resolved = PointResolver.resolveAt(
-                new ObligationAssessment(new Criterion.AtTheLevel(Level.OfTheQuantity.of(1)),
+                new ObligationAssessment(
+                        Optional.of(new Criterion.AtTheLevel(Level.OfTheQuantity.of(1))),
                         new ObligationCoverage.Witnessed(RowWitnesses.ANOTHER_ROW),
                         ItemAssessment.WritabilityProjection.PROVEN, SearchOutcomes.none(),
                         ObligationDisposition.openOn(List.of())),
@@ -318,7 +320,8 @@ class WhichReadingComposesTheRowALineIsOwedTest {
     /** A point a row is owed at, measured and missed, so a search of it would tell somebody
      *  something. */
     private static ObligationAssessment owed() {
-        return new ObligationAssessment(new Criterion.AtTheLevel(Level.OfTheQuantity.of(1)),
+        return new ObligationAssessment(
+                Optional.of(new Criterion.AtTheLevel(Level.OfTheQuantity.of(1))),
                 new ObligationCoverage.Missed(),
                 ItemAssessment.WritabilityProjection.PROVEN, SearchOutcomes.none(),
                 ObligationDisposition.openOn(List.of()));

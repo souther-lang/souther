@@ -406,15 +406,35 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
      *
      * <p>A reading shown to stand at the line stands at the matching point of the author's. One
      * shown to be of the line without being able to tell its sides apart holds what it found about
-     * every point of the line of the same kind as this one without settling any of them; one where
-     * something outside the comparison decides it is held the same way and is no evidence that
-     * those points are owed ({@link ReadingSeat.Unresolved}); one shown to be no place of the line
-     * owes nothing for it.
+     * every point of the line of the same kind as this one without settling any of them. One not
+     * shown to be a place of the line owes nothing for it, whether it is shown to be no place of it
+     * or not shown either way; what the second holds about the line is {@link #holdsOpen}.
      */
     private List<OwedPoint> ofTheAuthorsLine(DomainPoint point, BorderObligationId line,
                                              PointContributions own,
                                              AuthoredPointMapping authored) {
-        PointContributions settled = switch (answer(point)) {
+        PointContributions settled = settledAt(point, own);
+        if (settled == null || !(authored instanceof AuthoredPointMapping.Proven proven)) {
+            return List.of();
+        }
+        List<DomainPoint> ofTheLine = pointsOf(line.line().facts());
+        Optional<DomainPoint> tied = theAuthorsPoint(point, proven).filter(ofTheLine::contains);
+        if (tied.isPresent()) {
+            return List.of(owedAt(line, tied.get(), settled, new ReadingSeat.At(point)));
+        }
+        List<OwedPoint> out = new ArrayList<>();
+        for (DomainPoint each : ofTheLine) {
+            if (sameKind(each, point)) {
+                out.add(owedAt(line, each, settled, new ReadingSeat.Untied(point)));
+            }
+        }
+        return out;
+    }
+
+    /** What settled {@code point} of this reading, from the line's own rule on, or null where no
+     *  row is owed there. */
+    private PointContributions settledAt(DomainPoint point, PointContributions own) {
+        return switch (answer(point)) {
             case PointAnswer.NotOwed _, PointAnswer.NotWorkedOut _ -> null;
             case PointAnswer.AtLine _ -> own;
             case PointAnswer.InRegion in -> {
@@ -425,26 +445,15 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
                 yield all;
             }
         };
-        if (settled == null || authored instanceof AuthoredPointMapping.NotAnAuthoredBoundary) {
-            return List.of();
-        }
-        List<DomainPoint> ofTheLine = pointsOf(line.line().facts());
-        Optional<DomainPoint> tied = authored instanceof AuthoredPointMapping.Proven proven
-                ? theAuthorsPoint(point, proven).filter(ofTheLine::contains) : Optional.empty();
-        List<OwedPoint> out = new ArrayList<>();
-        if (tied.isPresent()) {
-            out.add(owedAt(line, tied.get(), settled, new ReadingSeat.At(point)));
-        } else {
-            ReadingSeat seat = authored instanceof AuthoredPointMapping.Proven
-                    ? new ReadingSeat.Untied(point) : new ReadingSeat.Unresolved(point);
-            for (DomainPoint each : ofTheLine) {
-                if (each.againstTheLine() == point.againstTheLine()
-                        && each.getClass() == point.getClass()) {
-                    out.add(owedAt(line, each, settled, seat));
-                }
-            }
-        }
-        return out;
+    }
+
+    /** Whether {@code one} and {@code other} are the same one of the four, either side. */
+    private static boolean sameKind(DomainPoint one, DomainPoint other) {
+        return switch (one) {
+            case DomainPoint.AtTheLine _ -> other instanceof DomainPoint.AtTheLine;
+            case DomainPoint.BesideTheLine _ -> other instanceof DomainPoint.BesideTheLine;
+            case DomainPoint.InTheRegion _ -> other instanceof DomainPoint.InTheRegion;
+        };
     }
 
     private static OwedPoint owedAt(BorderObligationId line, DomainPoint point,
@@ -467,18 +476,9 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
      * fails — the relation's satisfied side is the comparison's other one, and what holds at the
      * value is what does not. A value singled out holds on neither side, and which side of it is
      * which is the facing's to say, and nothing's where the facing is not known.
-     *
-     * <p>A reading that cuts where the author singled a value out, or singles one out where the
-     * author cut, is at a line of its own: a count of the elements meeting something written
-     * {@code == 2} is read on an element's number as where that element starts to meet it, which
-     * is where the count arrives at two from one side and not the value two itself. Which of the
-     * author's points such a reading stands at is not known.
      */
     private Optional<DomainPoint> theAuthorsPoint(DomainPoint point,
                                                   AuthoredPointMapping.Proven proven) {
-        if (proven.claims().getClass() != origin.lineFacts().claim().getClass()) {
-            return Optional.empty();
-        }
         if (point.side() == null) {
             return Optional.of(point);
         }
@@ -616,6 +616,38 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
     /** The same over every point this line has, in the order the points are in. */
     public List<OwedPoint> owes() {
         return answers.keySet().stream().flatMap(point -> owes(point).stream()).toList();
+    }
+
+    /**
+     * The points of its author's line this reading holds something about without being shown to
+     * be a place of the line ({@link AuthoredPointMapping.Undetermined}): every point of the kind
+     * of each of its own, held as {@link ReadingSeat.Unresolved}.
+     *
+     * <p>Not points this border owes. Something outside the comparison decides it here, so this
+     * reading is no evidence that the author's line is owed a row at all; what it found holds a
+     * point open only where another reading owes it, which is for whoever gathers the readings of
+     * the line to say.
+     */
+    public List<OwedPoint> holdsOpen() {
+        if (!(origin instanceof LineOrigin.ComparisonOrigin comparison)
+                || !(comparison.authored() instanceof AuthoredPointMapping.Undetermined)) {
+            return List.of();
+        }
+        BorderObligationId line = obligation();
+        PointContributions own = PointContributions.by(origin.authoredLine());
+        List<OwedPoint> out = new ArrayList<>();
+        for (DomainPoint point : answers.keySet()) {
+            PointContributions settled = settledAt(point, own);
+            if (settled == null) {
+                continue;
+            }
+            for (DomainPoint each : pointsOf(line.line().facts())) {
+                if (sameKind(each, point)) {
+                    out.add(owedAt(line, each, settled, new ReadingSeat.Unresolved(point)));
+                }
+            }
+        }
+        return List.copyOf(out);
     }
 
     /**

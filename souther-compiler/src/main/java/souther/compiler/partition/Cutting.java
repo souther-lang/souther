@@ -359,8 +359,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         if (mapping instanceof AuthoredPointMapping.Proven(
                 var line, var claims, var facing, var itsOwn)) {
             Optional<Boolean> rises = facing == Derivation.AComparisonRead.Facing.NOTHING_WRITTEN
-                    ? Optional.empty() : cuts.cutting().risesWith(relation.relation());
-            // A line the comparison's own relation draws claims what the comparison wrote. One
+                    ? Optional.empty() : cuts.cutting().risesWith(relation.relation());            // A line the comparison's own relation draws claims what the comparison wrote. One
             // something else written in its definition draws — how an arm is selected, a
             // comparison written inside it, what a law says — has no two sides of the
             // comparison's written for it, and claims what this reading drew, as the comparison

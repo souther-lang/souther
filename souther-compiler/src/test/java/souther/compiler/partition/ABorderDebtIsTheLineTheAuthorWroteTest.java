@@ -44,8 +44,11 @@ import java.util.Set;
 import java.util.TreeSet;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * What a row is owed for is the line the author wrote, and neither the rule it came from nor the
@@ -374,6 +377,95 @@ class ABorderDebtIsTheLineTheAuthorWroteTest {
                         let check (x: Int): Bool = x <= 10
                         """),
                 "the line at a = 0 is not shown to be check's, and nothing else reads it");
+    }
+
+    /**
+     * And beside a reading of the line, such a reading is held against the line's points without
+     * standing at any of them.
+     *
+     * <p>Handed {@code if a > 0 then a else 11}, {@code check} reads its line at {@code a = 10}.
+     * At {@code a = 0} the caller's choice turns between that line and a constant: what a row
+     * there shows is not shown to be about the author's line, so it settles none of its points and
+     * is still beside them, where a row nothing else settles them with leaves them undecided.
+     */
+    @Test
+    void aReadingNotShownToBeOfTheLineIsHeldAgainstThePointsTheLineOwes() {
+        List<BorderObligationPointAssessment> points = pointsOf("""
+                module example.overlap
+
+                behavior admit : (a: Int) -> Bool
+                let admit (a) = check(if a > 0 then a else 11)
+
+                let check (x: Int): Bool = x <= 10
+                """).stream().filter(each -> each.id().provenance() instanceof RuleRef.Comparison c
+                        && c.origin().owner().equals(
+                                new WrittenOwner.Body("example.overlap", "check")))
+                .toList();
+
+        assertFalse(points.isEmpty(), "the line at ten is owed rows");
+        for (BorderObligationPointAssessment each : points) {
+            assertTrue(each.readings().stream().anyMatch(reading ->
+                            each.seatOf(reading) instanceof ReadingSeat.At),
+                    () -> each.at() + " is owed where a reading stands at it: " + each.seats());
+        }
+        assertTrue(points.stream().anyMatch(each -> each.readings().stream().anyMatch(reading ->
+                        each.seatOf(reading) instanceof ReadingSeat.Unresolved)),
+                () -> "and the reading at nought is held against them: " + points.stream()
+                        .map(BorderObligationPointAssessment::seats).toList());
+    }
+
+    /**
+     * A count of statements about values written out is a line its readings stand at.
+     *
+     * <p>{@code length(filter(w -> any(x -> meets(x, w), xs), wanted)) == 2} counts which of the
+     * two wants some element meets, and is read as the statements it counts: an A above nought and
+     * a B above nought. Those are not the count's two sides, so the line on an A's number is not
+     * faced as the count is — it is where the comparison comes to hold, and a row at it is a row at
+     * the author's point. Faced as the count, the line's points were tied to nothing, and no row
+     * could ever meet them.
+     */
+    @Test
+    void aCountOfStatementsWrittenOutIsALineItsReadingsStandAt() {
+        List<BorderObligationPointAssessment> points = pointsOf("""
+                module example.overlap
+
+                import List ( filter, any, length )
+
+                data A = { n: Int }
+                data B = { n: Int }
+                data Item = A | B
+                data Wanted = WantA | WantB
+                data Both
+                data NotBoth
+
+                let wanted = [ WantA, WantB ]
+
+                let meets (x: Item, w: Wanted): Bool =
+                    match x with
+                        | A { n } -> w == WantA && n > 0
+                        | B { n } -> w == WantB && n > 0
+
+                behavior f : (xs: List<Item>) -> Both | NotBoth
+
+                let f (xs) =
+                    if length(filter(w -> any(x -> meets(x, w), xs), wanted)) == 2
+                    then Both else NotBoth
+                """).stream().filter(each -> each.id().provenance() instanceof RuleRef.Comparison c
+                        && c.origin().owner().equals(new WrittenOwner.Body("example.overlap", "f")))
+                .toList();
+
+        assertFalse(points.isEmpty(), "the count is owed rows");
+        for (BorderObligationPointAssessment each : points) {
+            for (BorderAssessment reading : each.readings()) {
+                ReadingSeat.At at = assertInstanceOf(ReadingSeat.At.class, each.seatOf(reading),
+                        () -> each.at() + " is stood at by " + reading.border().label());
+                // Where the comparison holds on the reading is where it holds on the author's
+                // line: the value at which an A starts to meet its want is the ON point of both.
+                assertEquals(reading.border().roleOf(at.asked()), each.role(),
+                        () -> each.at() + " of the author's line is " + at.asked() + " at "
+                                + reading.border().label());
+            }
+        }
     }
 
     /** Each debt the comparisons of the model owe, by the labels of the readings of it. */

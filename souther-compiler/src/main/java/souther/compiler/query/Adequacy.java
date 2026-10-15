@@ -7028,11 +7028,20 @@ public final class Adequacy {
                 throw new IllegalArgumentException("a declaration's line is read somewhere, is on"
                         + " something it wrote, and is some declaration's: " + read);
             }
+            if (read.border().obligation().at().isEmpty()) {
+                throw new IllegalArgumentException("a declaration's line is at a value of its own: "
+                        + read.border().obligation());
+            }
         }
 
         /** The line, which is what tells one of these from another. */
         public BorderObligationId line() {
             return read.border().obligation();
+        }
+
+        /** The value of its own the line is at, which every declaration's line has. */
+        public souther.compiler.partition.Level level() {
+            return line().at().orElseThrow();
         }
 
         /** The roles the line has no point in, with why, in the order the roles are in. */
@@ -7049,7 +7058,7 @@ public final class Adequacy {
         /** Where on what the declaration wrote the line is, as a report writes it
          *  ({@link #saidOn}). */
         public String said() {
-            return saidOn(read, axis);
+            return saidOn(read, axis, level());
         }
 
         /** Whether the declaration has a quantity to say where the line is on
@@ -7098,12 +7107,21 @@ public final class Adequacy {
                 throw new IllegalArgumentException("a point no row is owed at is some line's, read"
                         + " somewhere, and some declaration's: " + point);
             }
+            if (point.line().at().isEmpty()) {
+                throw new IllegalArgumentException("a declaration's line is at a value of its own: "
+                        + point.line());
+            }
+        }
+
+        /** The value of its own the line is at, which every declaration's line has. */
+        public souther.compiler.partition.Level level() {
+            return point.line().at().orElseThrow();
         }
 
         /** Where on what the declaration wrote the line is, as a report writes it
          *  ({@link #saidOn}). */
         public String said() {
-            return saidOn(read, axis);
+            return saidOn(read, axis, level());
         }
 
         /** Whether the declaration has a quantity to say where the line is on
@@ -7151,12 +7169,9 @@ public final class Adequacy {
      * which is a reading's name and not the declaration's, so what is left is the quantity alone — as
      * {@link DeclaredDebt#said()} leaves it.
      */
-    private static String saidOn(BorderAssessment read, String axis) {
-        return namesALevel(read)
-                ? read.border().obligation().at()
-                        .map(at -> axis + " = " + read.border().cut().of().writtenAt(at))
-                        .orElse(axis)
-                : axis;
+    private static String saidOn(BorderAssessment read, String axis,
+                                 souther.compiler.partition.Level at) {
+        return namesALevel(read) ? axis + " = " + read.border().cut().of().writtenAt(at) : axis;
     }
 
     /**

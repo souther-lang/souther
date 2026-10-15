@@ -251,17 +251,26 @@ public final class WrittenLines {
         if (here.isEmpty()) {
             return;
         }
-        // Facing the comparison's own sides only where the comparison's own reading made it: a
-        // comparison written inside it faces the sides it wrote itself.
-        boolean itsOwn = step instanceof Derivation.AComparisonRead && !under.inAnother();
-        Seen how = new Seen(under.decidedOutside() ? null
-                : itsOwn ? ((Derivation.AComparisonRead) step).facing()
-                        : Derivation.AComparisonRead.Facing.NOTHING_WRITTEN, itsOwn);
+        // Facing the comparison's own sides only where it is the relation the comparison's own
+        // reading read off them. A comparison written inside it faces the sides it wrote itself,
+        // and so does what a count of statements about values written out was written out as: the
+        // reading faces the count, and the statements it counts are no side of the comparison's.
+        Derivation.AComparisonRead.Facing facing = null;
+        String own = null;
+        if (step instanceof Derivation.AComparisonRead read && !under.inAnother()) {
+            facing = read.facing();
+            own = new Proposition.Compared(read.relation(), true).heldKey();
+        }
         if (!under.decidedOutside()) {
             drawn.add(under.line());
         }
-        here.forEach(each -> seen.computeIfAbsent(each, _ -> new LinkedHashMap<>())
-                .merge(under.line(), how, WrittenLines::together));
+        for (String each : here) {
+            boolean itsOwn = each.equals(own);
+            Seen how = new Seen(under.decidedOutside() ? null
+                    : itsOwn ? facing : Derivation.AComparisonRead.Facing.NOTHING_WRITTEN, itsOwn);
+            seen.computeIfAbsent(each, _ -> new LinkedHashMap<>())
+                    .merge(under.line(), how, WrittenLines::together);
+        }
     }
 
     /** What {@code stated} claims of the number its relation's form is held against. */
