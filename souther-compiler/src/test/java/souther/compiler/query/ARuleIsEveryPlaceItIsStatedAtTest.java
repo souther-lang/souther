@@ -24,6 +24,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -205,10 +206,10 @@ class ARuleIsEveryPlaceItIsStatedAtTest {
                 RuleSearch.CameToNothing.of(List.of(CameToNothing.metNothing(
                         new Generator.UnresolvedCombination(List.of("a rule of the decision"),
                                 Generator.UnresolvedCombination.Reason
-                                        .NO_VALUE_CAN_STAND_THERE))))));
+                                        .NO_VALUE_CAN_STAND_THERE))))), Set.of());
         SettledAt elsewhere = new SettledAt(at, RuleSettlement.of(
                 new RuleRequirement.Unsettled.AComposedRowWentElsewhere(),
-                CompositionAccount.NOTHING));
+                CompositionAccount.NOTHING), Set.of());
 
         assertEquals(new SettledAcross(List.of(elsewhere)),
                 Adequacy.DecisionSearch.acrossThePlaces(List.of(excluded, elsewhere)),
@@ -229,9 +230,9 @@ class ARuleIsEveryPlaceItIsStatedAtTest {
         DecisionReading.Ruled at = compiled().answering();
         SettledAt stood = new SettledAt(at, RuleSettlement.of(
                 new RuleRequirement.Required(new RowToRun(List.of(), List.of())),
-                CompositionAccount.NOTHING));
+                CompositionAccount.NOTHING), Set.of());
         SettledAt nothingTried = new SettledAt(at, RuleSettlement.nothingToTryWith(
-                cameToNothing(), CompositionAccount.NOTHING));
+                cameToNothing(), CompositionAccount.NOTHING), Set.of());
 
         assertEquals(new SettledAcross(List.of(stood)),
                 Adequacy.DecisionSearch.acrossThePlaces(List.of(nothingTried, stood)),
@@ -253,10 +254,10 @@ class ARuleIsEveryPlaceItIsStatedAtTest {
         DecisionReading.Ruled second = Compiled.under(first.rule(), body.read().found().stream()
                 .filter(each -> !each.equals(first)).findFirst().orElseThrow());
         SettledAt nothingTried = new SettledAt(first, RuleSettlement.nothingToTryWith(
-                cameToNothing(), CompositionAccount.NOTHING));
+                cameToNothing(), CompositionAccount.NOTHING), Set.of());
         SettledAt composed = new SettledAt(second, RuleSettlement.of(
                 new RuleRequirement.Unsettled.AComposedRowWentElsewhere(),
-                CompositionAccount.NOTHING));
+                CompositionAccount.NOTHING), Set.of());
 
         assertEquals(new SettledAcross(List.of(composed, nothingTried)),
                 Adequacy.DecisionSearch.acrossThePlaces(List.of(nothingTried, composed)),
@@ -287,10 +288,10 @@ class ARuleIsEveryPlaceItIsStatedAtTest {
                 List.of(new RuleStep(first.steps().getFirst().shown(), List.of(declinedSecond),
                         AnswersDemanded.NOTHING, SaidOnTheWay.NONE)), true);
         SettledAt nothingTried = new SettledAt(one, RuleSettlement.nothingToTryWith(
-                cameToNothing(), CompositionAccount.NOTHING));
+                cameToNothing(), CompositionAccount.NOTHING), Set.of());
         SettledAt composed = new SettledAt(other, RuleSettlement.of(
                 new RuleRequirement.Unsettled.AComposedRowWentElsewhere(),
-                CompositionAccount.NOTHING));
+                CompositionAccount.NOTHING), Set.of());
 
         for (List<SettledAt> met : List.of(List.of(nothingTried, composed),
                 List.of(composed, nothingTried))) {

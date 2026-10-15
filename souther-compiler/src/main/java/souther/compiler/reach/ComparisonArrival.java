@@ -6,6 +6,12 @@ import souther.compiler.numeric.NumericDomain;
 /**
  * What arrives at one comparison, said as much of it as a reader downstream may safely use.
  *
+ * <p>Or at one application whose answer states a line — an emptiness check states a size against
+ * nought — which is dropped by the same fact a comparison's is. Such an application is answered
+ * {@link NothingArrives} or {@link NoProjection} and never {@link Values}: it has arguments and no
+ * side, so there is no position a projection could be of. A reader holding one of these is not
+ * holding a comparison's by that alone.
+ *
  * <p>A comparison's border stands or falls by whether the values that reach the comparison reach
  * the line it draws — not by whether either of its outcomes is one the paths prove nothing takes.
  * The two questions have different answers: a guard shadowed by a stricter guard above it draws a

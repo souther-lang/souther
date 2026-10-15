@@ -56,8 +56,11 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  */
 class WhoAsksAReadingAboutAPlaceSaysWhichPlanItIsOfTest {
 
-    private static final String A_READING =
-            "souther/compiler/check/PathReachability$Answers";
+    /** The two halves of a reading: what arrives at the places, and what arrives at the
+     *  constructs lines are drawn at. Either is asked about something of a plan. */
+    private static final Set<String> A_READING = Set.of(
+            "souther/compiler/check/PathReachability$Answers",
+            "souther/compiler/check/PathReachability$Arrivals");
 
     /** The two ways a reading is asked about a place of a plan. Both answer an absence as an
      *  ordinary fact, so neither can tell a caller it was handed the wrong reading. */
@@ -102,11 +105,15 @@ class WhoAsksAReadingAboutAPlaceSaysWhichPlanItIsOfTest {
                             + " over, so there is no pair for a caller to get wrong and nothing"
                             + " here for a check to be asked about"),
             new Licence("souther.compiler.query.Adequacy.DecisionSearch.NothingReaches"
-                    + ".comesOutSoNowhere -> at", 1,
-                    "whether every copy of a comparison comes out a way nothing arrives at, asked"
-                            + " of places of the plan the copies were found in; the reading is held"
-                            + " to that plan's numbering where the pair is put together, before any"
-                            + " place is looked up"));
+                    + ".unreachableIn -> at", 1,
+                    "whether an arm or a copy of a comparison coming out a way is one nothing"
+                            + " arrives at, asked of places of the plan the arms and the copies"
+                            + " were found in — as the rows corrected it, and with the proofs they"
+                            + " took back put back for what a rule no longer rests on. The arms, the"
+                            + " copies and the reading come out of the store under one module name"
+                            + " in the one method that asks for them, as the branch count's do, and"
+                            + " the reading is held to the plan's numbering where the pair is put"
+                            + " together"));
 
     @Test
     void everyReaderThatAsksAReadingAboutAPlaceIsWrittenDownWithWhatMakesItSafe() {
@@ -152,7 +159,7 @@ class WhoAsksAReadingAboutAPlaceSaysWhichPlanItIsOfTest {
             for (MethodModel method : model.methods()) {
                 method.code().ifPresent(code -> code.forEach(element -> {
                     if (element instanceof InvokeInstruction call
-                            && call.owner().asInternalName().equals(A_READING)
+                            && A_READING.contains(call.owner().asInternalName())
                             && ASKS_ABOUT_A_PLACE.contains(call.name().stringValue())) {
                         calls.merge(from + "." + wroteIt(method.methodName().stringValue())
                                 + " -> " + call.name().stringValue(), 1, Integer::sum);

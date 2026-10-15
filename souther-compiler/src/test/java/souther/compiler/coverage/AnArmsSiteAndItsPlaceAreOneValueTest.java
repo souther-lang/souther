@@ -188,9 +188,10 @@ class AnArmsSiteAndItsPlaceAreOneValueTest {
      * beside the two is under this rule the day it exists.
      *
      * <p>Over this reading's own surface and no further. What a correction hands back holds what a
-     * run lit and is asked about in a run's words rightly — {@code provedWrong()} is a set of
-     * probes, and a reader is free to ask it whether one is in there. The rule is about answering a
-     * question of the model's out of a number, which is what only this class answers.
+     * run lit and is told in a run's words rightly — {@code contradicted()} is the places a row
+     * went against a proof at, and a reader is free to ask it whether one is in there. The rule
+     * is about answering a question of the model's out of a number, which is what only this class
+     * answers.
      */
     @Test
     void theReadingTakesARunsVocabularyOnlyToBeCorrectedByOne() {

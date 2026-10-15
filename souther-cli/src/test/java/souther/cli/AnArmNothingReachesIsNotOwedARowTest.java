@@ -5,7 +5,9 @@ import souther.compiler.query.WeakeningSet;
 import souther.cli.Main;
 import org.junit.jupiter.api.Test;
 import souther.compiler.coverage.ArmProbe;
+import souther.compiler.coverage.ControlPlace;
 import souther.compiler.coverage.CoverageSites;
+import souther.compiler.coverage.SeenConditionOutcome;
 import souther.compiler.observe.MeasurementStatus;
 import souther.compiler.check.PathReachability;
 import souther.compiler.query.Adequacy;
@@ -473,6 +475,32 @@ class AnArmNothingReachesIsNotOwedARowTest {
         assertEquals(List.of(), measured.arms().unmet());
     }
 
+    /**
+     * A proof about a comparison coming out one way that a row went against is the reading's, and
+     * nothing the arms are counted out of: no arm was left out by it, so the denominator stands.
+     */
+    @Test
+    void anOutcomeTakenBackLeavesTheArmsCountedOutOfWhatTheyWere() {
+        PathReachability.Answers proven = proving();
+        ControlPlace.Outcome shut = proven.found().entrySet().stream()
+                .filter(each -> each.getKey() instanceof ControlPlace.Outcome)
+                .filter(each -> each.getValue() instanceof Reachability.Unreachable)
+                .map(each -> (ControlPlace.Outcome) each.getKey())
+                .findFirst().orElseThrow(() -> new AssertionError(
+                        "the guard at 50 is proven never to hold: " + proven.found()));
+        PathReachability.Answers.AsRun asRun = proven.asRunWith(Set.of(TAKEN),
+                Set.of(new SeenConditionOutcome(shut.at(), shut.held())));
+        Adequacy.BranchEvidence measured = Adequacy.BranchEvidence.measured("b",
+                List.of(UNREACHED_ARM, TAKEN_ARM), Map.of(TAKEN, RowWitnesses.ANOTHER_ROW),
+                Set.of(), asRun, WeakeningSet.none(), _ -> List.of());
+
+        assertEquals(Set.of(shut), asRun.contradicted().places(),
+                "the reading says which proof the row went against");
+        assertTrue(measured.arms().census().settled(),
+                "and the arms are counted out of what they were counted out of before");
+        assertEquals(MeasurementStatus.COMPLETE, AdequacyReport.statusOf(measured.measured()));
+    }
+
     /** The probes of the arms this account holds, in the order the body holds them. */
     private static List<ArmProbe> probesOf(Adequacy.BranchEvidence measured) {
         return measured.arms().all().stream()
@@ -548,7 +576,7 @@ class AnArmNothingReachesIsNotOwedARowTest {
     void theSameArmIsBackForEveryMeasure() {
         PathReachability.Answers.AsRun asRun = proving().asRunWith(Set.of(UNREACHED), Set.of());
 
-        assertEquals(Set.of(UNREACHED), asRun.provedWrong(),
+        assertEquals(Set.of(UNREACHED_ARM.place()), asRun.contradicted().places(),
                 "a row went through an arm this reading had proven nothing reaches");
         assertFalse(asRun.answers().at(UNREACHED_ARM.place())
                         instanceof Reachability.Unreachable,

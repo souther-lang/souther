@@ -201,8 +201,8 @@ class AReadingAnswersAboutThePlacesOfOnePlanTest {
 
         ArmProbe elsewhere = refused.armProvenDead().probe().orElseThrow();
 
-        assertEquals(Set.of(),
-                capped.arrives.asRunWith(Set.of(), Set.of()).provedWrong(),
+        assertEquals(PathReachability.Answers.Contradictions.NONE,
+                capped.arrives.asRunWith(Set.of(), Set.of()).contradicted(),
                 "no row ran, so this reading is shown wrong nowhere");
 
         IllegalArgumentException refusal = assertThrows(IllegalArgumentException.class,
@@ -286,7 +286,7 @@ class AReadingAnswersAboutThePlacesOfOnePlanTest {
             AnalysisBody analysis = checked.analysisBodies().get("pick");
             return GuardThresholds.of("pick", analysis, body, plan, inputs.reading(rules),
                     ElementBindings.of(analysis.core(), analysis.elements(), rules.newtypes()),
-                    against, new RuleReachNumbering(module, "pick"));
+                    against.arrivals(), new RuleReachNumbering(module, "pick"));
         }
 
         /** What this behavior's body declares cannot arrive. */

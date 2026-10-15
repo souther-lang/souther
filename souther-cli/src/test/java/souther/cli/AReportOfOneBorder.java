@@ -1,5 +1,6 @@
 package souther.cli;
 
+import souther.compiler.check.PathReachability;
 import souther.compiler.meaning.AuthoredPointMapping;
 import souther.compiler.meaning.Derivation;
 import souther.compiler.meaning.WrittenLine;
@@ -316,7 +317,8 @@ final class AReportOfOneBorder {
                 new souther.compiler.query.RowSummary(List.of()),
                 souther.compiler.query.ClaimAnnotations.NONE, List.of(), java.util.Map.of(),
                 AdequacyReport.ConditionsShown.NONE, rulePlaces(lines), java.util.Map.of(),
-                java.util.Map.of(), Map.of(), Map.of(), Map.of());
+                java.util.Map.of(), Map.of(), PathReachability.Answers.Contradictions.NONE,
+                Map.of(), Map.of());
         return new AdequacyReport(AdequacyReport.SCHEMA_VERSION, "test", WeakeningSet.none(),
                 List.of(new AdequacyReport.ModuleReport("example.wide",
                         new SourceId("wide.sou"), List.of(behavior), List.of(),
