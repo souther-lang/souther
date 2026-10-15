@@ -211,6 +211,36 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
     }
 
     /**
+     * Whether no row is on the ways to the lines {@code one} and {@code other} at once: what the two
+     * ways ask of a row, taken together, asks one position to be two things.
+     *
+     * <p>Then a row at one of them is never at the other, and the other's place is no edge of a run
+     * beside the first. {@code month.value <= minimum(term)} draws its line at 12 where {@code term}
+     * is {@code OneYear} and at 24 where it is {@code TwoYear}; a row at the first has a month above
+     * 24 on the same side of 12 as one at 13.
+     *
+     * <p>Only a proof says so. Nothing is said where either way is one of several ways, or where the
+     * position asked twice is inside the elements or keys of a container: two comparisons inside two
+     * closures each ask that of an element of their own, which may be two elements of one row.
+     *
+     * @param declarations what the declarations leave, which the ways narrow
+     */
+    public boolean neverTogether(LineOrigin one, LineOrigin other, SearchRegion declarations) {
+        WayToTheBorder first = wayTo(one);
+        WayToTheBorder second = wayTo(other);
+        if (first.onTheWay().isEmpty() || second.onTheWay().isEmpty()
+                || !first.severalWays().isEmpty() || !second.severalWays().isEmpty()) {
+            return false;
+        }
+        List<OnTheWay> both = new ArrayList<>(first.onTheWay());
+        both.addAll(second.onTheWay());
+        return Reachability.of(new WayToTheBorder(both), declarations)
+                instanceof Reachability.NothingReaches(Reachability.TwoAtOnce why)
+                && why.at().steps().stream().noneMatch(step ->
+                        step instanceof TermPath.Step.Element || step instanceof TermPath.Step.Key);
+    }
+
+    /**
      * Which copies of the model's code put each entry on the way to the line {@code origin} drew
      * ({@link #wayTo}), told when the ways to it were walked and of those ways alone.
      */

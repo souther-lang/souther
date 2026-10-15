@@ -737,7 +737,7 @@ class ABorderDebtIsTheLineTheAuthorWroteTest {
                 .filter(a -> a.path().toString().equals(path)).findFirst().orElseThrow();
         souther.compiler.inputs.Quantities reading = domain.quantities(rules);
         return Partitions.bordersOf(axis, reading,
-                reading.runsBetween(axis.term()), new LinesRead());
+                reading.runsBetween(axis.term()), new LinesRead(), (one, other) -> false);
     }
 
     /** A newtype's own clause, reached through the record that holds it. */

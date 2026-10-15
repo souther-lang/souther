@@ -971,7 +971,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         for (ComparisonAssessment.Several.Part part : several.parts()) {
             for (WhereAPartDecides reading : part.readings()) {
                 out.put(reading, numbering.said(
-                        ReachingCuts.whereItDecides(at, reading.decides(), in.read())));
+                        ReachingCuts.whereItDecides(at, reading.decides().where(), in.read())));
             }
         }
         return out;

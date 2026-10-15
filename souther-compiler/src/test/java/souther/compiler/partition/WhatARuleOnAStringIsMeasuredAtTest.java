@@ -206,7 +206,8 @@ class WhatARuleOnAStringIsMeasuredAtTest {
                         : made.stream().map(FixtureTemplate::text)
                                 .map(WhatARuleOnAStringIsMeasuredAtTest::bare).toList().toString());
             }
-            Partitions.bordersOf(axis, reading, reading.runsBetween(axis.term()), new LinesRead())
+            Partitions.bordersOf(axis, reading, reading.runsBetween(axis.term()), new LinesRead(),
+                            (one, other) -> false)
                     .forEach(border -> border.answers().keySet().stream()
                             .filter(DomainPoint::againstTheLine)
                             .filter(point -> border.demand(point).criterion() != null)

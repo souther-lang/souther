@@ -1,12 +1,21 @@
 package souther.compiler.partition;
 
+import souther.compiler.inputs.Case;
+import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.Quantities;
+import souther.compiler.inputs.Refinement;
+import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Proposition;
+import souther.compiler.meaning.WhereEachLineDecides;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Objects;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * One of the lines a statement of several relations draws, read in one case of where the statement
@@ -21,17 +30,81 @@ import java.util.Set;
  * <p>One case and not all of them. Where a line decides may be one of several things, and each is
  * somewhere a row can be composed to be; the line is read once in each, and a row meets it in any.
  *
+ * <p>With the side of the line the statement holds on in that case, which is what the line means
+ * there: {@code month.value <= minimum(term)} holds below its line {@code month.value > 12} where
+ * {@code term} is {@code OneYear}, so a row inside what the comparison keeps is below it.
+ *
  * @param part    which of the author's lines this is a place of, and which place
  * @param decides the case: parts of the statement that hold together beside the line, where
- *                crossing it turns the statement round. Over the relations the statement holds,
- *                every one of them a relation over the input's own numbers — so a row's values say
- *                whether it holds
+ *                crossing it turns the statement round, and which side of it the statement holds
+ *                on. Over the relations the statement holds, every one of them a relation over the
+ *                input's own numbers — so a row's values say whether it holds
  */
-public record WhereAPartDecides(PlaceOfALine part, Proposition decides) {
+public record WhereAPartDecides(PlaceOfALine part, WhereEachLineDecides.Case decides) {
 
     public WhereAPartDecides {
         Objects.requireNonNull(part, "a line of a statement is one of its lines");
         Objects.requireNonNull(decides, "a line decides somewhere, or nowhere");
+    }
+
+    /**
+     * Where the line decides, as a report says it after what a row there has to do on the
+     * positions {@code readAt} — or null where that says all of it.
+     *
+     * <p>Said because it is part of the line. Two readings of one comparison at one place can be
+     * readings of two lines in two cases, and the place and the values alone tell a reader nothing
+     * about which a row of theirs is at: {@code month.value <= minimum(term)} asks for a month above
+     * 12 where {@code term} is {@code OneYear} and for one above 24 where it is {@code TwoYear}.
+     *
+     * <p>The cases of values the line decides in, and nothing else of where it decides: which case
+     * a value is, whether it holds a value, which truth it is. Those are what a row is written in
+     * and what the values of the point do not say. The relations beside them are said by the
+     * values a search composes against; written out here as well, a reader is shown how the
+     * statement was taken apart — a part read once held and once failing where one of them is
+     * enough — and not anything a row has to do.
+     *
+     * <p>Less what the positions already say. A line at a field of one case of a value decides
+     * where the value is that case, and the position it is read at is named through that case.
+     */
+    public String said(List<TermPath> readAt) {
+        List<Proposition> parts = decides.where() instanceof Proposition.All all ? all.parts()
+                : List.of(decides.where());
+        List<String> said = new ArrayList<>();
+        for (Proposition part : parts) {
+            String one = saidOne(part);
+            if (one != null && !saidBy(readAt, part)) {
+                said.add(one);
+            }
+        }
+        return said.isEmpty() ? null : String.join(" and ", said);
+    }
+
+    /** Whether one of {@code readAt} is named through the case {@code part} says a value is. */
+    private static boolean saidBy(List<TermPath> readAt, Proposition part) {
+        TermPath narrowed = switch (part) {
+            case Proposition.InCases(DecisionSubject.AnInput(TermPath of), CasesLeft cases,
+                    boolean holds, var _) when holds -> of.refine(cases);
+            case Proposition.Present(DecisionSubject.AnInput(TermPath of), boolean holds, var _) ->
+                    of.refine(Refinement.of(new Case.Presence(holds)));
+            default -> null;
+        };
+        return narrowed != null && readAt.stream().anyMatch(each -> each.isAtOrUnder(narrowed));
+    }
+
+    /** One part of where a line decides, in the words a row is written in — or null where it is
+     *  no case of a value of the input. */
+    private static String saidOne(Proposition part) {
+        return switch (part) {
+            case Proposition.InCases(DecisionSubject.AnInput(TermPath of), CasesLeft cases,
+                    boolean holds, var _) -> of + (holds ? " is " : " is not ")
+                    + cases.atoms().stream().map(Refinement::spelled)
+                            .collect(Collectors.joining(" or "));
+            case Proposition.Truth(DecisionSubject.AnInput(TermPath of), boolean holds, var _) ->
+                    of + " is " + holds;
+            case Proposition.Present(DecisionSubject.AnInput(TermPath of), boolean holds, var _) ->
+                    of + " is " + (holds ? "Some" : "None");
+            default -> null;
+        };
     }
 
     /** Whether a row is somewhere the line decides, or what kept that from being read. */
@@ -64,7 +137,7 @@ public record WhereAPartDecides(PlaceOfALine part, Proposition decides) {
      * @param quantities the reading of the input, which says which order each number is on
      */
     AskedOfRows askedOfRows(String behavior, Quantities quantities) {
-        return new AskedOfRows(AStatementAtARow.of(decides, behavior, quantities));
+        return new AskedOfRows(AStatementAtARow.of(decides.where(), behavior, quantities));
     }
 
     /** Where a line decides, ready to be asked of rows. */

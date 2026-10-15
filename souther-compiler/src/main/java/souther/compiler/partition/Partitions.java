@@ -58,6 +58,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.function.BiPredicate;
 import java.util.function.Function;
 import java.util.function.IntFunction;
 import java.util.function.Supplier;
@@ -458,7 +459,8 @@ public final class Partitions {
         // that relates two positions draws a line on neither of them, and every line on no position
         // is arranged with the others where they are all in hand, which this phase is not.
         LinesRead read = new LinesRead();
-        java.util.Map<AxisId, List<Border>> lines = linesAlong(kept, quantities, read);
+        // No body was read here, so no line is on a way another one is not.
+        Map<AxisId, List<Border>> lines = linesAlong(kept, quantities, read, (one, other) -> false);
         read.returning(lines.values().stream().flatMap(List::stream).toList());
         MeasureClosure.Both closed = MeasureClosure.of(positions, standing, read);
         return new Partitioning(List.copyOf(settled), standing, uncertain,
@@ -1031,8 +1033,10 @@ public final class Partitions {
         // the position and a line between two leaves its border beside them; they are the same
         // reading, and an accounting over one of them says nothing about the other.
         LinesRead read = new LinesRead();
-        java.util.Map<AxisId, List<Border>> lines = linesAlong(out, reading, read);
-        List<Border> across = Border.allOf(between, partedByQuantity(out), read);
+        BiPredicate<LineOrigin, LineOrigin> apart =
+                (one, other) -> reaching.neverTogether(one, other, reading.region());
+        Map<AxisId, List<Border>> lines = linesAlong(out, reading, read, apart);
+        List<Border> across = Border.allOf(between, partedByQuantity(out), read, apart);
         read.returning(lines.values().stream().flatMap(List::stream).toList());
         read.returning(across);
         // Drawn from the reading that was made, or said to be the absence of one. A body this
@@ -1082,13 +1086,14 @@ public final class Partitions {
      * does one no value can stand at, though the input has values: the elements of a container
      * the rules hold to none. A row puts nothing there, so nothing there is owed one.
      */
-    private static java.util.Map<AxisId, List<Border>> linesAlong(
-            List<Axis> axes, Quantities reading, LinesRead read) {
+    private static Map<AxisId, List<Border>> linesAlong(
+            List<Axis> axes, Quantities reading, LinesRead read,
+            BiPredicate<LineOrigin, LineOrigin> apart) {
         Map<AxisId, List<Border>> out = new LinkedHashMap<>();
         for (Axis axis : axes) {
             if (axis.asksForARow() && reading.projectionOfTheDeclarations(axis.term())
                     instanceof NumericDomain.FormProjection.Within(NumericDomain.Bounds within)) {
-                out.put(axis.id(), bordersOf(axis, reading, within, read));
+                out.put(axis.id(), bordersOf(axis, reading, within, read, apart));
             }
         }
         return out;
@@ -1183,9 +1188,12 @@ public final class Partitions {
      * partitioning ({@link Partitioning#along}) and never assembled again. Assembling them takes
      * what the rules leave the term, which is a reading of the declarations — so a caller that could
      * assemble them would be deciding, from a reading of its own, which lines exist to be measured.
+     *
+     * @param apart whether no row meets two lines at once, which leaves the one's places out of the
+     *              runs beside the other ({@link ReachingCuts#neverTogether})
      */
     static List<Border> bordersOf(Axis axis, Quantities reading, NumericDomain.Bounds within,
-                                  LinesRead read) {
+                                  LinesRead read, BiPredicate<LineOrigin, LineOrigin> apart) {
         // Both orders of the number this axis measures, as the reading has them. A pair put
         // together here out of the position's order and the carrier a cut was drawn on is a pair
         // whose two halves came from two places, and the day they part is the day a row is decoded
@@ -1202,8 +1210,10 @@ public final class Partitions {
         // A bound reads none of them: its run is what the rules leave.
         // Every place the rules part this position's values: the ones its cuts stand at, and the
         // ones no cut stands at because the position holds no value there. A border built from the
-        // cuts alone read its two sides past exactly the lines that were left out.
-        List<Parting> known = new ArrayList<>(axis.parted());
+        // cuts alone read its two sides past exactly the lines that were left out. Each cut's places
+        // with the line that drew them, since a line no row meets together with a border's own is
+        // no edge of a run beside it.
+        List<Border.PlacesOfALine> known = new ArrayList<>();
         UnheldNumber notWorkedOut = null;
         for (Cut cut : axis.cuts()) {
             BoundaryTarget where = BoundaryTarget.at(
@@ -1216,7 +1226,8 @@ public final class Partitions {
                 // not worked out is kept as that, since every border on this position is read off
                 // an arrangement it is missing a place of.
                 switch (Border.partedBy(where, origin)) {
-                    case ExactAnswer.Held<List<Parting>> held -> known.addAll(held.value());
+                    case ExactAnswer.Held<List<Parting>> held ->
+                            known.add(new Border.PlacesOfALine(origin, held.value()));
                     case ExactAnswer.Unheld<List<Parting>> unheld -> {
                         if (notWorkedOut == null) {
                             notWorkedOut = unheld.why();
@@ -1225,8 +1236,6 @@ public final class Partitions {
                 }
             }
         }
-        ExactAnswer<List<Parting>> parted = notWorkedOut == null ? ExactAnswer.held(known)
-                : ExactAnswer.unheld(notWorkedOut);
         for (Cut cut : axis.cuts()) {
             // The level is on the cut's carrier, which is the one the rule was read on. What the
             // quantity is measured on is the reading's answer and not read off the line: a line
@@ -1245,6 +1254,12 @@ public final class Partitions {
                 // The line is written down as it is met and the border where it lands, so that the
                 // day something is written between the two the reading is held to having lost one.
                 read.found(target, origin);
+                ExactAnswer<List<Parting>> parted;
+                if (notWorkedOut == null) {
+                    parted = ExactAnswer.held(Border.besideThe(origin, axis.parted(), known, apart));
+                } else {
+                    parted = ExactAnswer.unheld(notWorkedOut);
+                }
                 out.add(read.drew(Border.at(target, origin, within, heldTo, parted,
                         axis.narrowed())));
             }

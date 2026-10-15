@@ -17,13 +17,15 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Where a line decides is said as cases while there are few of them, and as one case — the
- * statement with the line held against the statement with it failing — once there would be more.
+ * Where a line decides is said as cases while there are few of them, and as one case on each side
+ * of the line — the statement with the line held against the statement with it failing — once
+ * there would be more.
  *
  * <p>A line held together with a choice of an even number of other parts holding decides exactly
  * where an even number of them hold, which is a case for every such way: sixteen of five parts, and
  * thirty-two of six. The first is said case by case; the second is past what is said that way, and
- * the cases are not all worked out before that is noticed.
+ * the cases are not all worked out before that is noticed. Every one of them is on the side where
+ * the line holds, since the statement holds only where the line does.
  */
 class WhereALineDecidesIsSaidInFewCasesOrInOneTest {
 
@@ -34,23 +36,27 @@ class WhereALineDecidesIsSaidInFewCasesOrInOneTest {
 
     @Test
     void sixteenCasesAreSaidOneByOne() {
-        List<Proposition> cases = casesOf(5);
+        List<WhereEachLineDecides.Case> cases = casesOf(5);
         assertEquals(16, cases.size(), () -> "a case for each even way of five: " + cases);
-        assertTrue(cases.stream().allMatch(each -> each instanceof Proposition.All all
+        assertTrue(cases.stream().allMatch(each -> each.where() instanceof Proposition.All all
                         && all.parts().size() == 5),
                 () -> "each of them the five parts, held or failing: " + cases);
+        assertTrue(cases.stream().allMatch(WhereEachLineDecides.Case::holdsWithTheLine),
+                () -> "the statement holds where the line does: " + cases);
     }
 
     @Test
     void moreCasesThanThatAreSaidAsOne() {
-        List<Proposition> cases = casesOf(6);
+        List<WhereEachLineDecides.Case> cases = casesOf(6);
         assertEquals(1, cases.size(), () -> "one case: " + cases);
-        assertInstanceOf(Proposition.Any.class, cases.getFirst(),
-                "the statement held against itself across the line, which is one of two things");
+        assertInstanceOf(Proposition.Any.class, cases.getFirst().where(),
+                "some even way of the six, which is one of several things");
+        assertTrue(cases.getFirst().holdsWithTheLine(),
+                () -> "on the side where the line holds: " + cases);
     }
 
     /** Where {@link #LINE} decides, held together with an even number of {@code parts} truths. */
-    private static List<Proposition> casesOf(int parts) {
+    private static List<WhereEachLineDecides.Case> casesOf(int parts) {
         List<Proposition> truths = new ArrayList<>();
         for (int i = 0; i < parts; i++) {
             truths.add(new Proposition.Truth(new DecisionSubject.AnInput(TermPath.of("t" + i)),

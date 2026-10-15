@@ -7776,6 +7776,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 r.put("axis", said.at());
                 r.put("relation", at.border().operator(point.askedAt(at)));
                 r.put("against", at.border().against(point.askedAt(at)));
+                // And the cases the line decides in, which the values alone do not say: two
+                // readings of one comparison can be two lines, each in a case of its own.
+                String where = at.decidesWhere();
+                if (where != null) {
+                    r.put("where", where);
+                }
                 measured(r, point.owedAt(at).coverage(), (node, coverage) ->
                         node.put("hit", ItemAssessment.Coverage.hit(coverage)));
             }
