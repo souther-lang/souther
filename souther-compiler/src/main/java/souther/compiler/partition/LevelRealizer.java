@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import souther.compiler.check.Carrier;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.NumericTerms;
+import souther.compiler.inputs.ReadingsOfEachValue;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.numeric.AdditiveImage;
 import souther.compiler.numeric.AffinePreimage;
@@ -31,6 +32,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 /**
@@ -412,6 +414,15 @@ public final class LevelRealizer {
                               SearchRegion within,
                               Map<NumericTerm, NumericDomain.Bounds> runs,
                               WitnessSearch looking, ValuesTried tried) {
+        // Two numbers of one position stand apart by what one value comes to of both, where the
+        // order counts and the distance is their difference.
+        if (two.of().counts()) {
+            Realization named = amongTheValuesNamed(
+                    LinearForm.difference(two.on(), two.against()), two.where(), within, tried);
+            if (named != null) {
+                return named;
+            }
+        }
         // What each reading left behind, in the three vocabularies there are for it. Kept apart
         // all the way here: how a walk ended says which of them it is, and a reader told the wrong
         // one is sent to raise a figure that reached its end or told that no number would have
@@ -675,6 +686,10 @@ public final class LevelRealizer {
     private Realization ofAForm(Standing.OfAForm over,
                                 SearchRegion within,
                                 Map<NumericTerm, NumericDomain.Bounds> runs, ValuesTried tried) {
+        Realization named = amongTheValuesNamed(over.form(), over.where(), within, tried);
+        if (named != null) {
+            return named;
+        }
         LevelSpace levels = over.levels();
         // In the form's own order and not the map's. A form is a map, so the order its coefficients
         // were recorded in is a hash order — and which position is solved last decides whether the
@@ -716,6 +731,68 @@ public final class LevelRealizer {
         return Realization.Unknown.leftOpen(
                 Realization.Unknown.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED,
                 stoppedBy, Set.of(), unheld);
+    }
+
+    /**
+     * A form over numbers of one position whose rules name finitely many values, at what one of
+     * those values comes to where {@code where} asks — or null where the form is not that.
+     *
+     * <p>Each value read through every term together and the form worked out of what that one
+     * value reads as ({@link SearchRegion#readingsOfEach}), and never each term placed on its own:
+     * {@code c - Int.floorMod(c, 3)} of {@code 4}, {@code 8} and {@code 10} comes to three, six
+     * and nine, and a number for {@code c} and a remainder chosen apart reach five, which no value
+     * does — and reach nine through a value the rules refuse.
+     *
+     * <p>Every value the position admits is one of these, so where none comes to a level the item
+     * asks, the item is out of reach — a side as well as a point, since the values are all there
+     * is to look at. A value that comes to one and that no row was made of says nothing about the
+     * others, and nothing about the item.
+     */
+    private Realization amongTheValuesNamed(LinearForm<NumericTerm> form, Criterion where,
+                                            SearchRegion within, ValuesTried tried) {
+        return amongTheValuesNamed(form.coefs().keySet(),
+                values -> OrderedAffineBoundary.at(form, values).map(Optional::of), where, within,
+                tried);
+    }
+
+    /**
+     * The same, of a quantity over {@code terms} that is at the level {@code comesTo} says where
+     * its terms read as given — or at none, as a remainder of a form that comes to no whole number
+     * is.
+     */
+    private Realization amongTheValuesNamed(
+            Collection<NumericTerm> over,
+            Function<Map<NumericTerm, Place>, ExactAnswer<Optional<ExactRatio>>> comesTo,
+            Criterion where, SearchRegion within, ValuesTried tried) {
+        List<NumericTerm.FromOnePosition> terms = new ArrayList<>();
+        for (NumericTerm each : NumericTerms.inOrder(over)) {
+            if (each.atOnePosition() == null) {
+                return null;
+            }
+            terms.add(each.atOnePosition());
+        }
+        ReadingsOfEachValue named = within.readingsOfEach(terms);
+        if (named == null) {
+            return null;
+        }
+        boolean cameToOne = false;
+        for (ReadingsOfEachValue.Read each : named.each()) {
+            if (!(comesTo.apply(each.numbers())
+                    instanceof ExactAnswer.Held<Optional<ExactRatio>>(var level))) {
+                return null;
+            }
+            if (level.isEmpty() || !where.holds(new Level.OfTheQuantity(level.get()))) {
+                continue;
+            }
+            cameToOne = true;
+            Map<RealizationTarget, Place> fixing = new LinkedHashMap<>();
+            each.numbers().forEach((term, number) -> fixing.put(RealizationTarget.of(term), number));
+            Realization made = found(fixing, within, tried);
+            if (made instanceof Realization.Found) {
+                return made;
+            }
+        }
+        return cameToOne ? Realization.Unknown.nothingComposedOne() : new Realization.Impossible();
     }
 
     /**
@@ -800,6 +877,14 @@ public final class LevelRealizer {
     private Realization ofARemainder(Standing.OfARemainder over, SearchRegion within,
                                      Map<NumericTerm, NumericDomain.Bounds> runs,
                                      ValuesTried tried) {
+        // A remainder of a form over numbers of one position is what one value leaves, as a form
+        // over them is what one value comes to.
+        Realization named = amongTheValuesNamed(over.dividend().coefs().keySet(),
+                values -> OrderedAffineBoundary.remainderAt(over.dividend(), over.divisor(),
+                        values), over.where(), within, tried);
+        if (named != null) {
+            return named;
+        }
         LinearForm<NumericTerm> form = new LinearForm<>(ExactRatio.ZERO, over.dividend().coefs());
         BigInteger moved = ((ExactAnswer.Held<BigInteger>) over.dividend().constant().floor())
                 .value();

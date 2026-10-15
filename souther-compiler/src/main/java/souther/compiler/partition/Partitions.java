@@ -1033,7 +1033,12 @@ public final class Partitions {
         LinesRead read = new LinesRead();
         BiPredicate<LineOrigin, LineOrigin> apart = reaching.apart();
         Map<AxisId, List<Border>> lines = linesAlong(out, reading, read, apart);
-        List<Border> across = Border.allOf(between, partedByQuantity(out), read, apart);
+        // Once per quantity: several lines on one quantity are held to one answer, and working it
+        // out reads every value of the position again.
+        Map<BorderQuantity, HeldValues> heldTo = new LinkedHashMap<>();
+        List<Border> across = Border.allOf(between, partedByQuantity(out), read, apart,
+                quantity -> heldTo.computeIfAbsent(quantity,
+                        each -> each.heldIn(reading.region())));
         read.returning(lines.values().stream().flatMap(List::stream).toList());
         read.returning(across);
         // Drawn from the reading that was made, or said to be the absence of one. A body this

@@ -1969,13 +1969,39 @@ final class ReadQuantities implements Quantities {
 
     /**
      * The values the position's rules hold {@code term} to: the position's values for its own
-     * value, and each of them read through the term ({@link TermOrders#readOfEach}) for a number
+     * value, and what each of them reads as through the term ({@link #readingsOfEach}) for a number
      * taken of it, on the orders this reading has the term standing on.
      */
     public ValueSet heldAt(NumericTerm.FromOnePosition term) {
-        ValueSet admitted = admittedAt(term);
-        return term instanceof NumericTerm.ValueOf ? admitted
-                : ordersOf(term).readOfEach(admitted);
+        if (term instanceof NumericTerm.ValueOf) {
+            return admittedAt(term);
+        }
+        if (!(admittedAt(term) instanceof ValueSet.Finite admitted)) {
+            return ValueSet.ANY;
+        }
+        TermOrders orders = ordersOf(term);
+        ReadingsOfEachValue read = ReadingsOfEachValue.of(admitted, List.of(orders));
+        return read == null ? ValueSet.ANY : read.comeTo(orders);
+    }
+
+    /**
+     * Every value the position {@code terms} are taken of was read to admit, each read through every
+     * one of them on the orders this reading has it standing on.
+     *
+     * <p>The orders are worked out only where there are finitely many values to read. Most
+     * positions admit no finite set, and working out a term's orders is a derivation each time it
+     * is asked.
+     */
+    public ReadingsOfEachValue readingsOfEach(List<NumericTerm.FromOnePosition> terms) {
+        if (terms.isEmpty()
+                || !(admittedAt(terms.getFirst()) instanceof ValueSet.Finite admitted)) {
+            return null;
+        }
+        List<TermOrders> orders = new ArrayList<>();
+        for (NumericTerm.FromOnePosition each : terms) {
+            orders.add(ordersOf(each));
+        }
+        return ReadingsOfEachValue.of(admitted, orders);
     }
 
     /**
