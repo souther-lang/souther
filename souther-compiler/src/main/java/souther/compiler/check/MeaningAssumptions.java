@@ -390,7 +390,7 @@ final class MeaningAssumptions {
             // Taken of a form of several places, which is a fact about none of them — or what an
             // operation answered of a place, which a path names only by what it was made of.
             case Quantity.CodePointsOfAPiece _, DecisionAtom.TakenOfAnAnswer _,
-                 Quantity.WhatAnOperationAnswers _ -> {
+                 Quantity.WhatAnOperationAnswers _, Quantity.ProductOfTwo _ -> {
                 return new AtomAt.AtTheEdge(
                         WhyNotTaken.DomainLimit.A_PLACE_THE_PATH_DOES_NOT_READ);
             }

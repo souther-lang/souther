@@ -170,6 +170,11 @@ public enum CompositionBudget {
     /** How many levels past the one a side starts from are asked for. */
     LEVELS_A_SIDE_IS_ASKED_AT(8),
 
+    /** How many numbers, from one up, are tried as a divisor of a level a product is asked at.
+     *  The pairs of the divisors not tried are not asked, and the walk is carried out with the
+     *  figure. */
+    DIVISORS_OF_A_PRODUCT_TRIED(4096),
+
     /**
      * How often a walk re-reads the rules with the positions it has fixed.
      *
@@ -610,6 +615,8 @@ public enum CompositionBudget {
             case VALUES_OF_AN_UNBOUNDED_PROGRESSION_TRIED ->
                     "how many values of an unbounded progression are tried";
             case LEVELS_A_SIDE_IS_ASKED_AT -> "how many levels a side is asked at";
+            case DIVISORS_OF_A_PRODUCT_TRIED ->
+                    "how many numbers are tried as a divisor of a level of a product";
             case TIMES_THE_RULES_ARE_ASKED_AGAIN -> "how often the rules are read again";
             case VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT ->
                     "how many values a position on the way is tried at";
@@ -696,7 +703,8 @@ public enum CompositionBudget {
                  PAIRS_OF_INPUT_NUMBERS_AND_AN_ANSWER_TRIED,
                  PLACES_A_PAIR_IS_TRIED_AT, STEPS_A_SEARCH_MAY_TAKE,
                  ASSIGNMENTS_A_SEARCH_COMPOSES, VALUES_OF_AN_UNBOUNDED_PROGRESSION_TRIED,
-                 LEVELS_A_SIDE_IS_ASKED_AT, TIMES_THE_RULES_ARE_ASKED_AGAIN,
+                 LEVELS_A_SIDE_IS_ASKED_AT, DIVISORS_OF_A_PRODUCT_TRIED,
+                 TIMES_THE_RULES_ARE_ASKED_AGAIN,
                  VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT, VALUES_A_POINT_IS_TRIED_WITH,
                  PATHS_OF_A_DECISION_READ, CONDITIONS_A_DECISION_TAKES_IN_TO_PROVE,
                  READINGS_OF_ONE_CONDITION,

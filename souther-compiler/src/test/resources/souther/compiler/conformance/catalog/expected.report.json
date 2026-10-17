@@ -2072,7 +2072,7 @@
             "behavior" : "discount",
             "conditions" : [ {
               "kind" : "statement",
-              "condition" : "!Affine[form=LinearForm[constant=-0.01, coefs={conformance.catalog.discount.2=1}], proposition=GE]",
+              "condition" : "!Affine[form=LinearForm[constant=-0.01, coefs={item.price=1, item.price * rate=-1}], proposition=GE]",
               "outcome" : "denied"
             } ]
           },
@@ -2082,7 +2082,7 @@
             "behavior" : "discount",
             "conditions" : [ {
               "kind" : "statement",
-              "condition" : "!Affine[form=LinearForm[constant=-0.01, coefs={conformance.catalog.discount.2=1}], proposition=GE]",
+              "condition" : "!Affine[form=LinearForm[constant=-0.01, coefs={item.price=1, item.price * rate=-1}], proposition=GE]",
               "outcome" : "held"
             } ]
           },

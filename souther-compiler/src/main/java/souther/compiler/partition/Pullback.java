@@ -4455,6 +4455,12 @@ final class Pullback {
                 if (remainder != null) {
                     return LinearForm.atom(remainder);
                 }
+                // What two numbers of the input come to multiplied, where the arithmetic stopped at
+                // the product itself: one number, whichever factor was written first.
+                LinearForm<Quantity> product = productAt(node, at, inside);
+                if (product != null) {
+                    return product;
+                }
                 List<TermPath.Step> steps = new ArrayList<>();
                 Core under = Core.withoutStanding(node);
                 while (true) {
@@ -5823,6 +5829,61 @@ final class Pullback {
         return new Quantity.RemainderOfADividend(division.call().operation(), new LinearForm<>(
                 ExactRatio.of(constantOf(form).mod(division.divisor())), form.coefs()),
                 division.divisor());
+    }
+
+    /**
+     * {@code node} as what two numbers of the input come to multiplied, weighed by what each was
+     * weighed by — or null where it is no such product.
+     *
+     * <p>Only where the arithmetic stopped at {@code node} for being a product of two values that
+     * are not constants, and each of the two is a number of one position, or its negation, moved
+     * by nothing. A factor weighed by more is multiplied before the product is, so {@code 2 * p}
+     * passes where its type stops for half the values of {@code p}, whatever the other factor is,
+     * and those are values the product's reading would count as some row's; {@code p * q * 2}
+     * weighs the product and is read, since the product is taken first. A factor moved by a
+     * constant, a factor that is itself a sum or a product, and two factors of one position are
+     * not read here, and the stop stands.
+     */
+    private LinearForm<Quantity> productAt(Core node, InputReads at,
+                                           AffineForms.Outcome.StoppedAt<Quantity, InputReads>
+                                                   inside) {
+        if (inside == null
+                || !(Core.withoutStanding(node) instanceof Core.Binary written)
+                || written.op() != BinOp.MUL || inside.node() != written
+                || !(inside.why() instanceof AffineForms.Halt.NotLinear<Quantity, InputReads>(
+                        NonAffineOperation operation))
+                || operation != NonAffineOperation.PRODUCT_OF_NON_CONSTANT_VALUES) {
+            return null;
+        }
+        Map.Entry<NumericTerm.FromOnePosition, ExactRatio> left = aFactor(written.left(), at);
+        Map.Entry<NumericTerm.FromOnePosition, ExactRatio> right = aFactor(written.right(), at);
+        if (left == null || right == null
+                || left.getKey().position().equals(right.getKey().position())
+                || !(left.getValue().times(right.getValue())
+                        instanceof ExactAnswer.Held<ExactRatio>(ExactRatio weight))) {
+            return null;
+        }
+        return LinearForm.atom((Quantity) new Quantity.ProductOfTwo(left.getKey(),
+                right.getKey())).times(weight).orNull();
+    }
+
+    /**
+     * {@code factor} as one number of one position and whether it is negated, as its weight of one
+     * or minus one — or null where it reads as anything else.
+     */
+    private Map.Entry<NumericTerm.FromOnePosition, ExactRatio> aFactor(Core factor,
+                                                                       InputReads at) {
+        if (!(AffineForms.outcome(factor, at, quantities())
+                instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(
+                        LinearForm<Quantity> form))
+                || form.constant().signum() != 0 || form.coefs().size() != 1) {
+            return null;
+        }
+        Map.Entry<Quantity, ExactRatio> only = form.coefs().entrySet().iterator().next();
+        return only.getKey() instanceof DecisionAtom.OfTheInput(
+                NumericTerm.FromOnePosition term)
+                && only.getValue().abs().compareTo(ExactRatio.ONE) == 0
+                ? Map.entry(term, only.getValue()) : null;
     }
 
     /** Whether every number of {@code form}, its constant included, is a whole one. */

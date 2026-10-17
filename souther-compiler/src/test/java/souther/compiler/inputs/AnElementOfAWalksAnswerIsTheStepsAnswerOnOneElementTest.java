@@ -95,10 +95,12 @@ class AnElementOfAWalksAnswerIsTheStepsAnswerOnOneElementTest {
                 """));
     }
 
-    /** A step that is no arithmetic is read as whatever the reading of a number makes of it. */
+    /** A step that is no arithmetic is read as whatever the reading of a number makes of it. A
+     *  length is never below nought, so every {@code atLeast} at nought or below holds it whatever
+     *  the string is, and is parted from the rest there. */
     @Test
     void aStepIsReadAsAnyExpressionIs() {
-        assertEquals(List.of("String.length(xs[*]) = atLeast"), linesOf("""
+        assertEquals(List.of("atLeast = 0", "String.length(xs[*]) = atLeast"), linesOf("""
                 behavior busy : (xs: List<String>, atLeast: Int) -> List<Int>
                 let busy (xs, atLeast) =
                     List.filter(c -> c >= atLeast, List.map(x -> String.length(x), xs))

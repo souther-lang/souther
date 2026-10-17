@@ -79,6 +79,8 @@ public final class PositionsAStatementReads {
                     reads(summed, out) && reads(each, out);
             case Quantity.RemainderOfADividend(var _, var dividend, var _) ->
                     dividend.coefs().keySet().stream().allMatch(term -> reads(term, out));
+            case Quantity.ProductOfTwo product -> product.factors().stream()
+                    .allMatch(term -> reads(term, out));
         };
     }
 

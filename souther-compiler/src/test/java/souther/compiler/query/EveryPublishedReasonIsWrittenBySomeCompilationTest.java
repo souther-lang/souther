@@ -287,13 +287,16 @@ class EveryPublishedReasonIsWrittenBySomeCompilationTest {
                     if Int.max(p, c) > 5 then Yes else No
                 }
                 """.formatted(ANSWER)));
-        // A relation whose other side never reaches some values here: the length of a string is
-        // never below nought, so n below nought settles the rule whatever s holds.
+        // A relation whose other side is not shown to reach the values here left between those
+        // that settle it: a string held to one character or three is no length of two, and a
+        // length of one or three is not shown to be every length between.
         out.put(UndividedPosition.Reason.RELATION_NOT_SHOWN_TO_REACH_EVERY_VALUE, of("""
                 module m
                 %s
-                behavior f : (n: Int, s: String) -> Answer
-                let f (n, s) = if n == String.length(s) then Yes else No
+                data S = String
+                    invariant value == "a" || value == "aaa"
+                behavior f : (n: Int, s: S) -> Answer
+                let f (n, s) = if n == String.length(s.value) then Yes else No
                 """.formatted(ANSWER)));
         // A rule about how a list's elements stand to each other, offered as one alternative of a
         // choice: no builder keeps either of two such rules, and no set of the list's own values
@@ -372,13 +375,14 @@ class EveryPublishedReasonIsWrittenBySomeCompilationTest {
                 behavior run : (x: Cyclic) -> Ok
                 let run (x) = Ok
                 """));
-        // A comparison over a product of two input fields, and over a quotient by one: the
-        // arithmetic met a shape it has no term for, and nothing was made of either position.
+        // A comparison over a product of two input fields one of which is weighed before the
+        // product is taken, and over a quotient by one: the arithmetic met a shape it has no term
+        // for, and nothing was made of either position.
         out.put(UndividedPosition.Reason.NON_AFFINE_PRODUCT, of("""
                 module m
                 %s
                 behavior f : (a: Int, b: Int) -> Answer
-                let f (a, b) = if a * b > 10 then Yes else No
+                let f (a, b) = if 2 * a * b > 10 then Yes else No
                 """.formatted(ANSWER)));
         out.put(UndividedPosition.Reason.NON_CONSTANT_DIVISOR, of("""
                 module m

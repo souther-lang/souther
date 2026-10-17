@@ -188,6 +188,20 @@ public record OrderedAffineBoundary(LinearQuantity of, Seam seam, Towards satisf
     }
 
     /**
+     * What the two numbers {@code factors} come to multiplied at a row, or which way the exact
+     * arithmetic could not hold the product.
+     *
+     * <p>The one place a product of two numbers is worked out of the numbers a row holds, so a row
+     * read against a border on it, a value read for what it comes to and a row a search composed
+     * are read alike.
+     */
+    static ExactAnswer<ExactRatio> productAt(List<NumericTerm> factors,
+                                             Map<NumericTerm, Place> values) {
+        return Count.number(values.get(factors.get(0))).exactly()
+                .times(Count.number(values.get(factors.get(1))).exactly());
+    }
+
+    /**
      * {@code constant} and each weighed number, added as one sum ({@link ExactRatio#sum}), so
      * whether it is held does not turn on which term came first.
      */
