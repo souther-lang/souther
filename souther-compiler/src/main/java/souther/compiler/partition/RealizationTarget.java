@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.RunSource;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.Proposition;
 
@@ -160,6 +161,12 @@ public sealed interface RealizationTarget {
 
         @Override
         public TermPath writeRoot() {
+            // The nodes of a tree are counted by writing what is below its root, which holds the
+            // root's own number nothing moves.
+            if (term.source() instanceof RunSource.ReachableNodes nodes
+                    && nodes.container().isEmpty()) {
+                return nodes.root().then(nodes.through().getFirst());
+            }
             return term.source().subjectPath().outermostContainer();
         }
 

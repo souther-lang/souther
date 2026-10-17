@@ -10,8 +10,8 @@ import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.RunSource;
 import souther.compiler.inputs.TermPath;
-import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
@@ -20,6 +20,7 @@ import souther.compiler.numeric.LinearForm;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
+import souther.compiler.semantics.TakenAs;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -34,8 +35,10 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
  * number of each adds up to — over the position the container stands at — and not as some other
  * number, or as nothing.
  *
- * <p>What a row is asked is then that number against the other side, which no composer writes a
- * container toward, so the run decides it; the statement is the one the law says.
+ * <p>How many different values there are is a number no composer writes a container toward, so the
+ * run decides a comparison over it; the statement is the one the law says. What the sizes of the
+ * lists inside the elements add up to is how many occurrences there are of what those lists hold,
+ * a number of a run a row is composed to hold.
  */
 class ANumberOverTheElementsIsReadAsTheNumberItIsTest {
 
@@ -81,12 +84,8 @@ class ANumberOverTheElementsIsReadAsTheNumberItIsTest {
     }
 
     @Test
-    void howManyListsPutEndToEndHoldIsWhatTheirSizesAddUpTo() {
-        Quantity.SumOver read = assertInstanceOf(Quantity.SumOver.class, theOnlyNumber("stocked"));
-        assertEquals(new DecisionSubject.AnInput(BINS), read.container());
-        NumericTerm.TakenOf size = assertInstanceOf(NumericTerm.TakenOf.class,
-                assertInstanceOf(DecisionAtom.OfTheInput.class, read.ofTheElement()).term());
-        assertEquals(BINS.element(), size.subjectPath(), () -> "the size of each list: " + read);
+    void howManyListsPutEndToEndHoldIsHowManyOccurrencesOfTheirElementsThereAre() {
+        assertEquals(BINS.element().element(), theOccurrencesCounted("stocked"));
     }
 
     @Test
@@ -97,14 +96,29 @@ class ANumberOverTheElementsIsReadAsTheNumberItIsTest {
     }
 
     @Test
-    void whatTheListsOfAMappedListAddUpToIsWhatTheirSizesInTheSourceAddUpTo() {
-        Quantity.SumOver read = assertInstanceOf(Quantity.SumOver.class,
-                theOnlyNumber("stockedItems"));
-        assertEquals(new DecisionSubject.AnInput(ITEMS), read.container());
-        NumericTerm.TakenOf size = assertInstanceOf(NumericTerm.TakenOf.class,
-                assertInstanceOf(DecisionAtom.OfTheInput.class, read.ofTheElement()).term());
-        assertEquals(ITEMS.element().then("bins"), size.subjectPath(),
-                () -> "the size of each list: " + read);
+    void whatTheListsOfAMappedListHoldIsEveryOccurrenceOfTheirElementsInTheSource() {
+        assertEquals(ITEMS.element().then("bins").element(),
+                theOccurrencesCounted("stockedItems"));
+    }
+
+    /**
+     * Where every occurrence of what {@code behavior}'s condition counts stands, as the row is
+     * composed for it: one count of a run no one container holds, against a number written out.
+     */
+    private static TermPath theOccurrencesCounted(String behavior) {
+        List<OnTheWay> stated = statedAll(behavior);
+        assertEquals(1, stated.size(), () -> "one statement: " + stated);
+        RowDemand.Relational composed = assertInstanceOf(RowDemand.Relational.class,
+                assertInstanceOf(OnTheWay.TakenIn.class, stated.getFirst()).demand(),
+                () -> "a row is composed for it: " + stated);
+        LinearForm<NumericTerm> form = assertInstanceOf(TakenConstraint.Affine.class,
+                composed.constraint()).form();
+        assertEquals(1, form.coefs().size(), () -> "one number: " + form);
+        NumericTerm.TakenOver count = assertInstanceOf(NumericTerm.TakenOver.class,
+                form.coefs().keySet().iterator().next());
+        assertInstanceOf(TakenAs.HowManyItHolds.class, count.takenAs());
+        return assertInstanceOf(RunSource.FlattenedOccurrences.class, count.source())
+                .subjectPath();
     }
 
     /**

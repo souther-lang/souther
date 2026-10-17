@@ -10,6 +10,7 @@ import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.CountDomain;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
 import souther.compiler.types.Type;
@@ -54,10 +55,11 @@ import java.util.stream.IntStream;
  */
 final class NestedContainersAddingUp {
 
-    /** Every container the path is inside, outermost first, what each of them holds, and what its
-     *  elements are kept apart at. */
+    /** Every container the path is inside, outermost first, what each of them holds, what its
+     *  elements are kept apart at, and what the rules of the value holding it keep them apart at. */
     private record Level(TypeView view, Shape.Sequence holding, DeclaredBounds.CountRange howMany,
-                         ContainersAddingUp.Ways ways, ContainersAddingUp.KeptApart apart) {}
+                         ContainersAddingUp.Ways ways, ContainersAddingUp.KeptApart apart,
+                         List<List<String>> held) {}
 
     /**
      * How the leaves are grouped: for a container above the innermost, one entry for each element
@@ -108,18 +110,43 @@ final class NestedContainersAddingUp {
                                     RuleReadingContext reading,
                                     ContainersAddingUp.HowManyIsAskedFor alsoHolding,
                                     DemandsInside inside) {
+        return written(answer, container, keptApart, orders, within, reading, alsoHolding, inside,
+                false);
+    }
+
+    /**
+     * The same, where what is asked is how many occurrences of the path there are in all: as many
+     * leaves as {@code answer}, grouped as a total's leaves are, each innermost container holding
+     * its share of them whatever they are.
+     */
+    TermRealizations.Realization holding(Place answer, Type container,
+                                         List<List<String>> keptApart, TermOrders orders,
+                                         SearchRegion within, RuleReadingContext reading,
+                                         DemandsInside inside) {
+        return written(answer, container, keptApart, orders, within, reading, null, inside, true);
+    }
+
+    private TermRealizations.Realization written(Place answer, Type container,
+                                                 List<List<String>> keptApart, TermOrders orders,
+                                                 SearchRegion within, RuleReadingContext reading,
+                                                 ContainersAddingUp.HowManyIsAskedFor alsoHolding,
+                                                 DemandsInside inside, boolean counting) {
         Carrier elements = orders.answered();
         if (!(answer instanceof Count total) || elements == null) {
             return none(Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
         }
-        if (!(within.projectionOf(new NumericTerm.ValueOf(run))
-                instanceof NumericDomain.FormProjection.Within(NumericDomain.Bounds runs))) {
-            return none(Generator.UnresolvedCombination.Reason.NO_VALUE_CAN_STAND_THERE);
-        }
-        ContainersAddingUp.Ends ends = ContainersAddingUp.Ends.of(
-                runs == null ? NumericDomain.Bounds.OPEN : runs, elements);
-        if (ends == null) {
-            return none(Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+        // A count asks nothing of what the leaves are, so where their values run is no part of it.
+        ContainersAddingUp.Ends ends = null;
+        if (!counting) {
+            if (!(within.projectionOf(new NumericTerm.ValueOf(run))
+                    instanceof NumericDomain.FormProjection.Within(NumericDomain.Bounds runs))) {
+                return none(Generator.UnresolvedCombination.Reason.NO_VALUE_CAN_STAND_THERE);
+            }
+            ends = ContainersAddingUp.Ends.of(runs == null ? NumericDomain.Bounds.OPEN : runs,
+                    elements);
+            if (ends == null) {
+                return none(Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+            }
         }
         ContainersAddingUp.WhatWasLeft left = new ContainersAddingUp.WhatWasLeft();
         List<TermPath> chain = run.containersHoldingIt();
@@ -170,7 +197,7 @@ final class NestedContainersAddingUp {
                                 CompositionShortfall.of(ways.cutBy()));
             }
             ways.cutBy().forEach(left::refused);
-            levels.add(new Level(view, holding, howMany, ways, apart));
+            levels.add(new Level(view, holding, howMany, ways, apart, held));
             if (!innermost) {
                 held = ElementsKeptApart.heldUnder(holding.element(),
                         chain.get(at + 1).ruleKeyUnder(here.element()), reading);
@@ -190,6 +217,15 @@ final class NestedContainersAddingUp {
         List<DeclaredBounds.CountRange> counts = levels.stream().map(Level::howMany).toList();
         long fewest = leaves(counts, 0, false);
         long most = leaves(counts, 0, true);
+        // A count is how many leaves there are, so it is the one number of leaves walked.
+        if (counting) {
+            int asked = CountDomain.asCount(total);
+            if (asked < 0) {
+                return none(Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+            }
+            fewest = Math.max(fewest, asked);
+            most = Math.min(most, asked);
+        }
         if (fewest > most) {
             return none(Generator.UnresolvedCombination.Reason.NO_VALUE_CAN_STAND_THERE);
         }
@@ -392,7 +428,8 @@ final class NestedContainersAddingUp {
         return shares;
     }
 
-    /** The counts of leaves walked from the fewest the rules leave, each spread and grouped. */
+    /** The counts of leaves walked from the fewest the rules leave, each spread and grouped — or,
+     *  with no ends to spread a total between, each grouped only, the count being what is asked. */
     private static final class Walk implements ContainersAddingUp.Spending<Integer> {
 
         private final BigDecimal total;
@@ -441,6 +478,16 @@ final class NestedContainersAddingUp {
             }
             // The groupings are some of the many, always.
             left.notAllOf(CompositionRepertoire.WAYS_A_TOTAL_IS_SPREAD);
+            // A count asks only how many leaves there are, so no values are spread over them.
+            if (ends == null) {
+                for (Layout layout : layouts) {
+                    if (ContainersAddingUp.asFarAs(containers(List.of(), layout), offered, left)
+                            == Traversal.STOPPED) {
+                        return Taken.AND_DONE;
+                    }
+                }
+                return Taken.AND_MORE;
+            }
             // No two leaves alike where any level keeps its elements apart by what they are built
             // around: leaves apart across the whole row are apart inside every container, and
             // containers holding leaves of their own are apart as wholes.
@@ -493,6 +540,11 @@ final class NestedContainersAddingUp {
             List<ContainersAddingUp.Filling> fillings = level.ways().filled();
             ContainersAddingUp.Filling filling = fillings.get(Math.min(way, fillings.size() - 1));
             if (at == levels.size() - 1) {
+                // Counted, the innermost container holds its share of leaves whatever they are.
+                if (ends == null) {
+                    return Witnesses.ofSize(level.view(), layout.leaves(), level.held(), reading,
+                            Set.of());
+                }
                 List<BigDecimal> mine = new ArrayList<>();
                 for (int i = 0; i < layout.leaves(); i++) {
                     mine.add(values.removeFirst());

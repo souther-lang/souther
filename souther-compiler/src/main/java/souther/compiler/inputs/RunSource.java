@@ -2,6 +2,7 @@ package souther.compiler.inputs;
 
 import souther.compiler.types.Type;
 
+import java.util.List;
 import java.util.Objects;
 import java.util.function.UnaryOperator;
 
@@ -31,6 +32,17 @@ public sealed interface RunSource {
     TermPath subjectPath();
 
     /**
+     * Whether the run is the elements of one container, one value for each: then how many it holds
+     * is how many that container holds, and a count of it is a taking of the container's place.
+     */
+    default boolean isInOneContainer() {
+        return switch (this) {
+            case ProjectedOccurrences _, ComputedOccurrences _ -> true;
+            case FlattenedOccurrences _, ReachableNodes _ -> false;
+        };
+    }
+
+    /**
      * The same run, over the values read from where {@code moved} puts this one's — or null where
      * what stands there is no one run, as a run inside an element of another container is not.
      */
@@ -45,6 +57,9 @@ public sealed interface RunSource {
                     ? new FlattenedOccurrences(at) : null;
             case ComputedOccurrences computed ->
                     computedOverTheElementsAt(at, computed.computation(), computed.each());
+            // The nodes below a node are the same fields of it wherever it stands.
+            case ReachableNodes nodes -> at == null ? null
+                    : new ReachableNodes(at, nodes.through(), nodes.container());
         };
     }
 
@@ -187,6 +202,45 @@ public sealed interface RunSource {
         @Override
         public String toString() {
             return "{" + computation + " | " + elements + "}";
+        }
+    }
+
+    /**
+     * Every node a tree holds from the node at {@code root} down, each once: that node, and the
+     * elements of the fields {@code through} of every node reached, which are nodes of the same
+     * type — or, where {@code container} names fields of a node, the elements of the container
+     * there in every one of those nodes.
+     *
+     * <p>A tree is finite however deep it goes, so these are as many values as it holds; and no
+     * path names them, since the positions below a node of a type that holds itself are not read
+     * again ({@link InputDomain}). Where the values are read from is the root, and the rest is
+     * found by walking down from it.
+     *
+     * @param through   the fields of a node whose elements are the nodes below it, in one order
+     * @param container the fields from a node to the container whose elements are the values, or
+     *                  none where the values are the nodes
+     */
+    record ReachableNodes(TermPath root, List<String> through, List<String> container)
+            implements RunSource {
+
+        public ReachableNodes {
+            Objects.requireNonNull(root, "a tree is walked from some node");
+            through = List.copyOf(through);
+            container = List.copyOf(container);
+            if (through.isEmpty()) {
+                throw new IllegalArgumentException("a tree goes below a node through something");
+            }
+        }
+
+        @Override
+        public TermPath subjectPath() {
+            return root;
+        }
+
+        @Override
+        public String toString() {
+            return "{" + (container.isEmpty() ? "node" : String.join(".", container) + "[*]")
+                    + " below " + root + " through " + through + "}";
         }
     }
 
