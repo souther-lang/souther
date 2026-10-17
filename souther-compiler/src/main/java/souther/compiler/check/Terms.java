@@ -18,6 +18,7 @@ import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.core.Core;
+import souther.compiler.core.Kernel;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Refinement;
@@ -1451,9 +1452,55 @@ final class Terms {
         }
         return switch (arm.binding()) {
             case Core.ArmBinding.Selected selected -> arithmetic(selected.type(), scrutinee, at);
-            case Core.ArmBinding.Payload _ -> new Opens(null, heldBy(of), null);
+            case Core.ArmBinding.Payload _ ->
+                    new Opens(elementPicked(scrutinee, at), heldBy(of), null);
             case Core.ArmBinding.Unbound _ -> null;
         };
+    }
+
+    /**
+     * The value {@code List.get(index, list)} holds where it holds one, or null where it is not such
+     * a call or which value it holds is not written down.
+     *
+     * <p>The element at a number written down, of a list written out or of the code points of a
+     * text written down ({@link WrittenCodePoints}) — each found through the names it was given
+     * ({@link #given}), as the reading of the input finds them. Every element such a list holds is
+     * there on every run, so the index picks one. And only an element that is itself written: what
+     * the arm is handed is read in the arm, and a written value means the same there as where the
+     * list was written.
+     */
+    private Core elementPicked(Core scrutinee, Denotations at) {
+        Given called = given(scrutinee, at);
+        if (!(AnOperationApplied.of(called.value()) instanceof AnOperationApplied(
+                ValueName.Stdlib.Operation operation, List<Core> args))
+                || symbols.kernelOf(operation) != Kernel.LIST_GET || args.size() != 2
+                || !(Core.withoutStanding(given(args.get(0), called.at()).value())
+                        instanceof Core.Int index)
+                || index.value() < 0) {
+            return null;
+        }
+        List<Core> elements = writtenElements(args.get(1), called.at());
+        if (elements == null || index.value() >= elements.size()) {
+            return null;
+        }
+        Core picked = elements.get((int) index.value());
+        return isWritten(picked) ? picked : null;
+    }
+
+    /** The elements of {@code list} where it is a list written out or the code points of a text
+     *  written down, or null where it is neither. */
+    private List<Core> writtenElements(Core list, Denotations at) {
+        Given container = given(list, at);
+        Core value = Core.withoutStanding(container.value());
+        if (value instanceof Core.ListLit written) {
+            return written.elements();
+        }
+        return AnOperationApplied.of(value) instanceof AnOperationApplied(
+                ValueName.Stdlib.Operation operation, List<Core> args)
+                && symbols.kernelOf(operation) == Kernel.STRING_CODE_POINTS && args.size() == 1
+                && Core.withoutStanding(given(args.getFirst(), container.at()).value())
+                        instanceof Core.Str text
+                ? WrittenCodePoints.of(text.value(), value.pos()) : null;
     }
 
     /**
