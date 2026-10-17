@@ -364,7 +364,7 @@ final class OperationFactBinder {
                     new BoundOperationFact.HoldsTheImageOfEveryElement(operation,
                             holdTheImage(declaration, holds));
             case OperationFact.HoldsThePiecesOf pieces -> {
-                holdTheResultToTheDeclaration(declaration, TypeRequirement.CONTAINER,
+                holdTheResultToTheDeclaration(declaration, TypeRequirement.LIST_OF_TEXT,
                         "the pieces a string falls into");
                 yield new BoundOperationFact.HoldsThePiecesOf(operation,
                         pieces.separator().map(separator -> holdToTheDeclaration(declaration,
@@ -374,7 +374,7 @@ final class OperationFactBinder {
                                 TypeRequirement.TEXT, "the string that falls into pieces"));
             }
             case OperationFact.ListsTheCodePointsOf listed -> {
-                holdTheResultToTheDeclaration(declaration, TypeRequirement.CONTAINER,
+                holdTheResultToTheDeclaration(declaration, TypeRequirement.LIST_OF_INTS,
                         "the code points of a string");
                 yield new BoundOperationFact.ListsTheCodePointsOf(operation,
                         holdToTheDeclaration(declaration, listed.string(), null,

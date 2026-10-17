@@ -1,5 +1,7 @@
 package souther.compiler.partition;
 
+import java.util.List;
+
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.DefaultStdlib;
@@ -126,6 +128,22 @@ class WhatTheCodePointsOfAStringComeToIsReadAndWrittenAsTheRunTimeAddsThemTest {
         }
     }
 
+    /**
+     * And what is read is what {@code List.sum} answers of the list {@code String.codePoints}
+     * answers on a run, over the string as the language holds it: none at all, ASCII, one past
+     * the first plane, and a letter with a combining mark the language composes into one.
+     */
+    @Test
+    void whatIsReadIsTheTotalOfTheListTheRunTimeAnswers() {
+        for (String written : List.of("", "AB", "a😀b", "é", "é")) {
+            String held = Strings.admit(written);
+            long total = Strings.codePoints(held).stream().mapToLong(Long::longValue).sum();
+            assertEquals(new NumericTerm.Reading.Number(Count.of(total)),
+                    orders().read(new ObservedValue.Text(held)),
+                    () -> "the code points of " + held.codePoints().boxed().toList());
+        }
+    }
+
     /** Only a string is read, and anything else holds no number of this kind. */
     @Test
     void whatIsNotAStringHoldsNoSum() {
@@ -136,12 +154,15 @@ class WhatTheCodePointsOfAStringComeToIsReadAndWrittenAsTheRunTimeAddsThemTest {
     /**
      * What is built for a sum reads back as that sum, as the language holds the text: small sums
      * that only control characters reach, the code point of a letter, one past the first plane,
-     * and more than one code point holds.
+     * more than one code point holds, and what only as many code points as a string is searched
+     * for in full reach together.
      */
     @Test
     void everyStringBuiltForASumReadsBackAsIt() {
         int checked = 0;
-        for (long each : new long[] {0, 1, 9, 10, 65, 200, 128_512, 2L * Character.MAX_CODE_POINT}) {
+        long most = CompositionBudget.CODE_POINTS_A_STRING_IS_SEARCHED_IN_FULL.maximum();
+        for (long each : new long[] {0, 1, 9, 10, 65, 200, 128_512, 2L * Character.MAX_CODE_POINT,
+                5L * Character.MAX_CODE_POINT + 7, most * Character.MAX_CODE_POINT}) {
             TermRealizations.Realization.Built built = assertInstanceOf(
                     TermRealizations.Realization.Built.class,
                     TermRealizations.at(Type.STRING, orders(), Count.of(each),

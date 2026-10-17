@@ -11,10 +11,15 @@ import souther.compiler.semantics.ElementLineage;
 import souther.compiler.semantics.LawNumber;
 import souther.compiler.semantics.LawProposition;
 import souther.compiler.semantics.LawSubject;
+import souther.compiler.semantics.OperationFact;
+import souther.compiler.semantics.OperationFacts;
 import souther.compiler.semantics.OperationLaw;
 import souther.compiler.semantics.SideAnswered;
 import souther.compiler.semantics.SizeAgainstItsSource;
 import souther.compiler.types.ValueName;
+
+import java.util.List;
+import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
 
@@ -107,6 +112,42 @@ class ARuleIsHeldToTheDeclarationItIsAboutTest {
         CompleteSignature declaration = declared(operation);
         OperationFactBinder.holdLaw(declaration, declaration.declaring(),
                 new OperationLaw.Observation<>(result, equivalentTo));
+    }
+
+    /** A fact about one operation, bound with nothing else beside it. */
+    private static void bindAlone(String operation, OperationFact fact) {
+        OperationFactBinder.bindAll(DefaultStdlib.get(),
+                List.of(new OperationFacts.Declared(op(operation), fact)));
+    }
+
+    /**
+     * That an operation lists the code points of a string says each element is the number one
+     * code point is, in order and as often as it stands: a total of them is read as what the
+     * string's code points come to. An operation answering anything but a list of whole numbers
+     * is no such list, and the fact is refused where it meets the signature.
+     */
+    @Test
+    void codePointsAreListedOnlyAsAListOfWholeNumbers() {
+        OperationFact listed = new OperationFact.ListsTheCodePointsOf(new ArgumentRef.At(0));
+        assertDoesNotThrow(() -> bindAlone("String.codePoints", listed));
+        IllegalStateException strings = assertThrows(IllegalStateException.class,
+                () -> bindAlone("String.characters", listed));
+        assertTrue(strings.getMessage().contains("a list of whole numbers"),
+                strings.getMessage());
+    }
+
+    /**
+     * And the pieces a string falls into are counted in order and as often as they stand, each a
+     * string: an operation answering anything but a list of strings holds no pieces.
+     */
+    @Test
+    void piecesAreHeldOnlyAsAListOfStrings() {
+        OperationFact pieces = new OperationFact.HoldsThePiecesOf(Optional.empty(),
+                new ArgumentRef.At(0));
+        assertDoesNotThrow(() -> bindAlone("String.characters", pieces));
+        IllegalStateException numbers = assertThrows(IllegalStateException.class,
+                () -> bindAlone("String.codePoints", pieces));
+        assertTrue(numbers.getMessage().contains("a list of strings"), numbers.getMessage());
     }
 
     /** An operation walking no container with a closure has no element to witness anything. */
