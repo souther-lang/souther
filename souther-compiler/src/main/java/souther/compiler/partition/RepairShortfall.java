@@ -106,11 +106,13 @@ public record RepairShortfall(List<Generator.Purpose> soughtFor, CoverageSites.A
         record Searched(CameToNothing came) implements WayPast {}
 
         /**
-         * Looked for until a row the search had to run was one the runs had none left for.
+         * Looked for until a figure stopped the looking: a row the search had to run was one the
+         * runs had none left for, or some of the ways the way can be held along were more than are
+         * looked along.
          *
-         * <p>Only where a run was refused. A row run already costs nothing to look at again, so a
-         * search made with no runs left can still answer from rows run before, and one that did is
-         * {@link Searched} or a row that goes on — never this.
+         * <p>For the runs, only where a run was refused. A row run already costs nothing to look at
+         * again, so a search made with no runs left can still answer from rows run before, and one
+         * that did is {@link Searched} or a row that goes on — never this.
          *
          * @param came   what the search had come to when it stopped
          * @param figure what ran out
@@ -125,8 +127,9 @@ public record RepairShortfall(List<Generator.Purpose> soughtFor, CoverageSites.A
     public enum Barrier {
 
         /**
-         * A part of it is an arm, or a comparison no border offers a point on the side the way
-         * asks for. What a search holds a row to is a point of a border, and there is none here.
+         * A part of it is one nothing here states a demand for: no border offers a point on the
+         * side the way asks for, and what the part coming out that way states is nothing this
+         * reading could put as a demand on a row.
          */
         NOTHING_HOLDS_A_ROW_TO_IT,
 

@@ -98,14 +98,14 @@ import java.util.function.Supplier;
  */
 record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                           Map<ConditionOccurrence, Citation> conditionsMet,
-                          List<TruthMet> truths, List<ForkDecided> decided,
+                          List<OutcomeMet> outcomes, List<ForkDecided> decided,
                           WhereTheOperationsStand operationsStanding) {
 
     ComparisonReadings {
         comparisons = List.copyOf(comparisons);
         forks = List.copyOf(forks);
         conditionsMet = Map.copyOf(conditionsMet);
-        truths = List.copyOf(truths);
+        outcomes = List.copyOf(outcomes);
         decided = List.copyOf(decided);
     }
 
@@ -132,22 +132,33 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
     }
 
     /**
-     * A truth a fork's condition asks, or a part of one asks, and what stood on the way to it.
+     * A truth or a comparison a fork's condition asks, or a part of one asks, and what stood on
+     * the way to it.
      *
-     * <p>Beside the comparisons because a run is seen coming out of one as it is of a comparison,
-     * and a row held to it coming out the other way is composed under what stood on the way to it
-     * — which is this walk's to say, and said nowhere else.
+     * <p>Kept because a run is seen coming out of one, and a row held to it coming out the other
+     * way is composed under what stood on the way to it — which is this walk's to say, and said
+     * nowhere else.
      *
-     * <p>Only the truths of a fork's condition. Those are the conditions a run is stopped at; a
-     * truth that is an answer the body hands back stops nothing.
+     * <p>A comparison as much as a truth. A point of a comparison's border is one way to hold a
+     * row to it coming out a way, and a comparison carried past to the lines of its closures has
+     * no border of its own; what it states coming out each way is what a row is held to there, as
+     * it is for a truth.
      *
-     * @param assumed every condition on the way to it, each with what became of it
-     * @param context where the truth stands: what a construct answering it is in the model is the
-     *                copy the call a helper's body was read at makes of it
+     * <p>Only those of a fork's condition. Those are the conditions a run is stopped at; a truth
+     * that is an answer the body hands back stops nothing.
+     *
+     * @param condition the truth or the comparison, never two of them joined
+     * @param assumed   every condition on the way to it, each with what became of it
+     * @param context   where it stands: what a construct answering it is in the model is the copy
+     *                  the call a helper's body was read at makes of it
      */
-    record TruthMet(Condition.Truth condition, List<OnTheWay> assumed, CallContext context) {
+    record OutcomeMet(Condition condition, List<OnTheWay> assumed, CallContext context) {
 
-        TruthMet {
+        OutcomeMet {
+            if (condition instanceof Condition.Joined) {
+                throw new IllegalArgumentException(
+                        "a condition a run is seen coming out of is one construct: " + condition);
+            }
             assumed = List.copyOf(assumed);
         }
     }
@@ -333,7 +344,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      */
     private record Body(String behavior, InputReading read,
                         Arrivals answering, Templates templates,
-                        List<TruthMet> truths, List<ForkDecided> decided, StatedHere stated,
+                        List<OutcomeMet> outcomes, List<ForkDecided> decided, StatedHere stated,
                         WhatConditionsState conditions, CallContext context, Core root,
                         InputReads atTheRoot, ArmsNamed.Gathered armsNamed,
                         ForkDependencies.Gathered dependencies,
@@ -342,7 +353,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         /** The same reading, in the body of a recursive helper read at a call of it: its own
          *  tree, and the copy that call makes of each construct in it. */
         Body inside(Core helperBody, CallContext called, InputReads reads) {
-            return new Body(behavior, read, Arrivals.inTheTree(helperBody), templates, truths,
+            return new Body(behavior, read, Arrivals.inTheTree(helperBody), templates, outcomes,
                     decided, stated, conditions, called, helperBody, reads, armsNamed,
                     dependencies, oneApplication);
         }
@@ -382,7 +393,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         Core body = analysis.core();
         List<Reading> readings = new ArrayList<>();
         List<ForkMet> forks = new ArrayList<>();
-        List<TruthMet> truths = new ArrayList<>();
+        List<OutcomeMet> outcomes = new ArrayList<>();
         List<ForkDecided> decided = new ArrayList<>();
         Templates templates = new Templates(analysis.templates());
         // The names the conditions of this body take, handed out as the walk meets them. One of
@@ -407,7 +418,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         ForkDependencies.Gathered dependencies = new ForkDependencies.Gathered();
         WithinOneApplication.Gathered oneApplication = new WithinOneApplication.Gathered();
         walk(body, new Body(behavior, read, answering,
-                        templates, truths, decided, stated, conditions,
+                        templates, outcomes, decided, stated, conditions,
                         CallContext.OF_THE_BODY, body, reads, armsNamed, dependencies,
                         oneApplication),
                 reads, ClosureApplications.OUTSIDE,
@@ -424,7 +435,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                 // No root a way is read from: what stood on the way to a template is every build's
                 // way joined, which no walk down the template says.
                 walk(template, new Body(behavior, read, answering,
-                        templates, truths, decided, stated, conditions,
+                        templates, outcomes, decided, stated, conditions,
                         CallContext.OF_THE_BODY, null, null, armsNamed, dependencies,
                         oneApplication),
                         defined, ClosureApplications.OUTSIDE, LiveFlow.of(template),
@@ -432,7 +443,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                         readings, forks, numbering);
             }
         }
-        return new ComparisonReadings(readings, forks, numbering.metAt(), truths, decided,
+        return new ComparisonReadings(readings, forks, numbering.metAt(), outcomes, decided,
                 new WhereTheOperationsStand(armsNamed.named(), dependencies.read(),
                         oneApplication.read()));
     }
@@ -596,7 +607,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                 List<OnTheWay> failing = numbering.said(
                         ReachingCuts.stating(condition, in.read(), false, in.conditions()));
                 if (live) {
-                    truthsIn(condition, assumed, in.read(), in.truths(), in.conditions(),
+                    outcomesIn(condition, assumed, in.read(), in.outcomes(), in.conditions(),
                             in.context(), numbering);
                     if (iff.occurrence() != null) {
                         in.decided().add(new ForkDecided(in.context().of(iff.occurrence()),
@@ -991,22 +1002,23 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
     }
 
     /**
-     * Every truth {@code condition} asks, each with what stood on the way to it: what stood before
-     * the condition, and for a part after a connective, what the parts before it coming out the
-     * way that runs it say.
+     * Every truth and comparison {@code condition} asks, each with what stood on the way to it:
+     * what stood before the condition, and for a part after a connective, what the parts before it
+     * coming out the way that runs it say.
      */
-    private static void truthsIn(Condition condition, List<OnTheWay> assumed, InputReading read,
-                                 List<TruthMet> out, WhatConditionsState conditions,
-                                 CallContext context, ConditionNumbering numbering) {
+    private static void outcomesIn(Condition condition, List<OnTheWay> assumed,
+                                   InputReading read, List<OutcomeMet> out,
+                                   WhatConditionsState conditions, CallContext context,
+                                   ConditionNumbering numbering) {
         switch (condition) {
-            case Condition.Truth truth -> out.add(new TruthMet(truth, assumed, context));
-            case Condition.Compares _ -> { }
+            case Condition.Truth _, Condition.Compares _ ->
+                    out.add(new OutcomeMet(condition, assumed, context));
             // The right part runs where the left leaves the answer open, which under a conjunction
             // is the left holding and under a disjunction the left failing.
             case Condition.Joined joined -> {
-                truthsIn(joined.left(), assumed, read, out, conditions, context, numbering);
+                outcomesIn(joined.left(), assumed, read, out, conditions, context, numbering);
                 boolean leftHolding = joined.how().under(true) == ConditionJoin.BOTH;
-                truthsIn(joined.right(),
+                outcomesIn(joined.right(),
                         taking(joined.left(), leftHolding, read, assumed, conditions, numbering),
                         read, out, conditions, context, numbering);
             }

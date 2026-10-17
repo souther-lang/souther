@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import souther.compiler.coverage.ControlPlace;
 
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 
 /**
@@ -69,18 +70,36 @@ public record HeldOutcome(List<RowDemand> demands, Reachability.Reaching reachin
      */
     public sealed interface Bringing {
 
-        /** What the row has to be. */
-        record Found(HeldOutcome held) implements Bringing {}
+        /**
+         * What the row has to be: one of {@code ways}, and never all of them at once.
+         *
+         * <p>Several where what the condition coming out that way states is one of several things
+         * — some element of one container meeting its closure or some element of another meeting
+         * its own — and each of them is a way of its own, with the way to the condition taken
+         * along the same alternative. Held to all of them at once, a row would be held to a
+         * conjunction the condition never stated.
+         *
+         * @param ways     one or more, in the order they are best looked for in
+         * @param cutShort the figure that left some way out, where one did: then a row past none of
+         *                 these may still be past the condition, and saying no way goes past would
+         *                 be saying more than was looked at
+         */
+        record Found(List<HeldOutcome> ways, Optional<CompositionBudget> cutShort)
+                implements Bringing {
+
+            public Found {
+                ways = List.copyOf(ways);
+                if (ways.isEmpty()) {
+                    throw new IllegalArgumentException("what brings a run somewhere is some way");
+                }
+                Objects.requireNonNull(cutShort, "the figure that left a way out, or none");
+            }
+        }
 
         /** No value can stand on the side the comparison comes out on, so nothing does. */
         record NoValueCanStandThere() implements Bringing {}
 
         /** Nothing was found that does, which does not make it a place no run comes to. */
         record NothingFound() implements Bringing {}
-
-        /** What was found, or nothing found where {@code found} is empty. */
-        static Bringing of(Optional<HeldOutcome> found) {
-            return found.<Bringing>map(Found::new).orElseGet(NothingFound::new);
-        }
     }
 }

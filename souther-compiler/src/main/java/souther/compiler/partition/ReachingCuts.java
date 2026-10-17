@@ -72,7 +72,7 @@ import java.util.function.BiPredicate;
  */
 public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
                            Lookup<ALine, SaidOnTheWay> saidByLine,
-                           Lookup<ModelOccurrence, ConditionOnTheWay> byTruth,
+                           Lookup<ModelOccurrence, List<ConditionOnTheWay>> byOutcome,
                            Lookup<ModelOccurrence, ConditionOnTheWay> byFork) {
 
     public static final ReachingCuts NONE = new ReachingCuts(Lookup.built(_ -> { }),
@@ -81,7 +81,8 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
     public ReachingCuts {
         Objects.requireNonNull(byLine, "what a walk collected, line by line");
         Objects.requireNonNull(saidByLine, "who put what on each line's way");
-        Objects.requireNonNull(byTruth, "what a walk collected, truth by truth");
+        Objects.requireNonNull(byOutcome,
+                "what a walk collected, truth by truth and comparison by comparison");
         Objects.requireNonNull(byFork, "what a walk collected, fork by fork");
     }
 
@@ -129,10 +130,10 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
     }
 
     /**
-     * What brings the truth the application {@code application} answers out {@code held}, where a
-     * fork's condition asks it: every demand it coming out that way makes of a row, and the way to
-     * it with those taken in — or empty where it asks something this reading could not state, asks
-     * nothing, or no row takes the way.
+     * What brings the truth or the comparison the construct {@code application} answers out
+     * {@code held}, where a fork's condition asks it: every demand it coming out that way makes of
+     * a row, and the way to it with those taken in — or nothing found where it asks something this
+     * reading could not state, asks nothing, or no row takes the way.
      *
      * <p>The demands are on the way the row is held to and not only beside it. What a row has to
      * be for a truth to come out a way is a condition a composer meets the way it meets every
@@ -140,11 +141,29 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
      * itself. All of them, because a truth asks them all at once: some element meeting a predicate
      * and what the predicate asks of the rest of the row are one coming out.
      *
+     * <p>And where what it asks is one of several things, one of them at a time
+     * ({@link HeldOutcome.Bringing.Found}).
+     *
      * @param declarations what the declarations leave, which the way narrows
      */
-    public Optional<HeldOutcome> heldAt(ModelOccurrence application, boolean held,
-                                        SearchRegion declarations) {
-        return held(byTruth.get(application), held, declarations);
+    public HeldOutcome.Bringing heldAt(ModelOccurrence application, boolean held,
+                                       SearchRegion declarations) {
+        List<ConditionOnTheWay> copies = byOutcome.get(application);
+        if (copies == null) {
+            return new HeldOutcome.Bringing.NothingFound();
+        }
+        // Each copy a way of its own, in the order the walk met them.
+        List<HeldOutcome> ways = new ArrayList<>();
+        Optional<CompositionBudget> cutShort = Optional.empty();
+        for (ConditionOnTheWay copy : copies) {
+            if (held(copy, held, declarations)
+                    instanceof HeldOutcome.Bringing.Found(var found, var left)) {
+                ways.addAll(found);
+                cutShort = cutShort.or(() -> left);
+            }
+        }
+        return ways.isEmpty() ? new HeldOutcome.Bringing.NothingFound()
+                : new HeldOutcome.Bringing.Found(ways, cutShort);
     }
 
     /**
@@ -157,37 +176,85 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
      * also names; and where the condition coming out that way is nothing this can state, nothing
      * holds a row to the arm.
      */
-    public Optional<HeldOutcome> heldAtTheArm(ModelOccurrence fork, int part,
-                                              SearchRegion declarations) {
+    public HeldOutcome.Bringing heldAtTheArm(ModelOccurrence fork, int part,
+                                             SearchRegion declarations) {
         return held(byFork.get(fork), part == 0, declarations);
     }
 
-    private static Optional<HeldOutcome> held(ConditionOnTheWay met, boolean held,
-                                              SearchRegion declarations) {
+    /**
+     * What {@code met} coming out {@code held} asks of a row, as one way for each way some row
+     * may take past it.
+     *
+     * <p>What it asks is walked as a way is ({@link WayToTheBorder#along}), so that what is one of
+     * several things is each of them in turn, and a row is held to one of them. And each is held
+     * along the way to the condition taken the same way: a guard above that came out one of
+     * several ways is past along one of them, and a row composed against the way whole is
+     * composed against none of what that guard asked. So each alternative is held along every way
+     * the way to it splits into, and along the way whole after them, which every row past it is
+     * on.
+     *
+     * <p>An alternative asking something this reading could not state is no way to hold a row to,
+     * and neither is one asking nothing; the others still are.
+     */
+    private static HeldOutcome.Bringing held(ConditionOnTheWay met, boolean held,
+                                             SearchRegion declarations) {
         if (met == null) {
-            return Optional.empty();
+            return new HeldOutcome.Bringing.NothingFound();
         }
         List<OnTheWay> asked = held ? met.holding() : met.failing();
+        if (!(new WayToTheBorder(asked).along()
+                instanceof OneOfEach.Walked.Open<OnTheWay, Reachability>(var alternatives,
+                        var stoppedBy))) {
+            return new HeldOutcome.Bringing.NothingFound();
+        }
+        List<HeldOutcome> ways = new ArrayList<>();
+        CompositionBudget cutShort = stoppedBy;
+        for (OneOfEach.Way<OnTheWay> alternative : alternatives) {
+            // An alternative whose choices the figure left is not what the condition asks, and the
+            // figure is already said.
+            if (!(alternative instanceof OneOfEach.Way.Chosen<OnTheWay>(var entries))) {
+                continue;
+            }
+            List<RowDemand> demands = demandsOf(entries);
+            if (demands.isEmpty()) {
+                continue;
+            }
+            List<OnTheWay> way = new ArrayList<>(met.assumed());
+            way.addAll(entries);
+            if (!(Reachability.of(new WayToTheBorder(way), declarations)
+                    instanceof Reachability.Reaching reaching)) {
+                continue;
+            }
+            for (Reachability.Reaching along : reaching.along()) {
+                ways.add(new HeldOutcome(demands, along));
+            }
+            ways.add(new HeldOutcome(demands, reaching));
+            if (cutShort == null && reaching.ways() instanceof Reachability.Ways.Whole whole) {
+                cutShort = whole.figure();
+            }
+        }
+        return ways.isEmpty() ? new HeldOutcome.Bringing.NothingFound()
+                : new HeldOutcome.Bringing.Found(ways, Optional.ofNullable(cutShort));
+    }
+
+    /**
+     * What one alternative of what a condition asks demands of a row, every choice in it chosen:
+     * each demand it takes in, or none where it asks something this reading could not state.
+     */
+    private static List<RowDemand> demandsOf(List<OnTheWay> chosen) {
         List<RowDemand> demands = new ArrayList<>();
-        for (OnTheWay each : asked) {
+        for (OnTheWay each : chosen) {
             switch (each) {
                 case OnTheWay.TakenIn in -> demands.add(in.demand());
                 case OnTheWay.Settled _ -> { }
-                // One of several ways is no set of demands a row is held to all of.
-                case OnTheWay.Declined _, OnTheWay.Narrowed _, OnTheWay.OneOf _ -> {
-                    return Optional.empty();
+                case OnTheWay.Declined _, OnTheWay.Narrowed _ -> {
+                    return List.of();
                 }
+                case OnTheWay.OneOf _ -> throw new IllegalStateException(
+                        "an alternative with every choice chosen asks no choice: " + each);
             }
         }
-        if (demands.isEmpty()) {
-            return Optional.empty();
-        }
-        List<OnTheWay> way = new ArrayList<>(met.assumed());
-        way.addAll(asked);
-        return Reachability.of(new WayToTheBorder(way), declarations)
-                instanceof Reachability.Reaching reaching
-                ? Optional.of(new HeldOutcome(demands, reaching))
-                : Optional.empty();
+        return demands;
     }
 
     /**
@@ -697,20 +764,22 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
 
         private final Map<ALine, List<OnTheWay>> byLine = new LinkedHashMap<>();
         private final Map<ALine, SaidOnTheWay> saidByLine = new LinkedHashMap<>();
-        private final Map<ModelOccurrence, ConditionOnTheWay> byTruth = new LinkedHashMap<>();
+        private final Map<ModelOccurrence, Set<ConditionOnTheWay>> byOutcome =
+                new LinkedHashMap<>();
         private final Map<ModelOccurrence, ConditionOnTheWay> byFork = new LinkedHashMap<>();
 
         /**
-         * The truth the application {@code answers} answers, met as {@code met} says.
+         * The truth or the comparison the construct {@code answers} answers, met as {@code met}
+         * says.
          *
-         * <p>Once per construct of the model, as a comparison is, and for the same reason: two
-         * arriving under one would be two truths the model states at one place.
+         * <p>Every copy of it, each as it was met. A comparison in a closure applied twice, or in a
+         * value two regions build, is one construct the tree holds a copy of for each, and a run
+         * is seen coming out of it through whichever copy it went through. So each copy is a way
+         * of bringing it out, under what stood on the way to that copy, and none of them is what
+         * every run past it met.
          */
         void answered(ModelOccurrence answers, ConditionOnTheWay met) {
-            if (byTruth.putIfAbsent(answers, met) != null) {
-                throw new IllegalStateException(
-                        "two truths of one reading state one construct of the model: " + answers);
-            }
+            byOutcome.computeIfAbsent(answers, _ -> new LinkedHashSet<>()).add(met);
         }
 
         /**
@@ -784,7 +853,8 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
         ReachingCuts made() {
             return new ReachingCuts(Lookup.built(put -> byLine.forEach(put::put)),
                     Lookup.built(put -> saidByLine.forEach(put::put)),
-                    Lookup.built(put -> byTruth.forEach(put::put)),
+                    Lookup.built(put -> byOutcome.forEach((at, copies) ->
+                            put.put(at, List.copyOf(copies)))),
                     Lookup.built(put -> byFork.forEach(put::put)));
         }
     }

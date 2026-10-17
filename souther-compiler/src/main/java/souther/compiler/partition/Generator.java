@@ -2805,47 +2805,67 @@ public final class Generator {
                 RepairShortfall.WayPast[] came = new RepairShortfall.WayPast[ways.size()];
                 // Two ways that ask the row for the same things are one search, and what it came
                 // to is what both of them came to.
-                Map<List<HeldOutcome>, RepairShortfall.WayPast> asked = new HashMap<>();
+                Map<WayPastTheGuard.Holding, RepairShortfall.WayPast> asked = new HashMap<>();
                 GeneratedRow further = null;
                 // Every way is looked for, runs left or not. Looking at a row run already costs
                 // nothing, so a search with none left can still be answered by rows run before;
                 // what says a way was given up is a run refused inside its own search.
                 for (int at : fewestFirst(ways)) {
-                    List<HeldOutcome> way = ((WayPastTheGuard.Holding) ways.get(at)).demands();
+                    WayPastTheGuard.Holding way = (WayPastTheGuard.Holding) ways.get(at);
                     RepairShortfall.WayPast already = asked.get(way);
                     if (already != null) {
                         came[at] = already;
                         continue;
                     }
-                    List<HeldOutcome> both = new ArrayList<>(held);
-                    both.addAll(way);
-                    runs.stopped = false;
-                    Searched searched = search(axes, pins, purposes, List.of(from.from()), keeping,
-                            check, references, answers, List.copyOf(both),
-                            row -> switch (watched(row, runs).orElse(null)) {
-                                case null -> {
-                                    runs.stopped = true;
-                                    yield Acceptance.STOPPED;
-                                }
-                                // Past the guard and to an answer. A run that went on and then
-                                // stopped without one is a row the compiler refuses, wherever it
-                                // got to first.
-                                case ObservedRun(Watched.Ran(AlignedObservation run),
-                                                 AnswerObservation answer)
-                                        when run.lit(goneOn)
-                                        && !(answer instanceof AnswerObservation.NotAnswered) ->
-                                        Acceptance.TAKEN;
-                                default -> Acceptance.PASSED;
-                            }, answersNothing);
-                    if (searched.row() != null) {
-                        further = searched.row();
-                        held = List.copyOf(both);
+                    // One search for each way the way can be held along, and what the way came to
+                    // is what the last of them came to: the one along the way whole, which every
+                    // row past it is on.
+                    CameToNothing last = null;
+                    boolean stopped = false;
+                    for (List<HeldOutcome> choice : way.choices()) {
+                        List<HeldOutcome> both = new ArrayList<>(held);
+                        both.addAll(choice);
+                        runs.stopped = false;
+                        Searched searched = search(axes, pins, purposes, List.of(from.from()),
+                                keeping, check, references, answers, List.copyOf(both),
+                                row -> switch (watched(row, runs).orElse(null)) {
+                                    case null -> {
+                                        runs.stopped = true;
+                                        yield Acceptance.STOPPED;
+                                    }
+                                    // Past the guard and to an answer. A run that went on and
+                                    // then stopped without one is a row the compiler refuses,
+                                    // wherever it got to first.
+                                    case ObservedRun(Watched.Ran(AlignedObservation run),
+                                                     AnswerObservation answer)
+                                            when run.lit(goneOn)
+                                            && !(answer instanceof AnswerObservation.NotAnswered) ->
+                                            Acceptance.TAKEN;
+                                    default -> Acceptance.PASSED;
+                                }, answersNothing);
+                        if (searched.row() != null) {
+                            further = searched.row();
+                            held = List.copyOf(both);
+                            break;
+                        }
+                        last = searched.came();
+                        stopped = stopped || runs.stopped;
+                    }
+                    if (further != null) {
                         break;
                     }
-                    RepairShortfall.WayPast its = runs.stopped
-                            ? new RepairShortfall.WayPast.CutShort(searched.came(),
-                                    CompositionBudget.RUNS_REPAIRING_A_ROW)
-                            : new RepairShortfall.WayPast.Searched(searched.came());
+                    // A way some of whose ways a figure left unlooked at is cut short as much as
+                    // one whose runs ran out: a row past none of those looked along may still be
+                    // past it.
+                    RepairShortfall.WayPast its;
+                    if (stopped) {
+                        its = new RepairShortfall.WayPast.CutShort(last,
+                                CompositionBudget.RUNS_REPAIRING_A_ROW);
+                    } else if (way.cutShort().isPresent()) {
+                        its = new RepairShortfall.WayPast.CutShort(last, way.cutShort().get());
+                    } else {
+                        its = new RepairShortfall.WayPast.Searched(last);
+                    }
                     came[at] = its;
                     asked.put(way, its);
                 }
@@ -2866,8 +2886,7 @@ public final class Generator {
                             + " that was seen doing so: " + further);
                 }
                 best = further;
-                seen = now;
-            }
+                seen = now;            }
         }
 
         /** The runs one row's repair may still make. */
@@ -2891,11 +2910,29 @@ public final class Generator {
          */
         private sealed interface WayPastTheGuard {
 
-            /** What holds every part of the way the row did not do. */
-            record Holding(List<HeldOutcome> demands) implements WayPastTheGuard {
+            /**
+             * What holds every part of the way the row did not do, one of {@code choices} at a
+             * time.
+             *
+             * <p>Several where a part of the way is one of several things a row can be held to
+             * ({@link HeldOutcome.Bringing.Found}): each choice is one of those for each part, so
+             * a row held to any one of them is held to the whole way, and none of them is all a
+             * row past the way could be.
+             *
+             * @param choices  one or more, each holding every part the row did not do, in the order
+             *                 they are looked for in
+             * @param cutShort the figure that left some choice out, where one did
+             */
+            record Holding(List<List<HeldOutcome>> choices, Optional<CompositionBudget> cutShort)
+                    implements WayPastTheGuard {
 
                 public Holding {
-                    demands = List.copyOf(demands);
+                    choices = choices.stream().map(List::copyOf).toList();
+                    if (choices.isEmpty() || choices.getFirst().isEmpty()) {
+                        throw new IllegalArgumentException(
+                                "a way a row is held to holds it to something");
+                    }
+                    Objects.requireNonNull(cutShort, "the figure that left a choice out, or none");
                 }
             }
 
@@ -2920,7 +2957,7 @@ public final class Generator {
                 }
             }
             out.sort(Comparator.comparingInt(
-                    at -> ((WayPastTheGuard.Holding) ways.get(at)).demands().size()));
+                    at -> ((WayPastTheGuard.Holding) ways.get(at)).choices().getFirst().size()));
             return out;
         }
 
@@ -2934,11 +2971,12 @@ public final class Generator {
          * a guard that refused it on the next.
          *
          * <p>What the run already did is no demand: it was seen doing it, and the row it is
-         * composed again holds it as the row did, or holds it by the classes. A part of a way that
-         * is an arm, or a comparison no border offers a point on the side it comes out on, is one
-         * nothing here can hold a row to. Nor is one whose comparison stands a term at a parameter
-         * the row writes as the value the model states ({@code against}): holding it would compose
-         * that parameter afresh, and the value the author chose is the row's.
+         * composed again holds it as the row did, or holds it by the classes. A part of a way
+         * nothing here can state a demand for is one nothing here can hold a row to. Nor is one
+         * whose demand stands a term at a parameter the row writes as the value the model states
+         * ({@code against}): holding it would compose that parameter afresh, and the value the
+         * author chose is the row's. Asked of each way a part can be held along, since another
+         * way of holding the same part may leave the parameter as it is.
          *
          * <p>In the order the reading wrote them, one apiece.
          */
@@ -2961,7 +2999,11 @@ public final class Generator {
          */
         private WayPastTheGuard wayOn(AlignedObservation seen, List<ControlClaim> way,
                                       Set<String> against) {
-            List<HeldOutcome> demands = new ArrayList<>();
+            // Every combination of one way of holding each part, the first part's turning
+            // slowest, as many as a way is looked along.
+            List<List<HeldOutcome>> choices = new ArrayList<>();
+            choices.add(List.of());
+            CompositionBudget cutShort = null;
             RepairShortfall.Barrier barred = null;
             for (ControlClaim each : way) {
                 if (each.satisfiedBy(seen)) {
@@ -2977,25 +3019,47 @@ public final class Generator {
                             barred = RepairShortfall.Barrier.NOTHING_HOLDS_A_ROW_TO_IT;
                         }
                     }
-                    case HeldOutcome.Bringing.Found(HeldOutcome holds) -> {
-                        if (holds.demands().stream()
-                                .anyMatch(demand -> writesAnyOf(demand, against))) {
+                    case HeldOutcome.Bringing.Found(List<HeldOutcome> ways,
+                                                    Optional<CompositionBudget> left) -> {
+                        List<HeldOutcome> keeping = ways.stream()
+                                .filter(one -> one.demands().stream()
+                                        .noneMatch(demand -> writesAnyOf(demand, against)))
+                                .toList();
+                        if (keeping.isEmpty()) {
                             if (barred == null) {
                                 barred = RepairShortfall.Barrier.IT_WOULD_REWRITE_A_STATED_VALUE;
                             }
-                        } else {
-                            demands.add(holds);
+                            continue;
                         }
+                        if (cutShort == null && left.isPresent()) {
+                            cutShort = left.get();
+                        }
+                        List<List<HeldOutcome>> wider = new ArrayList<>();
+                        for (List<HeldOutcome> before : choices) {
+                            for (HeldOutcome one : keeping) {
+                                List<HeldOutcome> with = new ArrayList<>(before);
+                                with.add(one);
+                                wider.add(with);
+                            }
+                        }
+                        int most = CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG.maximum();
+                        if (wider.size() > most) {
+                            wider = new ArrayList<>(wider.subList(0, most));
+                            if (cutShort == null) {
+                                cutShort = CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG;
+                            }
+                        }
+                        choices = wider;
                     }
                 }
             }
             if (barred != null) {
                 return new WayPastTheGuard.Barred(barred);
             }
-            return demands.isEmpty()
+            return choices.getFirst().isEmpty()
                     ? new WayPastTheGuard.Barred(
                             RepairShortfall.Barrier.THE_ROW_ALREADY_DOES_ALL_OF_IT)
-                    : new WayPastTheGuard.Holding(demands);
+                    : new WayPastTheGuard.Holding(choices, Optional.ofNullable(cutShort));
         }
 
         /** Whether holding the row to {@code demand} composes a parameter in {@code against}. */
@@ -9376,7 +9440,8 @@ public final class Generator {
      * <p>The way to the last comparison and not a meet of every way. A comparison is reached by
      * the conditions above it, and a later guard stands below an earlier one — so the way to it
      * already takes in what the earlier guard holding asks, and a meet of the two would be that way
-     * met with a part of itself.
+     * met with a part of itself. Taken along the ways the earlier ones were held along
+     * ({@link #wayToTheLast}).
      *
      * @param check what a value's own type says of it, which a location the way's numbers are
      *              composed at is held to
@@ -9412,7 +9477,7 @@ public final class Generator {
                 }
             }
         }
-        Reachability.Reaching reaching = held.getLast().reaching();
+        Reachability.Reaching reaching = wayToTheLast(held);
         Requirements required;
         switch (reaching.writing(fixing.keySet())) {
             case Reachability.Written.Under(Requirements both) -> required = both;
@@ -9440,6 +9505,33 @@ public final class Generator {
         return new HeldTogether.Asked(new LinkedHashMap<>(numbers), where.at(), required, reaching,
                 ContentsAsked.of(reaching.boundedOnTheWay(), numbers), where.someElement(),
                 where.composed(), where.bounds());
+    }
+
+    /**
+     * The way to the last of {@code held}, along the ways the ones before it were held along.
+     *
+     * <p>The way to a later guard takes in an earlier one, and where the earlier one came out one
+     * of several ways, the way to the later one splits there ({@link Reachability.Ways}). A row
+     * held past the earlier guard was held along one of them, and composed along the later way
+     * whole it is composed against none of what that one asked. So the way taken is the first the
+     * later one splits into that asks everything the earlier ones were held along asked, and the
+     * way whole where none does.
+     */
+    private static Reachability.Reaching wayToTheLast(List<HeldOutcome> held) {
+        Reachability.Reaching last = held.getLast().reaching();
+        Set<OnTheWay.TakenIn> before = new HashSet<>();
+        for (HeldOutcome each : held.subList(0, held.size() - 1)) {
+            before.addAll(each.reaching().boundedOnTheWay());
+        }
+        if (last.boundedOnTheWay().containsAll(before)) {
+            return last;
+        }
+        for (Reachability.Reaching along : last.along()) {
+            if (along.boundedOnTheWay().containsAll(before)) {
+                return along;
+            }
+        }
+        return last;
     }
 
     /**
