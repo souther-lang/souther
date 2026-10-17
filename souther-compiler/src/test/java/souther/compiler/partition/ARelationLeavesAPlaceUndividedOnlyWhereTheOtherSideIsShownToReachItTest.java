@@ -552,6 +552,95 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         }
     }
 
+    private static final String QUOTE = "data Quote = { issuedOn: Int, expiresOn: Int } invariant ";
+
+    /**
+     * A rule of the record relating the field compared to another field it leaves free leaves the
+     * field every value, and the field and a value of another parameter, which no declaration
+     * relates to it, each reach every value the other may hold.
+     */
+    @Test
+    void aRuleRelatingTheFieldComparedToAFreeFieldLeavesItEveryValue() {
+        for (String rule : List.of("expiresOn >= issuedOn", "expiresOn == issuedOn")) {
+            assertEquals(Map.of("today", RELATES, "q.expiresOn", RELATES),
+                    leftAt("q: Quote, today: Int", QUOTE + rule, "today <= q.expiresOn", 26),
+                    rule);
+        }
+    }
+
+    /**
+     * The field the rule relates to is held at nought or more, so the field compared is too: a
+     * day before nought is before every expiry, and settles the comparison. The expiry still
+     * reaches every day from nought on.
+     */
+    @Test
+    void aRuleRelatingTheFieldComparedToABoundedFieldLeavesItTheRunThatBoundGives() {
+        assertEquals(Map.of("today", NOT_SHOWN, "q.expiresOn", RELATES),
+                leftAt("q: Quote, today: Int", QUOTE + "issuedOn >= 0 && expiresOn >= issuedOn",
+                        "today <= q.expiresOn", 26));
+    }
+
+    /** A value taken out of the field compared is a rule its bounds do not hold, so nothing is
+     *  shown of what it takes. */
+    @Test
+    void aRuleRelatingTheFieldComparedBesideOneItsBoundsDoNotHoldShowsNothingOfIt() {
+        assertEquals(Map.of("today", NOT_SHOWN, "q.expiresOn", RELATES),
+                leftAt("q: Quote, today: Int", QUOTE + "expiresOn >= issuedOn && expiresOn /= 5",
+                        "today <= q.expiresOn", 26));
+    }
+
+    /**
+     * Two fields the record relates each take every value up to ten, and are not apart: no row
+     * has {@code y} below {@code x}, so an {@code x} of ten is beside a {@code y} of ten alone and
+     * settles the comparison.
+     */
+    @Test
+    void twoFieldsTheRecordRelatesAreNotTakenToReachEachOther() {
+        assertEquals(Map.of("p.x", NOT_SHOWN, "p.y", NOT_SHOWN), leftAt("p: P",
+                "data P = { x: Int, y: Int } invariant x <= y && y <= 10", "p.x == p.y", 17));
+    }
+
+    /**
+     * A way relating the day to the field the rule relates the expiry to ties the expiry to the
+     * day: past {@code q.issuedOn == today} every expiry is at or after the day and none is past
+     * ten, so a day of ten is beside an expiry of ten alone and settles the comparison.
+     */
+    @Test
+    void aWayOverAFieldTheRuleRelatesTiesTheFieldCompared() {
+        assertEquals(Map.of("today", NOT_SHOWN, "q.expiresOn", NOT_SHOWN),
+                leftAt("q: Quote, today: Int", QUOTE + "expiresOn >= issuedOn && expiresOn <= 10",
+                        "if q.issuedOn == today then today == q.expiresOn else false", 54));
+    }
+
+    /**
+     * A rule relating how long the string compared is to how long a field held to three
+     * characters is holds the string compared to three as well, which no end on the string itself
+     * says: a string of four is equal to none of them.
+     *
+     * <p>Kept back twice. The set of strings at the place is not read whole beside a rule over
+     * their lengths, so the strings are not taken to be every string; and where they were, the end
+     * on the length would keep them back.
+     */
+    @Test
+    void aRuleRelatingAnotherNumberOfTheFieldComparedLeavesItWhatThatNumberIsLeft() {
+        assertEquals(Map.of("w.a", RELATES, "s", NOT_SHOWN), leftAt("w: W, s: String",
+                "data W = { a: String, b: String } invariant String.length(a) <= String.length(b)"
+                        + " && String.length(b) <= 3", "w.a == s", 20));
+    }
+
+    /**
+     * A name the cases of a sum share takes every value where every case leaves it every value,
+     * one of them by a rule relating it to a field of its own it leaves free.
+     */
+    @Test
+    void aNameTheCasesShareTakesEveryValueWhereOneCaseRelatesItToAFreeField() {
+        assertEquals(Map.of("s.d", RELATES, "n", RELATES), leftAt("s: S, n: Int", """
+                data C = { d: Int }
+                data A = { ...C, e: Int } invariant d >= e
+                data B = { ...C }
+                data S = A | B""", "s.d >= n", 20));
+    }
+
     /**
      * A rule of a value two out reads places, not fields: a record's rule over
      * {@code pending.low} and a newtype's over {@code value.low} read beside {@code boss}, and the
