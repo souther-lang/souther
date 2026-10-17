@@ -20,6 +20,19 @@ import java.math.BigInteger;
  */
 public record ExactParts(BigInteger numerator, BigInteger denominator, long twos, long fives) {
 
+    /**
+     * Parts with a nought below the line are no value, canonical or not, so none are made. What
+     * the arithmetic forms below the line is a product of denominators it was handed and of a
+     * divisor's numerator once nought is turned away, so it never forms one.
+     *
+     * @throws IllegalArgumentException where the denominator is nought
+     */
+    public ExactParts {
+        if (denominator.signum() == 0) {
+            throw new IllegalArgumentException("parts of a value have no nought below the line");
+        }
+    }
+
     public static final ExactParts ZERO = new ExactParts(BigInteger.ZERO, BigInteger.ONE, 0, 0);
 
     public boolean isZero() {

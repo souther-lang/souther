@@ -371,7 +371,11 @@ public record ExactRatio(BigInteger numeratorWithoutUnits, BigInteger denominato
     /** The difference, or which way the arithmetic could not hold it. Same failure as {@link #plus}:
      *  a difference is a sum of the negation. */
     public ExactAnswer<ExactRatio> minus(ExactRatio other) {
-        return plus(other.negated());
+        // The negation as parts and not as a ratio: a canonical form negated is canonical, and the
+        // sum is put in canonical form once.
+        ExactParts negation = new ExactParts(other.numeratorWithoutUnits.negate(),
+                other.denominatorWithoutUnits, other.twos, other.fives);
+        return ExactAnswer.of(() -> from(ExactArithmetic.plus(parts(), negation)));
     }
 
     /**

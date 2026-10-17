@@ -34,6 +34,9 @@ import souther.compiler.values.UnreadReason;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -63,26 +66,33 @@ import java.util.concurrent.ConcurrentHashMap;
  *
  * <p><b>Three things are shown of the term reaching, and none of them stands in for another.</b>
  * That it takes every value of a run, as above. That the run a way leaves it is every value between
- * the ends: a way placing an end on the term itself narrows where it runs, and what the region then
- * leaves it is taken only as the region answers it whole ({@link SearchRegion#wholeRunOf}) — never
- * put together from where the values lie and a proof given beside it, since the one may be rounded
- * past the rules and the other is not about that. And that nothing ties it to another place. A term
- * that takes every value alone may take only some of them beside a value of another term: under
- * {@code x + y <= 1} over nought and one, {@code x} at one is beside no {@code y} at one. Runs say
- * nothing of that — the runs of each, and of every sum and difference of the two, can be what they
- * would be untied — so what is asked is whether anything could tie the term to the others. Nothing
- * a way states ties it where it states nothing of the term but ends on itself, which case a value
- * around it is and how many a value around it holds: nothing a way took in turns on another number
- * with it, or on another number of the place it is taken of — a date on the twenty-ninth of
- * February is in a leap year; and nothing a way stated and none of this took in. Where one does,
- * nothing is shown of the term. The declarations tie it to nothing where no rule of a value it sits
- * in reads a place at, under or around it, other than for how many a container around it holds,
- * which is where a rule over two of its positions is written. A rule that reads the value at its
- * place and nothing around it leaves it the run its bounds say, where those are shown to be the
- * whole of what the rules leave ({@link Position#projection}): {@code expiresOn >= issuedOn} with
- * {@code issuedOn} free leaves {@code expiresOn} every value. It still holds the value beside the
- * places it names, so such a value is tied to nothing only by a term in another parameter, which
- * no declaration relates to it, and a way stating anything of a place of its parameter ties it.
+ * the ends: a way placing an end on the term itself, or a relation the region took in over the term
+ * and numbers of other places, narrows where it runs, and what the region then leaves it is taken
+ * only as the region answers it whole ({@link SearchRegion#wholeRunOf}) — never put together from
+ * where the values lie and a proof given beside it, since the one may be rounded past the rules and
+ * the other is not about that. Under {@code a >= b} with {@code b} free, {@code a} still runs over
+ * every value. And that nothing ties it to another place. A term that takes every value alone may
+ * take only some of them beside a value of another term: under {@code x + y <= 1} over nought and
+ * one, {@code x} at one is beside no {@code y} at one. Runs say nothing of that — the runs of each,
+ * and of every sum and difference of the two, can be what they would be untied — so what is asked
+ * is whether anything could tie the term to the others. A relation a way took in ties the term to
+ * whatever a chain of statements reaches from the places it relates it to, and that is asked of
+ * each pair of terms apart from what the term runs over: past {@code a >= b}, {@code a} is tied to
+ * {@code b} and to nothing else. Which case a value around the term is and how many a value around
+ * it holds say nothing of its values and tie it to nothing; nor, where no rule names the term, does
+ * what other places of an element it is inside are asked to meet — which key a map's entry is under
+ * says nothing of the value there. What a way states of the term otherwise leaves nothing shown of
+ * it: a relation over
+ * another number of the place it is taken of — a date on the twenty-ninth of February is in a leap
+ * year — or anything the region did not take in. The declarations tie it to nothing where no rule
+ * of a value it sits in reads a place at, under or around it, other than for how many a container
+ * around it holds, which is where a rule over two of its positions is written. A rule that reads
+ * the value at its place and nothing around it leaves it the run its bounds say, where those are
+ * shown to be the whole of what the rules leave ({@link Position#projection}):
+ * {@code expiresOn >= issuedOn} with {@code issuedOn} free leaves {@code expiresOn} every value. It
+ * still holds the value beside the places it names, so such a value is tied to nothing only by a
+ * term in another parameter, which no declaration relates to it, and a way stating anything of a
+ * place of its parameter ties it.
  * A rule reading it any other way, or one not read, leaves nothing shown of it.
  *
  * <p>Held as the relation and not as the answer, because the answer is asked twice: once of what
@@ -307,7 +317,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     carriers.get(1) != null ? carriers.get(1) : known);
         }
         if (ways.isEmpty()) {
-            return leftAlong(sources, carriers, read.quantities().region(), List.of(), true);
+            return leftAlong(read, sources, carriers, read.quantities().region(), List.of(),
+                    true);
         }
         List<Reachability.Reaching> branches = new ArrayList<>();
         for (Reachability.Reaching each : ways) {
@@ -317,8 +328,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
         WhatItLeaves out = null;
         for (Reachability.Reaching each : branches) {
-            WhatItLeaves along = leftAlong(sources, carriers, each.region(), conditionsOf(each),
-                    each.declined().isEmpty());
+            WhatItLeaves along = leftAlong(read, sources, carriers, each.region(),
+                    conditionsOf(each), each.declined().isEmpty());
             out = out == null ? along : out.alongBoth(along);
         }
         return out;
@@ -357,29 +368,38 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     private static List<OnAWay> conditionsOf(Reachability.Reaching way) {
         List<OnAWay> out = new ArrayList<>();
         way.boundedOnTheWay().forEach(taken -> {
-            NumericTerm runOf = taken.demand() instanceof RowDemand.Relational(
-                    TakenConstraint.Affine(LinearForm<NumericTerm> form, Rel rel))
-                    && rel != Rel.NE && form.coefs().size() == 1
-                    ? form.coefs().keySet().iterator().next() : null;
-            out.add(new OnAWay(taken.demand().positions(), runOf,
-                    runOf instanceof NumericTerm.TakenOf count
+            TakenConstraint relation = taken.demand() instanceof RowDemand.Relational(
+                    TakenConstraint constraint) ? constraint : null;
+            out.add(new OnAWay(taken.demand().positions(),
+                    relation instanceof TakenConstraint.Affine(var form, var rel)
+                            && rel != Rel.NE && form.coefs().size() == 1
+                            && form.coefs().keySet().iterator().next()
+                            instanceof NumericTerm.TakenOf count
                             && count.takenAs() instanceof TakenAs.HowManyItHolds,
-                    taken.demand() instanceof RowDemand.Relational(
-                            TakenConstraint.Affine affine) ? affine : null));
+                    relation, elementsAsked(taken.demand())));
         });
         way.requirements().refinements().keySet()
-                .forEach(at -> out.add(new OnAWay(Set.of(at), null, true, null)));
+                .forEach(at -> out.add(new OnAWay(Set.of(at), true, null, null)));
         way.requirements().atANameTheCasesShare()
-                .forEach(at -> out.add(new OnAWay(Set.of(at), null, true, null)));
+                .forEach(at -> out.add(new OnAWay(Set.of(at), true, null, null)));
         return out;
+    }
+
+    /** The container {@code demand} asks what some or every element of meets, or null where it
+     *  asks nothing of the elements of one. */
+    private static TermPath elementsAsked(RowDemand.OfACondition demand) {
+        return switch (demand) {
+            case RowDemand.Exists exists -> exists.container();
+            case RowDemand.ForAll every -> every.container();
+            case RowDemand.Relational _, RowDemand.ATruth _, RowDemand.OneValueAtBoth _,
+                 RowDemand.SoMany _, RowDemand.ForTheRun _ -> null;
+        };
     }
 
     /**
      * One statement of a way.
      *
-     * @param positions the positions it turns on
-     * @param runOf      the one number it places an end on, where it is an end on one number and
-     *                   nothing else; null where it is anything else
+     * @param positions  the positions it turns on
      * @param whatStands whether it says what stands at a value and nothing of the values that
      *                   stand there beside another: which case the value is, or ends on how many
      *                   it holds. Either of a value around a term says nothing of the term's
@@ -387,11 +407,50 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      *                   holding one says nothing of what it is. Of the term's own value, a case,
      *                   as an enumeration's, is a value taken out of its order, which the region
      *                   holds, and an end on how many is an end on the term itself
-     * @param affine     what it states as a form of the input's numbers held against nought, or
-     *                   null where it states anything else
+     * @param relation   what it states as a relation the region took in, or null where it states
+     *                   anything else
+     * @param elementsOf the container it asks what some or every element of meets, or null where
+     *                   it asks nothing of the elements of one
      */
-    private record OnAWay(Set<TermPath> positions, NumericTerm runOf, boolean whatStands,
-                          TakenConstraint.Affine affine) {}
+    private record OnAWay(Set<TermPath> positions, boolean whatStands, TakenConstraint relation,
+                          TermPath elementsOf) {
+
+        /** What it states as a form of the input's numbers held against nought, or null where it
+         *  states anything else. */
+        TakenConstraint.Affine affine() {
+            return relation instanceof TakenConstraint.Affine affine ? affine : null;
+        }
+
+        /** Whether this says nothing of the values {@code term} takes by saying only what stands
+         *  at a value around it — which case it is, or how many it holds — and nothing at or
+         *  under the term. */
+        boolean saysOnlyWhatStandsAround(NumericTerm.FromOnePosition term) {
+            return whatStands && touches(term, positions) && onlyAround(term, positions);
+        }
+
+        /**
+         * Whether this asks of the elements of a container the term is inside of nothing at, under
+         * or around the term but the container. An element holds every value its other places
+         * leave whatever is asked of those places — which key a map's entry is under, a field
+         * beside the term — so this says nothing of the values the term takes, except where a rule
+         * relates the term to those places, which the caller asks apart. That an element is a
+         * value at another position is asked of the element whole, which is around the term, and
+         * is not this.
+         */
+        boolean asksOnlyOtherPlacesOfTheElement(NumericTerm.FromOnePosition term) {
+            if (elementsOf == null || !term.placesReadOff().stream()
+                    .allMatch(place -> place.isAtOrUnder(elementsOf.element()))) {
+                return false;
+            }
+            for (TermPath at : positions) {
+                if (!at.equals(elementsOf) && term.placesReadOff().stream()
+                        .anyMatch(place -> overlap(place, at))) {
+                    return false;
+                }
+            }
+            return true;
+        }
+    }
 
     /**
      * What this leaves its places over the rows in {@code region}, a way stating
@@ -405,32 +464,40 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * @param sources  what the declarations leave the value each side is, or is taken of, in the
      *                 order of the sides
      * @param carriers the order each side is counted on, or null where it has none
+     * @param read     the reading of the input, whose rules say which places they may name
      */
-    private WhatItLeaves leftAlong(List<Source> sources, List<Carrier> carriers,
-                                   SearchRegion region, List<OnAWay> conditions,
-                                   boolean heldWhole) {
+    private WhatItLeaves leftAlong(InputReading read, List<Source> sources,
+                                   List<Carrier> carriers, SearchRegion region,
+                                   List<OnAWay> conditions, boolean heldWhole) {
         List<List<OnAWay>> stating = stating(sources, conditions, heldWhole);
         List<WhatARelationLeavesUndivided.Term<FilingCoordinate>> terms =
                 termsAlong(sources, carriers, region, stating, heldWhole);
         Set<FilingCoordinate> out = new LinkedHashSet<>(amongThemselves);
         Map<NumericTerm.FromOnePosition, WhatARelationLeavesUndivided.Leaves.Settled> settled =
                 new LinkedHashMap<>();
+        // A way that relates a term to other numbers leaves it the run the region answers, and
+        // the pair is asked whether the way ties them as well as whether the declarations do.
+        TiedOnTheWay tied = TiedOnTheWay.of(conditions, read);
+        List<Set<Object>> tiedTo = new ArrayList<>();
+        for (int i = 0; i < sides.size(); i++) {
+            tiedTo.add(tiedTo(i, tied, conditions, sources));
+        }
+        WhatARelationLeavesUndivided.Independence independent =
+                (one, other) -> apartByTheDeclarations(one, other, sources)
+                        && Collections.disjoint(tiedTo.get(one), tiedTo.get(other));
         if (multiplied) {
             for (int at = 0; at < 2; at++) {
                 int other = 1 - at;
                 boolean apart = !overlapping(sides.get(at), sides.get(other))
-                        && apartByTheDeclarations(at, other, sources);
+                        && independent.between(at, other);
                 putDown(at, WhatARelationLeavesUndivided.leavesOfAProduct(terms.get(at),
                         terms.get(other), constant.negated(), relation, apart,
                         greatestOf(carriers.get(at))), out, settled);
             }
             return new WhatItLeaves(out, settled);
         }
-        // A way that states of a term anything past an end on it leaves the term nothing it is
-        // shown to take (wayOf), so what is asked of a pair is what the declarations tie.
         out.addAll(WhatARelationLeavesUndivided.of(terms, constant, relation,
-                UndividedByARelation::overlap,
-                (one, other) -> apartByTheDeclarations(one, other, sources)));
+                UndividedByARelation::overlap, independent));
         if (!out.containsAll(places())) {
             out.addAll(undividedByTheDifference(sources, carriers, stating, heldWhole));
         }
@@ -440,9 +507,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 continue;
             }
             putDown(at, WhatARelationLeavesUndivided.leavesOf(terms, at, constant, relation,
-                    UndividedByARelation::overlap,
-                    (one, other) -> apartByTheDeclarations(one, other, sources), true),
-                    out, settled);
+                    UndividedByARelation::overlap, independent, true), out, settled);
         }
         return new WhatItLeaves(out, settled);
     }
@@ -625,15 +690,15 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
 
     /**
      * Those of {@code conditions} that state anything of the values {@code term} takes. What
-     * stands at a value around the term says nothing of the values the term takes, so a statement
-     * of only that is left out.
+     * stands at a value around the term, and what other places of an element the term is inside
+     * are asked to meet, say nothing of the values the term takes, so a statement of only that is
+     * left out.
      */
     private static List<OnAWay> statingAnythingOf(NumericTerm.FromOnePosition term,
                                                   List<OnAWay> conditions) {
         List<OnAWay> out = new ArrayList<>();
         for (OnAWay each : conditions) {
-            if (touches(term, each.positions())
-                    && !(each.whatStands() && onlyAround(term, each.positions()))) {
+            if (touches(term, each.positions()) && !saysNothingOfTheValuesOf(term, each, false)) {
                 out.add(each);
             }
         }
@@ -653,12 +718,25 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         List<OnAWay> out = new ArrayList<>();
         for (OnAWay each : conditions) {
             boolean inIt = each.positions().stream().anyMatch(at -> heads.contains(at.head()));
-            if (inIt && !(each.whatStands() && touches(term, each.positions())
-                    && onlyAround(term, each.positions()))) {
+            if (inIt && !saysNothingOfTheValuesOf(term, each, true)) {
                 out.add(each);
             }
         }
         return out;
+    }
+
+    /**
+     * Whether {@code statement} says nothing of the values {@code term} takes: it says only what
+     * stands at a value around the term, or — where no rule may name the term — asks only other
+     * places of an element the term is inside. A rule naming the term may relate it to those
+     * places, so for such a term what is asked of them is said of it.
+     *
+     * @param named whether a rule of the declarations may name the term
+     */
+    private static boolean saysNothingOfTheValuesOf(NumericTerm.FromOnePosition term,
+                                                    OnAWay statement, boolean named) {
+        return statement.saysOnlyWhatStandsAround(term)
+                || (!named && statement.asksOnlyOtherPlacesOfTheElement(term));
     }
 
     /**
@@ -678,18 +756,21 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         return new WhatARelationLeavesUndivided.OnTheDifference(first, form.constant(), rel);
     }
 
-    /** What a way does to a term: nothing, an end on it alone, or more than this can read. */
+    /** What a way does to a term: nothing, narrows where it runs over every value of the places it
+     *  is related to, or more than this can read. */
     private enum Way {
 
         /** Nothing it states turns on any place the term is read off. */
         UNTOUCHED,
 
-        /** What it states of those places is ends on the term itself, or what stands at a value
-         *  around it, and nothing else: that narrows where it runs and ties it to nothing. */
+        /** What it states of those places is ends on the term itself, what stands at a value
+         *  around it, or a relation the region took in over it and numbers of other places, and
+         *  nothing else: that narrows where it runs, and what it ties the term to is asked
+         *  apart ({@link TiedOnTheWay}). */
         NARROWED,
 
-        /** Something it states of them is anything else: about another number with it, about a
-         *  number of the same place other than the term, a value taken out. */
+        /** Something it states of them is anything else: about a number of the same place other
+         *  than the term, a value taken out, a statement the region did not take in. */
         TIES
     }
 
@@ -699,12 +780,132 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         Way out = Way.UNTOUCHED;
         for (OnAWay each : stating) {
             // Which case the term's own value is takes values out of its order, which narrows it.
-            if (!each.whatStands() && !term.equals(each.runOf())) {
+            if (!each.whatStands() && !inTheRegion(term, each)) {
                 return Way.TIES;
             }
             out = Way.NARROWED;
         }
         return out;
+    }
+
+    /**
+     * Whether {@code statement} is a relation the region took in over {@code term} alone, or over
+     * it and numbers of other places, placing ends: what it leaves the term over every value of
+     * those is the run the region answers whole ({@link SearchRegion#wholeRunOf}), and whatever
+     * it ties the term to is asked apart ({@link TiedOnTheWay}). A form held against nought and an
+     * end on one position's own order are both that. A relation over another number of a place
+     * the term is read off — a string's length beside the string — is one the region holds as two
+     * numbers it does not tie, so it is not this. Nor is a relation keeping the term off a value,
+     * which leaves a hole where a run is answered by its ends.
+     */
+    private static boolean inTheRegion(NumericTerm.FromOnePosition term, OnAWay statement) {
+        Set<NumericTerm> over = switch (statement.relation()) {
+            case null -> Set.of();
+            case TakenConstraint.Affine affine ->
+                    affine.rel() == Rel.NE ? Set.of() : affine.form().coefs().keySet();
+            case TakenConstraint.Ordered ordered -> Set.of(ordered.term());
+            case TakenConstraint.AwayFrom _ -> Set.of();
+        };
+        if (!over.contains(term)) {
+            return false;
+        }
+        for (NumericTerm each : over) {
+            if (!each.equals(term) && touches(term, Set.of(each.subjectPath()))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * What the way ties the side at {@code at} to, as the classes of {@code tied} it is in: those
+     * of every statement about a place the side is made of, save one saying nothing of the values
+     * its term takes, and its parameter's where a rule of the declarations may name it. Two sides
+     * in no class together are tied by nothing the way states.
+     */
+    private Set<Object> tiedTo(int at, TiedOnTheWay tied, List<OnAWay> conditions,
+                               List<Source> sources) {
+        Side side = sides.get(at);
+        Set<Object> out = new HashSet<>();
+        for (OnAWay each : conditions) {
+            boolean about = side.term() == null
+                    ? side.madeOf().stream().anyMatch(place -> each.positions().stream()
+                            .anyMatch(that -> overlap(place.path(), that)))
+                    : touches(side.term(), each.positions()) && !saysNothingOfTheValuesOf(
+                            side.term(), each, mayBeNamed(at, sources));
+            if (about) {
+                out.add(tied.classOf(each.positions().iterator().next()));
+            }
+        }
+        if (mayBeNamed(at, sources)) {
+            side.madeOf().forEach(place -> out.add(tied.classOf(
+                    new TiedOnTheWay.Parameter(place.path().head()))));
+        }
+        return out;
+    }
+
+    /**
+     * The places a way's statements tie together, in classes.
+     *
+     * <p>Two places are tied where a chain reaches from one to the other: a statement ties every
+     * place it is about, the value one place sits in is tied to every place inside it, and a place
+     * a rule of the declarations may name is tied to the parameter it is in, which the rule may
+     * relate to anything else there. Generous where it is unsure — two places tied only through a
+     * value the way leaves free are taken as tied — since a pair kept from one another by a third
+     * place is not told from one that is not by anything the runs of each say. Worked out once for
+     * a way and read by every pair of its sides.
+     */
+    private static final class TiedOnTheWay {
+
+        /** The parameter a place is in, as one node every place a rule may name there is tied
+         *  to. */
+        private record Parameter(String head) {}
+
+        private final Map<Object, Object> parent = new HashMap<>();
+
+        static TiedOnTheWay of(List<OnAWay> conditions, InputReading read) {
+            TiedOnTheWay out = new TiedOnTheWay();
+            Set<TermPath> places = new LinkedHashSet<>();
+            for (OnAWay each : conditions) {
+                TermPath first = null;
+                for (TermPath at : each.positions()) {
+                    if (first == null) {
+                        first = at;
+                    } else {
+                        out.join(first, at);
+                    }
+                    if (places.add(at) && namedByTheDeclarations(at, read) != Named.NOT) {
+                        out.join(at, new Parameter(at.head()));
+                    }
+                }
+            }
+            List<TermPath> all = List.copyOf(places);
+            for (int i = 0; i < all.size(); i++) {
+                for (int j = i + 1; j < all.size(); j++) {
+                    if (overlap(all.get(i), all.get(j))) {
+                        out.join(all.get(i), all.get(j));
+                    }
+                }
+            }
+            return out;
+        }
+
+        /** The class {@code node} is in, named by one node of it. */
+        Object classOf(Object node) {
+            Object at = node;
+            for (Object up = parent.get(at); up != null; up = parent.get(at)) {
+                at = up;
+            }
+            return at;
+        }
+
+        private void join(Object one, Object other) {
+            Object first = classOf(one);
+            Object second = classOf(other);
+            if (!first.equals(second)) {
+                parent.put(first, second);
+            }
+        }
     }
 
     /** Whether one of {@code positions} is a place {@code term} is read off, or one around it or
@@ -738,9 +939,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * none is shown.
      *
      * <p>A value no rule restricts, untouched on the way, takes every value of its type. Where a
-     * way places ends on it, where the rules are ends on it and nothing else, or where it is a number
-     * taken of a value no rule restricts, what it takes is the run the region shows it fills
-     * ({@link SearchRegion#wholeRunOf}).
+     * way narrows it ({@link Way#NARROWED}), where the rules are ends on it and nothing else, or
+     * where it is a number taken of a value no rule restricts, what it takes is the run the region
+     * shows it fills ({@link SearchRegion#wholeRunOf}).
      *
      * @param source what the declarations leave the value {@code term} is, or is taken of
      */
@@ -951,13 +1152,17 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     }
 
     /**
-     * The rules of each name {@link #namedByTheDeclarations} read, kept with the reading: what a
-     * position is left is kept per position ({@link Left}), and many positions sit in one value.
+     * The rules of each name {@link #namedByTheDeclarations} read, and what it answered of each
+     * place, kept with the reading: what a position is left is kept per position ({@link Left}),
+     * many positions sit in one value, and every way a relation is asked along asks again of the
+     * places its statements are about.
      */
-    private record RulesRead(Map<TypeSymbol.AtModule, PublishedRules> byName) {
+    private record RulesRead(Map<TypeSymbol.AtModule, PublishedRules> byName,
+                             Map<TermPath, Named> byPlace) {
 
         static RulesRead of(InputReading read) {
-            return read.derived(RulesRead.class, _ -> new RulesRead(new ConcurrentHashMap<>()));
+            return read.derived(RulesRead.class,
+                    _ -> new RulesRead(new ConcurrentHashMap<>(), new ConcurrentHashMap<>()));
         }
     }
 
@@ -1008,6 +1213,12 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * itself ({@link ClauseRead}).
      */
     private static Named namedByTheDeclarations(TermPath path, InputReading read) {
+        return RulesRead.of(read).byPlace().computeIfAbsent(path,
+                each -> namedByTheDeclarationsWorkedOut(each, read));
+    }
+
+    /** {@link #namedByTheDeclarations}, worked out. */
+    private static Named namedByTheDeclarationsWorkedOut(TermPath path, InputReading read) {
         List<TermPath.Step> steps = path.steps();
         Named out = Named.NOT;
         for (int length = 0; length < steps.size(); length++) {
@@ -1137,6 +1348,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     }
 
     private static boolean overlap(FilingCoordinate one, FilingCoordinate other) {
-        return one.path().isAtOrUnder(other.path()) || other.path().isAtOrUnder(one.path());
+        return overlap(one.path(), other.path());
+    }
+
+    /** Whether two places are one, or one is inside the other. */
+    private static boolean overlap(TermPath one, TermPath other) {
+        return one.isAtOrUnder(other) || other.isAtOrUnder(one);
     }
 }
