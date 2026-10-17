@@ -348,10 +348,15 @@ sealed interface StatedByClauses {
          * the clause says, and a clause says what it says wherever it is written; this one is about
          * what reaches a reader, and the walk that would have reached these ends stopped at the
          * {@code ||} the author wrote.
+         *
+         * <p>And how a container's elements stand to each other is given up on here. What the
+         * builders are told is read off the conjuncts of the clause ({@link ElementsApart}), and
+         * that reading stops at the {@code ||} as well — so a rule taken in under it is one no
+         * container is composed for, however dead the alternative beside it is.
          */
         Part underACollapsedChoice() {
-            return new Part(byValues, byOrder, byDerivedNumbers, byElements, stopped, aboutStrings,
-                    asked,
+            return new Part(byValues, byOrder, byDerivedNumbers,
+                    byElements.unbuiltAt(byElements.mentions()), stopped, aboutStrings, asked,
                     ruleShortfalls, endsLeftOpen.underACollapsedChoice(), boundary,
                     underACollapsedChoice(boundsLeftOpen));
         }

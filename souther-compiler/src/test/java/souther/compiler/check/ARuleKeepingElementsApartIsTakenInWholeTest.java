@@ -137,6 +137,38 @@ class ARuleKeepingElementsApartIsTakenInWholeTest {
                 "a builder keeping the keys apart refuses lists of four the choice admits");
     }
 
+    /**
+     * Taken in exactly where the builders are told, which is the claim the reading makes. A choice
+     * one alternative of which nobody can be in is read like a conjunction, and the builders still
+     * stop at the {@code ||}: credited there, the rule is accounted for by containers nothing
+     * composes apart.
+     */
+    @Test
+    void theRuleIsTakenInExactlyWhereTheBuildersAreTold() {
+        List<String> models = List.of(
+                "List.allDistinctBy(.id, items) && n >= 0",
+                "n >= 0 && (List.allDistinctBy(.id, items) || n < 0)",
+                "(List.allDistinctBy(.id, items) || n < 0) && n >= 0",
+                "List.allDistinctBy(.id, items) || (n < 0 && n > 0)",
+                "{\n        let xs = items\n        List.allDistinctBy(.id, xs) && n >= 0\n    }");
+        for (String rule : models) {
+            FieldDomains read = read("""
+                    data N = { n: Int, items: List<Item> }
+                        invariant %s
+                    """.formatted(rule));
+            FieldDomains.Held held = read.heldAt(RuleKey.of("items"));
+            boolean told = held != null && !held.keptApart().isEmpty();
+
+            assertEquals(told, !anyUnaccounted(read), rule);
+        }
+        FieldDomains.Held control = read("""
+                data N = { n: Int, items: List<Item> }
+                    invariant List.allDistinctBy(.id, items) && n >= 0
+                """).heldAt(RuleKey.of("items"));
+        assertEquals(List.of(List.of("id")), control.keptApart(),
+                "the conjunction tells the builders, so the pairing above is not two absences");
+    }
+
     @Test
     void aKeyNothingHereReadsIsARuleNothingTookIn() {
         FieldDomains read = read("""
