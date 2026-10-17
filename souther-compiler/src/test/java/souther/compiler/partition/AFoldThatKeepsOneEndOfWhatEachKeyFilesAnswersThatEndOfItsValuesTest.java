@@ -215,6 +215,35 @@ class AFoldThatKeepsOneEndOfWhatEachKeyFilesAnswersThatEndOfItsValuesTest {
         }
     }
 
+    /**
+     * The model the line was first missed in, as it was written: the map kept to its keys and
+     * handed back inside a record. The comparison is read, and its line is on the least of a key's
+     * values against the threshold.
+     */
+    @Test
+    void theStaleAccountsModelReadsItsComparison() {
+        Compilation compilation = measured("""
+                module example.stale
+
+                data Touch = { account: String, days: Int }
+
+                data Report = { stale: List<String> }
+
+                behavior staleAccounts : (touches: List<Touch>, staleAfter: Int) -> Report
+
+                let staleAccounts (touches, staleAfter) = {
+                    let since: Map<String, Int> =
+                        List.fold((acc, t) -> Map.updateOrInsert(t.account, t.days, seen -> Int.min(seen, t.days), acc),
+                                  Map.empty, touches)
+                    Report { stale = Map.keys(Map.filterEntries((k, days) -> days >= staleAfter, since)) }
+                }
+                """);
+        assertFalse(report(compilation).contains("not read"), () -> report(compilation));
+        assertEquals(1, bordersOf(compilation).size(), () -> report(compilation));
+        assertTrue(json(compilation).contains("least(touches[*].days by account)"),
+                () -> report(compilation));
+    }
+
     /** The line is written in a document the schema shipped beside this accepts. */
     @Test
     void theDocumentNamingTheEndIsOneTheSchemaAccepts() {

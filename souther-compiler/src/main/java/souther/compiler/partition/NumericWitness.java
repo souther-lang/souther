@@ -464,18 +464,20 @@ final class NumericWitness {
      * What the declarations leave the position {@code term} is read at, or nothing narrowed where
      * it is read at none.
      *
-     * <p>A number over a run, how often a value occurs among a container's elements, or the end of
-     * the values of a key, is a number of the values standing there and not any one of them: a set
-     * a position admits says which
+     * <p>A number over a run, or how often a value occurs among a container's elements, is a
+     * number of the values standing there and not one of them: a set a position admits says which
      * values may be written at it, and no value is written at such a number. What the rules leave
-     * it is the region's, which the walk is held to already.
+     * it is the region's, which the walk is held to already. The end of the values of a key is one
+     * of the values at its place, so it is admitted no value the place is not.
      */
     private static ValueSet admittedAt(NumericTerm term, WitnessSearch looking,
                                        SearchRegion within) {
         return switch (term) {
             case NumericTerm.FromOnePosition one -> looking.toNarrowBy(one, within);
-            case NumericTerm.TakenOver _, NumericTerm.Multiplicity _,
-                 NumericTerm.ExtremeOfItsKey _ -> ValueSet.ANY;
+            // One of the values at its place, so none the place does not admit.
+            case NumericTerm.ExtremeOfItsKey extreme ->
+                    looking.toNarrowBy(extreme.valuesTakenFrom(), within);
+            case NumericTerm.TakenOver _, NumericTerm.Multiplicity _ -> ValueSet.ANY;
         };
     }
 

@@ -593,6 +593,18 @@ public sealed interface NumericTerm
             return extreme;
         }
 
+        /**
+         * The number this one is always one of the values of: what stands at {@link #value()}.
+         *
+         * <p>Which values this number can take — the run the rules leave it, the set a place
+         * admits — is that number's question, since an end of some of the values is one of them.
+         * Whether a row exists holding one at it is not: that takes a container holding the
+         * elements, which no answer about the values says exists.
+         */
+        public ValueOf valuesTakenFrom() {
+            return new ValueOf(value);
+        }
+
         /** Where the values one end of which is taken stand, which is where a reader is sent and no
          *  place the number stands at. */
         @Override

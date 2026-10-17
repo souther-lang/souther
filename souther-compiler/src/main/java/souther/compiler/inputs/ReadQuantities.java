@@ -2346,7 +2346,7 @@ final class ReadQuantities implements Quantities {
             // The end of a key's values is one of the values the place holds, so it is wherever
             // what the place was read to hold is.
             case NumericTerm.ExtremeOfItsKey extreme ->
-                    ownOf(new NumericTerm.ValueOf(extreme.value()));
+                    ownOf(extreme.valuesTakenFrom());
         };
     }
 
