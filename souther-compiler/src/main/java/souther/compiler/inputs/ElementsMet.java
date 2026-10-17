@@ -98,7 +98,6 @@ public final class ElementsMet {
         }
         ElementsMet copy = new ElementsMet(true);
         copy.standingFor.putAll(standingFor);
-        copy.names.addAll(names);
         copy.crowded = crowded;
         return copy;
     }
