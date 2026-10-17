@@ -1346,7 +1346,7 @@ public final class FieldDomains {
             throw new AStandingQuestionWithNoAccount(rule, named);
         }
         return new RuleAccounting.Why.TheValueReadingSays(why, form,
-                new AnswerShortfalls(answered));
+                took.decidedWhereTheArithmeticStopped(rule, why), new AnswerShortfalls(answered));
     }
 
     /**

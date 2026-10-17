@@ -4,12 +4,10 @@ import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.RuleReasons;
 import souther.compiler.inputs.RuleSite;
 import souther.compiler.inputs.WhatAQuestionStandsOn;
-import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.values.UnreadReason;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -335,22 +333,35 @@ public final class RuleAccounting {
          * where a reader is owed the author's order it is the source that is asked.
          */
         record TheValueReadingSays(Set<RuleShortfall> shortfalls, Set<FormShortfall> theForm,
+                                   Set<RuleShortfall> whereTheArithmeticStopped,
                                    AnswerShortfalls aboutTheAnswer) implements Why {
 
             public TheValueReadingSays {
-                if (shortfalls == null || theForm == null || aboutTheAnswer == null) {
+                if (shortfalls == null || theForm == null || whereTheArithmeticStopped == null
+                        || aboutTheAnswer == null) {
                     throw new IllegalArgumentException("a reading that stopped says why");
                 }
                 if (shortfalls.isEmpty() && theForm.isEmpty() && aboutTheAnswer.isEmpty()) {
                     throw new IllegalArgumentException("a reading that stopped says why");
                 }
+                if (!shortfalls.containsAll(whereTheArithmeticStopped)) {
+                    throw new IllegalArgumentException(
+                            "where the arithmetic stopped is said of what the reading of values"
+                                    + " was short of, and of nothing else");
+                }
+                if (!whereTheArithmeticStopped.isEmpty() && theForm.isEmpty()) {
+                    throw new IllegalArgumentException(
+                            "a part the arithmetic stopped on says where it stopped");
+                }
                 shortfalls = Collections.unmodifiableSet(new LinkedHashSet<>(shortfalls));
                 theForm = Collections.unmodifiableSet(new LinkedHashSet<>(theForm));
+                whereTheArithmeticStopped = Set.copyOf(whereTheArithmeticStopped);
             }
 
             /**
-             * Which shortfalls are a form the reading of values does not take apart, in the copy of
-             * a comparison the arithmetic said of where it stopped, at the same position.
+             * Which shortfalls are a form the reading of values does not take apart, decided only
+             * in comparisons the arithmetic said of where it stopped, at the same position
+             * ({@link #whereTheArithmeticStopped}).
              *
              * <p>Then the arithmetic's word is the one said of it. A form that reading does not
              * take apart is a statement that no reading here took the form apart, which is not true
@@ -364,19 +375,10 @@ public final class RuleAccounting {
              * told turns on the arithmetic.
              */
             Predicate<RuleShortfall> toldByTheForm() {
-                Set<Told> told = new HashSet<>();
-                theForm.forEach(each -> told.add(new Told(each.occurrence(), each.position())));
                 return shortfall -> shortfall.kind() == RuleShortfall.Kind.LEAF
                         && shortfall.why().why() == UnreadReason.FORM_NOT_READ
-                        && told.contains(new Told(shortfall.occurrence(), shortfall.position()));
+                        && whereTheArithmeticStopped.contains(shortfall);
             }
-
-            /**
-             * One copy of a written construct, at one position. The copy and not the place: two
-             * copies of one comparison are read with what two calls handed them, and the
-             * arithmetic stopping on one says nothing of the other ({@link FormShortfall}).
-             */
-            private record Told(ConstructOccurrence occurrence, FactSubject position) {}
 
             /**
              * What a rule of this is answerable for, as reasons alone.

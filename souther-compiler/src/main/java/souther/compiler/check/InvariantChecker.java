@@ -29,7 +29,6 @@ import souther.compiler.inputs.ChoiceToLift;
 import souther.compiler.inputs.RuleSite;
 import souther.compiler.inputs.WhatARelationLeavesUndivided;
 import souther.compiler.types.BindingId;
-import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
@@ -2397,11 +2396,10 @@ public final class InvariantChecker {
         // reading of values files what it could not take apart in it, so the two are said of one
         // thing an author wrote.
         if (stoppedOn != null) {
-            ConstructOccurrence wrote = AdmissibleReading.wroteIt(part);
-            RuleSite site = RuleSite.at(wrote.origin(), statement.part());
+            RuleSite site = RuleSite.at(AdmissibleReading.wroteIt(part).origin(), statement.part());
             BlockReason.RuleReadingStopped why = stoppedOn.said();
             standing.forEach(name -> took.stoppedOnTheForm(rule,
-                    new FormShortfall(wrote, site, why, name)));
+                    new FormShortfall(site, why, name), statement));
         }
     }
 

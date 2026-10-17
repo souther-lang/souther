@@ -111,31 +111,45 @@ class WhatARuleIsAnswerableForIsToldApartByThePartItsAuthorWroteTest {
 
     /**
      * And where the arithmetic stopped stands in for a form the reading of values had no word for
-     * only in the copy it was said of.
+     * only in the statements it stopped on.
      *
-     * <p>Two copies of one comparison are one place to go and two readings, each with what its own
-     * call handed it. Matched by the place, the arithmetic stopping on one copy would take the other
-     * copy's word away, and the question that copy left would be told a reason that is not its own.
+     * <p>The statement is what says which comparison it was. A comparison nobody wrote is written
+     * as what every such comparison is written as, and a conjunct holds as many comparisons as it
+     * states — so matched by the construct, or by the construct and the place, the arithmetic
+     * stopping on one comparison would take another comparison's word away.
      */
     @Test
-    void andTheArithmeticsWordStandsInOnlyForTheCopyItWasSaidOf() {
-        BlockReason.RuleReadingStopped derived = new BlockReason.RuleAboutADerivedValue();
-        RuleShortfall formNotRead = new RuleShortfall(wrote(3), RuleSite.at(FIRST),
-                RuleShortfall.Kind.LEAF, StoppedReading.of(UnreadReason.FORM_NOT_READ), POSITION);
+    void andTheArithmeticsWordStandsInOnlyWhereItStopped() {
+        RuleShortfall nobodyWroteIt = new RuleShortfall(ConstructOccurrence.unwritten(),
+                RuleSite.at(FIRST), RuleShortfall.Kind.LEAF,
+                StoppedReading.of(UnreadReason.FORM_NOT_READ), POSITION);
+        InvariantStatementId one = new InvariantStatementId(FIRST, 0);
+        InvariantStatementId another = new InvariantStatementId(FIRST, 1);
+        InvariantStatementId elsewhere = new InvariantStatementId(SECOND, 0);
 
-        assertEquals(List.of(derived), said(formNotRead,
-                        new FormShortfall(wrote(3), RuleSite.at(FIRST), derived, POSITION)),
-                "in the copy the arithmetic stopped on, its word is the one said");
-        assertEquals(2, said(formNotRead,
-                        new FormShortfall(wrote(7), RuleSite.at(FIRST), derived, POSITION)).size(),
-                "in another copy at the same place, both words are said");
+        assertEquals(Set.of(nobodyWroteIt), toldByTheForm(nobodyWroteIt, List.of(one), one),
+                "in the statement the arithmetic stopped on, its word is the one said");
+        assertEquals(Set.of(), toldByTheForm(nobodyWroteIt, List.of(one), elsewhere),
+                "a comparison nobody wrote in another conjunct is another comparison");
+        assertEquals(Set.of(), toldByTheForm(nobodyWroteIt, List.of(one), another),
+                "and so is one in another statement of the same conjunct, at the same place");
+        assertEquals(Set.of(), toldByTheForm(nobodyWroteIt, List.of(one, another), another),
+                "and one fact decided in two statements is true of the one it did not stop on");
     }
 
-    /** What the question standing on {@code shortfall} and {@code stopped} is told. */
-    private static List<BlockReason.RuleReadingStopped> said(RuleShortfall shortfall,
-                                                             FormShortfall stopped) {
-        return new RuleAccounting.Why.TheValueReadingSays(Set.of(shortfall), Set.of(stopped),
-                AnswerShortfalls.none()).stopped().itsRuleLeft().reasons();
+    /**
+     * Which of the value reading's facts the arithmetic's word stands in for, with {@code fact}
+     * decided in {@code decidedIn} and the arithmetic stopped on {@code stoppedOn}, nothing taken in.
+     */
+    private static Set<RuleShortfall> toldByTheForm(RuleShortfall fact,
+                                                    List<InvariantStatementId> decidedIn,
+                                                    InvariantStatementId stoppedOn) {
+        RuleRef.Invariant rule = FIRST.rule();
+        ReadingEvidence took = new ReadingEvidence();
+        decidedIn.forEach(each -> took.stoppedBy(rule, fact, each));
+        took.stoppedOnTheForm(rule, new FormShortfall(RuleSite.at(stoppedOn.part()),
+                new BlockReason.RuleAboutADerivedValue(), POSITION), stoppedOn);
+        return took.decidedWhereTheArithmeticStopped(rule, Set.of(fact));
     }
 
     /** What crosses out of a reading, as the set that files it holds them. */

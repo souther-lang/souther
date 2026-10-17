@@ -100,6 +100,16 @@ final class ReadingEvidence {
      */
     private final Map<RuleRef.Invariant, Set<FormShortfall>> formStopped = new LinkedHashMap<>();
 
+    /**
+     * Which statements the arithmetic stopped on, at which positions nothing took them in.
+     *
+     * <p>The statement is what says which comparison it was. One that compares is that comparison
+     * and nothing else, and it is the one identity both readings file under — the construct a
+     * comparison was written as is no identity for one nobody wrote, which every such comparison
+     * shares, and the place it stands in holds as many comparisons as the conjunct states.
+     */
+    private final Set<StatementAt> formStoppedAt = new HashSet<>();
+
     /** A reading took {@code rule} in at {@code position}. */
     void record(RuleRef.Invariant rule, FactSubject position) {
         spokenFor.computeIfAbsent(rule, _ -> new LinkedHashSet<>()).add(position);
@@ -191,9 +201,41 @@ final class ReadingEvidence {
         return out;
     }
 
-    /** The arithmetic stopped on a part of {@code rule} that nothing took in. */
-    void stoppedOnTheForm(RuleRef.Invariant rule, FormShortfall stoppedOn) {
+    /** The arithmetic stopped on {@code statement} of {@code rule}, which nothing took in. */
+    void stoppedOnTheForm(RuleRef.Invariant rule, FormShortfall stoppedOn,
+                          InvariantStatementId statement) {
         formStopped.computeIfAbsent(rule, _ -> new LinkedHashSet<>()).add(stoppedOn);
+        formStoppedAt.add(new StatementAt(statement, stoppedOn.position()));
+    }
+
+    /**
+     * Which of {@code these} were decided only in comparisons the arithmetic stopped on, at the
+     * position each is about.
+     *
+     * <p>Every statement a fact was decided in that nothing took in, and not some of them. One fact
+     * decided in two — a helper's comparison copied into two conjuncts — is true of both, and the
+     * arithmetic stopping on one of them says nothing of the other.
+     */
+    Set<RuleShortfall> decidedWhereTheArithmeticStopped(RuleRef.Invariant rule,
+                                                        Set<RuleShortfall> these) {
+        Map<RuleShortfall, Set<InvariantStatementId>> here = stopped.getOrDefault(rule, Map.of());
+        Set<RuleShortfall> out = new LinkedHashSet<>();
+        for (RuleShortfall each : these) {
+            Set<InvariantStatementId> in = here.getOrDefault(each, Set.of());
+            boolean any = false;
+            boolean all = true;
+            for (InvariantStatementId statement : in) {
+                StatementAt at = new StatementAt(statement, each.position());
+                if (!statementsTaken.contains(at)) {
+                    any = true;
+                    all &= formStoppedAt.contains(at);
+                }
+            }
+            if (any && all) {
+                out.add(each);
+            }
+        }
+        return out;
     }
 
     /**
