@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.check.Carrier;
 import souther.compiler.check.ClauseMeaning;
 import souther.compiler.check.ClauseRead;
 import souther.compiler.check.DefaultBoundOperationFacts;
@@ -12,6 +13,7 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Position;
 import souther.compiler.inputs.PositionBounds;
 import souther.compiler.inputs.SearchRegion;
+import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.inputs.WhatARelationLeavesUndivided;
 import souther.compiler.meaning.DecisionAtom;
@@ -27,6 +29,7 @@ import souther.compiler.types.TypeSymbol;
 import souther.compiler.values.AdmissibleSet;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -194,8 +197,23 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 case NumericTerm.CodePointClassCount _ -> null;
             });
         }
+        // And the order each side's values are counted on, which says where its type ends.
+        List<Carrier> carriers = new ArrayList<>();
+        for (Side each : sides) {
+            TermOrders orders = each.term() == null ? null
+                    : read.quantities().ordersOf(each.term());
+            carriers.add(orders == null ? null : orders.answered());
+        }
+        // Two sides each standing at the other's value are two values of one order, so the order
+        // one of them is counted on is the other's too: what an operation answered is a string
+        // where the value it is held equal to is one, and it is never below the empty string.
+        if (WhatARelationLeavesUndivided.eachStandsAtTheOthersValue(
+                sides.stream().map(Side::weight).toList(), constant)) {
+            Carrier shared = carriers.get(0) != null ? carriers.get(0) : carriers.get(1);
+            carriers = Arrays.asList(shared, shared);
+        }
         if (ways.isEmpty()) {
-            return undividedAlong(sources, read.quantities().region(), List.of(), true);
+            return undividedAlong(sources, carriers, read.quantities().region(), List.of(), true);
         }
         List<Reachability.Reaching> branches = new ArrayList<>();
         for (Reachability.Reaching each : ways) {
@@ -205,7 +223,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
         Set<FilingCoordinate> out = null;
         for (Reachability.Reaching each : branches) {
-            Set<FilingCoordinate> along = undividedAlong(sources, each.region(),
+            Set<FilingCoordinate> along = undividedAlong(sources, carriers, each.region(),
                     conditionsOf(each), each.declined().isEmpty());
             if (out == null) {
                 out = along;
@@ -289,11 +307,13 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * The places shown undivided over the rows in {@code region}, a way stating
      * {@code conditions} there.
      *
-     * @param sources what the declarations leave the value each side is, or is taken of, in the
-     *                order of the sides
+     * @param sources  what the declarations leave the value each side is, or is taken of, in the
+     *                 order of the sides
+     * @param carriers the order each side is counted on, or null where it has none
      */
-    private Set<FilingCoordinate> undividedAlong(List<Takes> sources, SearchRegion region,
-                                                 List<OnAWay> conditions, boolean heldWhole) {
+    private Set<FilingCoordinate> undividedAlong(List<Takes> sources, List<Carrier> carriers,
+                                                 SearchRegion region, List<OnAWay> conditions,
+                                                 boolean heldWhole) {
         List<WhatARelationLeavesUndivided.Term<FilingCoordinate>> terms = new ArrayList<>();
         // What the way states of each side, asked once and read by both readings.
         List<List<OnAWay>> stating = new ArrayList<>();
@@ -301,15 +321,16 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             Side each = sides.get(i);
             stating.add(each.term() == null || !heldWhole ? List.of()
                     : statingAnythingOf(each.term(), conditions));
-            NumericDomain.Bounds holds = each.term() != null
+            NumericDomain.Bounds holds = asARelationReadsIt(each.term() != null
                     && region.projectionOf(each.term())
                     instanceof NumericDomain.FormProjection.Within(NumericDomain.Bounds within)
-                    ? within : NumericDomain.Bounds.OPEN;
+                    ? within : NumericDomain.Bounds.OPEN, carriers.get(i));
             Way way = each.term() == null || !heldWhole ? Way.TIES
                     : wayOf(each.term(), stating.get(i));
             Takes source = way == Way.TIES ? null : sources.get(i);
             NumericDomain.Bounds realizes = source == null ? null
-                    : realized(each.term(), source, region, way);
+                    : asARelationReadsIt(realized(each.term(), source, region, way),
+                            carriers.get(i));
             Takes takes = way == Way.UNTOUCHED && each.term() instanceof NumericTerm.ValueOf
                     ? source : null;
             terms.add(new WhatARelationLeavesUndivided.Term<>(each.madeOf(), each.weight(), holds,
@@ -321,9 +342,20 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         out.addAll(WhatARelationLeavesUndivided.of(terms, constant, relation,
                 UndividedByARelation::overlap, (one, other) -> true));
         if (!out.containsAll(places())) {
-            out.addAll(undividedByTheDifference(sources, stating, heldWhole));
+            out.addAll(undividedByTheDifference(sources, carriers, stating, heldWhole));
         }
         return out;
+    }
+
+    /**
+     * {@code run} as a relation reads it on {@code carrier}: ending where the order ends at a value
+     * a model holds ({@link Carrier#asARelationReadsIt}) — an enumeration's last case, the empty
+     * string — and left as it is where the order has no such end, or the side none at all. Null
+     * stays null: nothing shown is still nothing shown.
+     */
+    private static NumericDomain.Bounds asARelationReadsIt(NumericDomain.Bounds run,
+                                                           Carrier carrier) {
+        return run == null || carrier == null ? run : run.meet(carrier.asARelationReadsIt());
     }
 
     /**
@@ -338,11 +370,14 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * since it may keep a side from values of its own.
      */
     private Set<FilingCoordinate> undividedByTheDifference(List<Takes> sources,
+                                                         List<Carrier> carriers,
                                                          List<List<OnAWay>> stating,
                                                          boolean heldWhole) {
-        if (!heldWhole || sides.size() != 2) {
+        if (!heldWhole || sides.size() != 2 || carriers.get(0) == null
+                || !carriers.get(0).equals(carriers.get(1))) {
             return Set.of();
         }
+        Carrier on = carriers.get(0);
         List<WhatARelationLeavesUndivided.Term<FilingCoordinate>> terms = new ArrayList<>();
         for (int i = 0; i < sides.size(); i++) {
             Side each = sides.get(i);
@@ -352,7 +387,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 return Set.of();
             }
             terms.add(new WhatARelationLeavesUndivided.Term<>(each.madeOf(), each.weight(),
-                    NumericDomain.Bounds.OPEN, NumericDomain.Bounds.OPEN, source, true));
+                    on.asARelationReadsIt(), on.asARelationReadsIt(), source, true));
         }
         // A statement about both sides is in each side's list; it is one statement.
         Set<OnAWay> aboutEither = new LinkedHashSet<>(stating.get(0));
@@ -367,6 +402,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             held.add(statement);
         }
         return WhatARelationLeavesUndivided.ofTheirDifference(terms, constant, relation, held,
+                new NumericDomain.Bounds(on.extent().low(), on.extent().high()),
                 UndividedByARelation::overlap);
     }
 

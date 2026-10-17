@@ -3198,7 +3198,8 @@ public final class InvariantChecker {
      * of it, and no part but this one names it: the rules of its type and of every value it sits in
      * are parts reaching this value, and one of them naming the place narrows what it takes. That
      * is also what leaves it tied to nothing — the only rule naming it is the one being asked of —
-     * and where a place may lie is left open, which no place is outside of. Two such places on one
+     * and where a place may lie is every value of its order, open where the order stops only
+     * because what carries it does ({@link Carrier#asARelationReadsIt}). Two such places on one
      * carrier take the same values, so a form over the two alone is also asked of how far apart
      * they are ({@link WhatARelationLeavesUndivided#ofTheirDifference}), with nothing else held of
      * them.
@@ -3209,6 +3210,9 @@ public final class InvariantChecker {
         List<WhatARelationLeavesUndivided.Term<RuleKey>> terms = new ArrayList<>();
         // The same terms, each taking the values of its carrier, for how far apart two of them are.
         List<WhatARelationLeavesUndivided.Term<RuleKey>> apart = new ArrayList<>();
+        // Where the first place's type stops, which is where the second's does when the two take
+        // the same values, and the only time it is read.
+        NumericDomain.Bounds extent = NumericDomain.Bounds.OPEN;
         for (Map.Entry<Coordinate, ExactRatio> each : over.weights().entrySet()) {
             if (each.getValue() == null || each.getValue().signum() == 0) {
                 return Set.of();
@@ -3216,12 +3220,17 @@ public final class InvariantChecker {
             Coordinate at = each.getKey();
             boolean itsPlace = at.at().of() instanceof NumberAt.OfWhatNumber.OfItsOwnValue;
             boolean every = itsPlace && partsNaming.onlyNamedBy(at.path(), part);
+            // Every value of the place, ending where its order ends at a value a model holds.
+            NumericDomain.Bounds values = at.carrier() == null ? NumericDomain.Bounds.OPEN
+                    : at.carrier().asARelationReadsIt();
             terms.add(new WhatARelationLeavesUndivided.Term<>(List.of(at.path()), each.getValue(),
-                    NumericDomain.Bounds.OPEN, every ? NumericDomain.Bounds.OPEN : null, null,
-                    itsPlace));
+                    values, every ? values : null, null, itsPlace));
             apart.add(new WhatARelationLeavesUndivided.Term<>(List.of(at.path()), each.getValue(),
-                    NumericDomain.Bounds.OPEN, every ? NumericDomain.Bounds.OPEN : null,
-                    every ? at.carrier() : null, itsPlace));
+                    values, every ? values : null, every ? at.carrier() : null, itsPlace));
+            if (apart.size() == 1 && at.carrier() != null) {
+                extent = new NumericDomain.Bounds(at.carrier().extent().low(),
+                        at.carrier().extent().high());
+            }
         }
         Rel relation = over.comparison().claim().statedRelation();
         BiPredicate<RuleKey, RuleKey> overlap =
@@ -3229,7 +3238,7 @@ public final class InvariantChecker {
         Set<RuleKey> out = new LinkedHashSet<>(WhatARelationLeavesUndivided.of(terms,
                 over.constant(), relation, overlap, (one, other) -> true));
         out.addAll(WhatARelationLeavesUndivided.ofTheirDifference(apart, over.constant(), relation,
-                List.of(), overlap));
+                List.of(), extent, overlap));
         return out;
     }
 

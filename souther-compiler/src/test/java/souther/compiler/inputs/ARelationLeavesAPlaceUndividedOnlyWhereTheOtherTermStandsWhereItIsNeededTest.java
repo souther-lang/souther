@@ -8,6 +8,7 @@ import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Rel;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Set;
 
@@ -127,11 +128,46 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherTermStandsWhereItIsNeededTe
                 ExactRatio.of(constant), relation);
     }
 
+    /** The days a date can be written on, which is where the type two dates take stops. */
+    private static final NumericDomain.Bounds DATES =
+            run(LocalDate.MIN.toEpochDay(), LocalDate.MAX.toEpochDay());
+
     private static Set<String> apart(List<WhatARelationLeavesUndivided.Term<String>> terms,
                                      long constant, Rel relation,
                                      WhatARelationLeavesUndivided.OnTheDifference... held) {
         return WhatARelationLeavesUndivided.ofTheirDifference(terms, ExactRatio.of(constant),
-                relation, List.of(held), String::equals);
+                relation, List.of(held), DATES, String::equals);
+    }
+
+    /**
+     * No two dates are ten trillion days apart, so {@code a - b > 10^13} holds for none of them and
+     * {@code a} settles it wherever it stands. Fourteen days apart, every date but those beside the
+     * two ends has partners on both sides.
+     */
+    @Test
+    void aDifferenceNoTwoValuesAreApartByIsNoOutcome() {
+        assertEquals(Set.of(), apart(pair(1, -1, A_DATE), -10_000_000_000_000L, Rel.GT));
+        assertEquals(Set.of("a", "b"), apart(pair(1, -1, A_DATE), -14, Rel.GT));
+    }
+
+    /**
+     * Four hundred billion days is more than half the dates there are: only dates nearer the two
+     * ends than the middle is are that far apart, and every other date settles
+     * {@code a - b > 4 * 10^11} alone. Three hundred billion is less than half, and the middle date
+     * has a partner on either side of it, so the dates settling it alone are those beside an end.
+     */
+    @Test
+    void theMiddleOfTheTypeHasToSeeBothOutcomes() {
+        assertEquals(Set.of(), apart(pair(1, -1, A_DATE), -400_000_000_000L, Rel.GT));
+        assertEquals(Set.of("a", "b"), apart(pair(1, -1, A_DATE), -300_000_000_000L, Rel.GT));
+    }
+
+    /** A type with no end, as a decimal is, leaves every difference one some value is apart by. */
+    @Test
+    void aTypeWithNoEndLeavesEveryDifference() {
+        assertEquals(Set.of("a", "b"), WhatARelationLeavesUndivided.ofTheirDifference(
+                pair(1, -1, A_DATE), ExactRatio.of(-10_000_000_000_000L), Rel.GT, List.of(),
+                NumericDomain.Bounds.OPEN, String::equals));
     }
 
     /**

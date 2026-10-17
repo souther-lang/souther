@@ -127,6 +127,116 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     }
 
     /**
+     * The last case of an enumeration, the empty string and the last second of a day are values a
+     * model holds, and a relation that comes out one way only there divides them: {@code a < b} is
+     * false at the last stage whatever {@code b} is, and at the empty {@code b} whatever {@code a}
+     * is. No string is the greatest, so every {@code a} has strings either side. The ends of an
+     * {@code Int} are where the representation stops, and two of them relate each other; so do two
+     * stages held equal, since every stage has one equal to it and one not.
+     */
+    @Test
+    void anEndAModelHoldsIsAValueTheRelationDivides() {
+        String stage = "data Stage = Prospecting | Negotiation | Won | Lost";
+        assertEquals(Map.of("a", NOT_SHOWN, "b", NOT_SHOWN),
+                left("a: Stage, b: Stage", stage, "a < b", "4:18"));
+        assertEquals(Map.of("a", NOT_SHOWN, "b", NOT_SHOWN),
+                left("a: Stage, b: Stage", stage, "if a <= b then a < b else false", "4:33"));
+        assertEquals(Map.of("a", RELATES, "b", RELATES),
+                left("a: Stage, b: Stage", stage, "a == b", "4:18"));
+        assertEquals(Map.of("a", RELATES, "b", NOT_SHOWN),
+                left("a: String, b: String", stage, "a < b", "4:18"));
+        assertEquals(Map.of("a", NOT_SHOWN, "b", NOT_SHOWN),
+                left("a: Time, b: Time", stage, "a < b", "4:18"));
+        assertEquals(Map.of("a", RELATES, "b", RELATES),
+                left("a: Int, b: Int", stage, "a < b", "4:18"));
+    }
+
+    /**
+     * No two dates are ten trillion days apart, so the comparison holds for none of them; and
+     * four hundred billion days apart are only dates nearer the two ends than the middle is.
+     * Three hundred billion days leave the middle date partners either side.
+     */
+    @Test
+    void aDifferenceHasToBeOneTheMiddleOfTheTypeReachesBothWays() {
+        for (String apart : List.of("10000000000000", "400000000000")) {
+            assertEquals(Map.of("a", NOT_SHOWN, "b", NOT_SHOWN),
+                    left("a: Date, b: Date", "data Unused = Int",
+                            "Date.daysBetween(a, b) > " + apart, "4:39"), apart);
+        }
+        assertEquals(Map.of("a", RELATES, "b", RELATES),
+                left("a: Date, b: Date", "data Unused = Int",
+                        "Date.daysBetween(a, b) > 300000000000", "4:39"));
+    }
+
+    /**
+     * A rule between two stages of a record is measured to the end: a row for it is composed by
+     * moving one stage by how far apart the rule leaves the two, and a move past the last stage is
+     * a run reaching as far as the stages do, or no run, never a place with nothing at it.
+     */
+    @Test
+    void aRuleBetweenTwoStagesIsMeasuredToTheEnd() {
+        Compilation compilation = Compilation.ofSource("""
+                module w1
+                data Stage = Prospecting | Negotiation | Won | Lost
+                data Deal = { from: Stage, to: Stage }
+                    invariant from < to
+                behavior m : (d: Deal) -> Bool
+                let m (d) = true
+                """, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        String report = AdequacyReport.of(compilation)
+                .human(SourceRendering.namedByIdentity(compilation.texts()));
+        for (String place : List.of("d.from", "d.to")) {
+            assertTrue(report.lines().anyMatch(line -> line.contains("invariant Deal #1")
+                    && line.contains("not shown to reach every value here")
+                    && line.endsWith("about `" + place + "`")), report);
+        }
+    }
+
+    /**
+     * The model the question was asked with: how many days are left before a deadline, held at
+     * nought or more and then at fourteen or less. Both comparisons are about how far apart the
+     * two dates are, so neither date is divided by either and what is measured is the two borders
+     * on the difference.
+     */
+    @Test
+    void howManyDaysAreLeftBeforeADeadlineDividesNeitherDate() {
+        Compilation compilation = Compilation.ofSource("""
+                module check
+
+                data TooLate = { days: Int }
+                data TooEarly = { days: Int }
+                data Fine = { days: Int }
+
+                behavior check : (deadline: Date, today: Date) -> Fine | TooLate | TooEarly
+
+                let check (deadline, today) = {
+                    let left = Date.daysBetween(today, deadline)
+                    guard left >= 0 else TooLate { days = left }
+                    guard left <= 14 else TooEarly { days = left }
+                    Fine { days = left }
+                }
+
+                example check
+                    | (Date("2026-08-01"), Date("2026-07-25")) -> Fine { days = 7 }
+                    | (Date("2026-07-20"), Date("2026-07-25")) -> TooLate { days = -5 }
+                    | (Date("2026-09-01"), Date("2026-07-25")) -> TooEarly { days = 38 }
+                """, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        String report = AdequacyReport.of(compilation)
+                .human(SourceRendering.namedByIdentity(compilation.texts()));
+        assertTrue(report.contains("measurement: complete"), report);
+        assertFalse(report.contains("not shown to reach every value here"), report);
+        for (String place : List.of("deadline", "today")) {
+            assertEquals(2, report.lines().filter(line -> line.contains("· no line: comparison@")
+                    && line.contains("rather than dividing the values here")
+                    && line.endsWith("about `" + place + "`")).count(), report);
+        }
+    }
+
+    /**
      * A guard on how far apart two dates are leaves them moved together: at nought or more, the
      * difference is at fourteen or less and past it. A guard on one of them alone keeps it from
      * values of its own, and a guard holding the difference to ten or less leaves it never past

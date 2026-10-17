@@ -432,6 +432,27 @@ public sealed interface Carrier extends ValueOrder {
     }
 
     /**
+     * Every value this order has, as a relation between two of its values is read over: open where
+     * the order stops only because what carries it does, and ending where a value a model writes
+     * stands at the end.
+     *
+     * <p>The two kinds of end are told apart here and nowhere else. The first and last case of an
+     * enumeration, the empty string and the first and last second of a day are values a model
+     * holds: {@code a < b} is false at the last case whatever {@code b} is, and that is a class of
+     * {@code a} the model wrote. The least and greatest {@code Int}, and the first and last day,
+     * moment and instant written down here, are where the representation stops; no rule a model
+     * writes is about them, so a relation that comes out one way only there is read as though the
+     * order ran on ({@link #extent} still says where it stops). A decimal has no end at all.
+     */
+    default NumericDomain.Bounds asARelationReadsIt() {
+        return switch (this) {
+            case Whole _, Dense _, Days _, Seconds _, Nanos _ -> NumericDomain.Bounds.OPEN;
+            case SecondsOfDay _, Text _, Ordinal _ ->
+                    new NumericDomain.Bounds(extent().low(), extent().high());
+        };
+    }
+
+    /**
      * The ends of the orders that have the same ends every time they are asked.
      *
      * <p>Where a reading starts is asked of every leaf of every clause, and of every position of

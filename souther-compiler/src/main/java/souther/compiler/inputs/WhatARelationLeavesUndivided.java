@@ -37,10 +37,13 @@ import java.util.function.BiPredicate;
  * divides neither. Not for an order: the least value a declaration leaves is one {@code x > y} is
  * false at, whatever {@code y} of the same declaration is.
  *
- * <p>The ends of a type are not values a model divides. {@code x < y} is false at the greatest
- * {@code x} an {@code Int} holds whatever {@code y} is, as it is at the least string under
- * {@code y < x}; that is where the representation stops, and a run that stops only there is said
- * with no end at all. Reaching passes over it only where what the reaching term has to stand at is
+ * <p>The ends where a type's representation stops are not values a model divides. {@code x < y} is
+ * false at the greatest {@code x} an {@code Int} holds whatever {@code y} is; that is where the
+ * representation stops, and a run that stops only there is said with no end at all. Which ends
+ * those are is the carrier's to say ({@code Carrier.asARelationReadsIt}): the last case of an
+ * enumeration, the empty string and the last second of a day are values a model holds, so a run
+ * a term takes ends there and a relation that comes out one way only there divides the place.
+ * Reaching passes over an end only where what the reaching term has to stand at is
  * the other term's own value — two terms weighed one and minus one, held against nought — so that
  * every value it is needed at is a value of the type. Moved by a weight, an end of the type is a
  * value whose partner is past the end, and so is every value from half the way there on: under
@@ -50,8 +53,9 @@ import java.util.function.BiPredicate;
  * passed over by the other reading, of how far apart two values moved together are
  * ({@link #ofTheirDifference}), and not by this one. And even where reaching passes over it, it is
  * so of the value at a place, which is one value there, and not of what an operation answers:
- * every string of spaces is one {@code String.trim} answers the least string of, and none of them
- * is below {@code d < String.trim(s)}'s {@code d}. So where an order needs the reaching term past
+ * every pair holding the least {@code Int} is one {@code Int.min} answers the least of, and none
+ * of them is below {@code d < Int.min(s, t)}'s {@code d}. So where an order needs the reaching
+ * term past
  * an end the other runs to, the end is passed over only where the other is the value at its
  * place.
  *
@@ -148,10 +152,16 @@ public final class WhatARelationLeavesUndivided {
      * statements leave, and the relation is left to come out either way wherever one difference
      * they leave holds it and another fails it. Moved up to an end of the type, a value finds
      * no partner past it; that is where the representation stops and not a line the model draws,
-     * the same end the other reading passes over for two terms held against nought, and the run of
-     * values it reaches into is as wide as the constant and does not grow with the type. A
+     * the same end the other reading passes over for two terms held against nought. A
      * statement that keeps the first from some values of its own is not about the difference, and
      * leaves the caller nothing to pass here.
+     *
+     * <p><b>The middle of the type has to see both.</b> A difference no two values of the type are
+     * apart by is no difference anything comes out at, and one only values near the two ends are
+     * apart by settles the relation for nearly every value. So each outcome is asked of a
+     * difference a value halfway between the ends reaches both ways. Then every value that finds no
+     * partner for one of the two is nearer an end than the middle is, and the values passed over
+     * are the ones beside the ends, however far in the line puts them.
      *
      * <p>Asked of whole differences only, which every value of a type a term takes lies apart by
      * where its values are whole, and which a dense type holds as well: a difference left between
@@ -161,16 +171,21 @@ public final class WhatARelationLeavesUndivided {
      *                the same values as the other — or nothing is shown
      * @param held    every statement the rows arriving hold of either term, each about their
      *                difference
+     * @param extent  where the type the two take stops, open on a side it does not
      * @param overlap whether two places are one, or one is part of the other
      */
     public static <P> Set<P> ofTheirDifference(List<Term<P>> terms, ExactRatio constant,
                                                Rel relation, List<OnTheDifference> held,
+                                               NumericDomain.Bounds extent,
                                                BiPredicate<P, P> overlap) {
         if (terms.size() != 2 || constant == null || !apart(terms, 0, overlap)
                 || !moveTogether(terms.get(0), terms.get(1))) {
             return Set.of();
         }
-        WholeRun left = WholeRun.EVERY;
+        WholeRun left = WholeRun.reachedFromTheMiddleOf(extent);
+        if (left == null) {
+            return Set.of();
+        }
         for (OnTheDifference each : held) {
             WholeRun where = WholeRun.where(each);
             if (where == null) {
@@ -269,13 +284,22 @@ public final class WhatARelationLeavesUndivided {
      * are.
      */
     private static <P> boolean standsAtTheOthersValue(List<Term<P>> terms, ExactRatio constant) {
-        if (terms.size() != 2 || (constant != null && constant.signum() != 0)) {
+        return eachStandsAtTheOthersValue(terms.stream().map(Term::weight).toList(), constant);
+    }
+
+    /**
+     * Whether terms weighed {@code weights} and held against {@code constant} each stand exactly at
+     * the other's value: two of them, weighed one and minus one, held against nought or against a
+     * value that is no number. Such two are two values of one order.
+     */
+    public static boolean eachStandsAtTheOthersValue(List<ExactRatio> weights,
+                                                     ExactRatio constant) {
+        if (weights.size() != 2 || (constant != null && constant.signum() != 0)) {
             return false;
         }
-        ExactRatio one = terms.get(0).weight();
+        ExactRatio one = weights.get(0);
         return one.abs().equals(ExactRatio.ONE)
-                && one.plus(terms.get(1).weight()) instanceof ExactAnswer.Held<ExactRatio>(
-                        ExactRatio sum)
+                && one.plus(weights.get(1)) instanceof ExactAnswer.Held<ExactRatio>(ExactRatio sum)
                 && sum.signum() == 0;
     }
 
@@ -457,7 +481,26 @@ public final class WhatARelationLeavesUndivided {
     /** The whole numbers between two, each end inclusive and null where nothing bounds it. */
     private record WholeRun(BigInteger low, BigInteger high) {
 
-        static final WholeRun EVERY = new WholeRun(null, null);
+        /**
+         * The whole differences a value halfway between the ends of {@code extent} is apart from
+         * some value of it by, either way — every one where it is open on a side — or null where an
+         * end is no number.
+         */
+        static WholeRun reachedFromTheMiddleOf(NumericDomain.Bounds extent) {
+            if (extent.min() == null || extent.max() == null) {
+                return new WholeRun(null, null);
+            }
+            if (!(extent.min().at() instanceof Count low)
+                    || !(extent.max().at() instanceof Count high)
+                    || !(high.exactly().minus(low.exactly())
+                            instanceof ExactAnswer.Held<ExactRatio>(ExactRatio across))
+                    || !(across.dividedBy(ExactRatio.of(2)) instanceof ExactAnswer.Held<ExactRatio>(
+                            ExactRatio half))
+                    || !(half.floor() instanceof ExactAnswer.Held<BigInteger>(BigInteger reach))) {
+                return null;
+            }
+            return new WholeRun(reach.negate(), reach);
+        }
 
         /**
          * The whole differences {@code statement} holds at, or null where they are no run: a

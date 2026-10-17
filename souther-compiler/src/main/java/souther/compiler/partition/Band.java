@@ -421,6 +421,16 @@ public record Band(BandEnd lower, BandEnd upper) {
         if (low == null || high == null) {
             return null;
         }
+        // An end the rules leave that lands nowhere on the other order is past one of its ends,
+        // and which one is read off the other end: with that one on a place, this one is past the
+        // end on its own side and the run reaches as far as the carrier does. With neither on a
+        // place the run is past both ends or past one, wholly outside, and nothing says which.
+        boolean lowOff = lower instanceof BandEnd.AtDomain && low instanceof BandEnd.AtOrderEnd;
+        boolean highOff = upper instanceof BandEnd.AtDomain && high instanceof BandEnd.AtOrderEnd;
+        if ((lowOff && high instanceof BandEnd.AtOrderEnd)
+                || (highOff && low instanceof BandEnd.AtOrderEnd)) {
+            return null;
+        }
         return new Band(low, high);
     }
 
@@ -440,19 +450,29 @@ public record Band(BandEnd lower, BandEnd upper) {
                 // reach is the one built from the line, and not whether the two are one place. A
                 // reach that came off the rules' end is at the same place under another spelling as
                 // often as not, and either answer takes the same branch.
-                yield new BandEnd.AtParting(moved, reaches.equals(atTheLine(parted, inward))
-                        ? atTheLine(moved, inward)
-                        : tighter(atTheLine(moved, inward), mapped(reaches, onto), inward));
+                if (reaches.equals(atTheLine(parted, inward))) {
+                    yield new BandEnd.AtParting(moved, atTheLine(moved, inward));
+                }
+                // An end the rules leave inside the line, landing nowhere while the line lands on
+                // a place, is past the far end of the other order: the run holds nothing there.
+                Bound left = mapped(reaches, onto);
+                yield left == null ? null : new BandEnd.AtParting(moved,
+                        tighter(atTheLine(moved, inward), left, inward));
             }
-            case BandEnd.AtDomain(Bound reaches) -> new BandEnd.AtDomain(mapped(reaches, onto));
+            case BandEnd.AtDomain(Bound reaches) -> {
+                Bound moved = mapped(reaches, onto);
+                yield moved == null ? new BandEnd.AtOrderEnd(inward.opposite())
+                        : new BandEnd.AtDomain(moved);
+            }
             case BandEnd.AtOrderEnd order -> order;
         };
     }
 
-    /** An end the rules leave, read on another order. Whether the run keeps the place it stops at
-     *  is the end's own and does not move with it. */
+    /** An end the rules leave, read on another order, or null where it lands on no place of it.
+     *  Whether the run keeps the place it stops at is the end's own and does not move with it. */
     private static Bound mapped(Bound end, java.util.function.UnaryOperator<Level> onto) {
-        return end == null ? null : Bound.at(onto.apply(valueOrRefuse(end)), end.inclusive());
+        Level moved = end == null ? null : onto.apply(valueOrRefuse(end));
+        return moved == null ? null : Bound.at(moved, end.inclusive());
     }
 
     /**
