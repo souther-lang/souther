@@ -512,6 +512,8 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
         row(out, c + "partition/Pullback", "aWayInto", "(L" + c + "inputs/Denotation;"
                 + "Ljava/util/Set;)L" + c + "partition/Pullback$Inside;", Reading.STRUCTURE,
                 CHOICES_AND_CALLS);
+        row(out, c + "partition/Pullback", "variesByApplication", "(" + core + reads
+                + "Ljava/util/Set;)Z", Reading.STRUCTURE, BINDINGS);
         row(out, c + "partition/Pullback", "measuredByCases", "(L" + c + "inputs/Denotation;"
                 + "Ljava/util/Map;)L" + c + "partition/Pullback$SizedByCases;", Reading.STRUCTURE,
                 CHOICES_AND_CALLS);

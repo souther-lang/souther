@@ -87,7 +87,7 @@ record ACallAgainstANumber<E, F>(AnOperationApplied applied, Core answered, F fa
     }
 
     /** What {@code side} is under the names it was given and the newtypes it was built as. */
-    private static <E> ValueStanding.ReadThrough<E> under(Core side, E at,
+    static <E> ValueStanding.ReadThrough<E> under(Core side, E at,
                                                          TheSignOfAnOrder.Sides<E> sides) {
         ValueStanding.ReadThrough<E> stands = sides.standing(side, at);
         while (Core.withoutStanding(stands.value()) instanceof Core.Construct built
