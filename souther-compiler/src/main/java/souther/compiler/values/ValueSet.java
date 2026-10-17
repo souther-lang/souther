@@ -7,8 +7,10 @@ import net.unit8.notation199x.pattern.Meter;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -33,8 +35,8 @@ import java.util.Set;
  *
  * <p><b>A set, and nothing about what it cost.</b> Two of these are put together by {@link Sets},
  * which is where the allowance for building a machine lives — so a set is a value wherever it came
- * from, and two equal sets are equal, but for the one pair of spellings {@link WholeRuns} says it
- * keeps. Written here, a meet would be an operation with no answer for
+ * from, and two equal sets are equal, but for the spellings {@link WholeRuns} says it keeps, which
+ * {@link #holdsTheSameValuesAs} answers for. Written here, a meet would be an operation with no answer for
  * the case where the exact one is too much work, and the only thing left to do would be to fail in
  * the middle of a method that is supposed to be total.
  */
@@ -99,14 +101,20 @@ public sealed interface ValueSet {
      * would have to answer that the comparisons admit everything. Held by the ends of its runs, what
      * it costs is how many comparisons made it ({@link WholeNumberRuns}).
      *
-     * <p><b>Never empty, never everything, and never what the other two hold as they are.</b> Runs
-     * of one number each are a {@link Finite} of those numbers, and runs leaving out one number at a
-     * time are a {@link Cofinite} of the numbers left out; {@link #wholeNumbers} is where that is
-     * settled, and it is the only way to one of these. What is not settled is a finite set of whole
-     * numbers some of which are neighbours, which is a {@link Finite} where a rule named its values
-     * one by one and one of these where comparisons left it, since counting the runs out into values
-     * is the cost this shape is for. The two say the same of every value ({@link #has}), and what
-     * either is met or joined with comes out the same set.
+     * <p><b>Never empty, never everything, and never numbers apart or all numbers but some apart.</b>
+     * Runs of one number each are a {@link Finite} of those numbers, and runs leaving out one number
+     * at a time are a {@link Cofinite} of the numbers left out; {@link #wholeNumbers} is where that is
+     * settled, and it is the only way to one of these.
+     *
+     * <p><b>One set, and sometimes two spellings of it.</b> A set of whole numbers some of which are
+     * neighbours — {@code {1, 2}}, or every whole number but {@code 0} and {@code 1} — is a
+     * {@link Finite} or a {@link Cofinite} where a rule named its values one by one, and one of these
+     * where comparisons left it: counting runs out into values is the cost this shape is there to
+     * avoid, so neither spelling is turned into the other. What is the same either way is every
+     * question about the set — {@link #has}, {@link #sharesAnythingWith}, what it is met or joined
+     * with ({@link Sets}) and whether it holds the same values as another
+     * ({@link #holdsTheSameValuesAs}). {@code equals} is the spelling, and a reader asking whether
+     * two sets are one set asks the last of those and not it.
      *
      * <p>Over the whole numbers, as every set here is over one carrier: a value that is no whole
      * number is in none of these.
@@ -272,6 +280,50 @@ public sealed interface ValueSet {
         // Neither is finite, so each admits values without end and no finite thing either of them
         // holds out can be the whole of what the other has.
         return true;
+    }
+
+    /**
+     * Whether this and {@code other} hold the same values, however each is spelled.
+     *
+     * <p>{@code equals} where neither is runs of whole numbers, since each set has one spelling
+     * there. Where one is, the other is read as runs if it can be one — a set naming whole numbers,
+     * or every value but some whole numbers — which is the values already written out put in order,
+     * and the runs are never counted out. Runs hold whole numbers and nothing else, so a set naming
+     * anything else, or a language, holds other values than they do.
+     */
+    default boolean holdsTheSameValuesAs(ValueSet other) {
+        if (!(this instanceof WholeRuns) && !(other instanceof WholeRuns)) {
+            return equals(other);
+        }
+        WholeNumberRuns mine = runsOf(this);
+        return mine != null && mine.equals(runsOf(other));
+    }
+
+    /** The whole numbers {@code set} holds as runs, or null where it holds some other value or
+     *  is no set of whole numbers runs can say. */
+    private static WholeNumberRuns runsOf(ValueSet set) {
+        return switch (set) {
+            case WholeRuns it -> it.numbers();
+            case Finite it -> wholeNumbersAmong(it.values());
+            case Cofinite it -> {
+                WholeNumberRuns excluded = wholeNumbersAmong(it.excluded());
+                yield excluded == null ? null : excluded.others();
+            }
+            case Matching _ -> null;
+        };
+    }
+
+    /** {@code values} as runs of one number each, or null where one of them is no whole number. */
+    private static WholeNumberRuns wholeNumbersAmong(Set<Value> values) {
+        List<BigInteger> numbers = new ArrayList<>();
+        for (Value each : values) {
+            BigInteger whole = wholeNumberOf(each);
+            if (whole == null) {
+                return null;
+            }
+            numbers.add(whole);
+        }
+        return WholeNumberRuns.of(numbers);
     }
 
     /** Whether no value is admitted, which is what refuses a declaration. */

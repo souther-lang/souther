@@ -168,9 +168,18 @@ public record WholeNumberRuns(List<Run> runs) {
 
     /** The numbers this holds or {@code other} holds. */
     public WholeNumberRuns or(WholeNumberRuns other) {
-        List<Run> all = new ArrayList<>(runs);
-        all.addAll(other.runs);
-        return joined(all);
+        // Both in order already, so the two are walked side by side, each run taken in the order
+        // it begins and laid on the last where they touch.
+        List<Run> out = new ArrayList<>();
+        int i = 0;
+        int j = 0;
+        while (i < runs.size() || j < other.runs.size()) {
+            Run next = j == other.runs.size() || (i < runs.size()
+                    && beginsNoLater(runs.get(i), other.runs.get(j)))
+                    ? runs.get(i++) : other.runs.get(j++);
+            laidOn(out, next);
+        }
+        return new WholeNumberRuns(out);
     }
 
     /** The numbers this does not hold. */
@@ -231,22 +240,35 @@ public record WholeNumberRuns(List<Run> runs) {
         sorted.sort(Comparator.comparing(Run::from,
                 Comparator.nullsFirst(Comparator.<BigInteger>naturalOrder())));
         List<Run> out = new ArrayList<>();
-        for (Run run : sorted) {
-            if (!out.isEmpty()) {
-                Run last = out.getLast();
-                if (last.to() == null) {
-                    break;
-                }
-                if (run.from() == null
-                        || last.to().add(BigInteger.ONE).compareTo(run.from()) >= 0) {
-                    BigInteger to = run.to() == null ? null : run.to().max(last.to());
-                    out.set(out.size() - 1, new Run(last.from(), to));
-                    continue;
-                }
-            }
-            out.add(run);
-        }
+        sorted.forEach(run -> laidOn(out, run));
         return new WholeNumberRuns(out);
+    }
+
+    /**
+     * {@code run} laid after {@code out}, whose runs are in order and begin no later than it does:
+     * made one with the last where the two overlap or touch.
+     */
+    private static void laidOn(List<Run> out, Run run) {
+        if (out.isEmpty()) {
+            out.add(run);
+            return;
+        }
+        Run last = out.getLast();
+        if (last.to() == null) {
+            return;
+        }
+        if (run.from() == null || last.to().add(BigInteger.ONE).compareTo(run.from()) >= 0) {
+            BigInteger to = run.to() == null ? null : run.to().max(last.to());
+            out.set(out.size() - 1, new Run(last.from(), to));
+            return;
+        }
+        out.add(run);
+    }
+
+    /** Whether {@code mine} begins no later than {@code theirs}, no end being the earliest. */
+    private static boolean beginsNoLater(Run mine, Run theirs) {
+        return mine.from() == null
+                || (theirs.from() != null && mine.from().compareTo(theirs.from()) <= 0);
     }
 
     /** The later of two lower ends, null being no end. */

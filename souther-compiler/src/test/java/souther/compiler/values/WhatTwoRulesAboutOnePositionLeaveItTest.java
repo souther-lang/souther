@@ -206,6 +206,42 @@ class WhatTwoRulesAboutOnePositionLeaveItTest {
                 "a number between two whole ones is in no run");
     }
 
+    /**
+     * A set of whole numbers with neighbours in it is spelled as named values where a rule named
+     * them and as runs where comparisons left it, and every question about the set answers the same
+     * of both spellings — the one that asks whether two sets are one set included.
+     */
+    @Test
+    void twoSpellingsOfOneSetOfWholeNumbersAnswerAlike() {
+        ValueSet named = ValueSet.oneOf(Set.of(Value.number(1), Value.number(2)));
+        ValueSet left = ValueSet.wholeNumbers(runs(1, 2));
+        ValueSet allBut = new ValueSet.Cofinite(Set.of(Value.number(1), Value.number(2)));
+        ValueSet leftOut = ValueSet.wholeNumbers(runs(1, 2).others());
+        assertTrue(left instanceof ValueSet.WholeRuns && leftOut instanceof ValueSet.WholeRuns,
+                "the comparisons' spelling is runs");
+        assertFalse(named.equals(left), "and the spelling is what equals is about");
+
+        assertTrue(named.holdsTheSameValuesAs(left));
+        assertTrue(left.holdsTheSameValuesAs(named));
+        assertTrue(allBut.holdsTheSameValuesAs(leftOut));
+        assertTrue(leftOut.holdsTheSameValuesAs(allBut));
+        assertFalse(left.holdsTheSameValuesAs(ValueSet.oneOf(Set.of(Value.number(1),
+                Value.number(2), Value.number(3)))));
+        assertFalse(left.holdsTheSameValuesAs(allBut));
+        assertFalse(left.holdsTheSameValuesAs(ValueSet.oneOf(Set.of(Value.number(1),
+                Value.number(2), Value.text("x")))), "a value that is no whole number is in no run");
+
+        for (ValueSet other : List.of(named, left, allBut, leftOut, ValueSet.just(Value.number(1)),
+                new ValueSet.Cofinite(Set.of(Value.number(5))))) {
+            assertEquals(named.sharesAnythingWith(other), left.sharesAnythingWith(other),
+                    () -> "{1, 2} against " + other);
+            assertEquals(allBut.sharesAnythingWith(other), leftOut.sharesAnythingWith(other),
+                    () -> "all but {1, 2} against " + other);
+            assertTrue(met(named, other).holdsTheSameValuesAs(met(left, other)),
+                    () -> "{1, 2} met with " + other);
+        }
+    }
+
     private static WholeNumberRuns runs(Integer from, Integer to) {
         return WholeNumberRuns.one(from == null ? null : BigInteger.valueOf(from),
                 to == null ? null : BigInteger.valueOf(to));
