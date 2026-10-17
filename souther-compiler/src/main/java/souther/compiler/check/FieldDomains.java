@@ -590,10 +590,12 @@ public final class FieldDomains {
      * happened to have a sentence for, and a rule this reading owes nothing about could not be
      * passed along at all.
      *
-     * <p>Nothing settled, save whether the arithmetic was read. Which line a comparison draws is
-     * the next reading's to say; whether the arithmetic under it was read is this reading's, said
-     * to an author at each place the comparison names, and one comparison is not both read and
-     * unread.
+     * <p>Nothing settled, save whether the arithmetic named an operation no form says. Which line a
+     * comparison draws is the next reading's to say, and it may read what this one set aside: the
+     * two name numbers with different atoms. But where the arithmetic stopped at an operation it
+     * names — a product of two values that are not constants, a quotient by one — every place the
+     * comparison names is told that no line on its values says it, and that is said of the
+     * comparison and not of this reading's atoms.
      *
      * <p>What the conjunct states, and not the node it was written as. Which number it is about,
      * and what it does to that number, are the next reading's to establish in its own vocabulary —
@@ -617,13 +619,12 @@ public final class FieldDomains {
      *                  as trees of their own they have that name free. Not a meaning to read off a
      *                  second time — nothing here reads the tree, and whoever asks the rooted
      *                  question needs to be able to name it
-     * @param read      whether this reading's arithmetic came to a form of each side of the
-     *                  comparison. Where it stopped inside one, every place the comparison names is
-     *                  told the rule went unread there, and a line the next reading drew of it
-     *                  would say of the same comparison that it was read
+     * @param noFormSaysIt whether the arithmetic stopped in a side at an operation it names as one
+     *                  no form says, which each place the comparison names is told. A line the
+     *                  next reading drew of it would say of the same comparison that a line says it
      */
     public record WithoutAnEnd(InvariantStatementId statement, StatedComparison states,
-                               SourcePos wrote, Core root, boolean read) {
+                               SourcePos wrote, Core root, boolean noFormSaysIt) {
 
         public WithoutAnEnd {
             if (statement == null || states == null || wrote == null || root == null) {

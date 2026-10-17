@@ -2502,7 +2502,7 @@ public final class InvariantChecker {
             // it can of.
             withoutAnEnd.putIfAbsent(new HandOver(statement),
                     new FieldDomains.WithoutAnEnd(statement, comparison, said.written().pos(),
-                            of.clause(), !(read instanceof CanonicalForm.NotRead)));
+                            of.clause(), noFormSaysIt(read)));
             return;
         }
         // An end where the other side is a constant, and a relation everywhere else. Which it is
@@ -2582,7 +2582,7 @@ public final class InvariantChecker {
             // about, and what the next reading is given to read.
             withoutAnEnd.putIfAbsent(new HandOver(statement),
                     new FieldDomains.WithoutAnEnd(statement, comparison, said.written().pos(),
-                            of.clause(), !(read instanceof CanonicalForm.NotRead)));
+                            of.clause(), noFormSaysIt(read)));
             // The declaration and not the clause. Which declaration took an edge in is what ADR-0090
             // names beside a line, and what a reader is sent to look at is the declaration holding
             // the relation.
@@ -3942,6 +3942,16 @@ public final class InvariantChecker {
                     ? new UnreadComparison.Quantity.OverOne<>(it.positions().iterator().next())
                     : new UnreadComparison.Quantity.OverSeveral<>(it.positions());
         };
+    }
+
+    /**
+     * Whether the arithmetic of {@code read} stopped at an operation it names as one no form says,
+     * which is what each place the comparison names is told
+     * ({@link UnreadComparison#whereItStopped}). A stop at a value this reading has no atom for
+     * names no operation, and says nothing a line another reading draws would contradict.
+     */
+    private static boolean noFormSaysIt(CanonicalForm read) {
+        return read instanceof CanonicalForm.NotRead stopped && stopped.decided().isPresent();
     }
 
     /**

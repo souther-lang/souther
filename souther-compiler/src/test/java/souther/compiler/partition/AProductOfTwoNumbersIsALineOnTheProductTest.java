@@ -213,7 +213,9 @@ class AProductOfTwoNumbersIsALineOnTheProductTest {
     /**
      * Whether a clause draws a line is asked of that clause: the end {@code rate >= 0} places
      * beside an unread product is still drawn, and a sum and a length an invariant relates to a
-     * field, which the reading of ends reads, still draw theirs.
+     * field, which the reading of ends reads, still draw theirs. So do the days between two dates
+     * and a comparison of two decimals, which the reading of ends has no atom for and names no
+     * operation of: what it tells their places says nothing a line contradicts.
      */
     @Test
     void anUnreadClauseTakesNoOtherClausesLineWithIt() {
@@ -227,7 +229,9 @@ class AProductOfTwoNumbersIsALineOnTheProductTest {
                 && each.value().equals("0")), describe(lines));
 
         for (String[] related : List.of(new String[] {"a: Int, b: Int", "a + b >= 1000", "+"},
-                new String[] {"a: Int, s: String", "String.length(s) <= a", "length"})) {
+                new String[] {"a: Int, s: String", "String.length(s) <= a", "length"},
+                new String[] {"from: Date, to: Date", "Date.daysBetween(from, to) >= 3", "from"},
+                new String[] {"a: Decimal, b: Decimal", "Decimal.compare(a, b) <= 0", "p.a"})) {
             List<BorderAssessment> drawn = linesOf(compiled("""
                     data Pair = { %s }
                         invariant %s
