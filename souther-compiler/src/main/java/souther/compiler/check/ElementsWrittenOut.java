@@ -18,8 +18,9 @@ import java.util.OptionalLong;
 /**
  * Every element a container holds, written out, in the order a walk of it meets them and each with
  * what it was kept by — where the container is a list written in the source, the code points of a
- * text written in the source, or a list an operation put together of a piece of each element of one
- * ({@link ElementBindings#piecesOfEachElement}).
+ * text written in the source, a list an operation put together of a piece of each element of one
+ * ({@link ElementBindings#piecesOfEachElement}), or a list a choice answers ({@link Choice}), each
+ * of its arms one of these.
  *
  * <p>One walk for every reader that writes a container out, whatever it reads names in. The reading
  * of an input and the discharge of a rule read names in two environments, and each hands this the
@@ -31,8 +32,9 @@ import java.util.OptionalLong;
  * <p>What each piece is, is what the operation is proved to make of an element, and nothing read
  * off its name. A map's piece is the step's answer on the element, read where the step is handed
  * it; a filter's is the element itself, kept where the step's answer on it holds; a flatMap's is
- * every element of the step's answer on it, written out by this same walk. What an occurrence was
- * kept by is carried down every level, each truth read where it was decided.
+ * every element of the step's answer on it, written out by this same walk. A choice's are every
+ * element of each arm, kept where the arm is taken. What an occurrence was kept by is carried down
+ * every level, each truth read where it was decided.
  *
  * <p>An occurrence a filter dropped is written out as well, kept where its truth holds. Whether it
  * holds is a question about the values, and the answer is a reader's. What this answers itself is
@@ -72,6 +74,10 @@ public final class ElementsWrittenOut {
          *  element hands its parameter one. */
         E handing(E at, BindingId element, Stood<E> value);
 
+        /** {@code at} with what choosing the arm {@code decidedBy} decides entered, as the arm's
+         *  answer is read. */
+        E choosing(E at, Choice.Decides decidedBy);
+
         /** What {@code value} comes to at compile time where it stands ({@link FoldedValue}), or
          *  empty where it is no constant. */
         Optional<Object> folded(Stood<E> value);
@@ -109,11 +115,30 @@ public final class ElementsWrittenOut {
         }
     }
 
-    /** A truth an occurrence was kept by, and which way it came out. */
-    public record Kept<E>(Stood<E> truth, boolean holds) {
+    /** What an occurrence was kept by. */
+    public sealed interface Kept<E> {
 
-        public Kept {
-            Objects.requireNonNull(truth, "an occurrence is kept by some truth");
+        /** A truth, and which way it came out: a filter's step on the element. */
+        record ATruth<E>(Stood<E> truth, boolean holds) implements Kept<E> {
+
+            public ATruth {
+                Objects.requireNonNull(truth, "an occurrence is kept by some truth");
+            }
+        }
+
+        /**
+         * The arm {@code part} of {@code fork} being the one a run takes, as {@link Choice}
+         * numbers its arms.
+         *
+         * <p>The fork and not what decides the arm, because an arm is taken where its own way of
+         * being decided holds and no arm before it was taken: which one is taken is a fact of the
+         * whole fork.
+         */
+        record AnArm<E>(Stood<E> fork, int part) implements Kept<E> {
+
+            public AnArm {
+                Objects.requireNonNull(fork, "an arm is an arm of some fork");
+            }
         }
     }
 
@@ -176,14 +201,22 @@ public final class ElementsWrittenOut {
      * Whether {@code one} is there on every run: false where one truth it was kept by comes out the
      * other way on every run, whatever the others do; true where every one comes out the way it was
      * kept by on every run; and null where neither is so, one of them turning on the run.
+     *
+     * <p>Which arm of a choice a run takes is not folded here, so an occurrence kept by one turns
+     * on the run.
      */
     private static <E> Boolean onEveryRun(Occurrence<E> one, Reading<E> reading) {
         boolean decided = true;
         for (Kept<E> kept : one.keptWhere()) {
-            if (!(reading.folded(kept.truth()).orElse(null) instanceof Boolean holds)) {
-                decided = false;
-            } else if (holds != kept.holds()) {
-                return false;
+            switch (kept) {
+                case Kept.ATruth<E>(Stood<E> truth, boolean wanted) -> {
+                    if (!(reading.folded(truth).orElse(null) instanceof Boolean holds)) {
+                        decided = false;
+                    } else if (holds != wanted) {
+                        return false;
+                    }
+                }
+                case Kept.AnArm<E> _ -> decided = false;
             }
         }
         return decided ? true : null;
@@ -275,7 +308,9 @@ public final class ElementsWrittenOut {
                     return block;
                 });
         if (pieces == null || pieces.element() == null || pieces.element().binding() == null) {
-            return new Walked.NotWrittenOut<>();
+            Choice choice = Choice.of(value);
+            return choice == null ? new Walked.NotWrittenOut<>()
+                    : chosen(value, choice, at, reading, enough, walked);
         }
         E stepAt = written.getOrDefault(pieces.step(), at);
         // A map's and a filter's pieces are one to an element, so as many elements are enough; a
@@ -310,7 +345,7 @@ public final class ElementsWrittenOut {
                         return new Walked.PastTheFigure<>();
                     }
                     List<Kept<E>> kept = new ArrayList<>(each.keptWhere());
-                    kept.add(new Kept<>(answered, true));
+                    kept.add(new Kept.ATruth<>(answered, true));
                     out.add(new Occurrence<>(each.value(), kept));
                 }
                 case WHAT_THE_CLOSURE_ANSWERS -> {
@@ -322,6 +357,34 @@ public final class ElementsWrittenOut {
                     made.forEach(one -> out.add(one.keptAlsoWhere(each.keptWhere())));
                 }
             }
+        }
+        return new Walked.Each<>(out);
+    }
+
+    /**
+     * The occurrences each arm of {@code choice}, which {@code fork} is, answers — the arms in the
+     * order {@link Choice} numbers them, each read where its arm is entered and kept where it is
+     * taken.
+     *
+     * <p>Every arm walked or nothing: an arm this cannot write out holds elements a run taking it
+     * walks, so the others alone are not every element the container may hold. The arms past the
+     * first {@code enough} occurrences are not walked, as the elements past them are not by any
+     * other step of this walk: what is asked for is the first ones. What taking an arm states
+     * is not said here, however the arm is decided: it is a fact of the whole fork, and its reader
+     * is the reader of conditions.
+     */
+    private static <E> Walked<E> chosen(Core fork, Choice choice, E at, Reading<E> reading,
+                                        int enough, int[] walked) {
+        List<Occurrence<E>> out = new ArrayList<>();
+        for (int part = 0; part < choice.arms().size() && out.size() < enough; part++) {
+            Choice.Arm arm = choice.arms().get(part);
+            Kept<E> taken = new Kept.AnArm<>(new Stood<>(fork, at), part);
+            Walked<E> inside = of(reading.standing(arm.answers(),
+                    reading.choosing(at, arm.decidedBy())), reading, enough - out.size(), walked);
+            if (!(inside instanceof Walked.Each<E>(List<Occurrence<E>> made))) {
+                return inside;
+            }
+            made.forEach(one -> out.add(one.keptAlsoWhere(List.of(taken))));
         }
         return new Walked.Each<>(out);
     }

@@ -131,8 +131,9 @@ class WhatAnOptionMadeByAClosureHoldsIsWhatTheClosureMadeTest {
 
     /**
      * Whether everything {@code report} says went unread is that a relation is not shown to reach
-     * every value of a place: a threshold the input holds is related to what the closure made, and
-     * along each way it runs over only some of its values. The comparison itself was read.
+     * every value of a place: a threshold the input holds is related to what the closure made,
+     * and where what it was made of is a lookup's entry, the lookup's condition on the map and the
+     * key ties the entry's value on the way to it. The comparison itself was read.
      */
     private static boolean readSaveForWhatTheOtherValueReaches(String report) {
         return report.lines().filter(line -> line.strip().startsWith("· not read"))

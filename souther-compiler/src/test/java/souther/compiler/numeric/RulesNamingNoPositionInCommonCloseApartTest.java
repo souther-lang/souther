@@ -180,6 +180,107 @@ class RulesNamingNoPositionInCommonCloseApartTest {
                 + " compared where they ran without end");
     }
 
+    /**
+     * And rules said after a closure was worked out come to the same state with that closure's parts
+     * lent as without.
+     *
+     * <p>What lending does is decide where each rule said later goes among the parts the closure
+     * before it had: at the end of the one part whose positions it weighs, into a part of its own
+     * after all of them, or — where it weighs positions of two — nowhere, with the parts worked out
+     * from the rules. The rules are cut at a drawn place, so each of the three is drawn, and each is
+     * counted. Asked of the table and of a domain the rules are said into one at a time, with what
+     * they leave asked now and then on the way, since a domain is lent whatever the one it was made
+     * from had worked out by then.
+     */
+    @Test
+    void rulesSaidAfterAClosureComeToTheSameStateWithItsPartsLent() {
+        Random dice = new Random(2481);
+        int joinedOne = 0;
+        int stoodApart = 0;
+        int joinedTwo = 0;
+        for (int round = 0; round < CASES; round++) {
+            CanonicalOrder<String> order = ORDERS.get(round % ORDERS.size());
+            List<Written> one = dice.nextBoolean()
+                    ? boxed(someRules(dice, ONE_HALF), List.of("a", "b")) : someRules(dice, ONE_HALF);
+            List<Written> other = round % 2 == 0 ? renamed(one) : someRules(dice, OTHER_HALF);
+            List<Written> written = dealt(dice, one, other);
+            List<AffineConstraint<String>> both = read(written);
+            int cut = dice.nextInt(both.size() + 1);
+            List<AffineConstraint<String>> first = both.subList(0, cut);
+
+            ClosedStates kept = ClosedStates.kept();
+            ClosedStates.Parted<String> before = kept.of(first,
+                    RulesNamingNoPositionInCommonCloseApartTest::spacing, order, null);
+            long askedBefore = kept.questionsAsked();
+            ClosedStates.Parted<String> after = kept.of(both,
+                    RulesNamingNoPositionInCommonCloseApartTest::spacing, order, before);
+            long asked = kept.questionsAsked() - askedBefore;
+            Outcome inOneRun = outcome(ClosedState.closedTogether(both,
+                    RulesNamingNoPositionInCommonCloseApartTest::spacing, order));
+
+            assertEquals(inOneRun, outcome(after.state()), () -> both + " lent the parts of "
+                    + first + " is not " + both + " in one run");
+            NumericDomain<String> alone = said(written, order, ClosedStates.IN_ONE_RUN);
+            NumericDomain<String> lent = saidAskingOnTheWay(written, order, dice);
+            assertEquals(alone.isBottom(), lent.isBottom(), written::toString);
+            for (String position : positionsOf(written)) {
+                assertEquals(alone.projectionOf(position), lent.projectionOf(position),
+                        () -> "where " + position + " is under " + written);
+            }
+
+            // Where each later rule goes, taken in the order they were said, so that a later rule
+            // meets the parts the ones before it made. Only the parts they reach are asked about,
+            // unless one of them joins two, and then every part of all the rules is.
+            Map<String, Integer> partOf = new LinkedHashMap<>();
+            List<List<AffineConstraint<String>>> parts = ClosureQuestion.independentRules(first);
+            for (int at = 0; at < parts.size(); at++) {
+                for (AffineConstraint<String> rule : parts.get(at)) {
+                    for (String position : rule.form().coefs().keySet()) {
+                        partOf.put(position, at);
+                    }
+                }
+            }
+            int made = parts.size();
+            Set<Integer> reachedAtAll = new LinkedHashSet<>();
+            boolean joined = false;
+            for (AffineConstraint<String> later : both.subList(cut, both.size())) {
+                Set<Integer> reached = new LinkedHashSet<>();
+                later.form().coefs().keySet().forEach(position -> {
+                    if (partOf.containsKey(position)) {
+                        reached.add(partOf.get(position));
+                    }
+                });
+                if (reached.size() > 1) {
+                    joinedTwo++;
+                    joined = true;
+                    break;
+                }
+                int part;
+                if (reached.isEmpty()) {
+                    stoodApart++;
+                    part = made++;
+                } else {
+                    joinedOne++;
+                    part = reached.iterator().next();
+                }
+                reachedAtAll.add(part);
+                for (String position : later.form().coefs().keySet()) {
+                    partOf.put(position, part);
+                }
+            }
+            long expected = joined ? ClosureQuestion.independentRules(both).size()
+                    : reachedAtAll.size();
+            assertEquals(expected, asked, () -> "the questions put once " + first
+                    + " was lent to " + both);
+        }
+        int ones = joinedOne;
+        int aparts = stoodApart;
+        int twos = joinedTwo;
+        assertTrue(joinedOne > 0 && stoodApart > 0 && joinedTwo > 0, () -> "a place a later rule"
+                + " can go was never drawn: " + ones + " joined one part, " + aparts
+                + " stood apart and " + twos + " joined two");
+    }
+
     // --- what is compared -------------------------------------------------------------------------
 
     /**
@@ -407,6 +508,31 @@ class RulesNamingNoPositionInCommonCloseApartTest {
         NumericDomain<String> out = NumericDomain.top(order, closing);
         for (Written each : rules) {
             out = out.assume(new LinearForm<>(each.constant(), each.coefs()), each.rel(), kinds);
+        }
+        return out;
+    }
+
+    /**
+     * {@link #said} through a kept table, asking whether anything is left after a drawn half of
+     * the rules, so that each domain is lent what the one before it had worked out by then — and
+     * each answer on the way held to the same rules closed in one run.
+     */
+    private static NumericDomain<String> saidAskingOnTheWay(List<Written> rules,
+                                                            CanonicalOrder<String> order,
+                                                            Random dice) {
+        Map<String, Granularity> kinds = new LinkedHashMap<>();
+        List<String> everywhere = new ArrayList<>(ONE_HALF);
+        everywhere.addAll(OTHER_HALF);
+        everywhere.forEach(position -> kinds.put(position, spacing(position)));
+        NumericDomain<String> out = NumericDomain.top(order, ClosedStates.kept());
+        NumericDomain<String> alone = NumericDomain.top(order, ClosedStates.IN_ONE_RUN);
+        for (Written each : rules) {
+            LinearForm<String> said = new LinearForm<>(each.constant(), each.coefs());
+            out = out.assume(said, each.rel(), kinds);
+            alone = alone.assume(said, each.rel(), kinds);
+            if (dice.nextBoolean()) {
+                assertEquals(alone.isBottom(), out.isBottom(), rules::toString);
+            }
         }
         return out;
     }

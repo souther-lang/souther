@@ -3,8 +3,10 @@ package souther.compiler.partition;
 import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.StatedComparison;
 import souther.compiler.core.Core;
+import souther.compiler.inputs.Denotation;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
+import souther.compiler.inputs.ReadMeaning;
 import souther.compiler.meaning.Proposition;
 
 import java.util.HashMap;
@@ -12,6 +14,7 @@ import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Supplier;
 
 /**
  * What each condition met over one reading of the input states, read once however many readers
@@ -37,6 +40,16 @@ import java.util.Optional;
  * <p>The arms of a fork that chooses by no condition are kept here too, every arm of a fork at
  * once ({@link Pullback#ofTheArms}): what one arm states is a fact of the whole fork, so it is
  * read once for the fork and not once for each arm a reader asks about.
+ *
+ * <p>And what keeps each occurrence of a container written out ({@link #kept}), which is one of
+ * these: a filter's truth on the element, or the arm of a fork the occurrence was written in. A
+ * walk writes out every occurrence of an arm under the same fork, and every reader of an occurrence
+ * asks what keeps it, so read anywhere else the fork would be read once for each occurrence and
+ * each reader.
+ *
+ * <p>Read without a site of the model, this is the only place they are read: what a reader asks
+ * for here is what every other reader of the same reading was answered. A reading filed at a site
+ * ({@code MeaningsOfABodyReading}) says which construct it is the meaning of, and is that one's.
  */
 final class WhatConditionsState {
 
@@ -75,7 +88,7 @@ final class WhatConditionsState {
     }
 
     /** A truth, or a fork whose arms are entered, by the node it is, under names. */
-    private record ANode(Core value, InputReads reads) {
+    record ANode(Core value, InputReads reads) {
 
         @Override
         public boolean equals(Object other) {
@@ -93,32 +106,66 @@ final class WhatConditionsState {
     Pullback.OnTheInput comparison(StatedComparison comparison, InputReads reads,
                                    InputReading read) {
         heldTo(read);
-        return comparisons.computeIfAbsent(
+        return kept(comparisons,
                 new AComparison(comparison.left(), comparison.right(), comparison.claim(), reads),
-                _ -> Pullback.ofAComparisonOnTheInput(comparison, reads, read));
+                () -> Pullback.ofAComparisonOnTheInput(comparison, reads, read));
     }
 
     /** What {@code truth} holding states with its names as {@code reads} has them, under
      *  {@code read}. */
     Pullback.Pulled truth(Core truth, InputReads reads, InputReading read) {
         heldTo(read);
-        return truths.computeIfAbsent(new ANode(truth, reads),
-                _ -> Pullback.ofATruth(truth, reads, read, Optional.empty()));
+        return kept(truths, new ANode(truth, reads),
+                () -> Pullback.ofATruth(truth, reads, read, Optional.empty()));
     }
 
     /** What {@code optional} holding a value states with its names as {@code reads} has them,
      *  under {@code read}. */
     Pullback.Pulled presence(Core optional, InputReads reads, InputReading read) {
         heldTo(read);
-        return presences.computeIfAbsent(new ANode(optional, reads),
-                _ -> Pullback.ofAPresence(optional, reads, read, Optional.empty()));
+        return kept(presences, new ANode(optional, reads),
+                () -> Pullback.ofAPresence(optional, reads, read, Optional.empty()));
     }
 
     /** What a run entering arm {@code part} of {@code fork} states with its names as {@code reads}
      *  has them ({@link Pullback#ofTheArms}). */
     Pullback.Pulled arm(Core fork, int part, InputReads reads) {
-        return arms.computeIfAbsent(new ANode(fork, reads),
-                _ -> Pullback.ofTheArms(fork, reads, read, Optional.empty())).get(part);
+        return kept(arms, new ANode(fork, reads),
+                () -> Pullback.ofTheArms(fork, reads, read, Optional.empty())).get(part);
+    }
+
+    /**
+     * What an occurrence of a container written out being kept by {@code kept} states under
+     * {@code read}: its truth coming out the way it was kept by, or its arm being the one a run
+     * takes — each read as any truth or arm of a fork is here.
+     */
+    Proposition kept(ReadMeaning.Occurrence.Kept kept, InputReading read) {
+        heldTo(read);
+        return switch (kept) {
+            case ReadMeaning.Occurrence.Kept.ATruth(Denotation truth, boolean holds) -> {
+                Proposition stated = truth(truth.value(), truth.at(), read).proposition();
+                yield holds ? stated : denied(stated);
+            }
+            case ReadMeaning.Occurrence.Kept.AnArm(Denotation fork, int part) ->
+                    arm(fork.value(), part, fork.at()).proposition();
+        };
+    }
+
+    /**
+     * What {@code in} keeps under {@code key}, read by {@code reading} the first time it is asked.
+     *
+     * <p>Asked and then put, and not computed in place: reading one condition reads others — a
+     * truth an occurrence it walks over was kept by, an arm of a fork it stands in — and each of
+     * those is kept here too, into the same map, while the first is still being read.
+     */
+    private static <K, V> V kept(Map<K, V> in, K key, Supplier<V> reading) {
+        V known = in.get(key);
+        if (known != null) {
+            return known;
+        }
+        V made = reading.get();
+        in.put(key, made);
+        return made;
     }
 
     /**

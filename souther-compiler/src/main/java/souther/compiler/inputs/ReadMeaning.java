@@ -224,11 +224,28 @@ public sealed interface ReadMeaning {
             return new Occurrence(value, all);
         }
 
-        /** A truth an occurrence was kept by, and which way it came out. */
-        public record Kept(Denotation truth, boolean holds) {
+        /**
+         * What an occurrence was kept by ({@link ElementsWrittenOut.Kept}), read where it was
+         * decided. What it states is not this reading's to say: a reader of conditions says it,
+         * and says it once for every reader of an occurrence.
+         */
+        public sealed interface Kept {
 
-            public Kept {
-                Objects.requireNonNull(truth, "an occurrence is kept by some truth");
+            /** A truth, and which way it came out. */
+            record ATruth(Denotation truth, boolean holds) implements Kept {
+
+                public ATruth {
+                    Objects.requireNonNull(truth, "an occurrence is kept by some truth");
+                }
+            }
+
+            /** The arm {@code part} of {@code fork} being the one a run takes
+             *  ({@link ElementsWrittenOut.Kept.AnArm}). */
+            record AnArm(Denotation fork, int part) implements Kept {
+
+                public AnArm {
+                    Objects.requireNonNull(fork, "an arm is an arm of some fork");
+                }
             }
         }
     }

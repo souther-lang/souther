@@ -13,9 +13,12 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.SortedMap;
 import java.util.TreeMap;
+import java.util.stream.Collectors;
 
 /**
  * What a condition states, about the subjects it is finally about.
@@ -516,12 +519,124 @@ public sealed interface Proposition {
             if (container == null || ofTheElement == null) {
                 throw new IllegalArgumentException("a quantifier is over some container");
             }
+            if (quantifiesOver(container, ofTheElement)) {
+                throw new IllegalArgumentException("a quantifier over " + container
+                        + " says of its element another quantifier over it, which would read two"
+                        + " elements as one: " + ofTheElement);
+            }
             key = (holds ? "some " : "no ") + container + " [" + ofTheElement.key() + "]";
+        }
+
+        /**
+         * Whether {@code stated} quantifies {@code container} somewhere in it: what a reader that
+         * would put {@code stated} inside a quantifier over {@code container} asks first, since
+         * the two elements would be one subject there.
+         *
+         * <p>The container as {@code stated} names it where it stands, and not its spelling: what a
+         * search asks of each node it reaches names the places under the node it was written of,
+         * and those are the places under the node reached ({@link SomeReachable}). Where the
+         * search starts below the node it was written of, no node it reaches is that node, so a
+         * quantifier there over a container under it is over another container, whatever it is
+         * spelled. Where it starts at that node, the node itself is reached, and the container
+         * is the one spelled. What the search says of the node it starts at having none below is
+         * said of that node as it stands, and its containers are the ones spelled.
+         */
+        public static boolean quantifiesOver(DecisionSubject container, Proposition stated) {
+            return quantifiesOverInside(container, stated, List.of());
+        }
+
+        /** {@link #quantifiesOver}, inside searches written of each of {@code rebound}. */
+        private static boolean quantifiesOverInside(DecisionSubject container, Proposition stated,
+                                                    List<TermPath> rebound) {
+            return switch (stated) {
+                case Some some -> (some.container.equals(container)
+                        && !reboundBy(some.container, rebound))
+                        || quantifiesOverInside(container, some.ofTheElement, rebound);
+                case All all -> all.parts().stream()
+                        .anyMatch(part -> quantifiesOverInside(container, part, rebound));
+                case Any any -> any.parts().stream()
+                        .anyMatch(part -> quantifiesOverInside(container, part, rebound));
+                case SomeReachable reached -> {
+                    List<TermPath> inside = rebound;
+                    if (reached.startsBelowWhereItWasWritten()) {
+                        inside = new ArrayList<>(rebound);
+                        inside.add(reached.writtenAt());
+                    }
+                    yield quantifiesOverInside(container, reached.atANode(), inside)
+                            || reached.noneBelow()
+                                    .filter(each -> quantifiesOverInside(container, each, rebound))
+                                    .isPresent();
+                }
+                case OnAnApplication applied -> applied.each().stream()
+                        .anyMatch(each -> quantifiesOverInside(container, each, rebound));
+                case SoManyHold counted -> counted.statements().stream()
+                        .anyMatch(each -> quantifiesOverInside(container, each, rebound));
+                case WhereItAnswers where ->
+                        quantifiesOverInside(container, where.answers(), rebound)
+                                || quantifiesOverInside(container, where.states(), rebound);
+                case Always _, Compared _, Truth _, InCases _, Present _, SameValue _,
+                     LastToHold _, Carried _, Unread _ -> false;
+            };
+        }
+
+        /** Whether {@code container} is a place under the node a search around it was written
+         *  of, which names the place under each node the search reaches. */
+        private static boolean reboundBy(DecisionSubject container, List<TermPath> rebound) {
+            return container instanceof DecisionSubject.AnInput(TermPath at)
+                    && rebound.stream().anyMatch(at::isAtOrUnder);
         }
 
         @Override
         public Proposition denied() {
             return new Some(container, ofTheElement, !holds);
+        }
+
+        /** This quantifier with the parts it asks of its element, spelled once. */
+        public ElementAsked elementAsked() {
+            return new ElementAsked(this, switch (ofTheElement) {
+                case All all -> all.parts().stream().map(Proposition::key)
+                        .collect(Collectors.toUnmodifiableSet());
+                case Always(boolean always) -> always ? Set.of() : Set.of(ofTheElement.key());
+                // One part, whatever it says: two spelled alike are one statement.
+                case Compared _, Truth _, InCases _, Present _, SameValue _, LastToHold _, Any _,
+                     Some _, Carried _, SomeReachable _, Unread _, OnAnApplication _,
+                     SoManyHold _, WhereItAnswers _ -> Set.of(ofTheElement.key());
+            });
+        }
+
+        /**
+         * A quantifier and the spellings of the parts it asks of its element, each once.
+         *
+         * @param quantifier the quantifier
+         * @param parts      what it asks of its element, part by part; none where it asks nothing
+         */
+        public record ElementAsked(Some quantifier, Set<String> parts) {
+
+            public ElementAsked {
+                Objects.requireNonNull(quantifier, "the parts are some quantifier's");
+                parts = Set.copyOf(parts);
+            }
+
+            /**
+             * Whether {@code other} holds wherever this does, and is not the same statement: both
+             * held, over one container, and every part {@code other} asks of its element one this
+             * asks of its own, with more besides. An element meeting this meets {@code other}, so
+             * the container holds one.
+             *
+             * <p>Read off the parts as they are written and nothing more: a part {@code other}
+             * asks that this asks only in other words is no part this was seen to ask, and the
+             * answer is no. And never both ways round, since each asks more than the other.
+             *
+             * <p>Asked of two quantifiers standing side by side in one statement, where a
+             * container and a part spelled alike are one container and one part. Inside a search
+             * a place is named by the node the search was written of ({@link SomeReachable}), so
+             * a quantifier there is not compared with one outside it by how they are spelled.
+             */
+            public boolean holdsOnlyWhere(ElementAsked other) {
+                return quantifier.holds && other.quantifier.holds
+                        && quantifier.container.equals(other.quantifier.container)
+                        && parts.size() > other.parts.size() && parts.containsAll(other.parts);
+            }
         }
     }
 
@@ -617,6 +732,15 @@ public sealed interface Proposition {
         @Override
         public Proposition denied() {
             return new SomeReachable(at, writtenAt, through, atANode, noneBelow, !holds);
+        }
+
+        /**
+         * Whether the search starts below the node {@code atANode} is written of, so that no node
+         * it reaches is that node: the places {@code atANode} names under it are then places
+         * under other nodes.
+         */
+        public boolean startsBelowWhereItWasWritten() {
+            return at.isAtOrUnder(writtenAt) && !at.equals(writtenAt);
         }
 
         /**

@@ -256,6 +256,9 @@ final class Pullback {
      * these, and names which ({@link Quantity.CodePointsOfAPiece}).
      */
     private final Map<Pieces, Integer> parting = new HashMap<>();
+    /** What entering each arm of a fork derives on this reading, by the fork and its names
+     *  ({@link #keeping}). */
+    private final Map<WhatConditionsState.ANode, List<Derivation>> entered = new HashMap<>();
     /**
      * Where whether a container holds anything was asked, while what it holds is being read.
      *
@@ -367,6 +370,34 @@ final class Pullback {
                            Optional<ModelOccurrence> where) {
         Pullback reading = new Pullback(read, where);
         return reading.pulled(reading.observe(truth, AnswerAspect.TRUTH, reads));
+    }
+
+    /**
+     * How an occurrence being kept by {@code kept} was derived on this reading: its truth coming
+     * out the way it was kept by, or its arm being the one a run takes. What it states, asked
+     * outside a reading, is {@link WhatConditionsState#kept}'s.
+     *
+     * <p>A fork is entered once on this reading ({@link #entered}): every occurrence of every arm
+     * of it is kept by it, and the parts it is read off are met once however many of them are
+     * read.
+     */
+    private Derivation keeping(ReadMeaning.Occurrence.Kept kept) {
+        return switch (kept) {
+            case ReadMeaning.Occurrence.Kept.ATruth(Denotation truth, boolean holds) -> {
+                Derivation stated = observe(truth.value(), AnswerAspect.TRUTH, truth.at());
+                yield holds ? stated : new Derivation.UnderADenial(stated, true);
+            }
+            case ReadMeaning.Occurrence.Kept.AnArm(Denotation fork, int part) -> {
+                WhatConditionsState.ANode at = new WhatConditionsState.ANode(fork.value(),
+                        fork.at());
+                List<Derivation> arms = entered.get(at);
+                if (arms == null) {
+                    arms = entering(fork.value(), fork.at());
+                    entered.put(at, arms);
+                }
+                yield arms.get(part);
+            }
+        };
     }
 
     /** What {@code optional} holding a value states. */
@@ -1130,51 +1161,14 @@ final class Pullback {
     private WhichCase answeredByItsArms(Denotation chosen,
                                                        WhyUnread.AtNoPosition.Place nowhere) {
         InputReads where = chosen.at();
+        List<Derivation> taken = entering(chosen.value(), where);
+        List<Choice.Arm> choice = Choice.of(Core.withoutStanding(chosen.value())).arms();
         List<WhichCase.Arm> arms = new ArrayList<>();
-        switch (Core.withoutStanding(chosen.value())) {
-            case Core.If iff -> {
-                Derivation cond = observe(iff.cond(), AnswerAspect.TRUTH, where);
-                arms.add(new WhichCase.Arm(cond,
-                        answered(new Denotation(iff.then(), where), nowhere)));
-                arms.add(new WhichCase.Arm(new Derivation.UnderADenial(cond, true),
-                        answered(new Denotation(iff.els(), where), nowhere)));
-            }
-            case Core.Match match -> {
-                List<Derivation> selections = selectionsOf(match, where);
-                for (int i = 0; i < match.cases().size(); i++) {
-                    Core.Case arm = match.cases().get(i);
-                    InputReads inside = where.choosing(Choice.Decides.ofCase(match, arm),
-                            read.rules().symbols(), read.rules().newtypes());
-                    arms.add(new WhichCase.Arm(
-                            new Derivation.AnArmTaken(selections.subList(0, i), selections.get(i)),
-                            answered(new Denotation(arm.body(), inside), nowhere)));
-                }
-            }
-            case Core.IfConstructed attempt -> {
-                List<Derivation> taken = attempted(attempt, where);
-                List<Choice.Arm> choice = Choice.of(attempt).arms();
-                for (int i = 0; i < choice.size(); i++) {
-                    InputReads inside = where.choosing(choice.get(i).decidedBy(),
-                            read.rules().symbols(), read.rules().newtypes());
-                    arms.add(new WhichCase.Arm(taken.get(i),
-                            answered(new Denotation(choice.get(i).answers(), inside), nowhere)));
-                }
-            }
-            // An operation of the library answering one of its arguments by how they stand: each
-            // case reached where they stand as it says and no case before it does, and answering
-            // what that argument is.
-            case Core call -> {
-                List<Choice.Arm> cases = Choice.of(call).arms();
-                List<Derivation> stand = new ArrayList<>();
-                for (Choice.Arm arm : cases) {
-                    stand.add(howTheArgumentsStand(arm, where, chosen));
-                }
-                for (int i = 0; i < cases.size(); i++) {
-                    arms.add(new WhichCase.Arm(
-                            new Derivation.AnArmTaken(stand.subList(0, i), stand.get(i)),
-                            answered(new Denotation(cases.get(i).answers(), where), nowhere)));
-                }
-            }
+        for (int i = 0; i < choice.size(); i++) {
+            InputReads inside = where.choosing(choice.get(i).decidedBy(), read.rules().symbols(),
+                    read.rules().newtypes());
+            arms.add(new WhichCase.Arm(taken.get(i),
+                    answered(new Denotation(choice.get(i).answers(), inside), nowhere)));
         }
         return new WhichCase.ByItsArms(arms);
     }
@@ -1220,14 +1214,7 @@ final class Pullback {
 
     /**
      * What a run entering each arm of {@code fork} — a {@code match}, or an attempted construction
-     * — states, where {@code fork} is read in {@code reads}.
-     *
-     * <p>Every arm at once, because what one arm states is a fact of the whole fork: the arms
-     * before it not taken and its own taken. So the fork is read once — a {@code match}'s
-     * selections, an attempt's clauses — and each arm concluded off that one reading.
-     *
-     * <p>The arms as {@link Choice} numbers them: a {@code match}'s in the order they are written,
-     * and an attempt's built arm first and then its departures as written.
+     * — states, where {@code fork} is read in {@code reads} ({@link #entering}).
      *
      * @param where the construct of the model the fork is, where the caller knows it
      */
@@ -1237,8 +1224,25 @@ final class Pullback {
         return reading.entering(fork, reads).stream().map(reading::pulled).toList();
     }
 
+    /**
+     * What a run entering each arm of the choice {@code fork} is ({@link Choice#of}) states, where
+     * {@code fork} is read in {@code reads}.
+     *
+     * <p>Every arm at once, because what one arm states is a fact of the whole fork: the arms
+     * before it not taken and its own taken. So the fork is read once — an {@code if}'s condition,
+     * a {@code match}'s selections, an attempt's clauses, how a library operation's arguments
+     * stand in each of its cases — and each arm concluded off that one reading.
+     *
+     * <p>The arms as {@link Choice} numbers them: an {@code if}'s branch taken where its condition
+     * holds first, a {@code match}'s and a library operation's cases in the order they are
+     * written, and an attempt's built arm first and then its departures as written.
+     */
     private List<Derivation> entering(Core fork, InputReads reads) {
         return switch (Core.withoutStanding(fork)) {
+            case Core.If iff -> {
+                Derivation cond = observe(iff.cond(), AnswerAspect.TRUTH, reads);
+                yield List.of(cond, new Derivation.UnderADenial(cond, true));
+            }
             case Core.Match match -> {
                 List<Derivation> selections = selectionsOf(match, reads);
                 List<Derivation> out = new ArrayList<>();
@@ -1249,8 +1253,24 @@ final class Pullback {
                 yield out;
             }
             case Core.IfConstructed attempt -> attempted(attempt, reads);
-            default -> throw new IllegalArgumentException(fork.getClass().getSimpleName()
-                    + " at " + fork.pos() + " is no match or attempt with arms a run enters");
+            // An operation of the library answering one of its arguments by how they stand: each
+            // case reached where they stand as it says and no case before it does.
+            case Core call -> {
+                Choice choice = Choice.of(call);
+                if (choice == null) {
+                    throw new IllegalArgumentException(call.getClass().getSimpleName() + " at "
+                            + call.pos() + " is no choice with arms a run enters");
+                }
+                List<Derivation> stand = new ArrayList<>();
+                for (Choice.Arm arm : choice.arms()) {
+                    stand.add(howTheArgumentsStand(arm, reads, new Denotation(fork, reads)));
+                }
+                List<Derivation> out = new ArrayList<>();
+                for (int part = 0; part < stand.size(); part++) {
+                    out.add(new Derivation.AnArmTaken(stand.subList(0, part), stand.get(part)));
+                }
+                yield out;
+            }
         };
     }
 
@@ -2557,9 +2577,7 @@ final class Pullback {
             }
             List<Derivation> by = new ArrayList<>();
             for (ReadMeaning.Occurrence.Kept kept : keptWhere) {
-                Derivation truth = observe(kept.truth().value(), AnswerAspect.TRUTH,
-                        kept.truth().at());
-                by.add(kept.holds() ? truth : new Derivation.UnderADenial(truth, true));
+                by.add(keeping(kept));
             }
             return new Derivation.OfWhatWasKept(stated, by);
         }

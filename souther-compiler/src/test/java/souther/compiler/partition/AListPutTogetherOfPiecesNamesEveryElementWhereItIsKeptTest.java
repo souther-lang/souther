@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.core.Core;
 import souther.compiler.inputs.Denotation;
+import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.ReadMeaning;
 import souther.compiler.check.ElementsWrittenOut;
@@ -11,7 +12,6 @@ import souther.compiler.meaning.Proposition;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -102,6 +102,66 @@ class AListPutTogetherOfPiecesNamesEveryElementWhereItIsKeptTest {
                         + " [ Big { threshold = 3 }, Big { threshold = 3 } ] ]))"));
     }
 
+    /** An {@code if} holds every element of each arm, each kept where its arm is taken. */
+    @Test
+    void anIfNamesTheElementsOfEachArmWhereTheArmIsTaken() {
+        assertEquals("[1 where [the row], 2 where [the row]]", standingOn(
+                "if n > 1 then [ Big { threshold = 1 } ] else [ Big { threshold = 2 } ]"));
+    }
+
+    /** An arm no run takes holds nothing there, and one every run takes is kept by nothing. */
+    @Test
+    void anArmNoRunTakesHoldsNothingThere() {
+        assertEquals("[1]", there(
+                "if 1 > 0 then [ Big { threshold = 1 } ] else [ Big { threshold = 2 } ]"));
+    }
+
+    /** A {@code match} holds every element of each arm, kept where the arm is taken. */
+    @Test
+    void aMatchNamesTheElementsOfEachArmWhereTheArmIsTaken() {
+        assertEquals("[1 where [the row], 2 where [the row]]", standingOn(
+                "match (if n > 1 then On else Off) with | On -> [ Big { threshold = 1 } ]"
+                        + " | Off -> [ Big { threshold = 2 } ]"));
+    }
+
+    /** A case no run is leaves its arm holding nothing there. */
+    @Test
+    void anArmOfAMatchNoRunTakesHoldsNothingThere() {
+        assertEquals("[2]", there(
+                "match (if 1 > 0 then Off else On) with | On -> [ Big { threshold = 1 } ]"
+                        + " | Off -> [ Big { threshold = 2 } ]"));
+    }
+
+    /** An attempt holds every element of what it answers where it built the value and where it
+     *  departed, each kept where that arm is taken. */
+    @Test
+    void anAttemptNamesTheElementsOfEachArmWhereTheArmIsTaken() {
+        assertEquals("[1 where [the row], 2 where [the row]]", standingOn(
+                "if Level(n) as l then [ Big { threshold = 1 } ] else [ Big { threshold = 2 } ]"));
+    }
+
+    /** What the arm is taken on goes before what a filter in it kept an element by. */
+    @Test
+    void whatAnArmIsTakenOnGoesBeforeWhatIsKeptInIt() {
+        assertEquals("[1 where [the row, no row], 2 where [the row, every row]]", standingOn(
+                "if n > 1 then List.filter(k -> k.threshold > 1, [ Big { threshold = 1 },"
+                        + " Big { threshold = 2 } ]) else []"));
+    }
+
+    /** A choice a flatMap's step makes is read on each element it is handed. */
+    @Test
+    void aChoiceInAFlatMapIsReadOnEachElement() {
+        assertEquals("[2]", there(
+                "List.flatMap(t -> if t > 1 then [ Big { threshold = t } ] else [], [ 1, 2 ])"));
+    }
+
+    /** An arm this cannot write out leaves the whole unwritten, and not the other arms. */
+    @Test
+    void anArmThatCannotBeWrittenOutLeavesTheWholeAnElement() {
+        assertEquals("Element", standingOn("if n > 1 then [ Big { threshold = 1 } ] else"
+                + " List.append([ Big { threshold = 1 } ], [ Big { threshold = 2 } ])"));
+    }
+
     /** A piece this reading cannot write out leaves the whole unwritten, and not a part of it. */
     @Test
     void aPieceThatCannotBeWrittenOutLeavesTheWholeAnElement() {
@@ -148,6 +208,11 @@ class AListPutTogetherOfPiecesNamesEveryElementWhereItIsKeptTest {
                 module g
 
                 data Big = { threshold: Int }
+                data On
+                data Off
+                data Flag = On | Off
+                data Level = Int
+                    invariant value > 1
                 data Yes
                 data No
 
@@ -187,10 +252,9 @@ class AListPutTogetherOfPiecesNamesEveryElementWhereItIsKeptTest {
                 continue;
             }
             List<String> kept = new ArrayList<>();
-            for (ReadMeaning.Occurrence.Kept truth : occurrence.keptWhere()) {
-                Proposition stated = Pullback.ofATruth(truth.truth().value(), truth.truth().at(),
-                        read.inputs().reading(read.rules()), Optional.empty()).proposition();
-                kept.add(switch (truth.holds() ? stated : stated.denied()) {
+            InputReading reading = read.inputs().reading(read.rules());
+            for (ReadMeaning.Occurrence.Kept by : occurrence.keptWhere()) {
+                kept.add(switch (WhatConditionsState.of(reading).kept(by, reading)) {
                     case Proposition.Always(boolean holds) -> holds ? "every row" : "no row";
                     case Proposition.Unread _ -> "unread";
                     default -> "the row";

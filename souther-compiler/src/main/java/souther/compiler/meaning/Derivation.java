@@ -426,12 +426,14 @@ public sealed interface Derivation {
                 Proposition states = stating.get(i);
                 // The entry an arm picks out is the one its statement is about: the statement
                 // sits inside the quantifier that selected it, where its subjects under the
-                // container's elements are that entry's.
+                // container's elements are that entry's. A statement that picks out another entry
+                // of the same container is about two of them, which inside one quantifier would
+                // be one subject; it is read of neither, as the two written in one comparison are.
                 if (arm.aboutTheEntry() && selects instanceof Proposition.Some(
                         DecisionSubject container, Proposition ofTheEntry, boolean holds, var _)
                         && holds) {
-                    arrives.add(new Proposition.Some(container,
-                            Proposition.all(List.of(ofTheEntry, states)), true));
+                    arrives.add(numbering.someElement(container,
+                            Proposition.all(List.of(ofTheEntry, states))));
                 } else {
                     arrives.add(selects);
                     arrives.add(states);
@@ -1622,15 +1624,15 @@ public sealed interface Derivation {
             List<Proposition> decided = parts.stream()
                     .filter(part -> !part.mayTurnOnAnElementOf(container)).toList();
             if (decided.isEmpty()) {
-                return new Proposition.Some(container, element, true);
+                return numbering.someElement(container, element);
             }
             List<Proposition> undecided = parts.stream()
                     .filter(part -> part.mayTurnOnAnElementOf(container)).toList();
             return element instanceof Proposition.Any
                     ? Proposition.any(List.of(meeting(Proposition.any(decided), numbering),
-                            new Proposition.Some(container, Proposition.any(undecided), true)))
+                            numbering.someElement(container, Proposition.any(undecided))))
                     : Proposition.all(List.of(Proposition.all(decided),
-                            new Proposition.Some(container, Proposition.all(undecided), true)));
+                            numbering.someElement(container, Proposition.all(undecided))));
         }
     }
 
@@ -1925,8 +1927,11 @@ public sealed interface Derivation {
         public Proposition conclusion(Conclusion numbering) {
             Proposition stated = numbering.of(about);
             return numbering.of(selection) instanceof Proposition.Some(
-                    DecisionSubject _, Proposition ofTheEntry, boolean holds, var _) && holds
-                    ? Proposition.all(List.of(stated, ofTheEntry)) : stated;
+                    DecisionSubject container, Proposition ofTheEntry, boolean holds, var _)
+                    && holds
+                    ? numbering.ofOneElement(container,
+                            Proposition.all(List.of(stated, ofTheEntry)))
+                    : stated;
         }
     }
 

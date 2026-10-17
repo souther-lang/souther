@@ -44,14 +44,23 @@ final class ClosureQuestion<A> {
     private final Map<A, Granularity> spacing;
     private final Map<A, Integer> place;
 
+    /**
+     * The order {@link #place} was read off. Carried and not part of what this question is: two
+     * orders that put the positions in the same places put one question, which {@link #equals}
+     * says by the places. What it is for is {@link #isPutBy}, where the order the places came from
+     * is the order being asked about, and the places need not be read again.
+     */
+    private final CanonicalOrder<A> placedBy;
+
     /** Worked out on the first asking. Comparing two of these walks every rule, and so would this. */
     private int hash;
 
     private ClosureQuestion(List<AffineConstraint<A>> rules, Map<A, Granularity> spacing,
-                           Map<A, Integer> place) {
+                           Map<A, Integer> place, CanonicalOrder<A> placedBy) {
         this.rules = rules;
         this.spacing = spacing;
         this.place = place;
+        this.placedBy = placedBy;
     }
 
     /**
@@ -63,7 +72,7 @@ final class ClosureQuestion<A> {
      */
     static <A> ClosureQuestion<A> of(List<AffineConstraint<A>> rules,
                                      Function<A, Granularity> spacing, CanonicalOrder<A> order) {
-        return of(rules, spacing, weighed -> placesIn(weighed, order));
+        return of(rules, spacing, order, weighed -> placesIn(weighed, order));
     }
 
     /**
@@ -71,11 +80,11 @@ final class ClosureQuestion<A> {
      * rather than sorted out here — for a caller that has already put those positions in the same
      * order and kept what it came to.
      *
-     * @param placing what {@link #placesIn} answers for the positions the rules weigh, under the
-     *                order the closure is to walk them in
+     * @param placing what {@link #placesIn} answers for the positions the rules weigh under
+     *                {@code order}
      */
     static <A> ClosureQuestion<A> of(List<AffineConstraint<A>> rules,
-                                     Function<A, Granularity> spacing,
+                                     Function<A, Granularity> spacing, CanonicalOrder<A> order,
                                      Function<Set<A>, Map<A, Integer>> placing) {
         Set<A> weighed = new LinkedHashSet<>();
         rules.forEach(each -> weighed.addAll(each.form().coefs().keySet()));
@@ -89,28 +98,7 @@ final class ClosureQuestion<A> {
             spaced.put(position, it);
         }
         return new ClosureQuestion<>(List.copyOf(rules), Map.copyOf(spaced),
-                placing.apply(Collections.unmodifiableSet(weighed)));
-    }
-
-    /**
-     * The questions {@code rules} put, one for each part of them that names no position another part
-     * names.
-     *
-     * <p>Each of these is a closure on its own, and what the rules leave together is the product of
-     * what these leave ({@link ClosedState#product}) — see {@link ClosedState} for why. So two sets
-     * of rules that share a part share the question that part puts, whatever else each of them holds.
-     *
-     * @param placing as for {@link #of(List, Function, Function)}, asked once for each part
-     */
-    static <A> List<ClosureQuestion<A>> independent(List<AffineConstraint<A>> rules,
-                                                    Function<A, Granularity> spacing,
-                                                    Function<Set<A>, Map<A, Integer>> placing) {
-        List<List<AffineConstraint<A>>> parts = independentRules(rules);
-        List<ClosureQuestion<A>> out = new ArrayList<>(parts.size());
-        for (List<AffineConstraint<A>> part : parts) {
-            out.add(of(part, spacing, placing));
-        }
-        return out;
+                placing.apply(Collections.unmodifiableSet(weighed)), order);
     }
 
     /**
@@ -222,6 +210,27 @@ final class ClosureQuestion<A> {
                     "`" + position + "` is weighed by none of the rules being closed");
         }
         return answer;
+    }
+
+    /**
+     * Whether the rules this holds, spaced by {@code spacing} and walked in {@code order}, put this
+     * question — the three things {@link #equals} compares, asked of rules already known to be
+     * these, so that nothing has to be built to ask it.
+     *
+     * <p>Here and not with whoever lends a closure, because what a closure is worked out from is
+     * this class's to say: a fourth thing added to it is a fourth thing this asks.
+     *
+     * @param placing what {@link #placesIn} answers under {@code order}, asked only where
+     *                {@code order} is not the one these places were read off
+     */
+    boolean isPutBy(Function<A, Granularity> spacing, CanonicalOrder<A> order,
+                    Function<Set<A>, Map<A, Integer>> placing) {
+        for (Map.Entry<A, Granularity> each : this.spacing.entrySet()) {
+            if (!each.getValue().equals(spacing.apply(each.getKey()))) {
+                return false;
+            }
+        }
+        return order == placedBy || place.equals(placing.apply(this.spacing.keySet()));
     }
 
     @Override

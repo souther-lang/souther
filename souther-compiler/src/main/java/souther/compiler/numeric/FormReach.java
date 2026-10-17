@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * How far a set of rules lets a whole form run — the one reading of that question there is.
@@ -65,6 +66,14 @@ final class FormReach<A> {
      *  until the first form of two or more positions asks. */
     private List<Premise<A>> premises;
 
+    /**
+     * How many premises this has merged into a form, and how many it has held against the ends, for
+     * a test holding a premise the ends already hold to being passed over and to being held against
+     * them once a round. Counts and nothing else: what any form comes to is the same either way.
+     */
+    private long merged;
+    private long heldAgainstTheEnds;
+
     private FormReach(List<AffineConstraint<A>> rules, Box<A> ends,
                       DifferenceBounds<A> differences, CanonicalOrder<A> order) {
         this.rules = rules;
@@ -102,6 +111,16 @@ final class FormReach<A> {
      *  read to come apart. */
     List<AffineConstraint<A>> rules() {
         return rules;
+    }
+
+    /** How many premises this has merged into a form — see {@link #merged}. */
+    long premisesMerged() {
+        return merged;
+    }
+
+    /** How many premises this has held against the ends — see {@link #merged}. */
+    long premisesHeldAgainstTheEnds() {
+        return heldAgainstTheEnds;
     }
 
     /** What {@code Σ coefs·position + constant} runs between. */
@@ -202,7 +221,8 @@ final class FormReach<A> {
         // side by side. Where the form weighs two positions or more, that residual has three or
         // more, so the ranges are its only route — see passesOver for when they bound it no lower
         // than what is already held.
-        boolean residualsAreRangedOnly = weighed(coefs) >= 2;
+        int weighs = weighed(coefs);
+        boolean residualsAreRangedOnly = weighs >= 2;
         for (Premise<A> each : premises()) {
             if (each.rule().equals(without)) {
                 continue;
@@ -211,6 +231,10 @@ final class FormReach<A> {
             if (residualsAreRangedOnly && namesNoneOf(premise, coefs) && passesOver(each, ranges)) {
                 continue;
             }
+            if (ranges != null && heldAlready(each, coefs, weighs)) {
+                continue;
+            }
+            merged++;
             // A model's own decimals can put this premise's bound, or one of its own
             // coefficients, far enough apart in scale from what it is being merged with that the
             // exact arithmetic cannot hold the sum. Where that happens this premise composes no
@@ -291,6 +315,120 @@ final class FormReach<A> {
         return room != null && room.at().signum() > 0 ? Room.ABOVE_NOUGHT : Room.NOT_SETTLED;
     }
 
+    /**
+     * Whether {@code each} is a bound on one position that the ends already hold at least as
+     * tightly, in a way that leaves the form no route through it below the ranges' bound on the
+     * form — so passing it over changes nothing that comes back.
+     *
+     * <p>Say the premise is {@code x <= b} with the ends holding {@code x} at most at {@code m}, no
+     * looser than {@code b}, and the form weighs {@code x} by {@code c}. Taken off, it leaves
+     * {@code x} weighed by {@code c - 1} and the bound {@code b} added. Where {@code c} is one or
+     * more the residual reads {@code x} at {@code m} as the form does, and {@code (c - 1)·m + b} is
+     * no less than {@code c·m}. Where {@code c} is below one the residual reads {@code x} at its
+     * least, {@code l}, and comes to {@code (1 - c)·(m - l) + (b - m)} or more above the form, which
+     * is not below it where the ends leave {@code x} a value. Where the two come to one value,
+     * {@code b} is {@code m}, and a premise no looser than an end that is reached is reached too, so
+     * the residual is not the strict one of the two. {@code -x <= b} is the same on the other side.
+     *
+     * <p>All of that is the ranges. A residual that is the difference of two positions is also
+     * bounded by the closed differences, which can hold it lower than any range does, so a premise
+     * leaving one of those is merged in like any other — and a residual of three positions or more
+     * is not one, which is every residual of a form weighing four.
+     *
+     * @param weighs how many positions the form weighs
+     */
+    private boolean heldAlready(Premise<A> each, Map<A, ExactRatio> coefs, int weighs) {
+        HeldEnd<A> held = each.heldEnd(this);
+        if (held == null) {
+            return false;
+        }
+        if (!held.holdsAValue()) {
+            ExactRatio weighed = coefs.get(held.at());
+            if (weighed == null || (held.above() ? weighed.compareTo(ExactRatio.ONE) < 0
+                    : weighed.compareTo(MINUS_ONE) > 0)) {
+                return false;
+            }
+        }
+        return weighs >= 4 || !leavesADifference(coefs, held.at(),
+                held.above() ? ExactRatio.ONE : MINUS_ONE);
+    }
+
+    private static final ExactRatio MINUS_ONE = ExactRatio.ONE.negated();
+
+    /**
+     * {@code half} as a bound on one position the ends hold at least as tightly, or null where it is
+     * not one — which is the premise's and the ends', and no form's.
+     */
+    private HeldEnd<A> heldEndOf(AffineConstraint.HalfSpace<A> half) {
+        heldAgainstTheEnds++;
+        if (half.form().coefs().size() != 1) {
+            return null;
+        }
+        A at = null;
+        ExactRatio weight = null;
+        for (Map.Entry<A, ExactRatio> each : half.form().entriesIn(order)) {
+            at = each.getKey();
+            weight = each.getValue();
+        }
+        boolean above = ExactRatio.ONE.equals(weight);
+        if (!above && !MINUS_ONE.equals(weight)) {
+            return null;
+        }
+        ExactCut least = ends.leastOf(at);
+        ExactCut most = ends.mostOf(at);
+        ExactCut bound = half.bound();
+        boolean noLooser = above
+                ? most != null && noLooserThan(most.at().compareTo(bound.at()), most, bound)
+                : least != null
+                        && noLooserThan(bound.at().negated().compareTo(least.at()), least, bound);
+        if (!noLooser) {
+            return null;
+        }
+        int apart = least == null || most == null ? -1 : least.at().compareTo(most.at());
+        return new HeldEnd<>(at, above,
+                apart < 0 ? least != null : apart == 0 && least.inclusive() && most.inclusive());
+    }
+
+    /**
+     * A premise bounding {@code at} that the ends hold at least as tightly, on the upper side where
+     * {@code above}, and whether the ends leave {@code at} a value.
+     */
+    private record HeldEnd<A>(A at, boolean above, boolean holdsAValue) {}
+
+    /**
+     * Whether an end is no looser than a premise's bound, given {@code order} — negative where the
+     * end is inside the bound, nought where the two are at one value.
+     */
+    private static boolean noLooserThan(int order, ExactCut end, ExactCut bound) {
+        return order < 0 || (order == 0 && (!end.inclusive() || bound.inclusive()));
+    }
+
+    /** Whether {@code coefs} with {@code weight} taken off {@code at} is the difference of two
+     *  positions, or a sum the exact arithmetic cannot hold — either way one to merge in. */
+    private static <A> boolean leavesADifference(Map<A, ExactRatio> coefs, A at,
+                                                 ExactRatio weight) {
+        ExactRatio left = coefs.containsKey(at)
+                ? coefs.get(at).minus(weight).orNull() : weight.negated();
+        if (left == null) {
+            return true;
+        }
+        int weighs = left.isZero() ? 0 : 1;
+        ExactRatio up = left.signum() > 0 ? left : null;
+        ExactRatio down = left.signum() < 0 ? left : null;
+        for (Map.Entry<A, ExactRatio> each : coefs.entrySet()) {
+            if (each.getKey().equals(at) || each.getValue().isZero()) {
+                continue;
+            }
+            weighs++;
+            if (each.getValue().signum() > 0) {
+                up = each.getValue();
+            } else {
+                down = each.getValue();
+            }
+        }
+        return weighs == 2 && up != null && down != null && up.compareTo(down.negated()) == 0;
+    }
+
     /** Where a premise's room stands against the ranges of this round. */
     private enum Room {
         /** An end the room needs is missing, so the ranges bound it nowhere. */
@@ -330,14 +468,18 @@ final class FormReach<A> {
      * One half-space of a rule, and where its room stands once a form has asked.
      *
      * <p>The room is the premise's and the ranges', and not the form's, so it is worked out the
-     * first time a form naming none of the premise asks and kept for the round. Two threads that
-     * both work it out work out the same answer.
+     * first time a form naming none of the premise asks and kept for the round. So is whether it is
+     * a bound the ends already hold ({@link #heldEndOf}). Two threads that both work either out
+     * work out the same answer.
      */
     private static final class Premise<A> {
 
         private final AffineConstraint<A> rule;
         private final AffineConstraint.HalfSpace<A> half;
         private Room room;
+
+        /** {@link #heldEndOf}'s answer, empty where it is not such a bound, and null until asked. */
+        private Optional<HeldEnd<A>> held;
 
         Premise(AffineConstraint<A> rule, AffineConstraint.HalfSpace<A> half) {
             this.rule = rule;
@@ -359,6 +501,15 @@ final class FormReach<A> {
                 room = read;
             }
             return read;
+        }
+
+        HeldEnd<A> heldEnd(FormReach<A> round) {
+            Optional<HeldEnd<A>> read = held;
+            if (read == null) {
+                read = Optional.ofNullable(round.heldEndOf(half));
+                held = read;
+            }
+            return read.orElse(null);
         }
     }
 

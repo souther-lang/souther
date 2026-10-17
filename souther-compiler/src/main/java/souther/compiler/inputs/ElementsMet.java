@@ -42,19 +42,21 @@ public final class ElementsMet {
     /**
      * The names of elements that {@code sides} are written through, whatever else they name: which
      * entries a comparison is about, for a reader that has the comparison and not the reading of
-     * it.
+     * it. Every one of them, two elements of one container among them: whether the comparison can
+     * be read of both is what its reading says, and not which names it was written with.
      */
     public static Set<BindingId> namesOfElementsIn(List<Core> sides, InputReads at,
                                                   DeclarationNewtypes newtypes) {
-        ElementsMet met = new ElementsMet();
-        sides.forEach(side -> met.admits(side, at, newtypes));
-        return met.names();
+        Set<BindingId> names = new LinkedHashSet<>();
+        for (Core side : sides) {
+            at.elementsStoodForIn(side, newtypes).forEach(stood -> names.add(stood.name()));
+        }
+        return Set.copyOf(names);
     }
 
     private final boolean holding;
     /** For each element of a container, the name that stands for it in this comparison. */
     private final Map<Slot, BindingId> standingFor = new LinkedHashMap<>();
-    private final Set<BindingId> names = new LinkedHashSet<>();
     private boolean crowded;
 
     /** A comparison's own, which nothing has been met of. */
@@ -82,7 +84,6 @@ public final class ElementsMet {
                 crowded = true;
                 return false;
             }
-            names.add(stood.name());
         }
         return true;
     }
@@ -97,7 +98,6 @@ public final class ElementsMet {
         }
         ElementsMet copy = new ElementsMet(true);
         copy.standingFor.putAll(standingFor);
-        copy.names.addAll(names);
         copy.crowded = crowded;
         return copy;
     }
@@ -106,10 +106,5 @@ public final class ElementsMet {
      *  comparison was already read of. */
     public boolean crowded() {
         return crowded;
-    }
-
-    /** The names this comparison has been read of an element through. */
-    public Set<BindingId> names() {
-        return Set.copyOf(names);
     }
 }
