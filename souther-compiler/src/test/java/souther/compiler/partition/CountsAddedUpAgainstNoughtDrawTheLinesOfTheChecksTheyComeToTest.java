@@ -112,6 +112,35 @@ class CountsAddedUpAgainstNoughtDrawTheLinesOfTheChecksTheyComeToTest {
         assertEquals(Set.of(true, false), held);
     }
 
+    /**
+     * Drawing no line of its own, the sum is still a condition on the way to what follows it: a
+     * later line has a row past the sum at its point and just short of it.
+     */
+    @Test
+    void aLaterLineHasRowsPastTheSumOnEachSideOfIt() {
+        String text = GeneratedRows.of(compiled("""
+                module probe
+                data No
+                behavior some : (xs: List<Int>, ys: List<Int>, n: Int) -> Bool | No
+                let some (xs, ys, n) = {
+                    guard %s + %s >= 1 else No
+                    guard n > 0 else No
+                    true
+                }
+                """.formatted(X, Y)), "probe", null,
+                SourceRendering.namedByIdentity(SourceLayouts.NONE)).text();
+        Set<Long> pastTheSumAt = new LinkedHashSet<>();
+        Matcher row = Pattern.compile("\\(\\[([^\\]]*)\\], \\[([^\\]]*)\\], (-?\\d+)\\)")
+                .matcher(text);
+        while (row.find()) {
+            if (positives(row.group(1)) + positives(row.group(2)) >= 1) {
+                pastTheSumAt.add(Long.parseLong(row.group(3)));
+            }
+        }
+        assertTrue(pastTheSumAt.containsAll(Set.of(0L, 1L)),
+                () -> "a row past the sum on each side of n's line: " + text);
+    }
+
     @Test
     void aSumThatSaysHowManyIsTheComparisonsOwnRule() {
         for (String condition : List.of(X + " + " + Y + " >= 2", X + " - " + Y + " >= 1")) {
