@@ -451,8 +451,8 @@ final class Pullback {
     static boolean carriesPast(Core check, Pulled stated) {
         Derivation reading = readingUnderTheEntries(stated.meaning().how());
         boolean emptiness = reading instanceof Derivation.AnEmptinessCheck;
-        return (emptiness || reading instanceof Derivation.AComparisonRead read
-                        && Proposition.comesToWhetherAnyMeets(read.relation()))
+        return (emptiness || (reading instanceof Derivation.AComparisonRead read
+                        && Proposition.comesToWhetherAnyMeets(read.relation())))
                 && carriesPast(stated, check, emptiness);
     }
 
