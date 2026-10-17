@@ -159,6 +159,8 @@ sealed interface ConditionPlacement {
             case NumericTerm.CodePointClassCount count ->
                     measured instanceof NumericTerm.CodePointClassCount there
                             && there.counted().equals(count.counted());
+            case NumericTerm.CodePointValueSum _ ->
+                    measured instanceof NumericTerm.CodePointValueSum;
             // No number a position answers is this one.
             case NumericTerm.OfAnElementsNeighbours _ -> false;
             case NumericTerm.TakenOver _ -> false;

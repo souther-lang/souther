@@ -6385,6 +6385,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     }
                 }
             }
+            // What the code points of the string at the place come to.
+            case NumericTerm.CodePointValueSum it -> {
+                into.put("kind", "code_point_sum");
+                into.put("position", it.position().discriminated());
+            }
             // How often the value at the place occurs among the elements of its container.
             case NumericTerm.Multiplicity it -> {
                 into.put("kind", "multiplicity");

@@ -363,6 +363,16 @@ public final class BoundOperationFacts {
         return held == null ? null : new Pieces(held.separator(), held.string());
     }
 
+    /**
+     * The argument of {@code operation} whose code points it answers, each the number it is — or
+     * null where it answers no such list.
+     */
+    public DeclaredArgument codePointsListedOf(ValueName operation) {
+        BoundOperationFact.ListsTheCodePointsOf held =
+                one(BoundOperationFact.ListsTheCodePointsOf.class, operation);
+        return held == null ? null : held.string();
+    }
+
     /** The separator and the string an operation answers the pieces of; with no separator, each
      *  piece is one code point. */
     public record Pieces(Optional<DeclaredArgument> separator, DeclaredArgument string) {

@@ -2204,10 +2204,11 @@ public final class FieldDomains {
                 DerivedNumber number = DerivedNumber.of(new NumberAt<>(path, kind));
                 yield number == null ? null : derived.knownAt(number);
             }
-            // No choice settles how many of a string's code points are in a class, how often a
-            // value occurs among its neighbours, or the end of the values of a key: nothing the
-            // declarations write is about them.
+            // No choice settles how many of a string's code points are in a class, what they come
+            // to, how often a value occurs among its neighbours, or the end of the values of a
+            // key: nothing the declarations write is about them.
             case NumberAt.OfWhatNumber.OfHowManyCodePointsAreIn _,
+                 NumberAt.OfWhatNumber.OfWhatItsCodePointsComeTo _,
                  NumberAt.OfWhatNumber.OfItsMultiplicity _,
                  NumberAt.OfWhatNumber.OfTheExtremeOfItsKey _ -> null;
         };
@@ -2291,6 +2292,7 @@ public final class FieldDomains {
                             ? atomOf(countAt.get(path)) : null;
             // A number the declarations never mention.
             case NumberAt.OfWhatNumber.OfHowManyCodePointsAreIn _,
+                 NumberAt.OfWhatNumber.OfWhatItsCodePointsComeTo _,
                  NumberAt.OfWhatNumber.OfItsMultiplicity _,
                  NumberAt.OfWhatNumber.OfTheExtremeOfItsKey _ -> null;
         };

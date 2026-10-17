@@ -646,15 +646,16 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Ljava/util/List;",
                     "how far past a count a string the type admits is looked for; a plain string"
                             + " is offered whichever is found, so reaching it gives up no count"),
-            Map.entry("souther.compiler.partition.TermRealizations#stringsHoldingTheirCounts("
+            Map.entry("souther.compiler.partition.TermRealizations#stringsHoldingTheirNumbers("
                             + "Ljava/util/Map;Lsouther/compiler/types/Type;"
                             + "Ljava/util/SequencedMap;"
                             + "Lsouther/compiler/inputs/SearchRegion;"
                             + "Lsouther/compiler/check/RuleReadingContext;)"
                             + "Lsouther/compiler/partition/TermRealizations$Realization;",
                     "how many numbers of each demand are tried, up to which count every way of"
-                            + " writing a string is looked at, and how many steps the search may"
-                            + " take: each is handed over as what stopped it where nothing was"
+                            + " writing a string is looked at, how many code points a string"
+                            + " written to come to a sum may hold, and how many steps the search"
+                            + " may take: each is handed over as what stopped it where nothing was"
                             + " found"),
             Map.entry("souther.compiler.partition.TermRealizations#dateAnsweringMovedParts("
                             + "Ljava/util/List;Lsouther/compiler/check/Carrier;)"

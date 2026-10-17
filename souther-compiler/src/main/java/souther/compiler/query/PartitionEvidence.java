@@ -260,6 +260,8 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
                                 case NumberAt.OfWhatNumber
                                         .OfHowManyCodePointsAreIn count ->
                                         "#(" + count.counted() + ")(" + at() + ")";
+                                case NumberAt.OfWhatNumber.OfWhatItsCodePointsComeTo _ ->
+                                        "List.sum(String.codePoints(" + at() + "))";
                                 case NumberAt.OfWhatNumber.OfItsMultiplicity _ ->
                                         "multiplicity(" + at() + ")";
                                 case NumberAt.OfWhatNumber.OfTheExtremeOfItsKey extreme ->

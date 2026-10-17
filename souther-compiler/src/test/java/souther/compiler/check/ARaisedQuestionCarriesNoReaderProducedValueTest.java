@@ -126,6 +126,7 @@ class ARaisedQuestionCarriesNoReaderProducedValueTest {
             "souther/compiler/check/NumberAt$OfWhatNumber$OfItsOwnValue",
             "souther/compiler/check/NumberAt$OfWhatNumber$OfWhatAnOperationAnswers",
             "souther/compiler/check/NumberAt$OfWhatNumber$OfHowManyCodePointsAreIn",
+            "souther/compiler/check/NumberAt$OfWhatNumber$OfWhatItsCodePointsComeTo",
             "souther/compiler/check/NumberAt$OfWhatNumber$OfItsMultiplicity",
             "souther/compiler/check/NumberAt$OfWhatNumber$OfTheExtremeOfItsKey",
             "souther/compiler/check/Extreme",
