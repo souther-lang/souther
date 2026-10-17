@@ -428,6 +428,17 @@ final class ReadQuantities implements Quantities {
             return TermOrdering.of(term, computed.each(), fieldTypes,
                     ruleReading.source().symbols(), ruleReading.source().declarations());
         }
+        // The values are read on their own place's order, and which elements are of one key on
+        // the key's.
+        if (term instanceof NumericTerm.ExtremeOfItsKey extreme) {
+            Map<ElementProjection, Type> keyType = new LinkedHashMap<>();
+            Type keyedOn = typeAt.apply(extreme.key());
+            if (keyedOn != null) {
+                keyType.put(extreme.keyField(), keyedOn);
+            }
+            return TermOrdering.of(term, typeAt.apply(extreme.value()), keyType,
+                    ruleReading.source().symbols(), ruleReading.source().declarations());
+        }
         return TermOrdering.of(term, typeAt.apply(term.subjectPath()),
                 ruleReading.source().symbols(), ruleReading.source().declarations());
     }
@@ -1978,6 +1989,8 @@ final class ReadQuantities implements Quantities {
                     NumberAt.countOf(at.named(), count.counted());
             case NumericTerm.CodePointValueSum _ -> NumberAt.codePointSumOf(at.named());
             case NumericTerm.Multiplicity _ -> NumberAt.multiplicityOf(at.named());
+            case NumericTerm.ExtremeOfItsKey extreme ->
+                    NumberAt.extremeOf(at.named(), extreme.extreme(), extreme.keyField().steps());
             case NumericTerm.TakenOver over ->
                     NumberAt.takenAsItStands(at.named(), over.operation());
         };
@@ -2330,6 +2343,10 @@ final class ReadQuantities implements Quantities {
             // Nothing the rules of the elements say bounds how often one of them occurs besides
             // the term's own floor, which every term is read with.
             case NumericTerm.Multiplicity _ -> null;
+            // The end of a key's values is one of the values the place holds, so it is wherever
+            // what the place was read to hold is.
+            case NumericTerm.ExtremeOfItsKey extreme ->
+                    ownOf(extreme.valuesTakenFrom());
         };
     }
 

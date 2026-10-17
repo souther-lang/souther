@@ -91,7 +91,8 @@ public final class NumericTerms {
             case NumericTerm.TakenOver _ -> "3";
             case NumericTerm.CodePointClassCount _ -> "4";
             case NumericTerm.Multiplicity _ -> "5";
-            case NumericTerm.CodePointValueSum _ -> "6";
+            case NumericTerm.ExtremeOfItsKey _ -> "6";
+            case NumericTerm.CodePointValueSum _ -> "7";
         };
     }
 }

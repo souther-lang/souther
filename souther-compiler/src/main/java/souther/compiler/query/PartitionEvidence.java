@@ -264,6 +264,8 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
                                         "List.sum(String.codePoints(" + at() + "))";
                                 case NumberAt.OfWhatNumber.OfItsMultiplicity _ ->
                                         "multiplicity(" + at() + ")";
+                                case NumberAt.OfWhatNumber.OfTheExtremeOfItsKey extreme ->
+                                        extreme.spelledAt(at());
                             };
                 };
                 // The number the walk had named when it stopped, where it named one. Not what the

@@ -66,6 +66,7 @@ public sealed interface Proposition {
             case OnAnApplication applications -> applications.each();
             case SoManyHold counted -> counted.statements();
             case Some some -> List.of(some.ofTheElement());
+            case WhereItAnswers where -> List.of(where.answers(), where.states());
             case SomeReachable reached -> reached.noneBelow()
                     .map(none -> List.of(reached.atANode(), none))
                     .orElseGet(() -> List.of(reached.atANode()));
@@ -99,7 +100,7 @@ public sealed interface Proposition {
                     || mayBeAnElementOf(same.other(), container);
             case LastToHold last ->
                     isAnElementOf(new DecisionSubject.AnInput(last.position()), container);
-            case All _, Any _, OnAnApplication _, SoManyHold _ ->
+            case All _, Any _, OnAnApplication _, SoManyHold _, WhereItAnswers _ ->
                     somePartMayTurnOnAnElementOf(container);
             case Some some -> isAnElementOf(some.container(), container)
                     || somePartMayTurnOnAnElementOf(container);
@@ -372,6 +373,43 @@ public sealed interface Proposition {
     }
 
     /**
+     * What {@code states}, read only where {@code answers} holds: where it does not, an operation
+     * the statement is read through answers nothing, and the run stops before the statement comes
+     * out either way. Made through {@link #whereItAnswers}.
+     *
+     * <p>Holds where both do, and its denial is the denial of {@code states} where {@code answers}
+     * holds — not the denial of both, which would say that a run which stopped came out the other
+     * way. {@code answers} is where the statement is about anything at all, and so never one of
+     * its lines: a row where it fails is no row of either side.
+     *
+     * @param key spelled from the parts' own when it is made, whatever is handed in
+     */
+    record WhereItAnswers(Proposition answers, Proposition states, String key)
+            implements Proposition {
+
+        @Override
+        public int hashCode() {
+            return key.hashCode();
+        }
+
+        public WhereItAnswers(Proposition answers, Proposition states) {
+            this(answers, states, null);
+        }
+
+        public WhereItAnswers {
+            if (answers == null || states == null) {
+                throw new IllegalArgumentException("a statement is read somewhere, of something");
+            }
+            key = "where " + answers.key() + " [" + states.key() + "]";
+        }
+
+        @Override
+        public Proposition denied() {
+            return whereItAnswers(answers, states.denied());
+        }
+    }
+
+    /**
      * Every part holding. Made through {@link #all}.
      *
      * @param key spelled from the parts' own when it is made, whatever is handed in
@@ -533,6 +571,9 @@ public sealed interface Proposition {
                         .anyMatch(each -> quantifiesOverInside(container, each, rebound));
                 case SoManyHold counted -> counted.statements().stream()
                         .anyMatch(each -> quantifiesOverInside(container, each, rebound));
+                case WhereItAnswers where ->
+                        quantifiesOverInside(container, where.answers(), rebound)
+                                || quantifiesOverInside(container, where.states(), rebound);
                 case Always _, Compared _, Truth _, InCases _, Present _, SameValue _,
                      LastToHold _, Carried _, Unread _ -> false;
             };
@@ -559,7 +600,7 @@ public sealed interface Proposition {
                 // One part, whatever it says: two spelled alike are one statement.
                 case Compared _, Truth _, InCases _, Present _, SameValue _, LastToHold _, Any _,
                      Some _, Carried _, SomeReachable _, Unread _, OnAnApplication _,
-                     SoManyHold _ -> Set.of(ofTheElement.key());
+                     SoManyHold _, WhereItAnswers _ -> Set.of(ofTheElement.key());
             });
         }
 
@@ -1038,8 +1079,8 @@ public sealed interface Proposition {
     private static boolean stopsIn(Proposition stated, List<WhyUnread> into, boolean first) {
         return switch (stated) {
             case Unread unread -> into.add(unread.why());
-            case All _, Any _, OnAnApplication _, SoManyHold _, Some _, SomeReachable _ ->
-                    stopsIn(stated.partsHeld(), into, first);
+            case All _, Any _, OnAnApplication _, SoManyHold _, Some _, SomeReachable _,
+                 WhereItAnswers _ -> stopsIn(stated.partsHeld(), into, first);
             case Always _, Compared _, Truth _, InCases _, Present _, SameValue _,
                  LastToHold _, Carried _ -> false;
         };
@@ -1063,7 +1104,8 @@ public sealed interface Proposition {
     static boolean saysTheLastToHold(Proposition stated) {
         return switch (stated) {
             case LastToHold _ -> true;
-            case All _, Any _, OnAnApplication _, SoManyHold _, Some _, SomeReachable _ ->
+            case All _, Any _, OnAnApplication _, SoManyHold _, Some _, SomeReachable _,
+                 WhereItAnswers _ ->
                     stated.partsHeld().stream().anyMatch(Proposition::saysTheLastToHold);
             case Always _, Compared _, Truth _, InCases _, Present _, SameValue _, Unread _,
                  Carried _ -> false;
@@ -1091,7 +1133,8 @@ public sealed interface Proposition {
             case Present present -> present.of() instanceof DecisionSubject.AnAnswer;
             case SameValue same -> same.one() instanceof DecisionSubject.AnAnswer
                     || same.other() instanceof DecisionSubject.AnAnswer;
-            case All _, Any _, OnAnApplication _, SoManyHold _, SomeReachable _ ->
+            case All _, Any _, OnAnApplication _, SoManyHold _, SomeReachable _,
+                 WhereItAnswers _ ->
                     stated.partsHeld().stream().anyMatch(Proposition::aboutAnAnswer);
             case Some some -> some.container() instanceof DecisionSubject.AnAnswer
                     || some.partsHeld().stream().anyMatch(Proposition::aboutAnAnswer);
@@ -1222,6 +1265,57 @@ public sealed interface Proposition {
      */
     static Proposition all(List<Proposition> parts) {
         return joined(parts, true);
+    }
+
+    /**
+     * {@code states} read only where {@code answers} holds — {@code states} itself where it answers
+     * on every row.
+     */
+    static Proposition whereItAnswers(Proposition answers, Proposition states) {
+        if (answers instanceof Always(boolean everywhere) && everywhere) {
+            return states;
+        }
+        // Where it answers is one region however many operations it was said of.
+        return states instanceof WhereItAnswers(Proposition inner, Proposition stated, String _)
+                ? new WhereItAnswers(all(List.of(answers, inner)), stated)
+                : new WhereItAnswers(answers, states);
+    }
+
+    /**
+     * The rows {@code stated} answers on, or null where it answers on every row: where each
+     * operation a part of it is read through answers ({@link WhereItAnswers}), and past that, where
+     * the parts that do answer decide it without the ones that do not.
+     *
+     * <p>Read off what the parts state and nothing else. Which part a run works out first is not in
+     * a statement, so where that decides whether a run stops, it was said where the statement was
+     * made ({@link #afterIt}).
+     */
+    static Proposition answeredWhere(Proposition stated) {
+        if (!holdsAnAnswering(stated)) {
+            return null;
+        }
+        if (stated instanceof WhereItAnswers(Proposition answers, Proposition states, String _)) {
+            Proposition inside = answeredWhere(states);
+            return inside == null ? answers : all(List.of(answers, inside));
+        }
+        return any(List.of(stated, stated.denied()));
+    }
+
+    /** Whether some part of {@code stated} answers only where an operation does. */
+    private static boolean holdsAnAnswering(Proposition stated) {
+        return stated instanceof WhereItAnswers
+                || stated.partsHeld().stream().anyMatch(Proposition::holdsAnAnswering);
+    }
+
+    /**
+     * {@code then}, read where {@code first} answers: what a run that works {@code first} out before
+     * anything {@code then} reads comes to. Where {@code first} stops, the run stops there, whatever
+     * the rest would have decided — which is what a statement of both parts side by side cannot
+     * say, since a part that fails decides it there.
+     */
+    static Proposition afterIt(Proposition first, Proposition then) {
+        Proposition answered = answeredWhere(first);
+        return answered == null ? then : whereItAnswers(answered, then);
     }
 
     /** Some one of {@code parts} holding, the same way round. */

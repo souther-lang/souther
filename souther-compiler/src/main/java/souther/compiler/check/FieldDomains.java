@@ -2195,11 +2195,12 @@ public final class FieldDomains {
                 yield number == null ? null : derived.knownAt(number);
             }
             // No choice settles how many of a string's code points are in a class, what they come
-            // to, or how often a value occurs among its neighbours: nothing the declarations write
-            // is about them.
+            // to, how often a value occurs among its neighbours, or the end of the values of a
+            // key: nothing the declarations write is about them.
             case NumberAt.OfWhatNumber.OfHowManyCodePointsAreIn _,
                  NumberAt.OfWhatNumber.OfWhatItsCodePointsComeTo _,
-                 NumberAt.OfWhatNumber.OfItsMultiplicity _ -> null;
+                 NumberAt.OfWhatNumber.OfItsMultiplicity _,
+                 NumberAt.OfWhatNumber.OfTheExtremeOfItsKey _ -> null;
         };
     }
 
@@ -2282,7 +2283,8 @@ public final class FieldDomains {
             // A number the declarations never mention.
             case NumberAt.OfWhatNumber.OfHowManyCodePointsAreIn _,
                  NumberAt.OfWhatNumber.OfWhatItsCodePointsComeTo _,
-                 NumberAt.OfWhatNumber.OfItsMultiplicity _ -> null;
+                 NumberAt.OfWhatNumber.OfItsMultiplicity _,
+                 NumberAt.OfWhatNumber.OfTheExtremeOfItsKey _ -> null;
         };
     }
 

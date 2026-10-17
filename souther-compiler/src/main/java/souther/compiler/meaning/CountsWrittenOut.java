@@ -96,6 +96,13 @@ public final class CountsWrittenOut {
                 List<Proposition> parts = writtenOut(all.parts());
                 yield parts == null ? null : parts == all.parts() ? all : Proposition.all(parts);
             }
+            case Proposition.WhereItAnswers where -> {
+                Proposition answers = writtenOut(where.answers());
+                Proposition states = answers == null ? null : writtenOut(where.states());
+                yield states == null ? null
+                        : answers == where.answers() && states == where.states() ? where
+                        : Proposition.whereItAnswers(answers, states);
+            }
             case Proposition.Any any -> {
                 List<Proposition> parts = writtenOut(any.parts());
                 yield parts == null ? null : parts == any.parts() ? any : Proposition.any(parts);

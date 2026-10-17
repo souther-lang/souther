@@ -87,6 +87,8 @@ public sealed interface Owed {
                 case NumberAt.OfWhatNumber.OfWhatItsCodePointsComeTo _ ->
                         "List.sum(String.codePoints(" + where + "))";
                 case NumberAt.OfWhatNumber.OfItsMultiplicity _ -> "multiplicity(" + where + ")";
+                case NumberAt.OfWhatNumber.OfTheExtremeOfItsKey extreme ->
+                        extreme.spelledAt(where);
             };
         }
     }

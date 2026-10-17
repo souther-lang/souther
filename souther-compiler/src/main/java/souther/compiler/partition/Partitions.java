@@ -308,8 +308,14 @@ public final class Partitions {
                 // to: none for nought, and for any larger number code points that are no
                 // surrogates, chosen to add up to it.
                 case NumericTerm.CodePointValueSum _ -> true;
-                // An element holding a value as often as asked is written by repeating the value.
-                case NumericTerm.Multiplicity _ -> true;
+                // A number of an element read off the elements beside it is written by a container
+                // holding elements beside it, and which containers there are is the type's and its
+                // rules': a set never holds one value twice, and rules may keep elements apart or
+                // bound how many there are. What the number's values can be (the place's, for the
+                // end of a key's values) says nothing of whether such a container exists, and
+                // nothing here shows one does, so no edge is known writable until a row stands at
+                // it — which is not the edge being unwritable.
+                case NumericTerm.OfAnElementsNeighbours _ -> false;
                 // A run has as many values as a row wrote and each of them is chosen, so whether
                 // some run adds up to a given total is a question about what the elements may hold
                 // and how many there may be — not one the operation answers about itself. Nothing

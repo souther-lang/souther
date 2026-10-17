@@ -164,6 +164,10 @@ final class TruthOutcomes {
             case Proposition.OnAnApplication applications -> Outcomes.onSomeApplication(
                     applications.each().stream().map(TruthOutcomes::of).toList());
             case Proposition.SoManyHold counted -> ofACount(counted);
+            // Where it can answer, it comes out as what it states can; where it never can, it
+            // comes out no way at all, which is no answer this can name.
+            case Proposition.WhereItAnswers where -> of(where.answers()) == Outcomes.ONLY_FALSE
+                    ? Outcomes.UNKNOWN : of(where.states());
             case Proposition.Some some -> {
                 Outcomes found = switch (of(some.ofTheElement())) {
                     case ONLY_FALSE -> Outcomes.ONLY_FALSE;

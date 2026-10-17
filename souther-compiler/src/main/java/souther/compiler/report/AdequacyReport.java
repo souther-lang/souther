@@ -13,6 +13,7 @@ import souther.compiler.ast.Hir;
 import souther.compiler.check.BehaviorImplementation;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.ComparisonClaim;
+import souther.compiler.check.Extreme;
 import souther.compiler.check.CoverageObligation;
 import souther.compiler.check.PartId;
 import souther.compiler.publish.InputUseWord;
@@ -6391,6 +6392,17 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case NumericTerm.Multiplicity it -> {
                 into.put("kind", "multiplicity");
                 into.put("position", it.place().discriminated());
+            }
+            // The least or greatest of what the elements of a container hold at one place, among
+            // those alike at another.
+            case NumericTerm.ExtremeOfItsKey it -> {
+                into.put("kind", "extreme_of_its_key");
+                into.put("extreme", switch (it.extreme()) {
+                    case Extreme.Least _ -> "least";
+                    case Extreme.Greatest _ -> "greatest";
+                });
+                into.put("position", it.value().discriminated());
+                into.put("key", it.key().discriminated());
             }
             case NumericTerm.TakenOver it -> {
                 into.put("kind", "taken_over");

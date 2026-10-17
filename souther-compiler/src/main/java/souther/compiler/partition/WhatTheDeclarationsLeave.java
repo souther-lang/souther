@@ -134,6 +134,9 @@ public final class WhatTheDeclarationsLeave {
                     : some(all.parts(), false, read);
             case Proposition.Any any -> want ? some(any.parts(), true, read)
                     : every(any.parts(), false, read);
+            // Either way it comes out, it answered.
+            case Proposition.WhereItAnswers where -> every(List.of(where.answers(),
+                    want ? where.states() : where.states().denied()), true, read);
             // On some application, either way: each statement is denied where it stands.
             case Proposition.OnAnApplication applications ->
                     some(applications.each(), want, read);

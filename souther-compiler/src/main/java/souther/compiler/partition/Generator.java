@@ -7270,6 +7270,7 @@ public final class Generator {
             case RealizationTarget.AtOnePosition(NumericTerm.FromOnePosition term) -> term;
             case RealizationTarget.OverARun(NumericTerm.TakenOver term) -> term;
             case RealizationTarget.AmongTheElements(NumericTerm.Multiplicity term) -> term;
+            case RealizationTarget.AtItsKey(NumericTerm.ExtremeOfItsKey term) -> term;
             case RealizationTarget.AtOnePositionElsewhere(NumericTerm.FromOnePosition term,
                                                          TermPath root) -> {
                 NumericTerm moved = subject.quantities().namedAt(term, root);
@@ -7790,9 +7791,17 @@ public final class Generator {
         List<souther.compiler.observe.ObservedValue> row = new ArrayList<>(
                 java.util.Collections.nCopies(subject.parameters().size(), null));
         row.set(parameter, observed);
+        // A number of an element read off the elements beside it is read off each container whole:
+        // the values at the place gathered across containers would count, or take an end of, the
+        // elements of one container among those of another.
+        TermPath readAt = switch (target.term()) {
+            case NumericTerm.OfAnElementsNeighbours among -> among.container();
+            case NumericTerm.FromOnePosition _, NumericTerm.TakenOver _ ->
+                    target.term().subjectPath();
+        };
         // Over the arms, so a walk that comes to answer a third way is one this is taught about
         // rather than one read as the walk and the type disagreeing.
-        return switch (subject.inputs().valuesAt(row, target.term().subjectPath())) {
+        return switch (subject.inputs().valuesAt(row, readAt)) {
             case WalkResult.CouldNotWalk<List<souther.compiler.observe.ObservedValue>> _ ->
                     new RealizationReadback.CouldNotTell(new ReadbackGap.WalkAndTypeDisagree());
             case WalkResult.Reached(List<souther.compiler.observe.ObservedValue> values) ->
@@ -7809,13 +7818,21 @@ public final class Generator {
      * from, and the term's own reader says what that comes to ({@link TermOrders#readOver}). Asked
      * of the term's kind with no {@code default}, so a kind of term added is one this has to say
      * something of.
+     *
+     * <p>For a number of an element read off the elements beside it the values are the containers
+     * the elements stand in, each read on its own ({@link AnOccurrence}); no element in any of them
+     * is no value there. A container not read whole is a reading that could not be made, and never
+     * a container holding nothing.
      */
     static RealizationReadback readBack(TermOrders on,
                                         List<souther.compiler.observe.ObservedValue> values,
                                         Place at) {
         NumericTerm term = on.term();
         boolean nothingToRead = switch (term) {
-            case NumericTerm.Multiplicity _, NumericTerm.FromOnePosition _ -> values.isEmpty();
+            case NumericTerm.OfAnElementsNeighbours _ -> values.stream().allMatch(each -> AnOccurrence.of(each)
+                            instanceof AnOccurrence.Read(List<ObservedValue> held)
+                            && held.isEmpty());
+            case NumericTerm.FromOnePosition _ -> values.isEmpty();
             case NumericTerm.TakenOver _ -> false;
         };
         if (nothingToRead) {
@@ -7831,19 +7848,37 @@ public final class Generator {
         // one added later is not a reading of its own.
         Set<Incompleteness.Code> unread = EnumSet.noneOf(Incompleteness.Code.class);
         Set<UnheldNumber> notWorkedOut = EnumSet.noneOf(UnheldNumber.class);
+        // A container, or an element in one, that is not of the shape the walk and the type say:
+        // no reading of it is made, which is neither the value standing elsewhere nor an
+        // observation that came back short.
+        boolean ofAnotherShape = false;
         boolean stands = switch (term) {
-            // How often a value occurs among the values standing there: a row stands at a point
-            // where some element's value is that frequent.
-            case NumericTerm.Multiplicity _ -> {
+            // How often a value occurs, or the end of the values of a key, among the elements of
+            // each container: a row stands at a point where some element's number comes to it.
+            case NumericTerm.OfAnElementsNeighbours _ -> {
                 boolean any = false;
-                for (ObservedValue value : values) {
-                    switch (on.readAmong(value, values)) {
-                        case NumericTerm.Reading.Number number ->
-                                any |= number.value().compareTo(at) == 0;
-                        case NumericTerm.Reading.Missing missing -> unread.add(missing.code());
-                        case NumericTerm.Reading.NotNumber _ -> { }
-                        case NumericTerm.Reading.NotWorkedOut(UnheldNumber why) ->
-                                notWorkedOut.add(why);
+                for (ObservedValue container : values) {
+                    switch (AnOccurrence.of(container)) {
+                        case AnOccurrence.NotRead(Incompleteness.Code why) -> unread.add(why);
+                        case AnOccurrence.OfAnotherShape _ -> ofAnotherShape = true;
+                        case AnOccurrence.Read(List<ObservedValue> held) -> {
+                            List<NumericTerm.Reading> readings = readEachOf(on, held);
+                            if (readings == null) {
+                                ofAnotherShape = true;
+                                continue;
+                            }
+                            for (NumericTerm.Reading read : readings) {
+                                switch (read) {
+                                    case NumericTerm.Reading.Number number ->
+                                            any |= number.value().compareTo(at) == 0;
+                                    case NumericTerm.Reading.Missing missing ->
+                                            unread.add(missing.code());
+                                    case NumericTerm.Reading.NotNumber _ -> { }
+                                    case NumericTerm.Reading.NotWorkedOut(UnheldNumber why) ->
+                                            notWorkedOut.add(why);
+                                }
+                            }
+                        }
                     }
                 }
                 yield any;
@@ -7888,8 +7923,52 @@ public final class Generator {
         if (!unread.isEmpty()) {
             return new RealizationReadback.CouldNotTell(new ReadbackGap.Observation(unread));
         }
+        if (ofAnotherShape) {
+            return new RealizationReadback.CouldNotTell(new ReadbackGap.WalkAndTypeDisagree());
+        }
         return new RealizationReadback.Elsewhere("it was composed to put " + term + " at " + at
                 + " and does not stand there");
+    }
+
+    /**
+     * What a container the walk stood at reads as, for a number of each of its elements: the
+     * elements, where it was read whole and holds them in order; why it was not read, where it was
+     * not; and neither, where it was read and is no container of elements.
+     */
+    private sealed interface AnOccurrence {
+
+        record Read(List<ObservedValue> elements) implements AnOccurrence {}
+
+        record NotRead(Incompleteness.Code why) implements AnOccurrence {}
+
+        record OfAnotherShape() implements AnOccurrence {}
+
+        static AnOccurrence of(ObservedValue container) {
+            if (container.cause() != null) {
+                return new NotRead(container.cause().code());
+            }
+            return container instanceof ObservedValue.Sequence held ? new Read(held.elements())
+                    : new OfAnotherShape();
+        }
+    }
+
+    /**
+     * What each of {@code held}, the elements of one container, reads as {@code on}'s number among
+     * them — or null where an element read whole holds nothing at a way the number is read from,
+     * which is an element of another shape than the walk's.
+     */
+    private static List<NumericTerm.Reading> readEachOf(TermOrders on, List<ObservedValue> held) {
+        List<ElementProjection> read = on.amongItsNeighbours().fieldsRead();
+        List<Function<ElementProjection, ObservedValue>> each = new ArrayList<>();
+        for (ObservedValue element : held) {
+            for (ElementProjection field : read) {
+                if (field.in(element) == null) {
+                    return null;
+                }
+            }
+            each.add(field -> field.in(element));
+        }
+        return on.readEachInItsOccurrence(each);
     }
 
     /**
@@ -12530,10 +12609,11 @@ public final class Generator {
                 // What an operation answered is not what its root holds — three characters is not
                 // the position standing at three, and a hundred is not what the list adding up to
                 // it holds. Nor is how many of a string's code points are in a class, what they
-                // come to, or how often a value occurs among the elements beside it.
+                // come to, or how often a value occurs among the elements beside it, or the end of
+                // the values of a key, which another element of the key may hold.
                 case NumericTerm.TakenOf _, NumericTerm.CodePointClassCount _,
                      NumericTerm.CodePointValueSum _, NumericTerm.Multiplicity _,
-                     NumericTerm.TakenOver _ -> null;
+                     NumericTerm.TakenOver _, NumericTerm.ExtremeOfItsKey _ -> null;
             };
             // Nor is how many of its elements meet a statement, or that they meet one together.
             case RealizationTarget.ACount _, RealizationTarget.ElementsMeetingTogether _ -> null;

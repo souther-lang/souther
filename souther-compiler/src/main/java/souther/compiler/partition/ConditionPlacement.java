@@ -162,7 +162,7 @@ sealed interface ConditionPlacement {
             case NumericTerm.CodePointValueSum _ ->
                     measured instanceof NumericTerm.CodePointValueSum;
             // No number a position answers is this one.
-            case NumericTerm.Multiplicity _ -> false;
+            case NumericTerm.OfAnElementsNeighbours _ -> false;
             case NumericTerm.TakenOver _ -> false;
         };
     }

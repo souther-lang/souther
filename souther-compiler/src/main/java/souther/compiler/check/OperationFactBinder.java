@@ -873,13 +873,16 @@ final class OperationFactBinder {
 
     /** As {@link #holdToTheDeclaration}, for the arguments a bound names: the one the result is
      *  bounded against, and the one a condition on the rule reads. Each is a separate claim about a
-     *  separate argument. */
+     *  separate argument. The first is any number with an exact value, which is what a form of it
+     *  is arithmetic over: a narrowing of a Rational is within one of the quotient it was given,
+     *  and where that quotient is a form the bound is a line on it. */
     private static ResultBound<DeclaredArgument> holdBound(CompleteSignature declaration,
                                                            ResultBound<ArgumentRef> bound) {
         holdTheResultToTheDeclaration(declaration, TypeRequirement.NUMBER,
                 "what a bound on the result holds of");
         DeclaredArgument against = bound.against() == null ? null
-                : holdBoundArgument(declaration, bound.against());
+                : holdToTheDeclaration(declaration, bound.against(), null, TypeRequirement.EXACT,
+                        "the argument a bound on the result is held against");
         ResultBound.Provided<DeclaredArgument> provided = switch (bound.provided()) {
             case ResultBound.Provided.Always<ArgumentRef> _ -> new ResultBound.Provided.Always<>();
             case ResultBound.Provided.ConstantAboveZero<ArgumentRef> constant ->

@@ -354,6 +354,11 @@ final class TermRealizations {
                 case NumericTerm.Multiplicity _ -> {
                     return nothingSolvesAGroup();
                 }
+                // Written as the value it is the end of, alone: beside another number of the same
+                // place it would be two numbers asked of one value that need not be one.
+                case NumericTerm.ExtremeOfItsKey _ -> {
+                    return nothingSolvesAGroup();
+                }
                 case NumericTerm.ValueOf _ -> itself = target;
                 // Numbers of a string, which a string is chosen for and no container is built to
                 // have: what its code points come to is no total of elements composed one by one.
@@ -1291,7 +1296,8 @@ final class TermRealizations {
                 // A string is chosen whole, and what its code points come to is read off it: no
                 // element of it is composed.
                 case NumericTerm.ValueOf _, NumericTerm.CodePointClassCount _,
-                     NumericTerm.CodePointValueSum _, NumericTerm.Multiplicity _ -> false;
+                     NumericTerm.CodePointValueSum _, NumericTerm.Multiplicity _,
+                     NumericTerm.ExtremeOfItsKey _ -> false;
             };
             // Each element is chosen for what it answers of the statements, out of values of the
             // element's own number; nothing else inside it is planned.
@@ -1484,6 +1490,12 @@ final class TermRealizations {
             // row as an `Int`, and the decoder refused it with the report saying only that every
             // value tried had been refused.
             case NumericTerm.ValueOf _ -> {
+                nothingInside(inside);
+                yield standing(sourceType, orders, asked, within, reading);
+            }
+            // Written as the value it is the end of, at the place it is taken of, on the order the
+            // values stand on ({@link RealizationTarget.AtItsKey}).
+            case NumericTerm.ExtremeOfItsKey _ -> {
                 nothingInside(inside);
                 yield standing(sourceType, orders, asked, within, reading);
             }
@@ -2783,7 +2795,8 @@ final class TermRealizations {
                 case NumericTerm.CodePointClassCount count -> new InAClass(count.counted());
                 case NumericTerm.CodePointValueSum _ -> new CodePointSum();
                 case NumericTerm.TakenOf _, NumericTerm.ValueOf _, NumericTerm.Multiplicity _,
-                     NumericTerm.TakenOver _ -> throw new IllegalStateException(
+                     NumericTerm.ExtremeOfItsKey _, NumericTerm.TakenOver _ ->
+                        throw new IllegalStateException(
                         term + " is no number a string is written for");
             };
         }

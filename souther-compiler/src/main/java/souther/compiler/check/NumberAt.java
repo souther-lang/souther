@@ -5,6 +5,7 @@ import souther.compiler.semantics.CodePointClass;
 import souther.compiler.semantics.TakenArguments;
 import souther.compiler.types.ValueName;
 
+import java.util.List;
 import java.util.Objects;
 
 /**
@@ -99,6 +100,14 @@ public record NumberAt<P>(P position, NumberAt.OfWhatNumber of) {
         return new NumberAt<>(position, new OfWhatNumber.OfItsMultiplicity());
     }
 
+    /** The {@code extreme} of what the elements of the container {@code position} stands inside
+     *  hold there, among those holding at {@code key} what the element under consideration holds
+     *  there. */
+    public static <P> NumberAt<P> extremeOf(P position, Extreme extreme,
+                                            List<String> key) {
+        return new NumberAt<>(position, new OfWhatNumber.OfTheExtremeOfItsKey(extreme, key));
+    }
+
     /**
      * The same number with the place spelled {@code position}.
      *
@@ -185,6 +194,34 @@ public record NumberAt<P>(P position, NumberAt.OfWhatNumber of) {
          * value is another number when what is counted is the elements around it.
          */
         record OfItsMultiplicity() implements OfWhatNumber {}
+
+        /**
+         * The least or the greatest of what the elements of the container the place stands inside
+         * hold there, among the elements holding at {@code key} — the fields read from an element
+         * to reach it — what the element under consideration holds there.
+         *
+         * <p>A number of an element read off the elements beside it, as how often is. The key is
+         * part of which number it is: the least of one place by one key and by another are two
+         * numbers at one place.
+         */
+        record OfTheExtremeOfItsKey(Extreme extreme, List<String> key)
+                implements OfWhatNumber {
+
+            public OfTheExtremeOfItsKey {
+                Objects.requireNonNull(extreme, "this one names the end taken");
+                key = List.copyOf(key);
+            }
+
+            /** This number of what stands at the place spelled {@code position}, in the words a
+             *  report and a diagnostic write it in. */
+            public String spelledAt(String position) {
+                String end = switch (extreme) {
+                    case Extreme.Least _ -> "least";
+                    case Extreme.Greatest _ -> "greatest";
+                };
+                return end + "(" + position + " by " + String.join(".", key) + ")";
+            }
+        }
     }
 
     /**
@@ -209,6 +246,8 @@ public record NumberAt<P>(P position, NumberAt.OfWhatNumber of) {
             case OfWhatNumber.OfWhatItsCodePointsComeTo _ ->
                     "List.sum(String.codePoints(" + position + "))";
             case OfWhatNumber.OfItsMultiplicity _ -> "multiplicity(" + position + ")";
+            case OfWhatNumber.OfTheExtremeOfItsKey extremeOf ->
+                    extremeOf.spelledAt(position.toString());
         };
     }
 }

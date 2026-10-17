@@ -95,6 +95,9 @@ public record PlacementSeed(RuleAddress address, Placed placed, RuleCitation cit
             case NumericTerm.CodePointValueSum _ ->
                     new NumberAt.OfWhatNumber.OfWhatItsCodePointsComeTo();
             case NumericTerm.Multiplicity _ -> new NumberAt.OfWhatNumber.OfItsMultiplicity();
+            case NumericTerm.ExtremeOfItsKey extreme ->
+                    new NumberAt.OfWhatNumber.OfTheExtremeOfItsKey(extreme.extreme(),
+                            extreme.keyField().steps());
             // The operation likewise, since what a rule about this number is about is what the
             // operation answered. That it answered it over a run rather than of one value is not a
             // difference a rule of the value the run is under can name: no clause of a record is

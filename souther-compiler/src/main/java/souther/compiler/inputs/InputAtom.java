@@ -145,6 +145,7 @@ sealed interface InputAtom {
                 case NumberAt.OfWhatNumber.OfWhatItsCodePointsComeTo _ ->
                         "List.sum(String.codePoints(" + at + "))";
                 case NumberAt.OfWhatNumber.OfItsMultiplicity _ -> "multiplicity(" + at + ")";
+                case NumberAt.OfWhatNumber.OfTheExtremeOfItsKey extreme -> extreme.spelledAt(at);
             };
         }
     }

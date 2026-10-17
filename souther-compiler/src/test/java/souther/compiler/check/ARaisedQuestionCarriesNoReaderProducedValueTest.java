@@ -110,6 +110,12 @@ class ARaisedQuestionCarriesNoReaderProducedValueTest {
      * <p>{@code OfItsMultiplicity} belongs to how often an element's value occurs among the
      * elements beside it, which carries nothing: the place says which value, and the container it
      * stands inside says which elements are counted.
+     *
+     * <p>{@code OfTheExtremeOfItsKey} and {@code Extreme} belong to the least or greatest of the
+     * values the elements of a key hold: which end and which field of the element the key is are
+     * what make it one number of the place, and both are what the author's fold wrote — the end
+     * its closure keeps, and the field it files under, carried as the field names read from the
+     * element.
      */
     private static final Set<String> THE_QUESTIONS_OWN_VOCABULARY = Set.of(
             "souther/compiler/check/Owed",
@@ -122,6 +128,10 @@ class ARaisedQuestionCarriesNoReaderProducedValueTest {
             "souther/compiler/check/NumberAt$OfWhatNumber$OfHowManyCodePointsAreIn",
             "souther/compiler/check/NumberAt$OfWhatNumber$OfWhatItsCodePointsComeTo",
             "souther/compiler/check/NumberAt$OfWhatNumber$OfItsMultiplicity",
+            "souther/compiler/check/NumberAt$OfWhatNumber$OfTheExtremeOfItsKey",
+            "souther/compiler/check/Extreme",
+            "souther/compiler/check/Extreme$Least",
+            "souther/compiler/check/Extreme$Greatest",
             "souther/compiler/check/RuleKey",
             "souther/compiler/inputs/InputQuestion",
             "souther/compiler/inputs/InputQuestion$AboutAPosition",
