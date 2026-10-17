@@ -132,6 +132,31 @@ class TwoEntriesOfOneContainerAreNotReadAsOneTest {
         assertTrue(report.contains("read as f/m[*]"), report);
     }
 
+    /**
+     * An entry an arm picked out, added to another entry of the same map taken with a default, is
+     * two entries in one comparison however the second was taken out, and is not read as twice one
+     * entry. The same comparison with the second entry from another map is read.
+     */
+    @Test
+    void anEntryAnArmPickedOutBesideAnotherTakenWithADefaultIsNotReadAsOne() {
+        String model = """
+                module p
+                behavior f : (k: String, j: String, m: Map<String, Int>, n: Map<String, Int>,
+                              q: Int) -> Bool
+                let f (k, j, m, n, q) =
+                    match Map.get(k, m) with
+                        | Some a -> a + Option.withDefault(0, Map.get(j, %s)) >= q
+                        | None -> false
+                """;
+        String oneMap = report(measured(model.formatted("m")));
+        assertFalse(oneMap.contains("2 * m[*]"), oneMap);
+        assertTrue(oneMap.contains("does not read, about `m[*]`"), oneMap);
+
+        String twoMaps = report(measured(model.formatted("n")));
+        assertFalse(twoMaps.contains("two elements of one"), twoMaps);
+        assertTrue(twoMaps.contains("read as f/m[*] + n[*] - q"), twoMaps);
+    }
+
     private static final Pattern ENTRY = Pattern.compile("\\(\"([^\"]*)\", (-?\\d+)\\)");
 
     /**

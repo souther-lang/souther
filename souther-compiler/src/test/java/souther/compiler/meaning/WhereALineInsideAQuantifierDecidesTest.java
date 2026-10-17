@@ -2,12 +2,18 @@ package souther.compiler.meaning;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.inputs.Case;
+import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 import souther.compiler.partition.CompositionBudget;
+import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbol;
+import souther.compiler.types.TypeSymbols;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -193,6 +199,156 @@ class WhereALineInsideAQuantifierDecidesTest {
                 new Proposition.Some(CONTAINER, new Proposition.Always(true), true))), row);
         assertFalse(ofTheRow.isEmpty(), "the line on the row decides somewhere");
         assertEquals(Set.of(), notTakenApartAt(ofTheRow), ofTheRow::toString);
+    }
+
+    /**
+     * Some element meeting {@code k} and the line, or no element meeting {@code k} and {@code d}:
+     * a lookup with a default. The first quantifier holds only where the second does, so with
+     * the second failing the first cannot hold, and {@code d} turns nothing of whether the line is
+     * read. The line decides in one case, where some element meets {@code k}; and {@code d}
+     * decides where none does, with nothing asked of the first quantifier. The same where the
+     * second asks nothing of its element, which is the container holding one.
+     */
+    @Test
+    void aQuantifierHoldingOnlyWhereAnotherDoesIsNotSplitByWhatStandsBesideTheOther() {
+        Proposition.Compared line = compared(N, 0, Rel.GT);
+        Proposition.Compared d = compared(A, 0, Rel.GT);
+        for (Proposition k : List.of(compared(XS.element().then("k"), 0, Rel.GT),
+                new Proposition.Always(true))) {
+            Proposition entry = new Proposition.Some(CONTAINER,
+                    Proposition.all(List.of(k, line)), true);
+            Proposition.Some filed = new Proposition.Some(CONTAINER, k, true);
+            Proposition stated = Proposition.any(List.of(entry,
+                    Proposition.all(List.of(filed.denied(), d))));
+
+            assertEquals(List.of(Proposition.all(List.of(filed, k))), casesOf(stated, line),
+                    () -> "where some element meets k, and of the element at the line, k: "
+                            + stated);
+            assertEquals(List.of(filed.denied()), casesOf(stated, d),
+                    () -> "the default's line decides where nothing meets k, of " + stated);
+        }
+    }
+
+    /**
+     * The same lookup beside five pairs of truths, any of which is enough: the entry's line
+     * decides where none of the pairs holds, which is more cases than are said one by one, and is
+     * said in one condition. That condition is where some element meets {@code k} as well, as the
+     * cases it stands for are: said without it, it would hold where no element does, which is
+     * no row's.
+     */
+    @Test
+    void aLineSaidInOneConditionIsSaidWhereTheQuantifierItImpliesHolds() {
+        Proposition.Compared line = compared(N, 0, Rel.GT);
+        Proposition k = compared(XS.element().then("k"), 0, Rel.GT);
+        Proposition.Some filed = new Proposition.Some(CONTAINER, k, true);
+        List<Proposition> parts = new ArrayList<>(List.of(
+                new Proposition.Some(CONTAINER, Proposition.all(List.of(k, line)), true),
+                Proposition.all(List.of(filed.denied(), compared(A, 0, Rel.GT)))));
+        for (int i = 0; i < 5; i++) {
+            parts.add(Proposition.all(List.of(truth("t" + i), truth("u" + i))));
+        }
+        List<DecidingCase> cases = decidingCasesOf(Proposition.any(parts), line);
+
+        assertFalse(cases.isEmpty() || cases.stream().allMatch(DecidingCase::saidAlone),
+                () -> "said in one condition: " + cases);
+        for (DecidingCase each : cases) {
+            assertTrue(each.condition() instanceof Proposition.All all
+                            && all.parts().contains(filed),
+                    () -> "said where some element meets k: " + each.condition());
+        }
+    }
+
+    /**
+     * The control: where the second quantifier asks of its element something the first does not,
+     * an element meeting the first need not meet it, and {@code d} beside it turns whether the
+     * line is read.
+     */
+    @Test
+    void aQuantifierAskingWhatAnotherDoesNotIsSplitByWhatStandsBesideIt() {
+        Proposition.Compared line = compared(N, 0, Rel.GT);
+        Proposition.Compared d = compared(A, 0, Rel.GT);
+        Proposition entry = new Proposition.Some(CONTAINER, Proposition.all(List.of(
+                compared(XS.element().then("k"), 0, Rel.GT), line)), true);
+        Proposition other = new Proposition.Some(CONTAINER,
+                compared(XS.element().then("j"), 0, Rel.GT), false);
+        Proposition stated = Proposition.any(List.of(entry, Proposition.all(List.of(other, d))));
+
+        List<Proposition> ofTheLine = casesOf(stated, line);
+        assertTrue(ofTheLine.stream().anyMatch(each -> each.key().contains(d.key())),
+                () -> "the default's line tells the cases apart: " + ofTheLine);
+    }
+
+    /**
+     * Three quantifiers each holding only where the next does: some element meeting {@code k},
+     * {@code j} and the line, or none meeting {@code k} and {@code j} and {@code d}, or none
+     * meeting {@code k} and {@code e}. The line decides in one case, where some element meets
+     * {@code k} and {@code j}, which is where the first can hold at all; neither {@code d} nor
+     * {@code e} is any part of it. Each quantifier holding only where the next does leaves no
+     * way that two parts have to cross at once.
+     */
+    @Test
+    void aChainOfQuantifiersIsNotSplitByWhatStandsBesideAnyOfThem() {
+        Proposition.Compared line = compared(N, 0, Rel.GT);
+        Proposition k = compared(XS.element().then("k"), 0, Rel.GT);
+        Proposition j = compared(XS.element().then("j"), 0, Rel.GT);
+        Proposition.Some both = new Proposition.Some(CONTAINER, Proposition.all(List.of(k, j)),
+                true);
+        Proposition stated = Proposition.any(List.of(
+                new Proposition.Some(CONTAINER, Proposition.all(List.of(k, j, line)), true),
+                Proposition.all(List.of(both.denied(), truth("d"))),
+                Proposition.all(List.of(new Proposition.Some(CONTAINER, k, false), truth("e")))));
+
+        assertEquals(List.of(Proposition.all(List.of(both, k, j))), casesOf(stated, line),
+                stated::toString);
+    }
+
+    /**
+     * A quantifier holding only where another does, in a statement that also asks one value's
+     * case twice: the value is one case and the quantifiers leave out one way, and both are kept
+     * out together. The line decides where some element meets {@code k} and the other case with
+     * {@code d} does not hold, which the default's case is no part of.
+     */
+    @Test
+    void aQuantifierBesideAValueAskedTwiceIsReadWithBoth() {
+        Proposition.Compared line = compared(N, 0, Rel.GT);
+        Proposition k = compared(XS.element().then("k"), 0, Rel.GT);
+        Proposition.Some filed = new Proposition.Some(CONTAINER, k, true);
+        Proposition other = inCases("Other");
+        Proposition d = truth("d");
+        Proposition stated = Proposition.any(List.of(
+                new Proposition.Some(CONTAINER, Proposition.all(List.of(k, line)), true),
+                Proposition.all(List.of(filed.denied(), inCases("One"))),
+                Proposition.all(List.of(other, d))));
+
+        assertEquals(Set.of(Proposition.all(List.of(filed, d.denied(), k)),
+                        Proposition.all(List.of(filed, d, other.denied(), k))),
+                Set.copyOf(casesOf(stated, line)), stated::toString);
+    }
+
+    /**
+     * Two quantifiers asking the same parts of their elements, written in two orders and so
+     * spelled apart: neither is said to hold only where the other does, which would leave every
+     * way out where the two come out apart, and the two could be told apart by no one part.
+     */
+    @Test
+    void twoQuantifiersAskingTheSamePartsHoldNeitherOnlyWhereTheOtherDoes() {
+        Proposition k = compared(XS.element().then("k"), 0, Rel.GT);
+        Proposition n = compared(N, 0, Rel.GT);
+        Proposition.Some one = new Proposition.Some(CONTAINER,
+                new Proposition.All(List.of(k, n)), true);
+        Proposition.Some other = new Proposition.Some(CONTAINER,
+                new Proposition.All(List.of(n, k)), true);
+
+        assertFalse(one.key().equals(other.key()), "spelled apart");
+        assertFalse(one.elementAsked().holdsOnlyWhere(other.elementAsked()));
+        assertFalse(other.elementAsked().holdsOnlyWhere(one.elementAsked()));
+    }
+
+    /** The value at {@code term} being the case {@code leaf}. */
+    private static Proposition inCases(String leaf) {
+        TypeSymbol symbol = TypeSymbols.declared(new TypeKey("probe", leaf));
+        return new Proposition.InCases(new DecisionSubject.AnInput(TermPath.of("term")),
+                CasesLeft.ofEach(List.of(Refinement.of(new Case.SumCase(symbol, true)))), true);
     }
 
     /** Every figure some case nobody took apart was stopped at. */

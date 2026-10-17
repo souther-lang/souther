@@ -231,6 +231,33 @@ public final class Conclusion {
         return shared.last.get(step);
     }
 
+    /**
+     * Some element of {@code container} meeting {@code element} — or, where {@code element}
+     * quantifies {@code container} already, a part nothing read: two elements of one container
+     * said of one element would be one subject ({@link Proposition.Some}). Every quantifier a
+     * derivation concludes is made here, so no reading of two elements reaches a reader as one.
+     */
+    Proposition someElement(DecisionSubject container, Proposition element) {
+        return Proposition.Some.quantifiesOver(container, element)
+                ? twoElementsAsOne()
+                : new Proposition.Some(container, element, true);
+    }
+
+    /**
+     * {@code element} said of one element of {@code container} that a lookup picked out — or,
+     * where {@code element} quantifies {@code container}, a part nothing read. The element picked
+     * out stands at {@code container[*]} with no quantifier around it, so a quantifier over
+     * {@code container} inside {@code element} takes it for its own element, and the two are one
+     * subject just as two quantifiers would make them.
+     */
+    Proposition ofOneElement(DecisionSubject container, Proposition element) {
+        return Proposition.Some.quantifiesOver(container, element) ? twoElementsAsOne() : element;
+    }
+
+    private Proposition twoElementsAsOne() {
+        return unread(new Derivation.Stopped(new WhyUnread.TwoElementsOfOneContainer(), false));
+    }
+
     Proposition unread(Derivation.Stopped stopped) {
         return new Proposition.Unread(shared.where, shared.unread++, stopped.why(),
                 stopped.fixed(), true);
