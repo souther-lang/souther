@@ -26,7 +26,8 @@ import java.util.function.IntPredicate;
  * <p><b>Where a part growing grows the whole.</b> Only where the part is asked of a document the way
  * the whole is: under {@code properties}, {@code items}, {@code allOf}, {@code anyOf}, {@code then},
  * {@code else}, an {@code additionalProperties} that is a schema, a {@code contains} with no upper
- * count, and a branch of a {@code oneOf} no other branch can share a document with. Anywhere else a
+ * count, and a branch of a {@code oneOf} no other branch can share a document with — which is also
+ * what a branch added to a {@code oneOf} has to be, for the same reason. Anywhere else a
  * part accepting more can make the whole accept less: a condition of an {@code if} that holds of more
  * documents sends some of them to a {@code then} that refuses them, a {@code not} refuses whatever
  * its part accepts, two branches of a {@code oneOf} that come to accept one document both refuse it,
@@ -142,9 +143,10 @@ public final class SchemaEvolution {
                 case "additionalProperties" -> compare(was, is, here, was.isObject(), out);
                 case "contains" -> compare(was, is, here,
                         !shipped.has("maxContains") && !current.has("maxContains"), out);
-                case "allOf", "anyOf" -> eachBranch(was, is, here, out, _ -> true);
+                case "allOf", "anyOf" -> eachBranch(was, is, here, out, _ -> true, _ -> false);
                 case "oneOf" -> eachBranch(was, is, here, out,
-                        i -> exclusive(was, i, shipped) && exclusive(is, i, current));
+                        i -> exclusive(was, i, shipped) && exclusive(is, i, current),
+                        i -> exclusive(is, i, current));
                 default -> compare(was, is, here, false, out);
             }
         }
@@ -155,11 +157,25 @@ public final class SchemaEvolution {
         }
     }
 
+    /**
+     * The branches as shipped, each compared with the one at its place now, and any added after
+     * them.
+     *
+     * <p>A branch added after the ones that shipped narrows nothing where {@code mayBeAdded} says
+     * no other branch can share a document with it: a document that shipped matching one branch
+     * matches that one still and never the new one, and a document only the new one takes was
+     * refused before. A branch taken out, or added where it could share one, is a narrowing.
+     */
     private static void eachBranch(JsonNode was, JsonNode is, String at, List<String> out,
-                                   IntPredicate mayGrow) {
-        if (was.size() != is.size()) {
+                                   IntPredicate mayGrow, IntPredicate mayBeAdded) {
+        if (is.size() < was.size()) {
             out.add(at + ": " + was.size() + " branches shipped and " + is.size() + " now");
             return;
+        }
+        for (int i = was.size(); i < is.size(); i++) {
+            if (!mayBeAdded.test(i)) {
+                out.add(at + "/" + i + ": added where another branch can take what it takes");
+            }
         }
         for (int i = 0; i < was.size(); i++) {
             compare(was.get(i), is.get(i), at + "/" + i, mayGrow.test(i), out);

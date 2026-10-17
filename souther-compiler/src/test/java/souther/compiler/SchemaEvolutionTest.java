@@ -214,6 +214,58 @@ class SchemaEvolutionTest {
     }
 
     /**
+     * A branch added to a {@code oneOf} narrows nothing where no other branch can take what it
+     * takes, and narrows where one can; a branch taken out narrows.
+     */
+    @Test
+    void aBranchIsAddedOnlyWhereNoOtherBranchCanShareADocument() {
+        String toldApart = """
+                {
+                  "required": ["kind"],
+                  "oneOf": [
+                    { "properties": { "kind": { "const": "a" } } },
+                    { "properties": { "kind": { "const": "b" } } }
+                  ]
+                }""";
+        assertEquals(List.of(), narrowings(toldApart, """
+                {
+                  "required": ["kind"],
+                  "oneOf": [
+                    { "properties": { "kind": { "const": "a" } } },
+                    { "properties": { "kind": { "const": "b" } } },
+                    { "properties": { "kind": { "const": "c" } } }
+                  ]
+                }"""), "a document of kind a or b is refused by a branch of kind c");
+        assertEquals(List.of("/oneOf/2: added where another branch can take what it takes"),
+                narrowings(toldApart, """
+                        {
+                          "required": ["kind"],
+                          "oneOf": [
+                            { "properties": { "kind": { "const": "a" } } },
+                            { "properties": { "kind": { "const": "b" } } },
+                            { "properties": { "kind": { "const": "a" } } }
+                          ]
+                        }"""), "a document of kind a matched one branch and now matches two");
+        assertEquals(List.of("/oneOf/2: added where another branch can take what it takes"),
+                narrowings(toldApart, """
+                        {
+                          "required": ["kind"],
+                          "oneOf": [
+                            { "properties": { "kind": { "const": "a" } } },
+                            { "properties": { "kind": { "const": "b" } } },
+                            { "properties": { "v": { "enum": ["x"] } } }
+                          ]
+                        }"""), "a branch that says no kind takes documents of every kind");
+        assertEquals(List.of("/oneOf: 2 branches shipped and 1 now"), narrowings(toldApart, """
+                {
+                  "required": ["kind"],
+                  "oneOf": [
+                    { "properties": { "kind": { "const": "a" } } }
+                  ]
+                }"""), "a document of kind b is refused now");
+    }
+
+    /**
      * A definition a {@code not} reaches is as it shipped, even where it is reached elsewhere as
      * well; one reached only where things may grow may grow.
      */
