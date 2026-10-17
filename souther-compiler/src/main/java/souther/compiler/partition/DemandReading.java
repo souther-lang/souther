@@ -12,6 +12,7 @@ import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.CountsWrittenOut;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Proposition;
@@ -593,7 +594,11 @@ final class DemandReading {
     static Projected projectedOff(Pullback.Pulled pulled, Proposition stated, InputReading read,
                                   ModelOccurrences own) {
         Projection projection = Projection.over(pulled, own);
-        List<Read> reads = projected(stated, read, projection);
+        List<Read> reads = switch (CountsWrittenOut.of(stated)) {
+            case CountsWrittenOut.Written(Proposition written) ->
+                    projected(written, read, projection);
+            case CountsWrittenOut.PastAFigure(var figure) -> pastTheChoices(figure);
+        };
         return new Projected(reads, projection.told());
     }
 
@@ -688,7 +693,21 @@ final class DemandReading {
      * condition of the shape states, such as where a line of a statement of several decides.
      */
     static List<Read> asked(Proposition stated, InputReading read) {
-        return projected(stated, read);
+        return switch (CountsWrittenOut.of(stated)) {
+            case CountsWrittenOut.Written(Proposition written) -> projected(written, read);
+            case CountsWrittenOut.PastAFigure(var figure) -> pastTheChoices(figure);
+        };
+    }
+
+    /**
+     * What a statement holding a count of statements whose choices are not written out asks of a
+     * row: nothing a row is written toward, past {@code figure}.
+     *
+     * <p>A count of statements is asked as the choices of which of them hold, every count in the
+     * statement written out together and held to one figure ({@link CountsWrittenOut}).
+     */
+    private static List<Read> pastTheChoices(CompositionBudget figure) {
+        return List.of(new Read.Unread(new WhyNotTaken.MoreChoicesThanAreWrittenOut(figure)));
     }
 
     /**
@@ -840,14 +859,8 @@ final class DemandReading {
                 yield projection.joinedAlike(oneOf(parts, each -> each, (each, _) -> each,
                         Optional.of(any)), parts);
             }
-            // A count of statements is the choices of which of them hold, asked as those are; past
-            // what is written out of them, nothing a row is written toward.
-            case Proposition.SoManyHold counted -> {
-                Proposition choices = counted.choices();
-                yield choices != null ? projected(choices, read, projection)
-                        : List.of(new Read.Unread(new WhyNotTaken.MoreChoicesThanAreWrittenOut(
-                                counted.choicesStoppedAt())));
-            }
+            case Proposition.SoManyHold _ -> throw new IllegalArgumentException(
+                    "a count reaches what a row is asked written out as its choices: " + stated);
             // One of several statements, which one turning on which application a run meets the
             // condition on: one alternative per statement that can hold, as a disjunction is. A
             // statement of an application no run makes is an alternative too many and never one

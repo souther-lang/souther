@@ -15,7 +15,6 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -107,7 +106,7 @@ class HowManyOfSomeStatementsHoldIsWhichOfThemDoTest {
                 held.statements());
         assertEquals(List.of(1), held.admitted());
         assertTrue(held.weights().stream().allMatch(weight -> weight == 1), held::toString);
-        assertEquals(exactlyOneOf(each), held.choices());
+        assertEquals(new CountsWrittenOut.Written(exactlyOneOf(each)), CountsWrittenOut.of(held));
     }
 
     /** Half of eighteen is more choices than are written out, and is held as the count too. */
@@ -150,45 +149,49 @@ class HowManyOfSomeStatementsHoldIsWhichOfThemDoTest {
      */
     @Test
     void choicesPastWhatAReaderIsHandedAreHandedToNone() {
-        Proposition.SoManyHold half = assertInstanceOf(Proposition.SoManyHold.class,
-                howMany(distinct(18), Rel.EQ, 9));
-        assertNull(half.choices());
-        assertEquals(CompositionBudget.READINGS_OF_ONE_CONDITION, half.choicesStoppedAt());
+        assertEquals(new CountsWrittenOut.PastAFigure(CompositionBudget.READINGS_OF_ONE_CONDITION),
+                CountsWrittenOut.of(howMany(distinct(18), Rel.EQ, 9)));
 
         int most = CompositionBudget.READINGS_OF_ONE_CONDITION.maximum();
-        Proposition.SoManyHold one = assertInstanceOf(Proposition.SoManyHold.class,
-                howMany(distinct(most), Rel.EQ, 1));
-        assertNull(one.choices());
-        assertEquals(CompositionBudget.PARTS_THE_CHOICES_OF_A_COUNT_COME_TO,
-                one.choicesStoppedAt());
+        assertEquals(new CountsWrittenOut.PastAFigure(
+                        CompositionBudget.PARTS_THE_CHOICES_OF_A_COUNT_COME_TO),
+                CountsWrittenOut.of(howMany(distinct(most), Rel.EQ, 1)));
         assertEquals(CompositionBudget.PARTS_THE_CHOICES_OF_A_COUNT_COME_TO.figure(),
-                new WhyNotTaken.MoreChoicesThanAreWrittenOut(one.choicesStoppedAt()).figure()
+                new WhyNotTaken.MoreChoicesThanAreWrittenOut(
+                        CompositionBudget.PARTS_THE_CHOICES_OF_A_COUNT_COME_TO).figure()
                         .orElseThrow());
-
-        Proposition.SoManyHold fewer = assertInstanceOf(Proposition.SoManyHold.class,
-                howMany(distinct(70), Rel.EQ, 1));
-        assertEquals(exactlyOneOf(distinct(70)), fewer.choices());
-        assertNull(fewer.choicesStoppedAt());
     }
 
     /**
-     * A count whose statements a reader makes again is the same count of what they came to, two
-     * that came out one statement being that one weighed as both were — and written out where that
-     * is few enough choices.
+     * Exactly one of a thousand is past the parts a reader is handed, found by the walk making the
+     * choices and not after: each choice names every statement, so the parts pass the figure a few
+     * dozen choices in, and the walk stops there — not one thousand choices of a thousand
+     * statements each written out whole and counted.
      */
     @Test
-    void aCountMadeAgainWeighsTwoStatementsThatCameOutOneAsBoth() {
-        List<Proposition> each = distinct(70);
-        Proposition.SoManyHold held = assertInstanceOf(Proposition.SoManyHold.class,
-                howMany(each, Rel.EQ, 1));
-        List<Proposition> remade = new ArrayList<>();
-        for (int at = 0; at < held.statements().size(); at++) {
-            remade.add(at < 69 ? P : Q);
-        }
+    @Timeout(value = 10, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
+    void exactlyOneOfAThousandIsRefusedBeforeItsChoicesAreWrittenOut() {
+        assertEquals(new CountsWrittenOut.PastAFigure(
+                        CompositionBudget.PARTS_THE_CHOICES_OF_A_COUNT_COME_TO),
+                CountsWrittenOut.of(howMany(distinct("t", 1000), Rel.EQ, 1)));
+    }
 
-        // P weighs sixty-nine, so one holding is Q holding with P failing.
-        assertEquals(Proposition.all(List.of(P.denied(), Q)), held.over(remade));
-        assertEquals(howMany(remade, Rel.EQ, 1), held.over(remade));
+    /**
+     * What a reader is handed is held to the figure all together, and not count by count: exactly
+     * one of two hundred and fifty is within it alone, and two such counts in one statement are
+     * past it.
+     */
+    @Test
+    @Timeout(value = 10, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
+    void twoCountsOneReaderIsHandedAreHeldToOneFigure() {
+        Proposition one = howMany(distinct("t", 250), Rel.EQ, 1);
+        Proposition other = howMany(distinct("u", 250), Rel.EQ, 1);
+        assertInstanceOf(CountsWrittenOut.Written.class, CountsWrittenOut.of(one));
+        assertInstanceOf(CountsWrittenOut.Written.class, CountsWrittenOut.of(other));
+
+        assertEquals(new CountsWrittenOut.PastAFigure(
+                        CompositionBudget.PARTS_THE_CHOICES_OF_A_COUNT_COME_TO),
+                CountsWrittenOut.of(Proposition.all(List.of(one, other))));
     }
 
     /**
@@ -210,9 +213,15 @@ class HowManyOfSomeStatementsHoldIsWhichOfThemDoTest {
 
     /** {@code count} statements, each about a position of its own. */
     private static List<Proposition> distinct(int count) {
+        return distinct("t", count);
+    }
+
+    /** {@code count} statements, each about a position of its own named from {@code named}. */
+    private static List<Proposition> distinct(String named, int count) {
         List<Proposition> out = new ArrayList<>();
         for (int i = 0; i < count; i++) {
-            out.add(new Proposition.Truth(new DecisionSubject.AnInput(TermPath.of("t" + i)), true));
+            out.add(new Proposition.Truth(new DecisionSubject.AnInput(TermPath.of(named + i)),
+                    true));
         }
         return out;
     }

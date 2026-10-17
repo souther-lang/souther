@@ -216,7 +216,10 @@ final class Pullback {
                 case Proposition.SoManyHold counted ->
                         counted.statements().forEach(each -> partsOf(each, into));
                 case Proposition.Some some -> partsOf(some.ofTheElement(), into);
-                default -> {
+                case Proposition.Unread _, Proposition.Compared _, Proposition.Truth _,
+                     Proposition.InCases _, Proposition.Present _, Proposition.SameValue _,
+                     Proposition.LastToHold _, Proposition.Carried _,
+                     Proposition.SomeReachable _ -> {
                     into.add(stated.key());
                     into.add(stated.denied().key());
                 }

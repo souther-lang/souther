@@ -14,6 +14,7 @@ import souther.compiler.inputs.Position;
 import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.CountsWrittenOut;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Proposition;
@@ -97,6 +98,17 @@ public final class WhatTheDeclarationsLeave {
      */
     public static AWayThrough whetherRuledOut(Proposition stated, boolean want,
                                               InputReading read) {
+        // A count of statements is the choices of which of them hold, ruled out as those are,
+        // every count in the statement written out together and held to one figure.
+        return switch (CountsWrittenOut.of(stated)) {
+            case CountsWrittenOut.Written(Proposition written) -> ruledOut(written, want, read);
+            case CountsWrittenOut.PastAFigure(var figure) ->
+                    notAsked(new WhyNotTaken.MoreChoicesThanAreWrittenOut(figure));
+        };
+    }
+
+    /** {@link #whetherRuledOut} of a statement holding no count, kept with {@code read}. */
+    private static AWayThrough ruledOut(Proposition stated, boolean want, InputReading read) {
         // A statement no part of which is about the input is answered without one, and has nothing
         // to be kept with.
         if (read == null) {
@@ -125,13 +137,8 @@ public final class WhatTheDeclarationsLeave {
             // On some application, either way: each statement is denied where it stands.
             case Proposition.OnAnApplication applications ->
                     some(applications.each(), want, read);
-            // A count of statements is the choices of which of them hold, ruled out as those are.
-            case Proposition.SoManyHold counted -> {
-                Proposition choices = counted.choices();
-                yield choices != null ? whetherRuledOut(choices, want, read)
-                        : notAsked(new WhyNotTaken.MoreChoicesThanAreWrittenOut(
-                                counted.choicesStoppedAt()));
-            }
+            case Proposition.SoManyHold _ -> throw new IllegalArgumentException(
+                    "a count reaches the declarations written out as its choices: " + stated);
             case Proposition.Unread unread ->
                     notAsked(new WhyNotTaken.MeaningUnread(unread.why()));
             case Proposition.Carried carried -> throw carried.handedToAReader();
@@ -245,7 +252,7 @@ public final class WhatTheDeclarationsLeave {
      */
     private static AWayThrough someElement(Proposition.Some some, boolean someMeets,
                                            InputReading read) {
-        AWayThrough element = whetherRuledOut(some.ofTheElement(), someMeets, read);
+        AWayThrough element = ruledOut(some.ofTheElement(), someMeets, read);
         if (someMeets) {
             TermPath container = some.container().inputPosition();
             return element instanceof AWayThrough.RuledOut || !provedToHold(container, false, read)
@@ -273,7 +280,7 @@ public final class WhatTheDeclarationsLeave {
     private static AWayThrough every(List<Proposition> parts, boolean want, InputReading read) {
         List<WhyNotTaken> notAsked = new ArrayList<>();
         for (Proposition part : parts) {
-            switch (whetherRuledOut(part, want, read)) {
+            switch (ruledOut(part, want, read)) {
                 case AWayThrough.RuledOut out -> {
                     return out;
                 }
@@ -294,7 +301,7 @@ public final class WhatTheDeclarationsLeave {
         List<WhyRuledOut> eachRuledOut = new ArrayList<>();
         boolean somePartLeft = false;
         for (Proposition part : parts) {
-            switch (whetherRuledOut(part, want, read)) {
+            switch (ruledOut(part, want, read)) {
                 case AWayThrough.NotRuledOut(var whys) -> {
                     somePartLeft = true;
                     notAsked.addAll(whys);

@@ -241,7 +241,10 @@ final class AStatementAtARow {
                     case Relation.Ordered _ -> { }
                 }
             }
-            default -> { }
+            case Proposition.Always _, Proposition.Truth _, Proposition.InCases _,
+                 Proposition.Present _, Proposition.SameValue _, Proposition.LastToHold _,
+                 Proposition.Carried _, Proposition.SomeReachable _, Proposition.Unread _,
+                 Proposition.OnAnApplication _ -> { }
         }
     }
 
@@ -760,7 +763,13 @@ final class AStatementAtARow {
                             && index.containsKey(keyOf(count)) ->
                             add(Kind.COUNTED, null, index.get(keyOf(count)), EITHER,
                                     byNumber(compared, affine));
-                    default -> add(Kind.SETTLED, null, 0, EITHER, null);
+                    // A count of statements comes to either here: that claims nothing of it.
+                    case Proposition.Some _, Proposition.Compared _, Proposition.Truth _,
+                         Proposition.InCases _, Proposition.Present _, Proposition.SameValue _,
+                         Proposition.LastToHold _, Proposition.Carried _,
+                         Proposition.SomeReachable _, Proposition.Unread _,
+                         Proposition.OnAnApplication _, Proposition.SoManyHold _ ->
+                            add(Kind.SETTLED, null, 0, EITHER, null);
                 };
                 read.put(part.key(), out);
                 return out;

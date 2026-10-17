@@ -1508,7 +1508,12 @@ public sealed interface Derivation {
             List<Proposition> parts = switch (element) {
                 case Proposition.All all -> all.parts();
                 case Proposition.Any any -> any.parts();
-                default -> List.of(element);
+                // A count turning on the element is met by some element as one statement.
+                case Proposition.Always _, Proposition.Compared _, Proposition.Truth _,
+                     Proposition.InCases _, Proposition.Present _, Proposition.SameValue _,
+                     Proposition.LastToHold _, Proposition.Some _, Proposition.Carried _,
+                     Proposition.SomeReachable _, Proposition.Unread _,
+                     Proposition.OnAnApplication _, Proposition.SoManyHold _ -> List.of(element);
             };
             List<Proposition> decided = parts.stream()
                     .filter(part -> !part.mayTurnOnAnElementOf(container)).toList();
@@ -2059,8 +2064,8 @@ public sealed interface Derivation {
         }
 
         /** Whether {@code element} is made of nothing but settled truths and relations over the
-         *  counts of the one character {@code within} statements about some piece, gathering the
-         *  classes those count into {@code named}. */
+         *  counts of the one character {@code within} statements about some piece, joined or
+         *  counted, gathering the classes those count into {@code named}. */
         private static boolean onlyOfACharacter(int within, Proposition element,
                                                 Set<CodePointClass> named) {
             return switch (element) {
@@ -2080,7 +2085,12 @@ public sealed interface Derivation {
                     }
                     yield true;
                 }
-                default -> false;
+                case Proposition.SoManyHold counted -> counted.statements().stream()
+                        .allMatch(part -> onlyOfACharacter(within, part, named));
+                case Proposition.Compared _, Proposition.Truth _, Proposition.InCases _,
+                     Proposition.Present _, Proposition.SameValue _, Proposition.LastToHold _,
+                     Proposition.Some _, Proposition.Carried _, Proposition.SomeReachable _,
+                     Proposition.Unread _, Proposition.OnAnApplication _ -> false;
             };
         }
 
@@ -2109,8 +2119,21 @@ public sealed interface Derivation {
                     }
                     yield rel.holds(value.signum()) == holds;
                 }
-                default -> throw new IllegalStateException(element
-                        + " is not made of the counts of one character");
+                case Proposition.SoManyHold counted -> {
+                    int holding = 0;
+                    for (int one = 0; one < counted.statements().size(); one++) {
+                        if (holds(counted.statements().get(one), countOf)) {
+                            holding += counted.weights().get(one);
+                        }
+                    }
+                    yield counted.admitted().contains(holding);
+                }
+                case Proposition.Compared _, Proposition.Truth _, Proposition.InCases _,
+                     Proposition.Present _, Proposition.SameValue _, Proposition.LastToHold _,
+                     Proposition.Some _, Proposition.Carried _, Proposition.SomeReachable _,
+                     Proposition.Unread _, Proposition.OnAnApplication _ ->
+                        throw new IllegalStateException(element
+                                + " is not made of the counts of one character");
             };
         }
     }

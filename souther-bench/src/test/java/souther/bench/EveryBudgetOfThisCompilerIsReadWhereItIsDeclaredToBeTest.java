@@ -564,15 +564,25 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/meaning/WhichOfThemHold$Written;",
                     "stops writing the choices out past either figure handed in, and says which"
                             + " it was past"),
-            Map.entry("souther.compiler.partition.Cutting#choicesNotWrittenOut("
+            // Every count one reader is handed, written out together and held to one figure for
+            // the parts; past it, or past how many choices one count is handed, the reader is told
+            // which.
+            Map.entry("souther.compiler.meaning.CountsWrittenOut#<clinit>()V",
+                    "how many parts every count one reader is handed comes to together"),
+            Map.entry("souther.compiler.meaning.CountsWrittenOut#<init>()V",
+                    "starts a reader's writing out at the figure, which every count it is handed"
+                            + " is charged to, and past which it is handed none and told the figure"),
+            Map.entry("souther.compiler.partition.Cutting#asLines("
+                            + "Ljava/lang/String;"
                             + "Lsouther/compiler/check/StatedComparison;"
                             + "Lsouther/compiler/meaning/Proposition;"
                             + "Lsouther/compiler/inputs/InputReading;"
                             + "Lsouther/compiler/inputs/InputReads;"
-                            + "Lsouther/compiler/coverage/Arrivals;)"
+                            + "Lsouther/compiler/coverage/Arrivals;"
+                            + "Ljava/util/Optional;)"
                             + "Lsouther/compiler/partition/Cutting$Read;",
                     "files the statement at each place as one where its lines decide was not"
-                            + " worked out, naming the figure the count's choices were past"),
+                            + " worked out, naming the figure its counts' choices were past"),
             Map.entry("souther.compiler.partition.DecisionReading#<clinit>()V",
                     "how many paths through one body a decision is read for"),
             Map.entry("souther.compiler.partition.WaysNoInputTakes#<init>()V",

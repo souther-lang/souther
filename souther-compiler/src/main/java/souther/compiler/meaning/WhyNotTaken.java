@@ -107,7 +107,7 @@ public sealed interface WhyNotTaken {
     /**
      * What the condition means was read, and it holds a count of statements a reader takes by the
      * choices of which of them hold, and those were more than such a reader is handed, or written
-     * out came to more parts ({@link Proposition.SoManyHold#choices}). Raising the figure lifts
+     * out came to more parts ({@link CountsWrittenOut}). Raising the figure lifts
      * it; the count was read and stated whole, so nothing about its meaning is said.
      *
      * @param stoppedAt which of the two the choices were past

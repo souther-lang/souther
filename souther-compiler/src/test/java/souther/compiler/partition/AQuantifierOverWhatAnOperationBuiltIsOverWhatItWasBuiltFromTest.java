@@ -168,15 +168,7 @@ class AQuantifierOverWhatAnOperationBuiltIsOverWhatItWasBuiltFromTest {
     }
 
     private static boolean unreadIn(Proposition stated) {
-        return switch (stated) {
-            case Proposition.Unread _ -> true;
-            case Proposition.All all -> all.parts().stream()
-                    .anyMatch(AQuantifierOverWhatAnOperationBuiltIsOverWhatItWasBuiltFromTest::unreadIn);
-            case Proposition.Any any -> any.parts().stream()
-                    .anyMatch(AQuantifierOverWhatAnOperationBuiltIsOverWhatItWasBuiltFromTest::unreadIn);
-            case Proposition.Some some -> unreadIn(some.ofTheElement());
-            default -> false;
-        };
+        return Proposition.leavesSomethingUnread(stated);
     }
 
     /** What the condition of {@code f}'s one fork states, its fork written as {@code condition}. */

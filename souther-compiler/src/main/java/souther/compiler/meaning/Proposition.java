@@ -705,8 +705,9 @@ public sealed interface Proposition {
      * <p>The statements and the count, and not the choices. Written out, a choice names every
      * statement — each one chosen holding and, for a count that admits no more, each other one
      * failing — so exactly one of {@code n} is {@code n} choices of {@code n} statements each. Held
-     * here, each statement is held once, and a reader that needs the choices asks for them
-     * ({@link #choices}) and is held to how many parts they come to.
+     * here, each statement is held once, and a reader that needs the choices is handed them
+     * through {@link CountsWrittenOut}, held to how many they are and how many parts every count
+     * it is handed comes to together.
      *
      * <p>Denied, it is the count being one of the others. No statement is denied by that, and no
      * choice is made.
@@ -849,40 +850,23 @@ public sealed interface Proposition {
         }
 
         /**
-         * The same count over {@code remade}, each of {@link #statements} made again by a reader,
-         * in the same order and each weighed as before: two that come out one statement are that
-         * statement weighed as both were. Stated as {@link #compared} states a count, so one that
-         * came out fewer is written out where that fits.
-         */
-        public Proposition over(List<Proposition> remade) {
-            return WhichOfThemHold.of(this).over(remade).stated();
-        }
-
-        /**
          * Some one of the choices of which statements hold that put the count where this admits it,
-         * written out — or null where they are more than one condition is read in
-         * ({@link CompositionBudget#READINGS_OF_ONE_CONDITION}), or written out come to more parts
-         * than {@link CompositionBudget#PARTS_THE_CHOICES_OF_A_COUNT_COME_TO}
-         * ({@link #choicesStoppedAt} says which).
+         * written out, with how many parts they come to — or none, where they are more than one
+         * condition is read in ({@link CompositionBudget#READINGS_OF_ONE_CONDITION}) or written out
+         * come to more parts than {@link CompositionBudget#PARTS_THE_CHOICES_OF_A_COUNT_COME_TO},
+         * and which of the two.
          *
          * <p>What holds exactly where this does, for a reader that can read a disjunction of
-         * conjunctions and not a count; and the one place such a reader is held to figures for it.
-         * Both: a reader takes each choice as one of several things, and how many it is handed is
-         * a cost of its own beside how many parts they come to.
+         * conjunctions and not a count. Written out once for the count, and handed to a reader
+         * only through {@link CountsWrittenOut}, which holds the reader to what every count it is
+         * handed comes to together.
          */
-        public Proposition choices() {
-            return SharedPropositions.choices(this, this::writtenOutForAReader).choices();
+        WhichOfThemHold.Written writtenForAReader() {
+            return SharedPropositions.choices(this, this::writtenOutForAReader);
         }
 
-        /**
-         * The figure the choices were past, where {@link #choices} hands a reader none — or null
-         * where it hands them.
-         */
-        public CompositionBudget choicesStoppedAt() {
-            return SharedPropositions.choices(this, this::writtenOutForAReader).stoppedAt();
-        }
-
-        /** The choices written out no further than {@link #choices} says, each time it is asked. */
+        /** The choices written out no further than {@link #writtenForAReader} says, each time it
+         *  is asked. */
         private WhichOfThemHold.Written writtenOutForAReader() {
             return WhichOfThemHold.of(this).written(CompositionBudget.READINGS_OF_ONE_CONDITION,
                     CompositionBudget.PARTS_THE_CHOICES_OF_A_COUNT_COME_TO);
@@ -1009,88 +993,6 @@ public sealed interface Proposition {
             case Quantity.SumOver sum -> sum.container() instanceof DecisionSubject.AnAnswer
                     || anAnswerIn(sum.ofTheElement());
         };
-    }
-
-    /**
-     * {@code stated} with every count of statements in it written out as the choices of which of
-     * them hold ({@link SoManyHold#choices}) — or null where one of them comes to more parts than
-     * those are held to.
-     *
-     * <p>For a reader that takes a statement apart as conjunctions and disjunctions and has no
-     * reading of a count of its own. What a search reaches is left as it stands: a count there is
-     * one part of what each node is asked, and such a reader takes the search whole.
-     */
-    public static Proposition withTheCountsWrittenOut(Proposition stated) {
-        return switch (stated) {
-            case SoManyHold counted -> {
-                Proposition choices = counted.choices();
-                yield choices == null ? null : withTheCountsWrittenOut(choices);
-            }
-            case All all -> {
-                List<Proposition> parts = withTheCountsWrittenOut(all.parts());
-                yield parts == null ? null : parts == all.parts() ? all : all(parts);
-            }
-            case Any any -> {
-                List<Proposition> parts = withTheCountsWrittenOut(any.parts());
-                yield parts == null ? null : parts == any.parts() ? any : any(parts);
-            }
-            case OnAnApplication applications -> {
-                List<Proposition> each = withTheCountsWrittenOut(applications.each());
-                yield each == null ? null
-                        : each == applications.each() ? applications : onAnApplication(each);
-            }
-            case Some some -> {
-                Proposition element = withTheCountsWrittenOut(some.ofTheElement());
-                yield element == null ? null : element == some.ofTheElement() ? some
-                        : new Some(some.container(), element, some.holds());
-            }
-            case Always _, Compared _, Truth _, InCases _, Present _, SameValue _, LastToHold _,
-                 Carried _, Unread _, SomeReachable _ -> stated;
-        };
-    }
-
-    /**
-     * The first count of statements in {@code stated} whose choices are handed to no reader, where
-     * {@link #withTheCountsWrittenOut} found one — or null where it found none — walked as that
-     * walks.
-     */
-    public static SoManyHold aCountNotWrittenOut(Proposition stated) {
-        return switch (stated) {
-            case SoManyHold counted -> counted.choices() == null ? counted
-                    : aCountNotWrittenOut(counted.choices());
-            case All all -> aCountNotWrittenOut(all.parts());
-            case Any any -> aCountNotWrittenOut(any.parts());
-            case OnAnApplication applications -> aCountNotWrittenOut(applications.each());
-            case Some some -> aCountNotWrittenOut(some.ofTheElement());
-            case Always _, Compared _, Truth _, InCases _, Present _, SameValue _, LastToHold _,
-                 Carried _, Unread _, SomeReachable _ -> null;
-        };
-    }
-
-    private static SoManyHold aCountNotWrittenOut(List<Proposition> parts) {
-        for (Proposition part : parts) {
-            SoManyHold found = aCountNotWrittenOut(part);
-            if (found != null) {
-                return found;
-            }
-        }
-        return null;
-    }
-
-    /** Each of {@code parts} so written out, the list itself where none changed, or null where
-     *  one could not be. */
-    private static List<Proposition> withTheCountsWrittenOut(List<Proposition> parts) {
-        List<Proposition> out = new ArrayList<>(parts.size());
-        boolean changed = false;
-        for (Proposition part : parts) {
-            Proposition written = withTheCountsWrittenOut(part);
-            if (written == null) {
-                return null;
-            }
-            changed |= written != part;
-            out.add(written);
-        }
-        return changed ? out : parts;
     }
 
     /**

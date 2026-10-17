@@ -62,8 +62,24 @@ public final class AnswerAsAnInput {
                             Symbols symbols, Map<NumericTerm, ExactRatio> pinned) {
         AnswerAsAnInput reading = new AnswerAsAnInput(head, inners, symbols,
                 new LinkedHashMap<>(pinned), false);
-        Proposition remade = reading.proposition(stated);
+        Proposition remade = reading.remade(stated);
         return remade == null ? new Remade.NotAboutTheAnswer() : new Remade.Stated(remade);
+    }
+
+    /**
+     * {@link #proposition} of {@code stated} with every count in it written out as the choices of
+     * which statements hold, all of them held to one figure ({@link CountsWrittenOut}) — or null
+     * past it, as for a part no value composed here can meet.
+     *
+     * <p>Remade choice by choice and not count by count: a part about the input alone is left out
+     * of one of several things and held of all of them, which comes to something else of a count
+     * made of the same statements.
+     */
+    private Proposition remade(Proposition stated) {
+        return switch (CountsWrittenOut.of(stated)) {
+            case CountsWrittenOut.Written(Proposition written) -> proposition(written);
+            case CountsWrittenOut.PastAFigure _ -> null;
+        };
     }
 
     /**
@@ -81,7 +97,13 @@ public final class AnswerAsAnInput {
      * beside it.
      */
     public static Proposition ofTheRow(Proposition stated, Map<NumericTerm, ExactRatio> pinned) {
-        return ofTheRow(stated, pinned, true);
+        // A count of statements is the choices of which of them hold, every count in the
+        // statement written out together and held to one figure; past it, no row is composed
+        // toward the statement.
+        return switch (CountsWrittenOut.of(stated)) {
+            case CountsWrittenOut.Written(Proposition written) -> ofTheRow(written, pinned, true);
+            case CountsWrittenOut.PastAFigure _ -> null;
+        };
     }
 
     /**
@@ -125,12 +147,8 @@ public final class AnswerAsAnInput {
                     Proposition::any);
             case Proposition.OnAnApplication applications -> oneOf(applications.each(), pinned,
                     positive, Proposition::onAnApplication);
-            // A count of statements is the choices of which of them hold; past what is written out
-            // of those, no row is composed toward it.
-            case Proposition.SoManyHold counted -> {
-                Proposition choices = counted.choices();
-                yield choices == null ? null : ofTheRow(choices, pinned, positive);
-            }
+            case Proposition.SoManyHold _ -> throw new IllegalArgumentException(
+                    "a count reaches what a row is held to written out as its choices: " + stated);
             // An element of a container of the input. Where no element may meet it, every element
             // still asked the rest is held at the value, which the answer was composed to fail at.
             case Proposition.Some some when !(some.container()
@@ -278,13 +296,13 @@ public final class AnswerAsAnInput {
                                                            NewtypeInners inners,
                                                            Symbols symbols) {
         AnswerAsAnInput reading = new AnswerAsAnInput(head, inners, symbols, Map.of(), true);
-        return reading.proposition(stated) == null ? null : List.copyOf(reading.comparisons);
+        return reading.remade(stated) == null ? null : List.copyOf(reading.comparisons);
     }
 
     private static AnswerAsAnInput asking(Proposition stated) {
         AnswerAsAnInput reading =
                 new AnswerAsAnInput("$answer", null, null, Map.of(), true);
-        return reading.proposition(stated) == null ? null : reading;
+        return reading.remade(stated) == null ? null : reading;
     }
 
     private Proposition proposition(Proposition stated) {
@@ -359,17 +377,9 @@ public final class AnswerAsAnInput {
                 List<Proposition> each = propositions(applications.each());
                 yield each == null ? null : Proposition.onAnApplication(each);
             }
-            // A count of statements is read as the choices of which of them hold, as a disjunction
-            // is; past what is written out of those, as the same count of each statement made
-            // again.
-            case Proposition.SoManyHold counted -> {
-                Proposition choices = counted.choices();
-                if (choices != null) {
-                    yield proposition(choices);
-                }
-                List<Proposition> each = propositions(counted.statements());
-                yield each == null ? null : counted.over(each);
-            }
+            case Proposition.SoManyHold _ -> throw new IllegalArgumentException(
+                    "a count reaches what is said of an answer written out as its choices: "
+                            + stated);
             // Over a container of the input, the element's numbers are put at values with every
             // other number of the input, so what is asked of the answer is what the element asks
             // of it at those values. Whether the row holds such an element is the row's.

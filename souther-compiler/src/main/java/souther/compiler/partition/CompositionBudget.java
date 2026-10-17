@@ -356,16 +356,17 @@ public enum CompositionBudget {
     PARTS_A_DERIVATION_CONCLUDES(4096),
 
     /**
-     * How many parts the choices of which of some statements hold come to written out, for a
-     * reader that takes a count of them apart into those choices
-     * ({@link souther.compiler.meaning.Proposition.SoManyHold#choices}).
+     * How many parts the choices of which of some statements hold come to written out, every count
+     * one reader is handed together, for a reader that takes counts apart into those choices
+     * ({@link souther.compiler.meaning.CountsWrittenOut}).
      *
      * <p>Beside {@link #PARTS_A_DERIVATION_CONCLUDES} and not in place of it. That one bounds what
      * a step states, and a count of statements is stated as the statements and the counts it
      * admits, each statement once. Written out as choices, every choice names every statement it
      * needs, so exactly one of {@code n} is {@code n} choices of {@code n} statements — and what a
      * reader that needs the choices walks grows with that and not with what is stated. This bounds
-     * that walk, wherever a reader asks for it.
+     * that walk: what every count one reader is handed comes to together, and not each count on
+     * its own, so a statement holding several counts is held to it once.
      *
      * <p><b>Reaching it gives the choices up and says so.</b> The reader is handed none, and takes
      * the count as it takes a part it could not see into, naming this as why.

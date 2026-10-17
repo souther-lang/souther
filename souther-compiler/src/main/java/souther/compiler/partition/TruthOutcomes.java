@@ -186,7 +186,7 @@ final class TruthOutcomes {
     /**
      * Which answers a count of statements can give, from which each statement can
      * ({@link Proposition.SoManyHold#comesOut}). A statement fixed at an answer nobody named, or
-     * one this cannot say, leaves the counts unknown, and the count is read as the choices it is.
+     * one this cannot say, leaves the counts unknown, and so the count.
      */
     private static Outcomes ofACount(Proposition.SoManyHold counted) {
         List<Boolean> mayHold = new ArrayList<>();
@@ -194,8 +194,7 @@ final class TruthOutcomes {
         for (Proposition statement : counted.statements()) {
             Outcomes each = of(statement);
             if (each == Outcomes.FIXED_UNNAMED || each == Outcomes.UNKNOWN) {
-                Proposition choices = counted.choices();
-                return choices == null ? Outcomes.UNKNOWN : of(choices);
+                return Outcomes.UNKNOWN;
             }
             mayHold.add(each.allows(true));
             mayFail.add(each.allows(false));

@@ -8,6 +8,7 @@ import souther.compiler.inputs.NumericTerms;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.CountsWrittenOut;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Proposition;
@@ -177,7 +178,13 @@ final class MeaningAssumptions {
                                       InputPlaces places, Denotations at) {
         Proposition asked = positive ? stated : stated.denied();
         MeaningAssumptions taking = new MeaningAssumptions(terms, places, at, k, new Tries());
-        taking.take(asked);
+        // A count of statements is taken as the choices of which of them hold, every count in
+        // the statement written out together and held to one figure.
+        switch (CountsWrittenOut.of(asked)) {
+            case CountsWrittenOut.Written(Proposition written) -> taking.take(written);
+            case CountsWrittenOut.PastAFigure(var figure) ->
+                    taking.notTaken(new WhyNotTaken.MoreChoicesThanAreWrittenOut(figure));
+        }
         // Read to the end only where every part was taken in: a part a path cannot hold leaves an
         // arm under it unsettled for this reader's reach, which is not a fact about the model.
         return new Predicates.Assumed(taking.known, taking.taken, taking.notTaken.isEmpty(),
@@ -222,16 +229,8 @@ final class MeaningAssumptions {
             }
             case Proposition.Always _ -> { }
             case Proposition.Any any -> takingOneOf(any);
-            // A count of statements is the choices of which of them hold, taken as those are.
-            case Proposition.SoManyHold counted -> {
-                Proposition choices = counted.choices();
-                if (choices != null) {
-                    take(choices);
-                } else {
-                    notTaken(new WhyNotTaken.MoreChoicesThanAreWrittenOut(
-                            counted.choicesStoppedAt()));
-                }
-            }
+            case Proposition.SoManyHold _ -> throw new IllegalArgumentException(
+                    "a count reaches a path written out as its choices: " + asked);
             // Which application is no fact of a path.
             case Proposition.OnAnApplication _ ->
                     WhyNotTaken.declinedWhole(new WhyNotTaken.OutsideDomain(

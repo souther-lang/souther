@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.CountsWrittenOut;
 import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Proposition;
 
@@ -33,7 +34,8 @@ class ACountOfStatementsTurnsOnWhatItsChoicesTurnOnTest {
                 .sorted(Comparator.comparing(Proposition::key)).toList();
         Proposition.SoManyHold counted = new Proposition.SoManyHold(statements,
                 List.of(1, 1, 1, 1), List.of(2));
-        Proposition choices = counted.choices();
+        Proposition choices = CountsWrittenOut.of(counted)
+                instanceof CountsWrittenOut.Written(Proposition written) ? written : null;
         assertNotNull(choices, "six choices of four statements are written out for a reader");
 
         Set<String> ofTheCount = new HashSet<>();

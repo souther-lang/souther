@@ -26,6 +26,7 @@ import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.Towards;
 import souther.compiler.meaning.AuthoredPointMapping;
 import souther.compiler.meaning.AuthorsLines;
+import souther.compiler.meaning.CountsWrittenOut;
 import souther.compiler.meaning.DecidingCase;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.DecisionSubject;
@@ -820,32 +821,16 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                  Proposition.Present _
                     when statesNoRelation(stated.proposition()) -> new Read.StatesNoRelation();
             case Proposition.All _, Proposition.Any _, Proposition.SoManyHold _
-                    when !Proposition.leavesSomethingUnread(stated.proposition()) -> {
-                Proposition written = Proposition.withTheCountsWrittenOut(stated.proposition());
-                if (written == null) {
-                    yield choicesNotWrittenOut(comparison, stated.proposition(), read, reads,
-                            answering);
-                }
-                Read several = several(behavior, comparison.left(), written, read, reads,
-                        lines.get());
-                yield several != null ? several
-                        : severalNotDrawn(comparison, read, reads, answering);
-            }
+                    when !Proposition.leavesSomethingUnread(stated.proposition()) ->
+                    asLines(behavior, comparison, stated.proposition(), read, reads, answering,
+                            lines.get());
             // Some element meeting several parts, which is the parts read of that element: a
             // lookup's answer compared as a whole is its entry under the key meeting the
             // comparison, and the line is the comparison's on the entry. Inside an either-or it is
             // the same parts, read there.
             case Proposition.Some some when some.holds()
-                    && !Proposition.leavesSomethingUnread(some) -> {
-                Proposition written = Proposition.withTheCountsWrittenOut(some);
-                if (written == null) {
-                    yield choicesNotWrittenOut(comparison, some, read, reads, answering);
-                }
-                Read several = several(behavior, comparison.left(), written, read, reads,
-                        lines.get());
-                yield several != null ? several
-                        : severalNotDrawn(comparison, read, reads, answering);
-            }
+                    && !Proposition.leavesSomethingUnread(some) ->
+                    asLines(behavior, comparison, some, read, reads, answering, lines.get());
             default -> noLine(comparison, stated.proposition(), onTheInput.arithmetic(), read,
                     reads, answering);
         };
@@ -1118,18 +1103,27 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
     }
 
     /**
-     * {@code stated}, read to the end, holding a count of statements whose choices of which hold
-     * are not written out to be read as lines ({@link Proposition.SoManyHold#choices}): where its
-     * lines decide was not worked out, at the figure the choices were past, at each place the
+     * {@code stated}, read to the end, as the several lines it draws, each with where it decides —
+     * every count of statements in it written out as the choices of which hold, all of them held
+     * to one figure ({@link CountsWrittenOut}). Past that figure where its lines decide was not
+     * worked out, and where none are drawn it is several lines not drawn, at each place the
      * comparison is filed at.
      */
-    private static Read choicesNotWrittenOut(StatedComparison comparison, Proposition stated,
-                                             InputReading read, InputReads reads,
-                                             Arrivals answering) {
-        return new Read.Stopped(ComparisonAssessment.atEachOf(
-                GuardThresholds.filedAt(comparison, read, reads, answering),
-                new BlockReason.WhereALineDecidesNotWorkedOut(
-                        Proposition.aCountNotWrittenOut(stated).choicesStoppedAt().figure())));
+    private static Read asLines(String behavior, StatedComparison comparison, Proposition stated,
+                                InputReading read, InputReads reads, Arrivals answering,
+                                Optional<AuthorsLines> authors) {
+        return switch (CountsWrittenOut.of(stated)) {
+            case CountsWrittenOut.PastAFigure(CompositionBudget figure) ->
+                    new Read.Stopped(ComparisonAssessment.atEachOf(
+                            GuardThresholds.filedAt(comparison, read, reads, answering),
+                            new BlockReason.WhereALineDecidesNotWorkedOut(figure.figure())));
+            case CountsWrittenOut.Written(Proposition written) -> {
+                Read several = several(behavior, comparison.left(), written, read, reads,
+                        authors);
+                yield several != null ? several
+                        : severalNotDrawn(comparison, read, reads, answering);
+            }
+        };
     }
 
     /**
@@ -1151,9 +1145,9 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
     static Read ofAnApplication(String behavior, Core application, Proposition stated,
                                 InputReading read, InputReads reads,
                                 AuthorsLines authors) {
-        Proposition written = Proposition.withTheCountsWrittenOut(stated);
-        if (written != null && several(behavior, application, written, read, reads,
-                Optional.of(authors)) instanceof Read.Several lines) {
+        if (CountsWrittenOut.of(stated) instanceof CountsWrittenOut.Written(Proposition written)
+                && several(behavior, application, written, read, reads,
+                        Optional.of(authors)) instanceof Read.Several lines) {
             return lines;
         }
         List<FilingCoordinate> related = valuesItRelates(stated);

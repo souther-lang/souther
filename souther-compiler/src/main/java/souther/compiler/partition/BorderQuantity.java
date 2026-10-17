@@ -34,6 +34,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * What a border is a border <em>of</em>: the quantity a rule cuts.
@@ -989,9 +990,9 @@ public sealed interface BorderQuantity
             return switch (stated) {
                 case Proposition.Always(boolean holds) -> String.valueOf(holds);
                 case Proposition.All all -> all.parts().stream().map(HowMany::grouped)
-                        .collect(java.util.stream.Collectors.joining(" && "));
+                        .collect(Collectors.joining(" && "));
                 case Proposition.Any any -> any.parts().stream().map(HowMany::grouped)
-                        .collect(java.util.stream.Collectors.joining(" || "));
+                        .collect(Collectors.joining(" || "));
                 case Proposition.Some some -> (some.holds() ? "some " : "no ") + some.container()
                         + " [" + said(some.ofTheElement()) + "]";
                 case Proposition.Compared compared -> switch (compared.relation()) {
@@ -1030,14 +1031,24 @@ public sealed interface BorderQuantity
                             ? "== " + counted.admitted().getFirst()
                             : "in " + counted.admitted());
                 }
-                default -> stated.key();
+                case Proposition.Truth _, Proposition.InCases _, Proposition.Present _,
+                     Proposition.SameValue _, Proposition.LastToHold _, Proposition.Carried _,
+                     Proposition.SomeReachable _, Proposition.Unread _,
+                     Proposition.OnAnApplication _ -> stated.key();
             };
         }
 
         /** A part of a joined statement, bracketed where it is a join itself. */
         private static String grouped(Proposition part) {
-            return part instanceof Proposition.All || part instanceof Proposition.Any
-                    ? "(" + said(part) + ")" : said(part);
+            return switch (part) {
+                case Proposition.All _, Proposition.Any _ -> "(" + said(part) + ")";
+                // A count is written as a comparison, which binds tighter than a join.
+                case Proposition.SoManyHold _, Proposition.Always _, Proposition.Some _,
+                     Proposition.Compared _, Proposition.Truth _, Proposition.InCases _,
+                     Proposition.Present _, Proposition.SameValue _, Proposition.LastToHold _,
+                     Proposition.Carried _, Proposition.SomeReachable _, Proposition.Unread _,
+                     Proposition.OnAnApplication _ -> said(part);
+            };
         }
 
         private static String written(Rel rel) {

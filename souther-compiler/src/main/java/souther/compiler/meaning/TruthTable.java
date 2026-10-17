@@ -56,7 +56,12 @@ public final class TruthTable {
             case Proposition.Unread _ -> false;
             case Proposition.All all -> all.parts().stream().allMatch(part -> partsOf(part, into));
             case Proposition.Any any -> any.parts().stream().allMatch(part -> partsOf(part, into));
-            default -> {
+            // A count of statements is one part: what holds whichever way it comes out holds
+            // whichever way its statements do.
+            case Proposition.Compared _, Proposition.Truth _, Proposition.InCases _,
+                 Proposition.Present _, Proposition.SameValue _, Proposition.LastToHold _,
+                 Proposition.Some _, Proposition.Carried _, Proposition.SomeReachable _,
+                 Proposition.OnAnApplication _, Proposition.SoManyHold _ -> {
                 into.putIfAbsent(spelledFirst(stated), into.size());
                 yield true;
             }
@@ -71,7 +76,10 @@ public final class TruthTable {
                     .allMatch(part -> valueOf(part, parts, assignment));
             case Proposition.Any any -> any.parts().stream()
                     .anyMatch(part -> valueOf(part, parts, assignment));
-            default -> {
+            case Proposition.Compared _, Proposition.Truth _, Proposition.InCases _,
+                 Proposition.Present _, Proposition.SameValue _, Proposition.LastToHold _,
+                 Proposition.Some _, Proposition.Carried _, Proposition.SomeReachable _,
+                 Proposition.Unread _, Proposition.OnAnApplication _, Proposition.SoManyHold _ -> {
                 String spelled = spelledFirst(stated);
                 boolean set = (assignment >> parts.get(spelled) & 1L) == 1L;
                 yield spelled.equals(stated.key()) == set;

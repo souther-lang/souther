@@ -148,8 +148,14 @@ public final class Conclusion {
     /** Whether {@code stated} comes to no more parts written out than {@code figure}, counted as
      *  a step is ({@link #partsIn}). */
     static boolean withinTheParts(Proposition stated, CompositionBudget figure) {
+        return partsWrittenOut(stated, figure) <= figure.maximum();
+    }
+
+    /** How many parts {@code stated} comes to written out, counted as a step is, and no further
+     *  than one past {@code figure}. */
+    static long partsWrittenOut(Proposition stated, CompositionBudget figure) {
         return new Conclusion(new Shared(Optional.empty(), false, figure), Map.of())
-                .partsIn(stated) <= figure.maximum();
+                .partsIn(stated);
     }
 
     /**

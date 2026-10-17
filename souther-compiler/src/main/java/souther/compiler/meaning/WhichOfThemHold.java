@@ -89,24 +89,6 @@ final class WhichOfThemHold {
         return new WhichOfThemHold(held.statements(), held.weights(), admitted);
     }
 
-    /**
-     * The same count over {@code remade}, each of the statements made again, in their order: two
-     * that came out one statement are that one, weighed as both were.
-     */
-    WhichOfThemHold over(List<Proposition> remade) {
-        if (remade.size() != statements.size()) {
-            throw new IllegalArgumentException("each of " + statements.size()
-                    + " statements is made again: " + remade);
-        }
-        Map<String, Proposition> once = new LinkedHashMap<>();
-        Map<String, Integer> weighed = new LinkedHashMap<>();
-        for (int one = 0; one < remade.size(); one++) {
-            once.putIfAbsent(remade.get(one).key(), remade.get(one));
-            weighed.merge(remade.get(one).key(), weights.get(one), Integer::sum);
-        }
-        return new WhichOfThemHold(List.copyOf(once.values()), List.copyOf(weighed.values()),
-                admitted);
-    }
 
     /**
      * What the relation states: its choices written out, where they are no more than how many
@@ -123,8 +105,8 @@ final class WhichOfThemHold {
         if (within.choices() != null) {
             return within.choices();
         }
-        Written forAReader = within.stoppedAt() == CompositionBudget.PARTS_A_DERIVATION_CONCLUDES
-                && within.whole() != null ? new Written(within.whole(), null, null) : null;
+        long wholeParts = within.whole() == null ? 0 : Conclusion.partsWrittenOut(within.whole(),
+                CompositionBudget.PARTS_THE_CHOICES_OF_A_COUNT_COME_TO);
         List<Integer> byKey = new ArrayList<>(statements.size());
         for (int one = 0; one < statements.size(); one++) {
             byKey.add(one);
@@ -147,10 +129,10 @@ final class WhichOfThemHold {
         // Written out whole on the way here and past a step's parts, they are still what a reader
         // of the count is handed where they are within that reader's figure, and are not written
         // out again for it.
-        if (forAReader != null && held instanceof Proposition.SoManyHold counted
-                && Conclusion.withinTheParts(forAReader.choices(),
-                        CompositionBudget.PARTS_THE_CHOICES_OF_A_COUNT_COME_TO)) {
-            SharedPropositions.choicesWritten(counted, forAReader);
+        if (within.whole() != null && held instanceof Proposition.SoManyHold counted
+                && wholeParts <= CompositionBudget.PARTS_THE_CHOICES_OF_A_COUNT_COME_TO.maximum()) {
+            SharedPropositions.choicesWritten(counted,
+                    new Written(within.whole(), null, null, wholeParts));
         }
         return held;
     }
@@ -163,8 +145,11 @@ final class WhichOfThemHold {
      * @param stoppedAt the figure they were past, or null where they were within both
      * @param whole     every choice written out, where the walk made them all and only their parts
      *                  were past the figure; null otherwise
+     * @param parts     how many parts {@code choices} come to written out, and nought where there
+     *                  are none — what a reader walking them is charged
      */
-    record Written(Proposition choices, CompositionBudget stoppedAt, Proposition whole) {}
+    record Written(Proposition choices, CompositionBudget stoppedAt, Proposition whole,
+                   long parts) {}
 
     /**
      * What {@link Written} says of the choices, held to {@code choicesFigure} by how many they are
@@ -190,14 +175,15 @@ final class WhichOfThemHold {
             return atLeast[0] <= mostParts;
         });
         if (pastTheChoices[0]) {
-            return new Written(null, choicesFigure, null);
+            return new Written(null, choicesFigure, null, 0);
         }
         if (!whole) {
-            return new Written(null, partsFigure, null);
+            return new Written(null, partsFigure, null, 0);
         }
         Proposition written = Proposition.any(ways);
-        return Conclusion.withinTheParts(written, partsFigure) ? new Written(written, null, null)
-                : new Written(null, partsFigure, written);
+        long parts = Conclusion.partsWrittenOut(written, partsFigure);
+        return parts <= partsFigure.maximum() ? new Written(written, null, null, parts)
+                : new Written(null, partsFigure, written, 0);
     }
 
     /**
