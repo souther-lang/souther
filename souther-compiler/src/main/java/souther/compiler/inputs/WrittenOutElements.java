@@ -9,6 +9,7 @@ import souther.compiler.types.BindingId;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.OptionalLong;
 import java.util.Set;
 
 /**
@@ -85,13 +86,12 @@ public final class WrittenOutElements {
         };
     }
 
-    /** The element {@code List.get(index, list)} holds where {@code option} stands as one, read
-     *  here ({@link ElementsWrittenOut#picked}), or null where which it is is not one answer. */
-    static Denotation picked(Core option, InputReads at, Symbols symbols,
-                             DeclarationNewtypes newtypes) {
-        ElementsWrittenOut.Occurrence<InputReads> picked =
-                ElementsWrittenOut.picked(option, at, new Names(symbols, newtypes, Set.of()));
-        return picked == null ? null : denotation(picked.value());
+    /** How many elements {@code container}, standing where it is followed to, holds where it is
+     *  written out with each of them there on every run ({@link ElementsWrittenOut#sizeOf}). */
+    public static OptionalLong sizeOf(Denotation container, Symbols symbols,
+                                      DeclarationNewtypes newtypes) {
+        return ElementsWrittenOut.sizeOf(new ElementsWrittenOut.Stood<>(container.value(),
+                container.at()), new Names(symbols, newtypes, Set.of()));
     }
 
     private static ReadMeaning.Occurrence occurrence(ElementsWrittenOut.Occurrence<InputReads> one) {

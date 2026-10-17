@@ -2,14 +2,12 @@ package souther.compiler.inputs;
 
 import souther.compiler.check.AnIndexedMap;
 import souther.compiler.check.AnOperationApplied;
-import souther.compiler.check.BoundOperationFacts;
 import souther.compiler.check.CalledBody;
 import souther.compiler.check.CallArguments;
 import souther.compiler.check.Choice;
 import souther.compiler.check.ClosureUses;
 import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.check.DeclaredArgument;
-import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.ElementAnswer;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.Location;
@@ -17,8 +15,8 @@ import souther.compiler.check.ScopeStep;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.ValueStanding;
 import souther.compiler.check.ElementsWrittenOut;
+import souther.compiler.check.WhatAnOptionHolds;
 import souther.compiler.core.Core;
-import souther.compiler.core.Kernel;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.semantics.HowAClosureIsApplied;
 import souther.compiler.types.BindingId;
@@ -1329,62 +1327,87 @@ public final class InputReads {
     /**
      * What {@code option}, read here, holds where it holds a value ({@link WhatItHolds}).
      *
-     * <p>A lookup in the input's map holds the entry under the key, and a lookup in a list written
-     * out holds the element its index picks ({@link ElementsWrittenOut#picked}). An operation
-     * answering its closure on what another option holds holds what the closure's body answers, read
-     * with the closure's parameter standing for what the other holds — worked out the same way, down
-     * to a lookup, an optional's position, or nothing said. The closure is read where it stands, and
-     * may be a name for one; only a closure written as a block of one parameter is read.
-     *
-     * <p>Each step goes into an argument of the call before it, and each call is found through the
-     * names it was bound to ({@link #standing}), which stops where a name comes round again, so
-     * the descent ends where the tree does.
+     * <p>Followed by {@link WhatAnOptionHolds}, which the discharge of a rule follows as well: a
+     * lookup in a list written out holds the element its index picks, and an operation answering
+     * its closure on what another option holds holds the closure's answer on that. What only an
+     * input has is answered here: a lookup in the input's map holds the entry under the key, and an
+     * optional at a position holds what stands there.
      */
     WhatItHolds whatItHolds(Core option, Symbols symbols, DeclarationNewtypes newtypes) {
-        Denotation looked = standing(option, symbols, newtypes);
-        InputReads at = looked.at();
-        if (AnOperationApplied.of(Core.withoutStanding(looked.value()))
-                instanceof AnOperationApplied(ValueName operation, List<Core> args)) {
-            if (GET.equals(operation)) {
-                EntryLookedUp entry = args.size() == 2
-                        ? entryLookedUp(looked, args, symbols, newtypes) : null;
-                return entry == null ? new WhatItHolds.Unsaid() : new WhatItHolds.AnEntry(entry);
-            }
-            if (operation instanceof ValueName.Stdlib.Operation listed
-                    && symbols.kernelOf(listed) == Kernel.LIST_GET) {
-                Denotation picked = WrittenOutElements.picked(looked.value(), at, symbols,
-                        newtypes);
-                return picked == null ? new WhatItHolds.Unsaid()
-                        : new WhatItHolds.AnElement(picked);
-            }
-            BoundOperationFacts.ClosureOnWhatItHolds made =
-                    DefaultBoundOperationFacts.get().answersTheClosureOnWhatItHolds(operation);
-            int held = made == null ? -1 : CallArguments.positionOf(made.option(), operation);
-            int closure = made == null ? -1 : CallArguments.positionOf(made.closure(), operation);
-            if (held < 0 || held >= args.size() || closure < 0 || closure >= args.size()) {
-                return new WhatItHolds.Unsaid();
-            }
-            Denotation step = at.standing(args.get(closure), symbols, newtypes);
-            if (!(Core.withoutStanding(step.value()) instanceof Core.Block block)
-                    || block.params().size() != 1 || block.params().getFirst() == null
-                    || block.params().getFirst().binding() == null) {
-                return new WhatItHolds.Unsaid();
-            }
-            WhatItHolds handed = at.whatItHolds(args.get(held), symbols, newtypes);
-            return new WhatItHolds.MadeByAClosure(new Denotation(block.body(),
-                    step.at().holding(block.params().getFirst().binding(), handed, newtypes)),
+        return WhatAnOptionHolds.of(option, this, new Holds(symbols, newtypes));
+    }
+
+    /**
+     * How {@link WhatAnOptionHolds} reads an option here: names followed by this reading, a
+     * closure's parameter standing for what it is handed ({@link #holding}), and what only an input
+     * has answered here — the entry a lookup in the input's map picks, and what stands at a position
+     * of the input.
+     */
+    private record Holds(Symbols symbols, DeclarationNewtypes newtypes)
+            implements WhatAnOptionHolds.Reading<InputReads, WhatItHolds> {
+
+        Holds {
+            Objects.requireNonNull(symbols, "names are followed against some library");
+            Objects.requireNonNull(newtypes, "and some declarations' newtypes");
+        }
+
+        @Override
+        public ElementsWrittenOut.Stood<InputReads> standing(Core e, InputReads at) {
+            Denotation stood = at.standing(e, symbols, newtypes);
+            return new ElementsWrittenOut.Stood<>(stood.value(), stood.at());
+        }
+
+        @Override
+        public InputReads handing(InputReads at, BindingId element,
+                                  ElementsWrittenOut.Stood<InputReads> value) {
+            return at.handing(element, new Denotation(value.value(), value.at()), newtypes);
+        }
+
+        @Override
+        public WhatItHolds anElement(ElementsWrittenOut.Stood<InputReads> element) {
+            return new WhatItHolds.AnElement(new Denotation(element.value(), element.at()));
+        }
+
+        @Override
+        public WhatItHolds madeByAClosure(ElementsWrittenOut.Stood<InputReads> answered,
+                                          WhatItHolds handed) {
+            return new WhatItHolds.MadeByAClosure(new Denotation(answered.value(), answered.at()),
                     handed);
         }
-        // An optional at a position holds what stands there narrowed to its present case.
-        if (!(at.forkedOn(looked.value(), newtypes) instanceof PathResolution.At(TermPath path))) {
+
+        @Override
+        public InputReads holding(InputReads at, BindingId parameter, WhatItHolds handed) {
+            return at.holding(parameter, handed, newtypes);
+        }
+
+        @Override
+        public WhatItHolds otherwise(ElementsWrittenOut.Stood<InputReads> option,
+                                     AnOperationApplied applied) {
+            InputReads at = option.at();
+            if (applied != null) {
+                EntryLookedUp entry = GET.equals(applied.operation()) && applied.args().size() == 2
+                        ? at.entryLookedUp(new Denotation(option.value(), at), applied.args(),
+                                symbols, newtypes)
+                        : null;
+                return entry == null ? unsaid() : new WhatItHolds.AnEntry(entry);
+            }
+            // An optional at a position holds what stands there narrowed to its present case.
+            if (!(at.forkedOn(option.value(), newtypes)
+                    instanceof PathResolution.At(TermPath path))) {
+                return unsaid();
+            }
+            TermPath narrowed = switch (at.declared.taking(path, option.value().type(), PRESENT)) {
+                case DeclaredInput.Taking.Narrows(TermPath to) -> to;
+                case DeclaredInput.Taking.Implied _ -> path;
+                case DeclaredInput.Taking.Excluded _ -> null;
+            };
+            return narrowed == null ? unsaid() : new WhatItHolds.AtAPosition(narrowed);
+        }
+
+        @Override
+        public WhatItHolds unsaid() {
             return new WhatItHolds.Unsaid();
         }
-        TermPath narrowed = switch (at.declared.taking(path, looked.value().type(), PRESENT)) {
-            case DeclaredInput.Taking.Narrows(TermPath to) -> to;
-            case DeclaredInput.Taking.Implied _ -> path;
-            case DeclaredInput.Taking.Excluded _ -> null;
-        };
-        return narrowed == null ? new WhatItHolds.Unsaid() : new WhatItHolds.AtAPosition(narrowed);
     }
 
     /**

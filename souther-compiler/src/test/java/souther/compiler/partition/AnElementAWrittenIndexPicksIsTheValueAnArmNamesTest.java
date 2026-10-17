@@ -53,6 +53,34 @@ class AnElementAWrittenIndexPicksIsTheValueAnArmNamesTest {
                 """.formatted(picked);
     }
 
+    /** The issue's own report: neither the comparison nor the fork it stands under is left unread,
+     *  where both were. */
+    @Test
+    void neitherTheComparisonNorItsForkIsLeftUnread() {
+        assertEquals(List.of(), unreadAt(reportOf(guarded("List.get(0, String.codePoints(\"0\"))")),
+                        "x"),
+                "what the guard states about x is read, through the arm the match takes");
+    }
+
+    /** Which arm is taken is the library's law on List.get and not the element: an index past the
+     *  list takes the None arm, whose nought never reaches five. */
+    @Test
+    void anIndexPastTheListTakesTheNoneArm() {
+        assertTrue(compiled(guarded("List.get(1, [48])")).warnings().stream()
+                        .anyMatch(each -> "E1327".equals(each.diagnostic().code())),
+                "the guard's branch is reached by no input, since nought is never five or more");
+    }
+
+    /** A text is read as the source holds it once read, which is canonical: an e and a combining
+     *  acute written apart are the one code point they compose to. */
+    @Test
+    void aTextWrittenDecomposedIsReadComposed() {
+        assertEquals(Set.of("237", "238"),
+                pointsOn(reportOf(guarded("List.get(0, String.codePoints(\"é\"))")),
+                        "check/x"),
+                "U+00E9 is 233, and 233 and five is 238");
+    }
+
     @Test
     void theCodePointOfATextWrittenDownIsTheNumberTheArmNames() {
         assertEquals(Set.of("52", "53"),
@@ -225,13 +253,32 @@ class AnElementAWrittenIndexPicksIsTheValueAnArmNamesTest {
         node.forEach(child -> collect(child, axis, out));
     }
 
-    private static JsonNode reportOf(String model) {
+    /** Every reason a rule was said to leave {@code position} unread with. */
+    private static List<String> unreadAt(JsonNode report, String position) {
+        List<String> out = new ArrayList<>();
+        reasons(report, position, out);
+        return out;
+    }
+
+    private static void reasons(JsonNode node, String position, List<String> out) {
+        if (node.isObject() && node.has("ruleId") && node.has("reason")
+                && position.equals(node.path("position").asString())) {
+            out.add(node.path("ruleId").asString() + ": " + node.path("reason").asString());
+        }
+        node.forEach(child -> reasons(child, position, out));
+    }
+
+    private static Compilation compiled(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         assertTrue(compilation.errors().isEmpty(), () -> "compiles: " + compilation.errors()
                 .stream().map(e -> e.diagnostic().code()).toList());
-        return JSON.readTree(AdequacyReport.of(compilation)
+        return compilation;
+    }
+
+    private static JsonNode reportOf(String model) {
+        return JSON.readTree(AdequacyReport.of(compiled(model))
                 .json(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
     }
 }

@@ -23,34 +23,51 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Where a {@code Some} arm opens {@code List.get(i, xs)}, the reading of the input and the discharge
- * of a rule say the same of which element it is: both read {@code c - zero} as {@code c - 48}, or
- * neither does.
+ * Where a value is written down, the reading of an input and the discharge of a rule say the same
+ * of it: what a {@code Some} arm opens, and how many elements a container holds. Both read the
+ * body as {@code c - 48}, or neither does.
  *
  * <p>One program per row, asked of both. The measure is read where a guard
- * {@code digitValue(x) >= 5} draws its line, at {@code x = 53} where the element is forty-eight;
+ * {@code digitValue(x) >= 5} draws its line, at {@code x = 53} where the body is {@code c - 48};
  * the discharge where {@code Digit(digitValue(c))} under {@code c >= 48} is owed nothing, which it is
- * where the element is forty-eight and is not where nothing says which number the element is.
+ * where the body is {@code c - 48} and is not where nothing says which number is taken from
+ * {@code c}.
  */
-class WhereAnElementIsPickedTheMeasureAndTheDischargeAgreeTest {
+class WhereAWrittenValueIsReadTheMeasureAndTheDischargeAgreeTest {
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
-    /** Each scrutinee, and whether the element it holds is forty-eight as far as anything says. */
+    /** Each body of {@code digitValue}, and whether it is {@code c - 48} as far as anything says. */
     private static final Map<String, Boolean> ROWS = Map.ofEntries(
-            Map.entry("List.get(0, String.codePoints(\"0\"))", true),
-            Map.entry("List.get(1, [7, 48])", true),
-            Map.entry("List.get(0, [fortyEight])", true),
-            Map.entry("List.get(0, List.map(n -> n + 1, [47]))", true),
-            Map.entry("List.get(1, List.flatMap(p -> p, [[7], [48]]))", true),
-            Map.entry("List.get(0, String.codePoints(\"" + "0".repeat(2000) + "\"))", true),
-            Map.entry("List.get(0, xs)", false),
-            Map.entry("List.get(0, List.filter(n -> n > k, [48]))", false),
-            Map.entry("List.get(1, List.flatMap(p -> p, [List.filter(n -> n > k, [7]), [48]]))",
+            Map.entry(opening("List.get(0, String.codePoints(\"0\"))"), true),
+            Map.entry(opening("List.get(1, [7, 48])"), true),
+            Map.entry(opening("List.get(0, [fortyEight])"), true),
+            Map.entry(opening("List.get(0, List.map(n -> n + 1, [47]))"), true),
+            Map.entry(opening("List.get(1, List.flatMap(p -> p, [[7], [48]]))"), true),
+            Map.entry(opening("List.get(0, String.codePoints(\"" + "0".repeat(2000) + "\"))"),
+                    true),
+            Map.entry(opening("Option.map(n -> n + 1, List.get(0, [47]))"), true),
+            Map.entry("c - List.length(String.codePoints(\"" + "0".repeat(48) + "\"))", true),
+            Map.entry("c - List.length(List.map(n -> n + 1, String.codePoints(\""
+                    + "0".repeat(48) + "\")))", true),
+            Map.entry(opening("List.get(0, xs)"), false),
+            Map.entry(opening("List.get(0, List.filter(n -> n > k, [48]))"), false),
+            Map.entry(opening("List.get(1, List.flatMap(p -> p, [List.filter(n -> n > k, [7]),"
+                    + " [48]]))"), false),
+            Map.entry(opening("List.get(1024, String.codePoints(\"" + "0".repeat(1025) + "\"))"),
                     false),
-            Map.entry("List.get(1024, String.codePoints(\"" + "0".repeat(1025) + "\"))", false));
+            Map.entry(opening("Option.map(n -> n + k, List.get(0, [48]))"), false),
+            Map.entry("c - List.length(List.filter(n -> n > k, String.codePoints(\""
+                    + "0".repeat(48) + "\")))", false));
 
-    private static String program(String picked) {
+    /** A body subtracting what a {@code Some} arm over {@code option} opens. */
+    private static String opening(String option) {
+        return "match " + option + " with\n"
+                + "        | Some zero -> c - zero\n"
+                + "        | None -> 0";
+    }
+
+    private static String program(String body) {
         return """
                 module demo
 
@@ -61,9 +78,7 @@ class WhereAnElementIsPickedTheMeasureAndTheDischargeAgreeTest {
                 let fortyEight = 48
 
                 let digitValue (c: Int, xs: List<Int>, k: Int): Int =
-                    match %s with
-                        | Some zero -> c - zero
-                        | None -> 0
+                    %s
 
                 behavior check : (x: Int, xs: List<Int>, k: Int) -> Int | Bad
                 let check (x, xs, k) = {
@@ -75,20 +90,20 @@ class WhereAnElementIsPickedTheMeasureAndTheDischargeAgreeTest {
                     constructs Digit
                 let f (c, xs, k) =
                     if c >= 48 then Digit(digitValue(c, xs, k)) else Digit(0)
-                """.formatted(picked);
+                """.formatted(body);
     }
 
     @Test
     void eachProgramIsReadAlikeByBoth() {
         List<String> disagreeing = new ArrayList<>();
-        ROWS.forEach((picked, fortyEight) -> {
-            Compilation compilation = measured(program(picked));
-            boolean measured = pointsOn(reportOf(compilation), "check/x")
-                    .equals(Set.of("52", "53"));
+        ROWS.forEach((body, fortyEight) -> {
+            Compilation compilation = measured(program(body));
+            Set<String> points = pointsOn(reportOf(compilation), "check/x");
+            boolean measured = points.equals(Set.of("52", "53"));
             boolean discharged = compilation.warnings().stream().map(Located::diagnostic)
                     .noneMatch(d -> d.severity() == Severity.WARNING && "E2011".equals(d.code()));
             if (measured != fortyEight || discharged != fortyEight) {
-                disagreeing.add(picked + ": measured " + measured + ", discharged " + discharged
+                disagreeing.add(body + ": measured " + points + ", discharged " + discharged
                         + ", expected " + fortyEight);
             }
         });
@@ -104,8 +119,6 @@ class WhereAnElementIsPickedTheMeasureAndTheDischargeAgreeTest {
 
     private static void collect(JsonNode node, String axis, Set<String> out) {
         if (node.isObject() && node.has("point") && node.has("readings")
-                && "part_of_comparison".equals(
-                        node.at("/obligationId/line/which/kind").asString())
                 && Set.of("at_the_line", "beside_the_line").contains(
                         node.at("/obligationId/location/kind").asString())) {
             JsonNode reading = node.path("readings").get(0);

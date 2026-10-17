@@ -35,6 +35,7 @@ import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.OptionalLong;
 import java.util.Set;
 
 /**
@@ -912,8 +913,9 @@ final class Terms {
     }
 
     /**
-     * How many elements a size call over a list written out counts, or {@code null} where its
-     * argument is not one.
+     * How many elements a size call over a container written out counts, or {@code null} where its
+     * argument is not one ({@link ElementsWrittenOut#sizeOf}, which the reading of an input counts
+     * by as well).
      *
      * <p>What the elements are is not asked. Whether a value is <em>written</em>
      * ({@link #isWritten}) is a question about the whole of it, down to every part, and it is the
@@ -928,8 +930,10 @@ final class Terms {
         if (container == null) {
             return null;
         }
-        return Core.withoutStanding(given(container, at).value()) instanceof Core.ListLit list
-                ? BigDecimal.valueOf(list.elements().size()) : null;
+        Given written = given(container, at);
+        OptionalLong counted = ElementsWrittenOut.sizeOf(
+                new ElementsWrittenOut.Stood<>(written.value(), written.at()), elements);
+        return counted.isPresent() ? BigDecimal.valueOf(counted.getAsLong()) : null;
     }
 
     /** An expression a value is written at, and the environment that expression is read in — which
@@ -1454,9 +1458,9 @@ final class Terms {
      * <p>Asked of what the arm's name stands for and not of what the arm looks like. A name for the
      * matched value stands for the scrutinee and is about it, whichever carrier was tested. A name
      * for what stands under an optional's present carrier is a different value, named as what that
-     * optional holds. It stands for the element a lookup in a list written out picks, where one is
-     * picked ({@link #elementPicked}), and for nothing otherwise — no expression here is that value,
-     * so it is about something while standing for nothing. An arm with no name opens nothing.
+     * optional holds. It stands for the value the optional holds where that is written down
+     * ({@link #heldValue}), and for nothing otherwise — no expression here is that value, so it is
+     * about something while standing for nothing. An arm with no name opens nothing.
      */
     private Opens opens(Core.Case arm, Core scrutinee, Denotations at) {
         FactSubject of = subjectOf(scrutinee, at);
@@ -1465,37 +1469,41 @@ final class Terms {
         }
         return switch (arm.binding()) {
             case Core.ArmBinding.Selected selected -> arithmetic(selected.type(), scrutinee, at);
-            case Core.ArmBinding.Payload _ ->
-                    new Opens(elementPicked(scrutinee, at), heldBy(of), null);
+            case Core.ArmBinding.Payload _ -> new Opens(heldValue(scrutinee, at), heldBy(of), null);
             case Core.ArmBinding.Unbound _ -> null;
         };
     }
 
     /**
-     * The value {@code List.get(index, list)} holds where it holds one, or null where it is not such
-     * a call or which value it holds is not written down.
+     * The value {@code option} holds where it holds one and that value is written down, or null
+     * where it is not.
      *
-     * <p>Which element the index picks is {@link ElementsWrittenOut#picked}'s, which the reading of
-     * an input asks as well, with names followed here as everything else here follows them
-     * ({@link #given}) and a step's parameter entered as a {@code let} enters its binder. What the
-     * arm is handed is read in the arm, so it is the element as a value written down: the element
-     * itself where it is one, and otherwise what it comes to where it was picked.
+     * <p>What the option holds is {@link WhatAnOptionHolds}'s, which the reading of an input follows
+     * as well — the element a lookup in a list written out picks, or a closure's answer on what
+     * another option holds. What the arm is handed is read in the arm, so it is that value as one
+     * written down: the value itself where it is one, and otherwise what it comes to where it was
+     * made.
      */
-    private Core elementPicked(Core scrutinee, Denotations at) {
-        ElementsWrittenOut.Occurrence<Denotations> picked =
-                ElementsWrittenOut.picked(scrutinee, at, elements);
-        if (picked == null) {
+    private Core heldValue(Core option, Denotations at) {
+        ElementsWrittenOut.Stood<Denotations> held = WhatAnOptionHolds.of(option, at, elements);
+        if (held == null) {
             return null;
         }
-        Given element = given(picked.value().value(), picked.value().at());
-        return isWritten(element.value()) ? element.value()
-                : writtenAs(element.value(), folded(element.value(), symbols, element.at()));
+        Given value = given(held.value(), held.at());
+        return isWritten(value.value()) ? value.value()
+                : writtenAs(value.value(), folded(value.value(), symbols, value.at()));
     }
 
-    /** How the walk that writes a container out ({@link ElementsWrittenOut}) reads names here: as
-     *  everything else here follows them ({@link #given}), with a step's parameter entered as a
-     *  {@code let} enters its binder. */
-    private final class ElementsReading implements ElementsWrittenOut.Reading<Denotations> {
+    /**
+     * How the walks that write a container out ({@link ElementsWrittenOut}) and follow what an
+     * option holds ({@link WhatAnOptionHolds}) read names here: as everything else here follows
+     * them ({@link #given}), with a closure's parameter entered as a {@code let} enters its binder.
+     *
+     * <p>What an option holds is answered as the value it is, where it is one: here no option holds
+     * a place of an input, so an option no operation made holds nothing said.
+     */
+    private final class ElementsReading
+            implements WhatAnOptionHolds.Reading<Denotations, ElementsWrittenOut.Stood<Denotations>> {
 
         @Override
         public Symbols symbols() {
@@ -1512,6 +1520,36 @@ final class Terms {
         public Denotations handing(Denotations at, BindingId element,
                                    ElementsWrittenOut.Stood<Denotations> value) {
             return entering(element, value.value(), at);
+        }
+
+        @Override
+        public ElementsWrittenOut.Stood<Denotations> anElement(
+                ElementsWrittenOut.Stood<Denotations> element) {
+            return element;
+        }
+
+        @Override
+        public ElementsWrittenOut.Stood<Denotations> madeByAClosure(
+                ElementsWrittenOut.Stood<Denotations> answered,
+                ElementsWrittenOut.Stood<Denotations> handed) {
+            return answered;
+        }
+
+        @Override
+        public Denotations holding(Denotations at, BindingId parameter,
+                                   ElementsWrittenOut.Stood<Denotations> handed) {
+            return handed == null ? at : entering(parameter, handed.value(), at);
+        }
+
+        @Override
+        public ElementsWrittenOut.Stood<Denotations> otherwise(
+                ElementsWrittenOut.Stood<Denotations> option, AnOperationApplied applied) {
+            return null;
+        }
+
+        @Override
+        public ElementsWrittenOut.Stood<Denotations> unsaid() {
+            return null;
         }
     }
 

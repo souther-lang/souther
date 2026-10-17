@@ -1,6 +1,5 @@
 package souther.compiler.partition;
 
-import net.unit8.notation199x.ScalarValues;
 import net.unit8.notation199x.pattern.CodePoints;
 
 import souther.compiler.check.ARecursion;
@@ -115,6 +114,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalInt;
+import java.util.OptionalLong;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.function.BiFunction;
@@ -1405,15 +1405,12 @@ final class Pullback {
             return size == null ? new Sized.NotSized(new WhyUnread.NoMeasureOfItsSize())
                     : new Sized.AsAForm(LinearForm.atom(size));
         }
-        // A list written out holds as many as it was written with.
-        if (Core.withoutStanding(made.value()) instanceof Core.ListLit written) {
-            return new Sized.AsAForm(LinearForm.constant(ExactRatio.of(written.elements().size())));
-        }
-        // And a text written out holds as many code points as it was written with, counted as a
-        // run counts them.
-        if (Core.withoutStanding(made.value()) instanceof Core.Str written) {
-            return new Sized.AsAForm(LinearForm.constant(
-                    ExactRatio.of(ScalarValues.count(written.value()))));
+        // A container written out holds as many as were written, which the discharge of a rule
+        // counts the same way.
+        OptionalLong written = WrittenOutElements.sizeOf(made, read.rules().symbols(),
+                read.rules().newtypes());
+        if (written.isPresent()) {
+            return new Sized.AsAForm(LinearForm.constant(ExactRatio.of(written.getAsLong())));
         }
         if (!(AnOperationApplied.of(Core.withoutStanding(made.value()))
                 instanceof AnOperationApplied applied

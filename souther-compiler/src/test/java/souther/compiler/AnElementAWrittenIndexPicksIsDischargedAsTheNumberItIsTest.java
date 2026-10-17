@@ -14,7 +14,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>Both directions: under {@code c >= 48}, {@code c - zero} is at or above nought where the
  * element is forty-eight and may be below it where the element is forty-nine. That the measure
- * reads the same element is {@link WhereAnElementIsPickedTheMeasureAndTheDischargeAgreeTest}'s.
+ * reads the same element is {@link WhereAWrittenValueIsReadTheMeasureAndTheDischargeAgreeTest}'s.
  */
 class AnElementAWrittenIndexPicksIsDischargedAsTheNumberItIsTest {
 

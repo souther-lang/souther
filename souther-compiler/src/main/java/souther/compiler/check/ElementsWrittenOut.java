@@ -5,9 +5,12 @@ import souther.compiler.core.Kernel;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.ValueName;
 
+import net.unit8.notation199x.ScalarValues;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.OptionalLong;
 
 /**
  * Every element a container holds, written out, in the order a walk of it meets them and each with
@@ -126,6 +129,31 @@ public final class ElementsWrittenOut {
     /** Every element {@code container} holds. */
     public static <E> Walked<E> of(Stood<E> container, Reading<E> reading) {
         return of(container, reading, Integer.MAX_VALUE, new int[] {0});
+    }
+
+    /**
+     * How many elements {@code container} holds where that is written down, or empty where it is
+     * not.
+     *
+     * <p>A text written down holds as many as its code points, counted as a run counts them. A list
+     * written in the source holds as many as it was written with, however each was arrived at and
+     * however many there are. Any other container holds as many as the walk writes out, where every
+     * one of them is there on every run — one a step keeps on a condition makes the count turn on
+     * the run, and one past the figure leaves it unwritten.
+     */
+    public static <E> OptionalLong sizeOf(Stood<E> container, Reading<E> reading) {
+        Core value = Core.withoutStanding(container.value());
+        if (value instanceof Core.Str text) {
+            return OptionalLong.of(ScalarValues.count(text.value()));
+        }
+        if (value instanceof Core.ListLit written) {
+            return OptionalLong.of(written.elements().size());
+        }
+        if (!(of(container, reading) instanceof Walked.Each<E>(List<Occurrence<E>> each))
+                || each.stream().anyMatch(one -> !one.keptWhere().isEmpty())) {
+            return OptionalLong.empty();
+        }
+        return OptionalLong.of(each.size());
     }
 
     /**
