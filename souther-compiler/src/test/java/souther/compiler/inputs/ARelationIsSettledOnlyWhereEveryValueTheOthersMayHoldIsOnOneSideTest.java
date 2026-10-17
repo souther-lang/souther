@@ -44,7 +44,7 @@ class ARelationIsSettledOnlyWhereEveryValueTheOthersMayHoldIsOnOneSideTest {
     private static Leaves leavesOf(List<WhatARelationLeavesUndivided.Term<String>> terms, int at,
                                    long constant, Rel relation) {
         return WhatARelationLeavesUndivided.leavesOf(terms, at, ExactRatio.of(constant), relation,
-                String::equals, (one, other) -> true, true);
+                String::equals, (one, other) -> true, true, GREATEST_INT);
     }
 
     private static Leaves ofAProduct(NumericDomain.Bounds it, NumericDomain.Bounds other,
@@ -87,6 +87,26 @@ class ARelationIsSettledOnlyWhereEveryValueTheOthersMayHoldIsOnOneSideTest {
                 term("n", 1, NumericDomain.Bounds.OPEN, NumericDomain.Bounds.OPEN),
                 term("len", -1, NumericDomain.Bounds.OPEN, NumericDomain.Bounds.OPEN)), 0, 0,
                 Rel.LE));
+    }
+
+    /**
+     * {@code 4 * x + y >= 0}, {@code y} from the least value of the type to ten above it: the
+     * values settling it are {@code x} from two to the sixty-first on, and four times any of them
+     * passes where the type stops, so no row of that run has a value and it is no class — nothing
+     * is shown. With {@code y} from nought to ten the run starts at nought, which has rows.
+     */
+    @Test
+    void aRunWhoseEveryRowPassesWhereTheTypeStopsIsNoClass() {
+        long least = Long.MIN_VALUE;
+        assertNull(leavesOf(List.of(
+                term("x", 4, NumericDomain.Bounds.OPEN, NumericDomain.Bounds.OPEN),
+                term("y", 1, run(least, least + 10), run(least, least + 10))), 0, 0, Rel.GE));
+
+        Leaves near = leavesOf(List.of(
+                term("x", 4, NumericDomain.Bounds.OPEN, NumericDomain.Bounds.OPEN),
+                term("y", 1, run(0L, 10L), run(0L, 10L))), 0, 0, Rel.GE);
+        assertEquals(List.of(settled(null, -3L, false), settled(0L, null, true)),
+                ((Leaves.Settled) near).runs());
     }
 
     /**

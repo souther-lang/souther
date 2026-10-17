@@ -53,7 +53,8 @@ class AProductOfTwoNumbersIsALineOnTheProductTest {
                     long level = Long.parseLong(label.substring(label.lastIndexOf(' ') + 1));
                     long price = Long.parseLong(row.inputs().get(0));
                     long quantity = Long.parseLong(row.inputs().get(1));
-                    assertEquals(level, price * quantity, label + " at " + row.inputs());
+                    assertEquals(level, Math.multiplyExact(price, quantity),
+                            label + " at " + row.inputs());
                     labels.add(label);
                 }
             }
@@ -88,8 +89,7 @@ class AProductOfTwoNumbersIsALineOnTheProductTest {
 
     /**
      * One product however it is written: factors either way round, the comparison either way
-     * round, behind a name, or weighed after it is taken. The line is at one level and the classes
-     * are one partition.
+     * round, or behind a name. The line is at one level and the classes are one partition.
      */
     @Test
     void aProductIsOneLineHoweverItIsWritten() {
@@ -99,7 +99,6 @@ class AProductOfTwoNumbersIsALineOnTheProductTest {
         spellings.put(List.of("guard 1000 <= price * quantity else No", "Ok"), "faced the other way");
         spellings.put(List.of("let amount = price * quantity", "guard amount >= 1000 else No", "Ok"),
                 "named");
-        spellings.put(List.of("guard price * quantity * 2 >= 2000 else No", "Ok"), "weighed");
         List<String> borders = null;
         Map<String, List<String>> classes = null;
         for (Map.Entry<List<String>, String> each : spellings.entrySet()) {
@@ -138,13 +137,20 @@ class AProductOfTwoNumbersIsALineOnTheProductTest {
     }
 
     /**
-     * A product of one number with itself, of three numbers, or of a factor weighed before the
-     * product is taken is not read as one, and the report names the arithmetic as before.
+     * A product of one number with itself or of three numbers is not read as one, and neither is
+     * a product with arithmetic before or after it, which the run does in the type: at
+     * {@code price} of two to the sixty-second, {@code price * quantity * 2} stops the run for
+     * every {@code quantity} above nought, where a product held against five hundred would come
+     * out true. A factor weighed, negated or moved, and a product weighed, moved or negated, are
+     * each named as the arithmetic was before.
      */
     @Test
     void aProductThisDoesNotReadIsNamedAsAProduct() {
         for (String condition : List.of("price * price >= 1000",
-                "price * quantity * price >= 1000", "2 * price * quantity >= 1000")) {
+                "price * quantity * price >= 1000", "2 * price * quantity >= 1000",
+                "(0 - price) * quantity >= 1000", "(price + 1) * quantity >= 1000",
+                "price * quantity * 2 >= 1000", "price * quantity - 5 >= 995",
+                "0 - price * quantity <= 0 - 1000")) {
             Compilation compilation = compiled("", PRICE_AND_QUANTITY, condition);
             assertEquals(List.of(), bordersOf(linesOf(compilation)), condition);
             assertEquals(List.of(UndividedPosition.Reason.NON_AFFINE_PRODUCT),
@@ -173,27 +179,66 @@ class AProductOfTwoNumbersIsALineOnTheProductTest {
     }
 
     /**
-     * A rule an invariant states tells no row's values apart: a value settling it false is one
-     * the declaration refuses, and one settling it true is one it holds at as it holds everywhere
-     * else. So nought, which fails {@code rate * cap >= 10} whatever the other field is, is no
-     * class of either field, where the same rule in a body makes it one.
+     * A product an invariant states is one the reading of its ends does not read, and that
+     * reading tells each factor so. A line drawn on the product beside that would say of one
+     * comparison that it was read and that it was not, so the invariant draws none and stays a rule
+     * nothing read — weighed after the product or not. The same rule in a body is read, draws its
+     * line, and makes nought a class of each factor.
      */
     @Test
-    void anInvariantOverAProductDividesNeitherFactor() {
-        String declared = """
-                data Policy = { rate: Int, cap: Int }
-                    invariant rate * cap >= 10
-                """;
-        Map<String, List<String>> classes = classesOf(measured(compiled(declared, "p: Policy",
-                List.of("Ok"), "")));
-        assertTrue(!classes.containsKey("p.rate") && !classes.containsKey("p.cap"),
-                classes.toString());
+    void anInvariantOverAProductDrawsNoLineAndStaysUnread() {
+        for (String rule : List.of("rate * cap >= 10", "rate * cap * 2 >= 10")) {
+            String declared = """
+                    data Policy = { rate: Int, cap: Int }
+                        invariant %s
+                    """.formatted(rule);
+            Compilation compilation = compiled(declared, "p: Policy", List.of("Ok"), "");
+            assertEquals(List.of(), bordersOf(linesOf(compilation)), rule);
+            PartitionEvidence measured = measured(compilation);
+            assertTrue(reasonsOf(measured).contains(UndividedPosition.Reason.NON_AFFINE_PRODUCT),
+                    rule + ": " + reasonsOf(measured));
+            Map<String, List<String>> classes = classesOf(measured);
+            assertTrue(!classes.containsKey("p.rate") && !classes.containsKey("p.cap"),
+                    rule + ": " + classes);
+        }
 
         String plain = "data Policy = { rate: Int, cap: Int }";
-        Map<String, List<String>> guarded = classesOf(measured(compiled(plain, "p: Policy",
-                "p.rate * p.cap >= 10")));
+        Compilation guard = compiled(plain, "p: Policy", "p.rate * p.cap >= 10");
+        assertEquals(List.of("10"), bordersOf(linesOf(guard)));
+        Map<String, List<String>> guarded = classesOf(measured(guard));
         assertEquals(List.of("p.rate/= 0", "p.rate//= 0"), guarded.get("p.rate"),
                 guarded.toString());
+    }
+
+    /**
+     * Whether a clause draws a line is asked of that clause: the end {@code rate >= 0} places
+     * beside an unread product is still drawn, and a sum and a length an invariant relates to a
+     * field, which the reading of ends reads, still draw theirs.
+     */
+    @Test
+    void anUnreadClauseTakesNoOtherClausesLineWithIt() {
+        Compilation beside = compiled("""
+                data Policy = { rate: Int, cap: Int }
+                    invariant rate >= 0 && rate * cap >= 10
+                """, "p: Policy", List.of("Ok"), "");
+        List<BorderAssessment> lines = linesOf(beside);
+        assertEquals(List.of(), bordersOf(lines));
+        assertTrue(lines.stream().anyMatch(each -> each.axis().equals("f/p.rate")
+                && each.value().equals("0")), describe(lines));
+
+        for (String[] related : List.of(new String[] {"a: Int, b: Int", "a + b >= 1000", "+"},
+                new String[] {"a: Int, s: String", "String.length(s) <= a", "length"})) {
+            List<BorderAssessment> drawn = linesOf(compiled("""
+                    data Pair = { %s }
+                        invariant %s
+                    """.formatted(related[0], related[1]), "p: Pair", List.of("Ok"), ""));
+            assertTrue(drawn.stream().anyMatch(each -> each.axis().contains(related[2])),
+                    related[1] + ": " + describe(drawn));
+        }
+    }
+
+    private static String describe(List<BorderAssessment> lines) {
+        return lines.stream().map(each -> each.axis() + " @ " + each.value()).toList().toString();
     }
 
     /** One row of a measurement: what each input was written as and what each point is for. */

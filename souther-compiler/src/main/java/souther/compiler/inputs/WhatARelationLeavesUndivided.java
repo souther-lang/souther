@@ -237,11 +237,22 @@ public final class WhatARelationLeavesUndivided {
      * between are asked again, as one run, whether some other term reaches every value it would
      * have to stand at there.
      *
-     * @param whole whether the term's values are whole numbers
+     * <p>A run is a class only where some row of it has a value. The form is the number the run
+     * compares only at a row where every sum and every weighing the run does stays inside the type,
+     * and a value of the term at which none does is no row of either side. So each run is asked
+     * for one such row: its value nearest nought beside each other term's nearest nought, with the
+     * weighed size of every number of the form, the constant among them, coming to no more than
+     * the type's greatest value — so no sum of them, in whatever order the run adds them, passes
+     * it. Where a run has none, nothing is shown.
+     *
+     * @param whole    whether the term's values are whole numbers
+     * @param greatest the greatest value the type of the form holds, or null where it holds no
+     *                 greatest
      */
     public static <P> Leaves leavesOf(List<Term<P>> terms, int at, ExactRatio constant,
                                       Rel relation, BiPredicate<P, P> overlap,
-                                      Independence independent, boolean whole) {
+                                      Independence independent, boolean whole,
+                                      BigInteger greatest) {
         if (reachedBySome(terms, at, constant, relation, overlap, independent)) {
             return new Leaves.Undivided();
         }
@@ -277,6 +288,28 @@ public final class WhatARelationLeavesUndivided {
         }
         if (runs.isEmpty() || between == null) {
             return null;
+        }
+        if (greatest != null) {
+            // The weighed size of every number but the term's, each at its value nearest nought.
+            ExactRatio others = constant.abs();
+            for (int i = 0; i < terms.size() && others != null; i++) {
+                ExactRatio near = i == at ? ExactRatio.ZERO
+                        : nearestNought(Interval.of(terms.get(i).holds()));
+                ExactRatio sofar = others;
+                others = near == null ? null : near.times(terms.get(i).weight().abs())
+                        .flatMap(sofar::plus).orNull();
+            }
+            ExactRatio besideIt = others;
+            for (SettledRun each : runs) {
+                ExactRatio near = nearestNought(new Interval(
+                        each.from() == null ? null : ExactRatio.of(each.from()),
+                        each.to() == null ? null : ExactRatio.of(each.to())));
+                ExactRatio total = besideIt == null || near == null ? null
+                        : near.times(it.weight().abs()).flatMap(besideIt::plus).orNull();
+                if (total == null || total.compareTo(ExactRatio.of(greatest)) > 0) {
+                    return null;
+                }
+            }
         }
         if (between.holdsAWholeNumber()) {
             List<Term<P>> narrowed = new ArrayList<>(terms);
@@ -495,6 +528,21 @@ public final class WhatARelationLeavesUndivided {
         if (at != null && at.holdsAWholeNumber()) {
             out.add(at);
         }
+    }
+
+    /** How far from nought the value of {@code run} nearest it is, or null where the run is no
+     *  run of numbers. */
+    private static ExactRatio nearestNought(Interval run) {
+        if (run == null) {
+            return null;
+        }
+        if (run.low() != null && run.low().signum() > 0) {
+            return run.low();
+        }
+        if (run.high() != null && run.high().signum() < 0) {
+            return run.high().abs();
+        }
+        return ExactRatio.ZERO;
     }
 
     /** {@code runs} in order of their values, each joined to the one beside it where the two

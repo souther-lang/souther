@@ -502,7 +502,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         for (int at = 0; at < sides.size(); at++) {
             WhatARelationLeavesUndivided.Leaves each = WhatARelationLeavesUndivided.leavesOf(
                     terms, at, constant, relation, UndividedByARelation::overlap, independent,
-                    carriers.get(at) instanceof Carrier.Whole);
+                    carriers.get(at) instanceof Carrier.Whole, greatestOf(carriers.get(at)));
             leaves.add(each);
             if (each instanceof WhatARelationLeavesUndivided.Leaves.Undivided) {
                 out.addAll(sides.get(at).madeOf());

@@ -18,8 +18,13 @@ import souther.compiler.types.TypeSymbol;
  *
  * <p><b>Nothing here says what the clause comes to.</b> Which of these draws a line is settled by
  * the reading that draws it, in that reading's own atoms, and the word the reading of ends had for
- * why it placed none is no part of the question: the two read one clause with different atoms, and a
- * clause over a number one of them has no atom for is one the other names two positions in.
+ * why it placed none is no part of the question.
+ *
+ * <p>Save whether the reading of ends read the arithmetic of it. Where it stopped inside a side, it
+ * tells every place the comparison names that the rule went unread there, and that sentence is
+ * this comparison's whatever the other reading's atoms reach: a line drawn of it beside that would
+ * say of one comparison that it was read and that it was not. So a clause the reading of ends did
+ * not read draws no line, and stays a rule nothing read — not a rule that draws none.
  *
  * @param statement which statement of which conjunct this is, as the reading that arrived at it
  *                 named it. What tells one authored line from another is this name, and a reader
@@ -40,10 +45,12 @@ import souther.compiler.types.TypeSymbol;
  *                 clause under a name names no position at all. Nor is it always the name the
  *                 value was written as: a name that writes nothing over another that writes nothing
  *                 is read as that one, and its reads are bound to that one's value
+ * @param read     whether the reading of ends read the arithmetic of the comparison, to a form of
+ *                 each side
  */
 public record ClauseWithoutAnEnd(InvariantStatementId statement, StatedComparison states,
                                  SourcePos wrote, souther.compiler.core.Core readOutOf,
-                                 TermPath at, TypeSymbol.AtModule readUnder) {
+                                 TermPath at, TypeSymbol.AtModule readUnder, boolean read) {
 
     public ClauseWithoutAnEnd {
         if (statement == null || states == null || wrote == null || readOutOf == null

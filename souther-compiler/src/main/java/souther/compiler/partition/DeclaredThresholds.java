@@ -34,9 +34,13 @@ import java.util.Optional;
  * <p><b>Read here in the vocabulary a line is drawn in, and not carried from the reading of ends.</b>
  * What a clause cuts is a question about numbers, and the two readings name numbers differently on
  * purpose: the discharge procedure names what it can carry a fact about, and this names the numbers
- * a behavior's positions hold. A rule over a number the first has no atom for — the days between two
- * dates — is one this reads to the end, so a clause set aside there is asked here rather than taken
- * as settled.
+ * a behavior's positions hold.
+ *
+ * <p>Only of a clause whose arithmetic the reading of ends read ({@link ClauseWithoutAnEnd#read}).
+ * One it stopped inside is told, at every place it names, that the rule went unread there, and a
+ * line drawn here would say of the same comparison that it was read. So such a clause draws no line
+ * here, and nothing here says it draws none: it stays the rule nothing read, as the reading of ends
+ * said, which is what a reading that comes to read it later will change.
  *
  * <p>Only the lines that are on no position. A clause bounding one coordinate leaves an end, the end
  * becomes a cut of that position's axis, and the axis is where its line already is; drawn again here
@@ -68,6 +72,9 @@ public final class DeclaredThresholds {
     /** What one conjunct draws, or nothing where it draws no line on a quantity of its own. */
     private static void drawn(String behavior, ClauseWithoutAnEnd clause,
                               InputReading read, List<LineDrawn> out) {
+        if (!clause.read()) {
+            return;
+        }
         Symbols symbols = read.symbols();
         Map<BindingId, TermPath> roots = rootsOf(clause, symbols, read.rules().newtypes());
         if (roots.isEmpty()) {
@@ -94,7 +101,7 @@ public final class DeclaredThresholds {
         // ({@code FieldDomains.AboutOneCoordinate}), and here as a line where its quantity is over
         // none of them or several — so the two are disjoint exactly as far as the two readings
         // agree about how many coordinates a quantity is over. They are two readings of one
-        // question and neither is asked of the other.
+        // question, and which of them a conjunct is is not asked of the other.
         //
         // And only an order. A line a declaration draws is an end of what it admits, and a clause
         // naming one value of the quantity, held equal or apart, keeps no end of it

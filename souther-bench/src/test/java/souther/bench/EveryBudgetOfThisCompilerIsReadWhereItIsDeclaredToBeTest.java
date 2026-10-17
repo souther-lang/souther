@@ -373,6 +373,7 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
             Map.entry("souther.compiler.partition.LevelRealizer#ofAProduct("
                             + "Lsouther/compiler/partition/Standing$OfAProduct;"
                             + "Lsouther/compiler/inputs/SearchRegion;"
+                            + "Ljava/util/Map;"
                             + "Lsouther/compiler/partition/ValuesTried;)"
                             + "Lsouther/compiler/partition/Realization;",
                     "collects the levels it was offered and the divisors of a level it left"

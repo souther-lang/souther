@@ -147,7 +147,7 @@ public final class LevelRealizer {
             case Standing.OfTwoOnOneCarrier two -> ofTwo(two, within, runs, looking, tried);
             case Standing.OfAForm over -> ofAForm(over, within, runs, tried);
             case Standing.OfARemainder remainder -> ofARemainder(remainder, within, runs, tried);
-            case Standing.OfAProduct product -> ofAProduct(product, within, tried);
+            case Standing.OfAProduct product -> ofAProduct(product, within, runs, tried);
             case Standing.OfACount count -> ofACount(count, within, looking, tried);
             case Standing.OfACountAndAForm both ->
                     ofACountAndAForm(both, within, runs, looking, tried);
@@ -984,8 +984,15 @@ public final class LevelRealizer {
      * the square root of the level was tried as a divisor within the figure, or, at nought, the
      * declarations hold neither factor at nought. A side, as for any quantity, is never settled by
      * looking.
+     *
+     * <p>A pair with a factor outside the run the region leaves it is refused by that run, and the
+     * rules are read again only for a pair inside both runs — once, since that reading is the
+     * whole of what {@link #found} asks of a pair fixing nothing but numbers.
+     *
+     * @param runs where the region leaves each factor
      */
     private Realization ofAProduct(Standing.OfAProduct over, SearchRegion within,
+                                   Map<NumericTerm, NumericDomain.Bounds> runs,
                                    ValuesTried tried) {
         List<NumericTerm> both = List.of(over.one(), over.other());
         Realization named = amongTheValuesNamed(both,
@@ -1021,16 +1028,22 @@ public final class LevelRealizer {
                     standing.put(both.get(at), place);
                     fixing.put(RealizationTarget.of(both.get(at)), place);
                 });
-                // A pair the rules refuse is refused by a proof, and says nothing of the others.
-                if (within.given(standing).emptiness().isPresent()) {
+                // A pair outside where the region leaves a factor is refused by a proof, and says
+                // nothing of the others.
+                if (!standing.entrySet().stream().allMatch(
+                        each -> runs.get(each.getKey()).admits(each.getValue()))) {
                     continue;
                 }
+                // A pair tried before proves nothing either way.
+                if (tried.holds(fixing)) {
+                    bounded = false;
+                    continue;
+                }
+                // Any other pair is the answer, or refused by the rules, which is a proof too.
                 Realization made = found(fixing, within, tried);
                 if (made instanceof Realization.Found) {
                     return made;
                 }
-                // Nothing composed of a pair the rules did not refuse, which proves nothing.
-                bounded = false;
             }
         }
         if (bounded && over.where() instanceof Criterion.AtTheLevel) {

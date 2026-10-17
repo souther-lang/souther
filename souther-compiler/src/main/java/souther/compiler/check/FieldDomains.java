@@ -590,6 +590,11 @@ public final class FieldDomains {
      * happened to have a sentence for, and a rule this reading owes nothing about could not be
      * passed along at all.
      *
+     * <p>Nothing settled, save whether the arithmetic was read. Which line a comparison draws is
+     * the next reading's to say; whether the arithmetic under it was read is this reading's, said
+     * to an author at each place the comparison names, and one comparison is not both read and
+     * unread.
+     *
      * <p>What the conjunct states, and not the node it was written as. Which number it is about,
      * and what it does to that number, are the next reading's to establish in its own vocabulary —
      * said here, this would be the reading that placed no end answering the question it just failed
@@ -612,9 +617,13 @@ public final class FieldDomains {
      *                  as trees of their own they have that name free. Not a meaning to read off a
      *                  second time — nothing here reads the tree, and whoever asks the rooted
      *                  question needs to be able to name it
+     * @param read      whether this reading's arithmetic came to a form of each side of the
+     *                  comparison. Where it stopped inside one, every place the comparison names is
+     *                  told the rule went unread there, and a line the next reading drew of it
+     *                  would say of the same comparison that it was read
      */
     public record WithoutAnEnd(InvariantStatementId statement, StatedComparison states,
-                               SourcePos wrote, Core root) {
+                               SourcePos wrote, Core root, boolean read) {
 
         public WithoutAnEnd {
             if (statement == null || states == null || wrote == null || root == null) {

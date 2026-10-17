@@ -135,19 +135,23 @@ class AProductOfTwoInputsIsReportedAsAProductWhateverCarriesItTest {
                 """).toString().contains("NON_AFFINE_PRODUCT"));
     }
 
+    /** A product with arithmetic before or after it, which the run does in the type and a form
+     *  does not hold, is a product at each of its positions, as one nothing reads is. */
     @Test
     void aProductBetweenTwoPositionsIsAProductAtEach() {
-        assertEquals(List.of("a: NON_AFFINE_PRODUCT", "b: NON_AFFINE_PRODUCT"),
-                reasons("""
-                        behavior f : (a: Int, b: Int) -> Bool
-                        let f (a, b) = 2 * a * b >= 1000
-                        """));
+        for (String condition : List.of("2 * a * b >= 1000", "Int.add(a * b, 1) >= 1000")) {
+            assertEquals(List.of("a: NON_AFFINE_PRODUCT", "b: NON_AFFINE_PRODUCT"),
+                    reasons("""
+                            behavior f : (a: Int, b: Int) -> Bool
+                            let f (a, b) = %s
+                            """.formatted(condition)), condition);
+        }
     }
 
     /**
      * A product of two numbers each read as itself is read as one, and no carrier leaves a place
-     * of it unread: compared directly, handed to an operation over a container, counted, named,
-     * written in a helper, or under an operation whose form the library states.
+     * of it unread: compared directly, handed to an operation over a container, counted, named, or
+     * written in a helper.
      */
     @Test
     void aProductTheArithmeticReadsLeavesNoPlaceUnreadWhateverCarriesIt() {
@@ -172,9 +176,6 @@ class AProductOfTwoInputsIsReportedAsAProductWhateverCarriesItTest {
 
                         behavior f : (xs: List<A>) -> Bool
                         let f (xs) = List.length(List.filter(i -> amount(i) >= 1000, xs)) >= 1
-                        """, """
-                        behavior f : (a: Int, b: Int) -> Bool
-                        let f (a, b) = Int.add(a * b, 1) >= 1000
                         """)) {
             assertEquals(List.of(), reasons(behaviors), behaviors);
         }

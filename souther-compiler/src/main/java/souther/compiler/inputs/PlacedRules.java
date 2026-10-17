@@ -637,8 +637,9 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
      * reached the reading below.
      *
      * <p>Not what any of them came to. Which of these is a line is the drawing reading's answer,
-     * and this reading's word for why it drew none is no part of the question — the two read the
-     * same clause with different atoms, and a clause set aside here is one the other may read.
+     * and this reading's word for why it drew none is no part of the question. Only whether this
+     * reading read the arithmetic goes with each ({@link ClauseWithoutAnEnd#read}): that is said to
+     * an author at every place the comparison names, so it is the comparison's.
      *
      * <p><b>What was handed on, and not what was reported.</b> Read off the findings, this carried
      * whatever the reading of ends owed an author a sentence about — so a rule that names a value,
@@ -649,7 +650,7 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
                 .map(each -> new ClauseWithoutAnEnd(each.statement(), each.states(), each.wrote(),
                         each.root(),
                         root,
-                        bounds().named()))
+                        bounds().named(), each.read()))
                 .toList();
     }
 
