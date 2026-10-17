@@ -342,6 +342,9 @@ public final class PublicationOrders {
                     // them, then what a path takes in of what the reading made.
                     CompositionBudget.TOTAL_READINGS_OF_ONE_CONDITION,
                     CompositionBudget.PARTS_A_DERIVATION_CONCLUDES,
+                    // After what a step states, as what a reader that takes a count of statements
+                    // apart walks of it.
+                    CompositionBudget.PARTS_THE_CHOICES_OF_A_COUNT_COME_TO,
                     CompositionBudget.ALTERNATIVES_A_PATH_TRIES,
                     // After the reading of a condition, as the reading of where one line of a
                     // statement it made decides: the statement read, the cases taken apart, then

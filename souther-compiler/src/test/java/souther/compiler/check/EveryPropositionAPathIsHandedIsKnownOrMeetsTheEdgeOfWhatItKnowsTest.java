@@ -21,6 +21,7 @@ import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.Text;
 
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -29,6 +30,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -101,6 +103,11 @@ class EveryPropositionAPathIsHandedIsKnownOrMeetsTheEdgeOfWhatItKnowsTest {
                         case WhyNotTaken.MoreAlternativesThanAreTried _ -> fail(() -> name
                                 + " coming out " + positive + " met a figure its parts do not"
                                 + " reach: " + why);
+                        // And no count here holds as many statements as its choices would have
+                        // to, written out, to reach that figure.
+                        case WhyNotTaken.MoreChoicesThanAreWrittenOut _ -> fail(() -> name
+                                + " coming out " + positive + " met a figure its choices do not"
+                                + " reach: " + why);
                     }
                 }
             }
@@ -143,6 +150,9 @@ class EveryPropositionAPathIsHandedIsKnownOrMeetsTheEdgeOfWhatItKnowsTest {
                 TermPath.of("xs").element(), true));
         out.put("both", new Proposition.All(List.of(above, truth)));
         out.put("either", new Proposition.Any(List.of(above, truth)));
+        out.put("so many of them holding", new Proposition.SoManyHold(Stream.of(above, truth)
+                .sorted(Comparator.comparing(Proposition::key)).toList(), List.of(1, 1),
+                List.of(1)));
         out.put("some element", new Proposition.Some(new DecisionSubject.AnInput(TermPath.of("xs")),element, true));
         out.put("on some application", new Proposition.OnAnApplication(List.of(above, truth)));
         TermPath node = TermPath.of("t");

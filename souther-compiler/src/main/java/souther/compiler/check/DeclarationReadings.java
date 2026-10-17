@@ -6,6 +6,7 @@ import souther.compiler.types.TypeSymbol;
 import souther.compiler.revision.RevisionKnowledge;
 import souther.compiler.revision.RevisionWork;
 import souther.compiler.revision.StoreWork;
+import souther.compiler.values.StringFacts;
 import souther.compiler.values.StringMachineAnswers;
 
 import java.util.function.Supplier;
@@ -200,6 +201,44 @@ public interface DeclarationReadings {
                                                          ReadingPolicy policy,
                                                          Supplier<InvariantChecker.Seeded> read) {
                 return lender.readingForAnAnswer(declaration, origin, policy, read);
+            }
+        };
+    }
+
+    /**
+     * What a counterfactual of a reading of {@code named} borrows: {@code named}'s machines as that
+     * reading came to them, and nothing else.
+     *
+     * <p>{@code named}'s, because they are what is there. Another declaration's are a store's
+     * answer about it, and asking for one takes a store, which a reading standing inside a
+     * comparison has no way to reach — so a reading of one of those borrows nothing and keeps what
+     * it builds, which is what {@link StringMachineAnswers#unborrowed} is.
+     *
+     * <p>What the revision has worked out goes with it either way, whole. A counterfactual meets
+     * the sets its reading met wherever what it leaves out is about something else, and where a set
+     * stops is settled by the set — so a walk here is one the revision has already made, and so is
+     * every other piece of work the revision holds.
+     *
+     * <p>Nothing of the reading itself is lent, and nothing the counterfactual builds is written
+     * into it: each asking is handed answers of its own, made from those machines. What a
+     * counterfactual is depends on what it leaves out, so no counterfactual is the declaration's
+     * canonical reading and none is kept as one — which is what {@link InvariantChecker#seedFields}
+     * settles by looking at the reach it was handed.
+     */
+    static DeclarationReadings borrowing(TypeKey named, StringFacts machines,
+                                         RevisionKnowledge revision) {
+        return new DeclarationReadings() {
+
+            @Override
+            public StringMachineAnswers of(TypeKey declaration) {
+                return declaration.equals(named)
+                        ? StringMachineAnswers.borrowing(machines, revision)
+                        : StringMachineAnswers.unborrowed(revision);
+            }
+
+            @Override
+            public RevisionKnowledge revision() {
+                return revision;
             }
         };
     }

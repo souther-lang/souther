@@ -1291,8 +1291,8 @@ public final class AdmissibleValues<A> {
     private List<StoppedReading> unreadAffecting(A atom) {
         // The two ends meet, so every value reported is one this reading can promise and there is
         // nothing between them for an unread rule to have been. Asked of the block, which is what
-        // both ends answer for.
-        if (guaranteedAt(atom).equals(at(atom))) {
+        // both ends answer for, and of the values they hold rather than how each was spelled.
+        if (guaranteedAt(atom).holdsTheSameValuesAs(at(atom))) {
             return List.of();
         }
         return standing().across(blockOf(atom).members());

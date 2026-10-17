@@ -24,7 +24,6 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -398,15 +397,15 @@ class WhatAConditionStatesIsTheSameHoweverItIsSpeltTest {
 
     /**
      * A value the body works out from the parameter is another value on each application, so it is
-     * no one value to relate: its binding names all of them alike.
+     * no one value to relate: what each application states of it is what the same comparison
+     * written out states there, and its binding names none of them.
      */
     @Test
     void aValueWorkedOutFromTheParameterIsNoOneValue() {
         for (String over : List.of("List.any", "List.all")) {
-            Proposition stated = stated(over
-                    + "(v -> { let y = Int.floorMod(v - b.x, 7)\n y > 3 }, [1, 5])");
-            assertFalse(stated.toString().contains("Affine"),
-                    () -> over + " relates no value of one application to another's: " + stated);
+            assertEquals(stated(over + "(v -> Int.floorMod(v - b.x, 7) > 3, [1, 5])"),
+                    stated(over + "(v -> { let y = Int.floorMod(v - b.x, 7)\n y > 3 }, [1, 5])"),
+                    over);
         }
     }
 

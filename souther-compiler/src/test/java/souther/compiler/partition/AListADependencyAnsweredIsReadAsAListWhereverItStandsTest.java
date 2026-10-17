@@ -472,8 +472,9 @@ class AListADependencyAnsweredIsReadAsAListWhereverItStandsTest {
      * and the reading of what the comparison means has nothing to hold to a figure; put at the
      * value the way leaves the input's number at, it is a count alone against a constant, which is
      * as many choices of which statements hold as there are ways of picking that many. Past the
-     * readings of one condition the statement is said to be one a figure stopped the composing
-     * of — and not one nothing composes for, or one about something other than the answer.
+     * readings of one condition, which is as many choices as are handed to a reader of them, the
+     * statement is said to be one that figure stopped the composing of — and not one nothing
+     * composes for, or one about something other than the answer.
      */
     @Test
     void aCountLeftAloneByANumberPutAtAValueIsHeldToTheFigure() {

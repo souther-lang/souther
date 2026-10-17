@@ -266,6 +266,48 @@ class SchemaEvolutionTest {
     }
 
     /**
+     * A branch of a {@code oneOf} may grow where it takes objects alone and requires a key no other
+     * branch lets an object hold — every other one admitting no keys but the ones it names, and not
+     * that one, however deep its own branches are — and a definition it reaches grows with it. One
+     * other branch that admits any key is one that can share a document, and nothing grows.
+     */
+    @Test
+    void aBranchGrowsWhereItRequiresAKeyNoOtherBranchAdmits() {
+        String twoBranches = """
+                {
+                  "properties": { "id": { "oneOf": [
+                    { "$ref": "#/$defs/rule" },
+                    %s,
+                    { "$ref": "#/$defs/row" }
+                  ] } },
+                  "$defs": {
+                    "rule": { "type": "object", "required": ["conditions"],
+                              "additionalProperties": false,
+                              "properties": { "conditions": { "$ref": "#/$defs/reason" } } },
+                    "reason": { "enum": ["x"] },
+                    "row": { "type": "object", "oneOf": [
+                      { "required": ["name"], "additionalProperties": false,
+                        "properties": { "name": { "type": "string" } } },
+                      { "required": ["ordinal"], "additionalProperties": false,
+                        "properties": { "ordinal": { "type": "integer" } } }
+                    ] }
+                  }
+                }""";
+        String shipped = twoBranches.formatted("""
+                { "type": "object", "required": ["line"], "additionalProperties": false,
+                  "properties": { "line": { "type": "string" } } }""");
+        assertEquals(List.of(), narrowings(shipped, shipped.replace("\"enum\": [\"x\"]",
+                "\"enum\": [\"x\", \"y\"]")), "no other branch takes an object holding conditions");
+
+        String open = twoBranches.formatted("""
+                { "type": "object", "required": ["line"] }""");
+        assertEquals(List.of("/$defs/reason: changed where a part accepting more can make the"
+                        + " whole accept less"),
+                narrowings(open, open.replace("\"enum\": [\"x\"]", "\"enum\": [\"x\", \"y\"]")),
+                "{\"line\": \"a\", \"conditions\": \"y\"} matched one branch and now matches two");
+    }
+
+    /**
      * A definition a {@code not} reaches is as it shipped, even where it is reached elsewhere as
      * well; one reached only where things may grow may grow.
      */

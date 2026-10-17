@@ -11,6 +11,9 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeSet;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -550,6 +553,193 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                             + "\ndata Pending = { me: EmpId, boss: EmpId } " + rule,
                             "approver == p.boss", "5:32"), rule);
         }
+    }
+
+    private static final String QUOTE = "data Quote = { issuedOn: Int, expiresOn: Int } invariant ";
+
+    /**
+     * A rule of the record relating the field compared to another field it leaves free leaves the
+     * field every value, and the field and a value of another parameter, which no declaration
+     * relates to it, each reach every value the other may hold.
+     */
+    @Test
+    void aRuleRelatingTheFieldComparedToAFreeFieldLeavesItEveryValue() {
+        for (String rule : List.of("expiresOn >= issuedOn", "expiresOn == issuedOn")) {
+            assertEquals(Map.of("today", RELATES, "q.expiresOn", RELATES),
+                    leftAt("q: Quote, today: Int", QUOTE + rule, "today <= q.expiresOn", 26),
+                    rule);
+        }
+    }
+
+    /**
+     * The field the rule relates to is held at nought or more, so the field compared is too: a
+     * day before nought is before every expiry, and settles the comparison. The expiry still
+     * reaches every day from nought on.
+     */
+    @Test
+    void aRuleRelatingTheFieldComparedToABoundedFieldLeavesItTheRunThatBoundGives() {
+        assertEquals(Map.of("today", NOT_SHOWN, "q.expiresOn", RELATES),
+                leftAt("q: Quote, today: Int", QUOTE + "issuedOn >= 0 && expiresOn >= issuedOn",
+                        "today <= q.expiresOn", 26));
+    }
+
+    /**
+     * A rule beside the relation that the bounds do not hold — a value taken out of the field
+     * compared, a square of it — leaves nothing shown of what it takes, and so does an end the
+     * relation carries over at a value no decimal writes, which is handed on rounded past it.
+     */
+    @Test
+    void aRuleRelatingTheFieldComparedBesideOneItsBoundsDoNotHoldShowsNothingOfIt() {
+        for (String rule : List.of("expiresOn >= issuedOn && expiresOn /= 5",
+                "expiresOn >= issuedOn && expiresOn * expiresOn >= 4")) {
+            assertEquals(Map.of("today", NOT_SHOWN, "q.expiresOn", RELATES),
+                    leftAt("q: Quote, today: Int", QUOTE + rule, "today <= q.expiresOn", 26),
+                    rule);
+        }
+        assertEquals(Map.of("today", NOT_SHOWN, "q.expiresOn", RELATES), leftAt(
+                "q: Quote, today: Decimal",
+                "data Quote = { issuedOn: Decimal, expiresOn: Decimal } invariant "
+                        + "issuedOn * 3m >= 1m && expiresOn >= issuedOn",
+                "today <= q.expiresOn", 26));
+    }
+
+    /**
+     * Two fields the record relates each take every value up to ten, and are not apart: no row
+     * has {@code y} below {@code x}, so an {@code x} of ten is beside a {@code y} of ten alone and
+     * settles the comparison.
+     */
+    @Test
+    void twoFieldsTheRecordRelatesAreNotTakenToReachEachOther() {
+        assertEquals(Map.of("p.x", NOT_SHOWN, "p.y", NOT_SHOWN), leftAt("p: P",
+                "data P = { x: Int, y: Int } invariant x <= y && y <= 10", "p.x == p.y", 17));
+    }
+
+    /**
+     * A way relating the day to the field the rule relates the expiry to ties the expiry to the
+     * day: past {@code q.issuedOn == today} every expiry is at or after the day and none is past
+     * ten, so a day of ten is beside an expiry of ten alone and settles the comparison.
+     */
+    @Test
+    void aWayOverAFieldTheRuleRelatesTiesTheFieldCompared() {
+        assertEquals(Map.of("today", NOT_SHOWN, "q.expiresOn", NOT_SHOWN),
+                leftAt("q: Quote, today: Int", QUOTE + "expiresOn >= issuedOn && expiresOn <= 10",
+                        "if q.issuedOn == today then today == q.expiresOn else false", 54));
+    }
+
+    /**
+     * A rule relating how long the string compared is to how long a field held to three
+     * characters is holds the string compared to three as well, which no end on the string itself
+     * says: a string of four is equal to none of them.
+     *
+     * <p>Kept back twice. The set of strings at the place is not read whole beside a rule over
+     * their lengths, so the strings are not taken to be every string; and where they were, the end
+     * on the length would keep them back.
+     */
+    @Test
+    void aRuleRelatingAnotherNumberOfTheFieldComparedLeavesItWhatThatNumberIsLeft() {
+        assertEquals(Map.of("w.a", RELATES, "s", NOT_SHOWN), leftAt("w: W, s: String",
+                "data W = { a: String, b: String } invariant String.length(a) <= String.length(b)"
+                        + " && String.length(b) <= 3", "w.a == s", 20));
+    }
+
+    private static final String STAGES = """
+            data Lead
+            data Won
+            data Lost
+            data Stage = Lead | Won | Lost""";
+
+    /**
+     * Held above another stage, a stage is never the first one, though the relation places no
+     * end on it: the first stage is equal to no stage held there, and settles the comparison.
+     */
+    @Test
+    void aStrictRelationKeepsAnOrderedValueOffTheEndOfItsOrder() {
+        assertEquals(NOT_SHOWN, leftAt("q: Q, x: Stage", STAGES
+                        + "\ndata Q = { a: Stage, b: Stage } invariant a > b", "q.a == x", 20)
+                .get("x"));
+    }
+
+    /** Twice another field, a field holds even numbers alone, and an odd number is none of them. */
+    @Test
+    void aRelationLeavingAFieldEveryOtherNumberLeavesItNoRun() {
+        assertEquals(NOT_SHOWN, leftAt("q: Q, t: Int",
+                "data Q = { e: Int, i: Int } invariant e == 2 * i", "t == q.e", 18).get("t"));
+    }
+
+    /**
+     * A name the cases of a sum share takes every value where every case leaves it every value,
+     * one of them by a rule relating it to a field of its own it leaves free.
+     */
+    @Test
+    void aNameTheCasesShareTakesEveryValueWhereOneCaseRelatesItToAFreeField() {
+        assertEquals(Map.of("s.d", RELATES, "n", RELATES), leftAt("s: S, n: Int", """
+                data C = { d: Int }
+                data A = { ...C, e: Int } invariant d >= e
+                data B = { ...C }
+                data S = A | B""", "s.d >= n", 20));
+    }
+
+    /**
+     * The words each place of {@code name} is left with by its invariant {@code rule}, the rule's
+     * place in the declaration counted from one.
+     */
+    private static Map<String, Set<String>> leftByTheInvariant(String declaration, String name,
+                                                              int rule) {
+        Compilation compilation = Compilation.ofSource("""
+                module w1
+                %s
+                behavior m : (v: %s) -> Bool
+                let m (v) = true
+                """.formatted(declaration, name), "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        String report = AdequacyReport.of(compilation)
+                .human(SourceRendering.namedByIdentity(compilation.texts()));
+        Map<String, Set<String>> out = new LinkedHashMap<>();
+        Pattern about = Pattern.compile("about `([^`]+)`$");
+        for (String line : report.lines().map(String::strip).toList()) {
+            Matcher place = about.matcher(line);
+            if (!line.contains("invariant " + name + " #" + rule + " ") || !place.find()
+                    || !(line.startsWith("· no line") || line.startsWith("· not read"))) {
+                continue;
+            }
+            out.computeIfAbsent(place.group(1), _ -> new TreeSet<>()).add(
+                    line.contains("rather than dividing the values here") ? RELATES
+                            : line.contains("not shown to reach every value here") ? NOT_SHOWN
+                            : line);
+        }
+        return out;
+    }
+
+    /**
+     * A conjunct relating two places another conjunct relates to a free place: what it is asked of
+     * is what the rest of the rules leave them, and {@code b >= c} with {@code c} free leaves
+     * {@code b} every value beside the {@code a} no other conjunct names, as {@code a >= b} with
+     * {@code a} free leaves it beside {@code c}. Held at nought, {@code b} reaches only the values
+     * of {@code a} from nought on, and an {@code a} below nought settles the rule.
+     */
+    @Test
+    void aConjunctIsAskedWhatTheRestOfTheRulesLeaveThePlacesItRelates() {
+        assertEquals(Map.of("v.a", Set.of(RELATES), "v.b", Set.of(RELATES), "v.c", Set.of(RELATES)),
+                leftByTheInvariant("data Q = { a: Int, b: Int, c: Int } invariant b >= c && a >= b",
+                        "Q", 1));
+        assertEquals(Map.of("v.a", Set.of(NOT_SHOWN), "v.b", Set.of(RELATES)),
+                leftByTheInvariant("data Q = { a: Int, b: Int } invariant b >= 0 && a >= b",
+                        "Q", 1));
+    }
+
+    /**
+     * Two places the rest of the rules hold together each take every value and are not apart:
+     * held one or two apart, {@code x >= y} holds at every {@code x}, which settles it.
+     */
+    @Test
+    void twoPlacesTheRestOfTheRulesHoldTogetherAreNotTakenToReachEachOther() {
+        Map<String, Set<String>> left = leftByTheInvariant("""
+                data T = { x: Int, y: Int }
+                    invariant x >= y + 1
+                    invariant x <= y + 2
+                    invariant x >= y""", "T", 3);
+        assertEquals(Map.of("v.x", Set.of(NOT_SHOWN), "v.y", Set.of(NOT_SHOWN)), left);
     }
 
     /**

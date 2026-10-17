@@ -97,12 +97,22 @@ class AComparisonAgainstAPlaceUnderAListOrASumReachesAsOneUnderAProductTest {
                 """));
     }
 
-    /** A rule of the element over two of its fields may tie the one compared to the other. */
+    /**
+     * A rule of the element relating the field compared to a field it leaves free leaves the
+     * field every value; once that field is held to ten, so is the one compared, and an owner of
+     * eleven is in no element.
+     */
     @Test
-    void aFieldOfAListsElementWhoseRuleRelatesItToAnotherIsNotShown() {
-        assertEquals(Map.of("a[*].owner", RELATES, "owner", NOT_SHOWN), left("""
+    void aFieldOfAListsElementWhoseRuleRelatesItToAnotherReachesWhatTheRuleLeavesIt() {
+        assertEquals(Map.of("a[*].owner", RELATES, "owner", RELATES), left("""
                 module v2
                 data Meeting = { owner: Int, m: Int } invariant owner <= m
+                behavior many : (a: List<Meeting>, owner: Int) -> List<Meeting>
+                let many (a, owner) = List.filter(m -> m.owner == owner, a)
+                """));
+        assertEquals(Map.of("a[*].owner", RELATES, "owner", NOT_SHOWN), left("""
+                module v2
+                data Meeting = { owner: Int, m: Int } invariant owner <= m && m <= 10
                 behavior many : (a: List<Meeting>, owner: Int) -> List<Meeting>
                 let many (a, owner) = List.filter(m -> m.owner == owner, a)
                 """));
