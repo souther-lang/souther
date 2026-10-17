@@ -10,7 +10,7 @@ import java.util.List;
 /**
  * Which occurrences of a container written out are there on some row: each thing an occurrence was
  * kept by — a truth, or an arm a run takes — read where it was decided
- * ({@link Pullback#ofWhatKeeps}).
+ * ({@link WhatConditionsState#kept}).
  *
  * <p>The one decision every reader of an occurrence takes. A truth that holds on no row drops the
  * occurrence for every reader alike — no run hands it to a closure, nothing stated of it is part of
@@ -36,7 +36,7 @@ final class KeptTruths {
         }
         List<ReadMeaning.Occurrence.Kept> out = new ArrayList<>();
         for (ReadMeaning.Occurrence.Kept kept : keptWhere) {
-            switch (Pullback.ofWhatKeeps(kept, read).proposition()) {
+            switch (WhatConditionsState.of(read).kept(kept, read)) {
                 case Proposition.Always(boolean holds) when !holds -> {
                     return null;
                 }

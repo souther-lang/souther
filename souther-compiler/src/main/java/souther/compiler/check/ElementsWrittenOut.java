@@ -366,8 +366,10 @@ public final class ElementsWrittenOut {
      * order {@link Choice} numbers them, each read where its arm is entered and kept where it is
      * taken.
      *
-     * <p>Every arm or nothing: an arm this cannot write out holds elements a run taking it walks,
-     * so the others alone are not every element the container may hold. What taking an arm states
+     * <p>Every arm walked or nothing: an arm this cannot write out holds elements a run taking it
+     * walks, so the others alone are not every element the container may hold. The arms past the
+     * first {@code enough} occurrences are not walked, as the elements past them are not by any
+     * other step of this walk: what is asked for is the first ones. What taking an arm states
      * is not said here, however the arm is decided: it is a fact of the whole fork, and its reader
      * is the reader of conditions.
      */

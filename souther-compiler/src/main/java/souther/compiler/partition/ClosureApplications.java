@@ -190,8 +190,8 @@ sealed interface ClosureApplications {
                 case InputReads.Applications.Each(var each, var how) -> {
                     handed = true;
                     List<Proposition> answers = how == HowAClosureIsApplied.TO_EVERY_ELEMENT ? null
-                            : each.stream().map(one -> Pullback.ofATruth(block.body(), one.reads(),
-                                    read, Optional.empty()).proposition()).toList();
+                            : each.stream().map(one -> WhatConditionsState.of(read)
+                                    .truth(block.body(), one.reads(), read).proposition()).toList();
                     List<List<Proposition>> keptBy = each.stream()
                             .map(one -> keptBy(one.keptWhere(), read)).toList();
                     List<Proposition> reached = WhereAnApplicationIsMade.reached(answers, keptBy,
@@ -277,11 +277,12 @@ sealed interface ClosureApplications {
                     yield notSaid(around.metOn(), containers, read,
                             ReadingGap.REACH_IS_NO_VALUE_OF_THE_ROW);
                 }
-                Proposition answered = Pullback.ofATruth(block.body(), entered, read,
-                        Optional.empty()).proposition();
+                WhatConditionsState conditions = WhatConditionsState.of(read);
+                Proposition answered = conditions.truth(block.body(), entered, read)
+                        .proposition();
                 yield around.metOn().stoppingIn(container,
                         how == HowAClosureIsApplied.UNTIL_ONE_HOLDS ? answered
-                                : answered.denied());
+                                : conditions.denied(answered));
             }
         };
     }
@@ -313,13 +314,13 @@ sealed interface ClosureApplications {
 
     /**
      * What each thing an element was kept by states, read where it was decided
-     * ({@link Pullback#ofWhatKeeps}). One this cannot read is said as one it did not read, and not
-     * as one that holds: an application it decides is one a run may not make.
+     * ({@link WhatConditionsState#kept}). One this cannot read is said as one it did not read, and
+     * not as one that holds: an application it decides is one a run may not make.
      */
     private static List<Proposition> keptBy(List<ReadMeaning.Occurrence.Kept> keptWhere,
                                             InputReading read) {
-        return keptWhere.stream()
-                .map(kept -> Pullback.ofWhatKeeps(kept, read).proposition()).toList();
+        WhatConditionsState conditions = WhatConditionsState.of(read);
+        return keptWhere.stream().map(kept -> conditions.kept(kept, read)).toList();
     }
 
     /**
@@ -345,9 +346,9 @@ sealed interface ClosureApplications {
     default ClosureApplications taking(Core condition, boolean holding, InputReading read) {
         return switch (this) {
             case Each(var each) -> new Each(each.stream().map(one -> {
-                Proposition stated = Pullback.ofATruth(condition, one.reads(), read,
-                        Optional.empty()).proposition();
-                Proposition past = holding ? stated : stated.denied();
+                WhatConditionsState conditions = WhatConditionsState.of(read);
+                Proposition stated = conditions.truth(condition, one.reads(), read).proposition();
+                Proposition past = holding ? stated : conditions.denied(stated);
                 return Proposition.leavesSomethingUnread(past)
                         && pastOnTheFirstStep(condition, holding, one, read) ? one
                         : new Application(one.reads(), WhereAnApplicationIsMade.past(
@@ -368,7 +369,7 @@ sealed interface ClosureApplications {
         for (Map.Entry<BindingId, Denotation> seed : one.carriedIntoTheFirst().entrySet()) {
             first = first.handing(seed.getKey(), seed.getValue(), read.newtypes());
         }
-        return Pullback.ofATruth(condition, first, read, Optional.empty()).proposition()
+        return WhatConditionsState.of(read).truth(condition, first, read).proposition()
                 instanceof Proposition.Always(boolean holds) && holds == holding;
     }
 

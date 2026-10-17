@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.core.Core;
 import souther.compiler.inputs.Denotation;
+import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.ReadMeaning;
 import souther.compiler.check.ElementsWrittenOut;
@@ -251,9 +252,9 @@ class AListPutTogetherOfPiecesNamesEveryElementWhereItIsKeptTest {
                 continue;
             }
             List<String> kept = new ArrayList<>();
+            InputReading reading = read.inputs().reading(read.rules());
             for (ReadMeaning.Occurrence.Kept by : occurrence.keptWhere()) {
-                kept.add(switch (Pullback.ofWhatKeeps(by, read.inputs().reading(read.rules()))
-                        .proposition()) {
+                kept.add(switch (WhatConditionsState.of(reading).kept(by, reading)) {
                     case Proposition.Always(boolean holds) -> holds ? "every row" : "no row";
                     case Proposition.Unread _ -> "unread";
                     default -> "the row";

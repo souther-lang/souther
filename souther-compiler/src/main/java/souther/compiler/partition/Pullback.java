@@ -251,6 +251,9 @@ final class Pullback {
      * these, and names which ({@link Quantity.CodePointsOfAPiece}).
      */
     private final Map<Pieces, Integer> parting = new HashMap<>();
+    /** What entering each arm of a fork derives on this reading, by the fork and its names
+     *  ({@link #keeping}). */
+    private final Map<WhatConditionsState.ANode, List<Derivation>> entered = new HashMap<>();
     /**
      * Where whether a container holds anything was asked, while what it holds is being read.
      *
@@ -365,26 +368,30 @@ final class Pullback {
     }
 
     /**
-     * What an occurrence being kept by {@code kept} states: its truth coming out the way it was
-     * kept by, or its arm being the one a run takes ({@link #entering}).
+     * How an occurrence being kept by {@code kept} was derived on this reading: its truth coming
+     * out the way it was kept by, or its arm being the one a run takes. What it states, asked
+     * outside a reading, is {@link WhatConditionsState#kept}'s.
      *
-     * <p>The one reading of what keeps an occurrence, for every reader of one: which occurrences
-     * are there on some row, what each application of a closure is made under, and what a
-     * statement about some element is about.
+     * <p>A fork is entered once on this reading ({@link #entered}): every occurrence of every arm
+     * of it is kept by it, and the parts it is read off are met once however many of them are
+     * read.
      */
-    static Pulled ofWhatKeeps(ReadMeaning.Occurrence.Kept kept, InputReading read) {
-        Pullback reading = new Pullback(read, Optional.empty());
-        return reading.pulled(reading.keeping(kept));
-    }
-
     private Derivation keeping(ReadMeaning.Occurrence.Kept kept) {
         return switch (kept) {
             case ReadMeaning.Occurrence.Kept.ATruth(Denotation truth, boolean holds) -> {
                 Derivation stated = observe(truth.value(), AnswerAspect.TRUTH, truth.at());
                 yield holds ? stated : new Derivation.UnderADenial(stated, true);
             }
-            case ReadMeaning.Occurrence.Kept.AnArm(Denotation fork, int part) ->
-                    entering(fork.value(), fork.at()).get(part);
+            case ReadMeaning.Occurrence.Kept.AnArm(Denotation fork, int part) -> {
+                WhatConditionsState.ANode at = new WhatConditionsState.ANode(fork.value(),
+                        fork.at());
+                List<Derivation> arms = entered.get(at);
+                if (arms == null) {
+                    arms = entering(fork.value(), fork.at());
+                    entered.put(at, arms);
+                }
+                yield arms.get(part);
+            }
         };
     }
 
