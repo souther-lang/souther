@@ -5374,6 +5374,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case WhyUnread.ANumberOfWhatAnOperationAnswers(var measure, var madeBy) ->
                     "a comparison over " + measure.qualified() + " of what " + madeBy.qualified()
                             + " answers, which the library states no law of";
+            case WhyUnread.CodePointsOfWhatAnOperationAnswers(var madeBy) -> "a comparison over"
+                    + " how many code points of a class what " + madeBy.qualified() + " answers"
+                    + " holds, which the library states no law of";
             case WhyUnread.TwoElementsOfOneContainer _ -> "a condition on two elements of one"
                     + " container at once";
             case WhyUnread.NoLawFor(var operation, var _) -> "a condition on what "
@@ -6029,7 +6032,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     case WhyUnread.NoWordsFor _ -> "no_words_for_what_it_comes_to";
                     case WhyUnread.NotProvedOfItsBody _ -> "not_proved_of_its_body";
                     case WhyUnread.NoFormOfWhatItAnswers _ -> "no_form_of_what_it_answers";
-                    case WhyUnread.ANumberOfWhatAnOperationAnswers _ ->
+                    // A count of code points is a number of what the operation answered, and the
+                    // document's word for it is that one.
+                    case WhyUnread.ANumberOfWhatAnOperationAnswers _,
+                         WhyUnread.CodePointsOfWhatAnOperationAnswers _ ->
                             "number_of_what_an_operation_answers";
                     case WhyUnread.WhatARecursiveHelperAnswers _ ->
                             "what_a_recursive_helper_answers";

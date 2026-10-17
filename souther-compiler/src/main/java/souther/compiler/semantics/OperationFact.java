@@ -313,8 +313,10 @@ public sealed interface OperationFact {
      * a question about the call and is asked where it is read, as what a constant argument reads
      * as.
      *
-     * <p>Nothing here counts the pieces. How many there are is the number of times the separator
-     * stands in the string and is no number the language says.
+     * <p>So there is one more piece than the times the separator stands in the string, which for
+     * one code point is how many of the string's code points are that one. That is a number of
+     * the call, the class counted being its separator, and the operation's own size stays unsaid:
+     * for a longer separator it is no number the language says.
      *
      * <p>With no separator each piece is one code point of the string, every one of them in order:
      * the characters it is taken apart into.
