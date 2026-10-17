@@ -154,12 +154,12 @@ final class ReadingEvidence {
      * Nothing is asked here because nothing of the wrong kind can be made: what arrives is refused
      * where it would be built, which is one fact away from where a caller could have written it.
      *
-     * @param in the statements it was decided in, held beside the fact and not in it: one choice a
+     * @param in the statement it was decided in, held beside the fact and not in it: one choice a
      *           helper wrote, copied into two conjuncts, is one fact decided in both
      */
-    void stoppedBy(RuleRef.Invariant rule, RuleShortfall read, Set<InvariantStatementId> in) {
+    void stoppedBy(RuleRef.Invariant rule, RuleShortfall read, InvariantStatementId in) {
         stopped.computeIfAbsent(rule, _ -> new LinkedHashMap<>())
-                .computeIfAbsent(read, _ -> new LinkedHashSet<>()).addAll(in);
+                .computeIfAbsent(read, _ -> new LinkedHashSet<>()).add(in);
     }
 
     /**
