@@ -5713,10 +5713,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      */
     private static List<PublishedStop> publishedStops(PartitionEvidence.Unanswered asked,
                                                       WhereAPartIs parts) {
-        record Entry(UndividedPosition.Reason reason, Optional<PublishedAt> sentTo) {}
-        Map<Entry, List<Figure>> out = new LinkedHashMap<>();
+        record WordAtAPlace(UndividedPosition.Reason reason, Optional<PublishedAt> sentTo) {}
+        Map<WordAtAPlace, List<Figure>> out = new LinkedHashMap<>();
         for (ReportedReason.Stop each : whyStanding(asked, parts).written()) {
-            out.computeIfAbsent(new Entry(each.reason(), placeInTheRule(each.sentTo(), parts)),
+            out.computeIfAbsent(
+                    new WordAtAPlace(each.reason(), placeInTheRule(each.sentTo(), parts)),
                     _ -> new ArrayList<>()).addAll(each.figures());
         }
         List<PublishedStop> written = new ArrayList<>();
