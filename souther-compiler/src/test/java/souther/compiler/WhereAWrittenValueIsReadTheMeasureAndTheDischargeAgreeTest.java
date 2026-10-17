@@ -53,6 +53,18 @@ class WhereAWrittenValueIsReadTheMeasureAndTheDischargeAgreeTest {
             Map.entry("c - List.length(List.filter(n -> n > 0, [" + "1, ".repeat(47) + "1]))",
                     true),
             Map.entry("c - holding.held", true),
+            Map.entry("c - 48 - List.length(List.filter(n -> n > 100,"
+                    + " List.filter(n -> n > k, [1, 2])))", true),
+            Map.entry(opening("List.get(0, List.map(n -> n, {\n            let zero = 48\n"
+                    + "            [zero]\n        }))"), true),
+            Map.entry(opening("List.get(0, List.flatMap(p -> p, {\n            let zero = 48\n"
+                    + "            [[zero]]\n        }))"), true),
+            Map.entry(opening("Option.map(n -> n, List.get(0, {\n            let zero = 48\n"
+                    + "            [zero]\n        }))"), true),
+            Map.entry(opening("List.get(0, zeros)"), true),
+            Map.entry(opening("List.get(0, List.map(n -> n, zeros))"), true),
+            Map.entry(opening("Option.map(n -> n, List.get(0, zeros))"), true),
+            Map.entry("c - List.length(zeros) - 47", true),
             Map.entry("{\n        let (a, b) = (48, 1)\n        c - a\n    }", true),
             Map.entry("{\n        let r = holding\n        c - r.held\n    }", true),
             Map.entry(opening("List.get(0, xs)"), false),
@@ -84,6 +96,11 @@ class WhereAWrittenValueIsReadTheMeasureAndTheDischargeAgreeTest {
 
                 data Holder = { held: Int }
                 let holding = Holder { held = 48 }
+
+                let zeros: List<Int> = {
+                    let zero = 48
+                    [zero]
+                }
 
                 let digitValue (c: Int, xs: List<Int>, k: Int): Int =
                     %s

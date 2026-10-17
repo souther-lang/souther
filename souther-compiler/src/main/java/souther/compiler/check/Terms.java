@@ -697,7 +697,7 @@ final class Terms {
         if (had != null) {
             return had;
         }
-        Denotations made = entering(li.binder().binding(), li.value(), at);
+        Denotations made = entering(li.binder().binding(), li.value(), at, at);
         if (made != at) {
             under.put(at, made);
         }
@@ -705,10 +705,13 @@ final class Terms {
     }
 
     /**
-     * {@code at} with {@code binding} the name of {@code value}: what a {@code let} enters, and what
-     * an application of a step to an element enters for the step's parameter.
+     * {@code at} with {@code binding} the name of {@code value}, which is read in {@code valueAt}:
+     * what a {@code let} enters, where the two are one environment, and what an application of a
+     * step enters for its parameter, where the value was written wherever the container or option
+     * it came out of was.
      */
-    private Denotations entering(BindingId binding, Core value, Denotations at) {
+    private Denotations entering(BindingId binding, Core value, Denotations valueAt,
+                                 Denotations at) {
         // What the binder is given: the value, or where it is a build of one, what that value is.
         // Asked once and handed to every question below, so the environment holds the body it
         // answered about and not the edge that stood for it. The type the binding is in force at
@@ -719,19 +722,21 @@ final class Terms {
         // Entering a binding a walk is already inside is not a second binding of it. A branch is
         // read from where its conditional stood, which is inside these, over a tree that still holds
         // them.
-        if (at.valueOf(binding) == given) {
+        ValueStanding.ReadThrough<Denotations> had = at.givenTo(binding);
+        if (had != null && had.value() == given) {
             return at;
         }
         // The names a value's body holds are its own, so it is read where nothing outside it is in
-        // force, and the same environment answers for every build of it.
-        Denotations reading = built != null ? insideATemplate : at;
+        // force, and the same environment answers for every build of it. Every reading of the name
+        // reads the value there, and not only the ones below.
+        Denotations reading = built != null ? insideATemplate : valueAt;
         // What the name is about is what it was given is about. Where even the identity reading has
         // nothing to name — an expression answering nothing at all — the name is what there is, and
         // it is one value however many times it is read.
         FactSubject about = subjectOf(given, reading);
-        return at.binding(binding, given, about != null ? about : placeSubject(binding),
-                locationOf(given, reading), bodyKey(given, reading),
-                numericMeaningOf(given, reading));
+        return at.binding(binding, given, reading == at ? null : reading,
+                about != null ? about : placeSubject(binding), locationOf(given, reading),
+                bodyKey(given, reading), numericMeaningOf(given, reading));
     }
 
     /**
@@ -889,13 +894,11 @@ final class Terms {
         if (at.locationOf(read.binding()) != null) {
             return null;
         }
-        Core given = at.valueOf(read.binding());
-        // The environment at the read. A binding is entered where its body is walked, so what a
-        // name was given is read under the bindings that were in scope where it was made and under
-        // whatever was bound after it; a binding tells itself from every other, so nothing bound
-        // later answers for a name this one holds.
-        return given == null || given == read ? null
-                : new ValueStanding.ReadThrough<>(given, at);
+        // Where the value is read is the environment's answer (Denotations#givenTo): the one at the
+        // read for a binding entered as the walk goes, and where the value was written for one
+        // handed in from somewhere the walk never entered.
+        ValueStanding.ReadThrough<Denotations> given = at.givenTo(read.binding());
+        return given == null || given.value() == read ? null : given;
     }
 
     /**
@@ -953,8 +956,9 @@ final class Terms {
             // A value standing as a wider type is still that value, built the way it was built.
             case Core.Widen w -> given(w.value(), at);
             case Core.Read r -> {
-                Core given = at.valueOf(r.binding());
-                yield given == null || given == e ? new Given(e, at) : given(given, at);
+                ValueStanding.ReadThrough<Denotations> given = at.givenTo(r.binding());
+                yield given == null || given.value() == e ? new Given(e, at)
+                        : given(given.value(), given.at());
             }
             case Core.LetIn li -> given(li.body(), inside(li, at));
             case null, default -> new Given(e, at);
@@ -1505,7 +1509,7 @@ final class Terms {
         @Override
         public Denotations handing(Denotations at, BindingId element,
                                    ElementsWrittenOut.Stood<Denotations> value) {
-            return entering(element, value.value(), at);
+            return entering(element, value.value(), value.at(), at);
         }
 
         @Override
@@ -1529,7 +1533,8 @@ final class Terms {
         @Override
         public Denotations holding(Denotations at, BindingId parameter,
                                    ElementsWrittenOut.Stood<Denotations> handed) {
-            return handed == null ? at : entering(parameter, handed.value(), at);
+            return handed == null ? at
+                    : entering(parameter, handed.value(), handed.at(), at);
         }
 
         @Override
@@ -1611,8 +1616,9 @@ final class Terms {
             return value;
         }
         if (value instanceof Core.Read read && seen.add(read.binding())) {
-            Core given = at.valueOf(read.binding());
-            return given == null || given == value ? null : originating(given, at, seen);
+            ValueStanding.ReadThrough<Denotations> given = at.givenTo(read.binding());
+            return given == null || given.value() == value ? null
+                    : originating(given.value(), given.at(), seen);
         }
         return null;
     }
@@ -3004,9 +3010,9 @@ final class Terms {
      * answer to one of them depend on which other answers were left.
      */
     boolean computesAsWhatItWasGiven(BindingId binding, Denotations at) {
-        Core given = at.valueOf(binding);
+        ValueStanding.ReadThrough<Denotations> given = at.givenTo(binding);
         return at.locationOf(binding) == null && at.termOf(binding) != null
-                && (given == null || writtenValue(given, at) == null);
+                && (given == null || writtenValue(given.value(), given.at()) == null);
     }
 
     /**
@@ -3082,7 +3088,8 @@ final class Terms {
         }
         Core e = Core.withoutStanding(standing);
         if (e instanceof Core.Read r) {
-            Core given = at.valueOf(r.binding());
+            ValueStanding.ReadThrough<Denotations> givenTo = at.givenTo(r.binding());
+            Core given = givenTo == null ? null : givenTo.value();
             if (given == null || given == e) {
                 return null;
             }
@@ -3093,7 +3100,7 @@ final class Terms {
             if (!seen.add(r.binding())) {
                 return null;
             }
-            Core written = writtenValue(given, at, seen);
+            Core written = writtenValue(given, givenTo.at(), seen);
             followed.put(r.binding(), new Followed(at, given, written));
             return written;
         }
@@ -3180,9 +3187,10 @@ final class Terms {
             if (had != null && had.at() == at) {
                 return had.named();
             }
-            Core given = at.valueOf(r.binding());
+            ValueStanding.ReadThrough<Denotations> given = at.givenTo(r.binding());
             boolean answer = computesAsWhatItWasGiven(r.binding(), at) && given != null
-                    && given != e && (affineOf(given, at) != null || namedByRule(given, at));
+                    && given.value() != e && (affineOf(given.value(), given.at()) != null
+                            || namedByRule(given.value(), given.at()));
             named.put(r.binding(), new Named(at, answer));
             return answer;
         }
@@ -3288,8 +3296,11 @@ final class Terms {
             // longer in the tree ({@link ClauseExpr.Scoped}).
             case Core.Read r when given.containsKey(r.binding()) ->
                     writtenLiteralOf(given.get(r.binding()), at, given);
-            case Core.Read r when at.valueOf(r.binding()) != null ->
-                    writtenLiteralOf(at.valueOf(r.binding()), at, given);
+            // Read where the environment says it is, under none of the bindings this tree makes
+            // around the read, since it was written where the reading was told of it.
+            case Core.Read r when at.givenTo(r.binding()) instanceof
+                    ValueStanding.ReadThrough<Denotations>(Core value, Denotations readIn) ->
+                    writtenLiteralOf(value, readIn, new HashMap<>());
             case Core.Int i -> new Hir.IntLit(i.value(), i.pos(), null);
             case Core.Decimal d -> new Hir.DecimalLit(d.value(), d.pos(), null);
             case Core.Str s -> new Hir.StringLit(s.value(), s.pos(), null);
@@ -3354,14 +3365,18 @@ final class Terms {
 
     /** The block {@code e} is, following a name given one: a lambda handed to an operation the
      * representation keeps standing is never applied here, so it is bound to a name like any other
-     * value and reaches the call as that name. */
+     * value and reaches the call as that name. Only a block read where the name is: its body is
+     * read where the call applies it, and one written where the environment says something else
+     * is in force would have its names read in the wrong place, so it is no block here. */
     static Core.Block blockOf(Core standing, Denotations at) {
         Core e = Core.withoutStanding(standing);
         if (e instanceof Core.Block b) {
             return b;
         }
         return e instanceof Core.Read r
-                && Core.withoutStanding(at.valueOf(r.binding())) instanceof Core.Block b ? b : null;
+                && at.givenTo(r.binding()) instanceof ValueStanding.ReadThrough<Denotations>(
+                        Core value, Denotations readIn)
+                && readIn == at && Core.withoutStanding(value) instanceof Core.Block b ? b : null;
     }
 
 

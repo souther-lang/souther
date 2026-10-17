@@ -59,9 +59,15 @@ record Denotations(Map<BindingId, Means> bound) {
      *                was computed to make it are apart, and the arm of a {@code match} is where they
      *                come apart furthest — it opens a number a library operation computed, and the
      *                value it stands for is the union that operation answered
+     * @param readIn  where {@code value} is read, or null where it is read where the name is. A
+     *                binding entered as the walk goes is read where the name is, since nothing is
+     *                taken away and nothing bound later answers for a name this one holds; a value
+     *                written somewhere the walk never entered — inside a value's definition, or
+     *                where a container was written before its element was handed to a step — is
+     *                read there
      */
     record Means(Core value, FactSubject subject, Location location, Term term,
-                 NumericMeaning numeric) {
+                 NumericMeaning numeric, Denotations readIn) {
 
         Means {
             // Every binding this holds is one something is known about. A binding entered without a
@@ -104,10 +110,19 @@ record Denotations(Map<BindingId, Means> bound) {
         return given == null ? null : given.numeric();
     }
 
-    /** The value {@code binding} was given, or null where nothing recorded one. */
-    Core valueOf(BindingId binding) {
+    /**
+     * The value {@code binding} was given and where that value is read, or null where nothing
+     * recorded one.
+     *
+     * <p>The two together and never the value alone: a value stands for the name in the
+     * environment it was written in (ADR-0111), and a reader handed the expression without it would
+     * read its names wherever it happened to be standing.
+     */
+    ValueStanding.ReadThrough<Denotations> givenTo(BindingId binding) {
         Means given = bound.get(binding);
-        return given == null ? null : given.value();
+        return given == null || given.value() == null ? null
+                : new ValueStanding.ReadThrough<>(given.value(),
+                        given.readIn() != null ? given.readIn() : this);
     }
 
     /** {@code binding} entered as a place: somewhere the seeding can write about, standing for no
@@ -120,7 +135,7 @@ record Denotations(Map<BindingId, Means> bound) {
      * binding is ({@link Terms#placeSubject}); an arm opening an optional hands what that optional
      * holds. */
     Denotations location(BindingId binding, FactSubject subject, Term term) {
-        return with(binding, new Means(null, subject, Location.of(binding), term, null));
+        return with(binding, new Means(null, subject, Location.of(binding), term, null, null));
     }
 
     /**
@@ -140,7 +155,7 @@ record Denotations(Map<BindingId, Means> bound) {
      */
     Denotations opened(BindingId binding, Core value, FactSubject subject, Term term,
                        NumericMeaning numeric) {
-        return with(binding, new Means(value, subject, Location.of(binding), term, numeric));
+        return with(binding, new Means(value, subject, Location.of(binding), term, numeric, null));
     }
 
     /** The same, for bindings that stand for themselves rather than for a value the walk reached —
@@ -157,10 +172,11 @@ record Denotations(Map<BindingId, Means> bound) {
     /** {@code binding} entered as the name of {@code value}: what a {@code let} introduces. What
      * the name means is what it was given, in every one of these answers — which arithmetic it is
      * included, since a name given a quotient is that quotient and naming a value does not change
-     * what is known of it (spec §invariant-discharge-terms). */
-    Denotations binding(BindingId binding, Core value, FactSubject subject, Location location,
-                        Term term, NumericMeaning numeric) {
-        return with(binding, new Means(value, subject, location, term, numeric));
+     * what is known of it (spec §invariant-discharge-terms). {@code readIn} is where the value is
+     * read, or null where it is read where the name is ({@link Means#readIn}). */
+    Denotations binding(BindingId binding, Core value, Denotations readIn, FactSubject subject,
+                        Location location, Term term, NumericMeaning numeric) {
+        return with(binding, new Means(value, subject, location, term, numeric, readIn));
     }
 
     private Denotations with(BindingId binding, Means means) {

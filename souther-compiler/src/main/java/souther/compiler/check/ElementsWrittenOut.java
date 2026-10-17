@@ -8,7 +8,9 @@ import souther.compiler.types.ValueName;
 import net.unit8.notation199x.ScalarValues;
 
 import java.util.ArrayList;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalLong;
@@ -171,19 +173,20 @@ public final class ElementsWrittenOut {
     }
 
     /**
-     * Whether {@code one} is there on every run: true where every truth it was kept by comes out the
-     * way it was kept by on every run, false where one comes out the other way on every run, and
-     * null where one turns on the run.
+     * Whether {@code one} is there on every run: false where one truth it was kept by comes out the
+     * other way on every run, whatever the others do; true where every one comes out the way it was
+     * kept by on every run; and null where neither is so, one of them turning on the run.
      */
     private static <E> Boolean onEveryRun(Occurrence<E> one, Reading<E> reading) {
-        boolean there = true;
+        boolean decided = true;
         for (Kept<E> kept : one.keptWhere()) {
             if (!(reading.folded(kept.truth()).orElse(null) instanceof Boolean holds)) {
-                return null;
+                decided = false;
+            } else if (holds != kept.holds()) {
+                return false;
             }
-            there &= holds == kept.holds();
         }
-        return there;
+        return decided ? true : null;
     }
 
     /**
@@ -259,12 +262,22 @@ public final class ElementsWrittenOut {
                 && args.size() == 1) {
             return codePointsOf(reading.standing(args.getFirst(), at), value, enough, walked);
         }
+        // Each block the call's closures stand as, with where it was written: the step's body is
+        // read there, under the element it is handed, and not where the call stands.
+        Map<Core.Block, E> written = new IdentityHashMap<>();
         ElementBindings.PiecesOfEachElement pieces = ElementBindings.piecesOfEachElement(value,
-                closure -> Core.withoutStanding(reading.standing(closure, at).value())
-                        instanceof Core.Block block ? block : null);
+                closure -> {
+                    Stood<E> stood = reading.standing(closure, at);
+                    if (!(Core.withoutStanding(stood.value()) instanceof Core.Block block)) {
+                        return null;
+                    }
+                    written.put(block, stood.at());
+                    return block;
+                });
         if (pieces == null || pieces.element() == null || pieces.element().binding() == null) {
             return new Walked.NotWrittenOut<>();
         }
+        E stepAt = written.getOrDefault(pieces.step(), at);
         // A map's and a filter's pieces are one to an element, so as many elements are enough; a
         // flatMap's are any number to an element, so its elements are walked until enough pieces
         // are.
@@ -284,7 +297,7 @@ public final class ElementsWrittenOut {
             }
             // The step's body read on the application handing it this element.
             Stood<E> answered = new Stood<>(pieces.step().body(),
-                    reading.handing(at, element, each.value()));
+                    reading.handing(stepAt, element, each.value()));
             switch (pieces.piece()) {
                 case THE_CLOSURES_ANSWER -> {
                     if (++walked[0] > MOST_WALKED) {

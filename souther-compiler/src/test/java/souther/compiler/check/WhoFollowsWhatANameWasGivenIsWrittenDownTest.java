@@ -51,7 +51,7 @@ class WhoFollowsWhatANameWasGivenIsWrittenDownTest {
     void everyReaderThatFollowsANameIsWrittenDown() {
         assertEquals(FOLLOWERS,
                 new ArrayList<>(new TreeSet<>(
-                        WhatWasCompiled.callersOf(Denotations.class, "valueOf"))),
+                        WhatWasCompiled.callersOf(Denotations.class, "givenTo"))),
                 "a reader added here follows a name to what it was given: say what stops it"
                         + " following one twice, and add the row");
     }

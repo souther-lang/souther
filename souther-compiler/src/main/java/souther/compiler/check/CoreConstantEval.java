@@ -55,8 +55,16 @@ final class CoreConstantEval {
 
     /** What {@code e} folds to, or empty where it is not a compile-time constant. */
     Optional<Object> eval(Core e) {
-        return FoldedValue.of(e, Env.NONE, new Told(at, templates), symbols);
+        return FoldedValue.of(e, new Scope(at, Env.NONE), new Told(templates), symbols);
     }
+
+    /**
+     * Where a name is read: what the reading was told the names it has met were given, and the
+     * bindings the tree wrote around the read. The two travel together because a value the reading
+     * was told of is read where it was told — which is not always where the name is read — and
+     * under none of the bindings the tree makes around the read.
+     */
+    private record Scope(Denotations told, Env lets) {}
 
     /**
      * The bindings the tree wrote, innermost first, each with the environment its value was written
@@ -91,33 +99,35 @@ final class CoreConstantEval {
      * as, read where nothing the tree binds is in force, since a value names nothing of the body
      * that builds it.
      */
-    private record Told(Denotations at, ValueTemplates templates)
-            implements ValueStanding.Names<Env, Told> {
+    private record Told(ValueTemplates templates) implements ValueStanding.Names<Scope, Told> {
 
         @Override
-        public ValueStanding.ReadThrough<Env> taken(Core node, Env where) {
+        public ValueStanding.ReadThrough<Scope> taken(Core node, Scope where) {
             Core built = templates == null ? null : templates.builtBy(node);
-            return built == null ? null : new ValueStanding.ReadThrough<>(built, Env.NONE);
+            return built == null ? null
+                    : new ValueStanding.ReadThrough<>(built, new Scope(where.told(), Env.NONE));
         }
 
         @Override
-        public ValueStanding.ReadThrough<Env> readThrough(Core.Read read, Env where) {
-            Env bound = where.read(read.binding());
+        public ValueStanding.ReadThrough<Scope> readThrough(Core.Read read, Scope where) {
+            Env bound = where.lets().read(read.binding());
             if (bound != null) {
-                return new ValueStanding.ReadThrough<>(bound.value(), bound.definedAt());
+                return new ValueStanding.ReadThrough<>(bound.value(),
+                        new Scope(where.told(), bound.definedAt()));
             }
-            Core value = at.valueOf(read.binding());
-            return value == null ? null : new ValueStanding.ReadThrough<>(value, Env.NONE);
+            ValueStanding.ReadThrough<Denotations> told = where.told().givenTo(read.binding());
+            return told == null ? null
+                    : new ValueStanding.ReadThrough<>(told.value(), new Scope(told.at(), Env.NONE));
         }
 
         @Override
-        public List<ValueStanding.ReadThrough<Env>> alternativesOf(Core.Read read, Env where) {
+        public List<ValueStanding.ReadThrough<Scope>> alternativesOf(Core.Read read, Scope where) {
             return null;
         }
 
         @Override
-        public Env inside(Core.LetIn li, Env where) {
-            return where.with(li.binder().binding(), li.value());
+        public Scope inside(Core.LetIn li, Scope where) {
+            return new Scope(where.told(), where.lets().with(li.binder().binding(), li.value()));
         }
 
         @Override
