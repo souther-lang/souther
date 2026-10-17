@@ -479,7 +479,37 @@ public sealed interface Proposition {
             if (container == null || ofTheElement == null) {
                 throw new IllegalArgumentException("a quantifier is over some container");
             }
+            if (quantifiesOver(container, ofTheElement)) {
+                throw new IllegalArgumentException("a quantifier over " + container
+                        + " says of its element another quantifier over it, which would read two"
+                        + " elements as one: " + ofTheElement);
+            }
             key = (holds ? "some " : "no ") + container + " [" + ofTheElement.key() + "]";
+        }
+
+        /**
+         * Whether {@code stated} quantifies {@code container} somewhere in it: what a reader that
+         * would put {@code stated} inside a quantifier over {@code container} asks first, since
+         * the two elements would be one subject there.
+         */
+        public static boolean quantifiesOver(DecisionSubject container, Proposition stated) {
+            return switch (stated) {
+                case Some some -> some.container.equals(container)
+                        || quantifiesOver(container, some.ofTheElement);
+                case All all -> all.parts().stream()
+                        .anyMatch(part -> quantifiesOver(container, part));
+                case Any any -> any.parts().stream()
+                        .anyMatch(part -> quantifiesOver(container, part));
+                case SomeReachable reached -> quantifiesOver(container, reached.atANode())
+                        || reached.noneBelow().filter(each -> quantifiesOver(container, each))
+                                .isPresent();
+                case OnAnApplication applied -> applied.each().stream()
+                        .anyMatch(each -> quantifiesOver(container, each));
+                case SoManyHold counted -> counted.statements().stream()
+                        .anyMatch(each -> quantifiesOver(container, each));
+                case Always _, Compared _, Truth _, InCases _, Present _, SameValue _,
+                     LastToHold _, Carried _, Unread _ -> false;
+            };
         }
 
         @Override

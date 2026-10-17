@@ -733,6 +733,49 @@ class WhatADerivationConcludesIsWhatItsRuleComputesTest {
                 Proposition.all(List.of(truth(A), truth(XS.element())))));
     }
 
+    /**
+     * An arm about the entry it picked out, whose statement picks out another entry of the same
+     * container, is about two entries: inside one quantifier they would be one subject. It
+     * concludes what was not read, for two elements of one container. The same arm about an
+     * entry of another container is read inside the quantifier, beside the other.
+     */
+    @Test
+    void anArmAboutTwoEntriesOfOneContainerIsReadOfNeither() {
+        DecisionSubject xs = new DecisionSubject.AnInput(XS);
+        Derivation filed = new Derivation.SomeElementMeeting(xs, truthAt(XS.element().then("k")),
+                true, Optional.empty());
+        Derivation another = new Derivation.SomeElementMeeting(xs,
+                truthAt(XS.element().then("j")), true, Optional.empty());
+        Proposition stated = concluded(new Derivation.MatchArms(List.of(
+                new Derivation.MatchArms.Arm(filed, another, true),
+                new Derivation.MatchArms.Arm(new Derivation.WrittenOut(true), truthAt(A)))));
+        Proposition unread = new Proposition.Unread(Optional.empty(), 0,
+                new WhyUnread.TwoElementsOfOneContainer(), false, true);
+        Proposition some = new Proposition.Some(xs, truth(XS.element().then("k")), true);
+        assertEquals(Proposition.any(List.of(unread,
+                Proposition.all(List.of(some.denied(), truth(A))))), stated);
+
+        Derivation ofAnother = new Derivation.SomeElementMeeting(
+                new DecisionSubject.AnInput(YS), truthAt(YS.element()), true, Optional.empty());
+        Proposition read = concluded(new Derivation.MatchArms(List.of(
+                new Derivation.MatchArms.Arm(filed, ofAnother, true),
+                new Derivation.MatchArms.Arm(new Derivation.WrittenOut(true), truthAt(A)))));
+        assertEquals(Proposition.any(List.of(
+                new Proposition.Some(xs, Proposition.all(List.of(truth(XS.element().then("k")),
+                        new Proposition.Some(new DecisionSubject.AnInput(YS), truth(YS.element()),
+                                true))), true),
+                Proposition.all(List.of(some.denied(), truth(A))))), read);
+    }
+
+    /** A quantifier over a container cannot be made to say another over it of its element. */
+    @Test
+    void aQuantifierOverAContainerHoldsNoOtherOverIt() {
+        DecisionSubject xs = new DecisionSubject.AnInput(XS);
+        Proposition inner = new Proposition.Some(xs, truth(XS.element()), true);
+        assertThrows(IllegalArgumentException.class, () -> new Proposition.Some(xs,
+                Proposition.all(List.of(truth(A), inner)), true));
+    }
+
     /** A conclusion that has the container's holding anything as a part cannot be made without it. */
     @Test
     void aPartTheConclusionHasMustHaveBeenRead() {
