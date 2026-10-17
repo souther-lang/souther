@@ -143,6 +143,19 @@ class WhatAConditionStatesIsTheSameHoweverItIsSpeltTest {
     }
 
     /**
+     * A list chosen by cases whose arms are written out holds each arm's elements where that arm is
+     * taken: an element of the arm a run does not take meets nothing there. Handed to a walk's
+     * parameter first, the elements are the same ones.
+     */
+    @Test
+    void anElementOfAnArmWrittenOutMeetsAStatementOnlyWhereItsArmIsTaken() {
+        Proposition byCases = stated("(b.open && b.x == 1) || (Bool.not(b.open) && b.y == 1)");
+        assertEquals(byCases, stated("List.any(v -> v == 1, if b.open then [ b.x ] else [ b.y ])"));
+        assertEquals(byCases, stated(
+                "List.any(v -> v == 1, List.flatMap(e -> [ e ], if b.open then [ b.x ] else [ b.y ]))"));
+    }
+
+    /**
      * A list chosen by cases holds every element of the list one case answers only on that case: on
      * the other it holds none, so a total over it is no total of everything that list holds. A list
      * that every case answers is.
