@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Timeout;
 
 import souther.compiler.ast.Hir;
 import souther.compiler.diag.SourceRendering;
+import souther.compiler.diag.msg.ExampleMessage;
 import souther.compiler.partition.CameToNothing;
 import souther.compiler.partition.FixtureTemplate;
 import souther.compiler.partition.GenerationOutcome;
@@ -673,13 +674,18 @@ class AListWhoseRulesKeepItsElementsApartIsComposedApartTest {
         assertTrue(report.contains("partition   not applicable"), report);
     }
 
-    /** And a row saying one id twice is still refused. */
+    /** And a row saying one id twice is still refused, by the rule and at that row alone. */
     @Test
     void aRowSayingOneKeyTwiceIsStillRefused() {
         Compilation measured = measured(APART_AND_NOTHING_ELSE.replace(
                 "Item { id = 1 }, Item { id = 2 }", "Item { id = 1 }, Item { id = 1 }"));
 
-        assertFalse(errors(measured).isEmpty(), () -> report(measured));
+        assertEquals(1, measured.errors().size(), () -> errors(measured).toString());
+        ExampleMessage.AnInputCouldNotBeBuilt refused = assertInstanceOf(
+                ExampleMessage.AnInputCouldNotBeBuilt.class,
+                measured.errors().get(0).diagnostic().said());
+        assertEquals("1", refused.at(), "the second row, which writes the id twice");
+        assertTrue(refused.why().endsWith("invariant violated on p.Book"), refused::why);
     }
 
     /**

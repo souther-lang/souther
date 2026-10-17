@@ -348,15 +348,10 @@ sealed interface StatedByClauses {
          * the clause says, and a clause says what it says wherever it is written; this one is about
          * what reaches a reader, and the walk that would have reached these ends stopped at the
          * {@code ||} the author wrote.
-         *
-         * <p>And how a container's elements stand to each other is given up on here. What the
-         * builders are told is read off the conjuncts of the clause ({@link ElementsApart}), and
-         * that reading stops at the {@code ||} as well — so a rule taken in under it is one no
-         * container is composed for, however dead the alternative beside it is.
          */
         Part underACollapsedChoice() {
-            return new Part(byValues, byOrder, byDerivedNumbers,
-                    byElements.unbuiltAt(byElements.mentions()), stopped, aboutStrings, asked,
+            return new Part(byValues, byOrder, byDerivedNumbers, byElements, stopped, aboutStrings,
+                    asked,
                     ruleShortfalls, endsLeftOpen.underACollapsedChoice(), boundary,
                     underACollapsedChoice(boundsLeftOpen));
         }
@@ -680,12 +675,19 @@ sealed interface StatedByClauses {
         };
     }
 
-    /** The reading of one value's positions, made once and used over however many clauses reach it.
-     *  Built per clause, this walk paid for a pair of readers at every clause of every value. */
+    /**
+     * The reading of one value's positions, made once and used over however many clauses reach it.
+     * Built per clause, this walk paid for a pair of readers at every clause of every value.
+     *
+     * @param keptApart what the builders of each container position keep its elements apart at
+     *                  ({@link ElementsApart#keptAt}), which is what the reading of how elements
+     *                  stand to each other is held to; a position with nothing kept is absent
+     */
     static Reading readingOf(Terms terms, Map<FactSubject, Type> byName,
                              Symbols symbols, Alternatives alternatives,
                              Allowance<FactSubject> allowed, StringMachineAnswers machines,
-                             StatedLines lines, BoundaryReading boundaries) {
+                             StatedLines lines, BoundaryReading boundaries,
+                             Map<FactSubject, List<List<String>>> keptApart) {
         // The positions as chains of names, made once beside the table for every reading that asks
         // which subexpression of a clause is a position.
         List<Term> held = new ArrayList<>(byName.size());
@@ -696,7 +698,7 @@ sealed interface StatedByClauses {
         return new Reading(
                 AdmissibleReading.of(terms, byName, chains, symbols, terms.sums(), allowed),
                 OrderedReading.of(terms, byName), terms, byName, chains, alternatives,
-                machines, lines, boundaries);
+                machines, lines, boundaries, Map.copyOf(keptApart));
     }
 
 
@@ -723,7 +725,8 @@ sealed interface StatedByClauses {
      */
     record Reading(AdmissibleReading values, OrderedReading ordered, Terms terms,
                    Map<FactSubject, Type> byName, Term.Chains chains, Alternatives alternatives,
-                   StringMachineAnswers machines, StatedLines lines, BoundaryReading boundaries)
+                   StringMachineAnswers machines, StatedLines lines, BoundaryReading boundaries,
+                   Map<FactSubject, List<List<String>>> keptApart)
             implements ClauseReading<StatedByClauses, Denotations> {
 
         /** What a binding under a clause is entered as, for a fold over this reading. The one
@@ -835,12 +838,22 @@ sealed interface StatedByClauses {
          * says nothing of any one element's {@code id}, so a position under the container that the
          * leaf mentions is one this reading has no word for, and the values reading answers for it
          * on its own.
+         *
+         * <p>Taken in where the builders of the container keep its elements apart at the run the
+         * leaf states, and given up on where they do not. What this reading says is that every
+         * container composed for the position satisfies the rule, which the builders' answer says
+         * and the leaf does not: a leaf they were never told of is a rule no container keeps.
          */
         private Adoption<FactSubject, ReadingLanguage.Elements> elementsOf(ClauseExpr.Part part,
                                                                            Denotations at) {
-            FactSubject container = values.keptApartAt(part, at);
-            return container == null ? Adoption.nothing()
-                    : Adoption.at(Set.of(container), Set.of(container), false);
+            AdmissibleReading.KeptApart stated = values.keptApartAt(part, at);
+            if (stated == null) {
+                return Adoption.nothing();
+            }
+            Set<FactSubject> container = Set.of(stated.container());
+            boolean kept = ElementsApart.covers(
+                    keptApart.getOrDefault(stated.container(), List.of()), stated.run());
+            return Adoption.at(container, kept ? container : Set.of(), !kept);
         }
 
         /** What one leaf's reading of the derived numbers comes to, as the state that composes. */
