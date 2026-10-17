@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * How far a set of rules lets a whole form run — the one reading of that question there is.
@@ -65,6 +66,14 @@ final class FormReach<A> {
      *  until the first form of two or more positions asks. */
     private List<Premise<A>> premises;
 
+    /**
+     * How many premises this has merged into a form, and how many it has held against the ends, for
+     * a test holding a premise the ends already hold to being passed over and to being held against
+     * them once a round. Counts and nothing else: what any form comes to is the same either way.
+     */
+    private long merged;
+    private long heldAgainstTheEnds;
+
     private FormReach(List<AffineConstraint<A>> rules, Box<A> ends,
                       DifferenceBounds<A> differences, CanonicalOrder<A> order) {
         this.rules = rules;
@@ -102,6 +111,16 @@ final class FormReach<A> {
      *  read to come apart. */
     List<AffineConstraint<A>> rules() {
         return rules;
+    }
+
+    /** How many premises this has merged into a form — see {@link #merged}. */
+    long premisesMerged() {
+        return merged;
+    }
+
+    /** How many premises this has held against the ends — see {@link #merged}. */
+    long premisesHeldAgainstTheEnds() {
+        return heldAgainstTheEnds;
     }
 
     /** What {@code Σ coefs·position + constant} runs between. */
@@ -215,6 +234,7 @@ final class FormReach<A> {
             if (ranges != null && heldAlready(each, coefs, weighs)) {
                 continue;
             }
+            merged++;
             // A model's own decimals can put this premise's bound, or one of its own
             // coefficients, far enough apart in scale from what it is being merged with that the
             // exact arithmetic cannot hold the sum. Where that happens this premise composes no
@@ -340,6 +360,7 @@ final class FormReach<A> {
      * not one — which is the premise's and the ends', and no form's.
      */
     private HeldEnd<A> heldEndOf(AffineConstraint.HalfSpace<A> half) {
+        heldAgainstTheEnds++;
         if (half.form().coefs().size() != 1) {
             return null;
         }
@@ -456,8 +477,9 @@ final class FormReach<A> {
         private final AffineConstraint<A> rule;
         private final AffineConstraint.HalfSpace<A> half;
         private Room room;
-        private HeldEnd<A> held;
-        private boolean heldRead;
+
+        /** {@link #heldEndOf}'s answer, empty where it is not such a bound, and null until asked. */
+        private Optional<HeldEnd<A>> held;
 
         Premise(AffineConstraint<A> rule, AffineConstraint.HalfSpace<A> half) {
             this.rule = rule;
@@ -482,11 +504,12 @@ final class FormReach<A> {
         }
 
         HeldEnd<A> heldEnd(FormReach<A> round) {
-            if (!heldRead) {
-                held = round.heldEndOf(half);
-                heldRead = true;
+            Optional<HeldEnd<A>> read = held;
+            if (read == null) {
+                read = Optional.ofNullable(round.heldEndOf(half));
+                held = read;
             }
-            return held;
+            return read.orElse(null);
         }
     }
 

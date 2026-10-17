@@ -10,9 +10,12 @@ import souther.compiler.check.RuleReadings;
 import souther.compiler.check.TypeCardinality;
 import souther.compiler.check.Emptiness;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.Place;
+import souther.compiler.numeric.Rel;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
@@ -206,6 +209,129 @@ class WhatIsFixedIsAskedTogetherHoweverItArrivedTest {
                 assertEquals(together.runsBetween(x), apart.runsBetween(x), where);
             }
         }
+    }
+
+    /** A field beside a sum, and two numbers under one of its cases that a rule relates. */
+    private static final String CASED = """
+            module example.cased
+
+            data A = { lo: Int, x: Int }
+                invariant ordered = lo <= x
+            data B = { y: Int }
+            data Q = A | B
+
+            data Holder = { n: Int, q: Q }
+
+            data Taken
+
+            behavior take : (h: Holder) -> Taken
+            """;
+
+    /**
+     * The same where the term fixed next stands under a case the reading before it had not
+     * settled, so the context everything is asked under is not the one it was asked under before —
+     * and the one after that stands under the same case again.
+     */
+    @Test
+    void oneMoreFixedUnderACaseNotYetSettledIsAllFixedAtOnce() {
+        Read read = read(CASED, "take");
+        Quantities asked = read.inputs().quantities(read.rules());
+        NumericTerm n = new NumericTerm.ValueOf(pathOf(read, "h.n"));
+        NumericTerm lo = new NumericTerm.ValueOf(pathOf(read, "h.q@A.lo"));
+        NumericTerm x = new NumericTerm.ValueOf(pathOf(read, "h.q@A.x"));
+        Quantities first = asked.given(n, count(1));
+        assertTrue(first.emptiness().isEmpty(), "n at one leaves the rest somewhere");
+        for (int low = 0; low <= 2; low++) {
+            Quantities underTheCase = first.given(lo, count(low));
+            assertTrue(underTheCase.emptiness().isEmpty(), "lo at " + low + " leaves x somewhere");
+            for (int high = 0; high <= 2; high++) {
+                Quantities apart = underTheCase.given(x, count(high));
+                Map<NumericTerm, Place> all = new LinkedHashMap<>();
+                all.put(n, count(1));
+                all.put(lo, count(low));
+                all.put(x, count(high));
+                Quantities together = asked.given(all);
+                String where = "lo at " + low + " and x at " + high;
+
+                assertEquals(low > high, together.emptiness().isPresent(), where);
+                assertEquals(together.emptiness(), apart.emptiness(), where);
+                assertEquals(together.runsBetween(lo), apart.runsBetween(lo), where);
+                assertEquals(together.runsBetween(x), apart.runsBetween(x), where);
+            }
+        }
+    }
+
+    /** Four fields a rule holds together, for readings narrowed through each of them in turn. */
+    private static final String FOUR = """
+            module example.four
+
+            data P = { a: Int, b: Int, c: Int, d: Int }
+                invariant noneBelowNone = a >= 0
+                invariant together = a + b + c + d <= 40
+
+            data Taken
+
+            behavior take : (p: P) -> Taken
+            """;
+
+    private static final List<NumericTerm> FOUR_TERMS = List.of(
+            new NumericTerm.ValueOf(TermPath.of("p").then("a")),
+            new NumericTerm.ValueOf(TermPath.of("p").then("b")),
+            new NumericTerm.ValueOf(TermPath.of("p").then("c")),
+            new NumericTerm.ValueOf(TermPath.of("p").then("d")));
+
+    /**
+     * A reading narrowed by one fixing more than a reading that has been asked about puts that one
+     * fixing on, and not every fixing again.
+     *
+     * <p>Counted, because the answers are the same either way — that is what the tests above hold —
+     * and what is held here is the work: four readings narrowed one fixing at a time put four on,
+     * where putting every fixing on again would put on one, then two, then three, then four.
+     */
+    @Test
+    void aReadingNarrowedByOneFixingPutsThatOneOn() {
+        Read read = read(FOUR, "take");
+        Quantities region = read.inputs().quantities(read.rules());
+        long before = ReadQuantities.stepsPutOn();
+        for (NumericTerm term : FOUR_TERMS) {
+            region = region.given(term, count(1));
+            assertTrue(region.emptiness().isEmpty(), term + " at one leaves the rest somewhere");
+        }
+
+        assertEquals(FOUR_TERMS.size(), ReadQuantities.stepsPutOn() - before);
+    }
+
+    /**
+     * And the same of a condition taken in: a reading that took one more in than a reading that has
+     * been asked about takes that one in, and every condition taken in on the way still holds.
+     */
+    @Test
+    void aReadingNarrowedByOneConditionTakesThatOneIn() {
+        Read read = read(FOUR, "take");
+        ReadQuantities region = (ReadQuantities) read.inputs().quantities(read.rules());
+        long before = ReadQuantities.stepsPutOn();
+        for (NumericTerm term : FOUR_TERMS) {
+            LinearForm<NumericTerm> atMostEight = new LinearForm<>(ExactRatio.of(-8),
+                    Map.of(term, ExactRatio.ONE));
+            region = taken(region.assuming(atMostEight, Rel.LE));
+            assertTrue(region.emptiness().isEmpty(), term + " at most eight leaves it somewhere");
+        }
+
+        assertEquals(FOUR_TERMS.size(), ReadQuantities.stepsPutOn() - before);
+        for (NumericTerm term : FOUR_TERMS) {
+            assertEquals(Endpoint.inclusive(count(8)), region.runsBetween(term).max(),
+                    term + " is held at most at eight by the condition taken in about it");
+        }
+    }
+
+    private static ReadQuantities taken(ReadQuantities.Taking taking) {
+        return ((ReadQuantities.Taking.Taken) taking).rules();
+    }
+
+    private static TermPath pathOf(Read read, String spelled) {
+        return read.inputs().positions().stream().map(Position::path)
+                .filter(each -> each.toString().equals(spelled))
+                .findFirst().orElseThrow(() -> new AssertionError("no position at " + spelled));
     }
 
     /** One position holds one value, so fixing it twice fixes it at nothing. */

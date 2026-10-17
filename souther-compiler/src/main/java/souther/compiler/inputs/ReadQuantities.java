@@ -193,27 +193,39 @@ final class ReadQuantities implements Quantities {
             new ConcurrentHashMap<>();
 
     /**
-     * The term this reading fixed last, with what the reading it was fixed in had worked out — or
-     * null where this one was not made by fixing one more term.
+     * How this reading was narrowed from another in one step, with what that one had worked out —
+     * or null where it was not made that way.
      *
-     * <p>Carried so that the rules with the fixings standing in them can be the ones that reading
-     * holds with one more fixing put on, rather than every fixing put on again
-     * ({@link #effectiveConstraints}). What this reading answers is settled by its own fixings and
+     * <p>Carried so that the rules this reading holds can be the ones that reading held with the
+     * one step put on, rather than every step put on again ({@link #constraints},
+     * {@link #effectiveConstraints}). What this reading answers is settled by what it was told and
      * never by this.
      */
-    private final OneMoreFixed oneMoreFixed;
+    private final NarrowedByOne narrowedByOne;
+
+    /**
+     * One step a reading was narrowed by, and what the reading before it had worked out — and not
+     * that reading, which holds what it spends its answers out of and is no part of this one.
+     */
+    private sealed interface NarrowedByOne permits OneMoreFixed, OneMoreTaken {}
 
     /**
      * {@code term} fixed at the end of the fixings of a reading that held {@code rulesBefore} and
      * {@code runsBefore} as its own {@link #withTheFixings} and {@link #whereEachTermRuns}.
-     *
-     * <p>What that reading had worked out and not the reading, which holds what it spends its
-     * answers out of and is no part of this one.
      */
     private record OneMoreFixed(
             NumericTerm term,
             Map<StructuralContext, ConstraintState<InputAtom>> rulesBefore,
-            Map<NumericTerm, Optional<NumericDomain.Bounds>> runsBefore) {}
+            Map<NumericTerm, Optional<NumericDomain.Bounds>> runsBefore) implements NarrowedByOne {}
+
+    /**
+     * {@code taken} at the end of what a reading had taken in, which held {@code takenBefore} as its
+     * own {@link #answered}.
+     */
+    private record OneMoreTaken(
+            Assumed taken,
+            Map<StructuralContext, ConstraintState<InputAtom>> takenBefore)
+            implements NarrowedByOne {}
 
     /**
      * Where each term this reading has been asked about runs, without what the declarations hold
@@ -347,9 +359,9 @@ final class ReadQuantities implements Quantities {
                            Map<NumericTerm, Fixed> fixed,
                            RuleReadingContext ruleReading, List<Assumed> assumed,
                            List<HeldAgainst> heldAgainst, Contexts contexts,
-                           OneMoreFixed oneMoreFixed) {
+                           NarrowedByOne narrowedByOne) {
         this.contexts = contexts;
-        this.oneMoreFixed = oneMoreFixed;
+        this.narrowedByOne = narrowedByOne;
         this.cases = List.copyOf(cases);
         this.ruleReading = ruleReading;
         this.typeAt = typeAt;
@@ -621,6 +633,19 @@ final class ReadQuantities implements Quantities {
     private static final AtomicLong CONTEXTS_READ = new AtomicLong();
 
     /**
+     * How many fixings and conditions have been put onto rules, for a test holding a reading
+     * narrowed by one step to putting that one step on rather than every step again.
+     *
+     * <p>Counted for the reason {@link #contextsRead} is: the readings would answer the same either
+     * way, and what is held is the work.
+     */
+    static long stepsPutOn() {
+        return STEPS_PUT_ON.get();
+    }
+
+    private static final AtomicLong STEPS_PUT_ON = new AtomicLong();
+
+    /**
      * How many times the numbers of this reading, and of every reading sharing its contexts, have
      * had what they leave worked out rather than lent — for a test holding those readings to
      * asking one question once.
@@ -853,8 +878,11 @@ final class ReadQuantities implements Quantities {
             pairs = new ArrayList<>(heldAgainst);
             pairs.add(pair);
         }
+        // Carried on from only where this one had taken something in: otherwise the rules before it
+        // are the declarations' own, and taking one condition in is all there is to do.
+        OneMoreTaken oneMore = assumed.isEmpty() ? null : new OneMoreTaken(taking, answered);
         return new ReadQuantities(byRoot, roots, byPath, cases, typeAt, fixed, ruleReading,
-                both, pairs, contexts, null);
+                both, pairs, contexts, oneMore);
     }
 
     /**
@@ -906,44 +934,63 @@ final class ReadQuantities implements Quantities {
         if (had != null) {
             return had;
         }
-        ConstraintState<InputAtom> made = declared;
-        // And what the caller took in, onto the same rules rather than met against the answer
-        // afterwards. A condition relating two positions says nothing about either of them alone,
-        // so met afterwards it would be gone.
-        //
-        // Read under this context like everything else. A condition is about the positions it
-        // names, so one taken in about a case says nothing where the value is another — left in, it
-        // would be a rule about a row that is not the row being asked about.
-        // The arithmetic's alone. What was taken in on an order that counts nothing has no form to
-        // solve with the relations and is read back where a term is asked as itself; brought in
-        // here, it would be a rule over a number nothing can space.
-        for (Assumed taken : assumed) {
-            if (!(taken instanceof Assumed.OverAForm each)) {
-                continue;
-            }
-            if (!stands(each.form().coefs().keySet(), under)) {
-                continue;
-            }
-            Map<InputAtom, souther.compiler.numeric.Granularity> spacing = new LinkedHashMap<>();
-            for (NumericTerm term : NumericTerms.inOrder(each.form().coefs().keySet())) {
-                souther.compiler.numeric.Granularity spaced =
-                        spacingOf(made.numbers(), term, called(term, under));
-                if (spaced == null) {
-                    spacing = null;
-                    break;
-                }
-                spacing.put(called(term, under), spaced);
-            }
-            // Where the caller's own form cannot be carried into this input's terms, this rule is one
-            // the state is not narrowed by — an unheld sum is a step short, and the sound answer
-            // with less is not to take a step at all.
-            LinearForm<InputAtom> over = spacing == null ? null : over(each.form(), under);
-            if (over != null) {
-                made = made.taking(over, each.rel(), spacing);
+        // The rules the reading this one took one condition more than holds, with that condition
+        // taken in: what taking one in puts on reads the rules said before it and nothing else
+        // taken, so these are the rules taking every condition in again would say, in that order.
+        OneMoreTaken one = switch (narrowedByOne) {
+            case OneMoreTaken it -> it;
+            case OneMoreFixed _ -> null;
+            case null -> null;
+        };
+        ConstraintState<InputAtom> before = one == null ? null : one.takenBefore().get(under);
+        ConstraintState<InputAtom> made;
+        if (before != null) {
+            made = takingIn(before, one.taken(), under);
+        } else {
+            made = declared;
+            for (Assumed taken : assumed) {
+                made = takingIn(made, taken, under);
             }
         }
         answered.put(under, made);
         return made;
+    }
+
+    /**
+     * {@code made} with what the caller took in as {@code taken} put on, where it is a form this
+     * input's arithmetic can carry under {@code under}.
+     *
+     * <p>Onto the same rules rather than met against the answer afterwards. A condition relating two
+     * positions says nothing about either of them alone, so met afterwards it would be gone.
+     *
+     * <p>Read under this context like everything else. A condition is about the positions it names,
+     * so one taken in about a case says nothing where the value is another — left in, it would be a
+     * rule about a row that is not the row being asked about.
+     *
+     * <p>The arithmetic's alone. What was taken in on an order that counts nothing has no form to
+     * solve with the relations and is read back where a term is asked as itself; brought in here, it
+     * would be a rule over a number nothing can space.
+     */
+    private ConstraintState<InputAtom> takingIn(ConstraintState<InputAtom> made, Assumed taken,
+                                                StructuralContext under) {
+        STEPS_PUT_ON.incrementAndGet();
+        if (!(taken instanceof Assumed.OverAForm each)
+                || !stands(each.form().coefs().keySet(), under)) {
+            return made;
+        }
+        Map<InputAtom, Granularity> spacing = new LinkedHashMap<>();
+        for (NumericTerm term : NumericTerms.inOrder(each.form().coefs().keySet())) {
+            Granularity spaced = spacingOf(made.numbers(), term, called(term, under));
+            if (spaced == null) {
+                return made;
+            }
+            spacing.put(called(term, under), spaced);
+        }
+        // Where the caller's own form cannot be carried into this input's terms, this rule is one
+        // the state is not narrowed by — an unheld sum is a step short, and the sound answer with
+        // less is not to take a step at all.
+        LinearForm<InputAtom> over = over(each.form(), under);
+        return over == null ? made : made.taking(over, each.rel(), spacing);
     }
 
     /**
@@ -1022,6 +1069,13 @@ final class ReadQuantities implements Quantities {
      * already there.
      */
     private ConstraintState<InputAtom> carriedOn(StructuralContext under) {
+        // A condition taken in moves the rules every fixing is put onto, so only a fixing is
+        // carried on from here.
+        OneMoreFixed oneMoreFixed = switch (narrowedByOne) {
+            case OneMoreFixed it -> it;
+            case OneMoreTaken _ -> null;
+            case null -> null;
+        };
         if (oneMoreFixed == null) {
             return null;
         }
@@ -1329,6 +1383,7 @@ final class ReadQuantities implements Quantities {
      */
     private ConstraintState<InputAtom> holding(ConstraintState<InputAtom> rules, NumericTerm term,
                                                StructuralContext under) {
+        STEPS_PUT_ON.incrementAndGet();
         NumericDomain.Bounds runs = whereOneTermRuns(term, false);
         if (runs == null || (asCut(runs.min()) == null && asCut(runs.max()) == null)) {
             return rules;

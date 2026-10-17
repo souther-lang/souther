@@ -123,22 +123,35 @@ public final class ClosedStates {
         if (answers == null) {
             return Parted.whole(ClosedState.of(rules, spacing, order));
         }
-        Parted<A> lent = before == null ? null : before.followedBy(rules, spacing, order, this);
+        Parted<A> lent = before == null ? null : before.followedBy(rules, this);
         if (lent == null) {
-            lent = Parted.unread(ClosureQuestion.independentRules(rules), rules, spacing, order,
-                    this);
-        } else if (lent.state != null) {
-            return lent;
+            lent = Parted.unread(ClosureQuestion.independentRules(rules), rules, this);
         }
         // Asked a part at a time. A question is one closure on its own, and two sets of rules that
-        // differ only in some of their parts put the same question for every other part.
+        // differ only in some of their parts put the same question for every other part. A part
+        // lent is lent only where its rules still put the question it was worked out for, which is
+        // the question's to say.
+        Function<Set<A>, Map<A, Integer>> placing = weighed -> placed(weighed, order);
+        List<ClosureQuestion<A>> questions = new ArrayList<>(lent.parts.size());
         List<ClosedState<A>> closed = new ArrayList<>(lent.parts.size());
+        boolean everyPartLent = true;
         for (int at = 0; at < lent.parts.size(); at++) {
-            ClosedState<A> had = lent.closed.get(at);
-            closed.add(had != null ? had : of(ClosureQuestion.of(lent.parts.get(at), spacing,
-                    weighed -> placed(weighed, order))));
+            ClosureQuestion<A> had = lent.questions.get(at);
+            if (had != null && had.isPutBy(spacing, order, placing)) {
+                questions.add(had);
+                closed.add(lent.closed.get(at));
+                continue;
+            }
+            everyPartLent = false;
+            ClosureQuestion<A> asked =
+                    ClosureQuestion.of(lent.parts.get(at), spacing, order, placing);
+            questions.add(asked);
+            closed.add(of(asked));
         }
-        return new Parted<>(this, order, rules, lent.parts, closed, lent.partOf, lent.spaced,
+        if (everyPartLent && lent.state != null) {
+            return lent;
+        }
+        return new Parted<>(this, rules, lent.parts, questions, closed, lent.partOf,
                 ClosedState.product(closed));
     }
 
@@ -148,7 +161,7 @@ public final class ClosedStates {
      * <p>Held beside the domain it is the closure of, so that a domain made from that one by saying
      * more rules can be lent the parts those rules do not reach ({@link #of(List, Function,
      * CanonicalOrder, Parted)}). The parts are {@link ClosureQuestion#independentRules} of the
-     * rules, in its order, and each closure is the one its part puts.
+     * rules, in its order, and each closure is the one the question beside it puts.
      *
      * @param <A> what a position of the rules is
      */
@@ -156,56 +169,51 @@ public final class ClosedStates {
 
         /** Where the parts were asked, or null where nothing was parted. */
         private final ClosedStates owner;
-        private final CanonicalOrder<A> order;
         private final List<AffineConstraint<A>> rules;
         private final List<List<AffineConstraint<A>>> parts;
 
-        /** What each part leaves, or null for a part not yet worked out. */
+        /** The question each part put, or null for a part that has yet to put one. */
+        private final List<ClosureQuestion<A>> questions;
+
+        /** What each part's question leaves, beside it. */
         private final List<ClosedState<A>> closed;
 
         /** Which part weighs each position. */
         private final Map<A, Integer> partOf;
-
-        /** How each position a rule weighs was spaced, which is part of every question a part
-         *  puts ({@link ClosureQuestion}). */
-        private final Map<A, Granularity> spaced;
         private final ClosedState<A> state;
 
-        private Parted(ClosedStates owner, CanonicalOrder<A> order,
-                       List<AffineConstraint<A>> rules, List<List<AffineConstraint<A>>> parts,
+        private Parted(ClosedStates owner, List<AffineConstraint<A>> rules,
+                       List<List<AffineConstraint<A>>> parts, List<ClosureQuestion<A>> questions,
                        List<ClosedState<A>> closed, Map<A, Integer> partOf,
-                       Map<A, Granularity> spaced, ClosedState<A> state) {
+                       ClosedState<A> state) {
             this.owner = owner;
-            this.order = order;
             this.rules = rules;
             this.parts = parts;
+            this.questions = questions;
             this.closed = closed;
             this.partOf = partOf;
-            this.spaced = spaced;
             this.state = state;
         }
 
         /** A closure worked out in one piece, with no parts to lend. */
         private static <A> Parted<A> whole(ClosedState<A> state) {
-            return new Parted<>(null, null, List.of(), List.of(), List.of(), Map.of(), Map.of(),
-                    state);
+            return new Parted<>(null, List.of(), List.of(), List.of(), List.of(), Map.of(), state);
         }
 
-        /** {@code parts} of {@code rules}, none of them worked out yet. */
+        /** {@code parts} of {@code rules}, none of them asked yet. */
         private static <A> Parted<A> unread(List<List<AffineConstraint<A>>> parts,
-                                            List<AffineConstraint<A>> rules,
-                                            Function<A, Granularity> spacing,
-                                            CanonicalOrder<A> order, ClosedStates owner) {
+                                            List<AffineConstraint<A>> rules, ClosedStates owner) {
             Map<A, Integer> partOf = new HashMap<>();
-            Map<A, Granularity> spaced = new HashMap<>();
-            List<ClosedState<A>> closed = new ArrayList<>(parts.size());
+            List<ClosureQuestion<A>> unasked = new ArrayList<>(parts.size());
+            List<ClosedState<A>> unclosed = new ArrayList<>(parts.size());
             for (int at = 0; at < parts.size(); at++) {
                 for (AffineConstraint<A> rule : parts.get(at)) {
-                    putting(rule, at, partOf, spacing, spaced);
+                    putting(rule, at, partOf);
                 }
-                closed.add(null);
+                unasked.add(null);
+                unclosed.add(null);
             }
-            return new Parted<>(owner, order, rules, parts, closed, partOf, spaced, null);
+            return new Parted<>(owner, rules, parts, unasked, unclosed, partOf, null);
         }
 
         /** What the rules leave. */
@@ -214,8 +222,9 @@ public final class ClosedStates {
         }
 
         /**
-         * The parts of {@code more}, which these rules followed by others are, with what each part
-         * the others do not reach leaves — or null where this cannot say what the parts are.
+         * The parts of {@code more}, which these rules followed by others are, with the question and
+         * the closure of each part the others do not reach — or null where this cannot say what the
+         * parts are.
          *
          * <p>A rule said later joins the part of every position it weighs, and parts come in the
          * order of their first rule with each part's rules in the order they were said
@@ -226,13 +235,12 @@ public final class ClosedStates {
          * from the rules.
          *
          * <p>Null as well where {@code more} does not start with these rules, the very ones in the
-         * same order, or is spaced another way at a position they weigh, or walked in another order,
-         * or kept by another owner — then nothing here is a part of it.
+         * same order, or is kept by another owner. Whether a part not reached still puts its
+         * question under the spacing and the order {@code more} is closed with is asked of the
+         * question, where the closure is asked for.
          */
-        private Parted<A> followedBy(List<AffineConstraint<A>> more,
-                                     Function<A, Granularity> spacing, CanonicalOrder<A> walked,
-                                     ClosedStates asking) {
-            if (owner != asking || order != walked || more.size() < rules.size()) {
+        private Parted<A> followedBy(List<AffineConstraint<A>> more, ClosedStates asking) {
+            if (owner != asking || more.size() < rules.size()) {
                 return null;
             }
             for (int at = 0; at < rules.size(); at++) {
@@ -240,18 +248,12 @@ public final class ClosedStates {
                     return null;
                 }
             }
-            for (Map.Entry<A, Granularity> each : spaced.entrySet()) {
-                if (spacing.apply(each.getKey()) != each.getValue()) {
-                    return null;
-                }
-            }
             if (more.size() == rules.size()) {
                 return this;
             }
             Map<A, Integer> into = new HashMap<>(partOf);
-            Map<A, Granularity> spacedHere = new HashMap<>(spaced);
             List<List<AffineConstraint<A>>> grown = new ArrayList<>(parts);
-            List<ClosedState<A>> kept = new ArrayList<>(closed);
+            List<ClosureQuestion<A>> asked = new ArrayList<>(questions);
             // Which parts hold a list of their own here, to be added to; the rest are this one's.
             BitSet ownList = new BitSet();
             for (int at = rules.size(); at < more.size(); at++) {
@@ -263,18 +265,22 @@ public final class ClosedStates {
                 if (part == NONE) {
                     part = grown.size();
                     grown.add(new ArrayList<>());
-                    kept.add(null);
+                    asked.add(null);
                 } else if (!ownList.get(part)) {
                     grown.set(part, new ArrayList<>(grown.get(part)));
-                    kept.set(part, null);
+                    asked.set(part, null);
                 }
                 ownList.set(part);
                 grown.get(part).add(rule);
-                putting(rule, part, into, spacing, spacedHere);
+                putting(rule, part, into);
             }
             List<List<AffineConstraint<A>>> parted = new ArrayList<>(grown.size());
             grown.forEach(each -> parted.add(List.copyOf(each)));
-            return new Parted<>(owner, order, more, parted, kept, into, spacedHere, null);
+            List<ClosedState<A>> kept = new ArrayList<>(closed);
+            while (kept.size() < asked.size()) {
+                kept.add(null);
+            }
+            return new Parted<>(owner, more, parted, asked, kept, into, null);
         }
 
         /** What {@link #partWeighedBy} answers for a rule weighing no position of any part. */
@@ -303,14 +309,11 @@ public final class ClosedStates {
             return found;
         }
 
-        /** {@code partOf} with every position {@code rule} weighs in {@code part}, and
-         *  {@code spaced} with how {@code spacing} spaces each of them. */
+        /** {@code partOf} with every position {@code rule} weighs in {@code part}. */
         private static <A> void putting(AffineConstraint<A> rule, int part,
-                                        Map<A, Integer> partOf, Function<A, Granularity> spacing,
-                                        Map<A, Granularity> spaced) {
+                                        Map<A, Integer> partOf) {
             for (A position : rule.form().coefs().keySet()) {
                 partOf.put(position, part);
-                spaced.put(position, spacing.apply(position));
             }
         }
     }
