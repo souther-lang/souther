@@ -295,13 +295,14 @@ class EveryPublishedReasonIsWrittenBySomeCompilationTest {
                 behavior f : (n: Int, s: String) -> Answer
                 let f (n, s) = if n == String.length(s) then Yes else No
                 """.formatted(ANSWER)));
-        // A rule about how a list's elements stand to each other, which no set of the list's own
-        // values holds.
+        // A rule about how a list's elements stand to each other, offered as one alternative of a
+        // choice: no builder keeps either of two such rules, and no set of the list's own values
+        // holds it.
         out.put(UndividedPosition.Reason.RULE_RELATING_ELEMENTS, of("""
                 module m
                 %s
                 data Keys = List<String>
-                    invariant apart = List.allDistinctBy(k -> k, value)
+                    invariant apart = List.allDistinctBy(k -> k, value) || List.length(value) >= 4
                 behavior f : (ks: Keys, shelf: Map<String, String>) -> Answer
                 let f (ks, shelf) =
                     if List.any(k -> match Map.get(k, shelf) with

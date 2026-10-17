@@ -46,4 +46,20 @@ sealed interface ReadingLanguage {
 
         private DerivedNumbers() {}
     }
+
+    /**
+     * The reading that says how the elements of a container stand to each other
+     * ({@link ElementsApart}).
+     *
+     * <p>A fourth account, and no part of the values reading. {@code List.allDistinctBy(.id, value)}
+     * leaves every list whose elements' keys are pairwise apart, which no set of the position's
+     * values says: the values reading still holds every list there, and is right to, since a set
+     * that held the rule would have to hold two lists apart by what is inside them. What this one
+     * says is that the rule was read whole — the containers it admits are the ones whose builders
+     * keep the elements apart, and each element still takes every value.
+     */
+    final class Elements implements ReadingLanguage {
+
+        private Elements() {}
+    }
 }

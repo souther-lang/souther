@@ -293,13 +293,26 @@ final class AdmissibleReading {
      * for the position keeps.
      */
     private boolean relatesElements(ClauseExpr.Part part, Denotations at) {
+        return keptApartAt(part, at) != null;
+    }
+
+    /**
+     * The position whose elements {@code part} keeps apart, or null where it states nothing of the
+     * kind this compiler builds for.
+     *
+     * <p>The one recognition, asked by two readings. This one makes of it a reason its set of
+     * values is short of the rule; the reading of how elements stand to each other makes of it the
+     * rule taken in whole ({@link ReadingLanguage.Elements}). Asked apart, a rule one of them
+     * credits could be a rule the builders were never told.
+     */
+    FactSubject keptApartAt(ClauseExpr.Part part, Denotations at) {
         if (!part.positive()
                 || !(Core.withoutStanding(part.of()) instanceof Core.PreservedCall call)) {
-            return false;
+            return null;
         }
         ElementsApart.Stated stated = ElementsApart.stated(call);
         return stated != null && ElementsApart.readsAPlace(stated.container())
-                && positionIn(stated.container(), at) != null;
+                ? positionIn(stated.container(), at) : null;
     }
 
     /**
