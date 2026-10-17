@@ -3,7 +3,9 @@ package souther.compiler.check;
 import souther.compiler.core.Core;
 import souther.compiler.types.BindingId;
 
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -55,7 +57,8 @@ final class CoreConstantEval {
 
     /** What {@code e} folds to, or empty where it is not a compile-time constant. */
     Optional<Object> eval(Core e) {
-        return FoldedValue.of(e, new Scope(at, Env.NONE), new Told(templates), symbols);
+        Told names = new Told(templates);
+        return FoldedValue.of(e, names.scope(at, Env.NONE), names, symbols);
     }
 
     /**
@@ -63,6 +66,11 @@ final class CoreConstantEval {
      * bindings the tree wrote around the read. The two travel together because a value the reading
      * was told of is read where it was told — which is not always where the name is read — and
      * under none of the bindings the tree makes around the read.
+     *
+     * <p>Made only by {@link Told#scope}, one for each pair of parts in one fold: what a fold
+     * remembers of a name is remembered of the scope it was read in, told apart by identity, and a
+     * scope made afresh at each name followed would have every read of a name look like the first —
+     * a chain of names read two ways each folded once per way through it.
      */
     private record Scope(Denotations told, Env lets) {}
 
@@ -99,13 +107,29 @@ final class CoreConstantEval {
      * as, read where nothing the tree binds is in force, since a value names nothing of the body
      * that builds it.
      */
-    private record Told(ValueTemplates templates) implements ValueStanding.Names<Scope, Told> {
+    private static final class Told implements ValueStanding.Names<Scope, Told> {
+
+        private final ValueTemplates templates;
+
+        /** The one scope of each pair of parts, by the identity of each. */
+        private final Map<Denotations, Map<Env, Scope>> scopes = new IdentityHashMap<>();
+
+        Told(ValueTemplates templates) {
+            this.templates = templates;
+        }
+
+        /** The scope of {@code told} and {@code lets}: the same one each time they are the same
+         *  two. */
+        Scope scope(Denotations told, Env lets) {
+            return scopes.computeIfAbsent(told, _ -> new IdentityHashMap<>())
+                    .computeIfAbsent(lets, _ -> new Scope(told, lets));
+        }
 
         @Override
         public ValueStanding.ReadThrough<Scope> taken(Core node, Scope where) {
             Core built = templates == null ? null : templates.builtBy(node);
             return built == null ? null
-                    : new ValueStanding.ReadThrough<>(built, new Scope(where.told(), Env.NONE));
+                    : new ValueStanding.ReadThrough<>(built, scope(where.told(), Env.NONE));
         }
 
         @Override
@@ -113,11 +137,11 @@ final class CoreConstantEval {
             Env bound = where.lets().read(read.binding());
             if (bound != null) {
                 return new ValueStanding.ReadThrough<>(bound.value(),
-                        new Scope(where.told(), bound.definedAt()));
+                        scope(where.told(), bound.definedAt()));
             }
             ValueStanding.ReadThrough<Denotations> told = where.told().givenTo(read.binding());
             return told == null ? null
-                    : new ValueStanding.ReadThrough<>(told.value(), new Scope(told.at(), Env.NONE));
+                    : new ValueStanding.ReadThrough<>(told.value(), scope(told.at(), Env.NONE));
         }
 
         @Override
@@ -125,9 +149,15 @@ final class CoreConstantEval {
             return null;
         }
 
+        /**
+         * The scope a binding of the tree is read inside. A scope of its own each time it is
+         * entered, and that is not a second fold of anything: the value it binds is read where it
+         * was bound ({@link Env#definedAt}), which is a scope already made, and a name read twice
+         * is found folded in the scope it was read in before its binding is entered again.
+         */
         @Override
         public Scope inside(Core.LetIn li, Scope where) {
-            return new Scope(where.told(), where.lets().with(li.binder().binding(), li.value()));
+            return scope(where.told(), where.lets().with(li.binder().binding(), li.value()));
         }
 
         @Override

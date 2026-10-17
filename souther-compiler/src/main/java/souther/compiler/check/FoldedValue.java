@@ -33,6 +33,10 @@ import java.util.Optional;
  */
 public final class FoldedValue<E, N extends ValueStanding.Names<E, N>> {
 
+    /** Where a test counts the names this folds rather than finds folded already, and null
+     *  everywhere else. What a chain of names costs is not something an answer says. */
+    static long[] FOLDED;
+
     private final N names;
     private final Symbols symbols;
 
@@ -94,6 +98,10 @@ public final class FoldedValue<E, N extends ValueStanding.Names<E, N>> {
         Optional<Object> already = here.get(read.binding());
         if (already != null) {
             return already;
+        }
+        long[] counting = FOLDED;
+        if (counting != null) {
+            counting[0]++;
         }
         // Put before the fold as "not a constant", so a name that reaches itself answers rather
         // than going round.
