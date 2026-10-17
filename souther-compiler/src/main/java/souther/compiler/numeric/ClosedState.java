@@ -251,7 +251,7 @@ public final class ClosedState<A> {
      * CanonicalOrder)} works out from those.
      *
      * <p>Closed in one run and not parted first. The questions a closure is kept for are parted
-     * already ({@link ClosureQuestion#independent}), and a question that is not is closed to the
+     * already ({@link ClosureQuestion#independentRules}), and a question that is not is closed to the
      * same state either way.
      */
     static <A> ClosedState<A> of(ClosureQuestion<A> question) {

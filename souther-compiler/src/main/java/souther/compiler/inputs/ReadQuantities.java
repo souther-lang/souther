@@ -35,6 +35,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -192,6 +193,40 @@ final class ReadQuantities implements Quantities {
             new ConcurrentHashMap<>();
 
     /**
+     * The term this reading fixed last, with what the reading it was fixed in had worked out — or
+     * null where this one was not made by fixing one more term.
+     *
+     * <p>Carried so that the rules with the fixings standing in them can be the ones that reading
+     * holds with one more fixing put on, rather than every fixing put on again
+     * ({@link #effectiveConstraints}). What this reading answers is settled by its own fixings and
+     * never by this.
+     */
+    private final OneMoreFixed oneMoreFixed;
+
+    /**
+     * {@code term} fixed at the end of the fixings of a reading that held {@code rulesBefore} and
+     * {@code runsBefore} as its own {@link #withTheFixings} and {@link #whereEachTermRuns}.
+     *
+     * <p>What that reading had worked out and not the reading, which holds what it spends its
+     * answers out of and is no part of this one.
+     */
+    private record OneMoreFixed(
+            NumericTerm term,
+            Map<StructuralContext, ConstraintState<InputAtom>> rulesBefore,
+            Map<NumericTerm, Optional<NumericDomain.Bounds>> runsBefore) {}
+
+    /**
+     * Where each term this reading has been asked about runs, without what the declarations hold
+     * it to besides ({@link #whereOneTermRuns}), and empty where nothing here bounds it.
+     *
+     * <p>Kept because a fixing is put on by where its term runs, and a reading made by fixing one
+     * more term asks where each fixing of this one runs here — so every reading made from this one
+     * asks the same of it.
+     */
+    private final Map<NumericTerm, Optional<NumericDomain.Bounds>> whereEachTermRuns =
+            new ConcurrentHashMap<>();
+
+    /**
      * One thing taken in about this input's values.
      *
      * <p>Two shapes, because the values a carrier holds are not always numbers. The arithmetic's is
@@ -311,8 +346,10 @@ final class ReadQuantities implements Quantities {
                            java.util.function.Function<TermPath, Type> typeAt,
                            Map<NumericTerm, Fixed> fixed,
                            RuleReadingContext ruleReading, List<Assumed> assumed,
-                           List<HeldAgainst> heldAgainst, Contexts contexts) {
+                           List<HeldAgainst> heldAgainst, Contexts contexts,
+                           OneMoreFixed oneMoreFixed) {
         this.contexts = contexts;
+        this.oneMoreFixed = oneMoreFixed;
         this.cases = List.copyOf(cases);
         this.ruleReading = ruleReading;
         this.typeAt = typeAt;
@@ -337,7 +374,7 @@ final class ReadQuantities implements Quantities {
                              java.util.function.Function<TermPath, Type> typeAt,
                              RuleReadingContext ruleReading) {
         return new ReadQuantities(byRoot, new Roots(roots), byPath, cases, typeAt, Map.of(),
-                ruleReading, List.of(), List.of(), new Contexts());
+                ruleReading, List.of(), List.of(), new Contexts(), null);
     }
 
     /**
@@ -351,7 +388,7 @@ final class ReadQuantities implements Quantities {
     private ReadQuantities unrefined() {
         return fixed.isEmpty() && assumed.isEmpty() ? this
                 : new ReadQuantities(byRoot, roots, byPath, cases, typeAt, Map.of(), ruleReading,
-                        List.of(), List.of(), contexts);
+                        List.of(), List.of(), contexts, null);
     }
 
     /**
@@ -817,7 +854,7 @@ final class ReadQuantities implements Quantities {
             pairs.add(pair);
         }
         return new ReadQuantities(byRoot, roots, byPath, cases, typeAt, fixed, ruleReading,
-                both, pairs, contexts);
+                both, pairs, contexts, null);
     }
 
     /**
@@ -953,14 +990,59 @@ final class ReadQuantities implements Quantities {
         if (had != null) {
             return had;
         }
-        ConstraintState<InputAtom> made = constraints(under);
-        for (Map.Entry<NumericTerm, Fixed> each : fixed.entrySet()) {
-            if (each.getValue().isOne() && stands(Set.of(each.getKey()), under)) {
-                made = holding(made, each.getKey(), under);
+        ConstraintState<InputAtom> made = carriedOn(under);
+        if (made == null) {
+            made = constraints(under);
+            for (Map.Entry<NumericTerm, Fixed> each : fixed.entrySet()) {
+                if (each.getValue().isOne() && stands(Set.of(each.getKey()), under)) {
+                    made = holding(made, each.getKey(), under);
+                }
             }
         }
         withTheFixings.put(under, made);
         return made;
+    }
+
+    /**
+     * {@link #effectiveConstraints} as the reading with one term fewer fixed holds them, with that
+     * term put on — or null where that reading has not worked them out under {@code under}, or where
+     * putting the term on there would not say the same rules in the same order as putting every
+     * fixing on here.
+     *
+     * <p>The same order is what it takes. The rules are said in the order the fixings are put on,
+     * and the term is the last of them, so the reading before holds every rule here said before it,
+     * in that order. What a fixing puts on is read off where the term runs, and that can turn on
+     * another fixing — a remainder fixed beside the value it is a remainder of, one position held
+     * against another that now stands somewhere — so each fixing the reading before put on is asked
+     * again here, and where one of them runs anywhere else the rules are put on afresh. Where the
+     * reading before it ran is read off what it put on, which is there wherever its rules are.
+     *
+     * <p>Not worked out in the reading before for the asking. A search asks a reading whether
+     * anything is left before it fixes the next term in it, so what is there to carry on from is
+     * already there.
+     */
+    private ConstraintState<InputAtom> carriedOn(StructuralContext under) {
+        if (oneMoreFixed == null) {
+            return null;
+        }
+        ConstraintState<InputAtom> had = oneMoreFixed.rulesBefore().get(under);
+        if (had == null) {
+            return null;
+        }
+        NumericTerm term = oneMoreFixed.term();
+        for (Map.Entry<NumericTerm, Fixed> each : fixed.entrySet()) {
+            if (each.getKey().equals(term) || !each.getValue().isOne()
+                    || !stands(Set.of(each.getKey()), under)) {
+                continue;
+            }
+            Optional<NumericDomain.Bounds> ran = oneMoreFixed.runsBefore().get(each.getKey());
+            if (ran == null
+                    || !Objects.equals(whereOneTermRuns(each.getKey(), false), ran.orElse(null))) {
+                return null;
+            }
+        }
+        return fixed.get(term).isOne() && stands(Set.of(term), under)
+                ? holding(had, term, under) : had;
     }
 
     /**
@@ -1486,8 +1568,14 @@ final class ReadQuantities implements Quantities {
         if (both.equals(fixed)) {
             return this;
         }
+        // One term that was not fixed before goes at the end of the fixings, which is the shape the
+        // rules with the fixings in them can be carried on from.
+        OneMoreFixed oneMore = more.size() == 1 && both.size() == fixed.size() + 1
+                ? new OneMoreFixed(held(more.keySet().iterator().next()), withTheFixings,
+                        whereEachTermRuns)
+                : null;
         return new ReadQuantities(byRoot, roots, byPath, cases, typeAt, both, ruleReading,
-                assumed, heldAgainst, contexts);
+                assumed, heldAgainst, contexts, oneMore);
     }
 
     /**
@@ -1849,6 +1937,21 @@ final class ReadQuantities implements Quantities {
      * together has no word for one.
      */
     private NumericDomain.Bounds whereOneTermRuns(NumericTerm term, boolean andTheDeclared) {
+        if (andTheDeclared) {
+            return workedOutWhereOneTermRuns(term, true);
+        }
+        Optional<NumericDomain.Bounds> had = whereEachTermRuns.get(term);
+        if (had != null) {
+            return had.orElse(null);
+        }
+        NumericDomain.Bounds made = workedOutWhereOneTermRuns(term, false);
+        whereEachTermRuns.put(term, Optional.ofNullable(made));
+        return made;
+    }
+
+    /** {@link #whereOneTermRuns}, worked out. */
+    private NumericDomain.Bounds workedOutWhereOneTermRuns(NumericTerm term,
+                                                           boolean andTheDeclared) {
         NumericDomain.Bounds runs = meeting(whereItsValuesAre(term), term.intrinsicBounds());
         // And what was taken in about this position's own order. Here rather than with the
         // relations, because this is the one shape such a rule has: a bound on a carrier that counts

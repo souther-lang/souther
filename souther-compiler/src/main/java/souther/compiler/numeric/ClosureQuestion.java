@@ -93,27 +93,6 @@ final class ClosureQuestion<A> {
     }
 
     /**
-     * The questions {@code rules} put, one for each part of them that names no position another part
-     * names.
-     *
-     * <p>Each of these is a closure on its own, and what the rules leave together is the product of
-     * what these leave ({@link ClosedState#product}) — see {@link ClosedState} for why. So two sets
-     * of rules that share a part share the question that part puts, whatever else each of them holds.
-     *
-     * @param placing as for {@link #of(List, Function, Function)}, asked once for each part
-     */
-    static <A> List<ClosureQuestion<A>> independent(List<AffineConstraint<A>> rules,
-                                                    Function<A, Granularity> spacing,
-                                                    Function<Set<A>, Map<A, Integer>> placing) {
-        List<List<AffineConstraint<A>>> parts = independentRules(rules);
-        List<ClosureQuestion<A>> out = new ArrayList<>(parts.size());
-        for (List<AffineConstraint<A>> part : parts) {
-            out.add(of(part, spacing, placing));
-        }
-        return out;
-    }
-
-    /**
      * {@code rules} parted where no position joins them: two rules are in one part where a chain of
      * rules, each weighing a position the next one weighs, runs from one to the other.
      *

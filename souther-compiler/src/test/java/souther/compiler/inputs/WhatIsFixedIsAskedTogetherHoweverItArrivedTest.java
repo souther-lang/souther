@@ -16,6 +16,8 @@ import souther.compiler.numeric.NumericDomain;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
+import souther.compiler.semantics.TakenArguments;
+import souther.compiler.types.ValueName;
 
 import java.math.BigDecimal;
 import java.util.LinkedHashMap;
@@ -124,6 +126,81 @@ class WhatIsFixedIsAskedTogetherHoweverItArrivedTest {
         assertTrue(one.emptiness().isPresent(), "x = 4 beside y = 4 comes to eight, and the record"
                 + " holds the pair at five");
         assertEquals(one.emptiness(), other.emptiness());
+    }
+
+    /**
+     * And a reading made by fixing one more term in a reading that has been asked about answers
+     * what fixing both at once does.
+     *
+     * <p>Asked about first because that is what a search does before it fixes the next term, and
+     * it is what the second reading carries its rules on from. Every pair over the two fields, so
+     * the pairs the record refuses are among them.
+     */
+    @Test
+    void oneMoreFixedInAReadingAskedAboutIsBothFixedAtOnce() {
+        Quantities read = quantities();
+        for (int x = 0; x <= 5; x++) {
+            Quantities first = read.given(X, count(x));
+            assertTrue(first.emptiness().isEmpty(), "x at " + x + " leaves y somewhere");
+            for (int y = 0; y <= 5; y++) {
+                Quantities apart = first.given(Y, count(y));
+                Quantities together = read.given(fixing(X, x, Y, y));
+                String where = "x at " + x + " and y at " + y;
+
+                assertEquals(x + y > 5, together.emptiness().isPresent(), where);
+                assertEquals(together.emptiness(), apart.emptiness(), where);
+                assertEquals(together.runsBetween(sum()), apart.runsBetween(sum()), where);
+                assertEquals(together.runsBetween(X), apart.runsBetween(X), where);
+                assertEquals(together.runsBetween(Y), apart.runsBetween(Y), where);
+            }
+        }
+    }
+
+    /** A field nothing ties to another, for a remainder of it to be fixed beside it. */
+    private static final String REMAINDERED = """
+            module example.remaindered
+
+            data P = { x: Int }
+                invariant atLeastNone = x >= 0
+                invariant atMostTwenty = x <= 20
+
+            data Taken
+
+            behavior take : (p: P) -> Taken
+            """;
+
+    /**
+     * The same where the term fixed next is a remainder of the term fixed before it.
+     *
+     * <p>What fixing the value puts on is where the value runs, and a remainder fixed beside it
+     * moves that — to nowhere, where the two disagree. So the value's own fixing is not what it was
+     * in the reading before, and a reading that carried it on from there would say the pair leaves
+     * something.
+     */
+    @Test
+    void oneMoreFixedThatMovesAFixingBeforeItIsBothFixedAtOnce() {
+        Read read = read(REMAINDERED, "take");
+        Quantities asked = read.inputs().quantities(read.rules());
+        TermPath at = TermPath.of("p").then("x");
+        NumericTerm x = new NumericTerm.ValueOf(at);
+        NumericTerm byThree = NumericTerm.TakenOf.asItStands(
+                ValueName.Stdlib.operation("Int", "floorMod"), at,
+                TakenArguments.at(1, BigDecimal.valueOf(3)), read.inputs().at(at).type(),
+                read.rules().inners(), read.rules().symbols());
+        assertNotNull(byThree, "a remainder by three is a number of the place");
+        for (int value = 9; value <= 11; value++) {
+            Quantities first = asked.given(x, count(value));
+            assertTrue(first.emptiness().isEmpty(), "x at " + value + " is a value it takes");
+            for (int residue = 0; residue < 3; residue++) {
+                Quantities apart = first.given(byThree, count(residue));
+                Quantities together = asked.given(fixing(x, value, byThree, residue));
+                String where = "x at " + value + " and x mod 3 at " + residue;
+
+                assertEquals(value % 3 != residue, together.emptiness().isPresent(), where);
+                assertEquals(together.emptiness(), apart.emptiness(), where);
+                assertEquals(together.runsBetween(x), apart.runsBetween(x), where);
+            }
+        }
     }
 
     /** One position holds one value, so fixing it twice fixes it at nothing. */
