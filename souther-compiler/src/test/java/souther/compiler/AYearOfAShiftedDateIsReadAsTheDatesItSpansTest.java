@@ -304,14 +304,6 @@ class AYearOfAShiftedDateIsReadAsTheDatesItSpansTest {
     }
 
     @Test
-    void aPartOfADateThatRepeatsEveryYearIsNotOneLine() {
-        String report = about("Date.month(Date.addDays(1, b)) >= 3");
-
-        assertTrue(report.contains("not read"), report);
-        assertFalse(report.contains("measurement: complete"), report);
-    }
-
-    @Test
     void theYearOfADateThatIsAPositionKeepsItsOwnTerm() {
         String report = about("Date.year(b) >= 2027");
 
