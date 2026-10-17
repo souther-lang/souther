@@ -276,9 +276,14 @@ class WhatAConditionStatesIsTheSameHoweverItIsSpeltTest {
                 "List.map(e -> e + 1, b.xs)", "{ let ys = List.flatMap(e -> [e], b.xs)\n ys }")) {
             assertEquals(once, stated(sum.formatted(made)), made);
         }
-        // A walk adding one for every element counts them, and one adding two counts them twice.
+        // A walk adding one for every element counts them, and one adding two counts them twice;
+        // so does a walk putting one more in what it carries, and one that doubles what it
+        // carries is no count of anything.
         assertEquals(once, stated(
                 "List.fold((acc, e) -> acc + 1, 0, b.xs) + List.length(b.items) >= 1"));
+        assertEquals(once, stated(sum.formatted("List.fold((acc, e) -> acc ++ [e], [], b.xs)")));
+        assertInstanceOf(Proposition.Unread.class,
+                stated(sum.formatted("List.fold((acc, e) -> acc ++ acc ++ [e], [], b.xs)")));
         Proposition twice = stated(
                 "List.length(b.xs) + List.length(b.xs) + List.length(b.items) >= 1");
         assertEquals(twice, stated(
@@ -322,7 +327,8 @@ class WhatAConditionStatesIsTheSameHoweverItIsSpeltTest {
                 + " + List.length(b.xs) >= 1"), flattened);
         // And the sizes of those lists added up are the same number, by a total or by a fold.
         for (String added : List.of("List.sum(List.map(i -> List.length(i.parts), b.items))",
-                "List.fold((acc, i) -> acc + List.length(i.parts), 0, b.items)")) {
+                "List.fold((acc, i) -> acc + List.length(i.parts), 0, b.items)",
+                "List.length(List.fold((acc, i) -> acc ++ i.parts, [], b.items))")) {
             assertEquals(flattened, stated(added + " + List.length(b.xs) >= 1"), added);
         }
         for (String byCases : List.of("e -> if e > 0 then [e] else []",

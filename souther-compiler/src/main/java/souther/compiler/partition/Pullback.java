@@ -300,6 +300,11 @@ final class Pullback {
      */
     private final Map<Core, SizedBelow> sizedBelow = new IdentityHashMap<>();
     /**
+     * How many what a walk carried holds, by the name its step is handed it under, while the step
+     * is read for how many it adds ({@link #sizeOfAWalk}).
+     */
+    private final Map<BindingId, LinearForm<Quantity>> sizedSoFar = new HashMap<>();
+    /**
      * How many more readings this reading of a condition makes in all
      * ({@link CompositionBudget#TOTAL_READINGS_OF_ONE_CONDITION}), across every case, value and
      * application it is split into and every rule tried on each.
@@ -1416,6 +1421,11 @@ final class Pullback {
     }
 
     private Sized sizeOf(Core value, InputReads at) {
+        // What a walk has carried so far, where its step is being read for how many it adds.
+        if (Core.withoutStanding(value) instanceof Core.Read soFar
+                && sizedSoFar.get(soFar.binding()) instanceof LinearForm<Quantity> carried) {
+            return new Sized.AsAForm(carried);
+        }
         // Where it stands once the names and the arms taken are followed.
         Denotation made = at.standing(value, read.rules().symbols(), read.rules().newtypes());
         if (made.at().pathOf(made.value(), read.rules().newtypes())
@@ -1441,6 +1451,10 @@ final class Pullback {
         Sized searched = sizeOfARecursion(Core.withoutStanding(made.value()), made.at());
         if (searched != null) {
             return searched;
+        }
+        Sized walked = sizeOfAWalk(Core.withoutStanding(made.value()), made.at());
+        if (walked != null) {
+            return walked;
         }
         if (!(AnOperationApplied.of(Core.withoutStanding(made.value()))
                 instanceof AnOperationApplied applied
@@ -1488,6 +1502,135 @@ final class Pullback {
                     throw new IllegalStateException(operation + " settles how many it holds with"
                             + " a side of its answer");
         };
+    }
+
+    /**
+     * How many what a walk from a seed ends with holds ({@link SeededWalk}), where its step adds as
+     * many to what it carried as some number of the element says: how many the seed holds and that
+     * number added up over the elements — or null where {@code e} is no such walk, or the elements
+     * it walks stand at no position.
+     *
+     * <p>By induction over the walk, which hands every element to the step once. The step is read
+     * with what it carried holding nought and again holding one, and the two have to come one
+     * apart: a size read as a form is a form of what was carried, so the step is then that and one
+     * form of the element, for every size there is. What it adds of the element is added up as an
+     * operation's law sums over the elements ({@link #addedUpOver}).
+     */
+    private Sized sizeOfAWalk(Core e, InputReads reads) {
+        SeededWalk walk = SeededWalk.of(e, blocksAt(new Denotation(e, reads)));
+        if (walk == null || !(subjectOf(walk.container(), reads)
+                instanceof DecisionSubject.AnInput held)) {
+            return null;
+        }
+        if (!(sizeOf(walk.seed(), reads) instanceof Sized.AsAForm(LinearForm<Quantity> seed))) {
+            return null;
+        }
+        BindingId accumulator = walk.accumulator().binding();
+        if (!(stepSized(accumulator, ExactRatio.ZERO, walk, reads)
+                instanceof Sized.AsAForm(LinearForm<Quantity> adds))
+                || !(stepSized(accumulator, ExactRatio.ONE, walk, reads)
+                instanceof Sized.AsAForm(LinearForm<Quantity> addsToOne))
+                || !addsToOne.equals(new LinearForm<>(
+                        adds.constant().plus(ExactRatio.ONE).orNull(), adds.coefs()))) {
+            return null;
+        }
+        if (!quantifying.add(held)) {
+            return new Sized.NotSized(new WhyUnread.TwoElementsOfOneContainer());
+        }
+        Sized total;
+        try {
+            total = addedUpOver(held, adds);
+        } finally {
+            quantifying.remove(held);
+        }
+        if (!(total instanceof Sized.AsAForm(LinearForm<Quantity> over))) {
+            return total;
+        }
+        LinearForm<Quantity> all = seed.plus(over).orNull();
+        return all == null ? new Sized.NotSized(new WhyUnread.NoMeasureOfItsSize())
+                : new Sized.AsAForm(all);
+    }
+
+    /** How many {@code walk}'s step holds, with what it carried holding {@code soFar}. */
+    private Sized stepSized(BindingId accumulator, ExactRatio soFar, SeededWalk walk,
+                            InputReads reads) {
+        sizedSoFar.put(accumulator, LinearForm.constant(soFar));
+        try {
+            return sizeOf(walk.step().body(), reads);
+        } finally {
+            sizedSoFar.remove(accumulator);
+        }
+    }
+
+    /**
+     * What {@code each}, a number of every element of the container at {@code held}, adds up to
+     * over them: what every element adds alike times how many elements there are, how many a
+     * container inside each holds as how many occurrences of its elements there are
+     * ({@link #theCountsInside}), and every other number as its sum over them.
+     */
+    private Sized addedUpOver(DecisionSubject.AnInput held, LinearForm<Quantity> each) {
+        // What every element adds alike is that many times how many elements there are, which is
+        // asked only where there is such a part.
+        DecisionAtom size = each.constant().signum() == 0 ? null : sizeOfSubject(held, null);
+        LinearForm<Quantity> summed = Quantity.SumOver.over(held,
+                withoutTheCountsInside(held, each), size);
+        if (summed == null) {
+            return new Sized.NotSized(new WhyUnread.NoMeasureOfItsSize());
+        }
+        Map<Quantity, ExactRatio> coefs = new LinkedHashMap<>(summed.coefs());
+        coefs.putAll(theCountsInside(held, each));
+        return new Sized.AsAForm(new LinearForm<>(summed.constant(), coefs));
+    }
+
+    /**
+     * How many every element's container inside the elements of {@code held} holds, added up over
+     * them, of the counts in {@code each}, with the weight each has there: the occurrences of that
+     * container's element in every element, which is a number of a run
+     * ({@link NumericTerm.TakenOver}) and no sum of a number of each element. Two counts of
+     * different containers are counts of different occurrences, so none of them is another.
+     */
+    private Map<Quantity, ExactRatio> theCountsInside(DecisionSubject.AnInput held,
+                                                      LinearForm<Quantity> each) {
+        Map<Quantity, ExactRatio> coefs = new LinkedHashMap<>();
+        each.coefs().forEach((number, by) -> {
+            NumericTerm.TakenOver occurrences = occurrencesCounted(held, number);
+            if (occurrences != null) {
+                coefs.put(new DecisionAtom.OfTheInput(occurrences), by);
+            }
+        });
+        return coefs;
+    }
+
+    /** {@code each} with the counts {@link #theCountsInside} reads taken out. */
+    private LinearForm<Quantity> withoutTheCountsInside(DecisionSubject.AnInput held,
+                                                        LinearForm<Quantity> each) {
+        Map<Quantity, ExactRatio> coefs = new LinkedHashMap<>();
+        each.coefs().forEach((number, by) -> {
+            if (occurrencesCounted(held, number) == null) {
+                coefs.put(number, by);
+            }
+        });
+        return new LinearForm<>(each.constant(), coefs);
+    }
+
+    /**
+     * The count of every occurrence of a container's element, where {@code number} is how many a
+     * container inside the elements of {@code held} holds, taken of it as it stands — or null
+     * where it is anything else.
+     */
+    private NumericTerm.TakenOver occurrencesCounted(DecisionSubject.AnInput held,
+                                                     Quantity number) {
+        if (!(number instanceof DecisionAtom.OfTheInput(NumericTerm.TakenOf taken))
+                || !(taken.takenAs() instanceof TakenAs.HowManyItHolds)
+                || !taken.arguments().none()
+                || !ValueTransformation.NONE.equals(taken.transformation())
+                || !taken.position().isAtOrUnder(held.at().element())) {
+            return null;
+        }
+        TermPath every = taken.position().element();
+        return NumericTerm.TakenOver.howManyOf(RunSource.overEveryOccurrenceAt(every),
+                read.domain().typeAt(every, read.rules()), read.rules().inners(),
+                read.rules().symbols());
     }
 
     /**
@@ -3315,71 +3458,8 @@ final class Pullback {
                 elements.remove(at);
                 quantifying.remove(held);
             }
-            if (!(each instanceof Sized.AsAForm(LinearForm<Quantity> form))) {
-                return each;
-            }
-            // What every element adds alike is that many times how many elements there are, which
-            // is asked only where there is such a part.
-            DecisionAtom size = form.constant().signum() == 0 ? null : sizeOfSubject(held, null);
-            LinearForm<Quantity> summed = Quantity.SumOver.over(held,
-                    withoutTheCountsInside(held, form), size);
-            if (summed == null) {
-                return new Sized.NotSized(new WhyUnread.NoMeasureOfItsSize());
-            }
-            Map<Quantity, ExactRatio> coefs = new LinkedHashMap<>(summed.coefs());
-            coefs.putAll(theCountsInside(held, form));
-            return new Sized.AsAForm(new LinearForm<>(summed.constant(), coefs));
-        }
-
-        /**
-         * How many every element's container inside the elements of {@code held} holds, added up
-         * over them, of the counts in {@code each}, with the weight each has there: the
-         * occurrences of that container's element in every element, which is a number of a run
-         * ({@link NumericTerm.TakenOver}) and no sum of a number of each element. Two counts of
-         * different containers are counts of different occurrences, so none of them is another.
-         */
-        private Map<Quantity, ExactRatio> theCountsInside(DecisionSubject.AnInput held,
-                                                          LinearForm<Quantity> each) {
-            Map<Quantity, ExactRatio> coefs = new LinkedHashMap<>();
-            each.coefs().forEach((number, by) -> {
-                NumericTerm.TakenOver occurrences = occurrencesCounted(held, number);
-                if (occurrences != null) {
-                    coefs.put(new DecisionAtom.OfTheInput(occurrences), by);
-                }
-            });
-            return coefs;
-        }
-
-        /** {@code each} with the counts {@link #theCountsInside} reads taken out. */
-        private LinearForm<Quantity> withoutTheCountsInside(DecisionSubject.AnInput held,
-                                                            LinearForm<Quantity> each) {
-            Map<Quantity, ExactRatio> coefs = new LinkedHashMap<>();
-            each.coefs().forEach((number, by) -> {
-                if (occurrencesCounted(held, number) == null) {
-                    coefs.put(number, by);
-                }
-            });
-            return new LinearForm<>(each.constant(), coefs);
-        }
-
-        /**
-         * The count of every occurrence of a container's element, where {@code number} is how many
-         * a container inside the elements of {@code held} holds, taken of it as it stands — or
-         * null where it is anything else.
-         */
-        private NumericTerm.TakenOver occurrencesCounted(DecisionSubject.AnInput held,
-                                                         Quantity number) {
-            if (!(number instanceof DecisionAtom.OfTheInput(NumericTerm.TakenOf taken))
-                    || !(taken.takenAs() instanceof TakenAs.HowManyItHolds)
-                    || !taken.arguments().none()
-                    || !ValueTransformation.NONE.equals(taken.transformation())
-                    || !taken.position().isAtOrUnder(held.at().element())) {
-                return null;
-            }
-            TermPath every = taken.position().element();
-            return NumericTerm.TakenOver.howManyOf(RunSource.overEveryOccurrenceAt(every),
-                    read.domain().typeAt(every, read.rules()), read.rules().inners(),
-                    read.rules().symbols());
+            return each instanceof Sized.AsAForm(LinearForm<Quantity> form)
+                    ? addedUpOver(held, form) : each;
         }
 
         /**
