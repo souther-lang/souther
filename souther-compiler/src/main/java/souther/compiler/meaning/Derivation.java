@@ -1823,8 +1823,11 @@ public sealed interface Derivation {
         public Proposition conclusion(Conclusion numbering) {
             Proposition stated = numbering.of(about);
             return numbering.of(selection) instanceof Proposition.Some(
-                    DecisionSubject _, Proposition ofTheEntry, boolean holds, var _) && holds
-                    ? Proposition.all(List.of(stated, ofTheEntry)) : stated;
+                    DecisionSubject container, Proposition ofTheEntry, boolean holds, var _)
+                    && holds
+                    ? numbering.ofOneElement(container,
+                            Proposition.all(List.of(stated, ofTheEntry)))
+                    : stated;
         }
     }
 

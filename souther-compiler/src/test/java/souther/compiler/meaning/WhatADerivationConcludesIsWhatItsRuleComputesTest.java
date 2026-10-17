@@ -768,6 +768,32 @@ class WhatADerivationConcludesIsWhatItsRuleComputesTest {
                 Proposition.all(List.of(some.denied(), truth(A))))), read);
     }
 
+    /**
+     * A statement about the entry a lookup picked out, which quantifies the same container, is
+     * about two entries: the entry picked out stands at the container's element with no quantifier
+     * around it, and the quantifier inside would take it for its own. It concludes what was not
+     * read, for two elements of one container. The same statement quantifying another container is
+     * read beside what picked the entry out.
+     */
+    @Test
+    void aStatementAboutAnEntryPickedOutThatQuantifiesItsContainerIsReadOfNeither() {
+        DecisionSubject xs = new DecisionSubject.AnInput(XS);
+        Derivation picked = new Derivation.SomeElementMeeting(xs, truthAt(XS.element().then("k")),
+                true, Optional.empty());
+        Proposition stated = concluded(new Derivation.OfTheEntryUnderTheKey(picked,
+                new Derivation.SomeElementMeeting(xs, truthAt(XS.element().then("j")), true,
+                        Optional.empty())));
+        assertEquals(new Proposition.Unread(Optional.empty(), 0,
+                new WhyUnread.TwoElementsOfOneContainer(), false, true), stated);
+
+        DecisionSubject ys = new DecisionSubject.AnInput(YS);
+        Proposition read = concluded(new Derivation.OfTheEntryUnderTheKey(picked,
+                new Derivation.SomeElementMeeting(ys, truthAt(YS.element()), true,
+                        Optional.empty())));
+        assertEquals(Proposition.all(List.of(new Proposition.Some(ys, truth(YS.element()), true),
+                truth(XS.element().then("k")))), read);
+    }
+
     /** A quantifier over a container cannot be made to say another over it of its element. */
     @Test
     void aQuantifierOverAContainerHoldsNoOtherOverIt() {
