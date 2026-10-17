@@ -132,6 +132,45 @@ public final class TermOrders {
     }
 
     /**
+     * The end of what the elements {@code each} hold at the term's value among those holding at its
+     * key what {@code own} holds there, for a term that takes it.
+     *
+     * @param own  the element under consideration, as what it holds at each way into it
+     * @param each every element of its container, the same way
+     */
+    public NumericTerm.Reading readAtItsKey(Function<ElementProjection, ObservedValue> own,
+                                            List<Function<ElementProjection, ObservedValue>> each) {
+        if (!(term instanceof NumericTerm.ExtremeOfItsKey)) {
+            throw new IllegalArgumentException(term + " is not an end of the values of a key");
+        }
+        return TermReading.extremeOfItsKey(this, own, each);
+    }
+
+    /**
+     * What each of {@code every} reads, in their order, for a term that counts an element's equals
+     * — {@link #readAmong} for all of them, counting each value once rather than once per value.
+     */
+    public List<NumericTerm.Reading> readEachAmong(List<ObservedValue> every) {
+        if (!(term instanceof NumericTerm.Multiplicity)) {
+            throw new IllegalArgumentException(term + " is not a count of an element's equals");
+        }
+        return TermReading.amongEach(this, every);
+    }
+
+    /**
+     * What each of {@code each} reads, in their order, for a term that takes an end of a key's
+     * values — {@link #readAtItsKey} for all of them, keeping one end per key rather than walking
+     * every element for each.
+     */
+    public List<NumericTerm.Reading> readEachAtItsKey(
+            List<Function<ElementProjection, ObservedValue>> each) {
+        if (!(term instanceof NumericTerm.ExtremeOfItsKey)) {
+            throw new IllegalArgumentException(term + " is not an end of the values of a key");
+        }
+        return TermReading.extremeOfEachKey(this, each);
+    }
+
+    /**
      * The same, over the values of a run.
      *
      * <p>Which rows there are and how many values stand at a place in one are the measure's; a term

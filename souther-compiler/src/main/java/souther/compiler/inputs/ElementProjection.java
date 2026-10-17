@@ -146,7 +146,14 @@ public record ElementProjection(List<String> steps) {
     }
 
     /**
-     * What stands at this way from {@code element}, or null where the element holds nothing there.
+     * What stands at this way from {@code element}; where a value on the way was not read whole,
+     * that value, which says what stopped it; and null only where a value read whole holds nothing
+     * there.
+     *
+     * <p>Not read and not there are two answers. A reader handed none for both would read an
+     * observation cut short as an element of another shape, which is a definite answer about the
+     * row where the row said nothing; handed the value that stopped, it says what stopped as it
+     * does for a value at the field itself.
      *
      * <p>A newtype is no step of a path, so a name wrapped round a record is walked through to the
      * record it wraps when a step is not one of its own fields.
@@ -155,9 +162,12 @@ public record ElementProjection(List<String> steps) {
         ObservedValue at = element;
         for (String step : steps) {
             ObservedValue held = at;
-            while (held instanceof ObservedValue.Constructed wrapper && wrapper.field(step) == null
-                    && wrapper.field("value") != null) {
+            while (held.cause() == null && held instanceof ObservedValue.Constructed wrapper
+                    && wrapper.field(step) == null && wrapper.field("value") != null) {
                 held = wrapper.field("value");
+            }
+            if (held.cause() != null) {
+                return held;
             }
             if (!(held instanceof ObservedValue.Constructed holder)) {
                 return null;

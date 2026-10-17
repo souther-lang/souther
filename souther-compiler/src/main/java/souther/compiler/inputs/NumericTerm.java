@@ -3,6 +3,8 @@ package souther.compiler.inputs;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.NewtypeInners;
 import souther.compiler.check.DefaultBoundOperationFacts;
+import souther.compiler.check.Extreme;
+import souther.compiler.check.NumberAt;
 import souther.compiler.check.NumericAnswers;
 import souther.compiler.check.NumericMeasures;
 import souther.compiler.check.Symbols;
@@ -56,7 +58,8 @@ import java.util.function.UnaryOperator;
  * written for it.
  */
 public sealed interface NumericTerm
-        permits NumericTerm.FromOnePosition, NumericTerm.TakenOver, NumericTerm.Multiplicity {
+        permits NumericTerm.FromOnePosition, NumericTerm.TakenOver, NumericTerm.Multiplicity,
+                NumericTerm.ExtremeOfItsKey {
 
     /**
      * A number a row can be asked for at one place, because one value stands there.
@@ -444,13 +447,14 @@ public sealed interface NumericTerm
 
         /**
          * The number of times the value at {@code place} occurs among the elements of
-         * {@code container}, or null where {@code place} is not inside an element of it.
+         * {@code container}, or null where {@code place} is not reached from an element of it by
+         * fields alone, where an element may hold many values there or none.
          *
          * @param container the container whose elements are counted
          * @param place     where, inside an element of {@code container}, the value compared stands
          */
         public static Multiplicity of(TermPath container, TermPath place) {
-            return container != null && place != null && place.isAtOrUnder(container.element())
+            return container != null && place != null && fieldsBelowAnElement(container, place)
                     ? new Multiplicity(container, place) : null;
         }
 
@@ -464,6 +468,11 @@ public sealed interface NumericTerm
             return place;
         }
 
+        /** The way from an element of the container to {@link #place()}. */
+        public ElementProjection placeField() {
+            return fieldsTo(container, place);
+        }
+
         /** Where the value compared stands, which is where a reader is sent and no place the
          *  number stands at. */
         @Override
@@ -471,9 +480,11 @@ public sealed interface NumericTerm
             return place;
         }
 
+        /** The same number of where {@code moved} puts its places, or null where the place moved is
+         *  no longer one value of each element of the container moved. */
         @Override
         public Multiplicity movedTo(UnaryOperator<TermPath> moved) {
-            return new Multiplicity(moved.apply(container), moved.apply(place));
+            return of(moved.apply(container), moved.apply(place));
         }
 
         @Override
@@ -490,6 +501,140 @@ public sealed interface NumericTerm
         @Override
         public String toString() {
             return "multiplicity(" + place + ")";
+        }
+    }
+
+    /**
+     * The least or the greatest of the values the elements of a container hold at one place, among
+     * the elements holding at another place what the element under consideration holds there.
+     *
+     * <p>A number of an element read off the elements beside it, as {@link Multiplicity} is: what a
+     * fold that keeps one end of what it files under each key answers for the key of an element is
+     * this number, and the elements of one key all read the same one. It is not the value the
+     * element holds. Of two elements of one key holding four and ten, the least is four for both,
+     * so a statement that some element's least is at least seven is false where one that some
+     * element holds at least seven is true — which is why this is a term of its own and not the
+     * value at {@link #value()}.
+     *
+     * <p>Every element reads one of the values of its key, so the number is among the values the
+     * place holds; an element alone under its key reads its own.
+     */
+    final class ExtremeOfItsKey implements NumericTerm {
+
+        private final TermPath container;
+        private final TermPath key;
+        private final TermPath value;
+        private final Extreme extreme;
+
+        private ExtremeOfItsKey(TermPath container, TermPath key, TermPath value,
+                                Extreme extreme) {
+            this.container = Objects.requireNonNull(container, "taken among a container's elements");
+            this.key = Objects.requireNonNull(key, "of the elements alike at one place");
+            this.value = Objects.requireNonNull(value, "of what they hold at another");
+            this.extreme = Objects.requireNonNull(extreme, "and one end of it");
+        }
+
+        /**
+         * The {@code extreme} of what the elements of {@code container} hold at {@code value},
+         * among those holding at {@code key} what the element under consideration holds there — or
+         * null where either place is not reached from an element of it by fields alone, where an
+         * element may hold many values there or none.
+         */
+        public static ExtremeOfItsKey of(TermPath container, TermPath key, TermPath value,
+                                         Extreme extreme) {
+            return container != null && key != null && value != null && extreme != null
+                    && fieldsBelowAnElement(container, key)
+                    && fieldsBelowAnElement(container, value)
+                    ? new ExtremeOfItsKey(container, key, value, extreme) : null;
+        }
+
+        /**
+         * The same, with the key named by the fields read from the element the value at
+         * {@code value} stands in — or null where the value stands in no container.
+         */
+        public static ExtremeOfItsKey ofTheValueAt(TermPath value, List<String> key,
+                                                   Extreme extreme) {
+            List<TermPath> holding = value.containersHoldingIt();
+            if (holding.isEmpty()) {
+                return null;
+            }
+            TermPath container = holding.getLast();
+            return of(container, new ElementProjection(key).from(container.element()), value,
+                    extreme);
+        }
+
+        /** The way from an element of the container to {@link #key()}. */
+        public ElementProjection keyField() {
+            return fieldsTo(container, key);
+        }
+
+        /** The way from an element of the container to {@link #value()}. */
+        public ElementProjection valueField() {
+            return fieldsTo(container, value);
+        }
+
+        /** The container whose elements are looked at. */
+        public TermPath container() {
+            return container;
+        }
+
+        /** Where, inside an element, what makes two elements of one key stands. */
+        public TermPath key() {
+            return key;
+        }
+
+        /** Where, inside an element, the values one end of which is taken stand. */
+        public TermPath value() {
+            return value;
+        }
+
+        /** Which end of them is taken. */
+        public Extreme extreme() {
+            return extreme;
+        }
+
+        /**
+         * The number this one is always one of the values of: what stands at {@link #value()}.
+         *
+         * <p>Which values this number can take — the run the rules leave it, the set a place
+         * admits — is that number's question, since an end of some of the values is one of them.
+         * Whether a row exists holding one at it is not: that takes a container holding the
+         * elements, which no answer about the values says exists.
+         */
+        public ValueOf valuesTakenFrom() {
+            return new ValueOf(value);
+        }
+
+        /** Where the values one end of which is taken stand, which is where a reader is sent and no
+         *  place the number stands at. */
+        @Override
+        public TermPath subjectPath() {
+            return value;
+        }
+
+        /** The same number of where {@code moved} puts its places, or null where the places moved
+         *  are no longer one value of each element of the container moved. */
+        @Override
+        public ExtremeOfItsKey movedTo(UnaryOperator<TermPath> moved) {
+            return of(moved.apply(container), moved.apply(key), moved.apply(value), extreme);
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof ExtremeOfItsKey that && container.equals(that.container)
+                    && key.equals(that.key) && value.equals(that.value)
+                    && extreme.equals(that.extreme);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(container, key, value, extreme);
+        }
+
+        @Override
+        public String toString() {
+            return new NumberAt.OfWhatNumber.OfTheExtremeOfItsKey(extreme, keyField().steps())
+                    .spelledAt(value.toString());
         }
     }
 
@@ -678,8 +823,8 @@ public sealed interface NumericTerm
             // is. Every reader that goes on to draw a line or ask for a value gets the answer here.
             case TakenOver _ -> null;
             // And how often a value occurs among its neighbours is read off all of them, so no
-            // value standing at one place is it.
-            case Multiplicity _ -> null;
+            // value standing at one place is it; nor is the end of the values of a key.
+            case Multiplicity _, ExtremeOfItsKey _ -> null;
         };
     }
 
@@ -715,8 +860,9 @@ public sealed interface NumericTerm
             // location, which would be this reading inventing where a walk got its values.
             case TakenOver _ -> null;
             // How often a value occurs is read off the container it stands in, so a place moved
-            // alone is a count of some other container's elements.
-            case Multiplicity _ -> null;
+            // alone is a count of some other container's elements; the end of a key's values the
+            // same.
+            case Multiplicity _, ExtremeOfItsKey _ -> null;
         };
     }
 
@@ -756,6 +902,8 @@ public sealed interface NumericTerm
             // An element is one of the elements it counts, so there is always at least one.
             case Multiplicity _ ->
                     new NumericDomain.Bounds(Endpoint.inclusive(Count.of(1)), null);
+            // One of the values the place holds, which is open where the place is.
+            case ExtremeOfItsKey _ -> NumericDomain.Bounds.OPEN;
             // Asked of the operation, as a taking is. That a total of non-negative amounts is
             // itself non-negative is not among the answers: it follows from what the values the run
             // walks guarantee, together with the value the operation starts from and the step it
@@ -766,6 +914,28 @@ public sealed interface NumericTerm
                     DefaultBoundOperationFacts.get().boundsOnTheResult(over.operation()),
                     ConstantArguments.none());
         };
+    }
+
+    /** Whether {@code place} is reached from an element of {@code container} by fields alone, and
+     *  so is one value of each element. */
+    private static boolean fieldsBelowAnElement(TermPath container, TermPath place) {
+        if (!place.isAtOrUnder(container.element())) {
+            return false;
+        }
+        List<TermPath.Step> steps = place.steps();
+        return steps.subList(container.element().steps().size(), steps.size()).stream()
+                .allMatch(TermPath.Step.Field.class::isInstance);
+    }
+
+    /** The way from an element of {@code container} to {@code place}, which
+     *  {@link #fieldsBelowAnElement} has said is fields alone. */
+    private static ElementProjection fieldsTo(TermPath container, TermPath place) {
+        List<String> names = new ArrayList<>();
+        List<TermPath.Step> steps = place.steps();
+        for (TermPath.Step step : steps.subList(container.element().steps().size(), steps.size())) {
+            names.add(((TermPath.Step.Field) step).name());
+        }
+        return new ElementProjection(names);
     }
 
     /**
