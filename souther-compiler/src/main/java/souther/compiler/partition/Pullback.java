@@ -1359,7 +1359,7 @@ final class Pullback {
 
     /**
      * The pieces {@code split}, a call of {@code operation} read in {@code at}, answers of the
-     * string it was handed as {@code string}: what a split at {@code separator}, one code point,
+     * string {@code parted} says it was handed: what a split at {@code separator}, one code point,
      * leaves — or, with no separator, its characters, each code point a piece.
      *
      * <p>One call in one reading is one set of pieces: the call by identity, since a name stands
@@ -1367,7 +1367,7 @@ final class Pullback {
      * is what that call and reading say.
      */
     private record Pieces(Core.PreservedCall split, ValueName.Stdlib operation, InputReads at,
-                          DeclaredArgument string, OptionalInt separator) {
+                          BoundOperationFacts.Pieces parted, OptionalInt separator) {
 
         @Override
         public boolean equals(Object other) {
@@ -1424,8 +1424,7 @@ final class Pullback {
         // many, and this call's separator gives one.
         ALawRead call = new ALawRead(applied, e, made.at());
         if (call.piecesOf(made) instanceof Pieces pieces && pieces.separator().isPresent()) {
-            return call.number(DefaultBoundOperationFacts.get().piecesOf(operation)
-                    .howManyPartedAt(pieces.separator().getAsInt()));
+            return call.number(pieces.parted().howManyPartedAt(pieces.separator().getAsInt()));
         }
         return switch (DefaultBoundOperationFacts.get().settled(operation,
                 OperationLaw.Observed.SIZE)) {
@@ -2068,7 +2067,7 @@ final class Pullback {
             // Met as a part of its own, as how many a container holds above nought is: it is a
             // statement about a number of the string, which is what a line is drawn on.
             return leaf(new Derivation.SomePieceMeeting(
-                    callOf(pieces.operation(), split, pieces.at(), Set.of(pieces.string())),
+                    callOf(pieces.operation(), split, pieces.at(), Set.of(pieces.parted().string())),
                     pieces.separator(), within, ofTheString, answered),
                     askedAt != null ? askedAt : new Denotation(e, reads));
         }
@@ -2395,7 +2394,7 @@ final class Pullback {
                 }
                 separatedBy = OptionalInt.of(written.value().codePointAt(0));
             }
-            return new Pieces(call, operation, container.at(), parted.string(), separatedBy);
+            return new Pieces(call, operation, container.at(), parted, separatedBy);
         }
 
         /**
