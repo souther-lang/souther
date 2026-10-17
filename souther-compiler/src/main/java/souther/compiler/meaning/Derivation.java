@@ -417,7 +417,7 @@ public sealed interface Derivation {
             if (stating.stream().allMatch(each -> each.key().equals(first.key()))
                     && arms.stream().noneMatch(Arm::aboutTheEntry)
                     && Proposition.firstStopIn(first) == null) {
-                return first;
+                return afterWhatIsSelected(selecting, first);
             }
             List<Proposition> taken = new ArrayList<>();
             List<Proposition> before = new ArrayList<>();
@@ -443,7 +443,7 @@ public sealed interface Derivation {
                 taken.add(Proposition.all(arrives));
                 before.add(selects);
             }
-            return Proposition.any(taken);
+            return afterWhatIsSelected(selecting, Proposition.any(taken));
         }
 
         @Override
@@ -486,7 +486,23 @@ public sealed interface Derivation {
     static Proposition taken(List<Proposition> before, Proposition selects) {
         List<Proposition> arrives = new ArrayList<>(noArmBefore(before, selects));
         arrives.add(selects);
-        return Proposition.all(arrives);
+        List<Proposition> selecting = new ArrayList<>(before);
+        selecting.add(selects);
+        return afterWhatIsSelected(selecting, Proposition.all(arrives));
+    }
+
+    /**
+     * {@code stated}, read only where what each of {@code selecting} selects off answers. The value
+     * a match selects by is worked out before any arm, so where it stops the match does — whichever
+     * arm would have been taken, and whether or not an arm before it is apart from it.
+     */
+    private static Proposition afterWhatIsSelected(List<Proposition> selecting,
+                                                   Proposition stated) {
+        Proposition out = stated;
+        for (Proposition each : selecting) {
+            out = Proposition.afterIt(each, out);
+        }
+        return out;
     }
 
     /**

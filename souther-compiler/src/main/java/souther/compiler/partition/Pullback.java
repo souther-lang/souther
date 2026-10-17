@@ -392,7 +392,7 @@ final class Pullback {
                         fork.at());
                 List<Derivation> arms = entered.get(at);
                 if (arms == null) {
-                    arms = entering(fork.value(), fork.at());
+                    arms = entering(fork.value(), true, fork.at());
                     entered.put(at, arms);
                 }
                 yield arms.get(part);
@@ -666,15 +666,16 @@ final class Pullback {
             }
             case Core.Match match -> {
                 return madeBy(match,
-                        armsOf(match, reads, (body, inside) -> observe(body, asked, inside)));
+                        armsOf(match, whole(asked), reads,
+                                (body, inside) -> observe(body, asked, inside)));
             }
             default -> { }
         }
         return switch (asked) {
             case Asked.OnASide(AnswerAspect aspect, boolean whole) -> switch (aspect) {
                 case TRUTH -> truth(e, whole, reads);
-                case EMPTINESS -> holdingSomething(e, reads);
-                case PRESENCE -> present(e, reads);
+                case EMPTINESS -> holdingSomething(e, whole, reads);
+                case PRESENCE -> present(e, whole, reads);
             };
             case Asked.SomeElement(ALawRead law, var some) ->
                     law.someElementOf(new Denotation(e, reads), some);
@@ -843,6 +844,7 @@ final class Pullback {
                                                 boolean whole, boolean fixed, InputReads reads,
                                                 Once<AffineReading.OfAComparison> arithmetic) {
         AnEmptinessCheck.Checked checked = AnEmptinessCheck.checked(stated);
+        Asked emptiness = new Asked.OnASide(AnswerAspect.EMPTINESS, whole);
         // Whether the arithmetic stops at a value to go into decides both of the last two rules:
         // the one goes in where it does, and the other takes the comparison only where it does
         // not. Asked of one reading, it is one answer, and reading the sides for it again would
@@ -851,9 +853,9 @@ final class Pullback {
                 new Denotation(stated.left(), reads), new Denotation(stated.right(), reads)))));
         return List.of(
                 () -> checked == null ? null : new Derivation.AnEmptinessCheck(at == null
-                        ? observe(checked.container(), AnswerAspect.EMPTINESS, reads)
-                        : asking(at, () -> observe(checked.container(), AnswerAspect.EMPTINESS,
-                                reads)), checked.emptyWhereItHolds()),
+                        ? observe(checked.container(), emptiness, reads)
+                        : asking(at, () -> observe(checked.container(), emptiness, reads)),
+                        checked.emptyWhereItHolds()),
                 () -> partOf(at, truthCompared(stated, reads)),
                 () -> heldAgainstAWrittenTruth(stated, reads),
                 () -> partOf(at, ofTwoValuesWrittenOut(stated, reads)),
@@ -866,8 +868,8 @@ final class Pullback {
                 () -> ofARoundedNumber(stated, at, whole, fixed, reads),
                 () -> ofAQuotientByAValue(stated, at, whole, fixed, reads),
                 () -> partOf(at, ofItsArguments(stated, whole, fixed, reads)),
-                () -> ofASizeInCases(stated, at, reads),
-                () -> ofAChoice(stated, at, reads),
+                () -> ofASizeInCases(stated, at, whole, reads),
+                () -> ofAChoice(stated, at, whole, reads),
                 () -> throughWhatItStopsAt(stated, at, whole, fixed, reads, wayIn.get()),
                 () -> partOf(at, ofBoundValues(stated, fixed, reads, wayIn.get())));
     }
@@ -901,9 +903,9 @@ final class Pullback {
 
     /**
      * How a container that is no binding, name or choice holding something was read, chosen as
-     * {@link #truth} chooses.
+     * {@link #truth} chooses, and asked as it was ({@link Asked.OnASide#whole}).
      */
-    private Derivation holdingSomething(Core standing, InputReads reads) {
+    private Derivation holdingSomething(Core standing, boolean whole, InputReads reads) {
         Core e = Core.withoutStanding(standing);
         AnOperationApplied applied = AnOperationApplied.of(e);
         // What the container's holding anything is read off, or where reading it stopped, is the
@@ -915,7 +917,7 @@ final class Pullback {
                 () -> byALaw(applied, e, AnswerAspect.EMPTINESS, reads, asked),
                 () -> acrossAWalk(e, AnswerAspect.EMPTINESS, reads),
                 () -> acrossARecursion(e, AnswerAspect.EMPTINESS, reads),
-                () -> inTheCalledBody(e, new Asked.OnASide(AnswerAspect.EMPTINESS, false), reads),
+                () -> inTheCalledBody(e, new Asked.OnASide(AnswerAspect.EMPTINESS, whole), reads),
                 () -> {
                     DecisionSubject held = reads.pathOf(e, read.rules().newtypes())
                             instanceof PathResolution.At(TermPath at)
@@ -933,9 +935,9 @@ final class Pullback {
 
     /**
      * How an optional that is no binding, name or choice holding a value was read, chosen as
-     * {@link #truth} chooses.
+     * {@link #truth} chooses, and asked as it was ({@link Asked.OnASide#whole}).
      */
-    private Derivation present(Core standing, InputReads reads) {
+    private Derivation present(Core standing, boolean whole, InputReads reads) {
         Core e = Core.withoutStanding(standing);
         AnOperationApplied applied = AnOperationApplied.of(e);
         Derivation taken = firstThatReadsIt(List.of(
@@ -944,7 +946,7 @@ final class Pullback {
                 () -> byALaw(applied, e, AnswerAspect.PRESENCE, reads, new Denotation(e, reads)),
                 () -> acrossAWalk(e, AnswerAspect.PRESENCE, reads),
                 () -> acrossARecursion(e, AnswerAspect.PRESENCE, reads),
-                () -> inTheCalledBody(e, new Asked.OnASide(AnswerAspect.PRESENCE, false), reads),
+                () -> inTheCalledBody(e, new Asked.OnASide(AnswerAspect.PRESENCE, whole), reads),
                 () -> {
                     DecisionSubject subject = reads.pathOf(e, read.rules().newtypes())
                             instanceof PathResolution.At(TermPath at)
@@ -1048,9 +1050,9 @@ final class Pullback {
      * InputReads#whetherEveryRowTakes}); one a row controls is a case the row writes at its position
      * or stands the dependency in with.
      */
-    private Derivation.MatchArms armsOf(Core.Match match, InputReads reads,
+    private Derivation.MatchArms armsOf(Core.Match match, boolean whole, InputReads reads,
                                         BiFunction<Core, InputReads, Derivation> states) {
-        List<Derivation> selections = selectionsOf(match, reads);
+        List<Derivation> selections = selectionsOf(match, whole, reads);
         boolean ofAnEntry = reads.holdsAnEntryLookedUp(match.scrutinee(),
                 read.rules().symbols(), read.rules().newtypes());
         List<Derivation.MatchArms.Arm> arms = new ArrayList<>();
@@ -1068,8 +1070,11 @@ final class Pullback {
     /**
      * Whether each arm of {@code match} selects the value it matches, in the order the arms are
      * written — each on its own, and not yet that no arm before it does.
+     *
+     * @param whole whether the match is asked for itself ({@link Asked.OnASide#whole}), which what
+     *              it selects by is asked as: the value is worked out before any arm
      */
-    private List<Derivation> selectionsOf(Core.Match match, InputReads reads) {
+    private List<Derivation> selectionsOf(Core.Match match, boolean whole, InputReads reads) {
         Set<TypeSymbol> written = reads.casesWritten(match.scrutinee(),
                 read.rules().symbols(), read.rules().newtypes());
         DecisionSubject subject = subjectOf(new Denotation(match.scrutinee(), reads));
@@ -1089,12 +1094,12 @@ final class Pullback {
             } else if (presenceSelected(arm) != null) {
                 // An optional is of its present case exactly where it holds a value, which is the
                 // observation the reading has a rule for whatever made the optional.
-                out.add(new Derivation.UnderADenial(
-                        observe(match.scrutinee(), AnswerAspect.PRESENCE, reads),
+                out.add(new Derivation.UnderADenial(observe(match.scrutinee(),
+                        new Asked.OnASide(AnswerAspect.PRESENCE, whole), reads),
                         !presenceSelected(arm)));
             } else {
                 if (scrutinee == null) {
-                    scrutinee = answered(new Denotation(match.scrutinee(), reads),
+                    scrutinee = answered(new Denotation(match.scrutinee(), reads), whole,
                             WhyUnread.AtNoPosition.Place.SCRUTINEE);
                 }
                 out.add(selecting(scrutinee, arm));
@@ -1151,18 +1156,20 @@ final class Pullback {
      * <p>The one reading of it, for a body's answer and for the value a {@code match} chooses its
      * arm by alike.
      *
+     * @param whole   whether what chooses by the value is asked for itself
+     *                ({@link Asked.OnASide#whole}), which what chooses the value is asked as
      * @param nowhere what the value is, as the place it stands at no position, where it is made of
      *                nothing followed back to the input
      */
-    private WhichCase answered(Denotation value,
-                                              WhyUnread.AtNoPosition.Place nowhere) {
+    private WhichCase answered(Denotation value, boolean whole,
+                               WhyUnread.AtNoPosition.Place nowhere) {
         Denotation chosen = chosenAt(value);
         if (chosen != null) {
             WhyUnread past = splitInto(value.at(), readingsOf(value, READINGS.maximum(), false));
             if (past != null) {
                 return new WhichCase.Unread(past);
             }
-            return answeredByItsArms(chosen, nowhere);
+            return answeredByItsArms(chosen, whole, nowhere);
         }
         Set<TypeSymbol> written = value.at().casesWritten(value.value(), read.rules().symbols(),
                 read.rules().newtypes());
@@ -1177,7 +1184,7 @@ final class Pullback {
         if (answer != null) {
             return new WhichCase.AtAnAnswer(answer);
         }
-        WhichCase called = calledFor(value, nowhere);
+        WhichCase called = calledFor(value, whole, nowhere);
         // Made of nothing followed back to the input: what an operation answers, or a value the
         // source works out.
         return called != null ? called : new WhichCase.Unread(
@@ -1185,17 +1192,17 @@ final class Pullback {
     }
 
     /** {@code chosen}'s arms, each reached where a run takes it and answering what it does. */
-    private WhichCase answeredByItsArms(Denotation chosen,
-                                                       WhyUnread.AtNoPosition.Place nowhere) {
+    private WhichCase answeredByItsArms(Denotation chosen, boolean whole,
+                                        WhyUnread.AtNoPosition.Place nowhere) {
         InputReads where = chosen.at();
-        List<Derivation> taken = entering(chosen.value(), where);
+        List<Derivation> taken = entering(chosen.value(), whole, where);
         List<Choice.Arm> choice = Choice.of(Core.withoutStanding(chosen.value())).arms();
         List<WhichCase.Arm> arms = new ArrayList<>();
         for (int i = 0; i < choice.size(); i++) {
             InputReads inside = where.choosing(choice.get(i).decidedBy(), read.rules().symbols(),
                     read.rules().newtypes());
             arms.add(new WhichCase.Arm(taken.get(i),
-                    answered(new Denotation(choice.get(i).answers(), inside), nowhere)));
+                    answered(new Denotation(choice.get(i).answers(), inside), whole, nowhere)));
         }
         return new WhichCase.ByItsArms(arms);
     }
@@ -1208,8 +1215,8 @@ final class Pullback {
      * @param nowhere what the value is, as the place it stands at no position, where what the body
      *                answers is made of nothing followed back to the input
      */
-    private WhichCase calledFor(Denotation value,
-                                               WhyUnread.AtNoPosition.Place nowhere) {
+    private WhichCase calledFor(Denotation value, boolean whole,
+                                WhyUnread.AtNoPosition.Place nowhere) {
         Denotation stands = value.at().standing(value.value(), read.rules().symbols(),
                 read.rules().newtypes());
         if (!(AnOperationApplied.of(Core.withoutStanding(stands.value()))
@@ -1220,7 +1227,7 @@ final class Pullback {
         Inside.ACall called = intoACall(stands);
         return called == null
                 ? new WhichCase.Unread(whatABehaviorAnswers(behavior, stands.at()))
-                : throughTheBody(behavior, answered(called.body(), nowhere));
+                : throughTheBody(behavior, answered(called.body(), whole, nowhere));
     }
 
     /** {@code answered}, read off the body of {@code behavior} where a call stands, with each arm
@@ -1248,7 +1255,7 @@ final class Pullback {
     static List<Pulled> ofTheArms(Core fork, InputReads reads, InputReading read,
                                   Optional<ModelOccurrence> where) {
         Pullback reading = new Pullback(read, where);
-        return reading.entering(fork, reads).stream().map(reading::pulled).toList();
+        return reading.entering(fork, true, reads).stream().map(reading::pulled).toList();
     }
 
     /**
@@ -1263,15 +1270,20 @@ final class Pullback {
      * <p>The arms as {@link Choice} numbers them: an {@code if}'s branch taken where its condition
      * holds first, a {@code match}'s and a library operation's cases in the order they are
      * written, and an attempt's built arm first and then its departures as written.
+     *
+     * @param whole whether what decides the fork is asked for itself ({@link Asked.OnASide#whole}):
+     *              a fork a run passes is, and a choice of a value is wherever what chooses by
+     *              the value is
      */
-    private List<Derivation> entering(Core fork, InputReads reads) {
+    private List<Derivation> entering(Core fork, boolean whole, InputReads reads) {
         return switch (Core.withoutStanding(fork)) {
             case Core.If iff -> {
-                Derivation cond = observeWhole(iff.cond(), AnswerAspect.TRUTH, reads);
+                Derivation cond = observe(iff.cond(),
+                        new Asked.OnASide(AnswerAspect.TRUTH, whole), reads);
                 yield List.of(cond, new Derivation.UnderADenial(cond, true));
             }
             case Core.Match match -> {
-                List<Derivation> selections = selectionsOf(match, reads);
+                List<Derivation> selections = selectionsOf(match, whole, reads);
                 List<Derivation> out = new ArrayList<>();
                 for (int part = 0; part < selections.size(); part++) {
                     out.add(new Derivation.AnArmTaken(selections.subList(0, part),
@@ -3026,7 +3038,7 @@ final class Pullback {
             });
             Inside inside = aWayIn(numbers);
             if (inside != null) {
-                return goingIn(inside, reads, new Denotation(e, reads), fixed(e, reads),
+                return goingIn(inside, reads, new Denotation(e, reads), false, fixed(e, reads),
                         taking -> new ALawRead(this, taking.apply(reads)).compared(compared));
             }
             // And on each case of how many an argument holds, or a number an argument is takes,
@@ -3140,7 +3152,7 @@ final class Pullback {
                                 asTheElement(container, iff.els(), stands.at(), compared)));
                     }
                     case Core.Match match -> {
-                        return madeBy(match, armsOf(match, stands.at(), (body, inside) ->
+                        return madeBy(match, armsOf(match, false, stands.at(), (body, inside) ->
                                 asTheElement(container, body, inside, compared)));
                     }
                     default -> { }
@@ -4862,7 +4874,7 @@ final class Pullback {
     private Derivation throughWhatItStopsAt(StatedComparison stated, Denotation at, boolean whole,
                                             boolean fixed, InputReads reads,
                                             Optional<Inside> wayIn) {
-        return wayIn.map(inside -> goingIn(inside, reads, at, fixed,
+        return wayIn.map(inside -> goingIn(inside, reads, at, whole, fixed,
                 taking -> comparison(stated, at, whole, fixed, taking.apply(reads))))
                 .orElse(null);
     }
@@ -4899,9 +4911,13 @@ final class Pullback {
      *
      * @param reads where the reading being split stands, which counts the readings it is one of
      * @param at    where what is read again is a part of a larger condition, or null
+     * @param whole whether what is read again is asked for itself ({@link Asked.OnASide#whole}),
+     *              which the condition of a choice it goes into is asked as: it is worked out
+     *              before either arm
      * @param fixed whether its answer is the same on every run
      */
-    private Derivation goingIn(Inside inside, InputReads reads, Denotation at, boolean fixed,
+    private Derivation goingIn(Inside inside, InputReads reads, Denotation at, boolean whole,
+                               boolean fixed,
                                Function<UnaryOperator<InputReads>, Derivation> again) {
         return switch (inside) {
             // A choice whose condition stops at a value a reading goes into is read with that value
@@ -4913,9 +4929,10 @@ final class Pullback {
                     && Core.withoutStanding(choiceAt.value()) instanceof Core.If iff -> {
                 Inside first = whereTheConditionStops(iff, choiceAt.at());
                 if (first != null) {
-                    yield goingIn(first, reads, at, fixed, again);
+                    yield goingIn(first, reads, at, whole, fixed, again);
                 }
-                Derivation condition = observe(iff.cond(), AnswerAspect.TRUTH, choiceAt.at());
+                Derivation condition = observe(iff.cond(),
+                        new Asked.OnASide(AnswerAspect.TRUTH, whole), choiceAt.at());
                 ArmsLeft left = armsLeftBy(condition);
                 // Counted in all and not along the way: an arm no run takes is not read, and the
                 // arms that are read are the work, wherever on the way they stand. Nor is the
@@ -4938,7 +4955,7 @@ final class Pullback {
                     yield partOf(at, new Derivation.Stopped(past, fixed));
                 }
                 Core choice = chosen.value();
-                yield new Derivation.AComparisonOfAChoice(byItsCases(chosen, at,
+                yield new Derivation.AComparisonOfAChoice(byItsCases(chosen, at, whole,
                         arm -> again.apply(on -> on.taking(choice, arm, arms))));
             }
             case Inside.ACall(Core call, ValueName.Behavior behavior, Denotation body) ->
@@ -5835,12 +5852,20 @@ final class Pullback {
      * ({@link Proposition#afterIt}). One asked of each element of a container, or of each step of a
      * walk or a recursion, is not: which element a run stops at first is in no statement of one,
      * and it is left unread.
+     *
+     * <p>Nor one whose divisor is another value on each application of a closure it stands in
+     * ({@link #variesByApplication}). Each application is read where the run makes it, and an
+     * application before it that stopped dividing is a run that never makes this one — which no
+     * reading of an application says where the closure is applied to every element, or read once
+     * for all of them. A divisor the same on every application stops the first application where it
+     * stops any, and the one being read says so of itself.
      */
     private Derivation ofAQuotientByAValue(StatedComparison stated, Denotation at, boolean whole,
                                            boolean fixed, InputReads reads) {
         QuotientByAValue.Read<InputReads> quotient = !whole ? null
                 : QuotientByAValue.read(stated, reads, sides(), read.rules().symbols());
-        if (quotient == null) {
+        if (quotient == null
+                || variesByApplication(quotient.divisor(), quotient.at(), new HashSet<>())) {
             return null;
         }
         Derivation answers = restated(quotient.answers(), at, whole, fixed, quotient.at());
@@ -5853,6 +5878,33 @@ final class Pullback {
                         restated(quotient.below(), at, whole, fixed, quotient.at())));
         return answers == null || states == null ? null
                 : new Derivation.WhereItAnswers(answers, states);
+    }
+
+    /**
+     * Whether {@code e}, read in {@code at}, is one value on one application of a closure and
+     * another on the next: it reads a name an application handed one of the values written out, or
+     * a name standing for an element of a container, itself or through the names it was given.
+     */
+    private boolean variesByApplication(Core e, InputReads at, Set<BindingId> met) {
+        if (e instanceof Core.Read name) {
+            if (at.turnsOnAnApplication(name, read.rules().symbols(), read.rules().newtypes())) {
+                return true;
+            }
+            if (!met.add(name.binding())) {
+                return false;
+            }
+            return switch (at.meaningOf(name, read.rules().symbols(), read.rules().newtypes())) {
+                case ReadMeaning.Position(TermPath path) -> path.insideAContainer();
+                case ReadMeaning.Through(Denotation denotes) ->
+                        variesByApplication(denotes.value(), denotes.at(), met);
+                case ReadMeaning.Element _, ReadMeaning.OneOf _, ReadMeaning.NoneHeld _,
+                     ReadMeaning.MoreThanAreWrittenOut _ -> true;
+                case ReadMeaning.Unknown _ -> false;
+            };
+        }
+        boolean[] found = {false};
+        Core.forEachChild(e, child -> found[0] = found[0] || variesByApplication(child, at, met));
+        return found[0];
     }
 
     /**
@@ -5996,14 +6048,15 @@ final class Pullback {
      * operation's arguments stand: read in each case of it, as a choice is read in each of its
      * cases — or null where neither side takes such a size.
      */
-    private Derivation ofASizeInCases(StatedComparison stated, Denotation at, InputReads reads) {
+    private Derivation ofASizeInCases(StatedComparison stated, Denotation at, boolean whole,
+                                      InputReads reads) {
         Denotation left = new Denotation(stated.left(), reads);
         Denotation right = new Denotation(stated.right(), reads);
         if (measuredByCases(left) == null && measuredByCases(right) == null) {
             return null;
         }
         return new Derivation.AComparisonOfAChoice(
-                comparedCase(left, right, stated.claim().statedRelation(), at));
+                comparedCase(left, right, stated.claim().statedRelation(), at, whole));
     }
 
     /**
@@ -6016,7 +6069,8 @@ final class Pullback {
      * wherever each was read, so a case reached through a name given the choice is compared with a
      * side read where the comparison stands ({@link #overQuantities}).
      */
-    private Derivation ofAChoice(StatedComparison stated, Denotation at, InputReads reads) {
+    private Derivation ofAChoice(StatedComparison stated, Denotation at, boolean whole,
+                                 InputReads reads) {
         Denotation left = new Denotation(stated.left(), reads);
         Denotation right = new Denotation(stated.right(), reads);
         // What each case answers is related as a number ({@link #overQuantities}), so this takes
@@ -6037,33 +6091,38 @@ final class Pullback {
             return partOf(at, new Derivation.Stopped(past, false));
         }
         return new Derivation.AComparisonOfAChoice(
-                comparedCase(left, right, stated.claim().statedRelation(), at));
+                comparedCase(left, right, stated.claim().statedRelation(), at, whole));
     }
 
     /**
      * {@code left states right}, each side split into its cases where it is chosen by them, and
      * related as numbers where neither is.
+     *
+     * @param whole whether the comparison is asked for itself ({@link Asked.OnASide#whole}), which
+     *              what decides a case of either side is asked as
      */
     private Derivation comparedCase(Denotation left, Denotation right, Rel states,
-                                    Denotation at) {
+                                    Denotation at, boolean whole) {
         // An if on either side is gone into as any choice a comparison is read through is
         // ({@link #goingIn}): the value its condition stops at first, and only the arms a run
         // takes, each counted where it is read.
         for (Denotation side : List.of(left, right)) {
             if (chosenAt(side) instanceof Denotation chosen
                     && Core.withoutStanding(chosen.value()) instanceof Core.If) {
-                return goingIn(new Inside.AChoice(side), side.at(), at, false,
+                return goingIn(new Inside.AChoice(side), side.at(), at, whole, false,
                         taking -> comparedCase(
                                 new Denotation(left.value(), taking.apply(left.at())),
                                 new Denotation(right.value(), taking.apply(right.at())),
-                                states, at));
+                                states, at, whole));
             }
         }
-        Derivation byLeft = byItsCases(left, at, side -> comparedCase(side, right, states, at));
+        Derivation byLeft = byItsCases(left, at, whole,
+                side -> comparedCase(side, right, states, at, whole));
         if (byLeft != null) {
             return byLeft;
         }
-        Derivation byRight = byItsCases(right, at, side -> comparedCase(left, side, states, at));
+        Derivation byRight = byItsCases(right, at, whole,
+                side -> comparedCase(left, side, states, at, whole));
         if (byRight != null) {
             return byRight;
         }
@@ -6071,9 +6130,10 @@ final class Pullback {
         // behavior entered, both sides read there ({@link #throughWhatItStopsAt}).
         Inside inside = aWayIn(List.of(left, right));
         if (inside != null) {
-            return goingIn(inside, left.at(), at, false, taking -> comparedCase(
+            return goingIn(inside, left.at(), at, whole, false, taking -> comparedCase(
                     new Denotation(left.value(), taking.apply(left.at())),
-                    new Denotation(right.value(), taking.apply(right.at())), states, at));
+                    new Denotation(right.value(), taking.apply(right.at())), states, at,
+                    whole));
         }
         // And how many an operation answers, where which number that is turns on how its
         // arguments stand.
@@ -6082,7 +6142,7 @@ final class Pullback {
             sized = measuredByCases(right);
         }
         if (sized != null) {
-            return inEachCaseOf(sized, at, () -> comparedCase(left, right, states, at));
+            return inEachCaseOf(sized, at, () -> comparedCase(left, right, states, at, whole));
         }
         return partOf(at, overQuantities(left, right, states));
     }
@@ -6277,10 +6337,12 @@ final class Pullback {
      * The choice {@code side} is, with {@code compared} read of what each case answers — or null
      * where {@code side} is chosen by no cases.
      *
-     * @param at the comparison the choice is a side of, where it is a part of a larger condition:
-     *           how the arguments of an operation stand is a part read off it
+     * @param at    the comparison the choice is a side of, where it is a part of a larger
+     *              condition: how the arguments of an operation stand is a part read off it
+     * @param whole whether the comparison is asked for itself ({@link Asked.OnASide#whole}), which
+     *              what decides the choice is asked as: it is worked out before any case
      */
-    private Derivation byItsCases(Denotation side, Denotation at,
+    private Derivation byItsCases(Denotation side, Denotation at, boolean whole,
                                   Function<Denotation, Derivation> compared) {
         Denotation chosen = chosenAt(side);
         if (chosen == null) {
@@ -6290,10 +6352,11 @@ final class Pullback {
         Core node = Core.withoutStanding(chosen.value());
         Derivation choice = switch (node) {
             case Core.If iff -> {
-                Derivation condition = observe(iff.cond(), AnswerAspect.TRUTH, where);
+                Derivation condition = observe(iff.cond(),
+                        new Asked.OnASide(AnswerAspect.TRUTH, whole), where);
                 yield armsOf(iff, where, condition, armsLeftBy(condition), compared);
             }
-            case Core.Match match -> armsOf(match, where,
+            case Core.Match match -> armsOf(match, whole, where,
                     (body, inside) -> compared.apply(new Denotation(body, inside)));
             case Core.IfConstructed attempt -> {
                 List<Derivation> taken = attempted(attempt, where);
@@ -6365,7 +6428,7 @@ final class Pullback {
         Derivation reached = null;
         for (Choice.ArgumentRelation stands : relationsDeciding(arm)) {
             Derivation one = comparedCase(new Denotation(stands.left(), where),
-                    new Denotation(stands.right(), where), stands.rel(), at);
+                    new Denotation(stands.right(), where), stands.rel(), at, false);
             reached = reached == null ? one
                     : new Derivation.Joined(ConditionJoin.BOTH, reached, one);
         }

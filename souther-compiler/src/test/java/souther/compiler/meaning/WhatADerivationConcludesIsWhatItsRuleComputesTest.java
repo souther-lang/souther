@@ -96,8 +96,8 @@ class WhatADerivationConcludesIsWhatItsRuleComputesTest {
     /**
      * A part worked out first that answers only where {@code a} holds stops what it is part of
      * wherever {@code a} fails: there neither the conclusion nor its denial holds, whatever the
-     * rest would decide. Of an if's condition, whether its arms differ or not, and of a join's left
-     * half.
+     * rest would decide. Of an if's condition, whether its arms differ or not, of a join's left
+     * half, and of what a match selects by, whichever arm follows and whichever is entered.
      */
     @Test
     void wherePartWorkedOutFirstStopsTheWholeComesOutNoWay() {
@@ -106,7 +106,17 @@ class WhatADerivationConcludesIsWhatItsRuleComputesTest {
                 new Derivation.IfThenElse(stopping, truthAt(C), truthAt(S)),
                 new Derivation.IfThenElse(stopping, truthAt(C), truthAt(C)),
                 new Derivation.Joined(ConditionJoin.BOTH, stopping, truthAt(C)),
-                new Derivation.Joined(ConditionJoin.EITHER, stopping, truthAt(C)));
+                new Derivation.Joined(ConditionJoin.EITHER, stopping, truthAt(C)),
+                new Derivation.MatchArms(List.of(
+                        new Derivation.MatchArms.Arm(stopping, truthAt(C)),
+                        new Derivation.MatchArms.Arm(new Derivation.UnderADenial(stopping, true),
+                                truthAt(S)))),
+                new Derivation.MatchArms(List.of(
+                        new Derivation.MatchArms.Arm(stopping, truthAt(C)),
+                        new Derivation.MatchArms.Arm(new Derivation.CasesWrittenOut(true),
+                                truthAt(S)))),
+                new Derivation.AnArmTaken(List.of(stopping),
+                        new Derivation.CasesWrittenOut(true)));
         for (Derivation whole : each) {
             Proposition stated = concluded(whole);
             for (Proposition way : List.of(stated, stated.denied())) {

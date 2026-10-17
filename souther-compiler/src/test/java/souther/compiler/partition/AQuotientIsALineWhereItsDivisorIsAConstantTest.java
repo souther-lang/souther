@@ -85,8 +85,21 @@ class AQuotientIsALineWhereItsDivisorIsAConstantTest {
 
             behavior aroundAQuotient : (x: Int, y: Int) -> Level
                 constructs Low, High
-            let aroundAQuotient (x, y) = if x / y + 1 < 30 then Low { v = 1 } else High { v = 2 }
+            let aroundAQuotient (x, y) = if x / y + x < 30 then Low { v = 1 } else High { v = 2 }
             example aroundAQuotient
+                | "under" : (1, 1) -> Low { v = 1 }
+
+            behavior aMovedQuotient : (x: Int, y: Int) -> Level
+                constructs Low, High
+            let aMovedQuotient (x, y) =
+                if 30 - 2 * (x / y + 1) > 0 then Low { v = 1 } else High { v = 2 }
+            example aMovedQuotient
+                | "under" : (1, 1) -> Low { v = 1 }
+
+            behavior itsQuotient : (x: Int, y: Int) -> Level
+                constructs Low, High
+            let itsQuotient (x, y) = if x / y < 14 then Low { v = 1 } else High { v = 2 }
+            example itsQuotient
                 | "under" : (1, 1) -> Low { v = 1 }
 
             behavior anInverse : (x: Int) -> Level
@@ -155,8 +168,8 @@ class AQuotientIsALineWhereItsDivisorIsAConstantTest {
     }
 
     /**
-     * A divisor with a position in it is no constant, so the quotient is no form, and arithmetic
-     * over it is not read.
+     * A divisor with a position in it is no constant, so the quotient is no form, and a value
+     * beside it with a position in it is no line.
      *
      * <p>Said as the rule being reported unread rather than as nothing being there. Those are
      * opposite facts about a model — one says this compiler fell short and the other says the model
@@ -192,6 +205,16 @@ class AQuotientIsALineWhereItsDivisorIsAConstantTest {
                 .toString());
         assertTrue(cutsOf("byAPosition").contains("y 0|1 belongs=BELOW"),
                 cutsOf("byAPosition").toString());
+    }
+
+    /**
+     * A quotient moved and weighed by numbers is the quotient against another number:
+     * {@code 30 - 2 * (x / y + 1) > 0} is {@code x / y < 14}, and draws its lines.
+     */
+    @Test
+    void aQuotientMovedAndWeighedByNumbersIsTheQuotientAgainstANumber() {
+        assertFalse(cutsOf("itsQuotient").isEmpty(), "the quotient against a number is read");
+        assertEquals(cutsOf("itsQuotient"), cutsOf("aMovedQuotient"));
     }
 
     /**
@@ -285,7 +308,7 @@ class AQuotientIsALineWhereItsDivisorIsAConstantTest {
     /**
      * The model, compiled once for every question put to it.
      *
-     * <p>One source and ten behaviors, and each of the readings below asks about one of them —
+     * <p>One source and twelve behaviors, and each of the readings below asks about one of them —
      * compiled where it is asked, the class pays for the whole model once per question. Read when a
      * question asks rather than in an initialiser, so a model that stopped compiling fails the
      * reading that met it instead of taking every method down with the class.

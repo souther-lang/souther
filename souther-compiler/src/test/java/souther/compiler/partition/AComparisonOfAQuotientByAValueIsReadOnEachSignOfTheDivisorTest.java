@@ -120,6 +120,21 @@ class AComparisonOfAQuotientByAValueIsReadOnEachSignOfTheDivisorTest {
                 Set.copyOf(borders("guard b.days > 0 else No", "100 < a.pay / b.days")));
     }
 
+    /**
+     * A quotient moved and weighed by numbers is the quotient against another number, the
+     * relation turned where it is weighed by a number below nought: {@code 30 - 2 * (q + 1) > 0}
+     * is {@code q < 14}, on each sign of the divisor.
+     */
+    @Test
+    void aQuotientMovedAndWeighedByNumbersIsTheQuotientAgainstANumber() {
+        for (String guard : List.of(ABOVE, BELOW)) {
+            assertEquals(Set.copyOf(borders(guard, "a.pay / b.days < 14")),
+                    Set.copyOf(borders(guard, "30 - 2 * (a.pay / b.days + 1) > 0")), guard);
+            assertEquals(Set.copyOf(borders(guard, "a.pay / b.days >= 14")),
+                    Set.copyOf(borders(guard, "(a.pay / b.days + 1) / 3 >= 5")), guard);
+        }
+    }
+
     @Test
     void aQuotientGivenANameIsTheQuotient() {
         assertEquals(Set.copyOf(borders("guard b.days > 0 else No", "a.pay / b.days >= 100")),
@@ -270,6 +285,27 @@ class AComparisonOfAQuotientByAValueIsReadOnEachSignOfTheDivisorTest {
         assertTrue(report.contains("no input takes 2 ways through this body"), report);
     }
 
+    /**
+     * What decides a choice is worked out before any of its cases, as an if's condition is, so a
+     * quotient there is read wherever the comparison the choice stands in is: a choice in a value,
+     * and the value a match selects by.
+     */
+    @Test
+    void aQuotientDecidingAChoiceIsReadAsTheConditionOfAnIfIs() {
+        for (String[] body : List.of(
+                new String[] {ABOVE, "(if a.pay / b.days >= 100 then a.pay else c.pay) > 0"},
+                new String[] {"""
+                        guard b.days > 0 else No
+                            let fine = match (if a.pay / b.days >= 100 then Ok else No) with
+                                | Ok -> c.pay > 0
+                                | No -> c.pay < 0""", "fine"})) {
+            String report = human(MODEL.formatted(body[0], body[1]));
+            assertTrue(report.contains("comparison@"), () -> body[1] + " compiles\n" + report);
+            assertFalse(report.contains("a quotient by a value that is not a constant"),
+                    () -> body[1] + "\n" + report);
+        }
+    }
+
     /** A body with a divisor held at nought, then a guard on {@code condition}. */
     private static String atANoughtDivisor(String condition) {
         return """
@@ -324,6 +360,58 @@ class AComparisonOfAQuotientByAValueIsReadOnEachSignOfTheDivisorTest {
                 }
                 """);
         assertTrue(report.contains("a quotient by a value that is not a constant"), report);
+    }
+
+    /**
+     * A quotient by what each application of a closure is handed is left unread, though each
+     * application is read: a filter applies its closure to every value, and an application whose
+     * divisor was nought is a run that makes none after it, which no reading of a later one says.
+     */
+    @Test
+    void aQuotientByWhatEachApplicationIsHandedIsLeftUnread() {
+        String report = human("""
+                module demo
+
+                behavior f : (n: Int, a: Int, b: Int) -> Bool
+
+                let f (n, a, b) = List.length(List.filter(x -> n / x >= 1, [a, b])) >= 1
+                """);
+        assertFalse(report.contains("read as f/n: = a"), report);
+        assertFalse(report.contains("read as f/n: = b"), report);
+        assertTrue(report.contains("a quotient by a value that is not a constant"), report);
+    }
+
+    /**
+     * The control: a divisor the same on every application stops the first application where it
+     * stops any, and the application read says so of itself, so the comparison draws its line on
+     * each element. By the element's own divisor it draws none.
+     *
+     * <p>What the quantifier states of the container is another reading, which leaves either
+     * quotient unread: which element a run reaches first is in no statement of one.
+     */
+    @Test
+    void aQuotientByAValueTheSameOnEveryApplicationIsReadOnEach() {
+        String byOne = human("""
+                module demo
+
+                data Month = { pay: Int, days: Int }
+
+                behavior f : (ms: List<Month>, d: Int) -> Bool
+
+                let f (ms, d) = List.any(m -> m.pay / d >= 100, ms)
+                """);
+        assertTrue(byOne.contains("read as f/-100 * d + ms[*].pay"), byOne);
+        String byEach = human("""
+                module demo
+
+                data Month = { pay: Int, days: Int }
+
+                behavior f : (ms: List<Month>, d: Int) -> Bool
+
+                let f (ms, d) = List.any(m -> m.pay / m.days >= 100, ms)
+                """);
+        assertFalse(byEach.contains("read as f/-100 * ms[*].days"), byEach);
+        assertTrue(byEach.contains("a quotient by a value that is not a constant"), byEach);
     }
 
     /**
