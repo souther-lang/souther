@@ -100,6 +100,12 @@ sealed interface Condition {
             implements Condition {}
 
     /**
+     * A condition that is one construct a run comes out of — a comparison or a truth — and not
+     * two of them joined: what a run is seen coming out of is one of these.
+     */
+    sealed interface OfOneConstruct extends Condition permits Compares, Truth {}
+
+    /**
      * One comparison, and where the names in it point.
      *
      * @param comparison the comparison together with what its operator placed. Recognising it is
@@ -112,7 +118,7 @@ sealed interface Condition {
      */
     record Compares(Comparison comparison, ConstructOccurrence stands,
                     ConditionOccurrence occurrence,
-                    ConditionReportAnchor anchor, InputReads reads) implements Condition {
+                    ConditionReportAnchor anchor, InputReads reads) implements OfOneConstruct {
 
         /**
          * Which construct of the model this comparison is, where the source wrote one.
@@ -141,7 +147,7 @@ sealed interface Condition {
      * @param value what the body asks the truth of, as the tree the walk met it in
      */
     record Truth(ConditionOccurrence occurrence, ConditionReportAnchor anchor, Core value,
-                 InputReads reads) implements Condition {}
+                 InputReads reads) implements OfOneConstruct {}
 
     /**
      * {@code e} read as a condition, under {@code reads}, taking its names from {@code numbering}.

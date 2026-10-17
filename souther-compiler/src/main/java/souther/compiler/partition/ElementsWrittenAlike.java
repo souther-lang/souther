@@ -79,7 +79,7 @@ final class ElementsWrittenAlike {
                 for (OneOfEach.Way<OnTheWay.TakenIn> way : ways) {
                     List<OnTheWay.TakenIn> asked = new ArrayList<>();
                     CompositionBudget leftBy = switch (way) {
-                        case OneOfEach.Way.Chosen<OnTheWay.TakenIn>(var entries) -> {
+                        case OneOfEach.Way.Chosen<OnTheWay.TakenIn>(var entries, var _) -> {
                             asked.addAll(entries);
                             yield null;
                         }

@@ -9,6 +9,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -394,9 +395,9 @@ class AFillerThatStopsTheBodyIsExchangedForOneThatGoesOnTest {
     }
 
     /**
-     * Each way in the order the body writes it, whichever was looked for and whichever could not
-     * be: a way no border offers a point for is said where it stands, before or after the one that
-     * was searched.
+     * Each way in the order the body writes it, whatever each came to: a way no value of
+     * {@code b} goes down, which no border offers a point for and what the comparison states holds
+     * a row to all the same, is said where it stands, before or after the one the class closes.
      */
     private static final String TWO_WAYS = """
             module example.settle
@@ -425,10 +426,10 @@ class AFillerThatStopsTheBodyIsExchangedForOneThatGoesOnTest {
     @Test
     void eachWayPastIsSaidInTheOrderTheBodyWritesIt() {
         assertEquals(List.of("searched: ONE_POSITION_CANNOT_BE_BOTH",
-                        "not searchable: NOTHING_HOLDS_A_ROW_TO_IT"),
+                        "searched: NO_VALUE_CAN_STAND_THERE"),
                 waysOf(stopsOf(TWO_WAYS.replace("CONDITION", "a > 0 || b.value > 20"))
                         .get("a=x <= 0")));
-        assertEquals(List.of("not searchable: NOTHING_HOLDS_A_ROW_TO_IT",
+        assertEquals(List.of("searched: NO_VALUE_CAN_STAND_THERE",
                         "searched: ONE_POSITION_CANNOT_BE_BOTH"),
                 waysOf(stopsOf(TWO_WAYS.replace("CONDITION", "b.value > 20 || a > 0"))
                         .get("a=x <= 0")));
@@ -460,6 +461,148 @@ class AFillerThatStopsTheBodyIsExchangedForOneThatGoesOnTest {
         assertEquals(List.of("amount=x <= 0"), labels);
     }
 
+    /**
+     * A guard on how many elements a filter keeps, against nought, ahead of a guard on {@code n}.
+     *
+     * <p>The comparison draws no line of its own: what it states is some element meeting the
+     * closure, whose line it is. So no border offers a point that gets a row past it, and what
+     * holds a row to it is what the comparison states.
+     */
+    private static final String COUNTED = """
+            module example.settle
+
+            data No
+
+            behavior settle : (xs: List<Int>, ys: List<Int>, n: Int) -> Bool | No
+
+            let settle (xs, ys, n) = {
+                guard CONDITION else No
+                guard n > 0 else No
+                true
+            }
+            """;
+
+    private static final String SOME_X = "List.length(List.filter(x -> x > 0, xs))";
+
+    private static final String SOME_Y = "List.length(List.filter(y -> y > 0, ys))";
+
+    /** The row for {@code n} at nought is held to some element of {@code xs} above nought. */
+    @Test
+    void aRowGoesOnPastACountOfWhatAFilterKeepsAgainstNought() {
+        assertEquals("[1], [], 0",
+                rowsOf(COUNTED.replace("CONDITION", SOME_X + " >= 1")).get("n=x <= 0"));
+    }
+
+    /** The same with the count named first, which says nothing different. */
+    @Test
+    void aRowGoesOnPastACountNamedFirst() {
+        assertEquals("[1], [], 0", rowsOf(COUNTED.replace("guard CONDITION",
+                "let c = " + SOME_X + "\n    guard c >= 1")).get("n=x <= 0"));
+    }
+
+    /**
+     * The same said as a list the filter keeps not being empty. A run through the guard is
+     * recorded at the comparison the library's {@code isEmpty} is written as, and that is where
+     * the application answers, so it is seen as the application's answer — which is what the
+     * guard's condition is read as.
+     */
+    @Test
+    void aRowGoesOnPastWhatAFilterKeepsNotBeingEmpty() {
+        assertEquals("[1], [], 0", rowsOf(COUNTED.replace("CONDITION",
+                "Bool.not(List.isEmpty(List.filter(x -> x > 0, xs)))")).get("n=x <= 0"));
+    }
+
+    /** Either count, written as two comparisons: each is a way past of its own. */
+    @Test
+    void aRowGoesOnPastEitherOfTwoCounts() {
+        assertEquals("[1], [0], 0", rowsOf(COUNTED.replace("CONDITION",
+                SOME_X + " >= 1 || " + SOME_Y + " >= 1")).get("n=x <= 0"));
+    }
+
+    /**
+     * Either count, written as their sum: one comparison stating one of two things, and a row is
+     * held to one of them.
+     */
+    @Test
+    void aRowGoesOnPastASumOfCountsAlongOneOfItsWays() {
+        Map<String, String> rows = rowsOf(COUNTED.replace("CONDITION",
+                SOME_X + " + " + SOME_Y + " >= 1"));
+        assertEquals("[1], [0], 0", rows.get("n=x <= 0"));
+        // A row about the elements of `ys` that are not above nought is held to the other way.
+        assertEquals("[1], [0], 1", rows.get("ys[*]=x <= 0"));
+    }
+
+    /**
+     * Past a guard on the sum and a second guard, for a class of a position read after both: the
+     * row taken past the second is still past the first.
+     */
+    @Test
+    void aRowHeldPastALaterGuardKeepsTheWayItTookPastAnEarlierOne() {
+        String source = """
+                module example.settle
+
+                data No
+
+                behavior settle : (xs: List<Int>, ys: List<Int>, n: Int, m: Int) -> Bool | No
+
+                let settle (xs, ys, n, m) = {
+                    guard SUM >= 1 else No
+                    guard n > 0 else No
+                    guard m > 0 else No
+                    true
+                }
+                """.replace("SUM", SOME_X + " + " + SOME_Y);
+        assertEquals("[1], [0], 1, 0", rowsOf(source).get("m=x <= 0"));
+    }
+
+    /**
+     * A way of holding a row to the sum that would write afresh a list the module states is left,
+     * and the other way is taken.
+     */
+    @Test
+    void aWayThatWouldRewriteAStatedValueLeavesTheOtherWay() {
+        String source = COUNTED.replace("CONDITION", SOME_X + " + "
+                        + "List.length(List.filter(y -> y.value > 0, ys)) >= 1")
+                .replace("ys: List<Int>", "ys: List<Count>")
+                .replace("data No", "data No\n\ndata Count = Int")
+                .replace("let settle (xs, ys, n) = {", "let none: List<Int> = [0]\n\n"
+                        + "let settle (xs, ys, n) = {");
+        // The row keeps the list the module states for `xs`, and goes past along `ys`.
+        assertEquals("none, [Count(1)], 0", rowsOf(source).get("n=x <= 0"));
+    }
+
+    /**
+     * A guard on which case a value is, ahead of a guard on {@code n}.
+     *
+     * <p>Which case a value is has no order and no border, so what holds a row to it is what the
+     * comparison states: a case of the value, which a row is written with. Beside a demand on a
+     * container in one condition, the two are one way and the row is held to both.
+     */
+    private static final String CASED = """
+            module example.settle
+
+            data No
+            data Plain
+            data Express
+            data Kind = Plain | Express
+
+            behavior settle : (kind: Kind, xs: List<Int>, n: Int) -> Bool | No
+
+            let settle (kind, xs, n) = {
+                guard CONDITION else No
+                guard n > 0 else No
+                true
+            }
+            """;
+
+    @Test
+    void aRowGoesOnPastAGuardOnWhichCaseAValueIs() {
+        assertEquals("Express, [], 0",
+                rowsOf(CASED.replace("CONDITION", "kind == Express")).get("n=x <= 0"));
+        assertEquals("Express, [1], 0", rowsOf(CASED.replace("CONDITION",
+                "kind == Express && List.any(x -> x > 0, xs)")).get("n=x <= 0"));
+    }
+
     /** What each way past the guard came to, in a word apiece. */
     private static List<String> waysOf(RepairShortfall stop) {
         assertTrue(stop != null && stop.came() instanceof RepairShortfall.AtTheGuard.NoWayPast,
@@ -468,16 +611,27 @@ class AFillerThatStopsTheBodyIsExchangedForOneThatGoesOnTest {
         for (RepairShortfall.WayPast way
                 : ((RepairShortfall.AtTheGuard.NoWayPast) stop.came()).ways()) {
             out.add(switch (way) {
-                case RepairShortfall.WayPast.Searched(CameToNothing came) ->
-                        "searched: " + came.why().reason();
-                case RepairShortfall.WayPast.CutShort(CameToNothing came,
-                        CompositionBudget figure) ->
-                        "cut short at " + figure + ": " + came.why().reason();
-                case RepairShortfall.WayPast.NotSearchable(RepairShortfall.Barrier why) ->
-                        "not searchable: " + why;
+                case RepairShortfall.WayPast.Searched(List<CameToNothing> came) ->
+                        "searched: " + reasons(came);
+                case RepairShortfall.WayPast.CutShort(List<CameToNothing> came,
+                        Set<CompositionBudget> figures) ->
+                        "cut short at " + inOrder(figures) + ": " + reasons(came);
+                case RepairShortfall.WayPast.NotSearchable(Set<RepairShortfall.Barrier> why,
+                        Set<CompositionBudget> figures) -> "not searchable: " + inOrder(why)
+                        + (figures.isEmpty() ? "" : " beside " + inOrder(figures));
             });
         }
         return out;
+    }
+
+    /** {@code these}, in the order they are declared in. */
+    private static <E extends Enum<E>> String inOrder(Set<E> these) {
+        return String.join(", ", these.stream().sorted().map(String::valueOf).toList());
+    }
+
+    /** Each word what a way's searches came to, joined in order. */
+    private static String reasons(List<CameToNothing> came) {
+        return String.join(" / ", came.stream().map(each -> String.valueOf(each.why().reason())).toList());
     }
 
     /** Why each row stops where it does, by its label, for the rows that stop at a guard. */

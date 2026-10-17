@@ -345,6 +345,49 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
         }
     }
 
+    /**
+     * This way with each condition of several ways {@code chosen} names taken as every alternative
+     * it names, where it stands, and every other left as it is.
+     *
+     * <p>By the condition and not by where it stands, so that what was chosen along one way is
+     * chosen along another that takes the same condition in: a guard below another takes the
+     * other's condition in, and a row held past the first along one of its ways is past it along
+     * that way wherever it goes next.
+     *
+     * <p>Every alternative named, all at once. A row held to two alternatives of one condition is
+     * held to both: some element of one container meeting a predicate and some element of another
+     * meeting its own hold together, and whether two cases of one value do is what reading the way
+     * says ({@link Reachability#of}), as for any two conditions on it.
+     */
+    public WayToTheBorder choosing(Map<OnTheWay, Set<Integer>> chosen) {
+        return chosen.isEmpty() ? this : new WayToTheBorder(choosing(onTheWay, chosen));
+    }
+
+    private static List<OnTheWay> choosing(List<OnTheWay> entries,
+                                           Map<OnTheWay, Set<Integer>> chosen) {
+        List<OnTheWay> out = new ArrayList<>();
+        for (OnTheWay each : entries) {
+            Set<Integer> taken = each.ofSeveralWays() ? chosen.get(each) : null;
+            if (taken == null) {
+                out.add(each);
+            } else {
+                for (int alternative : taken) {
+                    out.addAll(choosing(each.alternatives().get(alternative), chosen));
+                }
+            }
+        }
+        return out;
+    }
+
+    /**
+     * The positions what {@code entry} asks of a row turns on: the one account of them, which the
+     * walk of a way groups its choices by and a reader asking what holding a row to it writes asks
+     * as well.
+     */
+    static Set<TermPath> positionsOf(OnTheWay entry) {
+        return ASKED_OF_A_ROW.positions(entry);
+    }
+
     /** The conditions on this way a row is past one of several ways of
      *  ({@link OnTheWay#alternatives}), in the order the walk met them. */
     public List<OnTheWay> severalWays() {

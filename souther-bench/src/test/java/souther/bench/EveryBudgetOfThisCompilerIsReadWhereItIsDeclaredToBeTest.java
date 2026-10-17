@@ -244,8 +244,16 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/partition/Generator$CandidateCheck;"
                             + "Lsouther/compiler/partition/FixtureReferences;Ljava/util/List;)"
                             + "Lsouther/compiler/partition/Generator$Composed;",
-                    "says a way past a guard whose search was refused a run was cut short under the"
-                            + " figure, beside the row that goes out"),
+                    "says a way past a guard whose search was refused a run, or whose choices past"
+                            + " the first were more than the ones the guard's ways share, was cut"
+                            + " short under the figure, beside the row that goes out"),
+            Map.entry("souther.compiler.partition.Generator$GoingOn#wayOn("
+                            + "Lsouther/compiler/coverage/AlignedObservation;Ljava/util/List;"
+                            + "Ljava/util/Set;)"
+                            + "Lsouther/compiler/partition/Generator$GoingOn$WayPastTheGuard;",
+                    "holds a way past a guard to no more of the ways its parts can be held along"
+                            + " than the figure, and hands the figure on with the way, which says"
+                            + " it was cut short there"),
             // The ways under the cases of a sum a container, or a requirement at a name the cases
             // share, is written: one walk hands them over, and says the figure where it stopped,
             // which both roads a row is composed on carry with what the ways tried came to — rows
