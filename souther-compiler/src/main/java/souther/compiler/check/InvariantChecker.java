@@ -3210,9 +3210,6 @@ public final class InvariantChecker {
         List<WhatARelationLeavesUndivided.Term<RuleKey>> terms = new ArrayList<>();
         // The same terms, each taking the values of its carrier, for how far apart two of them are.
         List<WhatARelationLeavesUndivided.Term<RuleKey>> apart = new ArrayList<>();
-        // Where the first place's type stops, which is where the second's does when the two take
-        // the same values, and the only time it is read.
-        NumericDomain.Bounds extent = NumericDomain.Bounds.OPEN;
         for (Map.Entry<Coordinate, ExactRatio> each : over.weights().entrySet()) {
             if (each.getValue() == null || each.getValue().signum() == 0) {
                 return Set.of();
@@ -3227,11 +3224,12 @@ public final class InvariantChecker {
                     values, every ? values : null, null, itsPlace));
             apart.add(new WhatARelationLeavesUndivided.Term<>(List.of(at.path()), each.getValue(),
                     values, every ? values : null, every ? at.carrier() : null, itsPlace));
-            if (apart.size() == 1 && at.carrier() != null) {
-                extent = new NumericDomain.Bounds(at.carrier().extent().low(),
-                        at.carrier().extent().high());
-            }
         }
+        // Where the type the places take stops: read only where the two take the same values, so
+        // the first place's is the other's.
+        Carrier first = over.weights().keySet().iterator().next().carrier();
+        NumericDomain.Bounds extent = first == null ? NumericDomain.Bounds.OPEN
+                : new NumericDomain.Bounds(first.extent().low(), first.extent().high());
         Rel relation = over.comparison().claim().statedRelation();
         BiPredicate<RuleKey, RuleKey> overlap =
                 (one, other) -> one.isAtOrUnder(other) || other.isAtOrUnder(one);

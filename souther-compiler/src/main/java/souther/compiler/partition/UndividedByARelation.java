@@ -204,13 +204,25 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     : read.quantities().ordersOf(each.term());
             carriers.add(orders == null ? null : orders.answered());
         }
-        // Two sides each standing at the other's value are two values of one order, so the order
-        // one of them is counted on is the other's too: what an operation answered is a string
-        // where the value it is held equal to is one, and it is never below the empty string.
+        // Where each side stands is compared with where the others do, which says something only
+        // where they stand on one order: a case of one enumeration has no place on another's.
+        // Nothing a side is shown to take is then a place on another's order, and two values of
+        // two orders never take the same values, so nothing is shown of any of them.
+        for (Carrier one : carriers) {
+            for (Carrier other : carriers) {
+                if (one != null && other != null && !Carrier.onOneOrder(one, other)) {
+                    return new LinkedHashSet<>(amongThemselves);
+                }
+            }
+        }
+        // Two sides each standing at the other's value are compared as one value against another,
+        // so a side with no order of its own here — what an operation answered — stands on the
+        // other's: a string is held equal to a string, and none is below the empty one.
         if (WhatARelationLeavesUndivided.eachStandsAtTheOthersValue(
                 sides.stream().map(Side::weight).toList(), constant)) {
-            Carrier shared = carriers.get(0) != null ? carriers.get(0) : carriers.get(1);
-            carriers = Arrays.asList(shared, shared);
+            Carrier known = carriers.get(0) != null ? carriers.get(0) : carriers.get(1);
+            carriers = Arrays.asList(carriers.get(0) != null ? carriers.get(0) : known,
+                    carriers.get(1) != null ? carriers.get(1) : known);
         }
         if (ways.isEmpty()) {
             return undividedAlong(sources, carriers, read.quantities().region(), List.of(), true);

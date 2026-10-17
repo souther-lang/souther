@@ -152,6 +152,58 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     }
 
     /**
+     * Two enumerations each count where a case comes in their own declaration, so a stage and a
+     * late stage held equal are compared as values and stand on no one order: {@code Won} is the
+     * third stage and the first late one. Where one stands says nothing of where the other does,
+     * and nothing is shown of either. A stage held equal to a stage is shown.
+     */
+    @Test
+    void aCaseOfOneEnumerationHasNoPlaceOnAnothersOrder() {
+        String cases = "data Prospecting\ndata Negotiation\ndata Won\ndata Lost\n"
+                + "data Stage = Prospecting | Negotiation | Won | Lost\ndata Late = Won | Lost";
+        assertEquals(Map.of("a", NOT_SHOWN, "w", NOT_SHOWN),
+                leftAt("a: Stage, w: Late", cases, "a == w", 18));
+        assertEquals(Map.of("a", RELATES, "w", RELATES),
+                leftAt("a: Stage, w: Stage", cases, "a == w", 18));
+    }
+
+    /**
+     * A record holding a stage and a late stage as one value is read: the block the rule holds as
+     * one stands on no one order, so what it admits is not worked out on either, and each field
+     * keeps the classes its own enumeration gives it.
+     */
+    @Test
+    void aRuleHoldingCasesOfTwoEnumerationsAsOneValueIsRead() {
+        Compilation compilation = Compilation.ofSource("""
+                module w1
+                data Prospecting
+                data Negotiation
+                data Won
+                data Lost
+                data Stage = Prospecting | Negotiation | Won | Lost
+                data Late = Won | Lost
+                data Pair = { a: Stage, w: Late }
+                    invariant a == w
+                behavior m : (p: Pair) -> Bool
+                let m (p) = true
+                """, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        String report = AdequacyReport.of(compilation)
+                .human(SourceRendering.namedByIdentity(compilation.texts()));
+        assertTrue(report.contains("p.a holds 4 classes"), report);
+        assertTrue(report.contains("p.w holds 2 classes"), report);
+    }
+
+    /** {@link #left} at {@code column} of the line the body is written on, below every line of
+     *  {@code declarations}. */
+    private static Map<String, String> leftAt(String inputs, String declarations, String body,
+                                              int column) {
+        return left(inputs, declarations, body,
+                (declarations.lines().count() + 3) + ":" + column);
+    }
+
+    /**
      * No two dates are ten trillion days apart, so the comparison holds for none of them; and
      * four hundred billion days apart are only dates nearer the two ends than the middle is.
      * Three hundred billion days leave the middle date partners either side.

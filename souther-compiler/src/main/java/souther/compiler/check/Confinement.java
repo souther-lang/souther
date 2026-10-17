@@ -504,7 +504,8 @@ sealed interface Confinement<A> {
     private static <A> Admits admits(Map<A, Carrier> carriers, Function<A, OrderedInterval> sits,
                                      Sameness.Block<A> block, ValueSet set, int atMost) {
         Placed placed = placedAt(carriers, sits, block);
-        return Carrier.leftAt(placed.carrier(), set, placed.within(), atMost);
+        return placed.onNoOneOrder() ? new Admits.NotKnown()
+                : Carrier.leftAt(placed.carrier(), set, placed.within(), atMost);
     }
 
     /** The two questions one walk over the alternatives is asked: what each block leaves, and what
@@ -569,6 +570,9 @@ sealed interface Confinement<A> {
                                           StringMachineAnswers machines,
                                           Sameness.Block<A> block, ValueSet set) {
         Placed placed = placedAt(carriers, sits, block);
+        if (placed.onNoOneOrder()) {
+            return souther.compiler.values.Emptiness.UNDECIDED;
+        }
         return placed.carrier() == null ? souther.compiler.values.Emptiness.NONEMPTY
                 : placed.carrier().meets(set, placed.within(), meter, machines);
     }
@@ -588,10 +592,13 @@ sealed interface Confinement<A> {
     private static <A> Placed placedAt(Map<A, Carrier> carriers, Function<A, OrderedInterval> sits,
                                        Sameness.Block<A> block) {
         // One carrier, and refused rather than picked between: a rule holding two positions as one
-        // value is one an equality between them typed, and an equality types only where the two are
-        // of one type. So a block whose members disagree is this compiler being wrong about a
-        // block — and answered with whichever of them the walk met last, which of the two it was
-        // would be how the positions are spelled and nothing would say so.
+        // value is one an equality between them typed, and an equality types only where the two
+        // are of one type or are cases of enumerations, compared as cases. Two enumerations each
+        // count where a case comes in their own declaration, so a block holding a case of each
+        // stands on no one order, and where its positions sit on each says nothing of the other:
+        // that block is said to be on none. Any other disagreement is this compiler being wrong
+        // about a block — and answered with whichever of them the walk met last, which of the two
+        // it was would be how the positions are spelled and nothing would say so.
         Set<Carrier> orderedOn = new HashSet<>();
         OrderedInterval within = OrderedInterval.OPEN;
         for (A position : block.members()) {
@@ -603,13 +610,26 @@ sealed interface Confinement<A> {
             // they are met in.
             within = within.meet(sits.apply(position));
         }
+        for (Carrier one : orderedOn) {
+            for (Carrier other : orderedOn) {
+                if (!Carrier.onOneOrder(one, other)) {
+                    return new Placed(null, OrderedInterval.OPEN, true);
+                }
+            }
+        }
         return new Placed(orderedOn.isEmpty() ? null
-                : TheOnly.of(orderedOn, "order the positions held as one value are on"), within);
+                : TheOnly.of(orderedOn, "order the positions held as one value are on"), within,
+                false);
     }
 
-    /** A block's order and the range its positions leave it, the order being null where nothing
-     *  orders it. */
-    record Placed(Carrier carrier, OrderedInterval within) {}
+    /**
+     * A block's order and the range its positions leave it, the order being null where nothing
+     * orders it.
+     *
+     * @param onNoOneOrder whether its positions stand on orders a place on one of which is no place
+     *                     on another, so that neither the values nor the ranges are asked of it
+     */
+    record Placed(Carrier carrier, OrderedInterval within, boolean onNoOneOrder) {}
 
     /** Whether anything outside these readings places a position of {@code block}. */
     private static <A> boolean places(Sameness.Block<A> block,

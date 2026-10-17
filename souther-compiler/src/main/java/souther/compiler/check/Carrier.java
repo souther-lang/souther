@@ -453,6 +453,22 @@ public sealed interface Carrier extends ValueOrder {
     }
 
     /**
+     * Whether a value counted on {@code one} and a value counted on {@code other} stand on one
+     * order, so that where one stands can be compared with where the other does: two numbers,
+     * whatever each counts, two strings, and two cases of one enumeration. Two enumerations each
+     * count where a case comes in their own declaration, so a case of one stands nowhere on the
+     * other's order, however they compare as values.
+     */
+    static boolean onOneOrder(Carrier one, Carrier other) {
+        return switch (one) {
+            case Ordinal _ -> one.equals(other);
+            case Text _ -> other instanceof Text;
+            case Whole _, Dense _, Days _, Seconds _, SecondsOfDay _, Nanos _ ->
+                    !(other instanceof Ordinal) && !(other instanceof Text);
+        };
+    }
+
+    /**
      * The ends of the orders that have the same ends every time they are asked.
      *
      * <p>Where a reading starts is asked of every leaf of every clause, and of every position of
