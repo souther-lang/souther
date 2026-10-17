@@ -499,6 +499,18 @@ class AFillerThatStopsTheBodyIsExchangedForOneThatGoesOnTest {
                 "let c = " + SOME_X + "\n    guard c >= 1")).get("n=x <= 0"));
     }
 
+    /**
+     * The same said as a list the filter keeps not being empty. A run through the guard is
+     * recorded at the comparison the library's {@code isEmpty} is written as, and that is where
+     * the application answers, so it is seen as the application's answer — which is what the
+     * guard's condition is read as.
+     */
+    @Test
+    void aRowGoesOnPastWhatAFilterKeepsNotBeingEmpty() {
+        assertEquals("[1], [], 0", rowsOf(COUNTED.replace("CONDITION",
+                "Bool.not(List.isEmpty(List.filter(x -> x > 0, xs)))")).get("n=x <= 0"));
+    }
+
     /** Either count, written as two comparisons: each is a way past of its own. */
     @Test
     void aRowGoesOnPastEitherOfTwoCounts() {

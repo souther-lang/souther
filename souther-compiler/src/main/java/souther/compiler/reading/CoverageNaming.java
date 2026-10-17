@@ -124,14 +124,10 @@ final class CoverageNaming implements Naming<Outcome> {
         if (compared == null && drawn == null) {
             return null;
         }
-        // Which construct of the model the decision is of. An application answering here comes
-        // first: the comparison is then the code of the operation it applies, which the model
-        // states nothing of, and the rule the author wrote — and drew a line by — is the
-        // application. Where none does, the comparison is the construct.
-        ControlPlace.Outcome outcome = plan.applicationAnsweringAt(comparison)
-                .flatMap(application -> plan.outcomeOf(application, held))
-                .or(() -> outcomeAt(plan, comparison, held))
-                .orElse(null);
+        // Which construct of the model the decision is of: the application answering here where
+        // one does, which is the rule the author wrote and drew a line by, and otherwise the
+        // comparison ({@link CoverageSites.Plan#outcomeAt}).
+        ControlPlace.Outcome outcome = plan.outcomeAt(comparison, held).orElse(null);
         if (outcome == null) {
             return null;
         }
@@ -164,20 +160,6 @@ final class CoverageNaming implements Naming<Outcome> {
         List<TypeSymbol> left = compared.leavesWhere(held);
         return left.isEmpty() ? null : new Condition.Case(compared.at(),
                 left.stream().map(TypeSymbol::name).toList());
-    }
-
-    /**
-     * The place {@code comparison} coming out {@code held} is recorded at, or empty where the plan
-     * records no run through it.
-     *
-     * <p>The one way from a comparison of the tree that runs to where a run is seen making it, for
-     * every naming of a body that says what a run would be seen doing.
-     */
-    static Optional<ControlPlace.Outcome> outcomeAt(CoverageSites.Plan plan,
-                                                    Core.Binary comparison, boolean held) {
-        return plan.comparisons().occurrenceAt(comparison)
-                .filter(plan::instruments)
-                .flatMap(site -> plan.outcomeOf(site, held));
     }
 
     /** What {@code drawn} places on its number, where its other side is a value the number's order

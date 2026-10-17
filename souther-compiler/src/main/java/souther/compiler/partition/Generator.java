@@ -9517,7 +9517,7 @@ public final class Generator {
      * later one splits into that asks everything the earlier ones were held along asked, and the
      * way whole where none does.
      */
-    private static Reachability.Reaching wayToTheLast(List<HeldOutcome> held) {
+    static Reachability.Reaching wayToTheLast(List<HeldOutcome> held) {
         Reachability.Reaching last = held.getLast().reaching();
         Set<OnTheWay.TakenIn> before = new HashSet<>();
         for (HeldOutcome each : held.subList(0, held.size() - 1)) {
