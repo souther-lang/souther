@@ -849,6 +849,66 @@ public final class NumericDomain<A> {
         return kinds.get(atom);
     }
 
+    /**
+     * A run of {@code atom} every value of which, at its own spacing, the rules leave it — or null
+     * where that is not shown.
+     *
+     * <p>Not what {@link #projectionOf} answers, which is where the values lie and may be wider:
+     * three things are shown of it together, and the run is answered with them rather than beside
+     * them so that a caller cannot take one answer for another. The rules are shown to leave each
+     * atom they relate the whole of its run ({@link #projectionCertification}). Its ends are the
+     * rules' own and not rounded past them: an end at a third is handed over as a decimal a hair
+     * below, which no value of the atom is ({@link #endsAreWrittenExactly}). And each end is one
+     * the atom takes: a whole number at or inside a strict end where the values step by one, and
+     * an end that is not taken only where they are dense, so that some value lies as near it as any
+     * other value asked of. An atom whose spacing nothing recorded is a value the arithmetic does
+     * not count, and no run of it is shown.
+     */
+    public Bounds wholeRunOf(A atom) {
+        if (!(projectionCertification() instanceof ProjectionCertification.Certified)
+                || !endsAreWrittenExactly(atom)
+                || !(projectionOf(LinearForm.atom(atom)) instanceof FormProjection.Within(
+                        Bounds run))) {
+            return null;
+        }
+        return switch (spacingOf(atom)) {
+            case null -> null;
+            case DENSE -> run;
+            case DISCRETE -> onWholeNumbers(run);
+        };
+    }
+
+    /** {@code run} with each end the whole number nearest it that the run takes — or null where
+     *  an end is no number this can step from. An absent end, which runs to the end of the type,
+     *  is kept absent. */
+    private static Bounds onWholeNumbers(Bounds run) {
+        Endpoint low = run.min() == null ? null : wholeAt(run.min(), true);
+        Endpoint high = run.max() == null ? null : wholeAt(run.max(), false);
+        if ((run.min() != null && low == null) || (run.max() != null && high == null)) {
+            return null;
+        }
+        return new Bounds(low, high);
+    }
+
+    /**
+     * The whole number nearest {@code end} on the run's side of it that the run takes.
+     *
+     * @return null where the end is no number this can step from
+     */
+    private static Endpoint wholeAt(Endpoint end, boolean least) {
+        if (!(end.at() instanceof Count count)) {
+            return null;
+        }
+        ExactRatio at = count.exactly();
+        ExactAnswer<BigInteger> stepped = least ? at.ceiling() : at.floor();
+        if (!(stepped instanceof ExactAnswer.Held<BigInteger>(BigInteger whole))) {
+            return null;
+        }
+        BigInteger taken = end.inclusive() || !ExactRatio.of(whole).equals(at) ? whole
+                : least ? whole.add(BigInteger.ONE) : whole.subtract(BigInteger.ONE);
+        return Endpoint.inclusive(Count.of(new BigDecimal(taken)));
+    }
+
     /** What an atom's values are known to lie between. A {@code null} end is unbounded there. */
     public record Bounds(Endpoint min, Endpoint max) {
 

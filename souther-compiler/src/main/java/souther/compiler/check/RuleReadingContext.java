@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import souther.compiler.revision.RevisionKnowledge;
 import souther.compiler.types.TypeKey;
+import souther.compiler.values.StringFacts;
 import souther.compiler.values.StringMachineAnswers;
 
 /**
@@ -142,5 +143,18 @@ public final class RuleReadingContext {
     public RuleReadingContext whileTheAnswerIsMade(TypeKey named, StringMachineAnswers recorder) {
         return new RuleReadingContext(source, policy,
                 readings.whileTheAnswerIsMade(named, recorder));
+    }
+
+    /**
+     * The same rules and budget, for a counterfactual of a reading of {@code named} that came to
+     * {@code machines}: borrowing those and nothing else, with what the revision has worked out
+     * ({@link DeclarationReadings#borrowing}).
+     *
+     * <p>Here for the reason {@link #whileTheAnswerIsMade} is: a reader that took the lender out to
+     * put a world of its own together would be past the bound a producer put on this one.
+     */
+    RuleReadingContext forACounterfactual(TypeKey named, StringFacts machines) {
+        return new RuleReadingContext(source, policy,
+                DeclarationReadings.borrowing(named, machines, readings.revision()));
     }
 }
