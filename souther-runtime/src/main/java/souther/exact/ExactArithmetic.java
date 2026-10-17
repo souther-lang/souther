@@ -193,18 +193,11 @@ public final class ExactArithmetic {
         return out;
     }
 
-    /**
-     * Whether both whole numbers of {@code parts} take the long route: a long holds each with a bit
-     * to spare, as it does for {@link #canonical(long, long, long, long)}, and the denominator is
-     * not nought.
-     *
-     * <p>Parts are not a value and hold no rule against a nought below the line. What one fails
-     * with is said at any width, so the long route leaves it there.
-     */
+    /** Whether both whole numbers of {@code parts} take the long route: a long holds each with a
+     *  bit to spare, as it does for {@link #canonical(long, long, long, long)}. */
     private static boolean inLongs(ExactParts parts) {
         return parts.numerator().bitLength() < Long.SIZE - 1
-                && parts.denominator().bitLength() < Long.SIZE - 1
-                && parts.denominator().signum() != 0;
+                && parts.denominator().bitLength() < Long.SIZE - 1;
     }
 
     /** How many bits the magnitude of {@code whole} takes, which the long route holds below

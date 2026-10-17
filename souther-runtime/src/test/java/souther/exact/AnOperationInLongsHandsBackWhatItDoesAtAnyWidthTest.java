@@ -11,6 +11,7 @@ import java.util.function.BinaryOperator;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
  * A sum, a product and a quotient worked out in longs are the parts the same operation hands back
@@ -76,6 +77,13 @@ class AnOperationInLongsHandsBackWhatItDoesAtAnyWidthTest {
         assertEquals(BigInteger.TWO, sum.numerator());
     }
 
+    /** Which is why neither route asks after one: no parts have a nought below the line. */
+    @Test
+    void noPartsHaveANoughtBelowTheLine() {
+        assertThrows(IllegalArgumentException.class,
+                () -> new ExactParts(BigInteger.valueOf(3), BigInteger.ZERO, 0, 0));
+    }
+
     private static List<String> differences(BinaryOperator<ExactParts> operation,
                                             BinaryOperator<ExactParts> inLongs,
                                             BinaryOperator<ExactParts> atAnyWidth) {
@@ -128,10 +136,6 @@ class AnOperationInLongsHandsBackWhatItDoesAtAnyWidthTest {
                             Long.MAX_VALUE - 1, Long.MIN_VALUE, Long.MIN_VALUE + 1};
         List<ExactParts> out = new ArrayList<>();
         out.add(ExactParts.ZERO);
-        // Parts are not a value and hold no rule against a nought below the line, so the two
-        // routes are asked to fail alike on one.
-        out.add(parts(3, 0, 0, 0));
-        out.add(parts(-7, 0, 2, 0));
         Random random = new Random(20261017L);
         for (int i = 0; i < 100; i++) {
             BigInteger numerator = wholes.get(random.nextInt(wholes.size()));
