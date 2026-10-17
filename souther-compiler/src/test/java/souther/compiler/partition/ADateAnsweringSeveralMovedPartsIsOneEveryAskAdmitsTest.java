@@ -180,15 +180,16 @@ class ADateAnsweringSeveralMovedPartsIsOneEveryAskAdmitsTest {
     }
 
     /**
-     * Months and days with no year among them are answered by the first date of the cycle that
-     * answers them, and nothing is offered only where no date of the cycle does.
+     * Months and days with no year among them are answered by a date every ask admits, and nothing
+     * is offered only where no date does.
      *
-     * <p>The walk is held against every day of the cycle it says it walks, one by one: what it
-     * offers is the first of them that every ask admits, so neither the cuts nor the years it is
-     * walked in leave a date out.
+     * <p>Held against a walk over every day of more than a cycle around where the search starts,
+     * which covers every day the narrower moves here are defined at. The walk knows nothing of
+     * where the search starts or stops, so neither the window it picks nor the cuts it makes can
+     * leave a date out unseen.
      */
     @Test
-    void monthsAndDaysWithNoYearAreAnsweredByTheFirstDateOfTheCycleThatAnswersThem() {
+    void monthsAndDaysWithNoYearAreAnsweredWhereverADateAnswersThem() {
         Random random = new Random(2443);
         List<DatePart> noYear = List.of(DatePart.MONTH, DatePart.DAY);
         int offered = 0;
@@ -201,27 +202,30 @@ class ADateAnsweringSeveralMovedPartsIsOneEveryAskAdmitsTest {
                 asks.add(new TermRealizations.DatePartAsk(part, chain(random),
                         numbers(random, part, random.nextBoolean())));
             }
-            long first = asks.stream().mapToLong(each -> each.moved().first()).max()
-                    .orElseThrow();
-            long last = asks.stream().mapToLong(each -> each.moved().last()).min().orElseThrow();
-            long from = Math.max(first, Math.min(CYCLE_FROM, last - CYCLE + 1));
-            long to = Math.min(last, from + CYCLE - 1);
-            LocalDate expected = null;
-            for (long day = from; day <= to && expected == null; day++) {
-                final long on = day;
-                if (asks.stream().allMatch(ask -> admitsWide(ask, on))) {
-                    expected = LocalDate.ofEpochDay(day);
+            boolean somethingAnswers = false;
+            for (long day = WIDE_FROM + REACH; day < WIDE_FROM + MONTHS.length - REACH
+                    && !somethingAnswers; day++) {
+                somethingAnswers = true;
+                for (TermRealizations.DatePartAsk ask : asks) {
+                    if (!admitsWide(ask, day)) {
+                        somethingAnswers = false;
+                        break;
+                    }
                 }
             }
 
             TermRealizations.Search found =
                     TermRealizations.dateAnsweringMovedParts(asks, Carrier.DATE);
 
-            assertTrue(found.everyOne(), "a cycle is every day there is to ask: " + asks);
-            assertEquals(expected, found.on(), asks.toString());
-            if (expected == null) {
+            String where = asks.toString();
+            assertTrue(found.everyOne(), "a cycle is every day there is to ask: " + where);
+            assertEquals(somethingAnswers, found.on() != null, where);
+            if (found.on() == null) {
                 refused++;
             } else {
+                long day = found.on().toEpochDay();
+                assertTrue(asks.stream().allMatch(ask -> admitsWide(ask, day)),
+                        found.on() + " was offered and does not answer every ask: " + where);
                 offered++;
             }
         }

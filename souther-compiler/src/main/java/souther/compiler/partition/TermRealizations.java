@@ -39,6 +39,7 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.BitSet;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
@@ -3226,24 +3227,87 @@ final class TermRealizations {
      */
     record DatePartAsk(TakenAs.DatePart part, DateTranslation moved, NumericSet wanted) {
 
+        /** This ask, ready to be put to the days. */
+        PutToTheDays putToTheDays(Carrier observed) {
+            int most = switch (part) {
+                case YEAR -> 0;
+                case MONTH -> MONTHS_A_YEAR_HAS;
+                case DAY -> DAYS_THE_LONGEST_MONTH_HAS;
+            };
+            BitSet left = new BitSet(most + 1);
+            for (int value = 1; value <= most; value++) {
+                left.set(value, wanted.holds(Count.of(value), observed));
+            }
+            return new PutToTheDays(this, part == TakenAs.DatePart.YEAR ? null : left, observed);
+        }
+    }
+
+    /**
+     * One ask, ready to be put to the days.
+     *
+     * <p>A month or a day of the month takes so few values that which of them the set leaves is asked
+     * once, and each day reads the answer. A walk over a cycle of the calendar would otherwise ask
+     * the set again at every day of four hundred years. A year runs further than a table holds, and
+     * is asked of the set at each day it is put to.
+     *
+     * @param ask      what is asked
+     * @param left     the months or the days of the month the set leaves, by value, or null for a
+     *                 year
+     * @param observed what the set is asked on
+     */
+    record PutToTheDays(DatePartAsk ask, BitSet left, Carrier observed) {
+
         /** Whether the date {@code day} counts to is one this admits: one the move is defined at,
          *  whose moved date has a part the rules leave. */
-        boolean admits(long day, Carrier observed) {
-            return moved.definedAt(day)
-                    && wanted.holds(Count.of(partOf(part, day + moved.offsetDays())), observed);
+        boolean admits(long day) {
+            DateTranslation moved = ask.moved();
+            if (!moved.definedAt(day)) {
+                return false;
+            }
+            int part = partOf(ask.part(), day + moved.offsetDays());
+            return left == null ? ask.wanted().holds(Count.of(part), observed) : left.get(part);
         }
 
-        /** The days, among those after {@code from} up to {@code to}, at which this ask is
-         *  answered otherwise than on the day before: where the move stops being defined, and where
-         *  the part of the moved date starts a new run. */
+        /** Whether no date is one this admits, which a table answers without a walk. */
+        boolean admitsNothing() {
+            return left != null && left.isEmpty();
+        }
+
+        /**
+         * The days, among those after {@code from} up to {@code to}, at which this ask is answered
+         * otherwise than on the day before: where the move stops being defined, and where the part
+         * of the moved date starts a new run.
+         *
+         * <p>A day of the month starts a new run every day, but is answered otherwise only where
+         * the set turns between one day and the next, or where a month starts. With the table in
+         * hand those are the days cut at, so a set that leaves one day of the month cuts a month in
+         * three and not in thirty-one.
+         */
         void cutsInto(SortedSet<Long> cuts, long from, long to) {
+            DateTranslation moved = ask.moved();
             for (long edge : new long[] {moved.first(), moved.last() + 1}) {
                 addIfBetween(cuts, edge, from, to);
             }
+            long low = clamped(from + moved.offsetDays());
             long high = clamped(to + moved.offsetDays());
-            for (OptionalLong start = nextStartAfter(part, clamped(from + moved.offsetDays()));
+            if (ask.part() == TakenAs.DatePart.DAY) {
+                for (OptionalLong month = OptionalLong.of(
+                                LocalDate.ofEpochDay(low).withDayOfMonth(1).toEpochDay());
+                        month.isPresent() && month.getAsLong() <= high;
+                        month = nextStartAfter(TakenAs.DatePart.MONTH, month.getAsLong())) {
+                    long first = month.getAsLong();
+                    int length = LocalDate.ofEpochDay(first).lengthOfMonth();
+                    for (int day = 1; day <= length; day++) {
+                        if (day == 1 || left.get(day) != left.get(day - 1)) {
+                            addIfBetween(cuts, first + day - 1 - moved.offsetDays(), from, to);
+                        }
+                    }
+                }
+                return;
+            }
+            for (OptionalLong start = nextStartAfter(ask.part(), low);
                     start.isPresent() && start.getAsLong() <= high;
-                    start = nextStartAfter(part, start.getAsLong())) {
+                    start = nextStartAfter(ask.part(), start.getAsLong())) {
                 addIfBetween(cuts, start.getAsLong() - moved.offsetDays(), from, to);
             }
         }
@@ -3352,17 +3416,21 @@ final class TermRealizations {
      * is.
      */
     static Search dateAnsweringMovedParts(List<DatePartAsk> asks, Carrier observed) {
+        List<PutToTheDays> put = asks.stream().map(each -> each.putToTheDays(observed)).toList();
+        if (put.stream().anyMatch(PutToTheDays::admitsNothing)) {
+            return new Search(null, true);
+        }
         DatePartAsk lead = asks.stream().filter(each -> each.part() == TakenAs.DatePart.YEAR)
                 .findFirst().orElse(null);
         if (lead == null) {
-            return new Search(dateInOneCycle(asks, observed), true);
+            return new Search(dateInOneCycle(put), true);
         }
         Tried years = wholeNumbers(lead.wanted(), observed,
                 LocalDate.MIN.getYear(), LocalDate.MAX.getYear(),
                 CompositionBudget.NUMBERS_OF_A_SET_TRIED.maximum());
         boolean everyOne = years.rest() instanceof Remainder.Exhausted;
         for (Place year : years.numbers()) {
-            LocalDate on = dateInTheRunOf(lead, whole(year), asks, observed);
+            LocalDate on = dateInTheRunOf(lead, whole(year), put);
             if (on != null) {
                 return new Search(on, everyOne);
             }
@@ -3374,37 +3442,38 @@ final class TermRealizations {
      * The first date the lead ask's moved date is in {@code year} at, and every other ask admits,
      * or null where there is none.
      */
-    private static LocalDate dateInTheRunOf(DatePartAsk lead, int year, List<DatePartAsk> asks,
-                                            Carrier observed) {
+    private static LocalDate dateInTheRunOf(DatePartAsk lead, int year, List<PutToTheDays> asks) {
         DateTranslation moved = lead.moved();
         long from = Math.max(moved.first(),
                 LocalDate.of(year, 1, 1).toEpochDay() - moved.offsetDays());
         long to = Math.min(moved.last(),
                 LocalDate.of(year, 12, 31).toEpochDay() - moved.offsetDays());
-        return from > to ? null : firstAdmittedIn(from, to, asks, observed);
+        return from > to ? null : firstAdmittedIn(from, to, asks);
     }
 
     /**
      * The first date of a cycle of the calendar that every one of {@code asks} admits, or null where
      * there is none.
      *
-     * <p>The cycle is the one from the first of January of {@link #A_LEAP_YEAR} where every ask is
-     * defined there, and otherwise the nearest one that is. It is walked a year of the date at a
-     * time, so that a date found early is found without cutting the rest of the cycle.
+     * <p>The cycle is the one from {@link #A_CYCLE_STARTS} where every ask is defined there, and
+     * otherwise the nearest one that is. It is walked a year of the date at a time, so that a date
+     * found early is found without cutting the rest of the cycle.
      */
-    private static LocalDate dateInOneCycle(List<DatePartAsk> asks, Carrier observed) {
-        long first = asks.stream().mapToLong(each -> each.moved().first()).max().orElseThrow();
-        long last = asks.stream().mapToLong(each -> each.moved().last()).min().orElseThrow();
+    private static LocalDate dateInOneCycle(List<PutToTheDays> asks) {
+        long first = asks.stream().mapToLong(each -> each.ask().moved().first()).max()
+                .orElseThrow();
+        long last = asks.stream().mapToLong(each -> each.ask().moved().last()).min()
+                .orElseThrow();
         if (first > last) {
             return null;
         }
-        long from = Math.max(first, Math.min(LocalDate.of(A_LEAP_YEAR, 1, 1).toEpochDay(),
+        long from = Math.max(first, Math.min(A_CYCLE_STARTS.toEpochDay(),
                 last - DAYS_OF_A_CYCLE + 1));
         long to = Math.min(last, from + DAYS_OF_A_CYCLE - 1);
         for (long start = from; start <= to; ) {
             long end = Math.min(to,
                     LocalDate.of(LocalDate.ofEpochDay(start).getYear(), 12, 31).toEpochDay());
-            LocalDate found = firstAdmittedIn(start, end, asks, observed);
+            LocalDate found = firstAdmittedIn(start, end, asks);
             if (found != null) {
                 return found;
             }
@@ -3414,22 +3483,33 @@ final class TermRealizations {
     }
 
     /** The first date from {@code from} to {@code to} that every one of {@code asks} admits, or
-     *  null where there is none. The days are at most a year of them. */
-    private static LocalDate firstAdmittedIn(long from, long to, List<DatePartAsk> asks,
-                                             Carrier observed) {
+     *  null where there is none. The days are a year of them or fewer, which is what keeps the cuts
+     *  of a day of the month few. */
+    private static LocalDate firstAdmittedIn(long from, long to, List<PutToTheDays> asks) {
+        assert to - from < 366 : "a run of days walked at once is a year or less: " + from
+                + " to " + to;
         // Each ask is answered the same way between two of the days it changes at, so the first
         // day of each stretch is every day of it.
         TreeSet<Long> cuts = new TreeSet<>();
         cuts.add(from);
-        for (DatePartAsk each : asks) {
+        for (PutToTheDays each : asks) {
             each.cutsInto(cuts, from, to);
         }
         for (long day : cuts) {
-            if (asks.stream().allMatch(each -> each.admits(day, observed))) {
+            if (admitsEvery(asks, day)) {
                 return LocalDate.ofEpochDay(day);
             }
         }
         return null;
+    }
+
+    private static boolean admitsEvery(List<PutToTheDays> asks, long day) {
+        for (PutToTheDays each : asks) {
+            if (!each.admits(day)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**
@@ -3489,6 +3569,11 @@ final class TermRealizations {
     /** How many days the Gregorian calendar takes to repeat: four hundred years, of which ninety-seven
      *  are leap years. */
     private static final long DAYS_OF_A_CYCLE = 400L * 365 + 97;
+
+    /** Where the cycle walked for a month or a day of a moved date starts, where every ask is
+     *  defined there. Any day starts a cycle; this one is the first of a leap year, so the dates
+     *  offered are near the ones a reader writes and the first leap day is in the first year. */
+    private static final LocalDate A_CYCLE_STARTS = LocalDate.of(2000, 1, 1);
 
     /**
      * One value, wearing every name the position declares, or the reason there is none.

@@ -7,6 +7,8 @@ import souther.compiler.numeric.ValueTransformation;
 import souther.compiler.types.Type;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.YearMonth;
 
 /**
  * How the number an operation answers is taken of a value it is given.
@@ -72,8 +74,8 @@ public sealed interface TakenAs {
      *
      * <p>Asked where a term is built, as {@link #settledBy} is. Every account takes a number of the
      * value as it stands. Which of them take it of a value that was moved first is a second
-     * question: it needs the numbers the account answers to be a run of the values that were moved
-     * from, so that what a row is asked to hold is read back from the numbers asked for.
+     * question: it needs a number of the moved value to be read off a row, and a row to be written
+     * for the numbers asked, by something that knows how the value was moved.
      */
     default boolean readsWhatItWasMadeFrom(ValueTransformation from) {
         return from instanceof ValueTransformation.Identity;
@@ -363,6 +365,9 @@ public sealed interface TakenAs {
          * of days, and the dates a moved month or day falls on are not, but that is a question for
          * the search and not for what the number is: the calendar repeats, so the days of one
          * cycle of it are every day a month and a day can be asked of.
+         *
+         * <p>Written over the transformations although each answers the same, so that one of
+         * another kind is decided here before any part of a date is taken of it.
          */
         @Override
         public boolean readsWhatItWasMadeFrom(ValueTransformation from) {
@@ -373,22 +378,37 @@ public sealed interface TakenAs {
         }
 
         /**
-         * The years of the dates a chain of shifts is defined at, moved by it: the year of the
-         * first date it can answer and of the last. The dates are one run of days, so every year
-         * between is one of them as well.
+         * The parts of the dates a chain of shifts is defined at, moved by it, where those are a
+         * run of numbers: from the part of the first date it can answer to the part of the last.
+         *
+         * <p>The dates are one run of days, so the years they fall in are one run as well. Their
+         * months are one where the dates fall in one year, and their days of the month one where
+         * the dates fall in one month. Otherwise the months or the days come round and are no run,
+         * and every one the calendar has is left to what the operation declares.
          */
         @Override
         public NumericDomain.Bounds reachedFrom(ValueTransformation from) {
             return switch (from) {
                 case ValueTransformation.Identity _ -> NumericDomain.Bounds.OPEN;
-                case ValueTransformation.DateShift shift -> part != DatePart.YEAR
-                        ? NumericDomain.Bounds.OPEN
-                        : new NumericDomain.Bounds(
-                                Endpoint.inclusive(Count.of(shift.translation().firstMoved()
-                                        .getYear())),
-                                Endpoint.inclusive(Count.of(shift.translation().lastMoved()
-                                        .getYear())));
+                case ValueTransformation.DateShift shift -> {
+                    LocalDate first = shift.translation().firstMoved();
+                    LocalDate last = shift.translation().lastMoved();
+                    yield switch (part) {
+                        case YEAR -> run(first.getYear(), last.getYear());
+                        case MONTH -> first.getYear() == last.getYear()
+                                ? run(first.getMonthValue(), last.getMonthValue())
+                                : NumericDomain.Bounds.OPEN;
+                        case DAY -> YearMonth.from(first).equals(YearMonth.from(last))
+                                ? run(first.getDayOfMonth(), last.getDayOfMonth())
+                                : NumericDomain.Bounds.OPEN;
+                    };
+                }
             };
+        }
+
+        private static NumericDomain.Bounds run(int least, int most) {
+            return new NumericDomain.Bounds(Endpoint.inclusive(Count.of(least)),
+                    Endpoint.inclusive(Count.of(most)));
         }
     }
 
