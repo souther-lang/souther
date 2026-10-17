@@ -1421,10 +1421,13 @@ final class Pullback {
             return new Sized.AsAForm(inACase);
         }
         // The pieces of a string parted at one code point: the operation has no number for how
-        // many, and this call's separator gives one.
+        // many, and this call's separator gives one. Where that number is not read either, what
+        // is said is the operation's own word for its size.
         ALawRead call = new ALawRead(applied, e, made.at());
-        if (call.piecesOf(made) instanceof Pieces pieces && pieces.separator().isPresent()) {
-            return call.number(pieces.parted().howManyPartedAt(pieces.separator().getAsInt()));
+        if (call.piecesOf(made) instanceof Pieces pieces && pieces.separator().isPresent()
+                && call.number(pieces.parted().howManyPartedAt(pieces.separator().getAsInt()))
+                        instanceof Sized.AsAForm read) {
+            return read;
         }
         return switch (DefaultBoundOperationFacts.get().settled(operation,
                 OperationLaw.Observed.SIZE)) {
