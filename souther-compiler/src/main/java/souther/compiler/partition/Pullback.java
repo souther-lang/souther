@@ -5886,7 +5886,7 @@ final class Pullback {
      * a name standing for an element of a container, itself or through the names it was given.
      */
     private boolean variesByApplication(Core e, InputReads at, Set<BindingId> met) {
-        if (e instanceof Core.Read name) {
+        if (Core.withoutStanding(e) instanceof Core.Read name) {
             if (at.turnsOnAnApplication(name, read.rules().symbols(), read.rules().newtypes())) {
                 return true;
             }
