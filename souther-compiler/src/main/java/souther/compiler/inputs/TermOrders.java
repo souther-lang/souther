@@ -132,6 +132,21 @@ public final class TermOrders {
     }
 
     /**
+     * The end of what the elements {@code each} hold at the term's value among those holding at its
+     * key what {@code own} holds there, for a term that takes it.
+     *
+     * @param own  the element under consideration, as what it holds at each way into it
+     * @param each every element of its container, the same way
+     */
+    public NumericTerm.Reading readAtItsKey(Function<ElementProjection, ObservedValue> own,
+                                            List<Function<ElementProjection, ObservedValue>> each) {
+        if (!(term instanceof NumericTerm.ExtremeOfItsKey)) {
+            throw new IllegalArgumentException(term + " is not an end of the values of a key");
+        }
+        return TermReading.extremeOfItsKey(this, own, each);
+    }
+
+    /**
      * The same, over the values of a run.
      *
      * <p>Which rows there are and how many values stand at a place in one are the measure's; a term

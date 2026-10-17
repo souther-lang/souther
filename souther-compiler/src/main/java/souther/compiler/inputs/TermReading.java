@@ -1,6 +1,7 @@
 package souther.compiler.inputs;
 
 import souther.compiler.check.Carrier;
+import souther.compiler.check.Extreme;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.DateTranslation;
 import souther.compiler.numeric.Dates;
@@ -121,6 +122,63 @@ final class TermReading {
             }
         }
         return new Reading.Number(Count.of(same));
+    }
+
+    /**
+     * The least or the greatest of what the elements {@code each} hold at the term's value, among
+     * those holding at its key what {@code own} holds there.
+     *
+     * <p>Alike as the key's order has them, as {@link #among} counts them, and the values put on the
+     * value's own order, which is the order the number is measured on. {@code each} holds
+     * {@code own} among them, so some element is of its key and the number is one of the values.
+     * An element holding nothing at either place is a row that wrote nothing there, which the
+     * caller has said already; a value the order puts nowhere is no number read.
+     *
+     * @param own  the element under consideration, as what it holds at each way into it
+     * @param each every element of the container, the same way
+     */
+    static Reading extremeOfItsKey(TermOrders on, Function<ElementProjection, ObservedValue> own,
+                                   List<Function<ElementProjection, ObservedValue>> each) {
+        NumericTerm.ExtremeOfItsKey term = (NumericTerm.ExtremeOfItsKey) on.term();
+        ElementProjection key = term.keyField();
+        ElementProjection value = term.valueField();
+        Carrier keyedOn = on.fieldCarrier(key);
+        ObservedValue ownKey = own.apply(key);
+        if (ownKey == null) {
+            return new Reading.NotNumber();
+        }
+        Where ownWhere = whereTheOrderPuts(keyedOn, ownKey);
+        if (!(ownWhere instanceof Where.At(Place ownPlace))) {
+            return ((Where.Nowhere) ownWhere).why();
+        }
+        Place kept = null;
+        for (Function<ElementProjection, ObservedValue> element : each) {
+            ObservedValue itsKey = element.apply(key);
+            ObservedValue itsValue = element.apply(value);
+            if (itsKey == null || itsValue == null) {
+                return new Reading.NotNumber();
+            }
+            switch (whereTheOrderPuts(keyedOn, itsKey)) {
+                case Where.At(Place place) -> {
+                    if (!place.sameAs(ownPlace)) {
+                        continue;
+                    }
+                }
+                case Where.Nowhere nowhere -> {
+                    return nowhere.why();
+                }
+            }
+            switch (whereTheOrderPuts(on.observed(), itsValue)) {
+                case Where.At(Place place) -> kept = kept == null ? place : switch (term.extreme()) {
+                    case Extreme.Least _ -> place.compareTo(kept) < 0 ? place : kept;
+                    case Extreme.Greatest _ -> place.compareTo(kept) > 0 ? place : kept;
+                };
+                case Where.Nowhere nowhere -> {
+                    return nowhere.why();
+                }
+            }
+        }
+        return kept == null ? new Reading.NotNumber() : new Reading.Number(kept);
     }
 
     /** Where an order puts a value, or why it puts it nowhere. */

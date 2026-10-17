@@ -108,6 +108,33 @@ sealed interface WhatATermRead {
         };
     }
 
+    /**
+     * What {@code on} reads at the element {@code row} is about, of the end of the values of its
+     * key among the elements of the container the term takes it over.
+     *
+     * <p>Element by element, each read as the row with that element chosen, so the key and the
+     * value paired are the ones one element holds. What stopped the first place that could not be
+     * read is what the row is told.
+     */
+    static WhatATermRead atItsKey(TermOrders on, BorderQuantity.Observation row) {
+        if (!(on.term() instanceof NumericTerm.ExtremeOfItsKey term)) {
+            throw new IllegalArgumentException(on.term() + " is not an end of the values of a key");
+        }
+        TermPath element = term.container().element();
+        if (!(row.eachElementOf(term.container())
+                instanceof WalkResult.Reached<List<BorderQuantity.Observation>> reached)) {
+            return new CameToNothing(ReadingGap.COULD_NOT_WALK);
+        }
+        WhatRowsLeft left = new WhatRowsLeft();
+        List<Function<ElementProjection, ObservedValue>> each = new ArrayList<>();
+        for (BorderQuantity.Observation one : reached.value()) {
+            each.add(field -> left.at(one, field.from(element)));
+        }
+        NumericTerm.Reading read = on.readAtItsKey(field -> left.at(row, field.from(element)),
+                each);
+        return left.stopped() != null ? left.stopped() : of(read);
+    }
+
     /** The same over the values of a run, which a walk that was not taken has none of. */
     static WhatATermRead over(TermOrders on, WalkResult<List<ObservedValue>> answered) {
         return switch (answered) {

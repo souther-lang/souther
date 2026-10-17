@@ -353,6 +353,11 @@ final class TermRealizations {
                 case NumericTerm.Multiplicity _ -> {
                     return nothingSolvesAGroup();
                 }
+                // Written as the value it is the end of, alone: beside another number of the same
+                // place it would be two numbers asked of one value that need not be one.
+                case NumericTerm.ExtremeOfItsKey _ -> {
+                    return nothingSolvesAGroup();
+                }
                 case NumericTerm.ValueOf _ -> itself = target;
                 case NumericTerm.CodePointClassCount _ -> {
                     takenOfIt.add(target);
@@ -1283,7 +1288,7 @@ final class TermRealizations {
                 case NumericTerm.TakenOf taken ->
                         taken.takenAs() instanceof TakenAs.TheSumOfWhatItHolds;
                 case NumericTerm.ValueOf _, NumericTerm.CodePointClassCount _,
-                     NumericTerm.Multiplicity _ -> false;
+                     NumericTerm.Multiplicity _, NumericTerm.ExtremeOfItsKey _ -> false;
             };
             // Each element is chosen for what it answers of the statements, out of values of the
             // element's own number; nothing else inside it is planned.
@@ -1476,6 +1481,12 @@ final class TermRealizations {
             // row as an `Int`, and the decoder refused it with the report saying only that every
             // value tried had been refused.
             case NumericTerm.ValueOf _ -> {
+                nothingInside(inside);
+                yield standing(sourceType, orders, asked, within, reading);
+            }
+            // Written as the value it is the end of, at the place it is taken of, on the order the
+            // values stand on ({@link RealizationTarget.AtItsKey}).
+            case NumericTerm.ExtremeOfItsKey _ -> {
                 nothingInside(inside);
                 yield standing(sourceType, orders, asked, within, reading);
             }

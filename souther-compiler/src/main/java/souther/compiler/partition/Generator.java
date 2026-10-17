@@ -7128,6 +7128,7 @@ public final class Generator {
             case RealizationTarget.AtOnePosition(NumericTerm.FromOnePosition term) -> term;
             case RealizationTarget.OverARun(NumericTerm.TakenOver term) -> term;
             case RealizationTarget.AmongTheElements(NumericTerm.Multiplicity term) -> term;
+            case RealizationTarget.AtItsKey(NumericTerm.ExtremeOfItsKey term) -> term;
             case RealizationTarget.AtOnePositionElsewhere(NumericTerm.FromOnePosition term,
                                                          TermPath root) -> {
                 NumericTerm moved = subject.quantities().namedAt(term, root);
@@ -7648,9 +7649,13 @@ public final class Generator {
         List<souther.compiler.observe.ObservedValue> row = new ArrayList<>(
                 java.util.Collections.nCopies(subject.parameters().size(), null));
         row.set(parameter, observed);
+        // The end of the values of a key is read off whole elements, each pairing its key with its
+        // value; the values alone say nothing of which of them are of one key.
+        TermPath readAt = target.term() instanceof NumericTerm.ExtremeOfItsKey extreme
+                ? extreme.container().element() : target.term().subjectPath();
         // Over the arms, so a walk that comes to answer a third way is one this is taught about
         // rather than one read as the walk and the type disagreeing.
-        return switch (subject.inputs().valuesAt(row, target.term().subjectPath())) {
+        return switch (subject.inputs().valuesAt(row, readAt)) {
             case WalkResult.CouldNotWalk<List<souther.compiler.observe.ObservedValue>> _ ->
                     new RealizationReadback.CouldNotTell(new ReadbackGap.WalkAndTypeDisagree());
             case WalkResult.Reached(List<souther.compiler.observe.ObservedValue> values) ->
@@ -7673,7 +7678,8 @@ public final class Generator {
                                         Place at) {
         NumericTerm term = on.term();
         boolean nothingToRead = switch (term) {
-            case NumericTerm.Multiplicity _, NumericTerm.FromOnePosition _ -> values.isEmpty();
+            case NumericTerm.Multiplicity _, NumericTerm.ExtremeOfItsKey _,
+                 NumericTerm.FromOnePosition _ -> values.isEmpty();
             case NumericTerm.TakenOver _ -> false;
         };
         if (nothingToRead) {
@@ -7690,6 +7696,26 @@ public final class Generator {
         Set<Incompleteness.Code> unread = EnumSet.noneOf(Incompleteness.Code.class);
         Set<UnheldNumber> notWorkedOut = EnumSet.noneOf(UnheldNumber.class);
         boolean stands = switch (term) {
+            // The end of the values of a key, among the elements standing there: a row stands at
+            // a point where some element's key comes to it.
+            case NumericTerm.ExtremeOfItsKey _ -> {
+                List<Function<ElementProjection, ObservedValue>> each = new ArrayList<>();
+                for (ObservedValue element : values) {
+                    each.add(field -> field.in(element));
+                }
+                boolean any = false;
+                for (Function<ElementProjection, ObservedValue> own : each) {
+                    switch (on.readAtItsKey(own, each)) {
+                        case NumericTerm.Reading.Number number ->
+                                any |= number.value().compareTo(at) == 0;
+                        case NumericTerm.Reading.Missing missing -> unread.add(missing.code());
+                        case NumericTerm.Reading.NotNumber _ -> { }
+                        case NumericTerm.Reading.NotWorkedOut(UnheldNumber why) ->
+                                notWorkedOut.add(why);
+                    }
+                }
+                yield any;
+            }
             // How often a value occurs among the values standing there: a row stands at a point
             // where some element's value is that frequent.
             case NumericTerm.Multiplicity _ -> {
@@ -12308,9 +12334,11 @@ public final class Generator {
                 // What an operation answered is not what its root holds — three characters is not
                 // the position standing at three, and a hundred is not what the list adding up to
                 // it holds. Nor is how many of a string's code points are in a class, or how often
-                // a value occurs among the elements beside it.
+                // a value occurs among the elements beside it, or the end of the values of a key,
+                // which another element of the key may hold.
                 case NumericTerm.TakenOf _, NumericTerm.CodePointClassCount _,
-                     NumericTerm.Multiplicity _, NumericTerm.TakenOver _ -> null;
+                     NumericTerm.Multiplicity _, NumericTerm.TakenOver _,
+                     NumericTerm.ExtremeOfItsKey _ -> null;
             };
             // Nor is how many of its elements meet a statement, or that they meet one together.
             case RealizationTarget.ACount _, RealizationTarget.ElementsMeetingTogether _ -> null;
