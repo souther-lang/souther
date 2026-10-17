@@ -248,7 +248,8 @@ class AGuardOnWhatAContainerHoldsIsComposedPastTest {
                 : ((RepairShortfall.AtTheGuard.NoWayPast) stop.came()).ways()) {
             assertTrue(way instanceof RepairShortfall.WayPast.Searched,
                     () -> "each way was looked for to the end: " + way);
-            said.add(((RepairShortfall.WayPast.Searched) way).came().why().reason());
+            ((RepairShortfall.WayPast.Searched) way).came()
+                    .forEach(came -> said.add(came.why().reason()));
         }
         assertEquals(List.of(Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE), said,
                 () -> "the way past the guard came to this compiler composing nothing: " + stop);
@@ -347,7 +348,8 @@ class AGuardOnWhatAContainerHoldsIsComposedPastTest {
                 : ((RepairShortfall.AtTheGuard.NoWayPast) stop.came()).ways()) {
             assertTrue(way instanceof RepairShortfall.WayPast.Searched,
                     () -> "each way was looked for to the end: " + way);
-            said.add(((RepairShortfall.WayPast.Searched) way).came().why().reason());
+            ((RepairShortfall.WayPast.Searched) way).came()
+                    .forEach(came -> said.add(came.why().reason()));
         }
         assertEquals(List.of(Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE), said,
                 () -> "the way past the guard came to this compiler composing nothing: " + stop);

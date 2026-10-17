@@ -6358,10 +6358,10 @@ public final class Adequacy {
                 case ControlPlace.Outcome outcome -> holding(subject, edges, reaching, outcome);
                 // An arm a run is seen taking where its fork's condition is a truth nothing else
                 // records: what that truth coming out the way the arm is taken on asks of a row.
-                case ControlPlace.Arm arm -> HeldOutcome.Bringing.of(
-                        ModelOccurrence.statedAt(arm.arm().fork())
-                                .flatMap(fork -> reaching.heldAtTheArm(fork, arm.arm().part(),
-                                        subject.quantities().region())));
+                case ControlPlace.Arm arm -> ModelOccurrence.statedAt(arm.arm().fork())
+                        .map(fork -> reaching.heldAtTheArm(fork, arm.arm().part(),
+                                subject.quantities().region()))
+                        .orElseGet(HeldOutcome.Bringing.NothingFound::new);
             });
         }
 
@@ -6370,8 +6370,9 @@ public final class Adequacy {
          *
          * <p>For a comparison, the side is which of the border's roles stand inside it: a point in
          * {@link PointRole#ON} or {@link PointRole#IN} is one the comparison holds at, and one in
-         * {@link PointRole#OFF} or {@link PointRole#OUT} one it fails at. For a truth, what it
-         * coming out that way asks of a row ({@link ReachingCuts#heldAt}).
+         * {@link PointRole#OFF} or {@link PointRole#OUT} one it fails at. For a truth, and for a
+         * comparison no border offers such a point for, what it coming out that way asks of a row
+         * ({@link ReachingCuts#heldAt}).
          */
         private static HeldOutcome.Bringing holding(MeasuredInput subject,
                                                     List<BorderAssessment> edges,
@@ -6391,10 +6392,13 @@ public final class Adequacy {
                 if (edge.border().noValueStandsWhereItComesOut(outcome.held())) {
                     return new HeldOutcome.Bringing.NoValueCanStandThere();
                 }
-                if (!(souther.compiler.partition.Reachability.of(reaching.wayTo(comparison),
+                // No row takes the way to it, which is the model's as much as no value standing on
+                // the side is: a proof, and not something this compiler fell short on.
+                WayToTheBorder way = reaching.wayTo(comparison);
+                if (!(souther.compiler.partition.Reachability.of(way,
                         subject.quantities().region())
                         instanceof souther.compiler.partition.Reachability.Reaching able)) {
-                    return new HeldOutcome.Bringing.NothingFound();   // nothing takes the way to it
+                    return new HeldOutcome.Bringing.NoValueCanStandThere();
                 }
                 List<PointRole> onThatSide = outcome.held()
                         ? List.of(PointRole.ON, PointRole.IN)
@@ -6409,20 +6413,22 @@ public final class Adequacy {
                         if (new LevelRealizer().realize(quantity.standingAt(owed.criterion()),
                                 able.region(), subject.witnessSearch())
                                 instanceof Realization.Found at) {
-                            return new HeldOutcome.Bringing.Found(new HeldOutcome(
+                            return new HeldOutcome.Bringing.Found(List.of(new HeldOutcome(
                                     List.of(new RowDemand.AtAPoint(at.fixing(),
                                             quantity.asksOfEachTerm(owed.criterion()))),
-                                    able));
+                                    List.of(), way, Map.of(), able)), Set.of());
                         }
                     }
                 }
             }
-            // No point of a border brings it out that way, and the outcome may be an operation's
-            // truth a fork's condition asks: what that coming out the way asked demands of a row,
-            // composed past the way to it.
-            return HeldOutcome.Bringing.of(ModelOccurrence.statedAt(outcome.occurrence())
-                    .flatMap(answers -> reaching.heldAt(answers, outcome.held(),
-                            subject.quantities().region())));
+            // No point of a border brings it out that way: an operation's truth a fork's condition
+            // asks, or a comparison with no border of its own — one carried past to the lines of
+            // its closures. What that coming out the way asked states of a row, composed past the
+            // way to it.
+            return ModelOccurrence.statedAt(outcome.occurrence())
+                    .map(answers -> reaching.heldAt(answers, outcome.held(),
+                            subject.quantities().region()))
+                    .orElseGet(HeldOutcome.Bringing.NothingFound::new);
         }
 
         private static souther.compiler.partition.FillResult rowsFor(

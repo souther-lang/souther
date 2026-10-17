@@ -782,6 +782,31 @@ public final class CoverageSites {
         }
 
         /**
+         * Where a run is seen bringing the node {@code node} out {@code held}: at the application
+         * that answers there, where one does, and otherwise at the comparison it is — or empty
+         * where the plan records neither.
+         *
+         * <p>The application first. A comparison an application answers at is the code of the
+         * operation applied, which the model states nothing of, and what a run through it comes
+         * to is the application's answer: this plan placed the answer there because that node is
+         * what the operation answers ({@link #applicationAnsweringAt}). Answered here once, so
+         * that two readers of one node never name two constructs for it.
+         *
+         * <p>Of the value with what it stands as set aside, which is the node either was placed
+         * at.
+         */
+        public Optional<ControlPlace.Outcome> outcomeAt(Core node, boolean held) {
+            Core e = Core.withoutStanding(node);
+            Optional<ControlPlace.Outcome> answered = applicationAnsweringAt(e)
+                    .flatMap(application -> outcomeOf(application, held));
+            if (answered.isPresent() || !(e instanceof Core.Binary)) {
+                return answered;
+            }
+            return comparisons.occurrenceAt(e).filter(this::instruments)
+                    .flatMap(site -> outcomeOf(site, held));
+        }
+
+        /**
          * Whether this plan numbered any site a run can be recorded at.
          *
          * <p>Not whether it numbered anything. A body whose every arm answers {@code unreachable}

@@ -67,7 +67,7 @@ public sealed interface Reachability {
                 List<Reaching> along = new ArrayList<>();
                 for (OneOfEach.Way<OnTheWay> one : ways) {
                     along.add(switch (one) {
-                        case OneOfEach.Way.Chosen<OnTheWay>(var entries) ->
+                        case OneOfEach.Way.Chosen<OnTheWay>(var entries, var _) ->
                                 reaching(new WayToTheBorder(entries), declarations);
                         // A condition the walk left as it stands is one this way was not split
                         // at past the figure, and is said as one, so that a row composed along
