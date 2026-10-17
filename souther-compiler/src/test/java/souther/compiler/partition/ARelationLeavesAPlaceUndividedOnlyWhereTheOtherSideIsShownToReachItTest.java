@@ -480,6 +480,31 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                         "if x + y <= 1 then x == y else false", "4:37"));
     }
 
+    /**
+     * A way relating the value compared to a place it leaves free narrows nothing of it: past
+     * {@code a >= b}, {@code b} can be anything, so {@code a} still runs over every value. It is
+     * tied to {@code b} and to nothing else, so {@code c} and {@code a} each reach every value the
+     * other holds.
+     */
+    @Test
+    void aWayRelatingTheValueComparedToAFreePlaceLeavesItEveryValue() {
+        assertEquals(Map.of("a", RELATES, "c", RELATES),
+                left("a: Int, b: Int, c: Int", "data Unused = Int",
+                        "if a >= b then a < c else false", "4:36"));
+    }
+
+    /**
+     * A way relating the value compared to a place held at nought or more leaves it the run that
+     * gives: past {@code b >= 0 && a >= b}, no {@code a} is below nought, so a {@code c} at nought
+     * or below is above no {@code a} and settles the comparison.
+     */
+    @Test
+    void aWayRelatingTheValueComparedToABoundedPlaceLeavesItTheRunThatBoundGives() {
+        assertEquals(Map.of("a", RELATES, "c", NOT_SHOWN),
+                left("a: Int, b: Int, c: Int", "data Unused = Int",
+                        "if b >= 0 && a >= b then a < c else false", "4:46"));
+    }
+
     /** A way over another number of the date a year is taken of ties the year to it: a date on
      *  the twenty-ninth of February is in a leap year. */
     @Test
