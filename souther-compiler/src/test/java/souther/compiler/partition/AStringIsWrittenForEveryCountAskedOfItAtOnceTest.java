@@ -442,14 +442,20 @@ class AStringIsWrittenForEveryCountAskedOfItAtOnceTest {
 
     /**
      * And without the length a longer string may still come to it, so the same sum asked alone is
-     * not said to have none.
+     * not said to have none — nor is three of the greatest whitespace code point in a string of
+     * nothing else, which no string as long as the counts looked at comes to and three ideographic
+     * spaces do.
      */
     @Test
-    void aSumPastOneCodePointWithoutALengthIsWritten() {
+    void aSumWithoutALengthIsNotSaidToHaveNoString() {
         for (String each : offered(new Demands().exactly(SUM, Character.MAX_CODE_POINT + 1L)
                 .written())) {
             assertEquals(Character.MAX_CODE_POINT + 1L, sumOf(each), each);
         }
+        TermRealizations.Realization longer = new Demands()
+                .exactly(SUM, 3 * 0x3000).exactly(NOT_WHITESPACE, 0).written();
+        assertEquals(false, longer instanceof TermRealizations.Realization.None,
+                longer::toString);
     }
 
     /**
