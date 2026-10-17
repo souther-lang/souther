@@ -380,19 +380,29 @@ public final class InputNumber {
     }
 
     /**
+     * How many values {@code run}, one no single container holds, holds — or null where it is
+     * one container's, whose count is a taking of that container's place.
+     *
+     * @param each what stands where the run's values are read from
+     */
+    public static NumericTerm.TakenOver howManyHeld(RunSource run, Type each,
+                                                    RuleReadingSource source) {
+        return NumericTerm.TakenOver.howManyOf(run, each, source.inners(), source.symbols());
+    }
+
+    /**
      * How many values stand at {@code every}, every occurrence of a place inside some container:
      * the size of that container where it is one, and the count of the run over all of them where
      * it is inside several — or null where neither is a number this reads.
      */
-    private static NumericTerm howManyStandAt(TermPath every, InputDomain inputs,
-                                              RuleReadingSource source) {
+    public static NumericTerm howManyStandAt(TermPath every, InputDomain inputs,
+                                             RuleReadingSource source) {
         RunSource run = RunSource.overEveryOccurrenceAt(every);
         if (run == null) {
             return null;
         }
         if (!run.isInOneContainer()) {
-            return NumericTerm.TakenOver.howManyOf(run, inputs.typeAt(every, source),
-                    source.inners(), source.symbols());
+            return howManyHeld(run, inputs.typeAt(every, source), source);
         }
         TermPath container = every.containersHoldingIt().getLast();
         Type held = inputs.typeAt(container, source);

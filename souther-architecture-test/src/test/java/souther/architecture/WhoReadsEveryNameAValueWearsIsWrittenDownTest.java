@@ -173,15 +173,15 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
                             + "ContainersAddingUp$HowManyIsAskedFor;L" + PARTITION
                             + "DemandsInside;)" + REALIZATION,
                     THE_POSITION),
+            row(PARTITION + "NestedContainersAddingUp", "typeAlong",
+                    "(" + TYPE + "L" + INPUTS + "TermPath;L" + INPUTS + "TermPath;" + CONTEXT
+                            + ")" + TYPE,
+                    THE_POSITION),
             row(PARTITION + "NestedContainersAddingUp", "written",
                     "(Lsouther/compiler/numeric/Place;" + TYPE + "Ljava/util/List;L" + INPUTS
                             + "TermOrders;L" + INPUTS + "SearchRegion;" + CONTEXT + "L" + PARTITION
                             + "ContainersAddingUp$HowManyIsAskedFor;L" + PARTITION
                             + "DemandsInside;Z)" + REALIZATION,
-                    THE_POSITION),
-            row(PARTITION + "NestedContainersAddingUp", "typeAlong",
-                    "(" + TYPE + "L" + INPUTS + "TermPath;L" + INPUTS + "TermPath;" + CONTEXT
-                            + ")" + TYPE,
                     THE_POSITION),
             row(PARTITION + "ObservedFixtures", "of",
                     "(Lsouther/compiler/observe/ObservedValue;" + TYPE + CONTEXT + ")L" + PARTITION

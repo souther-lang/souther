@@ -1670,10 +1670,8 @@ final class Pullback {
                 || !taken.position().isAtOrUnder(held.at().element())) {
             return null;
         }
-        TermPath every = taken.position().element();
-        return NumericTerm.TakenOver.howManyOf(RunSource.overEveryOccurrenceAt(every),
-                read.domain().typeAt(every, read.rules()), read.rules().inners(),
-                read.rules().symbols());
+        return InputNumber.howManyStandAt(taken.position().element(), read.domain(), read.rules())
+                instanceof NumericTerm.TakenOver occurrences ? occurrences : null;
     }
 
     /**
@@ -5482,9 +5480,9 @@ final class Pullback {
                                                    Type nodeType) {
         Map<Quantity, ExactRatio> coefs = new LinkedHashMap<>();
         for (Map.Entry<List<String>, ExactRatio> weight : weights.entrySet()) {
-            NumericTerm.TakenOver count = NumericTerm.TakenOver.howManyOf(
+            NumericTerm.TakenOver count = InputNumber.howManyHeld(
                     new RunSource.ReachableNodes(at, through, weight.getKey()), nodeType,
-                    read.rules().inners(), read.rules().symbols());
+                    read.rules());
             if (count == null) {
                 return null;
             }
