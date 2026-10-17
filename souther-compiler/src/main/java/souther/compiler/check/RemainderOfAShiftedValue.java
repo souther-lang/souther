@@ -99,14 +99,28 @@ public final class RemainderOfAShiftedValue {
     }
 
     /**
-     * A stretch of the remainder {@code r} of the place, where the moved remainder is
-     * {@code r + by}, or {@code by - r} where {@code negated}.
-     *
-     * @param within that {@code r} is on the stretch, said as little as says it
-     * @param by     what the place's remainder is moved by there, a number a whole number the
-     *               language writes holds
+     * The remainder {@code r} of the place from {@code from} to {@code to}, of the remainders
+     * nought to {@code most}, where the moved remainder is {@code r + by}, or {@code by - r} where
+     * {@code negated}.
      */
-    public record Stretch(ConstantComparison within, long by, boolean negated) {}
+    public record Stretch(BigInteger from, BigInteger to, BigInteger most, BigInteger by,
+                          boolean negated) {
+
+        /** That {@code r} is on this stretch, said as little as says it. */
+        public ConstantComparison within() {
+            return ConstantComparison.both(ConstantComparison.of(Rel.GE, from, BigInteger.ZERO, most),
+                    ConstantComparison.of(Rel.LE, to, BigInteger.ZERO, most));
+        }
+
+        /**
+         * That the moved remainder stands {@code rel} to {@code against} on this stretch, as what
+         * it says of {@code r} there.
+         */
+        ConstantComparison standing(Rel rel, BigInteger against) {
+            return negated ? inStretch(turned(rel), by.subtract(against), from, to, most)
+                    : inStretch(rel, against.subtract(by), from, to, most);
+        }
+    }
 
     /**
      * What {@code comparison}, read in {@code at}, states of the remainder of the place one of its
@@ -130,15 +144,17 @@ public final class RemainderOfAShiftedValue {
                 continue;
             }
             Core.PreservedCall remainder = found.division().over(moved.place());
+            List<Stretch> stretches = stretchesOf(found.divisor(), moved);
             if (found.against() == null) {
-                List<Stretch> stretches = stretchesOf(found.divisor(), moved);
-                return found.at().equals(at) && stretches != null
+                // The moving is written into the comparison as a number, so it has to be one the
+                // language writes.
+                return found.at().equals(at) && stretches.stream()
+                        .allMatch(each -> each.by().bitLength() < Long.SIZE)
                         ? new Read.AgainstAValue<>(remainder, found.at(), found.written(),
                                 found.other(), stretches)
                         : null;
             }
-            ConstantComparison statement =
-                    statementOf(found.written(), found.against(), found.divisor(), moved);
+            ConstantComparison statement = statementOf(found.written(), found.against(), stretches);
             if (statement == null) {
                 return null;
             }
@@ -151,9 +167,8 @@ public final class RemainderOfAShiftedValue {
      * The stretches of the remainder of the place by {@code divisor}, each with what the remainder
      * moved by {@code moved} is there: below the turn the place's moved by the number, and from it
      * moved by the number less the divisor — or, taken from a number, the number less the place's,
-     * and a divisor more above it. The same two stretches {@link #statementOf} reads a whole number
-     * over. Null where what a stretch is moved by is past what a whole number the language writes
-     * holds, which is no number to write the moving with.
+     * and a divisor more above it. The one account of the stretches: a comparison against a number
+     * is read over them ({@link #statementOf}) and a comparison against a value is written on them.
      */
     static List<Stretch> stretchesOf(BigInteger divisor, Moved moved) {
         BigInteger most = divisor.subtract(BigInteger.ONE);
@@ -161,29 +176,17 @@ public final class RemainderOfAShiftedValue {
         List<Stretch> out = new ArrayList<>();
         if (!moved.negated()) {
             BigInteger turn = divisor.subtract(by);
-            out.add(stretch(BigInteger.ZERO, turn.subtract(BigInteger.ONE), most, by, false));
+            out.add(new Stretch(BigInteger.ZERO, turn.subtract(BigInteger.ONE), most, by, false));
             if (by.signum() != 0) {
-                out.add(stretch(turn, most, most, by.subtract(divisor), false));
+                out.add(new Stretch(turn, most, most, by.subtract(divisor), false));
             }
         } else {
-            out.add(stretch(BigInteger.ZERO, by, most, by, true));
+            out.add(new Stretch(BigInteger.ZERO, by, most, by, true));
             if (by.compareTo(most) < 0) {
-                out.add(stretch(by.add(BigInteger.ONE), most, most, by.add(divisor), true));
+                out.add(new Stretch(by.add(BigInteger.ONE), most, most, by.add(divisor), true));
             }
         }
-        return out.contains(null) ? null : out;
-    }
-
-    /** The stretch from {@code from} to {@code to} of a remainder no more than {@code most}, or
-     *  null where {@code by} is past what a whole number the language writes holds. */
-    private static Stretch stretch(BigInteger from, BigInteger to, BigInteger most, BigInteger by,
-                                   boolean negated) {
-        if (by.bitLength() >= Long.SIZE) {
-            return null;
-        }
-        return new Stretch(ConstantComparison.both(
-                ConstantComparison.of(Rel.GE, from, BigInteger.ZERO, most),
-                ConstantComparison.of(Rel.LE, to, BigInteger.ZERO, most)), by.longValue(), negated);
+        return out;
     }
 
     /**
@@ -293,33 +296,21 @@ public final class RemainderOfAShiftedValue {
     }
 
     /**
-     * What holds of the remainder {@code r} of the place, by {@code divisor}, where the remainder of
-     * the moved value stands {@code rel} to {@code against}.
+     * What holds of the remainder {@code r} of the place, where the remainder of the moved value
+     * stands {@code rel} to {@code against}: on each of {@code stretches}, what the comparison says
+     * of {@code r} there, the one stretch or the other.
+     *
+     * <p>On a stretch the moved remainder is {@code r + by}, so the comparison is of {@code r}
+     * against the number less {@code by}; taken from a number, it is {@code by - r}, and the
+     * comparison is the other way round, of {@code r} against {@code by} less the number.
      */
-    static ConstantComparison statementOf(Rel rel, BigInteger against, BigInteger divisor,
-                                          Moved moved) {
-        BigInteger most = divisor.subtract(BigInteger.ONE);
-        BigInteger by = moved.by().mod(divisor);
-        if (!moved.negated()) {
-            if (by.signum() == 0) {
-                return ConstantComparison.of(rel, against, BigInteger.ZERO, most);
-            }
-            // The remainder of the place plus `by`, which falls back round the divisor once the
-            // sum reaches it: below the turn the moved remainder is `r + by`, and from it
-            // `r + by - divisor`.
-            BigInteger turn = divisor.subtract(by);
-            return ConstantComparison.either(
-                    inStretch(rel, against.subtract(by), BigInteger.ZERO,
-                            turn.subtract(BigInteger.ONE), most),
-                    inStretch(rel, against.subtract(by).add(divisor), turn, most, most));
+    static ConstantComparison statementOf(Rel rel, BigInteger against, List<Stretch> stretches) {
+        ConstantComparison out = null;
+        for (Stretch each : stretches) {
+            ConstantComparison here = each.standing(rel, against);
+            out = out == null ? here : ConstantComparison.either(out, here);
         }
-        // `by` less the remainder, which is no more than `by` while the remainder is, and a
-        // divisor more above it. A comparison of what is taken from a number is the comparison the
-        // other way round of the number it is taken from.
-        return ConstantComparison.either(
-                inStretch(turned(rel), by.subtract(against), BigInteger.ZERO, by, most),
-                inStretch(turned(rel), by.add(divisor).subtract(against),
-                        by.add(BigInteger.ONE), most, most));
+        return out;
     }
 
     /**

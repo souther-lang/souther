@@ -151,17 +151,16 @@ public final class Sets {
                         kept(there.excluded(), each -> !here.has(each)));
                 case ValueSet.Matching there ->
                         matching(here.language().or(there.language(), meter));
-                // Strings and whole numbers, which no one shape holds together: every value, which
-                // holds both and refuses nothing either side admits.
-                case ValueSet.WholeRuns _ -> ValueSet.ANY;
+                // The language: whole numbers are no strings for it to take, as the numbers among
+                // values written beside it are not. A set is over one carrier ({@link ValueSet}).
+                case ValueSet.WholeRuns _ -> here;
             };
             case ValueSet.WholeRuns here -> switch (other) {
-                // The runs with the whole numbers written beside them, each a run of its own —
-                // and every value where one written there is no whole number, for the same reason.
-                case ValueSet.Finite there -> there.values().stream()
-                        .allMatch(each -> ValueSet.wholeNumberOf(each) != null)
-                        ? ValueSet.wholeNumbers(here.numbers().or(wholeNumbersIn(there.values())))
-                        : ValueSet.ANY;
+                // The runs with the whole numbers written beside them, each a run of its own. A
+                // value that is no whole number is of another carrier than the runs are over, as
+                // a number is beside a language.
+                case ValueSet.Finite there -> ValueSet.wholeNumbers(
+                        here.numbers().or(wholeNumbersIn(there.values())));
                 // Everything but what is excluded there and in none of the runs.
                 case ValueSet.Cofinite there -> new ValueSet.Cofinite(
                         kept(there.excluded(), each -> !here.has(each)));

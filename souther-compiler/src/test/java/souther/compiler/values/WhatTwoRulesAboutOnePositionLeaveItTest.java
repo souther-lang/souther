@@ -174,16 +174,6 @@ class WhatTwoRulesAboutOnePositionLeaveItTest {
                 PatternPlan.Budget.OF_WHAT_A_RULE_LEAVES.meter()));
         assertTrue(met(low, words).isEmpty(), "whole numbers are no strings");
         assertFalse(low.sharesAnythingWith(words));
-        // Put together with what no run holds, nothing either side admits is refused.
-        ValueSet besides = ValueSet.oneOf(Set.of(Value.text("x"), Value.number(new BigDecimal("2.5"))));
-        for (ValueSet other : List.of(words, besides)) {
-            ValueSet either = joined(low, other);
-            for (Value each : List.of(Value.text("x"), Value.number(new BigDecimal("2.5")),
-                    Value.number(2), Value.number(9))) {
-                assertTrue(!(low.has(each) || other.has(each)) || either.has(each),
-                        () -> "either of " + low + " and " + other + " holds " + each);
-            }
-        }
         assertTrue(low.sharesAnythingWith(new ValueSet.Cofinite(Set.of(Value.number(0)))),
                 "runs from eight on share with everything but nought");
         assertFalse(ValueSet.wholeNumbers(runs(0, 3).or(runs(10, 12))).sharesAnythingWith(

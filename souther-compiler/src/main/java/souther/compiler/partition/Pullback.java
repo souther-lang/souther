@@ -5237,11 +5237,11 @@ final class Pullback {
         Core.PreservedCall remainder = value.remainder();
         Derivation out = null;
         for (RemainderOfAShiftedValue.Stretch stretch : value.stretches()) {
-            Core by = new Core.Int(stretch.by(), Type.INT, remainder.pos());
+            Core by = new Core.Int(stretch.by().longValue(), Type.INT, remainder.pos());
             Core moved = stretch.negated()
                     ? new Core.Binary(BinOp.SUB, by, remainder, Core.BinaryReading.AS_THEY_STAND,
                             ConstructOccurrence.unwritten(), Type.INT, remainder.pos())
-                    : stretch.by() == 0 ? remainder
+                    : stretch.by().signum() == 0 ? remainder
                     : new Core.Binary(BinOp.ADD, remainder, by, Core.BinaryReading.AS_THEY_STAND,
                             ConstructOccurrence.unwritten(), Type.INT, remainder.pos());
             Derivation here = new Derivation.Joined(ConditionJoin.BOTH,

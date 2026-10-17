@@ -609,7 +609,9 @@ final class MeaningAssumptions {
      *
      * <p>Except a choice between comparisons of one whole number, which is no choice for a path to
      * make: it is the runs of the number it leaves ({@link #holdingTheValues}), and those are a
-     * fact a path holds however many numbers are in them.
+     * fact a path holds however many numbers are in them. Whether the number is a whole one is the
+     * order it was named on ({@link Terms#carrierOf}): a date is counted in days and its values
+     * are dates.
      */
     private void takingOneOf(Proposition.Any any) {
         // Which number the parts compare is asked of the statement before anything is named, so
@@ -617,9 +619,8 @@ final class MeaningAssumptions {
         // one is named once and not once for each comparison.
         Set<Quantity> numbers = new LinkedHashSet<>();
         if (comparesOnlyNumbers(any, numbers) && numbers.size() == 1
-                && isAWholeNumber(numbers.iterator().next())
                 && atomAt(numbers.iterator().next()) instanceof AtomAt.Named(FactSubject number)
-                && terms.kindsOf(LinearForm.atom(number)).get(number) == Granularity.DISCRETE) {
+                && terms.carrierOf(number) instanceof Carrier.Whole) {
             WholeNumberRuns values = leftOf(any);
             if (values != null) {
                 holdingTheValues(number, values);
@@ -741,28 +742,6 @@ final class MeaningAssumptions {
     }
 
     /**
-     * Whether {@code quantity} is a whole number whose values a path may hold as a set of numbers:
-     * a position whose values are counted in ones, or what a size or a division answers of the
-     * input, which are such numbers whatever they are taken of.
-     *
-     * <p>A position counted some other way is left out — a date is counted in days, and the values
-     * a path holds of it are dates — and so is anything a path names by what it was made of.
-     */
-    private boolean isAWholeNumber(Quantity quantity) {
-        return switch (quantity) {
-            case DecisionAtom.OfTheInput(NumericTerm.ValueOf(TermPath position)) -> {
-                Type type = places.typeAt().apply(position);
-                yield type != null
-                        && Carrier.ofValue(type, terms.declarations()) instanceof Carrier.Whole;
-            }
-            case DecisionAtom.OfTheInput(NumericTerm.TakenOf taken) ->
-                    taken.takenAs() instanceof TakenAs.TheFloorRemainder || isASize(taken);
-            case Quantity.RemainderOfADividend _ -> true;
-            default -> false;
-        };
-    }
-
-    /**
      * {@code values} of {@code number}, met with where what is known here leaves it, taken in: as
      * nothing reached where none are left, as the range they are where they are one run, and as
      * the runs of them where they are several ({@link ValueSet#wholeNumbers}).
@@ -798,7 +777,7 @@ final class MeaningAssumptions {
         Allowance<FactSubject> sets = terms.policy().allowanceForAdmittedValues();
         Confinement.Planned<FactSubject> said = new Confinement.Planned<>(
                 PlannedValues.at(number, AdmittedPlan.of(ValueSet.wholeNumbers(held))),
-                OrderedIntervals.top(), Map.of(number, Carrier.WHOLE));
+                OrderedIntervals.top(), Map.of(number, terms.carrierOf(number)));
         known = known.holdingOnThePath(said.resolve(sets), sets);
     }
 
