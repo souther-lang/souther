@@ -272,6 +272,7 @@ class EveryPropositionIsTakenOrMeetsTheEdgeOfAReadersWordsTest {
                 new DecisionSubject.AnInput(TermPath.of("s")), true));
         out.put("the last of its value", new Proposition.LastToHold(TermPath.of("xs"),
                 TermPath.of("xs").element(), true));
+        out.put("where an operation answers", new Proposition.WhereItAnswers(truth, above));
         out.put("both", new Proposition.All(List.of(above, truth)));
         out.put("either", new Proposition.Any(List.of(above, truth)));
         out.put("some element", new Proposition.Some(new DecisionSubject.AnInput(TermPath.of("xs")), element, true));

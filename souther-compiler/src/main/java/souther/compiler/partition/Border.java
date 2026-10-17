@@ -553,6 +553,11 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
                 yield Optional.of(point.side() == comparisonHolds ? authorsHolds
                         : authorsHolds.opposite());
             }
+            // A line naming a value fails alike on its two sides, so each side is the author's
+            // side of that name.
+            case ComparisonClaim.Singled _
+                    when origin.lineFacts().claim() instanceof ComparisonClaim.Singled ->
+                    Optional.of(point.side());
             default -> Optional.empty();
         };
         return side.map(towards -> sideOf(point, towards));

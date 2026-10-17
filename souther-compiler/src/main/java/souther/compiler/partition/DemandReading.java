@@ -418,7 +418,8 @@ final class DemandReading {
                     || from instanceof Proposition.Any
                     || from instanceof Proposition.OnAnApplication
                     || from instanceof Proposition.SoManyHold
-                    || from instanceof Proposition.SomeReachable) {
+                    || from instanceof Proposition.SomeReachable
+                    || from instanceof Proposition.WhereItAnswers) {
                 return reads;
             }
             Set<String> keys = new HashSet<>();
@@ -851,6 +852,12 @@ final class DemandReading {
             case Proposition.All all -> {
                 List<Read> out = new ArrayList<>();
                 all.parts().forEach(part -> out.addAll(projected(part, read, projection)));
+                yield List.copyOf(out);
+            }
+            // A row past it is one it answered at and came out this way at: both are asked.
+            case Proposition.WhereItAnswers where -> {
+                List<Read> out = new ArrayList<>(projected(where.answers(), read, projection));
+                out.addAll(projected(where.states(), read, projection));
                 yield List.copyOf(out);
             }
             case Proposition.Any any -> {

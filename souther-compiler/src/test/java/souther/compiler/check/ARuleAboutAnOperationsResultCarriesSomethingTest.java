@@ -82,6 +82,31 @@ class ARuleAboutAnOperationsResultCarriesSomethingTest {
                         BelowTen(Decimal.toInt(HALF_UP, d))
                     }
                     """),
+            // Arithmetic over a quotient and not a quotient, which has corners of its own to read.
+            new Discharges("Rational.toInt", """
+                    module demo
+                    data Bad
+                    data AtLeastTen = Int
+                        invariant value >= 10
+                    behavior whole : (x: Int) -> AtLeastTen | Bad constructs AtLeastTen
+                    let whole (x) = {
+                        guard x >= 20
+                            else Bad
+                        AtLeastTen(Rational.toInt(HALF_UP, x / 2 + 1))
+                    }
+                    """),
+            new Discharges("Rational.toInt", """
+                    module demo
+                    data Bad
+                    data BelowTen = Int
+                        invariant value < 10
+                    behavior whole : (x: Int) -> BelowTen | Bad constructs BelowTen
+                    let whole (x) = {
+                        guard x <= 16
+                            else Bad
+                        BelowTen(Rational.toInt(HALF_UP, x / 2 + 1))
+                    }
+                    """),
             new Discharges("Int.floorMod", """
                     module demo
                     data NonNeg = Int

@@ -118,6 +118,8 @@ final class AStatementAtARow {
             case Proposition.LastToHold _ -> true;
             case Proposition.All all -> all.parts().stream().allMatch(AStatementAtARow::askable);
             case Proposition.Any any -> any.parts().stream().allMatch(AStatementAtARow::askable);
+            case Proposition.WhereItAnswers where ->
+                    askable(where.answers()) && askable(where.states());
             case Proposition.SoManyHold counted ->
                     counted.statements().stream().allMatch(AStatementAtARow::askable);
             case Proposition.Some some -> askable(some.ofTheElement());
@@ -184,6 +186,10 @@ final class AStatementAtARow {
                     gather(part, behavior, quantities, into, elements, positions));
             case Proposition.Any any -> any.parts().forEach(part ->
                     gather(part, behavior, quantities, into, elements, positions));
+            case Proposition.WhereItAnswers where -> {
+                gather(where.answers(), behavior, quantities, into, elements, positions);
+                gather(where.states(), behavior, quantities, into, elements, positions);
+            }
             case Proposition.SoManyHold counted -> counted.statements().forEach(part ->
                     gather(part, behavior, quantities, into, elements, positions));
             case Proposition.Some some -> elements.computeIfAbsent(keyOf(some),
@@ -220,6 +226,10 @@ final class AStatementAtARow {
         switch (stated) {
             case Proposition.All all -> all.parts().forEach(part -> gatherNumbers(part, into));
             case Proposition.Any any -> any.parts().forEach(part -> gatherNumbers(part, into));
+            case Proposition.WhereItAnswers where -> {
+                gatherNumbers(where.answers(), into);
+                gatherNumbers(where.states(), into);
+            }
             case Proposition.SoManyHold counted ->
                     counted.statements().forEach(part -> gatherNumbers(part, into));
             case Proposition.Some some -> gatherNumbers(some.ofTheElement(), into);
@@ -433,6 +443,10 @@ final class AStatementAtARow {
                     .map(each -> at(each, row, answered)).toList(), true);
             case Proposition.Any any -> joined(any.parts().stream()
                     .map(each -> at(each, row, answered)).toList(), false);
+            // At a row it answered at, what it states; at one it did not, nothing holds — and its
+            // denial is asked as its own proposition, so a row that stopped holds neither.
+            case Proposition.WhereItAnswers where -> joined(List.of(
+                    at(where.answers(), row, answered), at(where.states(), row, answered)), true);
             case Proposition.SoManyHold counted -> howManyHold(counted, counted.statements()
                     .stream().map(each -> at(each, row, answered)).toList());
             case Proposition.Some some -> {
@@ -515,6 +529,8 @@ final class AStatementAtARow {
                     all.parts().stream().allMatch(part -> readsOf(part, about, read));
             case Proposition.Any any ->
                     any.parts().stream().allMatch(part -> readsOf(part, about, read));
+            case Proposition.WhereItAnswers where -> readsOf(where.answers(), about, read)
+                    && readsOf(where.states(), about, read);
             case Proposition.SoManyHold counted ->
                     counted.statements().stream().allMatch(part -> readsOf(part, about, read));
             case Proposition.Some some -> overElementsOf(some.container().inputPosition(), about,
@@ -749,6 +765,9 @@ final class AStatementAtARow {
                     case Proposition.Any any -> add(Kind.ANY, any.parts().stream()
                             .mapToInt(each -> node(each, of, container, index)).toArray(), 0,
                             EITHER, null);
+                    case Proposition.WhereItAnswers where -> add(Kind.ALL, new int[] {
+                            node(where.answers(), of, container, index),
+                            node(where.states(), of, container, index)}, 0, EITHER, null);
                     case Proposition.Some some
                             when of.elements.get(keyOf(some)) instanceof OverTheElements over
                             && over.container().equals(container)

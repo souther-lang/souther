@@ -66,6 +66,8 @@ public final class CasesHeldTo {
     private static Map<TermPath, Held> heldTo(Proposition stated) {
         return switch (stated) {
             case Proposition.Always(boolean holds) -> holds ? new LinkedHashMap<>() : null;
+            case Proposition.WhereItAnswers where ->
+                    heldTo(Proposition.all(List.of(where.answers(), where.states())));
             case Proposition.All all -> {
                 Map<TermPath, Held> out = new LinkedHashMap<>();
                 for (Proposition part : all.parts()) {

@@ -16,6 +16,7 @@ import souther.compiler.types.ValueName;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.Function;
@@ -273,17 +274,22 @@ final class IntrinsicNumericFacts {
         if (!DischargeRules.isAMeasure(call.operation()) || call.args().size() != 2) {
             return;
         }
-        if (!(Core.withoutStanding(
-                terms.originating(call.args().get(1), at, new java.util.HashSet<>()))
+        // The shift's arguments are read where the shift was written, which is not here where it
+        // came through a name.
+        Terms.Given origin = terms.originating(call.args().get(1), at, new HashSet<>());
+        if (origin == null || !(Core.withoutStanding(origin.value())
                 instanceof Core.PreservedCall moved)) {
             return;
         }
+        Denotations there = origin.at();
         BoundOperationFact.ShiftsBy shift = DischargeRules.shiftBy(moved);
         if (shift == null || !shift.measure().operation().equals(call.operation())
-                || !sameValue(CallArguments.of(shift.of(), moved), call.args().get(0), at, terms)) {
+                || !sameValue(CallArguments.of(shift.of(), moved), there, call.args().get(0), at,
+                        terms)) {
             return;
         }
-        LinearForm<FactSubject> amount = terms.affineOf(CallArguments.of(shift.amount(), moved), at);
+        LinearForm<FactSubject> amount =
+                terms.affineOf(CallArguments.of(shift.amount(), moved), there);
         // A shift whose form no ratio holds is a relation not stated.
         if (amount != null && amount.times(ExactRatio.of(shift.per()))
                 .flatMap(shifted -> LinearForm.atom(atom).minus(shifted))
@@ -294,9 +300,10 @@ final class IntrinsicNumericFacts {
 
     /** Whether the two expressions are one value, which is whether the term grammar names them
      * alike. */
-    private static boolean sameValue(Core a, Core b, Denotations at, Terms terms) {
-        Term one = terms.bodyKey(a, at);
-        return one != null && one.equals(terms.bodyKey(b, at));
+    private static boolean sameValue(Core a, Denotations aAt, Core b, Denotations bAt,
+                                     Terms terms) {
+        Term one = terms.bodyKey(a, aAt);
+        return one != null && one.equals(terms.bodyKey(b, bAt));
     }
 
     /** {@code form} with {@code offset} added, or null where the form could not be read or the sum
