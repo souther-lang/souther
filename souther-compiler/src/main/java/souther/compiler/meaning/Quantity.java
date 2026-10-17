@@ -85,7 +85,8 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
                      Proposition.Present _, Proposition.SameValue _, Proposition.LastToHold _,
                      Proposition.Carried _, Proposition.Unread _ -> false;
                 case Proposition.All _, Proposition.Any _, Proposition.OnAnApplication _,
-                     Proposition.SoManyHold _, Proposition.Some _, Proposition.SomeReachable _ ->
+                     Proposition.SoManyHold _, Proposition.Some _, Proposition.SomeReachable _,
+                     Proposition.WhereItAnswers _ ->
                         stated.partsHeld().stream().anyMatch(this::isIn);
             };
         }

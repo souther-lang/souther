@@ -49,6 +49,8 @@ public final class PositionsAStatementReads {
                 yield true;
             }
             case Proposition.All all -> all.parts().stream().allMatch(part -> reads(part, out));
+            case Proposition.WhereItAnswers where ->
+                    reads(where.answers(), out) && reads(where.states(), out);
             case Proposition.Any any -> any.parts().stream().allMatch(part -> reads(part, out));
             case Proposition.OnAnApplication applications -> applications.each().stream()
                     .allMatch(one -> reads(one, out));

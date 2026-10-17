@@ -169,6 +169,34 @@ class AComparisonOfARoundedNumberIsReadAsALineOnWhatWasRoundedTest {
         assertFalse(report.contains("not read"), report);
     }
 
+    /**
+     * A rounding held above a whole number is the number before rounding at or above the next one:
+     * {@code Rational.toInt(DOWN, x / 2) > 100} is {@code x / 2 >= 101}, whose value holds where the
+     * value the source wrote does not. The line drawn is the rule's, and every point of it is one a
+     * row is asked for, on whichever side the source wrote the rounding.
+     */
+    @Test
+    void aLineWhoseValueHoldsWhereTheWrittenOnesDoesNotIsMeasuredInFull() {
+        for (String condition : List.of("Rational.toInt(DOWN, x / 2) > 100",
+                "100 < Rational.toInt(DOWN, x / 2)", "Rational.toInt(DOWN, x / 2) <= 100",
+                "Rational.toInt(CEILING, x / 2) >= 100")) {
+            String report = human("""
+                    module demo
+
+                    data Low
+
+                    behavior decide : (x: Int) -> Int | Low
+
+                    let decide (x) = {
+                        guard %s else Low
+                        x
+                    }
+                    """.formatted(condition));
+            assertTrue(report.contains("measurement: complete"), condition + "\n" + report);
+            assertFalse(report.contains("nothing could show"), condition + "\n" + report);
+        }
+    }
+
     /** A way of rounding the run chooses is read on each way the run can take to it. */
     @Test
     void aWayOfRoundingTheRunChoosesIsReadOnEachPathToIt() {

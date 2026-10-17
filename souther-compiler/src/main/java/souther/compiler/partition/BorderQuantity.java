@@ -1035,7 +1035,7 @@ public sealed interface BorderQuantity
                 case Proposition.Truth _, Proposition.InCases _, Proposition.Present _,
                      Proposition.SameValue _, Proposition.LastToHold _, Proposition.Carried _,
                      Proposition.SomeReachable _, Proposition.Unread _,
-                     Proposition.OnAnApplication _ -> stated.key();
+                     Proposition.OnAnApplication _, Proposition.WhereItAnswers _ -> stated.key();
             };
         }
 
@@ -1048,7 +1048,7 @@ public sealed interface BorderQuantity
                      Proposition.Compared _, Proposition.Truth _, Proposition.InCases _,
                      Proposition.Present _, Proposition.SameValue _, Proposition.LastToHold _,
                      Proposition.Carried _, Proposition.SomeReachable _, Proposition.Unread _,
-                     Proposition.OnAnApplication _ -> said(part);
+                     Proposition.OnAnApplication _, Proposition.WhereItAnswers _ -> said(part);
             };
         }
 

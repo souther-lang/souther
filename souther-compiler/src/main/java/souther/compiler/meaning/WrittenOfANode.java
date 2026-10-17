@@ -61,6 +61,8 @@ public final class WrittenOfANode {
             case Proposition.LastToHold last -> reads(last.container()) && reads(last.position());
             case Proposition.All all -> all.parts().stream().allMatch(this::reads);
             case Proposition.Any any -> any.parts().stream().allMatch(this::reads);
+            case Proposition.WhereItAnswers where ->
+                    reads(where.answers()) && reads(where.states());
             case Proposition.OnAnApplication applications ->
                     applications.each().stream().allMatch(this::reads);
             case Proposition.SoManyHold counted -> counted.statements().stream()

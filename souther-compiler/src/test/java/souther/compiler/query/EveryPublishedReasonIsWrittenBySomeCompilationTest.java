@@ -376,8 +376,10 @@ class EveryPublishedReasonIsWrittenBySomeCompilationTest {
                 let run (x) = Ok
                 """));
         // A comparison over a product of two input fields one of which is weighed before the
-        // product is taken, and over a quotient by one: the arithmetic met a shape it has no term
-        // for, and nothing was made of either position.
+        // product is taken, and over a quotient by one held against a third: the arithmetic met a
+        // shape it has no term for, and nothing was made of either position. A quotient held
+        // against a number is a line on each sign of the divisor, and only a number times the
+        // divisor is a form; a value times it is a product.
         out.put(UndividedPosition.Reason.NON_AFFINE_PRODUCT, of("""
                 module m
                 %s
@@ -387,8 +389,8 @@ class EveryPublishedReasonIsWrittenBySomeCompilationTest {
         out.put(UndividedPosition.Reason.NON_CONSTANT_DIVISOR, of("""
                 module m
                 %s
-                behavior f : (a: Int, b: Int) -> Answer
-                let f (a, b) = if a / b > 10 then Yes else No
+                behavior f : (a: Int, b: Int, c: Int) -> Answer
+                let f (a, b, c) = if a / b > c then Yes else No
                 """.formatted(ANSWER)));
         // And a remainder by one: it has no period the positions could be told apart by, which is
         // said of the divisor and not of a value made of the positions.

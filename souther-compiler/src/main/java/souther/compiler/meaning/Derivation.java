@@ -276,6 +276,65 @@ public sealed interface Derivation {
         }
     }
 
+    /**
+     * A comparison read as another one that holds exactly where it does, and what that one states:
+     * a comparison of a rounded number as one of the number before rounding, of a quotient as one
+     * of the dividend and the divisor.
+     *
+     * <p>Concludes what the other comparison does. The sides that comparison is read off are no
+     * sides the source wrote, and its line can stand where the written comparison has a point
+     * beside its own: {@code Rational.toInt(DOWN, x / 2) > 100} is {@code x / 2 >= 101}, whose
+     * value holds where the written line's value does not. So its relations face nothing written,
+     * and each claims what it draws ({@link WrittenLines}).
+     */
+    record Restated(Derivation read) implements Derivation {
+
+        public Restated {
+            Objects.requireNonNull(read, "a comparison is read as another");
+        }
+
+        /** What {@code how} was read by, past every comparison it was read as. */
+        public static Derivation through(Derivation how) {
+            Derivation out = how;
+            while (out instanceof Restated(var inner)) {
+                out = inner;
+            }
+            return out;
+        }
+
+        @Override
+        public Proposition conclusion(Conclusion numbering) {
+            return numbering.of(read);
+        }
+
+        @Override
+        public List<Derivation> oneOf() {
+            return List.of(read);
+        }
+    }
+
+    /**
+     * A comparison read through an operation that answers nothing on some rows, and what it states
+     * where the operation answers ({@link Proposition.WhereItAnswers}): a quotient's comparison
+     * states something only where the divisor is not nought, since a run divides by nought
+     * nowhere and stops there.
+     *
+     * @param answers where the operation answers
+     * @param read    what the comparison states there
+     */
+    record WhereItAnswers(Derivation answers, Derivation read) implements Derivation {
+
+        public WhereItAnswers {
+            Objects.requireNonNull(answers, "an operation answers somewhere");
+            Objects.requireNonNull(read, "and the comparison states something there");
+        }
+
+        @Override
+        public Proposition conclusion(Conclusion numbering) {
+            return Proposition.whereItAnswers(numbering.of(answers), numbering.of(read));
+        }
+    }
+
     /** An {@code if}: its arm under its condition, and its other arm under the denial of it — or
      *  what both state, where they state one thing. */
     record IfThenElse(Derivation condition, Derivation then, Derivation otherwise)
@@ -292,11 +351,13 @@ public sealed interface Derivation {
             Proposition cond = numbering.of(condition);
             Proposition yes = numbering.of(then);
             Proposition no = numbering.of(otherwise);
+            // The condition is worked out before either arm, so where it stops the if does.
             if (yes.key().equals(no.key()) && Proposition.firstStopIn(yes) == null) {
-                return yes;
+                return Proposition.afterIt(cond, yes);
             }
-            return Proposition.any(List.of(Proposition.all(List.of(cond, yes)),
-                    Proposition.all(List.of(cond.denied(), no))));
+            return Proposition.afterIt(cond, Proposition.any(List.of(
+                    Proposition.all(List.of(cond, yes)),
+                    Proposition.all(List.of(cond.denied(), no)))));
         }
 
         @Override
@@ -356,7 +417,7 @@ public sealed interface Derivation {
             if (stating.stream().allMatch(each -> each.key().equals(first.key()))
                     && arms.stream().noneMatch(Arm::aboutTheEntry)
                     && Proposition.firstStopIn(first) == null) {
-                return first;
+                return afterWhatIsSelected(selecting, first);
             }
             List<Proposition> taken = new ArrayList<>();
             List<Proposition> before = new ArrayList<>();
@@ -382,7 +443,7 @@ public sealed interface Derivation {
                 taken.add(Proposition.all(arrives));
                 before.add(selects);
             }
-            return Proposition.any(taken);
+            return afterWhatIsSelected(selecting, Proposition.any(taken));
         }
 
         @Override
@@ -425,7 +486,23 @@ public sealed interface Derivation {
     static Proposition taken(List<Proposition> before, Proposition selects) {
         List<Proposition> arrives = new ArrayList<>(noArmBefore(before, selects));
         arrives.add(selects);
-        return Proposition.all(arrives);
+        List<Proposition> selecting = new ArrayList<>(before);
+        selecting.add(selects);
+        return afterWhatIsSelected(selecting, Proposition.all(arrives));
+    }
+
+    /**
+     * {@code stated}, read only where what each of {@code selecting} selects off answers. The value
+     * a match selects by is worked out before any arm, so where it stops the match does — whichever
+     * arm would have been taken, and whether or not an arm before it is apart from it.
+     */
+    private static Proposition afterWhatIsSelected(List<Proposition> selecting,
+                                                   Proposition stated) {
+        Proposition out = stated;
+        for (Proposition each : selecting) {
+            out = Proposition.afterIt(each, out);
+        }
+        return out;
     }
 
     /**
@@ -694,8 +771,12 @@ public sealed interface Derivation {
 
         @Override
         public Proposition conclusion(Conclusion numbering) {
-            List<Proposition> parts = List.of(numbering.of(left), numbering.of(right));
-            return how == ConditionJoin.BOTH ? Proposition.all(parts) : Proposition.any(parts);
+            Proposition first = numbering.of(left);
+            List<Proposition> parts = List.of(first, numbering.of(right));
+            // The left half is worked out first, so where it stops the join does; the right is
+            // worked out only where the left leaves it open, which is where its own stops count.
+            return Proposition.afterIt(first,
+                    how == ConditionJoin.BOTH ? Proposition.all(parts) : Proposition.any(parts));
         }
     }
 
@@ -1559,7 +1640,8 @@ public sealed interface Derivation {
                      Proposition.InCases _, Proposition.Present _, Proposition.SameValue _,
                      Proposition.LastToHold _, Proposition.Some _, Proposition.Carried _,
                      Proposition.SomeReachable _, Proposition.Unread _,
-                     Proposition.OnAnApplication _, Proposition.SoManyHold _ -> List.of(element);
+                     Proposition.OnAnApplication _, Proposition.SoManyHold _,
+                     Proposition.WhereItAnswers _ -> List.of(element);
             };
             List<Proposition> decided = parts.stream()
                     .filter(part -> !part.mayTurnOnAnElementOf(container)).toList();
@@ -2139,7 +2221,8 @@ public sealed interface Derivation {
                 case Proposition.Compared _, Proposition.Truth _, Proposition.InCases _,
                      Proposition.Present _, Proposition.SameValue _, Proposition.LastToHold _,
                      Proposition.Some _, Proposition.Carried _, Proposition.SomeReachable _,
-                     Proposition.Unread _, Proposition.OnAnApplication _ -> false;
+                     Proposition.Unread _, Proposition.OnAnApplication _,
+                     Proposition.WhereItAnswers _ -> false;
             };
         }
 
@@ -2180,7 +2263,8 @@ public sealed interface Derivation {
                 case Proposition.Compared _, Proposition.Truth _, Proposition.InCases _,
                      Proposition.Present _, Proposition.SameValue _, Proposition.LastToHold _,
                      Proposition.Some _, Proposition.Carried _, Proposition.SomeReachable _,
-                     Proposition.Unread _, Proposition.OnAnApplication _ ->
+                     Proposition.Unread _, Proposition.OnAnApplication _,
+                     Proposition.WhereItAnswers _ ->
                         throw new IllegalStateException(element
                                 + " is not made of the counts of one character");
             };
