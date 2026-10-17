@@ -117,11 +117,7 @@ public sealed interface ConstantComparison {
      */
     static WrittenBeside writtenBeside(Core subject, ExactRatio against) {
         for (Core number : literalsOf(against, subject.pos())) {
-            Type type = subject.type();
-            Core.BinaryReading reading = type.equals(number.type())
-                    ? Core.BinaryReading.AS_THEY_STAND
-                    : BinaryElaborator.exactlyComparable(type, number.type())
-                            ? Core.BinaryReading.EXACT_NUMBERS : null;
+            Core.BinaryReading reading = comparedAs(subject.type(), number.type());
             if (reading != null) {
                 return new WrittenBeside(number, reading);
             }
@@ -129,8 +125,19 @@ public sealed interface ConstantComparison {
         return null;
     }
 
+    /**
+     * What a comparison of a value of {@code left} with one of {@code right} reads the two as: as
+     * they stand where they are one type, at their exact values where the rule for that says so
+     * ({@link BinaryElaborator#exactlyComparable}), and null where a source could compare neither.
+     */
+    static Core.BinaryReading comparedAs(Type left, Type right) {
+        return left.equals(right) ? Core.BinaryReading.AS_THEY_STAND
+                : BinaryElaborator.exactlyComparable(left, right)
+                        ? Core.BinaryReading.EXACT_NUMBERS : null;
+    }
+
     /** The literals that are {@code n}: an Int where an Int says it, then a decimal where one does. */
-    private static List<Core> literalsOf(ExactRatio n, SourcePos pos) {
+    static List<Core> literalsOf(ExactRatio n, SourcePos pos) {
         List<Core> out = new ArrayList<>();
         if (n.isWhole() && n.floor() instanceof ExactAnswer.Held<BigInteger>(var whole)
                 && whole.bitLength() <= Long.SIZE - 1) {

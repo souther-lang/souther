@@ -67,7 +67,7 @@ record Denotations(Map<BindingId, Means> bound) {
      *                read there
      */
     record Means(Core value, FactSubject subject, Location location, Term term,
-                 NumericMeaning numeric, Denotations readIn) {
+                 Terms.Computed numeric, Denotations readIn) {
 
         Means {
             // Every binding this holds is one something is known about. A binding entered without a
@@ -104,8 +104,9 @@ record Denotations(Map<BindingId, Means> bound) {
     }
 
 
-    /** Which arithmetic {@code binding} is, or null where it is not arithmetic this reads. */
-    NumericMeaning numericOf(BindingId binding) {
+    /** Which arithmetic {@code binding} is and where its operands are read, or null where it is not
+     *  arithmetic this reads. */
+    Terms.Computed numericOf(BindingId binding) {
         Means given = bound.get(binding);
         return given == null ? null : given.numeric();
     }
@@ -154,7 +155,7 @@ record Denotations(Map<BindingId, Means> bound) {
      * {@code match} over what an outer arm bound could not find the call underneath it.
      */
     Denotations opened(BindingId binding, Core value, FactSubject subject, Term term,
-                       NumericMeaning numeric) {
+                       Terms.Computed numeric) {
         return with(binding, new Means(value, subject, Location.of(binding), term, numeric, null));
     }
 
@@ -175,7 +176,7 @@ record Denotations(Map<BindingId, Means> bound) {
      * what is known of it (spec §invariant-discharge-terms). {@code readIn} is where the value is
      * read, or null where it is read where the name is ({@link Means#readIn}). */
     Denotations binding(BindingId binding, Core value, Denotations readIn, FactSubject subject,
-                        Location location, Term term, NumericMeaning numeric) {
+                        Location location, Term term, Terms.Computed numeric) {
         return with(binding, new Means(value, subject, location, term, numeric, readIn));
     }
 

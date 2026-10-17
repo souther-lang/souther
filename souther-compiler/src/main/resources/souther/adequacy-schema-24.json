@@ -988,6 +988,31 @@
                   }
                 }
               }
+            },
+            "from": {
+              "type": "object",
+              "description": "What the value the number is taken of was made from the one at `position`, where it was made into anything: the date there moved by `days`, which is defined for the dates from `defined_from` to `defined_to`. Absent where the number is taken of the value as it stands.",
+              "required": [
+                "kind",
+                "days",
+                "defined_from",
+                "defined_to"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "kind": {
+                  "const": "date_shift"
+                },
+                "days": {
+                  "type": "integer"
+                },
+                "defined_from": {
+                  "type": "string"
+                },
+                "defined_to": {
+                  "type": "string"
+                }
+              }
             }
           }
         },
@@ -1078,6 +1103,86 @@
                   }
                 }
               ]
+            }
+          }
+        },
+        {
+          "description": "How many of the code points of the string a position holds are in a class: every one that is not whitespace, every one that is neither whitespace nor `separator`, or every one in `ranges`, each an inclusive pair of code points.",
+          "required": [
+            "position",
+            "class"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "code_points"
+            },
+            "position": {
+              "type": "string"
+            },
+            "class": {
+              "enum": [
+                "not_whitespace",
+                "not_whitespace_nor_equal_to",
+                "one_of"
+              ]
+            },
+            "separator": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "ranges": {
+              "type": "array",
+              "items": {
+                "type": "array",
+                "minItems": 2,
+                "maxItems": 2,
+                "items": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            }
+          }
+        },
+        {
+          "description": "How many elements of the container a position stands inside hold there what the element under consideration holds. No one position holds it.",
+          "required": [
+            "position"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "multiplicity"
+            },
+            "position": {
+              "type": "string"
+            }
+          }
+        },
+        {
+          "description": "The least or the greatest of what the elements of the container `position` stands inside hold there, among the elements holding at `key` what the element under consideration holds there. One of the values at `position`, and not the one the element itself holds: no one position holds it.",
+          "required": [
+            "extreme",
+            "position",
+            "key"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "extreme_of_its_key"
+            },
+            "extreme": {
+              "enum": [
+                "least",
+                "greatest"
+              ]
+            },
+            "position": {
+              "type": "string"
+            },
+            "key": {
+              "type": "string"
             }
           }
         }

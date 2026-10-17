@@ -90,6 +90,7 @@ class EveryStatementReadToTheEndIsDrawnOrSaidAsTheModelsTest {
         out.put("the last element of a value",
                 "match Map.get(i.key, List.indexBy(k -> k, i.keys)) with"
                         + " | Some v -> true | None -> false");
+        out.put("where an operation answers", "10 / i.m >= 2");
         out.put("both", "i.n > 5 && i.b");
         out.put("either", "i.n > 5 || i.b");
         out.put("both, in one check", "List.length(if i.b then i.xs else []) >= 1");
@@ -148,6 +149,10 @@ class EveryStatementReadToTheEndIsDrawnOrSaidAsTheModelsTest {
             case Proposition.OnAnApplication each -> each.each().forEach(one -> kindsIn(one, into));
             case Proposition.SoManyHold counted ->
                     counted.statements().forEach(one -> kindsIn(one, into));
+            case Proposition.WhereItAnswers where -> {
+                kindsIn(where.answers(), into);
+                kindsIn(where.states(), into);
+            }
             case Proposition.Carried _, Proposition.Always _, Proposition.Compared _,
                  Proposition.Truth _,
                  Proposition.InCases _, Proposition.Present _, Proposition.SameValue _,

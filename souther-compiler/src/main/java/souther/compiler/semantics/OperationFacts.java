@@ -199,10 +199,11 @@ public final class OperationFacts {
             // whichever side the divisor decides. Its `0` is not a case at all: the operation
             // aborts.
             //
-            // `Decimal.toInt` is within one of what it rounds, whichever mode it is handed. What a
-            // single mode does more narrowly — `HALF_UP` rounds to within a half — is not a bound
-            // on the result: it is read from the mode where a comparison of the result is, and
-            // only where the mode is one case there (`roundsToAWholeNumber` below).
+            // Both narrowings to a whole number are within one of what they round, whichever mode
+            // they are handed. What a single mode does more narrowly — `HALF_UP` rounds to within
+            // a half — is not a bound on the result: it is read from the mode where a comparison
+            // of the result is, and only where the mode is one case there (`roundsToAWholeNumber`
+            // below).
             about("Int", "abs", bounded(Rel.GE, 0)),
             about("Decimal", "abs", bounded(Rel.GE, 0)),
             about("Int", "floorMod", bounded(Rel.GE, 0, aboveZero(at(1)))),
@@ -211,6 +212,8 @@ public final class OperationFacts {
             about("Int", "floorMod", bounded(Rel.GT, at(1), 0, belowZero(at(1)))),
             about("Decimal", "toInt", bounded(Rel.GT, at(1), -1, always())),
             about("Decimal", "toInt", bounded(Rel.LT, at(1), 1, always())),
+            about("Rational", "toInt", bounded(Rel.GT, at(1), -1, always())),
+            about("Rational", "toInt", bounded(Rel.LT, at(1), 1, always())),
             // Both narrowings to a whole number take the policy first and the number last. What
             // they answer is a step of the number, so a comparison of it is read as a comparison
             // of the number at the step's edge.
