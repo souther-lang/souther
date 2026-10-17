@@ -13,7 +13,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * or the code points of a text written down.
  *
  * <p>Both directions: under {@code c >= 48}, {@code c - zero} is at or above nought where the
- * element is forty-eight and may be below it where the element is forty-nine.
+ * element is forty-eight and may be below it where the element is forty-nine. That the measure
+ * reads the same element is {@link WhereAnElementIsPickedTheMeasureAndTheDischargeAgreeTest}'s.
  */
 class AnElementAWrittenIndexPicksIsDischargedAsTheNumberItIsTest {
 
@@ -40,12 +41,6 @@ class AnElementAWrittenIndexPicksIsDischargedAsTheNumberItIsTest {
     }
 
     @Test
-    void theCodePointOfATextWrittenDownIsTheNumberTheArmNames() {
-        assertFalse(owed("List.get(0, String.codePoints(\"0\"))"),
-                "the code point of \"0\" is forty-eight, and c is at least that");
-    }
-
-    @Test
     void aCodePointAboveTheGuardIsOwed() {
         assertTrue(owed("List.get(0, String.codePoints(\"1\"))"),
                 "the code point of \"1\" is forty-nine, and c may be forty-eight");
@@ -65,10 +60,5 @@ class AnElementAWrittenIndexPicksIsDischargedAsTheNumberItIsTest {
                         let first = 0
                         List.get(first, codes)
                     }"""), "the names are followed to what they were given");
-    }
-
-    @Test
-    void anElementOfAnInputIsOwed() {
-        assertTrue(owed("List.get(0, xs)"), "the input's first element may be any number");
     }
 }

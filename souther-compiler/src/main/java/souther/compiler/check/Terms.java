@@ -18,7 +18,6 @@ import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.core.Core;
-import souther.compiler.core.Kernel;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Refinement;
@@ -160,6 +159,10 @@ final class Terms {
      * terms equal ({@link Term}).
      */
     private final Term.Interner interned = new Term.Interner();
+
+    /** How the walk that writes a container out reads names here ({@link ElementsReading}). */
+    private final ElementsReading elements = new ElementsReading();
+
     /**
      * What this reading knows about each atom it has named by knowing which value it is: how the
      * value was reached, and what it carries whatever reached it ({@link AtomKnowledge}).
@@ -686,24 +689,36 @@ final class Terms {
      * can be said about it later and not whether the binding may be entered at all.
      */
     Denotations inside(Core.LetIn li, Denotations at) {
-        // What the binder is given: the value, or where it is a build of one, what that value is.
-        // Asked once and handed to every question below, so the environment holds the body it
-        // answered about and not the edge that stood for it. The type the binding is in force at
-        // says nothing about which value it holds, so that is set aside.
-        Core value = Core.withoutStanding(li.value());
-        Core built = templates.builtBy(value);
-        Core given = built != null ? built : value;
-        // Entering a binding a walk is already inside is not a second binding of it. A branch is
-        // read from where its conditional stood, which is inside these, over a tree that still holds
-        // them.
-        if (at.valueOf(li.binder().binding()) == given) {
-            return at;
-        }
         Map<Denotations, Denotations> under =
                 entered.computeIfAbsent(li, _ -> new IdentityHashMap<>());
         Denotations had = under.get(at);
         if (had != null) {
             return had;
+        }
+        Denotations made = entering(li.binder().binding(), li.value(), at);
+        if (made != at) {
+            under.put(at, made);
+        }
+        return made;
+    }
+
+    /**
+     * {@code at} with {@code binding} the name of {@code value}: what a {@code let} enters, and what
+     * an application of a step to an element enters for the step's parameter.
+     */
+    private Denotations entering(BindingId binding, Core value, Denotations at) {
+        // What the binder is given: the value, or where it is a build of one, what that value is.
+        // Asked once and handed to every question below, so the environment holds the body it
+        // answered about and not the edge that stood for it. The type the binding is in force at
+        // says nothing about which value it holds, so that is set aside.
+        Core bare = Core.withoutStanding(value);
+        Core built = templates.builtBy(bare);
+        Core given = built != null ? built : bare;
+        // Entering a binding a walk is already inside is not a second binding of it. A branch is
+        // read from where its conditional stood, which is inside these, over a tree that still holds
+        // them.
+        if (at.valueOf(binding) == given) {
+            return at;
         }
         // The names a value's body holds are its own, so it is read where nothing outside it is in
         // force, and the same environment answers for every build of it.
@@ -712,12 +727,9 @@ final class Terms {
         // nothing to name — an expression answering nothing at all — the name is what there is, and
         // it is one value however many times it is read.
         FactSubject about = subjectOf(given, reading);
-        Denotations made = at.binding(li.binder().binding(), given,
-                about != null ? about : placeSubject(li.binder().binding()),
+        return at.binding(binding, given, about != null ? about : placeSubject(binding),
                 locationOf(given, reading), bodyKey(given, reading),
                 numericMeaningOf(given, reading));
-        under.put(at, made);
-        return made;
     }
 
     /**
@@ -1442,8 +1454,9 @@ final class Terms {
      * <p>Asked of what the arm's name stands for and not of what the arm looks like. A name for the
      * matched value stands for the scrutinee and is about it, whichever carrier was tested. A name
      * for what stands under an optional's present carrier is a different value, named as what that
-     * optional holds, and one no expression here is — so it is about something while standing for
-     * nothing. An arm with no name opens nothing.
+     * optional holds. It stands for the element a lookup in a list written out picks, where one is
+     * picked ({@link #elementPicked}), and for nothing otherwise — no expression here is that value,
+     * so it is about something while standing for nothing. An arm with no name opens nothing.
      */
     private Opens opens(Core.Case arm, Core scrutinee, Denotations at) {
         FactSubject of = subjectOf(scrutinee, at);
@@ -1462,45 +1475,56 @@ final class Terms {
      * The value {@code List.get(index, list)} holds where it holds one, or null where it is not such
      * a call or which value it holds is not written down.
      *
-     * <p>The element at a number written down, of a list written out or of the code points of a
-     * text written down ({@link WrittenCodePoints}) — each found through the names it was given
-     * ({@link #given}), as the reading of the input finds them. Every element such a list holds is
-     * there on every run, so the index picks one. And only an element that is itself written: what
-     * the arm is handed is read in the arm, and a written value means the same there as where the
-     * list was written.
+     * <p>Which element the index picks is {@link ElementsWrittenOut#picked}'s, which the reading of
+     * an input asks as well, with names followed here as everything else here follows them
+     * ({@link #given}) and a step's parameter entered as a {@code let} enters its binder. What the
+     * arm is handed is read in the arm, so it is the element as a value written down: the element
+     * itself where it is one, and otherwise what it comes to where it was picked.
      */
     private Core elementPicked(Core scrutinee, Denotations at) {
-        Given called = given(scrutinee, at);
-        if (!(AnOperationApplied.of(called.value()) instanceof AnOperationApplied(
-                ValueName.Stdlib.Operation operation, List<Core> args))
-                || symbols.kernelOf(operation) != Kernel.LIST_GET || args.size() != 2
-                || !(Core.withoutStanding(given(args.get(0), called.at()).value())
-                        instanceof Core.Int index)
-                || index.value() < 0) {
+        ElementsWrittenOut.Occurrence<Denotations> picked =
+                ElementsWrittenOut.picked(scrutinee, at, elements);
+        if (picked == null) {
             return null;
         }
-        List<Core> elements = writtenElements(args.get(1), called.at());
-        if (elements == null || index.value() >= elements.size()) {
-            return null;
-        }
-        Core picked = elements.get((int) index.value());
-        return isWritten(picked) ? picked : null;
+        Given element = given(picked.value().value(), picked.value().at());
+        return isWritten(element.value()) ? element.value()
+                : writtenAs(element.value(), folded(element.value(), symbols, element.at()));
     }
 
-    /** The elements of {@code list} where it is a list written out or the code points of a text
-     *  written down, or null where it is neither. */
-    private List<Core> writtenElements(Core list, Denotations at) {
-        Given container = given(list, at);
-        Core value = Core.withoutStanding(container.value());
-        if (value instanceof Core.ListLit written) {
-            return written.elements();
+    /** How the walk that writes a container out ({@link ElementsWrittenOut}) reads names here: as
+     *  everything else here follows them ({@link #given}), with a step's parameter entered as a
+     *  {@code let} enters its binder. */
+    private final class ElementsReading implements ElementsWrittenOut.Reading<Denotations> {
+
+        @Override
+        public Symbols symbols() {
+            return symbols;
         }
-        return AnOperationApplied.of(value) instanceof AnOperationApplied(
-                ValueName.Stdlib.Operation operation, List<Core> args)
-                && symbols.kernelOf(operation) == Kernel.STRING_CODE_POINTS && args.size() == 1
-                && Core.withoutStanding(given(args.getFirst(), container.at()).value())
-                        instanceof Core.Str text
-                ? WrittenCodePoints.of(text.value(), value.pos()) : null;
+
+        @Override
+        public ElementsWrittenOut.Stood<Denotations> standing(Core e, Denotations at) {
+            Given stood = given(e, at);
+            return new ElementsWrittenOut.Stood<>(stood.value(), stood.at());
+        }
+
+        @Override
+        public Denotations handing(Denotations at, BindingId element,
+                                   ElementsWrittenOut.Stood<Denotations> value) {
+            return entering(element, value.value(), at);
+        }
+    }
+
+    /** {@code value} written down as the literal of {@code folded}, or null where it folded to none
+     *  this writes. */
+    private static Core writtenAs(Core value, Object folded) {
+        return switch (folded) {
+            case Long n -> new Core.Int(n, value.type(), value.pos());
+            case BigDecimal d -> new Core.Decimal(d, value.type(), value.pos());
+            case String s -> new Core.Str(s, value.type(), value.pos());
+            case Boolean b -> new Core.Bool(b, value.type(), value.pos());
+            case null, default -> null;
+        };
     }
 
     /**

@@ -176,14 +176,24 @@ class AnElementAWrittenIndexPicksIsTheValueAnArmNamesTest {
                 "seven is there on every run, so forty-eight is the element at one");
     }
 
+    /** The list is written out as far as the element picked, so what follows it is not walked. */
     @Test
-    void aTextLongerThanAWalkWritesOutIsNotPickedFrom() {
-        assertEquals(Set.of(), pointsOn(reportOf(guarded("List.get(0, String.codePoints(\""
-                        + "0".repeat(1025) + "\"))")), "check/x"),
-                "past the figure, nothing is written out");
-        assertEquals(Set.of("52", "53"), pointsOn(reportOf(guarded("List.get(0, String.codePoints(\""
-                        + "0".repeat(1024) + "\"))")), "check/x"),
-                "and at the figure, the element at nought is forty-eight");
+    void aTextLongerThanAWalkWritesOutIsPickedFromAsFarAsTheIndex() {
+        assertEquals(Set.of("52", "53"), pointsOn(reportOf(guarded(zeros(0, 2000))), "check/x"),
+                "the element at nought is forty-eight, however long the text is");
+    }
+
+    @Test
+    void anIndexPastTheFigureIsNotPickedAt() {
+        assertEquals(Set.of(), pointsOn(reportOf(guarded(zeros(1024, 1025))), "check/x"),
+                "the element at the figure is past what a walk writes out");
+        assertEquals(Set.of("52", "53"), pointsOn(reportOf(guarded(zeros(1023, 1024))), "check/x"),
+                "and the one before it is not");
+    }
+
+    /** The element at {@code index} of the code points of {@code length} noughts. */
+    private static String zeros(int index, int length) {
+        return "List.get(" + index + ", String.codePoints(\"" + "0".repeat(length) + "\"))";
     }
 
     /** Every value at or beside a line of the statement a row is owed at, on {@code axis}. */

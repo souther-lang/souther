@@ -16,6 +16,7 @@ import souther.compiler.check.Location;
 import souther.compiler.check.ScopeStep;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.ValueStanding;
+import souther.compiler.check.ElementsWrittenOut;
 import souther.compiler.core.Core;
 import souther.compiler.core.Kernel;
 import souther.compiler.numeric.LinearForm;
@@ -1297,9 +1298,11 @@ public final class InputReads {
         }
 
         /**
-         * The element of a list written out that an index written out picks, read where the list
-         * wrote it. Made of no entry: the list is no map, and the element is what it was before it
-         * was put in.
+         * The element an index written down picks of a list written out
+         * ({@link ElementsWrittenOut#picked}) — a list written in the source, the code points of a
+         * text written there, or one an operation put together of pieces of either — read where
+         * the walk wrote it. Made of no entry: the list is no map, and the element is what it was
+         * before it was put in.
          */
         record AnElement(Denotation element) implements WhatItHolds {
 
@@ -1327,10 +1330,10 @@ public final class InputReads {
      * What {@code option}, read here, holds where it holds a value ({@link WhatItHolds}).
      *
      * <p>A lookup in the input's map holds the entry under the key, and a lookup in a list written
-     * out holds the element its index picks ({@link #elementPicked}). An operation answering its
-     * closure on what another option holds holds what the closure's body answers, read with the
-     * closure's parameter standing for what the other holds — worked out the same way, down to a
-     * lookup, an optional's position, or nothing said. The closure is read where it stands, and
+     * out holds the element its index picks ({@link ElementsWrittenOut#picked}). An operation
+     * answering its closure on what another option holds holds what the closure's body answers, read
+     * with the closure's parameter standing for what the other holds — worked out the same way, down
+     * to a lookup, an optional's position, or nothing said. The closure is read where it stands, and
      * may be a name for one; only a closure written as a block of one parameter is read.
      *
      * <p>Each step goes into an argument of the call before it, and each call is found through the
@@ -1349,8 +1352,10 @@ public final class InputReads {
             }
             if (operation instanceof ValueName.Stdlib.Operation listed
                     && symbols.kernelOf(listed) == Kernel.LIST_GET) {
-                return args.size() == 2 ? at.elementPicked(args.get(0), args.get(1), symbols,
-                        newtypes) : new WhatItHolds.Unsaid();
+                Denotation picked = WrittenOutElements.picked(looked.value(), at, symbols,
+                        newtypes);
+                return picked == null ? new WhatItHolds.Unsaid()
+                        : new WhatItHolds.AnElement(picked);
             }
             BoundOperationFacts.ClosureOnWhatItHolds made =
                     DefaultBoundOperationFacts.get().answersTheClosureOnWhatItHolds(operation);
@@ -1419,40 +1424,6 @@ public final class InputReads {
         return new InputReads(names, alternatives, declared, dependencies,
                 new Applied(applied.handed(), applied.readings(), applied.taken(), given,
                         applied.entered()));
-    }
-
-    /**
-     * What {@code List.get(index, list)} holds where it holds a value, read here: the element the
-     * index picks, where the index is a number written down and the list is written out up to that
-     * element with every one of them there on every run.
-     *
-     * <p>The index, the list and a text whose code points it is are each found through the names
-     * they were given ({@link #standing}), as the discharge of a rule finds them.
-     *
-     * <p>An element some step keeps on some runs and not others moves every element after it, and
-     * is itself the one picked only where it is kept — so where any of the elements up to and
-     * including the one picked is kept on a condition, which element the index picks is not one
-     * answer, and nothing is said.
-     */
-    private WhatItHolds elementPicked(Core index, Core list, Symbols symbols,
-                                      DeclarationNewtypes newtypes) {
-        if (!(Core.withoutStanding(standing(index, symbols, newtypes).value())
-                instanceof Core.Int written) || written.value() < 0
-                || !(WrittenOutElements.of(standing(list, symbols, newtypes), symbols, newtypes)
-                        instanceof WrittenOutElements.Walked.Each each)) {
-            return new WhatItHolds.Unsaid();
-        }
-        List<ReadMeaning.Occurrence> elements = each.asWritten();
-        if (written.value() >= elements.size()) {
-            return new WhatItHolds.Unsaid();
-        }
-        int picked = (int) written.value();
-        for (int i = 0; i <= picked; i++) {
-            if (!elements.get(i).keptWhere().isEmpty()) {
-                return new WhatItHolds.Unsaid();
-            }
-        }
-        return new WhatItHolds.AnElement(elements.get(picked).value());
     }
 
     /**

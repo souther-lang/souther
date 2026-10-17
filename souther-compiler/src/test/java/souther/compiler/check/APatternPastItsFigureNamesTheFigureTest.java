@@ -5,7 +5,6 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.TermPath;
-import souther.compiler.inputs.WrittenOutElements;
 import souther.compiler.observe.Figure;
 import souther.compiler.observe.RunSensitivity;
 import souther.compiler.observe.WorkFigure;
@@ -78,7 +77,7 @@ class APatternPastItsFigureNamesTheFigureTest {
                 new BlockReason.WhatItStatesIsNoLine(
                         BlockReason.WhatItStatesIsNoLine.Why.MORE_READINGS_THAN_ARE_MADE).figures());
         assertEquals(List.of(WorkFigure.ELEMENTS_A_WALK_WRITES_OUT.at(
-                        WrittenOutElements.MOST_WALKED)),
+                        ElementsWrittenOut.MOST_WALKED)),
                 new BlockReason.WhatItStatesIsNoLine(
                         BlockReason.WhatItStatesIsNoLine.Why.MORE_ELEMENTS_THAN_ARE_WRITTEN_OUT)
                         .figures());

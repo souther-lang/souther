@@ -6,7 +6,7 @@ import souther.compiler.core.Core;
 import souther.compiler.inputs.Denotation;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.ReadMeaning;
-import souther.compiler.inputs.WrittenOutElements;
+import souther.compiler.check.ElementsWrittenOut;
 import souther.compiler.meaning.Proposition;
 
 import java.util.ArrayList;
@@ -123,9 +123,9 @@ class AListPutTogetherOfPiecesNamesEveryElementWhereItIsKeptTest {
      */
     @Test
     void theWalkWritesOutAsManyAsAConditionIsReadOn() {
-        assertTrue(WrittenOutElements.MOST_WALKED
+        assertTrue(ElementsWrittenOut.MOST_WALKED
                         >= CompositionBudget.READINGS_OF_ONE_CONDITION.maximum(),
-                () -> WrittenOutElements.MOST_WALKED + " against "
+                () -> ElementsWrittenOut.MOST_WALKED + " against "
                         + CompositionBudget.READINGS_OF_ONE_CONDITION.maximum());
     }
 

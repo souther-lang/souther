@@ -22,7 +22,7 @@ class TheCodePointsOfAWrittenTextAreTheOnesARunAnswersTest {
     @Test
     void eachTextIsTheNumbersARunAnswers() {
         for (String text : List.of("0", "09", "😀", "a😀b", "é", "")) {
-            List<Long> read = WrittenCodePoints.of(text, new SourcePos(1, 1)).stream()
+            List<Long> read = WrittenCodePoints.of(text, Integer.MAX_VALUE, new SourcePos(1, 1)).stream()
                     .map(each -> ((Core.Int) each).value()).toList();
             assertEquals(Strings.codePoints(text), read, () -> "the code points of " + text);
         }
