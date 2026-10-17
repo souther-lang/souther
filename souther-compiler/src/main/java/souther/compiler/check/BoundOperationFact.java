@@ -20,7 +20,6 @@ import souther.compiler.semantics.SideAnswered;
 import souther.compiler.semantics.Unsayable;
 import souther.compiler.semantics.TakenArguments;
 import souther.compiler.semantics.TakenAs;
-import souther.compiler.semantics.WhatIsGathered;
 import souther.compiler.types.Type;
 
 import java.math.BigDecimal;
@@ -231,10 +230,9 @@ sealed interface BoundOperationFact permits BoundOperationFact.OneAboutAnOperati
     record PutsAValueIn(DeclaredOperation operation, DeclaredArgument value, DeclaredArgument into)
             implements OneAboutAnOperation {}
 
-    /** The operation answers a set holding exactly what {@code into} holds and {@code what}, the
-     *  value or every element of it as {@code how} says. */
-    record GathersIn(DeclaredOperation operation, DeclaredArgument what, WhatIsGathered how,
-                     DeclaredArgument into) implements OneAboutAnOperation {}
+    /** The operation answers a set holding exactly what {@code into} holds and {@code value}. */
+    record GathersIn(DeclaredOperation operation, DeclaredArgument value, DeclaredArgument into)
+            implements OneAboutAnOperation {}
 
     /** The operation answers a list of {@code part} of what {@code map} holds. */
     record ListsAPartOf(DeclaredOperation operation, DeclaredArgument map,

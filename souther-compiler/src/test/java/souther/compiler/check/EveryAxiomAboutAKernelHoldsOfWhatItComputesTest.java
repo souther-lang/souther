@@ -18,7 +18,6 @@ import souther.compiler.semantics.LawNumber;
 import souther.compiler.semantics.LawProposition;
 import souther.compiler.semantics.LawSubject;
 import souther.compiler.semantics.SideAnswered;
-import souther.compiler.semantics.WhatIsGathered;
 import souther.compiler.stdlib.Stdlib;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
@@ -79,8 +78,7 @@ class EveryAxiomAboutAKernelHoldsOfWhatItComputesTest {
             }
             if (facts.gathersIn(operation) instanceof BoundOperationFacts.Gathered gathers) {
                 statements.add(new WhatTheLibraryComputes.Statement(operation, "gathers",
-                        gathers(gathers.what().position(), gathers.how(),
-                                gathers.into().position())));
+                        gathers(gathers.value().position(), gathers.into().position())));
             }
             if (Combinators.listing(stdlib, facts, operation)
                     instanceof AppliedClosures.Listing listing) {
@@ -332,29 +330,20 @@ class EveryAxiomAboutAKernelHoldsOfWhatItComputesTest {
     }
 
     /**
-     * What an answer gathering {@code what} into {@code into} holds, both ways: every element of
-     * {@code into} and what is gathered — the value, or every element of it — is in the answer,
-     * and every element of the answer is one of those.
+     * What an answer gathering {@code value} into {@code into} holds, both ways: every element of
+     * {@code into} and the value are in the answer, and every element of the answer is one of
+     * those.
      */
-    private static LawProposition<Slot> gathers(int what, WhatIsGathered how, int into) {
+    private static LawProposition<Slot> gathers(int value, int into) {
         LawSubject<Slot> element = new LawSubject.ElementOf<>(new Slot.Answer());
         LawProposition<Slot> fromInto = new LawProposition.SomeElement<>(new Slot.Place(into),
                 same(new LawSubject.ElementOf<>(new Slot.Place(into)), element), true);
-        return switch (how) {
-            case THE_VALUE -> new LawProposition.All<>(List.of(
-                    among(new Slot.Place(into), new Slot.Answer()),
-                    new LawProposition.SomeElement<>(new Slot.Answer(),
-                            same(element, argument(what)), true),
-                    new LawProposition.SomeElement<>(new Slot.Answer(), new LawProposition.Any<>(
-                            List.of(same(element, argument(what)), fromInto)).denied(), false)));
-            case EVERY_ELEMENT -> new LawProposition.All<>(List.of(
-                    among(new Slot.Place(into), new Slot.Answer()),
-                    among(new Slot.Place(what), new Slot.Answer()),
-                    new LawProposition.SomeElement<>(new Slot.Answer(), new LawProposition.Any<>(
-                            List.of(new LawProposition.SomeElement<>(new Slot.Place(what),
-                                    same(new LawSubject.ElementOf<>(new Slot.Place(what)),
-                                            element), true), fromInto)).denied(), false)));
-        };
+        return new LawProposition.All<>(List.of(
+                among(new Slot.Place(into), new Slot.Answer()),
+                new LawProposition.SomeElement<>(new Slot.Answer(),
+                        same(element, argument(value)), true),
+                new LawProposition.SomeElement<>(new Slot.Answer(), new LawProposition.Any<>(
+                        List.of(same(element, argument(value)), fromInto)).denied(), false)));
     }
 
     /** What an answer listing {@code listing} of an argument holds of it: every element of the

@@ -1522,10 +1522,11 @@ final class Pullback {
      * it walks stand at no position.
      *
      * <p>By induction over the walk, which hands every element to the step once. The step is read
-     * with what it carried holding nought and again holding one, and the two have to come one
-     * apart: a size read as a form is a form of what was carried, so the step is then that and one
-     * form of the element, for every size there is. What it adds of the element is added up as an
-     * operation's law sums over the elements ({@link #addedUpOver}).
+     * once with what it carried holding a number standing for any ({@link Quantity.HowManyCarried}),
+     * and has to come to that number, once, and a form of the element that does not read it: then
+     * it is so for every size there is, whatever arithmetic the laws of what it calls do. What it
+     * adds of the element is added up as an operation's law sums over the elements
+     * ({@link #addedUpOver}).
      */
     private Sized sizeOfAWalk(Core e, InputReads reads) {
         SeededWalk walk = SeededWalk.of(e, blocksAt(new Denotation(e, reads)));
@@ -1548,13 +1549,13 @@ final class Pullback {
             return seed.equals(LinearForm.constant(ExactRatio.ZERO))
                     ? differentOverAWalk(walk, held, step, applied, gathers) : null;
         }
-        BindingId accumulator = walk.accumulator().binding();
-        if (!(stepSized(accumulator, ExactRatio.ZERO, walk, reads)
-                instanceof Sized.AsAForm(LinearForm<Quantity> adds))
-                || !(stepSized(accumulator, ExactRatio.ONE, walk, reads)
-                instanceof Sized.AsAForm(LinearForm<Quantity> addsToOne))
-                || !addsToOne.equals(new LinearForm<>(
-                        adds.constant().plus(ExactRatio.ONE).orNull(), adds.coefs()))) {
+        Quantity soFar = new Quantity.HowManyCarried(ACarriedValue.made());
+        if (!(stepSized(walk.accumulator().binding(), soFar, walk, reads)
+                instanceof Sized.AsAForm(LinearForm<Quantity> stepped))) {
+            return null;
+        }
+        LinearForm<Quantity> adds = addedBesideOnce(stepped, soFar);
+        if (adds == null) {
             return null;
         }
         if (!quantifying.add(held)) {
@@ -1577,9 +1578,9 @@ final class Pullback {
     /**
      * How many what {@code walk}, from an empty set over the elements of {@code held}, ends with
      * holds, where its step {@code applied}, standing as {@code step}, gathers into what it
-     * carried ({@link BoundOperationFacts#gathersIn}) a value standing at a place of the element,
-     * or every element of a set standing there: how many different values stand where those are
-     * over the elements — or null where it gathers anything else, or into anything else.
+     * carried ({@link BoundOperationFacts#gathersIn}) one value of each element: how many
+     * different values stand there over the elements — or null where it gathers anything else,
+     * or into anything else.
      *
      * <p>By induction over the walk, which hands every element to the step once: what it ends
      * with is exactly the values gathered, each once, which is how many differ among them.
@@ -1590,23 +1591,45 @@ final class Pullback {
         if (!(Core.withoutStanding(applied.args().get(gathers.into().position()))
                         instanceof Core.Read carried)
                 || !carried.binding().equals(walk.accumulator().binding())
-                || !(step.at().pathOf(applied.args().get(gathers.what().position()),
-                        read.rules().newtypes()) instanceof PathResolution.At(TermPath what))
-                || !what.isAtOrUnder(held.at().element())) {
+                || !(step.at().pathOf(applied.args().get(gathers.value().position()),
+                        read.rules().newtypes()) instanceof PathResolution.At(TermPath value))
+                || !Quantity.HowManyDifferent.oneOfEach(held, new DecisionSubject.AnInput(value))) {
             return null;
         }
-        TermPath each = switch (gathers.how()) {
-            case THE_VALUE -> what;
-            case EVERY_ELEMENT -> what.element();
-        };
         return new Sized.AsAForm(LinearForm.atom(
-                new Quantity.HowManyDifferent(held, new DecisionSubject.AnInput(each))));
+                new Quantity.HowManyDifferent(held, new DecisionSubject.AnInput(value))));
+    }
+
+    /**
+     * What {@code form} adds beside {@code carried}, where it is {@code carried} once and a form
+     * that reads it nowhere else — or null where it is anything else: {@code carried} twice, not
+     * at all, or added up over some elements.
+     */
+    private static LinearForm<Quantity> addedBesideOnce(LinearForm<Quantity> form,
+                                                        Quantity carried) {
+        if (!ExactRatio.ONE.equals(form.coefs().get(carried))) {
+            return null;
+        }
+        Map<Quantity, ExactRatio> rest = new LinkedHashMap<>(form.coefs());
+        rest.remove(carried);
+        for (Quantity each : rest.keySet()) {
+            if (mentions(each, carried)) {
+                return null;
+            }
+        }
+        return new LinearForm<>(form.constant(), rest);
+    }
+
+    /** Whether {@code number} is {@code carried} or a sum of it over some elements. */
+    private static boolean mentions(Quantity number, Quantity carried) {
+        return number.equals(carried) || number instanceof Quantity.SumOver(var _, Quantity each)
+                && mentions(each, carried);
     }
 
     /** How many {@code walk}'s step holds, with what it carried holding {@code soFar}. */
-    private Sized stepSized(BindingId accumulator, ExactRatio soFar, SeededWalk walk,
+    private Sized stepSized(BindingId accumulator, Quantity soFar, SeededWalk walk,
                             InputReads reads) {
-        sizedSoFar.put(accumulator, LinearForm.constant(soFar));
+        sizedSoFar.put(accumulator, LinearForm.atom(soFar));
         try {
             return sizeOf(walk.step().body(), reads);
         } finally {
@@ -3358,8 +3381,12 @@ final class Pullback {
                      LawSubject.Argument<DeclaredArgument> _ -> null;
                 case LawSubject.AnswerOf<DeclaredArgument> _ -> throw namedInNoLaw(ofTheElement);
             };
-            return each == null ? new Sized.NotSized(
-                    new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.SUBJECT))
+            // A place inside another container inside the element is as many values as that one
+            // holds, and how many differ among them is no number of the elements.
+            return each == null || !Quantity.HowManyDifferent.oneOfEach(
+                    new DecisionSubject.AnInput(held), new DecisionSubject.AnInput(each))
+                    ? new Sized.NotSized(
+                            new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.SUBJECT))
                     : new Sized.AsAForm(LinearForm.atom(new Quantity.HowManyDifferent(
                             new DecisionSubject.AnInput(held), new DecisionSubject.AnInput(each))));
         }
@@ -5298,13 +5325,12 @@ final class Pullback {
     }
 
     /**
-     * How many each call of a search being read for how many it answers stands for: what
-     * {@code each} says of the node one step below the node at {@code from}, the call being handed
-     * that node as its argument {@code node} — and the fields it went below through, gathered into
-     * {@code through}.
+     * How many each call of a search being read for how many it answers stands for, {@code each},
+     * the call being handed as its argument {@code node} a node one step below the node at
+     * {@code from} — and the fields it went below through, gathered into {@code through}.
      */
     private record SizedBelow(int node, TermPath from, Set<String> through,
-                              Function<TermPath, LinearForm<Quantity>> each) {}
+                              LinearForm<Quantity> each) {}
 
     /**
      * How many {@code e} holds where it is a call of a search down a tree, or one of its calls of
@@ -5323,7 +5349,7 @@ final class Pullback {
                         new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.SUBJECT));
             }
             supposed.through().add(field);
-            return new Sized.AsAForm(supposed.each().apply(supposed.from().then(field).element()));
+            return new Sized.AsAForm(supposed.each());
         }
         if (!recursing.add(helper)) {
             return null;
@@ -5340,15 +5366,15 @@ final class Pullback {
      * number for every node it reaches added up over them: how many nodes there are, or how many a
      * container of each node holds in all, or a form of those — or null where it is not read so.
      *
-     * <p>By induction over the tree, which is finite whatever its depth. The body is read with
-     * each call of itself standing for nought, and what is left is what a node adds of its own:
-     * written-out values and how many containers at its own places hold, each with a weight. That
-     * is the guess — those weights on how many nodes, and how many of each container's elements,
-     * there are from a node down. The body is read again with each call standing for the guess
-     * one node down, and has to come to what the node adds and the guess at every node below it
-     * through the fields it went down, each once: then the guess satisfies what the body does,
-     * and a tree has one number that does. A call made twice, of some of the nodes below, or
-     * through a field the first reading did not go down, is not that, and is not read.
+     * <p>By induction over the tree, which is finite whatever its depth. The body is read once
+     * with each call of itself standing for a number standing for any
+     * ({@link Quantity.HowManyCarried}), and has to come to that number added up once over the
+     * nodes below through each field it went down, and what the node adds of its own: written-out
+     * values and how many containers at its own places hold, each with a weight, reading the
+     * number nowhere else. Then how many it answers from a node is those weights on how many
+     * nodes, and how many of each container's elements, there are from it down — the one number a
+     * tree has that does what the body does. A call made twice, of some of the nodes below, or
+     * read any other way, is not that, and is not read.
      *
      * <p>Every other value it is handed stands at a position apart from the node, as a search's
      * are ({@link #acrossATree}).
@@ -5375,46 +5401,38 @@ final class Pullback {
         if (inside == null) {
             return null;
         }
-        Type nodeType = args.get(search.node()).type();
+        Quantity below = new Quantity.HowManyCarried(ACarriedValue.made());
         Set<String> went = new TreeSet<>();
-        if (!(sizedBelowWith(search, node, went, _ -> LinearForm.constant(ExactRatio.ZERO),
+        if (!(sizedBelowWith(search, node, went, LinearForm.atom(below),
                 () -> sizeOf(body.body(), inside)) instanceof Sized.AsAForm(
-                        LinearForm<Quantity> own)) || went.isEmpty()) {
+                        LinearForm<Quantity> stepped)) || went.isEmpty()) {
             return null;
         }
-        List<String> through = List.copyOf(went);
-        Map<List<String>, ExactRatio> weights = addedByEachNode(own, node, through);
-        if (weights == null) {
-            return null;
-        }
-        Function<TermPath, LinearForm<Quantity>> guess =
-                at -> heldFromANodeDown(at, through, weights, nodeType);
-        Set<String> wentAgain = new TreeSet<>();
-        if (!(sizedBelowWith(search, node, wentAgain, guess, () -> sizeOf(body.body(), inside))
-                instanceof Sized.AsAForm(LinearForm<Quantity> stepped))
-                || !wentAgain.equals(went)) {
-            return null;
-        }
-        Map<Quantity, ExactRatio> expected = new LinkedHashMap<>(own.coefs());
-        for (String field : through) {
-            LinearForm<Quantity> below = Quantity.SumOver.over(
-                    new DecisionSubject.AnInput(node.then(field)),
-                    guess.apply(node.then(field).element()), null);
-            if (below == null) {
+        // Each field it went down, the nodes there added up once each.
+        Map<Quantity, ExactRatio> own = new LinkedHashMap<>(stepped.coefs());
+        for (String field : went) {
+            if (!ExactRatio.ONE.equals(own.remove(new Quantity.SumOver(
+                    new DecisionSubject.AnInput(node.then(field)), below)))) {
                 return null;
             }
-            expected.putAll(below.coefs());
         }
-        LinearForm<Quantity> fromHere = guess.apply(node);
-        return fromHere != null && stepped.equals(new LinearForm<>(own.constant(), expected))
-                ? new Sized.AsAForm(fromHere) : null;
+        for (Quantity each : own.keySet()) {
+            if (mentions(each, below)) {
+                return null;
+            }
+        }
+        List<String> through = List.copyOf(went);
+        Map<List<String>, ExactRatio> weights = addedByEachNode(
+                new LinearForm<>(stepped.constant(), own), node, through);
+        LinearForm<Quantity> fromHere = weights == null ? null
+                : heldFromANodeDown(node, through, weights, args.get(search.node()).type());
+        return fromHere == null ? null : new Sized.AsAForm(fromHere);
     }
 
-    /** {@code reading}, with each call of {@code search} standing for what {@code each} says of
-     *  the node it is handed, one step below the node at {@code from}. */
+    /** {@code reading}, with each call of {@code search} on a node one step below the node at
+     *  {@code from} standing for {@code each}. */
     private Sized sizedBelowWith(RecursionOverATree search, TermPath from, Set<String> through,
-                                 Function<TermPath, LinearForm<Quantity>> each,
-                                 Supplier<Sized> reading) {
+                                 LinearForm<Quantity> each, Supplier<Sized> reading) {
         SizedBelow supposed = new SizedBelow(search.node(), from, through, each);
         for (Core.Call again : search.again()) {
             sizedBelow.put(again, supposed);

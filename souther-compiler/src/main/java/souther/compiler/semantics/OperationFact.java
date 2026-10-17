@@ -399,8 +399,8 @@ public sealed interface OperationFact {
     }
 
     /**
-     * The operation answers a set holding exactly what {@code into} holds and {@code what} — the
-     * value itself or every element of it, as {@code how} says — each once.
+     * The operation answers a set holding exactly what {@code into} holds and {@code value}, each
+     * once.
      *
      * <p>Both ways, which is what {@link PutsAValueIn} does not say: every element of the answer
      * is one of those, and every one of those is an element of the answer. A set put a value in
@@ -410,12 +410,10 @@ public sealed interface OperationFact {
      *
      * <p>An axiom of a kernel, held to what the kernel computes.
      */
-    record GathersIn(ArgumentRef what, WhatIsGathered how, ArgumentRef into)
-            implements OperationFact {
+    record GathersIn(ArgumentRef value, ArgumentRef into) implements OperationFact {
 
         public GathersIn {
-            Objects.requireNonNull(what, "this one names what is gathered");
-            Objects.requireNonNull(how, "and how much of it");
+            Objects.requireNonNull(value, "this one names the value gathered");
             Objects.requireNonNull(into, "and what it is gathered into");
         }
     }

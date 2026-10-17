@@ -30,6 +30,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * How many an operation answers, where its law says that is a number taken over the elements of
@@ -113,14 +115,36 @@ class ANumberOverTheElementsIsReadAsTheNumberItIsTest {
 
     /**
      * A walk gathering into a set the value at a place of each element ends with as many as there
-     * are different values there; one gathering every element of a set at each holds as many as
-     * differ among all of theirs.
+     * are different values there. One gathering every element of a set at each holds as many as
+     * differ among all of theirs, which may be more than there are elements — {@code [{1, 2}]}
+     * holds two of them in one — so it is no number of how many differ among the elements, and
+     * nothing here reads it.
      */
     @Test
     void whatAWalkGathersIntoASetIsHowManyDifferentValuesItGathers() {
         assertEquals(theOnlyNumber("variedItems"), theOnlyNumber("gatheredItems"));
-        assertEquals(new Quantity.HowManyDifferent(new DecisionSubject.AnInput(TAGS),
-                new DecisionSubject.AnInput(TAGS.element().element())), theOnlyNumber("joined"));
+        assertEquals(List.of(), numbersAsked("joined"));
+    }
+
+    /**
+     * How many different values there are over the elements of a container is of one value of
+     * each: the element, a place inside it, or its key — never a place inside a container inside
+     * it, which is as many values as that one holds.
+     */
+    @Test
+    void howManyDifferentIsOfOneValueOfEachElement() {
+        DecisionSubject tags = new DecisionSubject.AnInput(TAGS);
+        DecisionSubject items = new DecisionSubject.AnInput(ITEMS);
+        assertTrue(Quantity.HowManyDifferent.oneOfEach(tags,
+                new DecisionSubject.AnInput(TAGS.element())));
+        assertTrue(Quantity.HowManyDifferent.oneOfEach(items,
+                new DecisionSubject.AnInput(ITEMS.element().then("code"))));
+        assertFalse(Quantity.HowManyDifferent.oneOfEach(tags,
+                new DecisionSubject.AnInput(TAGS.element().element())));
+        assertFalse(Quantity.HowManyDifferent.oneOfEach(items,
+                new DecisionSubject.AnInput(ITEMS.element().then("bins").element())));
+        assertThrows(IllegalArgumentException.class, () -> new Quantity.HowManyDifferent(tags,
+                new DecisionSubject.AnInput(TAGS.element().element())));
     }
 
     /**

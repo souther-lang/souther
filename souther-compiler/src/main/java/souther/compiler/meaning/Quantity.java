@@ -20,6 +20,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Predicate;
 
@@ -36,7 +37,40 @@ import java.util.function.Predicate;
 public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
         Quantity.HowManyMeet, Quantity.HowManyHold, Quantity.HowManyDifferent, Quantity.SumOver,
         Quantity.CodePointsOfAPiece, Quantity.RemainderOfADividend,
-        Quantity.WhatAnOperationAnswers {
+        Quantity.WhatAnOperationAnswers, Quantity.HowManyCarried {
+
+    /**
+     * How many what a recursion carries holds, whatever that is: what a walk carried into the step
+     * being read, or what a call of a search answers one node down.
+     *
+     * <p>Made only while the step or the body is read for how many it answers, which a reading does
+     * to show it is that many and a number of the element or the node, for every number there is.
+     * Read as a number standing for any number, a form over it says so of each by its weight; read
+     * as nought and one, it says it of those two. What the reading concludes has none of these in
+     * it, so no reader of what a condition states is handed one.
+     */
+    record HowManyCarried(ACarriedValue value) implements Quantity {
+
+        public HowManyCarried {
+            Objects.requireNonNull(value, "what is carried is some walk's");
+        }
+
+        /** What a reader handed one of these is told: it is no number of anything it reads. */
+        public IllegalStateException reachedAReader() {
+            return new IllegalStateException(spelled() + " stands for any number inside a"
+                    + " recursion's step, and reaches no reader of a condition");
+        }
+
+        @Override
+        public String spelled() {
+            return "#" + value;
+        }
+
+        @Override
+        public String toString() {
+            return spelled();
+        }
+    }
 
     /**
      * What an operation the library declares answers of values of the input, where nothing here
@@ -228,11 +262,23 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
             if (container == null || ofTheElement == null) {
                 throw new IllegalArgumentException("the values are of a container's elements");
             }
-            if (!ofTheElement.isAtOrUnder(container.element())
-                    && !ofTheElement.isAtOrUnder(container.key())) {
-                throw new IllegalArgumentException(ofTheElement + " is no part of an element of "
-                        + container);
+            if (!oneOfEach(container, ofTheElement)) {
+                throw new IllegalArgumentException(ofTheElement + " is no one value of each"
+                        + " element of " + container);
             }
+        }
+
+        /**
+         * Whether {@code ofTheElement} is one value of each element of the container at
+         * {@code container}: the element, a place inside it, or the key it is filed under, and no
+         * place inside another container inside it. A place in a container inside the element is
+         * as many values as that container holds, and how many differ among those is no number of
+         * the elements — it may be more of them than there are elements.
+         */
+        public static boolean oneOfEach(DecisionSubject container, DecisionSubject ofTheElement) {
+            return (ofTheElement.isAtOrUnder(container.element())
+                    || ofTheElement.isAtOrUnder(container.key()))
+                    && ofTheElement.containersHoldingIt() == container.containersHoldingIt() + 1;
         }
 
         @Override

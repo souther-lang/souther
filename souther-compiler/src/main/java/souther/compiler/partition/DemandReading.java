@@ -1673,6 +1673,7 @@ final class DemandReading {
                 case Quantity.OfABinding bound -> bound.madeOf().ifPresent(past::add);
                 case Quantity.WhatAnOperationAnswers _ -> answered = true;
                 case DecisionAtom.OfTheInput _ -> { }
+                case Quantity.HowManyCarried carried -> throw carried.reachedAReader();
             }
         }
         if (answered) {

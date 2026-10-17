@@ -63,7 +63,7 @@ public final class PositionsAStatementReads {
         return switch (quantity) {
             case DecisionAtom.OfTheInput(var term) -> reads(term, out);
             case DecisionAtom.OfAnAnswer _, DecisionAtom.TakenOfAnAnswer _,
-                 Quantity.OfABinding _ -> false;
+                 Quantity.OfABinding _, Quantity.HowManyCarried _ -> false;
             case Quantity.WhatAnOperationAnswers answers -> answers.of().stream()
                     .allMatch(each -> reads(each, out));
             // A piece of a string is whatever the statement it is read inside says it is, and the

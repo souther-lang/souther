@@ -1040,9 +1040,13 @@ public sealed interface Derivation {
                     case LawNumber.HowManyDifferent<DeclaredArgument>(var container, var each) -> {
                         TermPath at = positionOf(container);
                         TermPath element = positionOf(each);
+                        DecisionSubject.AnInput over = at == null ? null
+                                : new DecisionSubject.AnInput(at);
                         yield at == null || element == null
-                                || new Quantity.HowManyDifferent(new DecisionSubject.AnInput(at),
-                                new DecisionSubject.AnInput(element)).equals(atom);
+                                || (Quantity.HowManyDifferent.oneOfEach(over,
+                                        new DecisionSubject.AnInput(element))
+                                && new Quantity.HowManyDifferent(over,
+                                        new DecisionSubject.AnInput(element)).equals(atom));
                     }
                     // A sum is held spread over the numbers of each element and how many elements
                     // there are ({@link Quantity.SumOver#over}), so what each element adds is

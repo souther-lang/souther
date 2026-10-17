@@ -49,6 +49,20 @@ class ACountOfWhatARunHoldsIsComposedARowHoldingThatManyTest {
             let pick (root) = if List.length(everyone(root)) >= 3 then 1 else 0
             """;
 
+    /**
+     * Every node of a tree whose nodes are below it through two fields. The row is written through
+     * one of them, and what it is read back as counts the nodes through both.
+     */
+    private static final String THE_NODES_THROUGH_TWO_FIELDS = """
+            module p
+            data Node = { holder: Int, left: List<Node>, right: List<Node> }
+            let everyone (node: Node): List<Int> =
+                [ node.holder ] ++ List.flatMap(r -> everyone(r), node.left)
+                    ++ List.flatMap(r -> everyone(r), node.right)
+            behavior pick : (root: Node) -> Int
+            let pick (root) = if List.length(everyone(root)) >= 3 then 1 else 0
+            """;
+
     /** The same against a number a row writes. */
     private static final String THE_NODES_AGAINST_AN_INPUT = """
             module p
@@ -80,6 +94,7 @@ class ACountOfWhatARunHoldsIsComposedARowHoldingThatManyTest {
     /** Each model, with what its condition works out to over a row's inputs. */
     private static final Map<String, Function<List<Hir.Expr>, Integer>> ANSWERED = Map.of(
             THE_NODES, row -> nodesOf(row.get(0)) >= 3 ? 1 : 0,
+            THE_NODES_THROUGH_TWO_FIELDS, row -> nodesOf(row.get(0)) >= 3 ? 1 : 0,
             THE_NODES_AGAINST_AN_INPUT, row -> nodesOf(row.get(0)) >= wholeNumber(row.get(1))
                     ? 1 : 0,
             THE_LISTS_OF_A_LIST, row -> 1 + elementsOf(row.get(0), "items")
@@ -156,13 +171,16 @@ class ACountOfWhatARunHoldsIsComposedARowHoldingThatManyTest {
         return out;
     }
 
+    /** The fields of a node the nodes below it are in, in every model here. */
+    private static final Set<String> BELOW = Set.of("reports", "left", "right");
+
     /** How many nodes the tree {@code value} writes holds, at every depth. */
     private static long nodesOf(Hir.Expr value) {
         return switch (value) {
             case Hir.Apply applied when applied.args().size() == 1 ->
                     nodesOf(applied.args().getFirst());
             case Hir.NewData node -> 1 + node.inits().stream()
-                    .filter(each -> each.name().equals("reports"))
+                    .filter(each -> BELOW.contains(each.name()))
                     .mapToLong(each -> ((Hir.ListLit) each.value()).elements().stream()
                             .mapToLong(ACountOfWhatARunHoldsIsComposedARowHoldingThatManyTest
                                     ::nodesOf).sum())

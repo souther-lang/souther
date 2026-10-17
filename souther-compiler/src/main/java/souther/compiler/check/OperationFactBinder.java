@@ -543,28 +543,22 @@ final class OperationFactBinder {
                         UnaryOperator.identity(), "a container and one of what it holds");
                 yield new BoundOperationFact.PutsAValueIn(operation, value, into);
             }
-            // What is gathered into a set answers a set like it: the value one of what it holds,
-            // or a set like it whose every element is gathered.
+            // What a value is gathered into answers a set like it, and the value is one of what
+            // such a set holds.
             case OperationFact.GathersIn gathers -> {
                 if (stdlib.intrinsicOf(theLibraryOperation(operation.operation())) == null) {
                     throw new IllegalStateException(operation.operation() + " is written in the"
                             + " language, and what it gathers is proved of its body");
                 }
                 DeclaredArgument into = holdToTheDeclaration(declaration, gathers.into(), null,
-                        TypeRequirement.CONTAINER, "what is gathered into");
-                DeclaredArgument what = holdToTheDeclaration(declaration, gathers.what(), null,
-                        TypeRequirement.ANY, "what is gathered");
+                        TypeRequirement.CONTAINER, "what a value is gathered into");
+                DeclaredArgument value = holdToTheDeclaration(declaration, gathers.value(), null,
+                        TypeRequirement.ANY, "the value gathered");
                 holdTheAnswerTo(declaration, into, UnaryOperator.identity(),
                         UnaryOperator.identity(), "the same kind of container");
-                switch (gathers.how()) {
-                    case THE_VALUE -> holdTheAnswerTo(declaration, what,
-                            Type::elementOfAContainer, UnaryOperator.identity(),
-                            "a container and one of what it holds");
-                    case EVERY_ELEMENT -> holdTheAnswerTo(declaration, what,
-                            UnaryOperator.identity(), UnaryOperator.identity(),
-                            "the same kind of container");
-                }
-                yield new BoundOperationFact.GathersIn(operation, what, gathers.how(), into);
+                holdTheAnswerTo(declaration, value, Type::elementOfAContainer,
+                        UnaryOperator.identity(), "a container and one of what it holds");
+                yield new BoundOperationFact.GathersIn(operation, value, into);
             }
             case OperationFact.ReadsItsContainer reads ->
                     new BoundOperationFact.ReadsItsContainer(operation,
