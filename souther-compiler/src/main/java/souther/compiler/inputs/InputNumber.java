@@ -12,13 +12,16 @@ import souther.compiler.check.WalkElements;
 import souther.compiler.core.Core;
 import souther.compiler.numeric.DateTranslation;
 import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.ValueTransformation;
+import souther.compiler.semantics.TakenArguments;
 import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
@@ -233,6 +236,14 @@ public final class InputNumber {
         }
         ElementValue computed = null;
         if (answered == null) {
+            // A total of how many a container inside each element holds is how many occurrences
+            // of its element there are — where the elements walked are those of a container no
+            // other holds. One inside another is one of many, and every occurrence of the path is
+            // under every one of them.
+            ElementProjection counted = countedOfEach(measured, where, element, source);
+            if (counted != null && at.containersHoldingIt().size() == 1) {
+                return howManyStandAt(counted.from(at).element(), inputs, source);
+            }
             computed = computedOf(measured, where, element, source);
             if (computed == null) {
                 return null;
@@ -268,13 +279,14 @@ public final class InputNumber {
 
     /**
      * What a walk from a seed answers where its step only adds to the answer so far: the seed and
-     * the total of what the step adds for each element.
+     * what the step adds over every element.
      *
      * @param seed  what the walk starts from
-     * @param total the total of what each element adds, the term {@code List.sum} of the same
-     *              values is
+     * @param added what the step adds over every element: the total of what it adds of each, the
+     *              term {@code List.sum} of the same values is, or — where it adds the same for
+     *              each — that many times how many elements there are; nothing where it adds none
      */
-    public record SeedAndTotal(ExactRatio seed, NumericTerm total) {}
+    public record SeedAndAdded(ExactRatio seed, LinearForm<NumericTerm> added) {}
 
     /**
      * What {@code e} is, where it is a walk from a seed ({@link SeededWalk}) whose step answers the
@@ -296,7 +308,7 @@ public final class InputNumber {
      *
      * @param blockOf the block a closure argument stands for, where the call stands
      */
-    public static SeedAndTotal ofAWalkAdding(Core e, InputDomain inputs, InputReads reads,
+    public static SeedAndAdded ofAWalkAdding(Core e, InputDomain inputs, InputReads reads,
                                              RuleReadingSource source,
                                              Function<Core, Core.Block> blockOf) {
         SeededWalk walk = SeededWalk.of(e, blockOf);
@@ -313,18 +325,45 @@ public final class InputNumber {
         }
         BindingId element = walk.element().binding();
         Map<BindingId, Core> held = reads.heldByTheBody();
-        ElementValue.Affine adds = ElementValue.addedTo(
+        ElementValue.Added step = ElementValue.addedTo(
                 new ElementAnswer(element, walk.step().body()), walk.accumulator().binding(), held,
                 source);
         ElementValue.Affine seed = affine(ElementValue.read(
                 new ElementAnswer(element, walk.seed()), held, source));
-        if (adds == null || seed == null || !seed.form().coefs().isEmpty()) {
+        if (step == null || seed == null || !seed.form().coefs().isEmpty()) {
             return null;
+        }
+        Map<NumericTerm, ExactRatio> added = new LinkedHashMap<>();
+        // How many a container inside each element holds, over every element, is how many
+        // occurrences of its element there are.
+        for (Map.Entry<ElementProjection, ExactRatio> counted : step.heldAt().entrySet()) {
+            NumericTerm howMany =
+                    howManyStandAt(counted.getKey().from(at).element(), inputs, source);
+            if (howMany == null) {
+                return null;
+            }
+            added.put(howMany, counted.getValue());
+        }
+        ElementValue.Affine adds = step.ofTheElement();
+        if (adds.form().coefs().isEmpty()) {
+            // What every element adds alike is that many for each of them, so a step adding
+            // nothing else of the element counts them.
+            ExactRatio each = adds.form().constant();
+            if (each.signum() != 0) {
+                NumericTerm howMany = howManyStandAt(at, inputs, source);
+                if (howMany == null) {
+                    return null;
+                }
+                added.put(howMany, each);
+            }
+            return new SeedAndAdded(seed.form().constant(),
+                    new LinearForm<>(ExactRatio.ZERO, added));
         }
         ElementProjection place = adds.asAPlace();
         NumericTerm total;
-        if (place != null && TypeOps.base(walk.step().body().type(), source.inners()).equals(
-                TypeOps.base(inputs.typeAt(place.from(at), source), source.inners()))) {
+        if (place != null && step.heldAt().isEmpty() && TypeOps.base(walk.step().body().type(),
+                source.inners()).equals(TypeOps.base(inputs.typeAt(place.from(at), source),
+                source.inners()))) {
             RunSource over = RunSource.overEveryOccurrenceAt(place.from(at));
             total = over == null ? null
                     : NumericTerm.TakenOver.of(SUM, over, inputs.typeAt(place.from(at), source),
@@ -335,7 +374,45 @@ public final class InputNumber {
             total = over == null ? null
                     : NumericTerm.TakenOver.of(SUM, over, each, source.inners(), source.symbols());
         }
-        return total == null ? null : new SeedAndTotal(seed.form().constant(), total);
+        if (total == null) {
+            return null;
+        }
+        added.put(total, ExactRatio.ONE);
+        return new SeedAndAdded(seed.form().constant(), new LinearForm<>(ExactRatio.ZERO, added));
+    }
+
+    /**
+     * How many values {@code run}, one no single container holds, holds — or null where it is
+     * one container's, whose count is a taking of that container's place.
+     *
+     * @param each what stands where the run's values are read from
+     */
+    public static NumericTerm.TakenOver howManyHeld(RunSource run, Type each,
+                                                    RuleReadingSource source) {
+        return NumericTerm.TakenOver.howManyOf(run, each, source.inners(), source.symbols());
+    }
+
+    /**
+     * How many values stand at {@code every}, every occurrence of a place inside some container:
+     * the size of that container where it is one, and the count of the run over all of them where
+     * it is inside several — or null where neither is a number this reads.
+     */
+    public static NumericTerm howManyStandAt(TermPath every, InputDomain inputs,
+                                             RuleReadingSource source) {
+        RunSource run = RunSource.overEveryOccurrenceAt(every);
+        if (run == null) {
+            return null;
+        }
+        if (!run.isInOneContainer()) {
+            return howManyHeld(run, inputs.typeAt(every, source), source);
+        }
+        TermPath container = every.containersHoldingIt().getLast();
+        Type held = inputs.typeAt(container, source);
+        ValueName.Stdlib measure = held == null ? null
+                : NumericMeasures.takenOf(held, source.inners());
+        return measure == null ? null
+                : NumericTerm.TakenOf.of(measure, ObservationSource.asItStands(container),
+                        TakenArguments.NONE, held, source.inners(), source.symbols());
     }
 
     private static final ValueName.Stdlib.Operation SUM =
@@ -384,6 +461,23 @@ public final class InputNumber {
         return over == null ? null
                 : NumericTerm.TakenOver.of(measured.operation(), over, each, source.inners(),
                         source.symbols());
+    }
+
+    /**
+     * The place of the element whose container the closure the walk handed {@code element} to
+     * counts, where {@code measured} is a total of those counts — or null where it is anything
+     * else.
+     */
+    private static ElementProjection countedOfEach(NumericMeasures.Measured measured,
+                                                   InputReads where, BindingId element,
+                                                   RuleReadingSource source) {
+        if (!(DefaultBoundOperationFacts.get().takenAs(measured.operation())
+                instanceof TakenAs.TheSumOfWhatItHolds)) {
+            return null;
+        }
+        ElementAnswer closure = where.answerAt(element);
+        return closure == null ? null : ElementValue.countedAt(closure.body(),
+                closure.parameter(), where.heldByTheBody(), source);
     }
 
     /**

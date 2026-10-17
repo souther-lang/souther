@@ -610,6 +610,16 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/partition/TermRealizations$Realization;",
                     "how many counts a container is asked to hold, and whether they were all the"
                             + " set admits"),
+            Map.entry("souther.compiler.partition.TermRealizations#counting("
+                            + "Lsouther/compiler/partition/AskedAt;"
+                            + "Lsouther/compiler/types/Type;Ljava/util/List;"
+                            + "Lsouther/compiler/inputs/TermOrders;"
+                            + "Lsouther/compiler/inputs/SearchRegion;"
+                            + "Lsouther/compiler/check/RuleReadingContext;"
+                            + "Lsouther/compiler/partition/DemandsInside;)"
+                            + "Lsouther/compiler/partition/TermRealizations$Realization;",
+                    "how many counts of a run's values or of a tree's nodes are composed for,"
+                            + " and whether they were all the set admits"),
             Map.entry("souther.compiler.partition.TermRealizations#holdingThatManyOfAClass("
                             + "Lsouther/compiler/semantics/CodePointClass;"
                             + "Lsouther/compiler/types/Type;"

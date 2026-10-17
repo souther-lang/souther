@@ -310,6 +310,11 @@ public final class BoundOperationFacts {
         return ones(BoundOperationFact.CountsWholeUnitsBetween.class);
     }
 
+    /** How {@code operation} rounds a number to a whole one, or null where it rounds none. */
+    public BoundOperationFact.RoundsToAWholeNumber roundsToAWholeNumber(ValueName operation) {
+        return one(BoundOperationFact.RoundsToAWholeNumber.class, operation);
+    }
+
     /** What holds of the number {@code operation} answers, wherever it is called, in the order
      *  declared. */
     public List<ResultBound<DeclaredArgument>> boundsOnTheResult(ValueName operation) {
@@ -463,6 +468,16 @@ public final class BoundOperationFacts {
      *  condition. */
     BoundOperationFact.PutsAValueIn putsAValueIn(ValueName operation) {
         return one(BoundOperationFact.PutsAValueIn.class, operation);
+    }
+
+    /** What an operation gathering a value into a set answers: exactly what {@code into} holds
+     *  and {@code value}, each once. */
+    public record Gathered(DeclaredArgument value, DeclaredArgument into) {}
+
+    /** What {@code operation} gathers into what, or null where nothing says it gathers. */
+    public Gathered gathersIn(ValueName operation) {
+        BoundOperationFact.GathersIn gathers = one(BoundOperationFact.GathersIn.class, operation);
+        return gathers == null ? null : new Gathered(gathers.value(), gathers.into());
     }
 
     /** The map whose keys {@code operation} answers a map keyed by, or null where it keeps none. */

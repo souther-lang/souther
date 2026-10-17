@@ -327,6 +327,18 @@ public record TermPath(String head, List<Step> steps) {
         return steps;
     }
 
+    /** How many of {@code steps} reach inside a container, which is how many containers a place
+     *  they lead to stands inside. */
+    public static int containersAlong(List<Step> steps) {
+        int inside = 0;
+        for (Step step : steps) {
+            if (reachesInsideAContainer(step)) {
+                inside++;
+            }
+        }
+        return inside;
+    }
+
     /** Whether any step of this reaches inside a container. */
     public boolean insideAContainer() {
         for (Step step : steps) {

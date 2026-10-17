@@ -184,11 +184,13 @@ final class ProvingTheLibrary implements LibraryProofs {
             case BoundOperationFact.KeepsWhetherItHoldsACodePointOf _ -> false;
             case BoundOperationFact.IsRelated _ -> false;
             case BoundOperationFact.PutsAValueIn _ -> false;
+            case BoundOperationFact.GathersIn _ -> false;
             case BoundOperationFact.ListsAPartOf _ -> false;
             case BoundOperationFact.AnswersAFormOfItsArguments _ -> false;
             case BoundOperationFact.StatesTheOrderOfItsArguments _ -> false;
             case BoundOperationFact.ShiftsBy _ -> false;
             case BoundOperationFact.CountsWholeUnitsBetween _ -> false;
+            case BoundOperationFact.RoundsToAWholeNumber _ -> false;
             case BoundOperationFact.AnswersANumberTakenOfAValueItIsGiven _ -> false;
             case BoundOperationFact.EveryAnswerItCanGiveHasASourceValue _ -> false;
             case BoundOperationFact.ComputesANumber _ -> false;

@@ -144,6 +144,25 @@ public sealed interface OperationFact {
     }
 
     /**
+     * The operation answers the number at {@code value} rounded to a whole one, the way the rounding
+     * policy at {@code mode} says.
+     *
+     * <p>A rounded number is a step of what was rounded, so the answer is no form of it. What a
+     * comparison of the answer with a whole number states is exact all the same: each policy puts
+     * the least number rounding to at least {@code k} at {@code k}, at {@code k - 1} or at
+     * {@code k - 1/2}, and says whether that number is itself one of them. Which of these a policy
+     * does is the compiler's to know, and this says only which argument is the policy and which the
+     * number.
+     */
+    record RoundsToAWholeNumber(ArgumentRef mode, ArgumentRef value) implements OperationFact {
+
+        public RoundsToAWholeNumber {
+            Objects.requireNonNull(mode, "a number is rounded some way");
+            Objects.requireNonNull(value, "and a number is rounded");
+        }
+    }
+
+    /**
      * Something that holds of the number the operation answers, wherever it is called.
      *
      * <p>One fact per bound rather than a list in one: an operation with two bounds carries two
@@ -395,6 +414,26 @@ public sealed interface OperationFact {
         public PutsAValueIn {
             Objects.requireNonNull(value, "this one names the value put in");
             Objects.requireNonNull(into, "and what it is put in");
+        }
+    }
+
+    /**
+     * The operation answers a set holding exactly what {@code into} holds and {@code value}, each
+     * once.
+     *
+     * <p>Both ways, which is what {@link PutsAValueIn} does not say: every element of the answer
+     * is one of those, and every one of those is an element of the answer. A set put a value in
+     * keeps what it held, which a map put a value under a key it has does not, so this is said of
+     * sets alone. Read by the reading of how many different values a walk gathering one at each
+     * step ends with.
+     *
+     * <p>An axiom of a kernel, held to what the kernel computes.
+     */
+    record GathersIn(ArgumentRef value, ArgumentRef into) implements OperationFact {
+
+        public GathersIn {
+            Objects.requireNonNull(value, "this one names the value gathered");
+            Objects.requireNonNull(into, "and what it is gathered into");
         }
     }
 

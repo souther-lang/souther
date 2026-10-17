@@ -571,7 +571,8 @@ public final class AnswerAsAnInput {
             case Quantity.HowManyDifferent different -> {
                 DecisionSubject container = subject(different.container());
                 DecisionSubject each = subject(different.ofTheElement());
-                yield container == null || each == null ? null
+                yield container == null || each == null
+                        || !Quantity.HowManyDifferent.oneOfEach(container, each) ? null
                         : new Quantity.HowManyDifferent(container, each);
             }
             // What each element adds may be a number put at a value here, and a sum of a value is
@@ -585,6 +586,7 @@ public final class AnswerAsAnInput {
                         ? null
                         : new Quantity.SumOver(container, each.coefs().keySet().iterator().next());
             }
+            case Quantity.HowManyCarried carried -> throw carried.reachedAReader();
             case DecisionAtom.OfTheInput _, Quantity.OfABinding _,
                  Quantity.CodePointsOfAPiece _, Quantity.RemainderOfADividend _,
                  Quantity.WhatAnOperationAnswers _ -> null;

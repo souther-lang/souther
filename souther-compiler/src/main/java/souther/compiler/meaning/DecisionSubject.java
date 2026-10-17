@@ -56,6 +56,9 @@ public sealed interface DecisionSubject {
      */
     boolean isAtOrUnder(DecisionSubject other);
 
+    /** How many containers this stands inside, the input's or an answer's. */
+    int howManyContainersHoldIt();
+
     /**
      * A position of the behavior's input, where a row writes a value.
      *
@@ -79,6 +82,11 @@ public sealed interface DecisionSubject {
         @Override
         public TermPath inputPosition() {
             return at;
+        }
+
+        @Override
+        public int howManyContainersHoldIt() {
+            return TermPath.containersAlong(at.steps());
         }
 
         @Override
@@ -137,6 +145,11 @@ public sealed interface DecisionSubject {
         public TermPath inputPosition() {
             throw new IllegalStateException(spelled() + " is a place inside what a dependency"
                     + " answered, which a row stands in for and writes no value at");
+        }
+
+        @Override
+        public int howManyContainersHoldIt() {
+            return TermPath.containersAlong(steps);
         }
 
         @Override

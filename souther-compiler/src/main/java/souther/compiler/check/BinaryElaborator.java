@@ -337,7 +337,7 @@ public final class BinaryElaborator {
     }
 
     /** Whether a value of this type has an exact mathematical value an exact operator reads it at. */
-    private static boolean exactlyReadable(Type t) {
+    static boolean exactlyReadable(Type t) {
         return t == Type.RATIONAL || t == Type.INT || t == Type.DECIMAL;
     }
 
