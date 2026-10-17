@@ -804,6 +804,36 @@ class WhatADerivationConcludesIsWhatItsRuleComputesTest {
         assertThrows(IllegalArgumentException.class, () -> new Proposition.Some(xs, outside, true));
     }
 
+    /**
+     * A search that starts at the node it was written of reaches that node, where the places it
+     * names under the node are the ones spelled: a quantifier over the nodes below in what it asks
+     * is, at that node, over the nodes below the start. And what it says of the start having none
+     * below is said of the start as it stands. Each inside a quantifier over the nodes below the
+     * start is two quantifiers over one container, and is refused; inside one over another
+     * container it is not.
+     */
+    @Test
+    void aSearchFromTheNodeItWasWrittenOfNamesThePlacesUnderThatNode() {
+        TermPath node = TermPath.of("n");
+        DecisionSubject below = new DecisionSubject.AnInput(node.then("below"));
+        DecisionSubject xs = new DecisionSubject.AnInput(XS);
+        Proposition.SomeReachable fromTheNode = new Proposition.SomeReachable(node, node,
+                List.of("below"), new Proposition.Some(below,
+                        truth(node.then("below").element().then("v")), true),
+                Optional.empty(), true);
+        assertThrows(IllegalArgumentException.class,
+                () -> new Proposition.Some(below, fromTheNode, true));
+
+        Proposition.SomeReachable noneBelow = new Proposition.SomeReachable(node, node,
+                List.of("below"), truth(node.then("v")),
+                Optional.of(new Proposition.Some(below, new Proposition.Always(true), false)),
+                true);
+        assertThrows(IllegalArgumentException.class,
+                () -> new Proposition.Some(below, noneBelow, true));
+        assertDoesNotThrow(() -> new Proposition.Some(xs, noneBelow, true));
+        assertDoesNotThrow(() -> new Proposition.Some(xs, fromTheNode, true));
+    }
+
     /** A conclusion that has the container's holding anything as a part cannot be made without it. */
     @Test
     void aPartTheConclusionHasMustHaveBeenRead() {

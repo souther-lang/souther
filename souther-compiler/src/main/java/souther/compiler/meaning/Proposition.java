@@ -494,9 +494,12 @@ public sealed interface Proposition {
          *
          * <p>The container as {@code stated} names it where it stands, and not its spelling: what a
          * search asks of each node it reaches names the places under the node it was written of,
-         * and those are the places under the node reached ({@link SomeReachable}). A quantifier
-         * there over a container under that node is over another container, whatever it is
-         * spelled; one over any other container is over the container it names.
+         * and those are the places under the node reached ({@link SomeReachable}). Where the
+         * search starts below the node it was written of, no node it reaches is that node, so a
+         * quantifier there over a container under it is over another container, whatever it is
+         * spelled. Where it starts at that node, the node itself is reached, and the container
+         * is the one spelled. What the search says of the node it starts at having none below is
+         * said of that node as it stands, and its containers are the ones spelled.
          */
         public static boolean quantifiesOver(DecisionSubject container, Proposition stated) {
             return quantifiesOverInside(container, stated, List.of());
@@ -514,11 +517,14 @@ public sealed interface Proposition {
                 case Any any -> any.parts().stream()
                         .anyMatch(part -> quantifiesOverInside(container, part, rebound));
                 case SomeReachable reached -> {
-                    List<TermPath> inside = new ArrayList<>(rebound);
-                    inside.add(reached.writtenAt());
+                    List<TermPath> inside = rebound;
+                    if (reached.startsBelowWhereItWasWritten()) {
+                        inside = new ArrayList<>(rebound);
+                        inside.add(reached.writtenAt());
+                    }
                     yield quantifiesOverInside(container, reached.atANode(), inside)
                             || reached.noneBelow()
-                                    .filter(each -> quantifiesOverInside(container, each, inside))
+                                    .filter(each -> quantifiesOverInside(container, each, rebound))
                                     .isPresent();
                 }
                 case OnAnApplication applied -> applied.each().stream()
@@ -683,6 +689,15 @@ public sealed interface Proposition {
         @Override
         public Proposition denied() {
             return new SomeReachable(at, writtenAt, through, atANode, noneBelow, !holds);
+        }
+
+        /**
+         * Whether the search starts below the node {@code atANode} is written of, so that no node
+         * it reaches is that node: the places {@code atANode} names under it are then places
+         * under other nodes.
+         */
+        public boolean startsBelowWhereItWasWritten() {
+            return at.isAtOrUnder(writtenAt) && !at.equals(writtenAt);
         }
 
         /**
