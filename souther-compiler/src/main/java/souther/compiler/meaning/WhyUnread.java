@@ -2,8 +2,8 @@ package souther.compiler.meaning;
 
 import souther.compiler.check.Clause;
 import souther.compiler.check.ClausesInOrder;
+import souther.compiler.check.ElementsWrittenOut;
 import souther.compiler.check.NonAffineOperation;
-import souther.compiler.inputs.WrittenOutElements;
 import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.observe.Figure;
 import souther.compiler.observe.WorkFigure;
@@ -71,7 +71,7 @@ public sealed interface WhyUnread {
             case MorePartsThanAreConcluded _ ->
                     Optional.of(CompositionBudget.PARTS_A_DERIVATION_CONCLUDES.figure());
             case MoreElementsThanAreWrittenOut _ -> Optional.of(
-                    WorkFigure.ELEMENTS_A_WALK_WRITES_OUT.at(WrittenOutElements.MOST_WALKED));
+                    WorkFigure.ELEMENTS_A_WALK_WRITES_OUT.at(ElementsWrittenOut.MOST_WALKED));
             case AtNoPosition _, NoMeasureOfItsSize _, OutsideTheLinearFragment _,
                  NotArithmetic _, ANumberNotHeld _, NoNumberOnARun _,
                  TwoElementsOfOneContainer _, NoLawFor _, NoWordsFor _, NotProvedOfItsBody _,

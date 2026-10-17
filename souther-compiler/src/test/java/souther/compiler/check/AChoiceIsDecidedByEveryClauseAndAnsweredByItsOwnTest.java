@@ -373,7 +373,7 @@ class AChoiceIsDecidedByEveryClauseAndAnsweredByItsOwnTest {
                         java.util.Set.of(), false, java.util.Set.of()),
                 new Adoption<>(java.util.Set.of(), java.util.Set.of(),
                         java.util.Set.of(UNREAD), true, java.util.Set.of()),
-                Adoption.nothing(), NOTHING_STOPPED,
+                Adoption.nothing(), Adoption.nothing(), NOTHING_STOPPED,
                 Map.of(), java.util.Set.of(), java.util.Set.of(), EndsLeftOpen.nothing(),
                 BoundaryState.nothing(), java.util.Map.of());
     }
@@ -385,7 +385,7 @@ class AChoiceIsDecidedByEveryClauseAndAnsweredByItsOwnTest {
                         java.util.Set.of(), false, java.util.Set.of()),
                 new Adoption<>(java.util.Set.of(CONSTRAINED), java.util.Set.of(),
                         java.util.Set.of(), false, java.util.Set.of()),
-                Adoption.nothing(), NOTHING_STOPPED,
+                Adoption.nothing(), Adoption.nothing(), NOTHING_STOPPED,
                 Map.of(), java.util.Set.of(), java.util.Set.of(), EndsLeftOpen.nothing(),
                 BoundaryState.nothing(), java.util.Map.of());
     }
@@ -414,7 +414,8 @@ class AChoiceIsDecidedByEveryClauseAndAnsweredByItsOwnTest {
         return new StatedByClauses.Part(
                 new Adoption<>(java.util.Set.of(CONSTRAINED), java.util.Set.of(SETTLED),
                         java.util.Set.of(), false, java.util.Set.of()),
-                Adoption.nothing(), Adoption.nothing(), NOTHING_STOPPED, Map.of(),
+                Adoption.nothing(), Adoption.nothing(), Adoption.nothing(), NOTHING_STOPPED,
+                Map.of(),
                 java.util.Set.of(), shortfalls,
                 EndsLeftOpen.nothing(),
                 BoundaryState.nothing(), java.util.Map.of());
@@ -426,7 +427,8 @@ class AChoiceIsDecidedByEveryClauseAndAnsweredByItsOwnTest {
         return new StatedByClauses.Part(
                 new Adoption<>(java.util.Set.of(), java.util.Set.of(), java.util.Set.of(UNREAD),
                         true, java.util.Set.of()),
-                Adoption.nothing(), Adoption.nothing(), NOTHING_STOPPED, Map.of(),
+                Adoption.nothing(), Adoption.nothing(), Adoption.nothing(), NOTHING_STOPPED,
+                Map.of(),
                 java.util.Set.of(), shortfalls,
                 EndsLeftOpen.nothing(),
                 BoundaryState.nothing(), java.util.Map.of());

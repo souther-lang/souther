@@ -340,7 +340,7 @@ public final class AffineForms {
         // computed. What is asked here is a written decimal or a whole number, which is every
         // number a fold answers that the arms above do not: a fold comes to a fraction only through
         // the operators, and each of those is arithmetic this composes.
-        BigDecimal folded = Terms.constantNumber(e, reading.symbols());
+        BigDecimal folded = foldedNumber(e, at, reading);
         if (folded != null) {
             return new Outcome.Composed<>(
                     LinearForm.constant(ExactRatio.of(folded)));
@@ -752,6 +752,12 @@ public final class AffineForms {
         return form;
     }
 
+    /** The number {@code e} folds to read in {@code at} with the reading's own names
+     *  ({@link FoldedValue}), or null where it folds to none. */
+    private static <A, E> BigDecimal foldedNumber(Core e, E at, Reading<A, E> reading) {
+        return FoldedValue.number(FoldedValue.of(e, at, reading, reading.symbols()));
+    }
+
     /**
      * What the walk makes of a projection its arm composed nothing for: the stages after
      * composition, in their order ({@link #of}). A projection is not a name, so the stage that
@@ -759,7 +765,7 @@ public final class AffineForms {
      */
     private static <A, E> Outcome<A, E> unread(Core.FieldProjection p, E at, Reading<A, E> reading,
                                                Stop<A, E> stopped) {
-        BigDecimal folded = Terms.constantNumber(p, reading.symbols());
+        BigDecimal folded = foldedNumber(p, at, reading);
         if (folded != null) {
             return new Outcome.Composed<>(LinearForm.constant(ExactRatio.of(folded)));
         }

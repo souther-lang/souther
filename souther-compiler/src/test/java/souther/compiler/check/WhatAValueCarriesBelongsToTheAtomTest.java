@@ -138,7 +138,7 @@ class WhatAValueCarriesBelongsToTheAtomTest {
         Core built = distinct(list(xs));
         // Entered as a `let` does it: a name for a value, and no location — a binding with one is a
         // place, and a place is named by where it is rather than by what it was given.
-        Denotations at = outer.binding(ys, built, naming.subjectOf(built, outer),
+        Denotations at = outer.binding(ys, built, null, naming.subjectOf(built, outer),
                 null, naming.bodyKey(built, outer), null);
 
         FactSubject written = terms.atomOf(length(distinct(list(xs))), at);

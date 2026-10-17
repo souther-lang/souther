@@ -29,7 +29,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * the word for.
  *
  * <p>Being stricter than the rule, it can refuse something the rule allows —
- * {@code Denotations.valueOf(BindingId)}, next door in this package, is a lookup and no crossing at
+ * a method named {@code valueOf} that looks a binding up is a lookup and no crossing at
  * all. That is the check working as designed and not a miss in it. Should such a call become
  * necessary here, decide about this check itself: narrowing it to the enums known today puts the
  * hole back, since what it is here for is the crossing nobody has written yet.

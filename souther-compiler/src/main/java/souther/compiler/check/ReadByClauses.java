@@ -116,6 +116,7 @@ record ReadByClauses(Confinement.Worked<FactSubject> confinement,
     record OfAPart(Adoption<FactSubject, ReadingLanguage.Values> byValues,
                    Adoption<FactSubject, ReadingLanguage.Order> byOrder,
                    Adoption<FactSubject, ReadingLanguage.DerivedNumbers> byDerivedNumbers,
+                   Adoption<FactSubject, ReadingLanguage.Elements> byElements,
                    Set<FactSubject> stopped,
                    Set<ReadingShortfall> aboutARule,
                    java.util.Map<FactSubject, AdmittedStrings> aboutStrings,
@@ -132,15 +133,24 @@ record ReadByClauses(Confinement.Worked<FactSubject> confinement,
          * <p>The reading of the numbers an operation answers among them. A rule it read whole
          * names no end and no set of values, and asked of the other two alone it is a rule nothing
          * took in, though the one length it leaves is what the model holds.
+         *
+         * <p>And the reading of how a container's elements stand to each other, for the same
+         * reason: {@code List.allDistinctBy(.id, value)} leaves no set of lists the values hold
+         * and no end, and the containers it admits are the ones built with their keys apart.
          */
         java.util.Set<FactSubject> adopted() {
             Set<FactSubject> out = new LinkedHashSet<>(ReadByClauses.adopted(byValues, byOrder));
-            byDerivedNumbers.mentions().forEach(each -> {
-                if (byDerivedNumbers.took(each)) {
+            tookIn(byDerivedNumbers, out);
+            tookIn(byElements, out);
+            return out;
+        }
+
+        private static void tookIn(Adoption<FactSubject, ?> by, Set<FactSubject> out) {
+            by.mentions().forEach(each -> {
+                if (by.took(each)) {
                     out.add(each);
                 }
             });
-            return out;
         }
 
         /**

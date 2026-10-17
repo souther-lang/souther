@@ -11,6 +11,8 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.function.Function;
 
 /**
  * A call that moves a date by a number of days written out, read through what the library says of
@@ -45,9 +47,10 @@ public final class DateShifts {
      *
      * <p>Null both for a call that is no shift and for one whose count is not written out or is not
      * a whole number of days: a count another input supplies is a number of two inputs, and no
-     * chain of constant shifts of one.
+     * chain of constant shifts of one. The count is folded where the asker reads the call
+     * ({@code folded}), so a count given a name is the number it was given.
      */
-    public static Step stepOf(Core e, Symbols symbols) {
+    public static Step stepOf(Core e, Function<Core, Optional<Object>> folded) {
         ValueName operation = Terms.operationOf(e);
         if (operation == null || Core.withoutStanding(e).type() != Type.Prim.DATE) {
             return null;
@@ -67,7 +70,7 @@ public final class DateShifts {
             if (each.getKey().stands() == Type.Prim.DATE) {
                 date = args.get(at);
             } else {
-                days = daysOf(args.get(at), each.getValue(), symbols);
+                days = daysOf(FoldedValue.number(folded.apply(args.get(at))), each.getValue());
             }
         }
         return date == null || days == null ? null : new Step(days, date);
@@ -107,10 +110,9 @@ public final class DateShifts {
         return date && days ? says : null;
     }
 
-    /** What {@code written}, weighed by {@code weight}, comes to as a whole count of days, or null
-     *  where it is not written out or does not come to one. */
-    private static Long daysOf(Core written, ExactRatio weight, Symbols symbols) {
-        BigDecimal folded = StatedComparison.foldedNumber(written, symbols);
+    /** What the count {@code folded}, weighed by {@code weight}, comes to as a whole count of days,
+     *  or null where nothing was folded or it does not come to one. */
+    private static Long daysOf(BigDecimal folded, ExactRatio weight) {
         if (folded == null
                 || !(weight.times(ExactRatio.of(folded))
                         instanceof ExactAnswer.Held<ExactRatio> product)

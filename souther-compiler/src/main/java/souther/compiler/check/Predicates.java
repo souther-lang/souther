@@ -932,7 +932,7 @@ final class Predicates {
      * already standing where it read a field, folded. {@code null} where it does not fold — which is
      * every clause reading anything computed at run time. */
     Boolean decidedAt(Core inv, Denotations at) {
-        Object folded = Terms.folded(inv, terms.symbols(), at);
+        Object folded = terms.folded(inv, at);
         return folded instanceof Boolean b ? b : null;
     }
 
@@ -947,8 +947,8 @@ final class Predicates {
      * states of {@code 1} and {@code 2} is settled here.
      */
     private Boolean decidedAt(StatedComparison stated, Denotations at) {
-        Object left = Terms.folded(stated.left(), terms.symbols(), at);
-        Object right = Terms.folded(stated.right(), terms.symbols(), at);
+        Object left = terms.folded(stated.left(), at);
+        Object right = terms.folded(stated.right(), at);
         return (left == null || right == null) ? null
                 : ConstEval.stands(stated.claim().statedRelation(), left, right);
     }
@@ -1460,12 +1460,14 @@ final class Predicates {
      * the day the library changed which argument a case answers. */
     private void chosenCalls(Core e, Denotations at, Map<FactSubject, Choice> out,
                              Set<BindingId> following) {
-        if (e instanceof Core.Read r && at.valueOf(r.binding()) != null) {
+        if (e instanceof Core.Read r
+                && at.givenTo(r.binding()) instanceof ValueStanding.ReadThrough<Denotations>(
+                        Core given, Denotations readIn)) {
             // A name followed once. What it was given is one value, so everything it holds is in
             // the map after the first read of it; following it per occurrence walks what the names
             // below it multiply out to, over a body that names them one more time.
             if (following.add(r.binding())) {
-                chosenCalls(at.valueOf(r.binding()), at, out, following);
+                chosenCalls(given, readIn, out, following);
             }
             return;
         }
