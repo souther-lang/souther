@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.check.Carrier;
 import souther.compiler.check.ClauseMeaning;
 import souther.compiler.check.ClauseRead;
 import souther.compiler.check.DefaultBoundOperationFacts;
@@ -12,10 +13,12 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Position;
 import souther.compiler.inputs.PositionBounds;
 import souther.compiler.inputs.SearchRegion;
+import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.inputs.WhatARelationLeavesUndivided;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.Quantity;
+import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
@@ -26,6 +29,7 @@ import souther.compiler.types.TypeSymbol;
 import souther.compiler.values.AdmissibleSet;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -193,8 +197,35 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 case NumericTerm.CodePointClassCount _ -> null;
             });
         }
+        // And the order each side's values are counted on, which says where its type ends.
+        List<Carrier> carriers = new ArrayList<>();
+        for (Side each : sides) {
+            TermOrders orders = each.term() == null ? null
+                    : read.quantities().ordersOf(each.term());
+            carriers.add(orders == null ? null : orders.answered());
+        }
+        // Where each side stands is compared with where the others do, which says something only
+        // where they stand on one order: a case of one enumeration has no place on another's.
+        // Nothing a side is shown to take is then a place on another's order, and two values of
+        // two orders never take the same values, so nothing is shown of any of them.
+        for (Carrier one : carriers) {
+            for (Carrier other : carriers) {
+                if (one != null && other != null && !Carrier.onOneOrder(one, other)) {
+                    return new LinkedHashSet<>(amongThemselves);
+                }
+            }
+        }
+        // Two sides each standing at the other's value are compared as one value against another,
+        // so a side with no order of its own here — what an operation answered — stands on the
+        // other's: a string is held equal to a string, and none is below the empty one.
+        if (WhatARelationLeavesUndivided.eachStandsAtTheOthersValue(
+                sides.stream().map(Side::weight).toList(), constant)) {
+            Carrier known = carriers.get(0) != null ? carriers.get(0) : carriers.get(1);
+            carriers = Arrays.asList(carriers.get(0) != null ? carriers.get(0) : known,
+                    carriers.get(1) != null ? carriers.get(1) : known);
+        }
         if (ways.isEmpty()) {
-            return undividedAlong(sources, read.quantities().region(), List.of(), true);
+            return undividedAlong(sources, carriers, read.quantities().region(), List.of(), true);
         }
         List<Reachability.Reaching> branches = new ArrayList<>();
         for (Reachability.Reaching each : ways) {
@@ -204,7 +235,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
         Set<FilingCoordinate> out = null;
         for (Reachability.Reaching each : branches) {
-            Set<FilingCoordinate> along = undividedAlong(sources, each.region(),
+            Set<FilingCoordinate> along = undividedAlong(sources, carriers, each.region(),
                     conditionsOf(each), each.declined().isEmpty());
             if (out == null) {
                 out = along;
@@ -254,12 +285,14 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     ? form.coefs().keySet().iterator().next() : null;
             out.add(new OnAWay(taken.demand().positions(), runOf,
                     runOf instanceof NumericTerm.TakenOf count
-                            && count.takenAs() instanceof TakenAs.HowManyItHolds));
+                            && count.takenAs() instanceof TakenAs.HowManyItHolds,
+                    taken.demand() instanceof RowDemand.Relational(
+                            TakenConstraint.Affine affine) ? affine : null));
         });
         way.requirements().refinements().keySet()
-                .forEach(at -> out.add(new OnAWay(Set.of(at), null, true)));
+                .forEach(at -> out.add(new OnAWay(Set.of(at), null, true, null)));
         way.requirements().atANameTheCasesShare()
-                .forEach(at -> out.add(new OnAWay(Set.of(at), null, true)));
+                .forEach(at -> out.add(new OnAWay(Set.of(at), null, true, null)));
         return out;
     }
 
@@ -276,30 +309,40 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      *                   holding one says nothing of what it is. Of the term's own value, a case,
      *                   as an enumeration's, is a value taken out of its order, which the region
      *                   holds, and an end on how many is an end on the term itself
+     * @param affine     what it states as a form of the input's numbers held against nought, or
+     *                   null where it states anything else
      */
-    private record OnAWay(Set<TermPath> positions, NumericTerm runOf, boolean whatStands) {}
+    private record OnAWay(Set<TermPath> positions, NumericTerm runOf, boolean whatStands,
+                          TakenConstraint.Affine affine) {}
 
     /**
      * The places shown undivided over the rows in {@code region}, a way stating
      * {@code conditions} there.
      *
-     * @param sources what the declarations leave the value each side is, or is taken of, in the
-     *                order of the sides
+     * @param sources  what the declarations leave the value each side is, or is taken of, in the
+     *                 order of the sides
+     * @param carriers the order each side is counted on, or null where it has none
      */
-    private Set<FilingCoordinate> undividedAlong(List<Takes> sources, SearchRegion region,
-                                                 List<OnAWay> conditions, boolean heldWhole) {
+    private Set<FilingCoordinate> undividedAlong(List<Takes> sources, List<Carrier> carriers,
+                                                 SearchRegion region, List<OnAWay> conditions,
+                                                 boolean heldWhole) {
         List<WhatARelationLeavesUndivided.Term<FilingCoordinate>> terms = new ArrayList<>();
+        // What the way states of each side, asked once and read by both readings.
+        List<List<OnAWay>> stating = new ArrayList<>();
         for (int i = 0; i < sides.size(); i++) {
             Side each = sides.get(i);
-            NumericDomain.Bounds holds = each.term() != null
+            stating.add(each.term() == null || !heldWhole ? List.of()
+                    : statingAnythingOf(each.term(), conditions));
+            NumericDomain.Bounds holds = asARelationReadsIt(each.term() != null
                     && region.projectionOf(each.term())
                     instanceof NumericDomain.FormProjection.Within(NumericDomain.Bounds within)
-                    ? within : NumericDomain.Bounds.OPEN;
+                    ? within : NumericDomain.Bounds.OPEN, carriers.get(i));
             Way way = each.term() == null || !heldWhole ? Way.TIES
-                    : wayOf(each.term(), conditions);
+                    : wayOf(each.term(), stating.get(i));
             Takes source = way == Way.TIES ? null : sources.get(i);
             NumericDomain.Bounds realizes = source == null ? null
-                    : realized(each.term(), source, region, way);
+                    : asARelationReadsIt(realized(each.term(), source, region, way),
+                            carriers.get(i));
             Takes takes = way == Way.UNTOUCHED && each.term() instanceof NumericTerm.ValueOf
                     ? source : null;
             terms.add(new WhatARelationLeavesUndivided.Term<>(each.madeOf(), each.weight(), holds,
@@ -310,7 +353,103 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         // taken to reach at all; nothing else needs saying of a pair.
         out.addAll(WhatARelationLeavesUndivided.of(terms, constant, relation,
                 UndividedByARelation::overlap, (one, other) -> true));
+        if (!out.containsAll(places())) {
+            out.addAll(undividedByTheDifference(sources, carriers, stating, heldWhole));
+        }
         return out;
+    }
+
+    /**
+     * {@code run} as a relation reads it on {@code carrier}: ending where the order ends at a value
+     * a model holds ({@link Carrier#asARelationReadsIt}) — an enumeration's last case, the empty
+     * string — and left as it is where the order has no such end, or the side none at all. Null
+     * stays null: nothing shown is still nothing shown.
+     */
+    private static NumericDomain.Bounds asARelationReadsIt(NumericDomain.Bounds run,
+                                                           Carrier carrier) {
+        return run == null || carrier == null ? run : run.meet(carrier.asARelationReadsIt());
+    }
+
+    /**
+     * The places shown undivided because the relation, and everything a way states of its two
+     * sides — {@code stating}, side by side — is about how far apart the two are
+     * ({@link WhatARelationLeavesUndivided#ofTheirDifference}).
+     *
+     * <p>Each side is the value at a position the declarations leave every value of its type, so
+     * nothing of them ties it and none is unread. What the way holds of either is taken only as a
+     * form over the two weighed one way and the other. A statement about either that is anything
+     * else — an end on one of them alone, a form with a third number in it — leaves nothing shown,
+     * since it may keep a side from values of its own.
+     */
+    private Set<FilingCoordinate> undividedByTheDifference(List<Takes> sources,
+                                                         List<Carrier> carriers,
+                                                         List<List<OnAWay>> stating,
+                                                         boolean heldWhole) {
+        if (!heldWhole || sides.size() != 2 || carriers.get(0) == null
+                || !carriers.get(0).equals(carriers.get(1))) {
+            return Set.of();
+        }
+        Carrier on = carriers.get(0);
+        List<WhatARelationLeavesUndivided.Term<FilingCoordinate>> terms = new ArrayList<>();
+        for (int i = 0; i < sides.size(); i++) {
+            Side each = sides.get(i);
+            Takes source = sources.get(i);
+            if (!(each.term() instanceof NumericTerm.ValueOf) || source == null
+                    || !source.every()) {
+                return Set.of();
+            }
+            terms.add(new WhatARelationLeavesUndivided.Term<>(each.madeOf(), each.weight(),
+                    on.asARelationReadsIt(), on.asARelationReadsIt(), source, true));
+        }
+        // A statement about both sides is in each side's list; it is one statement.
+        Set<OnAWay> aboutEither = new LinkedHashSet<>(stating.get(0));
+        aboutEither.addAll(stating.get(1));
+        List<WhatARelationLeavesUndivided.OnTheDifference> held = new ArrayList<>();
+        for (OnAWay each : aboutEither) {
+            WhatARelationLeavesUndivided.OnTheDifference statement = each.affine() == null ? null
+                    : onTheDifference(each.affine().form(), each.affine().rel());
+            if (statement == null) {
+                return Set.of();
+            }
+            held.add(statement);
+        }
+        return WhatARelationLeavesUndivided.ofTheirDifference(terms, constant, relation, held,
+                new NumericDomain.Bounds(on.extent().low(), on.extent().high()),
+                UndividedByARelation::overlap);
+    }
+
+    /**
+     * Those of {@code conditions} that state anything of the values {@code term} takes. What
+     * stands at a value around the term says nothing of the values the term takes, so a statement
+     * of only that is left out.
+     */
+    private static List<OnAWay> statingAnythingOf(NumericTerm.FromOnePosition term,
+                                                  List<OnAWay> conditions) {
+        List<OnAWay> out = new ArrayList<>();
+        for (OnAWay each : conditions) {
+            if (touches(term, each.positions())
+                    && !(each.whatStands() && onlyAround(term, each.positions()))) {
+                out.add(each);
+            }
+        }
+        return out;
+    }
+
+    /**
+     * {@code form} held against nought as {@code rel}, as a statement about the difference of the
+     * two sides — or null where it is over anything else, or weighs them other than one way and the
+     * other.
+     */
+    private WhatARelationLeavesUndivided.OnTheDifference onTheDifference(
+            LinearForm<NumericTerm> form, Rel rel) {
+        ExactRatio first = form.coefs().get(sides.get(0).term());
+        ExactRatio second = form.coefs().get(sides.get(1).term());
+        if (form.coefs().size() != 2 || first == null || second == null
+                || !(first.plus(second) instanceof ExactAnswer.Held<ExactRatio>(ExactRatio sum))
+                || sum.signum() != 0) {
+            return null;
+        }
+        return new WhatARelationLeavesUndivided.OnTheDifference(first, form.constant(), rel);
     }
 
     /** What a way does to a term: nothing, an end on it alone, or more than this can read. */
@@ -328,15 +467,12 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         TIES
     }
 
-    private static Way wayOf(NumericTerm.FromOnePosition term, List<OnAWay> conditions) {
+    /** What a way does to {@code term}, {@code stating} being what it states of the term
+     *  ({@link #statingAnythingOf}). */
+    private static Way wayOf(NumericTerm.FromOnePosition term, List<OnAWay> stating) {
         Way out = Way.UNTOUCHED;
-        for (OnAWay each : conditions) {
-            // What stands at a value around the term says nothing of the values the term takes;
-            // which case the term's own value is takes values out of its order, which narrows it.
-            if (!touches(term, each.positions())
-                    || (each.whatStands() && onlyAround(term, each.positions()))) {
-                continue;
-            }
+        for (OnAWay each : stating) {
+            // Which case the term's own value is takes values out of its order, which narrows it.
             if (!each.whatStands() && !term.equals(each.runOf())) {
                 return Way.TIES;
             }

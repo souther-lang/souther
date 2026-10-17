@@ -65,6 +65,12 @@ class AnInvariantSaysARuleWentUnreadTheWayAGuardDoesTest {
 
             behavior byGuardAboutOne : (b: Bare) -> Ok | No
             let byGuardAboutOne (b) = if b.x < b.x + 1 then Ok else No
+
+            data Floored = { x: Int, y: Int }
+                invariant x < y + 1 && x >= 0
+
+            behavior byRuleWithAFloor : (f: Floored) -> Ok | No
+            let byRuleWithAFloor (f) = Ok
             """;
 
     /**
@@ -150,6 +156,24 @@ class AnInvariantSaysARuleWentUnreadTheWayAGuardDoesTest {
         assertEquals(saidAbout(blockOf("byGuard"), "b.x"),
                 saidAbout(blockOf("byRule"), "p.x"));
         assertTrue(blockOf("byRule").contains("relates the value here to another value"), blockOf("byRule"));
+    }
+
+    /**
+     * And both leave the two undivided: {@code x} and {@code y} take every value of one type, the
+     * rule is about how far apart they are, and moved together they stay as far apart. A second
+     * rule holding {@code x} at nought or more keeps it from values of its own, and the rule beside
+     * it is no longer shown to leave either undivided.
+     */
+    @Test
+    void andForARuleAboutHowFarApartTheTwoAreBothLeaveThemUndivided() {
+        String undivided = "rather than dividing the values here";
+        assertTrue(saidAbout(blockOf("byRule"), "p.x").contains(undivided), blockOf("byRule"));
+        assertTrue(saidAbout(blockOf("byRule"), "p.y").contains(undivided), blockOf("byRule"));
+        assertTrue(saidAbout(blockOf("byGuard"), "b.x").contains(undivided), blockOf("byGuard"));
+        String floored = blockOf("byRuleWithAFloor");
+        assertTrue(saidAbout(floored, "f.y").contains("not shown to reach every value here"),
+                floored);
+        assertFalse(floored.contains(undivided), floored);
     }
 
     /**

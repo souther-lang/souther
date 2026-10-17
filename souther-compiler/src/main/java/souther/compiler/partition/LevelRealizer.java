@@ -19,6 +19,7 @@ import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.PlacesApart;
 import souther.compiler.numeric.Rel;
+import souther.compiler.numeric.Towards;
 import net.unit8.notation199x.pattern.Meter;
 import souther.compiler.values.ValueSet;
 import java.math.BigDecimal;
@@ -620,30 +621,45 @@ public final class LevelRealizer {
     private static MovedTo movedBy(Place from, Level level, Carrier carrier) {
         ExactRatio apart = distance(level);
         if (!carrier.counts()) {
-            return new MovedTo(apart.isZero() ? from : null, null);
+            return new MovedTo(apart.isZero() ? from : null, null, null);
         }
         // Where this cannot hold the place the distance moves to, this compiler composed nothing
         // from `from` — never the carrier holding nothing there. The caller trying one place after
         // another is the one that knows what that means, so which of the two this was travels with
         // the answer rather than being told apart by a caught exception.
         return switch (Count.number(from).exactly().plus(apart)) {
-            case ExactAnswer.Unheld<ExactRatio> unheld -> new MovedTo(null, unheld.why());
+            case ExactAnswer.Unheld<ExactRatio> unheld -> new MovedTo(null, unheld.why(), null);
             // And the count put on the carrier: a host with no room to write it out composed
             // nothing from `from` either, and says so the same way.
             case ExactAnswer.Held<ExactRatio> held -> switch (Count.written(held.value())) {
                 case ExactAnswer.Unheld<Optional<Count>> unheldCount ->
-                        new MovedTo(null, unheldCount.why());
-                case ExactAnswer.Held<Optional<Count>> written ->
-                        new MovedTo(written.value().map(carrier::onTheGrid).orElse(null), null);
+                        new MovedTo(null, unheldCount.why(), null);
+                case ExactAnswer.Held<Optional<Count>> written -> {
+                    Place on = written.value().map(carrier::onTheGrid).orElse(null);
+                    yield new MovedTo(on, null, on != null || written.value().isEmpty() ? null
+                            : pastTheEnd(written.value().get(), carrier));
+                }
             };
         };
     }
 
-    /** Where a distance moved a place to: the place, or which way the exact arithmetic could not
-     *  hold the sum. Neither set is the carrier holding nothing there — that is a place of
-     *  {@code null} with no reason, which is not an unheld number and is the ordinary answer this
-     *  had before either compose a place or say why not. */
-    private record MovedTo(Place place, UnheldNumber unheld) {}
+    /** Which end of {@code carrier} {@code count} is past, or null where it is past neither and is
+     *  only off the grid between two places. */
+    private static Towards pastTheEnd(Count count, Carrier carrier) {
+        OrderedInterval extent = carrier.extent();
+        if (extent.low() != null && count.compareTo(extent.low().at()) < 0) {
+            return Towards.BELOW;
+        }
+        if (extent.high() != null && count.compareTo(extent.high().at()) > 0) {
+            return Towards.ABOVE;
+        }
+        return null;
+    }
+
+    /** Where a distance moved a place to: the place, which way the exact arithmetic could not
+     *  hold the sum, or which end of the carrier the count lies past. None set is the carrier
+     *  holding nothing there that this can name — a count between two of its places. */
+    private record MovedTo(Place place, UnheldNumber unheld, Towards past) {}
 
     /**
      * The number a level of the distance between two positions is.
@@ -1787,24 +1803,29 @@ public final class LevelRealizer {
         // two ends and a line between them, and a mapping that gave them all the same place left a
         // run that said nothing about which side of the line it lay — so a search took whatever the
         // declared domain offered first and a row on the line came back for a point past it.
-        // Null where the carrier's arithmetic puts a level nowhere. Which end that happens at
-        // decides what it means: a line with no place is an item this order cannot be read as at
-        // all, and a run's far end with no place is a run that reaches as far as the carrier does.
+        // Where a level lands is said as on a place, past one end of the carrier, or nowhere, and
+        // which of them it is decides what it means: a line with no place is an item this order
+        // cannot be read as at all, and a run's end past the carrier on its own outer side is a run
+        // that reaches as far as the carrier does ({@link Band#mappedBy}).
         UnheldNumber[] unheld = {null};
-        java.util.function.UnaryOperator<Level> onto = level -> {
+        Function<Level, Band.Landing> onto = level -> {
             MovedTo moved = movedBy(common, level, of);
             if (moved.unheld() != null && unheld[0] == null) {
                 unheld[0] = moved.unheld();
             }
-            return moved.place() == null ? null : new Level.OnACarrier(of, moved.place());
+            if (moved.place() != null) {
+                return new Band.Landing.On(new Level.OnACarrier(of, moved.place()));
+            }
+            return moved.past() != null ? new Band.Landing.PastTheEnd(moved.past())
+                    : new Band.Landing.Nowhere();
         };
         Criterion mapped = switch (where) {
-            case Criterion.AtTheLevel at -> only(new Criterion.AtTheLevel(onto.apply(at.at())),
-                    onto.apply(at.at()));
+            case Criterion.AtTheLevel at -> only(new Criterion.AtTheLevel(onto.apply(at.at())
+                    .level()), onto.apply(at.at()).level());
             case Criterion.Within within -> {
                 Band run = within.band().mappedBy(onto);
                 yield run == null ? null : new Criterion.Within(run,
-                        within.except() == null ? null : onto.apply(within.except()),
+                        within.except() == null ? null : onto.apply(within.except()).level(),
                         within.away());
             }
         };
