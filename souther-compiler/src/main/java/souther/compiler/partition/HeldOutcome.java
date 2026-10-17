@@ -78,6 +78,31 @@ public record HeldOutcome(List<RowDemand> demands, List<OnTheWay.Narrowed> cases
     }
 
     /**
+     * Every condition holding a row to this asks it to meet, in each vocabulary it asks in: the
+     * demands and cases of the condition coming out that way, and those of every alternative
+     * {@link #chosen} takes on the way to it.
+     *
+     * <p>The alternatives as much as the condition. A way the way to the condition splits into
+     * takes a guard above along one of its alternatives, which may be another than the row went
+     * by, and a row held along it is written to meet that alternative — so what holding it writes
+     * is asked of all of this, and not of the condition's own demands alone.
+     */
+    List<OnTheWay> asks() {
+        Set<OnTheWay> out = new LinkedHashSet<>(cases);
+        for (Map.Entry<OnTheWay, Set<Integer>> each : chosen.entrySet()) {
+            for (int alternative : each.getValue()) {
+                for (OnTheWay one : new WayToTheBorder(each.getKey().alternatives()
+                        .get(alternative)).choosing(chosen).onTheWay()) {
+                    if (one instanceof OnTheWay.TakenIn || one instanceof OnTheWay.Narrowed) {
+                        out.add(one);
+                    }
+                }
+            }
+        }
+        return List.copyOf(out);
+    }
+
+    /**
      * The choices a walk made along one way, as the conditions they are of: each condition with
      * every alternative of it the way took.
      *

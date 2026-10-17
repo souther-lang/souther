@@ -97,7 +97,7 @@ final class OneOfEach {
          * @param entries what the way asks, each choice replaced by its alternative's entries
          * @param choices each choice taken and the alternative it was taken as, where it stands
          *                and in the order the way holds them: the way's identity among the ways of
-         *                the same entries, which {@code entries} no longer says once two
+         *                the same entries, which {@code entries} does not say where two
          *                alternatives ask alike. Every one of them — two entries alike are two
          *                choices the walk made apart, as it walks them apart
          */

@@ -95,6 +95,31 @@ class AWayPastALaterGuardIsTakenAlongTheWayAnEarlierOneWasHeldAlongTest {
         }
     }
 
+    /**
+     * A way the way to the later guard splits into takes the earlier guard along one of its
+     * alternatives, which asks of a list the way whole asks nothing of: what holding a row to it
+     * asks is that as much as the later guard's own condition, so that a reader asking what
+     * holding it writes is told of the list.
+     */
+    @Test
+    void whatHoldingARowAlongASplitWayAsksIncludesTheAlternativeItTakes() {
+        Read read = read(MODEL);
+        List<HeldOutcome> later = assertInstanceOf(HeldOutcome.Bringing.Found.class,
+                read.holding(1)).ways();
+        HeldOutcome whole = later.stream().filter(one -> !one.reaching().along().isEmpty())
+                .findFirst().orElseThrow();
+        List<HeldOutcome> split = later.stream()
+                .filter(one -> one.chosen().size() > whole.chosen().size()).toList();
+        assertEquals(2, split.size(), () -> "the later way splits at either list: " + later);
+        for (HeldOutcome each : split) {
+            List<OnTheWay.TakenIn> taken = each.reaching().boundedOnTheWay().stream()
+                    .filter(one -> !whole.reaching().boundedOnTheWay().contains(one)).toList();
+            assertTrue(!taken.isEmpty() && each.asks().containsAll(taken),
+                    () -> "what the split way asks beside the whole is asked: " + taken
+                            + " in " + each.asks());
+        }
+    }
+
     /** A guard asking one thing of one list, which is no choice of several. */
     private static final String SINGLE = """
             module example.settle

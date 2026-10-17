@@ -3116,13 +3116,25 @@ public final class Generator {
 
         /**
          * Whether holding the row to {@code held} composes a parameter in {@code against}: in
-         * every vocabulary it asks in, a case written at a position as much as a number.
+         * every vocabulary it asks in, a case written at a position as much as a number, and of
+         * every alternative it takes on the way as much as the condition ({@link HeldOutcome#asks}).
          */
         private static boolean writesAnyOf(HeldOutcome held, Set<String> against) {
-            return held.demands().stream().anyMatch(demand -> writesAnyOf(demand, against))
-                    || held.cases().stream().anyMatch(narrowed ->
-                            WayToTheBorder.positionsOf(narrowed).stream()
-                                    .anyMatch(position -> against.contains(position.head())));
+            if (held.demands().stream().anyMatch(demand -> writesAnyOf(demand, against))) {
+                return true;
+            }
+            for (OnTheWay asked : held.asks()) {
+                boolean writes = switch (asked) {
+                    case OnTheWay.TakenIn in -> writesAnyOf(in.demand(), against);
+                    case OnTheWay.Narrowed narrowed -> WayToTheBorder.positionsOf(narrowed)
+                            .stream().anyMatch(position -> against.contains(position.head()));
+                    case OnTheWay.Settled _, OnTheWay.Declined _, OnTheWay.OneOf _ -> false;
+                };
+                if (writes) {
+                    return true;
+                }
+            }
+            return false;
         }
 
         /** Whether holding the row to {@code demand} composes a parameter in {@code against}. */
