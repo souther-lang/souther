@@ -1120,7 +1120,9 @@ public sealed interface Derivation {
 
             /**
              * The container inside each element of the container at {@code at} whose element
-             * {@code atom} counts every occurrence of — or null where it is no such count.
+             * {@code atom} counts every occurrence of — or null where it is no such count, or the
+             * container at {@code at} stands inside another, whose every occurrence the count is
+             * of.
              */
             private static TermPath containerCountedInside(Quantity atom, TermPath at) {
                 if (!(atom instanceof DecisionAtom.OfTheInput(NumericTerm.TakenOver over))
@@ -1130,7 +1132,7 @@ public sealed interface Derivation {
                     return null;
                 }
                 TermPath inside = every.containersHoldingIt().getLast();
-                return inside.isAtOrUnder(at.element()) ? inside : null;
+                return !at.insideAContainer() && inside.isAtOrUnder(at.element()) ? inside : null;
             }
 
             /** Whether {@code atom} is how many what stands at {@code at} holds. */

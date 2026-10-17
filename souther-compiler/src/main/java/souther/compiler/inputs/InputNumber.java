@@ -237,9 +237,11 @@ public final class InputNumber {
         ElementValue computed = null;
         if (answered == null) {
             // A total of how many a container inside each element holds is how many occurrences
-            // of its element there are.
+            // of its element there are — where the elements walked are those of a container no
+            // other holds. One inside another is one of many, and every occurrence of the path is
+            // under every one of them.
             ElementProjection counted = countedOfEach(measured, where, element, source);
-            if (counted != null) {
+            if (counted != null && at.containersHoldingIt().size() == 1) {
                 return howManyStandAt(counted.from(at).element(), inputs, source);
             }
             computed = computedOf(measured, where, element, source);

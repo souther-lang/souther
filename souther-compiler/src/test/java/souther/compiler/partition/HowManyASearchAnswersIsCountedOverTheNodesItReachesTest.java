@@ -44,7 +44,9 @@ class HowManyASearchAnswersIsCountedOverTheNodesItReachesTest {
             module demo
 
             data Node = { v: Int, items: List<Int>, below: List<Node> }
-            data In = { t: Node, w: Int }
+            data Item = { tags: List<Int> }
+            data Order = { items: List<Item> }
+            data In = { t: Node, w: Int, ts: List<Node>, orders: List<Order> }
             """;
 
     private static final TermPath T = TermPath.of("i").then("t");
@@ -116,6 +118,29 @@ class HowManyASearchAnswersIsCountedOverTheNodesItReachesTest {
                 let along (node: Node, top: List<Int>): List<Int> =
                     top ++ List.flatMap(r -> along(r, top), node.below)
                 """, "List.length(along(i.t, i.t.items)) >= 2"));
+    }
+
+    /**
+     * A tree, or a container, one of many read under a statement about each of them is not every
+     * occurrence of its path: the nodes of one tree of a list, and the tags of one order's items,
+     * are no count of a run over all of them.
+     */
+    @Test
+    void oneOfManyIsNoRunOverAllOfThem() {
+        assertNoRunOverAllOfThem(stated(EVERYONE,
+                "List.all(t -> List.length(everyone(t)) >= 2, i.ts)"));
+        for (String counted : List.of(
+                "List.sum(List.map(e -> List.length(e.tags), o.items))",
+                "List.length(List.flatMap(e -> e.tags, o.items))")) {
+            assertNoRunOverAllOfThem(stated("", "List.all(o -> " + counted + " <= 5, i.orders)"));
+        }
+    }
+
+    /** That {@code stated} counts no run over every node below every tree, or every tag of every
+     *  order's items, whatever else it is read as. */
+    private static void assertNoRunOverAllOfThem(Proposition stated) {
+        assertTrue(!stated.key().contains("node below") && !stated.key().contains("tags[*])"),
+                () -> "read as " + stated);
     }
 
     private static RunSource.ReachableNodes nodes(List<String> container) {

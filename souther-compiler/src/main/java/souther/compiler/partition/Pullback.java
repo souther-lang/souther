@@ -1536,11 +1536,17 @@ final class Pullback {
         if (!(sizeOf(walk.seed(), reads) instanceof Sized.AsAForm(LinearForm<Quantity> seed))) {
             return null;
         }
-        // A set holds what it gathers once each, so what a step puts in it adds no number of
-        // its own; how many it ends with is how many different values were gathered.
-        if (e.type() instanceof Type.SetOf) {
+        // A step gathering into a set adds what it gathers once each, so it adds no number of its
+        // own; how many the walk ends with is how many different values were gathered. Which of
+        // the two a step is, is what its operation says of itself.
+        Denotation step = reads.standing(walk.step().body(), read.rules().symbols(),
+                read.rules().newtypes());
+        if (AnOperationApplied.of(Core.withoutStanding(step.value()))
+                instanceof AnOperationApplied applied
+                && DefaultBoundOperationFacts.get().gathersIn(applied.operation())
+                        instanceof BoundOperationFacts.Gathered gathers) {
             return seed.equals(LinearForm.constant(ExactRatio.ZERO))
-                    ? differentOverAWalk(walk, held, reads) : null;
+                    ? differentOverAWalk(walk, held, step, applied, gathers) : null;
         }
         BindingId accumulator = walk.accumulator().binding();
         if (!(stepSized(accumulator, ExactRatio.ZERO, walk, reads)
@@ -1570,23 +1576,18 @@ final class Pullback {
 
     /**
      * How many what {@code walk}, from an empty set over the elements of {@code held}, ends with
-     * holds, where each step gathers into what it carried a value standing at a place of the
-     * element, or every element of a set standing there ({@link BoundOperationFacts#gathersIn}):
-     * how many different values stand where those are over the elements — or null where its step
-     * is no such step.
+     * holds, where its step {@code applied}, standing as {@code step}, gathers into what it
+     * carried ({@link BoundOperationFacts#gathersIn}) a value standing at a place of the element,
+     * or every element of a set standing there: how many different values stand where those are
+     * over the elements — or null where it gathers anything else, or into anything else.
      *
      * <p>By induction over the walk, which hands every element to the step once: what it ends
      * with is exactly the values gathered, each once, which is how many differ among them.
      */
     private Sized differentOverAWalk(SeededWalk walk, DecisionSubject.AnInput held,
-                                     InputReads reads) {
-        Denotation step = reads.standing(walk.step().body(), read.rules().symbols(),
-                read.rules().newtypes());
-        if (!(AnOperationApplied.of(Core.withoutStanding(step.value()))
-                instanceof AnOperationApplied applied)
-                || !(DefaultBoundOperationFacts.get().gathersIn(applied.operation())
-                        instanceof BoundOperationFacts.Gathered gathers)
-                || !(Core.withoutStanding(applied.args().get(gathers.into().position()))
+                                     Denotation step, AnOperationApplied applied,
+                                     BoundOperationFacts.Gathered gathers) {
+        if (!(Core.withoutStanding(applied.args().get(gathers.into().position()))
                         instanceof Core.Read carried)
                 || !carried.binding().equals(walk.accumulator().binding())
                 || !(step.at().pathOf(applied.args().get(gathers.what().position()),
@@ -1668,10 +1669,15 @@ final class Pullback {
      * The count of every occurrence of a container's element, where {@code number} is how many a
      * container inside the elements of {@code held} holds, taken of it as it stands — or null
      * where it is anything else.
+     *
+     * <p>Only where {@code held} stands inside no container. Inside one — the items of one order,
+     * read under a statement about each order — what is added up is of that one, and every
+     * occurrence of the path is of every order: the count of all of them is no number of it.
      */
     private NumericTerm.TakenOver occurrencesCounted(DecisionSubject.AnInput held,
                                                      Quantity number) {
-        if (!(number instanceof DecisionAtom.OfTheInput(NumericTerm.TakenOf taken))
+        if (held.at().insideAContainer()
+                || !(number instanceof DecisionAtom.OfTheInput(NumericTerm.TakenOf taken))
                 || !(taken.takenAs() instanceof TakenAs.HowManyItHolds)
                 || !taken.arguments().none()
                 || !ValueTransformation.NONE.equals(taken.transformation())
@@ -5351,8 +5357,10 @@ final class Pullback {
         ARecursion recursion =
                 read.rules().declarations().answers().recursionOf(helper).orElse(null);
         RecursionOverATree search = recursion == null ? null : recursion.search().orElse(null);
+        // A tree whose root stands inside a container is one of many, read under a statement
+        // about each of them, and the nodes below every occurrence of that root are every tree's.
         if (search == null || !(reads.pathOf(args.get(search.node()), read.rules().newtypes())
-                instanceof PathResolution.At(TermPath node))) {
+                instanceof PathResolution.At(TermPath node)) || node.insideAContainer()) {
             return null;
         }
         for (int at = 0; at < args.size(); at++) {
