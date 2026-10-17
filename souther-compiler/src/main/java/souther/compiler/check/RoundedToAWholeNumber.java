@@ -1,15 +1,11 @@
 package souther.compiler.check;
 
 import souther.compiler.core.Core;
-import souther.compiler.numeric.ExactAnswer;
-import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.Rel;
-import souther.compiler.types.BinOp;
-import souther.compiler.types.ConstructOccurrence;
+import souther.compiler.types.Type;
 
 import java.math.BigInteger;
-import java.util.List;
 import java.util.Objects;
 
 /**
@@ -20,12 +16,13 @@ import java.util.Objects;
  * answer is arithmetic over it. What a comparison of it with a whole number states is exact all the
  * same: a line on the number before rounding, where the way of rounding puts it
  * ({@link WholeRounding}). {@code Rational.toInt(DOWN, x / 2) >= 100} is {@code x / 2 >= 100}, and
- * {@code Rational.toInt(HALF_UP, x / 2) >= 100} is {@code x / 2 >= 99.5}, which is said as twice
- * {@code x / 2} at least {@code 199} so the line is a whole number.
+ * {@code Rational.toInt(HALF_UP, x / 2) >= 100} is {@code x / 2 >= 99.5}.
  *
  * <p><b>The way of rounding is a value.</b> The policy is read as any value is, through the names it
- * was given under, and the comparison is read only where it is one case of the policy on every run.
- * A policy the run decides has no one line, and is left unread rather than taken as any of them.
+ * was given under, in the environment the comparison is read in, and the comparison is read only
+ * where it is one case of the policy there. A policy chosen by the run is one case on each path the
+ * walk reads to it; one that is no case where it is read has no one line, and is left unread rather
+ * than taken as any of them.
  *
  * <p><b>The rounded number is an Int.</b> A rounding past the ends of one aborts, so a row that
  * reaches the comparison has a rounded number inside them, and a whole number past them is settled
@@ -39,7 +36,7 @@ public final class RoundedToAWholeNumber {
      * What a comparison of a rounded number states of the number before rounding.
      *
      * @param <E> the environment the number is read in
-     * @param rounded the number before rounding — taken twice where the lines are at a half
+     * @param rounded the number before rounding
      * @param at where the rounding was applied, which is where {@code rounded} is read
      * @param statement what holds of {@code rounded} exactly where the comparison holds
      */
@@ -54,51 +51,37 @@ public final class RoundedToAWholeNumber {
 
     /**
      * What {@code comparison}, read in {@code at}, states of the number one of its sides rounds — or
-     * null where neither side is such a rounding, its policy is not one case on every run, the
-     * other side is no whole number the same on every run, or a line it comes to is more than a
-     * signed 64-bit number can say.
+     * null where neither side is such a rounding, its policy is no one case where it is read, or the
+     * other side is no whole number the same on every run.
      */
     public static <E> Read<E> read(StatedComparison comparison, E at,
                                    TheSignOfAnOrder.Sides<E> sides) {
-        for (boolean roundedFirst : List.of(true, false)) {
-            ValueStanding.ReadThrough<E> rounding =
-                    sides.standing(roundedFirst ? comparison.left() : comparison.right(), at);
-            Core call = Core.withoutStanding(rounding.value());
-            AnOperationApplied applied = AnOperationApplied.of(call);
-            BoundOperationFact.RoundsToAWholeNumber rounds = applied == null ? null
-                    : DefaultBoundOperationFacts.get().roundsToAWholeNumber(applied.operation());
-            if (rounds == null) {
-                continue;
-            }
-            Core value = applied.argument(rounds.value());
-            Core policy = applied.argument(rounds.mode());
-            WholeRounding way = policy == null ? null
-                    : rounds.wayOf(sides.standing(policy, rounding.at()).value());
-            ExactRatio against =
-                    sides.constant(roundedFirst ? comparison.right() : comparison.left(), at);
-            Carrier carrier = Carrier.ofValue(call.type(), sides.declarations());
-            OrderedInterval ends = carrier == null ? null : carrier.extent();
-            BigInteger least = ends == null ? null : WholeUnitsBetween.wholeNumberOf(ends.low());
-            BigInteger most = ends == null ? null : WholeUnitsBetween.wholeNumberOf(ends.high());
-            if (value == null || way == null || against == null || least == null || most == null
-                    || !against.isWhole()
-                    || !(against.floor() instanceof ExactAnswer.Held<BigInteger>(var whole))) {
-                return null;
-            }
-            // The relation the source wrote, read from the rounded side.
-            Rel written = (roundedFirst ? comparison.claim() : comparison.claim().turned())
-                    .statedRelation();
-            ConstantComparison statement = statementOf(way, written, whole, least, most);
-            return statement == null ? null
-                    : new Read<>(taken(value, way), rounding.at(), statement);
+        ACallAgainstANumber<E, BoundOperationFact.RoundsToAWholeNumber> rounding =
+                ACallAgainstANumber.of(comparison, at, sides,
+                        DefaultBoundOperationFacts.get()::roundsToAWholeNumber);
+        BigInteger whole = rounding == null ? null : rounding.whole();
+        if (whole == null) {
+            return null;
         }
-        return null;
+        BoundOperationFact.RoundsToAWholeNumber rounds = rounding.fact();
+        Core value = rounding.applied().argument(rounds.value());
+        Core policy = rounding.applied().argument(rounds.mode());
+        WholeRounding way = policy == null ? null
+                : rounds.wayOf(sides.standing(policy, rounding.at()).value());
+        if (value == null || way == null) {
+            return null;
+        }
+        // What is rounded to is an Int, which is what the fact was held to where it was bound.
+        OrderedInterval ends = Carrier.ofValue(Type.INT, sides.declarations()).extent();
+        BigInteger least = WholeUnitsBetween.wholeNumberOf(ends.low());
+        BigInteger most = WholeUnitsBetween.wholeNumberOf(ends.high());
+        return least == null || most == null ? null : new Read<>(value, rounding.at(),
+                statementOf(way, rounding.written(), whole, least, most));
     }
 
     /**
-     * What the number before rounding — taken twice where {@code way}'s lines are at a half — stands
-     * to where its rounding by {@code way} stands {@code rel} to {@code k}, for a rounded number from
-     * {@code least} to {@code most}; null where a line is more than a signed 64-bit number can say.
+     * What the number before rounding stands to where its rounding by {@code way} stands
+     * {@code rel} to {@code k}, for a rounded number from {@code least} to {@code most}.
      */
     static ConstantComparison statementOf(WholeRounding way, Rel rel, BigInteger k,
                                           BigInteger least, BigInteger most) {
@@ -112,18 +95,6 @@ public final class RoundedToAWholeNumber {
     private static ConstantComparison atLeast(WholeRounding way, BigInteger k, BigInteger least,
                                               BigInteger most) {
         ConstantComparison rounded = ConstantComparison.of(Rel.GE, k, least, most);
-        if (!(rounded instanceof ConstantComparison.Against)) {
-            return rounded;
-        }
-        ConstantComparison.Against line = way.atLeast(k);
-        return line.against().bitLength() > Long.SIZE - 1 ? null : line;
-    }
-
-    /** {@code value}, twice where {@code way}'s lines are at a half. */
-    private static Core taken(Core value, WholeRounding way) {
-        return way.linesAtAHalf()
-                ? new Core.Binary(BinOp.ADD, value, value, Core.BinaryReading.AS_THEY_STAND,
-                        ConstructOccurrence.unwritten(), value.type(), value.pos())
-                : value;
+        return rounded instanceof ConstantComparison.Against ? way.atLeast(k) : rounded;
     }
 }

@@ -202,7 +202,7 @@ public final class OperationFacts {
             // `Decimal.toInt` is within one of what it rounds, whichever mode it is handed. What a
             // single mode does more narrowly — `HALF_UP` rounds to within a half — is not a bound
             // on the result: it is read from the mode where a comparison of the result is, and
-            // only where the mode is one value on every run (`roundsToAWholeNumber` below).
+            // only where the mode is one case there (`roundsToAWholeNumber` below).
             about("Int", "abs", bounded(Rel.GE, 0)),
             about("Decimal", "abs", bounded(Rel.GE, 0)),
             about("Int", "floorMod", bounded(Rel.GE, 0, aboveZero(at(1)))),

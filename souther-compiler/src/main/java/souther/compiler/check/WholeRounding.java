@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Rel;
 
 import java.math.BigInteger;
@@ -22,31 +23,16 @@ import java.math.BigInteger;
  */
 enum WholeRounding {
 
-    HALF_UP(true),
-    HALF_EVEN(true),
-    HALF_DOWN(true),
-    UP(false),
-    DOWN(false),
-    CEILING(false),
-    FLOOR(false);
-
-    private final boolean atAHalf;
-
-    WholeRounding(boolean atAHalf) {
-        this.atAHalf = atAHalf;
-    }
+    HALF_UP,
+    HALF_EVEN,
+    HALF_DOWN,
+    UP,
+    DOWN,
+    CEILING,
+    FLOOR;
 
     /**
-     * Whether its lines are at a half: the number a statement is about is then the rounded number
-     * taken twice, so that a line at {@code k - 1/2} is the whole number {@code 2k - 1}.
-     */
-    boolean linesAtAHalf() {
-        return atAHalf;
-    }
-
-    /**
-     * What the number before rounding — taken twice where {@link #linesAtAHalf} — stands to exactly
-     * where its rounding is at least {@code k}.
+     * What the number before rounding stands to exactly where its rounding is at least {@code k}.
      *
      * <p>Toward nought and away from it part at the sign of {@code k}: a number above minus one
      * drops to nought, so the rounding toward nought is at least nought from just above minus one,
@@ -55,24 +41,29 @@ enum WholeRounding {
      * {@code HALF_EVEN} where {@code k} is even.
      */
     ConstantComparison.Against atLeast(BigInteger k) {
-        BigInteger one = BigInteger.ONE;
         boolean positive = k.signum() > 0;
         return switch (this) {
-            case FLOOR -> new ConstantComparison.Against(Rel.GE, k);
-            case CEILING -> new ConstantComparison.Against(Rel.GT, k.subtract(one));
-            case DOWN -> positive ? new ConstantComparison.Against(Rel.GE, k)
-                    : new ConstantComparison.Against(Rel.GT, k.subtract(one));
-            case UP -> positive ? new ConstantComparison.Against(Rel.GT, k.subtract(one))
-                    : new ConstantComparison.Against(Rel.GE, k);
+            case FLOOR -> from(k);
+            case CEILING -> above(k.subtract(BigInteger.ONE));
+            case DOWN -> positive ? from(k) : above(k.subtract(BigInteger.ONE));
+            case UP -> positive ? above(k.subtract(BigInteger.ONE)) : from(k);
             case HALF_UP -> atAHalfBelow(k, positive);
             case HALF_DOWN -> atAHalfBelow(k, !positive);
             case HALF_EVEN -> atAHalfBelow(k, !k.testBit(0));
         };
     }
 
-    /** Twice the number at or above twice {@code k} less one, the line itself where it rounds up. */
+    private static ConstantComparison.Against from(BigInteger line) {
+        return new ConstantComparison.Against(Rel.GE, ExactRatio.of(line));
+    }
+
+    private static ConstantComparison.Against above(BigInteger line) {
+        return new ConstantComparison.Against(Rel.GT, ExactRatio.of(line));
+    }
+
+    /** The number at or above a half below {@code k}, the half itself where it rounds up. */
     private static ConstantComparison.Against atAHalfBelow(BigInteger k, boolean roundsUp) {
         return new ConstantComparison.Against(roundsUp ? Rel.GE : Rel.GT,
-                k.shiftLeft(1).subtract(BigInteger.ONE));
+                ExactRatio.of(k.shiftLeft(1).subtract(BigInteger.ONE), BigInteger.TWO));
     }
 }

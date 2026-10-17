@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Rel;
 import souther.compiler.types.ValueName;
 import souther.runtime.CEILING;
@@ -21,7 +22,6 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
 
 /**
  * A comparison of a number rounded to a whole one states, of the number before rounding, exactly
@@ -71,7 +71,8 @@ class WhatAComparisonOfARoundedNumberStatesOfWhatWasRoundedTest {
                         String asked = way + " " + rel + " " + k + " at " + quarters
                                 + "/4: the run time rounds it to " + rounded;
                         assertEquals(rel.holds(Long.compare(rounded, k)),
-                                holds(stated, way, quarters), asked);
+                                holds(stated, ExactRatio.of(BigInteger.valueOf(quarters),
+                                        BigInteger.valueOf(QUARTERS))), asked);
                     }
                 }
             }
@@ -94,18 +95,15 @@ class WhatAComparisonOfARoundedNumberStatesOfWhatWasRoundedTest {
                 WholeRounding.HALF_UP, Rel.LE, most, least, most));
     }
 
-    /**
-     * A line at a half of a threshold near the end of an Int is twice the threshold, which no
-     * signed 64-bit number can say, and the comparison is not read rather than read as another.
-     */
+    /** A line at a half below a threshold near the end of an Int is held as the half it is. */
     @Test
-    void aLineNoLongCanSayIsNotRead() {
+    void aLineAtAHalfNearTheEndOfAnIntIsTheHalfItIs() {
         BigInteger least = BigInteger.valueOf(Long.MIN_VALUE);
         BigInteger most = BigInteger.valueOf(Long.MAX_VALUE);
-        assertNull(RoundedToAWholeNumber.statementOf(WholeRounding.HALF_UP, Rel.GE,
-                most.shiftRight(1).add(BigInteger.TEN), least, most));
-        assertNotNull(RoundedToAWholeNumber.statementOf(WholeRounding.DOWN, Rel.GE,
-                most.shiftRight(1).add(BigInteger.TEN), least, most));
+        assertEquals(new ConstantComparison.Against(Rel.GE,
+                        ExactRatio.of(most.shiftLeft(1).subtract(BigInteger.ONE), BigInteger.TWO)),
+                RoundedToAWholeNumber.statementOf(WholeRounding.HALF_UP, Rel.GE, most, least,
+                        most));
     }
 
     private static RoundingMode runTimes(WholeRounding way) {
@@ -120,21 +118,16 @@ class WhatAComparisonOfARoundedNumberStatesOfWhatWasRoundedTest {
         };
     }
 
-    /**
-     * Whether {@code statement} holds of {@code quarters} quarters, taken twice where {@code way}'s
-     * lines are at a half: a comparison of {@code q * times} with {@code b} is one of
-     * {@code quarters * times} with {@code 4 * b}.
-     */
-    private static boolean holds(ConstantComparison statement, WholeRounding way, int quarters) {
-        BigInteger taken = BigInteger.valueOf((long) quarters * (way.linesAtAHalf() ? 2 : 1));
+    /** Whether {@code statement} holds of the number {@code q}. */
+    private static boolean holds(ConstantComparison statement, ExactRatio q) {
         return switch (statement) {
-            case ConstantComparison.Against(Rel rel, BigInteger against) ->
-                    rel.holds(taken.compareTo(against.multiply(BigInteger.valueOf(QUARTERS))));
+            case ConstantComparison.Against(Rel rel, ExactRatio against) ->
+                    rel.holds(q.compareTo(against));
             case ConstantComparison.Settled(boolean holds) -> holds;
             case ConstantComparison.Both(var first, var second) ->
-                    holds(first, way, quarters) && holds(second, way, quarters);
+                    holds(first, q) && holds(second, q);
             case ConstantComparison.Either(var first, var second) ->
-                    holds(first, way, quarters) || holds(second, way, quarters);
+                    holds(first, q) || holds(second, q);
         };
     }
 }

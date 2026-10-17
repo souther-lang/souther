@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Rel;
 import souther.compiler.types.ValueName;
 import souther.runtime.Temporals;
@@ -11,8 +12,6 @@ import java.time.LocalDateTime;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertInstanceOf;
-import static org.junit.jupiter.api.Assertions.assertNull;
 
 /**
  * A comparison of a count of whole units states, of the steps between the two values, exactly what
@@ -84,21 +83,22 @@ class WhatACountOfWholeUnitsStatesOfTheStepsBetweenTest {
     }
 
     /**
-     * A threshold the range reaches and no signed 64-bit number can say is a comparison this does not
-     * read, and it is not read as another one.
+     * A threshold the range reaches is the number of steps it comes to, past what a signed 64-bit
+     * number says as well: what number a comparison may be handed on with is a question for where it
+     * is written ({@link ConstantComparison#stated}).
      */
     @Test
-    void aThresholdInsideTheRangeBeyondALongIsNotRead() {
+    void aThresholdInsideTheRangeBeyondALongIsTheStepsItComesTo() {
         BigInteger widest = BigInteger.TWO.pow(70);
-        assertNull(WholeUnitsBetween.statementOf(Rel.GE, BigInteger.TWO.pow(62), 60, widest));
-        assertInstanceOf(ConstantComparison.Against.class,
-                WholeUnitsBetween.statementOf(Rel.GE, BigInteger.TEN, 60, widest));
+        assertEquals(new ConstantComparison.Against(Rel.GE,
+                        ExactRatio.of(BigInteger.TWO.pow(62).multiply(BigInteger.valueOf(60)))),
+                WholeUnitsBetween.statementOf(Rel.GE, BigInteger.TWO.pow(62), 60, widest));
     }
 
     private static boolean holds(ConstantComparison statement, long steps) {
         return switch (statement) {
-            case ConstantComparison.Against(Rel rel, BigInteger against) ->
-                    rel.holds(BigInteger.valueOf(steps).compareTo(against));
+            case ConstantComparison.Against(Rel rel, ExactRatio against) ->
+                    rel.holds(ExactRatio.of(steps).compareTo(against));
             case ConstantComparison.Settled(boolean holds) -> holds;
             case ConstantComparison.Both(var first, var second) ->
                     holds(first, steps) && holds(second, steps);

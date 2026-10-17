@@ -779,11 +779,11 @@ final class OperationFactBinder {
                 TypeRequirement.FRACTIONAL, "the number that is rounded");
         DeclaredArgument mode = holdToTheDeclaration(declaration, rounds.mode(), null,
                 TypeRequirement.ANY, "the policy it is rounded by");
-        Type policy = theRoundingPolicyTheLibraryDeclares(stdlib);
-        if (!mode.stands().equals(policy)) {
+        Type policy = mode.stands();
+        if (!heldBy(stdlib, Arithmetic.Reads.A_ROUNDING_MODE, policy, declaration.result())) {
             throw new IllegalStateException(declaration.declaring().operation()
-                    + " is rounded by " + Type.show(mode.stands())
-                    + ", and the library's rounding policy is " + Type.show(policy));
+                    + " is rounded by " + Type.show(policy)
+                    + ", which is not the rounding policy the library declares");
         }
         if (!(policy instanceof Type.Ref(TypeSymbol.AtModule declared))
                 || !(stdlib.languageDeclaration(declared.key()) instanceof Hir.SumData sum)) {

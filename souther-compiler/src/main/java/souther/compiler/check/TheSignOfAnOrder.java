@@ -59,6 +59,9 @@ public final class TheSignOfAnOrder {
 
         /** What a type is declared as, for how the values of the sign are spaced. */
         DeclarationAccess declarations();
+
+        /** Which declarations are one value wearing a name, whose construction is that value. */
+        DeclarationNewtypes newtypes();
     }
 
     /**
@@ -132,47 +135,33 @@ public final class TheSignOfAnOrder {
      * number the same on every run, or the two rules leave the arguments open.
      */
     public static <E> Read<E> read(StatedComparison comparison, E at, Sides<E> sides) {
-        for (boolean signFirst : List.of(true, false)) {
-            ValueStanding.ReadThrough<E> sign =
-                    sides.standing(signFirst ? comparison.left() : comparison.right(), at);
-            Core answered = Core.withoutStanding(sign.value());
-            AnOperationApplied applied = AnOperationApplied.of(answered);
-            BoundOperationFact.StatesTheOrderOfItsArguments order = applied == null ? null
-                    : DefaultBoundOperationFacts.get()
-                            .statesTheOrderOfItsArguments(applied.operation());
-            if (order == null) {
-                continue;
-            }
-            Core greater = applied.argument(order.greater());
-            Core lesser = applied.argument(order.lesser());
-            Carrier counted = Carrier.ofValue(answered.type(), sides.declarations());
-            ExactRatio against =
-                    sides.constant(signFirst ? comparison.right() : comparison.left(), at);
-            if (greater == null || lesser == null || counted == null || !counted.counts()
-                    || against == null) {
-                return null;
-            }
-            // The relation the source wrote, read from the sign's side: `sign rel number` however
-            // the two were written round.
-            Rel written = (signFirst ? comparison.claim() : comparison.claim().turned())
-                    .statedRelation();
-            TheSign compared = new TheSign(applied.operation(), counted.spacing(), written,
-                    against);
-            return switch (of(applied.operation(), counted.spacing(), written, against)) {
-                case null -> null;
-                case Stands.Settled _ -> new Read.Settled<>(compared);
-                case Stands.Between(Rel between, boolean isTheCondition) ->
-                        new Read.OfTheArguments<>(compared,
-                                new StatedComparison(ComparisonClaim.stating(between), greater,
-                                        lesser,
-                                        // Two arguments of the operation that orders them, each
-                                        // standing as what it was passed as, and the order is the
-                                        // one over that type.
-                                        Core.BinaryReading.AS_THEY_STAND),
-                                sign.at(), isTheCondition);
-            };
+        ACallAgainstANumber<E, BoundOperationFact.StatesTheOrderOfItsArguments> sign =
+                ACallAgainstANumber.of(comparison, at, sides,
+                        DefaultBoundOperationFacts.get()::statesTheOrderOfItsArguments);
+        if (sign == null) {
+            return null;
         }
-        return null;
+        Core greater = sign.applied().argument(sign.fact().greater());
+        Core lesser = sign.applied().argument(sign.fact().lesser());
+        Carrier counted = Carrier.ofValue(sign.answered().type(), sides.declarations());
+        if (greater == null || lesser == null || counted == null || !counted.counts()) {
+            return null;
+        }
+        ValueName operation = sign.applied().operation();
+        TheSign compared = new TheSign(operation, counted.spacing(), sign.written(),
+                sign.against());
+        return switch (of(operation, counted.spacing(), sign.written(), sign.against())) {
+            case null -> null;
+            case Stands.Settled _ -> new Read.Settled<>(compared);
+            case Stands.Between(Rel between, boolean isTheCondition) ->
+                    new Read.OfTheArguments<>(compared,
+                            new StatedComparison(ComparisonClaim.stating(between), greater, lesser,
+                                    // Two arguments of the operation that orders them, each
+                                    // standing as what it was passed as, and the order is the
+                                    // one over that type.
+                                    Core.BinaryReading.AS_THEY_STAND),
+                            sign.at(), isTheCondition);
+        };
     }
 
     /** The two arguments of {@code operation} whose order its answer is the sign of, the greater

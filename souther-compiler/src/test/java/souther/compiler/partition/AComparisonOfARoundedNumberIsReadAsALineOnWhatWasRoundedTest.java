@@ -2,12 +2,15 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ItemAssessment;
+import souther.compiler.report.AdequacyReport;
 import souther.runtime.CEILING;
 import souther.runtime.DOWN;
+import souther.runtime.DecimalMath;
 import souther.runtime.FLOOR;
 import souther.runtime.HALF_DOWN;
 import souther.runtime.HALF_EVEN;
@@ -17,6 +20,7 @@ import souther.runtime.RationalMath;
 import souther.runtime.RoundingMode;
 import souther.runtime.UP;
 
+import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.List;
@@ -26,7 +30,9 @@ import java.util.TreeSet;
 import java.util.function.LongPredicate;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A comparison of a number rounded to a whole one draws the line of the number before it was
@@ -65,8 +71,12 @@ class AComparisonOfARoundedNumberIsReadAsALineOnWhatWasRoundedTest {
         assertEquals(List.of("201"), bordersOf(rounded + " > 100"));
         assertEquals(List.of("199"), bordersOf(rounded + " < 100"));
         assertEquals(List.of("201"), bordersOf(rounded + " <= 100"));
-        assertEquals(List.of("199", "201"), bordersOf(rounded + " == 100"));
-        assertEquals(List.of("199", "201"), bordersOf(rounded + " /= 100"));
+        // Two lines a rule draws stand where its comparison does, so they are listed by what they
+        // are at rather than in the order a source would have written them.
+        assertEquals(Set.copyOf(bordersOf("x / 2 >= 99.5m && x / 2 <= 100.5m")),
+                Set.copyOf(bordersOf(rounded + " == 100")));
+        assertEquals(Set.copyOf(bordersOf("x / 2 < 99.5m || x / 2 > 100.5m")),
+                Set.copyOf(bordersOf(rounded + " /= 100")));
     }
 
     @Test
@@ -95,6 +105,68 @@ class AComparisonOfARoundedNumberIsReadAsALineOnWhatWasRoundedTest {
                     Ok
                 }
                 """).stream().map(BorderAssessment::value).toList());
+    }
+
+    /**
+     * A line at a half below a threshold past what a signed 64-bit number says is the decimal it is,
+     * and not a comparison left unread for want of a number to write it with.
+     */
+    @Test
+    void aLineAtAHalfPastALongIsTheDecimalItIs() {
+        assertEquals(List.of("5999999999999999999.5"), linesOfModel("""
+                module demo
+
+                data Ok
+                data No
+
+                behavior f : (d: Decimal) -> Ok | No
+                let f (d) = {
+                    guard Decimal.toInt(HALF_UP, d) >= 6000000000000000000 else No
+                    Ok
+                }
+                """).stream().map(BorderAssessment::value).toList());
+    }
+
+    /**
+     * A rounding built as a newtype and held against a value of it is the rounding held against the
+     * number, as the arithmetic reads a newtype: an average of pay rounded down to whole yen.
+     */
+    @Test
+    void aRoundingUnderANewtypeIsTheSameRule() {
+        assertEquals(bordersOf("x / 3 >= 100"), bordersOfModel("""
+                module demo
+
+                data Yen = Int
+                data Ok
+                data No
+
+                behavior f : (x: Int) -> Ok | No
+                let f (x) = {
+                    let average = Yen(Rational.toInt(DOWN, x / 3))
+                    guard average >= Yen(100) else No
+                    Ok
+                }
+                """));
+    }
+
+    /** The comparison the issue was about is read, and the measurement of it is complete. */
+    @Test
+    void theRoundedAverageIsReadAndItsMeasurementIsComplete() {
+        String report = human("""
+                module demo
+
+                data Low
+
+                behavior decide : (x: Int) -> Int | Low
+
+                let decide (x) = {
+                    let avg = Rational.toInt(DOWN, x / 2)
+                    guard avg >= 100 else Low
+                    avg
+                }
+                """);
+        assertTrue(report.contains("measurement: complete"), report);
+        assertFalse(report.contains("not read"), report);
     }
 
     /** A way of rounding the run chooses is read on each way the run can take to it. */
@@ -153,17 +225,50 @@ class AComparisonOfARoundedNumberIsReadAsALineOnWhatWasRoundedTest {
         }
     }
 
+    /**
+     * The same of a decimal, whose line at a half is the decimal taken twice against a whole number
+     * and whose rows are decimals.
+     */
+    @Test
+    void theRowsBuiltForADecimalStandOnBothSidesOfItsRounding() {
+        for (RoundingMode mode : List.of(HALF_UP.INSTANCE, HALF_EVEN.INSTANCE, DOWN.INSTANCE)) {
+            String condition = "Decimal.toInt(" + RoundingMode.__tag(mode) + ", d) >= 3";
+            Set<Boolean> sides = new TreeSet<>();
+            for (String d : rowTextsOf(linesOfModel("""
+                    module demo
+
+                    data Ok
+                    data No
+
+                    behavior f : (d: Decimal) -> Ok | No
+                    let f (d) = {
+                        guard %s else No
+                        Ok
+                    }
+                    """.formatted(condition)))) {
+                sides.add(DecimalMath.toInt(mode,
+                        new BigDecimal(d.substring(0, d.length() - 1))) >= 3);
+            }
+            assertEquals(Set.of(false, true), sides, () -> "rows on both sides of: " + condition);
+        }
+    }
+
     /** Every certified row's {@code x}. */
     private static List<Long> rowsOf(String condition) {
-        List<Long> xs = new ArrayList<>();
-        for (BorderAssessment border : linesOf(condition)) {
+        return rowTextsOf(linesOf(condition)).stream().map(Long::parseLong).toList();
+    }
+
+    /** How every certified row writes its first input. */
+    private static List<String> rowTextsOf(List<BorderAssessment> lines) {
+        List<String> xs = new ArrayList<>();
+        for (BorderAssessment border : lines) {
             for (ItemAssessment item : border.items().values()) {
                 if (!(item instanceof ItemAssessment.Owed owed)) {
                     continue;
                 }
                 for (ItemAssessment.Attempt attempt : owed.searches().each()) {
                     if (attempt instanceof ItemAssessment.Attempt.Certified certified) {
-                        xs.add(Long.parseLong(certified.row().inputs().getFirst().text()));
+                        xs.add(certified.row().inputs().getFirst().text());
                     }
                 }
             }
@@ -206,6 +311,14 @@ class AComparisonOfARoundedNumberIsReadAsALineOnWhatWasRoundedTest {
                     Ok
                 }
                 """.formatted(condition));
+    }
+
+    private static String human(String model) {
+        Compilation compilation = Compilation.ofSource(model, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        return AdequacyReport.of(compilation)
+                .human(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
     private static List<BorderAssessment> linesOfModel(String model) {

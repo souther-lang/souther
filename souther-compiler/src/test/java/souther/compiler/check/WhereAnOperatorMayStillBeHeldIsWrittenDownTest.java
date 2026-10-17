@@ -293,10 +293,6 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                     "writes the steps from one value to another as the difference of the two, so"
                             + " that a comparison of a count of whole units is read where any"
                             + " comparison of a difference is"),
-            new Held("souther.compiler.check.RoundedToAWholeNumber.taken",
-                    "writes a number taken twice as the sum of it with itself, so that a line at a"
-                            + " half below a whole number is a whole number and a comparison of a"
-                            + " rounded number is read where any comparison of a sum is"),
             new Held("souther.compiler.partition.ClauseStatements.walk",
                     "walks into both halves, and stops where the connective composes either of"
                             + " them because what such a rule states is neither of its sides"),

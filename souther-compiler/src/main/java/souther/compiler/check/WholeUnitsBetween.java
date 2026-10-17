@@ -4,12 +4,10 @@ import souther.compiler.core.Core;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactAnswer;
-import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.Rel;
 
 import java.math.BigInteger;
-import java.util.List;
 import java.util.Objects;
 
 /**
@@ -26,12 +24,11 @@ import java.util.Objects;
  * <p><b>The steps are the carrier's.</b> A fact of this kind is declared of an operation whose two
  * values are counted ({@link BoundOperationFact.CountsWholeUnitsBetween}), so what the steps between
  * two of them can be is read off the order the values are counted on: no further apart than its
- * first value and its last. A threshold past that is settled by it — every pair is on one side —
- * and one inside it that no signed 64-bit number can say is a comparison this does not read, and
- * says so by answering nothing.
+ * first value and its last. A threshold past that is settled by it — every pair is on one side.
  *
- * <p><b>One account for every reader of a condition.</b> Which side is the count, which way round
- * the relation is read from it, and which relations of the difference that comes to are answered
+ * <p><b>One account for every reader of a condition.</b> Which side is the count and which way round
+ * the relation is read from it are answered where every call against a number is found
+ * ({@link ACallAgainstANumber}), which relations of the difference that comes to are answered
  * here, and a reader says only what is particular to its own environment
  * ({@link TheSignOfAnOrder.Sides}).
  */
@@ -65,33 +62,22 @@ public final class WholeUnitsBetween {
      */
     public static <E> Read<E> read(StatedComparison comparison, E at,
                                    TheSignOfAnOrder.Sides<E> sides) {
-        for (boolean countFirst : List.of(true, false)) {
-            ValueStanding.ReadThrough<E> count =
-                    sides.standing(countFirst ? comparison.left() : comparison.right(), at);
-            AnOperationApplied applied = AnOperationApplied.of(Core.withoutStanding(count.value()));
-            BoundOperationFact.CountsWholeUnitsBetween counts = applied == null ? null
-                    : DefaultBoundOperationFacts.get().countsWholeUnitsBetween(applied.operation());
-            if (counts == null) {
-                continue;
-            }
-            Core from = applied.argument(counts.from());
-            Core to = applied.argument(counts.to());
-            ExactRatio against =
-                    sides.constant(countFirst ? comparison.right() : comparison.left(), at);
-            BigInteger widest = from == null ? null : widestDifference(from, sides);
-            if (to == null || against == null || widest == null || !against.isWhole()
-                    || !(against.floor() instanceof ExactAnswer.Held<BigInteger>(var whole))) {
-                return null;
-            }
-            // The relation the source wrote, read from the count's side: `count rel number`
-            // however the two were written round.
-            Rel written = (countFirst ? comparison.claim() : comparison.claim().turned())
-                    .statedRelation();
-            ConstantComparison statement =
-                    statementOf(written, whole, counts.perUnit(), widest);
-            return statement == null ? null : new Read<>(from, to, count.at(), statement);
+        ACallAgainstANumber<E, BoundOperationFact.CountsWholeUnitsBetween> count =
+                ACallAgainstANumber.of(comparison, at, sides,
+                        DefaultBoundOperationFacts.get()::countsWholeUnitsBetween);
+        BigInteger whole = count == null ? null : count.whole();
+        if (whole == null) {
+            return null;
         }
-        return null;
+        Core from = count.applied().argument(count.fact().from());
+        Core to = count.applied().argument(count.fact().to());
+        BigInteger widest = from == null ? null : widestDifference(from, sides);
+        if (to == null || widest == null) {
+            return null;
+        }
+        ConstantComparison statement =
+                statementOf(count.written(), whole, count.fact().perUnit(), widest);
+        return statement == null ? null : new Read<>(from, to, count.at(), statement);
     }
 
     /**

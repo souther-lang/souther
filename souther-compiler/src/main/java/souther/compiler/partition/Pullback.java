@@ -5315,24 +5315,32 @@ final class Pullback {
      * <p>Each comparison is read as any comparison is, so a rule that turns one thing into another
      * hands over the tree of what the other states and nothing of how it is read. A comparison the
      * range of the number settles is the same for every value and has nothing to be written against.
+     * Null where a number it is against is one nothing written beside the subject says
+     * ({@link ConstantComparison#stated}), and then the statement is not read in part.
      */
     private Derivation theStatementStands(ConstantComparison statement, Core subject,
                                           Denotation at, boolean fixed, InputReads reads) {
         return switch (statement) {
             case ConstantComparison.Settled(boolean holds) -> new Derivation.WrittenOut(holds);
             case ConstantComparison.Both(var first, var second) ->
-                    new Derivation.Joined(ConditionJoin.BOTH,
+                    joined(ConditionJoin.BOTH,
                             theStatementStands(first, subject, at, fixed, reads),
                             theStatementStands(second, subject, at, fixed, reads));
             case ConstantComparison.Either(var first, var second) ->
-                    new Derivation.Joined(ConditionJoin.EITHER,
+                    joined(ConditionJoin.EITHER,
                             theStatementStands(first, subject, at, fixed, reads),
                             theStatementStands(second, subject, at, fixed, reads));
-            case ConstantComparison.Against(Rel rel, BigInteger against) -> comparison(
-                    new StatedComparison(ComparisonClaim.stating(rel), subject,
-                            new Core.Int(against.longValue(), Type.INT, subject.pos()),
-                            Core.BinaryReading.AS_THEY_STAND), at, fixed, reads);
+            case ConstantComparison.Against(Rel rel, ExactRatio against) -> {
+                StatedComparison written = ConstantComparison.stated(rel, subject, against);
+                yield written == null ? null : comparison(written, at, fixed, reads);
+            }
         };
+    }
+
+    /** Both or either of two statements read, or null where either was not. */
+    private static Derivation joined(ConditionJoin join, Derivation first, Derivation second) {
+        return first == null || second == null ? null
+                : new Derivation.Joined(join, first, second);
     }
 
     /** {@code side}, where it is the year of a date that stands at no position. */
@@ -5800,6 +5808,11 @@ final class Pullback {
             @Override
             public DeclarationAccess declarations() {
                 return read.rules().declarations();
+            }
+
+            @Override
+            public DeclarationNewtypes newtypes() {
+                return read.rules().newtypes();
             }
         };
     }
