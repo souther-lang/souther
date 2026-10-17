@@ -179,6 +179,74 @@ public final class ExactArithmetic {
     }
 
     /**
+     * The powers of five a long holds with a bit to spare, by their exponent: past the last of them
+     * a number raised by one is past what the long route holds whatever it was.
+     */
+    private static final long[] FIVES = fives();
+
+    private static long[] fives() {
+        long[] out = new long[27];
+        out[0] = 1;
+        for (int at = 1; at < out.length; at++) {
+            out[at] = out[at - 1] * 5;
+        }
+        return out;
+    }
+
+    /** Whether both whole numbers of {@code parts} take the long route: a long holds each with a
+     *  bit to spare, as it does for {@link #canonical(long, long, long, long)}. */
+    private static boolean inLongs(ExactParts parts) {
+        return parts.numerator().bitLength() < Long.SIZE - 1
+                && parts.denominator().bitLength() < Long.SIZE - 1;
+    }
+
+    /** How many bits the magnitude of {@code whole} takes, which the long route holds below
+     *  sixty-three. */
+    private static int bits(long whole) {
+        return Long.SIZE - Long.numberOfLeadingZeros(Math.abs(whole));
+    }
+
+    /** Whether the product of two numbers the long route holds is one it holds as well. Asked of
+     *  their lengths, so it turns away some products that would have fitted, and those go wide. */
+    private static boolean multipliesInALong(long a, long b) {
+        return bits(a) + bits(b) < Long.SIZE - 1;
+    }
+
+    /** Whether two exponents add up to one a long holds — the question {@link ExactPowers#added}
+     *  answers by refusing, asked so that the refusal is left to the arithmetic at any width. */
+    private static boolean addedInALong(long a, long b) {
+        long sum = a + b;
+        return ((a ^ sum) & (b ^ sum)) >= 0;
+    }
+
+    /** Whether the difference of two exponents is one a long holds, as {@link #addedInALong} asks of
+     *  their sum. */
+    private static boolean lessenedInALong(long a, long b) {
+        long difference = a - b;
+        return ((a ^ b) & (a ^ difference)) >= 0;
+    }
+
+    /**
+     * {@code whole × 2^twos × 5^fives}, or nought where the long route does not hold it.
+     *
+     * <p>The exponents are each the distance from an exponent down to the lesser of two, so they are
+     * never below nought, and a distance past what a long holds has wrapped: read unsigned, it is
+     * the distance still, and far past any that is built here. {@code whole} is not nought, so
+     * nought says nothing but that this went wide.
+     */
+    private static long raised(long whole, long twos, long fives) {
+        if (Long.compareUnsigned(twos, Long.SIZE - 2) > 0
+                || Long.compareUnsigned(fives, FIVES.length - 1) > 0) {
+            return 0;
+        }
+        long five = FIVES[(int) fives];
+        if (bits(whole) + (int) twos + bits(five) >= Long.SIZE - 1) {
+            return 0;
+        }
+        return (whole << twos) * five;
+    }
+
+    /**
      * The product of {@code factors}: one answer for the factors in whatever order they come, refused
      * only where the product itself has no representation.
      *
@@ -229,6 +297,48 @@ public final class ExactArithmetic {
      * than the answer.
      */
     public static ExactParts times(ExactParts a, ExactParts b) {
+        ExactParts inLongs = timesInLongs(a, b);
+        return inLongs != null ? inLongs : timesAtAnyWidth(a, b);
+    }
+
+    /**
+     * {@link #times}, worked out in longs where every number on the way is one the long route holds,
+     * and null where one is not or where the exponents are past sixty-four bits. The same parts as
+     * {@link #timesAtAnyWidth}, by the same steps: nearly every product the constraint algebra makes
+     * is of small fractions, and a {@code BigInteger} answers each step with a new one.
+     *
+     * <p>Null is not a refusal. A product whose working the long route does not hold is worked out
+     * at any width, and that is what refuses where the product has no representation.
+     */
+    static ExactParts timesInLongs(ExactParts a, ExactParts b) {
+        if (a.isZero() || b.isZero() || !inLongs(a) || !inLongs(b)) {
+            return null;
+        }
+        if (!addedInALong(a.twos(), b.twos()) || !addedInALong(a.fives(), b.fives())) {
+            return null;
+        }
+        long twos = a.twos() + b.twos();
+        long fives = a.fives() + b.fives();
+        long aNumerator = a.numerator().longValue();
+        long aDenominator = a.denominator().longValue();
+        long bNumerator = b.numerator().longValue();
+        long bDenominator = b.denominator().longValue();
+        long acrossOne = commonFactor(Math.abs(aNumerator), Math.abs(bDenominator));
+        long acrossTwo = commonFactor(Math.abs(bNumerator), Math.abs(aDenominator));
+        long numeratorOne = aNumerator / acrossOne;
+        long numeratorTwo = bNumerator / acrossTwo;
+        long denominatorOne = aDenominator / acrossTwo;
+        long denominatorTwo = bDenominator / acrossOne;
+        if (!multipliesInALong(numeratorOne, numeratorTwo)
+                || !multipliesInALong(denominatorOne, denominatorTwo)) {
+            return null;
+        }
+        return new ExactParts(BigInteger.valueOf(numeratorOne * numeratorTwo),
+                BigInteger.valueOf(denominatorOne * denominatorTwo), twos, fives);
+    }
+
+    /** {@link #times}, in whole numbers of whatever size the operands are. */
+    static ExactParts timesAtAnyWidth(ExactParts a, ExactParts b) {
         if (a.isZero() || b.isZero()) {
             return ExactParts.ZERO;
         }
@@ -257,6 +367,44 @@ public final class ExactArithmetic {
      * @throws IllegalArgumentException where the divisor is nought
      */
     public static ExactParts dividedBy(ExactParts a, ExactParts b) {
+        ExactParts inLongs = dividedByInLongs(a, b);
+        return inLongs != null ? inLongs : dividedByAtAnyWidth(a, b);
+    }
+
+    /**
+     * {@link #dividedBy}, worked out in longs as {@link #timesInLongs} works out the product, and
+     * null where it is not. A divisor's sign stays on the denominator handed back, as it does at any
+     * width, and a nought on either side is left to that as well, which says what each one means.
+     */
+    static ExactParts dividedByInLongs(ExactParts a, ExactParts b) {
+        if (a.isZero() || b.isZero() || !inLongs(a) || !inLongs(b)) {
+            return null;
+        }
+        if (!lessenedInALong(a.twos(), b.twos()) || !lessenedInALong(a.fives(), b.fives())) {
+            return null;
+        }
+        long twos = a.twos() - b.twos();
+        long fives = a.fives() - b.fives();
+        long aNumerator = a.numerator().longValue();
+        long aDenominator = a.denominator().longValue();
+        long bNumerator = b.numerator().longValue();
+        long bDenominator = b.denominator().longValue();
+        long acrossOne = commonFactor(Math.abs(aNumerator), Math.abs(bNumerator));
+        long acrossTwo = commonFactor(Math.abs(aDenominator), Math.abs(bDenominator));
+        long numeratorOne = aNumerator / acrossOne;
+        long numeratorTwo = bDenominator / acrossTwo;
+        long denominatorOne = aDenominator / acrossTwo;
+        long denominatorTwo = bNumerator / acrossOne;
+        if (!multipliesInALong(numeratorOne, numeratorTwo)
+                || !multipliesInALong(denominatorOne, denominatorTwo)) {
+            return null;
+        }
+        return new ExactParts(BigInteger.valueOf(numeratorOne * numeratorTwo),
+                BigInteger.valueOf(denominatorOne * denominatorTwo), twos, fives);
+    }
+
+    /** {@link #dividedBy}, in whole numbers of whatever size the operands are. */
+    static ExactParts dividedByAtAnyWidth(ExactParts a, ExactParts b) {
         if (b.isZero()) {
             throw new IllegalArgumentException("nought divides nothing");
         }
@@ -699,6 +847,72 @@ public final class ExactArithmetic {
      * has no sum, and that is a limit of the operation and not a limit of the machine.
      */
     public static ExactParts plus(ExactParts a, ExactParts b) {
+        ExactParts inLongs = plusInLongs(a, b);
+        return inLongs != null ? inLongs : plusAtAnyWidth(a, b);
+    }
+
+    /**
+     * {@link #plus}, worked out in longs where every number on the way is one the long route holds,
+     * and null where one is not. The same parts as {@link #plusAtAnyWidth}, by the same steps: the
+     * terms raised to the lesser of each exponent, the denominators' common factor off, and the sum
+     * formed with its factors of two taken off as {@link #summed} takes them.
+     *
+     * <p>Null is not a refusal, here least of all. A sum whose working is past a long can still come
+     * to an ordinary value, and the arithmetic at any width is what forms it, or refuses where the
+     * sum has no representation.
+     */
+    static ExactParts plusInLongs(ExactParts a, ExactParts b) {
+        if (a.isZero() || b.isZero() || !inLongs(a) || !inLongs(b)) {
+            return null;
+        }
+        long commonTwos = Math.min(a.twos(), b.twos());
+        long commonFives = Math.min(a.fives(), b.fives());
+        long here = raised(a.numerator().longValue(),
+                a.twos() - commonTwos, a.fives() - commonFives);
+        long there = raised(b.numerator().longValue(),
+                b.twos() - commonTwos, b.fives() - commonFives);
+        if (here == 0 || there == 0) {
+            return null;
+        }
+        long aDenominator = a.denominator().longValue();
+        long bDenominator = b.denominator().longValue();
+        long shared = commonFactor(Math.abs(aDenominator), Math.abs(bDenominator));
+        long overThis = aDenominator / shared;
+        long overThat = bDenominator / shared;
+        if (!multipliesInALong(here, overThat) || !multipliesInALong(there, overThis)
+                || !multipliesInALong(overThis, bDenominator)) {
+            return null;
+        }
+        // Both below sixty-two bits, so their sum is held whatever their signs.
+        long one = here * overThat;
+        long other = there * overThis;
+        long whole;
+        int twos;
+        if (Long.signum(one) != Long.signum(other)) {
+            whole = one + other;
+            twos = 0;
+        } else {
+            int common = Math.min(Long.numberOfTrailingZeros(one),
+                    Long.numberOfTrailingZeros(other));
+            one >>= common;
+            other >>= common;
+            if ((one & 1) != 0 && (other & 1) != 0) {
+                whole = (one >> 1) + (other >> 1) + 1;
+                twos = common + 1;
+            } else {
+                whole = one + other;
+                twos = common;
+            }
+        }
+        if (!addedInALong(commonTwos, twos)) {
+            return null;
+        }
+        return new ExactParts(BigInteger.valueOf(whole),
+                BigInteger.valueOf(overThis * bDenominator), commonTwos + twos, commonFives);
+    }
+
+    /** {@link #plus}, in whole numbers of whatever size the operands are. */
+    static ExactParts plusAtAnyWidth(ExactParts a, ExactParts b) {
         if (a.isZero()) {
             return b;
         }
