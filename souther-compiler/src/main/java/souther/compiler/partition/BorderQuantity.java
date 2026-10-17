@@ -59,7 +59,8 @@ import java.util.stream.Collectors;
  * an arm.
  */
 public sealed interface BorderQuantity
-        permits LinearQuantity, BorderQuantity.HowMany, BorderQuantity.RemainderOfAForm {
+        permits LinearQuantity, BorderQuantity.HowMany, BorderQuantity.RemainderOfAForm,
+        BorderQuantity.ProductOfAPair {
 
     /**
      * The number one position holds, which is the position's own values.
@@ -1218,8 +1219,221 @@ public sealed interface BorderQuantity
         }
     }
 
+    /**
+     * What two whole numbers of a row come to multiplied: a price times a quantity.
+     *
+     * <p>No form over the row's numbers and no line on either of them. A row at a level of it is a
+     * pair whose product is the level, and which pair that is turns on both: where one factor is
+     * fixed, the other is held to a run its sign sets the direction of, and where it is nought the
+     * product is nought whatever the other holds. So a border on it says where the product is and
+     * nothing of where either factor is.
+     *
+     * <p>The factors are read as a form of the two, each weighed by one, which is what reads a
+     * row's numbers; the quantity is what the two read values come to multiplied.
+     *
+     * @param factors the two factors, each weighed by one and on an order of whole numbers
+     */
+    record ProductOfAPair(String behavior, OverAForm factors) implements BorderQuantity {
+
+        public ProductOfAPair {
+            if (behavior == null || factors == null || factors.form().coefs().size() != 2
+                    || !factors.form().coefs().values().stream()
+                            .allMatch(weight -> weight.compareTo(ExactRatio.ONE) == 0)) {
+                throw new IllegalArgumentException("a product is of two factors, each read as"
+                        + " itself: " + factors);
+            }
+            for (TermOrders each : factors.on().values()) {
+                if (!(each.answered() instanceof Carrier.Whole)) {
+                    throw new IllegalArgumentException("a product read here is of whole numbers,"
+                            + " and this order is not one of them: " + each.answered());
+                }
+            }
+        }
+
+        /** The two factors, in the order of the terms. */
+        List<NumericTerm> terms() {
+            return factors.terms();
+        }
+
+        /** The factor at {@code at} in that order, as a form of itself alone. */
+        LinearForm<NumericTerm> alone(int at) {
+            return new LinearForm<>(ExactRatio.ZERO, Map.of(terms().get(at), ExactRatio.ONE));
+        }
+
+        /**
+         * A run holding every product of a value of {@code one} and a value of {@code other}, each
+         * end inclusive and open where the products have no end — or open throughout where an end
+         * of either is no number.
+         *
+         * <p>Where the products lie and nothing about which of them a row comes to: a run of each
+         * factor multiplies to the run between the products of their ends, and every product of a
+         * value of each lies between those, whatever lies between them.
+         */
+        static NumericDomain.Bounds across(NumericDomain.Bounds one, NumericDomain.Bounds other) {
+            OnALine[] first = {OnALine.of(one.min(), -1), OnALine.of(one.max(), 1)};
+            OnALine[] second = {OnALine.of(other.min(), -1), OnALine.of(other.max(), 1)};
+            OnALine least = null;
+            OnALine most = null;
+            for (OnALine a : first) {
+                for (OnALine b : second) {
+                    OnALine product = a == null || b == null ? null : a.times(b);
+                    if (product == null) {
+                        return NumericDomain.Bounds.OPEN;
+                    }
+                    least = least == null || product.compareTo(least) < 0 ? product : least;
+                    most = most == null || product.compareTo(most) > 0 ? product : most;
+                }
+            }
+            return new NumericDomain.Bounds(least.asAnEnd(), most.asAnEnd());
+        }
+
+        /**
+         * A number, or one of the two ends of the line no number reaches.
+         *
+         * @param past   which end it is, below or above every number, or nought where it is a number
+         * @param number the number, where it is one
+         */
+        private record OnALine(int past, ExactRatio number) implements Comparable<OnALine> {
+
+            /** {@code end} as a place on the line, past it on the {@code side} it is open to — or
+             *  null where the end is no number. */
+            static OnALine of(Endpoint end, int side) {
+                if (end == null) {
+                    return new OnALine(side, null);
+                }
+                return end.at() instanceof Count count ? new OnALine(0, count.exactly()) : null;
+            }
+
+            /** The two multiplied, or null where the product could not be held. A number past an
+             *  end times nought is nought, which is what the products of a run beside nought come
+             *  near and not past. */
+            OnALine times(OnALine other) {
+                if (past == 0 && other.past == 0) {
+                    return number.times(other.number) instanceof ExactAnswer.Held<ExactRatio>(
+                            ExactRatio product) ? new OnALine(0, product) : null;
+                }
+                int sign = signum() * other.signum();
+                return sign == 0 ? new OnALine(0, ExactRatio.ZERO) : new OnALine(sign, null);
+            }
+
+            private int signum() {
+                return past != 0 ? past : number.signum();
+            }
+
+            /** This as an inclusive end, or none where it is past every number. */
+            Endpoint asAnEnd() {
+                if (past != 0) {
+                    return null;
+                }
+                return number.floor() instanceof ExactAnswer.Held<BigInteger>(BigInteger whole)
+                        && number.isWhole()
+                        ? Endpoint.inclusive(Count.of(new BigDecimal(whole))) : null;
+            }
+
+            @Override
+            public int compareTo(OnALine other) {
+                if (past != 0 || other.past != 0) {
+                    return Integer.compare(past, other.past);
+                }
+                return number.compareTo(other.number);
+            }
+        }
+
+        /** Every whole number, each a product of itself and one. */
+        @Override
+        public LevelSpace levels() {
+            return LevelSpace.steppingBy(ExactRatio.ONE);
+        }
+
+        @Override
+        public Stands standsAt(Criterion where, Observation row) {
+            return switch (factors.valuesOf(factors.read(row))) {
+                case ValuesAtARow.NoneHere _ -> Stands.NO;
+                case ValuesAtARow.CouldNotTell(Set<ReadingGap> why) -> Stands.couldNotTell(why);
+                case ValuesAtARow.Read(Map<NumericTerm, Place> values) ->
+                        switch (OrderedAffineBoundary.productAt(terms(), values)) {
+                            case ExactAnswer.Unheld<ExactRatio> unheld ->
+                                    Stands.couldNotTell(Set.of(ReadingGap.of(unheld.why())));
+                            case ExactAnswer.Held<ExactRatio>(ExactRatio product) ->
+                                    where.holds(new Level.OfTheQuantity(product))
+                                            ? Stands.YES : Stands.NO;
+                        };
+            };
+        }
+
+        @Override
+        public void lookAt(Observation row) {
+            factors.lookAt(row);
+        }
+
+        @Override
+        public Standing standingAt(Criterion where) {
+            List<NumericTerm> both = terms();
+            return new Standing.OfAProduct(both.get(0).atOnePosition(),
+                    both.get(1).atOnePosition(), LinearQuantity.answeredOn(factors.on()),
+                    levels(), where);
+        }
+
+        @Override
+        public String behavior() {
+            return behavior;
+        }
+
+        @Override
+        public String named() {
+            return new AxisId(behavior, left()).toString();
+        }
+
+        /** The product as an author would write it, the factors in their order. */
+        @Override
+        public String left() {
+            List<NumericTerm> both = terms();
+            return both.get(0) + " * " + both.get(1);
+        }
+
+        @Override
+        public String writtenAt(Level level) {
+            if (!(level instanceof Level.OfTheQuantity product)) {
+                throw new IllegalStateException(
+                        "a product was asked to write a level that is not a number: " + level);
+            }
+            return product.at().spelled();
+        }
+
+        @Override
+        public BoundaryTarget.Shape shape() {
+            return BoundaryTarget.Shape.PRODUCT_OF_TWO;
+        }
+    }
+
     /** How this quantity's own values are ordered, and which of them it can take. */
     LevelSpace levels();
+
+    /**
+     * What a line on this at {@code at}, holding as {@code relation}, states as a relation of the
+     * input's numbers, which is what each term it relates is asked of ({@link UndividedByARelation})
+     * — one that shows nothing where this is neither a form of them nor a product of two.
+     *
+     * <p>A form is held against nought, which is the level taken over to the form's side: a
+     * counted level is that number, and a level on a carrier the number its place counts to where
+     * it counts to one — and no number where it does not, a string being ordered and counting to
+     * nothing. A product is held against the level as it is, and relates its two factors.
+     */
+    default UndividedByARelation relationAt(Level at, Rel relation) {
+        return switch (this) {
+            case LinearQuantity linear -> UndividedByARelation.ofTheInputsNumbers(
+                    linear.direction(), switch (at) {
+                        case Level.OfTheQuantity(ExactRatio level) -> level.negated();
+                        case Level.OnACarrier(Carrier _, Place place) ->
+                                place instanceof Count count ? count.exactly().negated() : null;
+                    }, relation);
+            case ProductOfAPair product -> at instanceof Level.OfTheQuantity(ExactRatio level)
+                    ? UndividedByARelation.ofAProduct(product.terms().get(0).atOnePosition(),
+                            product.terms().get(1).atOnePosition(), level, relation)
+                    : UndividedByARelation.SHOWING_NOTHING;
+            case HowMany _, RemainderOfAForm _ -> UndividedByARelation.SHOWING_NOTHING;
+        };
+    }
 
     /**
      * Whether a bound on this quantity is what stops the range the rules leave it.
@@ -1241,6 +1455,8 @@ public sealed interface BorderQuantity
             // What a remainder runs between is nought to one below its divisor, whatever any rule
             // about it says.
             case RemainderOfAForm _ -> false;
+            // And a product between what its factors' ranges multiply to.
+            case ProductOfAPair _ -> false;
         };
     }
 
@@ -1265,7 +1481,7 @@ public sealed interface BorderQuantity
     default NumbersAskedFor asksOfEachTerm(Criterion where) {
         return switch (this) {
             case OfACoordinate _ -> NumbersAskedFor.of(where.region());
-            case Apart _, OverAForm _, HowMany _, RemainderOfAForm _ ->
+            case Apart _, OverAForm _, HowMany _, RemainderOfAForm _, ProductOfAPair _ ->
                     NumbersAskedFor.onlyTogether(new QuantityInRegion(this, where.region()));
         };
     }
@@ -1307,6 +1523,7 @@ public sealed interface BorderQuantity
             }
             case HowMany count -> count.left();
             case RemainderOfAForm remainder -> remainder.left();
+            case ProductOfAPair product -> product.left();
         };
     }
 
@@ -1317,7 +1534,7 @@ public sealed interface BorderQuantity
     default ExactRatio per() {
         return switch (this) {
             case LinearQuantity form -> QuantityKey.per(form.direction());
-            case HowMany _, RemainderOfAForm _ -> ExactRatio.ONE;
+            case HowMany _, RemainderOfAForm _, ProductOfAPair _ -> ExactRatio.ONE;
         };
     }
 
@@ -1333,6 +1550,7 @@ public sealed interface BorderQuantity
             case LinearQuantity form -> form.terms();
             case HowMany count -> count.allNumbers();
             case RemainderOfAForm remainder -> remainder.dividend().terms();
+            case ProductOfAPair product -> product.terms();
         };
     }
 
@@ -1343,6 +1561,9 @@ public sealed interface BorderQuantity
             case LinearQuantity form -> quantities.runsBetween(form.direction());
             case HowMany count -> count.runs();
             case RemainderOfAForm remainder -> remainder.runs();
+            case ProductOfAPair product -> ProductOfAPair.across(
+                    quantities.runsBetween(product.alone(0)),
+                    quantities.runsBetween(product.alone(1)));
         };
     }
 
@@ -1360,6 +1581,22 @@ public sealed interface BorderQuantity
             // Whatever the rules leave the form, a remainder stays below its divisor.
             case RemainderOfAForm remainder ->
                     new NumericDomain.FormProjection.Within(remainder.runs());
+            // What the region leaves each factor, multiplied: nothing where it leaves either none.
+            case ProductOfAPair product -> {
+                NumericDomain.Bounds[] each = new NumericDomain.Bounds[2];
+                for (int i = 0; i < 2; i++) {
+                    switch (region.projectionOf(product.terms().get(i))) {
+                        case NumericDomain.FormProjection.Within(NumericDomain.Bounds held) ->
+                                each[i] = held == null ? NumericDomain.Bounds.OPEN : held;
+                        case NumericDomain.FormProjection.NothingIsLeft nothing -> {
+                            yield nothing;
+                        }
+                        case null -> each[i] = NumericDomain.Bounds.OPEN;
+                    }
+                }
+                yield new NumericDomain.FormProjection.Within(ProductOfAPair.across(each[0],
+                        each[1]));
+            }
         };
     }
 
@@ -1386,6 +1623,9 @@ public sealed interface BorderQuantity
             case RemainderOfAForm remainder -> HeldValues.OfAForm.of(region,
                     remainder.dividend().terms(), values -> OrderedAffineBoundary.remainderAt(
                             remainder.wholeDividend(), remainder.divisor(), values));
+            case ProductOfAPair product -> HeldValues.OfAForm.of(region, product.terms(),
+                    values -> OrderedAffineBoundary.productAt(product.terms(), values)
+                            .map(Optional::of));
             case HowMany _ -> HeldValues.NONE;
         };
     }
@@ -1397,7 +1637,8 @@ public sealed interface BorderQuantity
     default List<FilingCoordinate> filedAt() {
         return switch (this) {
             case LinearQuantity form -> AffineReading.filedAt(form.direction().coefs().keySet());
-            case HowMany _, RemainderOfAForm _ -> AffineReading.filedAt(numbers());
+            case HowMany _, RemainderOfAForm _, ProductOfAPair _ ->
+                    AffineReading.filedAt(numbers());
         };
     }
 
@@ -1418,7 +1659,7 @@ public sealed interface BorderQuantity
         return switch (this) {
             case Apart apart -> apart.counts();
             case OfACoordinate coordinate -> coordinate.of().answered().counts();
-            case OverAForm _, HowMany _, RemainderOfAForm _ -> true;
+            case OverAForm _, HowMany _, RemainderOfAForm _, ProductOfAPair _ -> true;
         };
     }
 
@@ -1433,6 +1674,8 @@ public sealed interface BorderQuantity
     default BlockReason.ReadToEndWithoutLine whyItDividesNoPosition() {
         return switch (this) {
             case RemainderOfAForm _ -> new BlockReason.ComparisonOnARemainder();
+            // Two numbers of the input multiplied, which relates the two.
+            case ProductOfAPair _ -> new BlockReason.ComparisonRelatingTwoValues();
             case LinearQuantity _, HowMany _ -> readOverARun()
                     ? new BlockReason.ComparisonOverARun()
                     : new BlockReason.ComparisonRelatingTwoValues();
@@ -1448,6 +1691,7 @@ public sealed interface BorderQuantity
             case HowMany _ -> true;
             case RemainderOfAForm remainder -> remainder.dividend().direction().coefs().keySet()
                     .stream().anyMatch(term -> term.atOnePosition() == null);
+            case ProductOfAPair _ -> false;
         };
     }
 
@@ -1459,7 +1703,7 @@ public sealed interface BorderQuantity
         return switch (this) {
             case LinearQuantity form -> form.direction().coefs().size() == 1
                     ? form.carrierOf(form.direction().coefs().keySet().iterator().next()) : null;
-            case HowMany _, RemainderOfAForm _ -> null;
+            case HowMany _, RemainderOfAForm _, ProductOfAPair _ -> null;
         };
     }
 
@@ -1553,6 +1797,8 @@ public sealed interface BorderQuantity
             case HowMany _ -> true;
             // What a division leaves, which is the call's and not a position's.
             case RemainderOfAForm _ -> true;
+            // What two numbers come to multiplied, which is the product's and not a position's.
+            case ProductOfAPair _ -> true;
         };
     }
 

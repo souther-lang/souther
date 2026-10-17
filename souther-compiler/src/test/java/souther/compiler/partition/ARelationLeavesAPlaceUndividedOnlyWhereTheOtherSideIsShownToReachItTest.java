@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
+import souther.compiler.query.PartitionEvidence;
 import souther.compiler.report.AdequacyReport;
 
 import java.util.LinkedHashMap;
@@ -37,7 +38,32 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
 
     private static final String NOT_SHOWN = "not shown";
 
-    /** The word each place is left with by the comparison at {@code at}, by its name. */
+    /**
+     * The classes the axis at {@code path} is divided into, where a place the relation does not
+     * leave undivided is parted at the values that settle it whatever the rest hold — or none
+     * where no axis is there.
+     */
+    private static List<String> classesAt(String inputs, String declarations, String body,
+                                          String path) {
+        Compilation compilation = Compilation.ofSource("""
+                module w1
+                %s
+                behavior m : (%s) -> Bool
+                let m (%s) = %s
+                """.formatted(declarations, inputs, inputs.replaceAll(": [A-Za-z]+", ""), body),
+                "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        PartitionEvidence evidence =
+                compilation.db().ask(new Adequacy.Coverage("w1")).value().get("m");
+        return evidence.axes().stream().filter(axis -> axis.path().equals(path))
+                .flatMap(axis -> axis.classes().stream()).toList();
+    }
+
+    /**
+     * The word each place is left with by the comparison at {@code at}, by its name. A place the
+     * comparison divides — at the values that settle it whatever the rest hold — is left none.
+     */
     private static Map<String, String> left(String inputs, String declarations, String body,
                                             String at) {
         Compilation compilation = Compilation.ofSource("""
@@ -66,11 +92,15 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         return out;
     }
 
+    /** An amount at nought or more is never a number below nought, so those numbers settle the
+     *  comparison and are a class of their own; from nought on, the amount reaches each. */
     @Test
     void aValueHeldToARunReachesWhatLiesInItAndNoMore() {
-        assertEquals(Map.of("a", RELATES, "n", NOT_SHOWN),
-                left("a: Amount, n: Int", "data Amount = Int invariant value >= 0",
-                        "n == a.value", "4:18"));
+        String amount = "data Amount = Int invariant value >= 0";
+        assertEquals(Map.of("a", RELATES),
+                left("a: Amount, n: Int", amount, "n == a.value", "4:18"));
+        assertEquals(List.of("n/x <= -1", "n/-1 < x"),
+                classesAt("a: Amount, n: Int", amount, "n == a.value", "n"));
     }
 
     /**
@@ -82,10 +112,12 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     @Test
     void anAmountHeldAtNoughtOrMoreReachesEveryOtherAmountFromItsEndOn() {
         String yen = "data Yen = Int invariant value >= 0";
-        assertEquals(Map.of("g", RELATES, "d", NOT_SHOWN),
+        assertEquals(Map.of("g", RELATES),
                 left("g: Yen, d: Yen", yen, "g.value >= d.value", "4:24"));
-        assertEquals(Map.of("g", RELATES, "d", NOT_SHOWN),
+        assertEquals(Map.of("g", RELATES),
                 left("g: Yen, d: Yen", yen, "d.value <= g.value", "4:24"));
+        assertEquals(List.of("d/0 <= x <= 0", "d/0 < x"),
+                classesAt("g: Yen, d: Yen", yen, "g.value >= d.value", "d"));
     }
 
     /**
@@ -105,9 +137,12 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
      *  deduction has no gross below it. */
     @Test
     void anAmountHeldBetweenTwoEndsIsDividedAtTheEndNothingReachesPast() {
-        assertEquals(Map.of("g", NOT_SHOWN, "d", NOT_SHOWN),
-                left("g: Yen, d: Yen", "data Yen = Int invariant value >= 0 && value <= 10",
-                        "g.value >= d.value", "4:24"));
+        String yen = "data Yen = Int invariant value >= 0 && value <= 10";
+        assertEquals(Map.of(), left("g: Yen, d: Yen", yen, "g.value >= d.value", "4:24"));
+        assertEquals(List.of("g/0 <= x < 10", "g/10 <= x <= 10"),
+                classesAt("g: Yen, d: Yen", yen, "g.value >= d.value", "g"));
+        assertEquals(List.of("d/0 <= x <= 0", "d/0 < x <= 10"),
+                classesAt("g: Yen, d: Yen", yen, "g.value >= d.value", "d"));
     }
 
     /**
@@ -123,14 +158,18 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
      */
     @Test
     void endsThatAreNotAllTheRulesSayLeaveTheValueReachingNothingShown() {
+        Map<String, Map<String, String>> eachRule = new LinkedHashMap<>();
         for (String rule : List.of("value >= 0 && value /= 5",
                 "value >= 0 && Int.floorMod(value, 2) == 0",
                 "value >= 0 && value * value >= 4")) {
-            assertEquals(Map.of("g", NOT_SHOWN, "d", NOT_SHOWN),
-                    leftAt("g: Amount, d: Yen", "data Amount = Int invariant value >= 0"
-                            + "\ndata Yen = Int invariant " + rule, "g.value >= d.value", 24),
-                    rule);
+            eachRule.put(rule, leftAt("g: Amount, d: Yen", "data Amount = Int invariant value >= 0"
+                    + "\ndata Yen = Int invariant " + rule, "g.value >= d.value", 24));
         }
+        // Where what the gross reaches is shown, a deduction of nought settles the comparison
+        // whatever the gross is, and is a class of its own.
+        assertEquals(Map.of("value >= 0 && value /= 5", Map.of("g", NOT_SHOWN, "d", NOT_SHOWN),
+                "value >= 0 && Int.floorMod(value, 2) == 0", Map.of("g", NOT_SHOWN),
+                "value >= 0 && value * value >= 4", Map.of("g", NOT_SHOWN)), eachRule);
         for (String rule : List.of("value >= \"b\" && String.length(value) <= 1",
                 "value >= \"b\"")) {
             assertEquals(Map.of("g", NOT_SHOWN, "d", NOT_SHOWN),
@@ -143,8 +182,10 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
      *  it is held to. */
     @Test
     void aLengthReachesEveryNumberAtOrAboveNoughtAndNothingBelow() {
-        assertEquals(Map.of("String.length(s)", RELATES, "n", NOT_SHOWN),
+        assertEquals(Map.of("String.length(s)", RELATES),
                 left("n: Int, s: String", "data Unused = Int", "n == String.length(s)", "4:18"));
+        assertEquals(List.of("n/x <= -1", "n/-1 < x"), classesAt("n: Int, s: String",
+                "data Unused = Int", "n == String.length(s)", "n"));
         assertEquals(Map.of("n", RELATES, "String.length(s)", RELATES),
                 left("n: N, s: String", "data N = Int invariant value >= 0",
                         "n.value == String.length(s)", "4:24"));
@@ -162,22 +203,31 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
      *  to them is. */
     @Test
     void anHourReachesTheHoursOfADay() {
-        assertEquals(Map.of("Time.hour(t)", RELATES, "n", NOT_SHOWN),
+        assertEquals(Map.of("Time.hour(t)", RELATES),
                 left("n: Int, t: Time", "data Unused = Int", "n == Time.hour(t)", "4:18"));
+        assertEquals(List.of("n/x <= -1", "n/-1 < x < 24", "n/24 <= x"),
+                classesAt("n: Int, t: Time", "data Unused = Int", "n == Time.hour(t)", "n"));
         assertEquals(Map.of("h", RELATES, "Time.hour(t)", RELATES),
                 left("h: H, t: Time", "data H = Int invariant value >= 0 && value <= 23",
                         "h.value == Time.hour(t)", "4:24"));
     }
 
     /** The years a date can be written in stop somewhere, and a number past them is one no date
-     *  is in; and a date held to two first days of January is in two years with one between. */
+     *  is in; a year past the ones a number is held to is one no such number is; and a date held
+     *  to two first days of January is in two years with one between. */
     @Test
     void aYearReachesTheYearsADateCanBeWrittenInAndNoGapARuleLeaves() {
-        assertEquals(Map.of("Date.year(d)", RELATES, "y", NOT_SHOWN),
+        assertEquals(Map.of("Date.year(d)", RELATES),
                 left("y: Int, d: Date", "data Unused = Int", "y == Date.year(d)", "4:18"));
-        assertEquals(Map.of("y", RELATES, "Date.year(d)", NOT_SHOWN),
-                left("y: Y, d: Date", "data Y = Int invariant value >= 1 && value <= 9999",
-                        "y.value == Date.year(d)", "4:24"));
+        assertEquals(List.of("y/x <= -1000000000", "y/-1000000000 < x < 1000000000",
+                "y/1000000000 <= x"), classesAt("y: Int, d: Date", "data Unused = Int",
+                "y == Date.year(d)", "y"));
+        String heldYear = "data Y = Int invariant value >= 1 && value <= 9999";
+        assertEquals(Map.of("y", RELATES),
+                left("y: Y, d: Date", heldYear, "y.value == Date.year(d)", "4:24"));
+        assertEquals(List.of("Date.year(d)/-999999999 <= x <= 0", "Date.year(d)/0 < x < 10000",
+                        "Date.year(d)/10000 <= x <= 999999999"),
+                classesAt("y: Y, d: Date", heldYear, "y.value == Date.year(d)", "Date.year(d)"));
         assertEquals(Map.of("Date.year(d)", RELATES, "y", NOT_SHOWN),
                 left("y: Int, d: D", "data D = Date invariant value == Date(\"2020-01-01\")"
                         + " || value == Date(\"2022-01-01\")", "y == Date.year(d.value)", "4:18"));
@@ -398,9 +448,11 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
      */
     @Test
     void aGuardOnOnePlaceNarrowsItAndTiesItToNothing() {
-        assertEquals(Map.of("a", RELATES, "b", NOT_SHOWN),
+        assertEquals(Map.of("a", RELATES),
                 left("a: Int, b: Int", "data Unused = Int", "if a > 0 then a < b else false",
                         "4:32"));
+        assertEquals(List.of("b/x <= 1", "b/1 < x"), classesAt("a: Int, b: Int",
+                "data Unused = Int", "if a > 0 then a < b else false", "b"));
     }
 
     /**
@@ -411,12 +463,16 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     @Test
     void aWeighedTermHasToStandAtTheRestOverItsWeight() {
         String declarations = "data Y = Int invariant value >= -10 && value <= -5";
-        assertEquals(Map.of("h", NOT_SHOWN, "y", NOT_SHOWN),
-                left("h: Int, y: Y", declarations,
-                        "if h >= 4 && h <= 11 then 2 * h + y.value < 0 else false", "4:58"));
-        assertEquals(Map.of("h", NOT_SHOWN, "y", RELATES),
-                left("h: Int, y: Y", declarations,
-                        "if h >= 0 && h <= 20 then 2 * h + y.value < 0 else false", "4:58"));
+        String fromFour = "if h >= 4 && h <= 11 then 2 * h + y.value < 0 else false";
+        assertEquals(Map.of(), left("h: Int, y: Y", declarations, fromFour, "4:58"));
+        assertEquals(List.of("h/x < 4", "h/4 <= x < 5", "h/5 <= x <= 11", "h/11 < x"),
+                classesAt("h: Int, y: Y", declarations, fromFour, "h"));
+        assertEquals(List.of("y/-10 <= x < -8", "y/-8 <= x <= -5"),
+                classesAt("h: Int, y: Y", declarations, fromFour, "y"));
+        String fromNought = "if h >= 0 && h <= 20 then 2 * h + y.value < 0 else false";
+        assertEquals(Map.of("y", RELATES), left("h: Int, y: Y", declarations, fromNought, "4:58"));
+        assertEquals(List.of("h/x < 0", "h/0 <= x <= 2", "h/2 < x < 5", "h/5 <= x <= 20",
+                "h/20 < x"), classesAt("h: Int, y: Y", declarations, fromNought, "h"));
     }
 
     /**
@@ -578,9 +634,11 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
      */
     @Test
     void aRuleRelatingTheFieldComparedToABoundedFieldLeavesItTheRunThatBoundGives() {
-        assertEquals(Map.of("today", NOT_SHOWN, "q.expiresOn", RELATES),
-                leftAt("q: Quote, today: Int", QUOTE + "issuedOn >= 0 && expiresOn >= issuedOn",
-                        "today <= q.expiresOn", 26));
+        String rules = QUOTE + "issuedOn >= 0 && expiresOn >= issuedOn";
+        assertEquals(Map.of("q.expiresOn", RELATES),
+                leftAt("q: Quote, today: Int", rules, "today <= q.expiresOn", 26));
+        assertEquals(List.of("today/x <= 0", "today/0 < x"),
+                classesAt("q: Quote, today: Int", rules, "today <= q.expiresOn", "today"));
     }
 
     /**

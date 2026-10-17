@@ -36,7 +36,7 @@ import java.util.function.Predicate;
  */
 public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
         Quantity.HowManyMeet, Quantity.HowManyHold, Quantity.HowManyDifferent, Quantity.SumOver,
-        Quantity.CodePointsOfAPiece, Quantity.RemainderOfADividend,
+        Quantity.CodePointsOfAPiece, Quantity.RemainderOfADividend, Quantity.ProductOfTwo,
         Quantity.WhatAnOperationAnswers, Quantity.HowManyCarried {
 
     /**
@@ -65,7 +65,7 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
                 case HowManyCarried other -> equals(other);
                 case DecisionAtom.OfTheInput _, DecisionAtom.TakenOfAnAnswer _,
                      DecisionAtom.OfAnAnswer _, OfABinding _, CodePointsOfAPiece _,
-                     RemainderOfADividend _, HowManyDifferent _ -> false;
+                     RemainderOfADividend _, ProductOfTwo _, HowManyDifferent _ -> false;
                 case WhatAnOperationAnswers answers -> answers.of().stream().anyMatch(this::isIn);
                 case SumOver sum -> isIn(sum.ofTheElement());
                 case HowManyHold held -> held.each().stream().anyMatch(this::isIn);
@@ -236,6 +236,56 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
                 out.append(" + ").append(dividend.constant().spelled());
             }
             return out.append(", ").append(divisor).append(')').toString();
+        }
+
+        @Override
+        public String toString() {
+            return spelled();
+        }
+    }
+
+    /**
+     * What two numbers of the input come to multiplied, where neither is a constant and each is the
+     * number of one position: a price times a quantity.
+     *
+     * <p>A number of its own and no form over the two. Fixing either factor leaves a form over the
+     * other, weighed by the value fixed, so a rule about the product relates the two positions and
+     * divides neither of them by a line of its own: where one stands, the other can be anywhere
+     * the value fixed lets it be. Which values of a factor still leave the rule both ways is asked
+     * of what the other reaches ({@link souther.compiler.inputs.WhatARelationLeavesUndivided}).
+     *
+     * <p>The factors in one order whichever was written first, so {@code q * p} is {@code p * q}.
+     * Two of one position are a square, which no factor fixed turns into a form of the other, and
+     * are not one of these.
+     *
+     * @param one   the factor first in the order of terms
+     * @param other the other factor
+     */
+    record ProductOfTwo(NumericTerm.FromOnePosition one, NumericTerm.FromOnePosition other)
+            implements Quantity {
+
+        public ProductOfTwo {
+            if (one == null || other == null) {
+                throw new IllegalArgumentException("a product is of two numbers");
+            }
+            if (one.position().equals(other.position())) {
+                throw new IllegalArgumentException("a product of two numbers of one position is no"
+                        + " relation between two: " + one + " and " + other);
+            }
+            List<NumericTerm> ordered = NumericTerms.inOrder(List.of(one, other));
+            NumericTerm.FromOnePosition first = (NumericTerm.FromOnePosition) ordered.get(0);
+            other = first == one ? other : one;
+            one = first;
+        }
+
+        /** Both factors, in their order. */
+        public List<NumericTerm.FromOnePosition> factors() {
+            return List.of(one, other);
+        }
+
+        @Override
+        public String spelled() {
+            return one + " * " + other;
         }
 
         @Override

@@ -8,7 +8,9 @@ import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Rel;
 
+import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -115,16 +117,418 @@ public final class WhatARelationLeavesUndivided {
                                 BiPredicate<P, P> overlap, Independence independent) {
         Set<P> out = new LinkedHashSet<>();
         for (int at = 0; at < terms.size(); at++) {
-            for (int other = 0; other < terms.size(); other++) {
-                if (other != at && apart(terms, other, overlap)
-                        && untied(terms, other, independent)
-                        && reaches(terms, other, at, constant, relation)) {
-                    out.addAll(terms.get(at).madeOf());
-                    break;
-                }
+            if (reachedBySome(terms, at, constant, relation, overlap, independent)) {
+                out.addAll(terms.get(at).madeOf());
             }
         }
         return out;
+    }
+
+    /**
+     * What a relation leaves the values of one term it is written over: every value of it still
+     * leaving the relation either way, or some runs of them settling it.
+     *
+     * <p>A value of a term settles the relation where it comes out one way whatever the others
+     * hold — {@code n <= String.length(s)} holds at every {@code n} at or below nought, and
+     * {@code p * q >= 1000} fails at {@code p} nought. That is shown of where the others may lie,
+     * which is everything they could be. The values left are then asked what a term that is apart
+     * reaches, as {@link #of} asks it, so a value neither shown to settle the relation nor shown to
+     * leave it is no answer at all.
+     */
+    public sealed interface Leaves {
+
+        /** Every value the term may hold leaves the relation coming out either way. */
+        record Undivided() implements Leaves {}
+
+        /**
+         * Some runs of the term's values settle the relation whatever the rest hold, and every
+         * other value it may hold leaves the relation either way.
+         *
+         * @param runs     the runs, in order, and none beside another that settles it the same way
+         * @param least    the least value the term may hold, or null where it holds no least
+         * @param greatest the greatest, or null where it holds no greatest
+         */
+        record Settled(List<SettledRun> runs, BigInteger least, BigInteger greatest)
+                implements Leaves {
+
+            public Settled {
+                runs = List.copyOf(runs);
+                if (runs.isEmpty()) {
+                    throw new IllegalArgumentException("a term some values of which settle a"
+                            + " relation has some");
+                }
+            }
+
+            /**
+             * The lines on the term that part its values where the relation is settled from where
+             * it is not, or settled one way from settled the other: one where a run ends inside
+             * what the term holds, and one value singled out where a run of one value has values
+             * left either way on both sides of it — or null where two of them would say the same
+             * of the term, which no two lines of one rule on one term may.
+             */
+            public List<Line> lines() {
+                List<Line> out = new ArrayList<>();
+                // The least value no run before has taken, or none where nothing bounds it below.
+                BigInteger next = least;
+                for (int i = 0; i < runs.size(); i++) {
+                    SettledRun run = runs.get(i);
+                    SettledRun after = i + 1 < runs.size() ? runs.get(i + 1) : null;
+                    // Values it does not settle, just below it and just above it.
+                    boolean leftBelow = run.from() != null
+                            && (next == null || run.from().compareTo(next) > 0);
+                    boolean leftAbove = run.to() != null && (after != null
+                            ? after.from().compareTo(run.to().add(BigInteger.ONE)) > 0
+                            : greatest == null || run.to().compareTo(greatest) < 0);
+                    if (leftBelow && leftAbove && run.from().equals(run.to())) {
+                        out.add(new Line(Rel.EQ, run.from()));
+                    } else {
+                        if (leftBelow) {
+                            out.add(new Line(Rel.GE, run.from()));
+                        }
+                        // Above it, values it leaves, or the next run settling it the other way.
+                        if (leftAbove || after != null) {
+                            out.add(new Line(Rel.LE, run.to()));
+                        }
+                    }
+                    next = run.to() == null ? null : run.to().add(BigInteger.ONE);
+                }
+                for (int i = 0; i < out.size(); i++) {
+                    for (int j = i + 1; j < out.size(); j++) {
+                        if (out.get(i).relation() == out.get(j).relation()) {
+                            return null;
+                        }
+                    }
+                }
+                return List.copyOf(out);
+            }
+        }
+    }
+
+    /**
+     * One line on a term a relation's settled values are parted by: the term standing to
+     * {@code at} as {@code relation}, which holds on the side of it the run is.
+     */
+    public record Line(Rel relation, BigInteger at) {}
+
+    /**
+     * A run of whole values of a term, and how the relation comes out at every one of them.
+     *
+     * @param from  the least of them, or null where the run has no least
+     * @param to    the greatest of them, or null where it has no greatest
+     * @param holds whether the relation holds there, or fails there
+     */
+    public record SettledRun(BigInteger from, BigInteger to, boolean holds) {
+
+        public SettledRun {
+            if (from != null && to != null && from.compareTo(to) > 0) {
+                throw new IllegalArgumentException("a run holds some value: " + from + " to " + to);
+            }
+        }
+    }
+
+    /**
+     * What {@code terms} held against {@code constant} as {@code relation} leave the values of the
+     * term at {@code at} — or null where neither is shown.
+     *
+     * <p>Shown undivided as {@link #of} shows it. Otherwise, where the term's values are whole, the
+     * values that settle the relation are worked out from where the other terms may lie: those at
+     * which the term weighed and every sum the others could come to hold together, and those at
+     * which they fail together. Those are runs at the ends of what the term holds, and the values
+     * between are asked again, as one run, whether some other term reaches every value it would
+     * have to stand at there.
+     *
+     * @param whole whether the term's values are whole numbers
+     */
+    public static <P> Leaves leavesOf(List<Term<P>> terms, int at, ExactRatio constant,
+                                      Rel relation, BiPredicate<P, P> overlap,
+                                      Independence independent, boolean whole) {
+        if (reachedBySome(terms, at, constant, relation, overlap, independent)) {
+            return new Leaves.Undivided();
+        }
+        Term<P> it = terms.get(at);
+        WholeRun held = whole ? WholeRun.ofTheValues(it.holds()) : null;
+        if (held == null || constant == null) {
+            return null;
+        }
+        // What the others and the constant come to together, wherever they lie.
+        Interval rest = Interval.at(constant);
+        for (int i = 0; i < terms.size(); i++) {
+            if (i == at) {
+                continue;
+            }
+            Interval each = Interval.of(terms.get(i).holds());
+            Interval weighed = each == null ? null : each.times(terms.get(i).weight());
+            rest = weighed == null ? null : rest.plus(weighed);
+            if (rest == null) {
+                return null;
+            }
+        }
+        List<SettledRun> runs = new ArrayList<>();
+        WholeRun between = held;
+        for (boolean holds : List.of(true, false)) {
+            Rel asked = holds ? relation : relation.denied();
+            for (WholeRun settling : settledBy(it.weight(), rest, asked)) {
+                between = between == null ? null : between.without(settling);
+                WholeRun here = settling.meet(held);
+                if (here.holdsAWholeNumber()) {
+                    runs.add(new SettledRun(here.low, here.high, holds));
+                }
+            }
+        }
+        if (runs.isEmpty() || between == null) {
+            return null;
+        }
+        if (between.holdsAWholeNumber()) {
+            List<Term<P>> narrowed = new ArrayList<>(terms);
+            narrowed.set(at, new Term<>(it.madeOf(), it.weight(), between.asBounds(),
+                    it.realizes(), it.takes(), it.itsPlace()));
+            if (!reachedBySome(narrowed, at, constant, relation, overlap, independent)) {
+                return null;
+            }
+        }
+        return new Leaves.Settled(inOrder(runs), held.low, held.high);
+    }
+
+    /**
+     * What a product of the terms {@code it} and {@code other}, held against {@code level} as
+     * {@code relation}, leaves the values of {@code it} — or null where neither is shown.
+     *
+     * <p>Fixing a value of {@code it} leaves a form of {@code other} weighed by that value, so each
+     * value of it is asked what the form of the other is asked: whether it holds wherever the other
+     * may lie, fails wherever it may, or is left either way because the other reaches both sides of
+     * the level over the value. The value's sign turns the side round, so the values below nought
+     * and those above are asked apart, each a run along which the level over the value moves one
+     * way; nought settles the relation by itself, the product being nought wherever the other is.
+     * Between the runs that settle it, the values left are shown undivided where the other takes a
+     * value strictly on the side the relation needs, and one on the other side, of every level over
+     * a value there — which lie between the level over each end of the run, and over an end the run
+     * has none of, nought.
+     *
+     * <p>A product past where its type stops is a run that aborts, and no row of either side. Every
+     * value of the other the reaching needs lies within one of the level over the value, so its
+     * product lies within the value of the level, and no further out than the value itself where
+     * the value is further out than the level. So where twice the level is a value of the type,
+     * none of those products is past where it stops, but the one of the least value there is with a
+     * value below nought — which is the end of the type and not a value a relation divides, as for
+     * every other relation here. Where it is not, nothing is shown.
+     *
+     * <p>Held equal or unequal, only against nought: a product is nought where either factor is,
+     * and against any other level, which values of {@code it} leave the other a whole number to
+     * stand at is which of them divide the level, a set no run says.
+     *
+     * @param apart    whether the other is apart from {@code it} and tied to it by nothing, which is
+     *                 what it takes for what the other reaches to be asked
+     * @param greatest the greatest value the type of the product holds, or null where it holds no
+     *                 greatest
+     */
+    public static <P> Leaves leavesOfAProduct(Term<P> it, Term<P> other, ExactRatio level,
+                                              Rel relation, boolean apart,
+                                              BigInteger greatest) {
+        if (greatest != null && !(level.abs().times(ExactRatio.of(2))
+                instanceof ExactAnswer.Held<ExactRatio>(ExactRatio twice)
+                && twice.compareTo(ExactRatio.of(greatest)) <= 0)) {
+            return null;
+        }
+        boolean exactly = relation == Rel.EQ || relation == Rel.NE;
+        if (exactly && level.signum() != 0) {
+            return null;
+        }
+        WholeRun held = WholeRun.ofTheValues(it.holds());
+        Interval lies = Interval.of(other.holds());
+        if (held == null || lies == null) {
+            return null;
+        }
+        List<SettledRun> runs = new ArrayList<>();
+        WholeRun zero = new WholeRun(BigInteger.ZERO, BigInteger.ZERO).meet(held);
+        if (zero.holdsAWholeNumber()) {
+            runs.add(new SettledRun(BigInteger.ZERO, BigInteger.ZERO,
+                    relation.holds(ExactRatio.ZERO.compareTo(level))));
+        }
+        for (int sign : List.of(-1, 1)) {
+            WholeRun side = (sign < 0 ? new WholeRun(null, BigInteger.ONE.negate())
+                    : new WholeRun(BigInteger.ONE, null)).meet(held);
+            if (!side.holdsAWholeNumber()) {
+                continue;
+            }
+            WholeRun between = side;
+            for (boolean holds : List.of(true, false)) {
+                WholeRun settling = settledByAFactor(sign, lies, level,
+                        holds ? relation : relation.denied());
+                if (settling == null) {
+                    continue;
+                }
+                between = between == null ? null : between.without(settling);
+                WholeRun here = settling.meet(side);
+                if (here.holdsAWholeNumber()) {
+                    runs.add(new SettledRun(here.low, here.high, holds));
+                }
+            }
+            if (between == null) {
+                return null;
+            }
+            if (between.holdsAWholeNumber() && !(apart && other.realizes() != null
+                    && reachesOverAFactor(other.realizes(), between, sign, level, relation))) {
+                return null;
+            }
+        }
+        return runs.isEmpty() ? new Leaves.Undivided()
+                : new Leaves.Settled(inOrder(runs), held.low, held.high);
+    }
+
+    /**
+     * The values a factor of {@code sign} settles {@code relation} of the product at, as a run of
+     * that sign's values — every one of them, or none, or those past a value — or null where none
+     * do.
+     *
+     * <p>Wherever the other lies in {@code lies}, the product at one value of the factor runs
+     * between that value times each end of where the other lies; the relation holds of all of them
+     * where it holds of the least of them for {@code >} and {@code >=}, of the greatest for
+     * {@code <} and {@code <=}, and of nought alone, for {@code ==} against nought, where nought is
+     * all the other may be.
+     */
+    private static WholeRun settledByAFactor(int sign, Interval lies, ExactRatio level,
+                                             Rel relation) {
+        WholeRun every = new WholeRun(null, null);
+        return switch (relation) {
+            case EQ -> lies.low() != null && lies.high() != null && lies.low().signum() == 0
+                    && lies.high().signum() == 0 ? every : null;
+            case NE -> (lies.low() != null && lies.low().signum() > 0)
+                    || (lies.high() != null && lies.high().signum() < 0) ? every : null;
+            case GT, GE -> productOfAnEnd(sign > 0 ? lies.low() : lies.high(), sign > 0 ? -1 : 1,
+                    sign, level, relation);
+            case LT, LE -> productOfAnEnd(sign > 0 ? lies.high() : lies.low(), sign > 0 ? 1 : -1,
+                    sign, level, relation);
+        };
+    }
+
+    /**
+     * The values of a factor of {@code sign} at which that value times {@code end} stands to
+     * {@code level} as {@code relation}, or null where it is at none.
+     *
+     * @param past which way the end runs off where it is null: below every number, or above
+     */
+    private static WholeRun productOfAnEnd(ExactRatio end, int past, int sign, ExactRatio level,
+                                           Rel relation) {
+        if (end == null) {
+            // Past every number, so the product is past every number the way the factor's sign
+            // turns it.
+            int product = past * sign;
+            boolean stands = product > 0 ? relation == Rel.GT || relation == Rel.GE
+                    : relation == Rel.LT || relation == Rel.LE;
+            return stands ? new WholeRun(null, null) : null;
+        }
+        if (end.signum() == 0) {
+            return relation.holds(ExactRatio.ZERO.compareTo(level)) ? new WholeRun(null, null)
+                    : null;
+        }
+        WholeRun at = WholeRun.where(new OnTheDifference(end, level.negated(), relation));
+        return at != null && at.holdsAWholeNumber() ? at : null;
+    }
+
+    /**
+     * Whether a factor reaching {@code realized} stands strictly on the side {@code relation}
+     * needs, and on the other side, of the level over every value of the run {@code between} of
+     * the other factor's values of {@code sign} — or, held equal or unequal to nought, at nought
+     * and away from it.
+     */
+    private static boolean reachesOverAFactor(NumericDomain.Bounds realized, WholeRun between,
+                                              int sign, ExactRatio level, Rel relation) {
+        if (relation == Rel.EQ || relation == Rel.NE) {
+            OfNumbers nought = new OfNumbers(ExactRatio.ZERO, ExactRatio.ZERO);
+            return nought.within(realized) && (realized.min() == null || realized.max() == null
+                    || !(realized.min().at() instanceof Count low)
+                    || !(realized.max().at() instanceof Count high)
+                    || low.exactly().signum() < 0 || high.exactly().signum() > 0);
+        }
+        // The level over each end of the run, and nought over an end it has none of.
+        ExactRatio one = overAnEnd(level, between.low);
+        ExactRatio two = overAnEnd(level, between.high);
+        if (one == null || two == null) {
+            return false;
+        }
+        Run needed = one.compareTo(two) <= 0 ? new OfNumbers(one, two) : new OfNumbers(two, one);
+        return needed.around(realized, strictlyBelow(relation, ExactRatio.of(sign)));
+    }
+
+    /** {@code level} over {@code end}, nought where there is no end, or null where it could not
+     *  be held. */
+    private static ExactRatio overAnEnd(ExactRatio level, BigInteger end) {
+        if (end == null) {
+            return ExactRatio.ZERO;
+        }
+        return level.dividedBy(ExactRatio.of(end)).orNull();
+    }
+
+    /**
+     * The runs of whole values a term weighed {@code weight} settles {@code relation} at, wherever
+     * the rest come to in {@code rest}: those at which the weighed term and every sum the rest
+     * could be stand as {@code relation} to nought.
+     */
+    private static List<WholeRun> settledBy(ExactRatio weight, Interval rest, Rel relation) {
+        List<WholeRun> out = new ArrayList<>();
+        switch (relation) {
+            case LT, LE -> addWhere(weight, rest.high(), relation, out);
+            case GT, GE -> addWhere(weight, rest.low(), relation, out);
+            case EQ -> {
+                if (rest.low() != null && rest.high() != null
+                        && rest.low().compareTo(rest.high()) == 0) {
+                    addWhere(weight, rest.low(), Rel.EQ, out);
+                }
+            }
+            case NE -> {
+                addWhere(weight, rest.high(), Rel.LT, out);
+                addWhere(weight, rest.low(), Rel.GT, out);
+            }
+        }
+        return out;
+    }
+
+    /** The whole values {@code weight} times which, moved by {@code constant}, stand to nought as
+     *  {@code relation}, added to {@code out} where there are some; nothing where the constant is
+     *  past every number. */
+    private static void addWhere(ExactRatio weight, ExactRatio constant, Rel relation,
+                                 List<WholeRun> out) {
+        if (constant == null) {
+            return;
+        }
+        WholeRun at = WholeRun.where(new OnTheDifference(weight, constant, relation));
+        if (at != null && at.holdsAWholeNumber()) {
+            out.add(at);
+        }
+    }
+
+    /** {@code runs} in order of their values, each joined to the one beside it where the two
+     *  settle the relation the same way. */
+    private static List<SettledRun> inOrder(List<SettledRun> runs) {
+        List<SettledRun> sorted = new ArrayList<>(runs);
+        sorted.sort((one, two) -> one.from() == null ? -1 : two.from() == null ? 1
+                : one.from().compareTo(two.from()));
+        List<SettledRun> out = new ArrayList<>();
+        for (SettledRun each : sorted) {
+            SettledRun last = out.isEmpty() ? null : out.getLast();
+            if (last != null && last.holds() == each.holds() && last.to() != null
+                    && each.from() != null
+                    && last.to().add(BigInteger.ONE).compareTo(each.from()) >= 0) {
+                out.set(out.size() - 1, new SettledRun(last.from(), each.to(), last.holds()));
+            } else {
+                out.add(each);
+            }
+        }
+        return out;
+    }
+
+    /** Whether some term apart from the one at {@code at}, and tied to it by nothing, reaches
+     *  every value it would have to stand at for that one to be left undivided. */
+    private static <P> boolean reachedBySome(List<Term<P>> terms, int at, ExactRatio constant,
+                                             Rel relation, BiPredicate<P, P> overlap,
+                                             Independence independent) {
+        for (int other = 0; other < terms.size(); other++) {
+            if (other != at && apart(terms, other, overlap) && untied(terms, other, independent)
+                    && reaches(terms, other, at, constant, relation)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -544,6 +948,63 @@ public final class WhatARelationLeavesUndivided {
             BigInteger upper = high == null ? other.high
                     : other.high == null ? high : high.min(other.high);
             return new WholeRun(lower, upper);
+        }
+
+        /** The whole numbers {@code bounds} holds, or null where an end of it is no number. */
+        static WholeRun ofTheValues(NumericDomain.Bounds bounds) {
+            BigInteger lower = null;
+            BigInteger upper = null;
+            if (bounds.min() != null) {
+                if (!(bounds.min().at() instanceof Count least)) {
+                    return null;
+                }
+                lower = bounds.min().inclusive() ? least.exactly().ceiling().orNull()
+                        : least.exactly().floor().map(at -> at.add(BigInteger.ONE)).orNull();
+                if (lower == null) {
+                    return null;
+                }
+            }
+            if (bounds.max() != null) {
+                if (!(bounds.max().at() instanceof Count most)) {
+                    return null;
+                }
+                upper = bounds.max().inclusive() ? most.exactly().floor().orNull()
+                        : most.exactly().ceiling().map(at -> at.subtract(BigInteger.ONE)).orNull();
+                if (upper == null) {
+                    return null;
+                }
+            }
+            return new WholeRun(lower, upper);
+        }
+
+        /**
+         * What is left of this run with {@code taken} out of it, or null where what is left is two
+         * runs: {@code taken} lies inside it and touches neither end.
+         */
+        WholeRun without(WholeRun taken) {
+            if (!meet(taken).holdsAWholeNumber()) {
+                return this;
+            }
+            boolean fromBelow = taken.low == null || (low != null && taken.low.compareTo(low) <= 0);
+            boolean fromAbove = taken.high == null
+                    || (high != null && taken.high.compareTo(high) >= 0);
+            if (fromBelow && fromAbove) {
+                return new WholeRun(BigInteger.ONE, BigInteger.ZERO);
+            }
+            if (fromBelow) {
+                return new WholeRun(taken.high.add(BigInteger.ONE), high);
+            }
+            if (fromAbove) {
+                return new WholeRun(low, taken.low.subtract(BigInteger.ONE));
+            }
+            return null;
+        }
+
+        /** This run as bounds on numbers, each end inclusive. */
+        NumericDomain.Bounds asBounds() {
+            return new NumericDomain.Bounds(
+                    low == null ? null : Endpoint.inclusive(Count.of(new BigDecimal(low))),
+                    high == null ? null : Endpoint.inclusive(Count.of(new BigDecimal(high))));
         }
 
         boolean holdsAWholeNumber() {

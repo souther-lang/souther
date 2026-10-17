@@ -1,6 +1,5 @@
 package souther.compiler.partition;
 
-import souther.compiler.check.Carrier;
 import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.check.StatedComparison;
 import souther.compiler.check.UnreadComparison;
@@ -12,14 +11,15 @@ import souther.compiler.inputs.EmptyInput;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.NumericTerms;
 import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.FilingCoordinate;
 import souther.compiler.inputs.SearchRegion;
+import souther.compiler.inputs.WhatARelationLeavesUndivided;
 import souther.compiler.meaning.AuthoredPointMapping;
 import souther.compiler.meaning.CasesOfALineAsked;
 import souther.compiler.meaning.DecidingCase;
 import souther.compiler.meaning.Proposition;
-import souther.compiler.numeric.Count;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Place;
@@ -127,39 +127,98 @@ sealed interface ComparisonAssessment {
      * <p>That a value of one position never settles the comparison whatever the others hold is
      * shown only where another term reaches every value of it ({@link UndividedByARelation}):
      * {@code n == a.value}, with {@code a} declared at nought or above, is false wherever {@code n}
-     * is below nought.
+     * is below nought. Where it is shown instead that some values of a term settle it and every
+     * other value leaves it either way, those values are a class of the term's own, parted from
+     * the rest by lines on it, and the term is divided there by the relation.
      *
      * @param relation  what the line states, as a relation of its terms
      * @param undivided the coordinates {@code relation} is shown to leave undivided
+     * @param settling  the lines on single positions that part the values settling the relation
+     *                  from the rest, each no line of the author's
      * @param authored  how the line stands to the line of its author's it is a place of
      */
     record AcrossPositions(Cutting cutting, Citation at, Places places,
                            UndividedByARelation relation, Set<FilingCoordinate> undivided,
-                           AuthoredPointMapping authored)
+                           List<AtAPosition> settling, AuthoredPointMapping authored)
             implements ComparisonAssessment {
 
         public AcrossPositions {
             if (cutting == null || at == null || places == null || relation == null
-                    || undivided == null || authored == null) {
+                    || undivided == null || settling == null || authored == null) {
                 throw new IllegalArgumentException("a line over a form names the form");
             }
             undivided = Set.copyOf(undivided);
+            settling = List.copyOf(settling);
         }
 
-        /** The same, with what it leaves undivided over the rows that arrive along {@code ways}. */
+        /** The line, with what {@code relation} leaves its places over {@code left}. */
+        static AcrossPositions leaving(Cutting cutting, Citation at, Places places,
+                                       UndividedByARelation relation,
+                                       UndividedByARelation.WhatItLeaves left,
+                                       AuthoredPointMapping authored, InputReading reading) {
+            return new AcrossPositions(cutting, at, places, relation, left.undivided(),
+                    settlingLines(cutting, at, left, authored, reading), authored);
+        }
+
+        /** The same, with what it leaves its places over the rows that arrive along
+         *  {@code ways}. */
         AcrossPositions whereRowsArrive(InputReading reading,
                                         List<Reachability.Reaching> ways) {
-            return new AcrossPositions(cutting, at, places, relation,
-                    relation.undividedWhereRowsArrive(reading, ways), authored);
+            return leaving(cutting, at, places, relation,
+                    relation.leftWhereRowsArrive(reading, ways), authored, reading);
         }
 
         /** The same, where every row arriving comes out on one side of it: it divides none of the
          *  positions it is filed at. */
         AcrossPositions decided() {
             return new AcrossPositions(cutting, at, places, relation,
-                    Set.copyOf(cutting.of().filedAt()), authored);
+                    Set.copyOf(cutting.of().filedAt()), List.of(), authored);
         }
 
+        /** The places a line on one of them parts the values that settle the relation at. */
+        Set<FilingCoordinate> dividedBySettling() {
+            Set<FilingCoordinate> out = new LinkedHashSet<>();
+            settling.forEach(line -> out.addAll(line.cutting().over()));
+            return out;
+        }
+    }
+
+    /**
+     * The lines on single positions that part the values of each term {@code left} says some of
+     * whose values settle the relation, each drawn as a comparison of the term against a number
+     * draws it and said to be no place of the author's line — none for a term whose runs come to
+     * no such lines, or one of whose lines is no line on its position.
+     */
+    private static List<AtAPosition> settlingLines(Cutting cutting, Citation at,
+                                                   UndividedByARelation.WhatItLeaves left,
+                                                   AuthoredPointMapping authored,
+                                                   InputReading reading) {
+        AuthoredPointMapping noPlaceOfIt =
+                new AuthoredPointMapping.NotAnAuthoredBoundary(authored.line(), authored.claims());
+        List<AtAPosition> out = new ArrayList<>();
+        List<NumericTerm> settled = new ArrayList<>(left.settled().keySet());
+        for (NumericTerm term : NumericTerms.inOrder(settled)) {
+            List<WhatARelationLeavesUndivided.Line> lines =
+                    left.settled().get(term.atOnePosition()).lines();
+            if (lines == null) {
+                continue;
+            }
+            List<AtAPosition> here = new ArrayList<>();
+            for (WhatARelationLeavesUndivided.Line each : lines) {
+                Cutting drawn = Cutting.onOneTerm(cutting.of().behavior(), term,
+                        ExactRatio.of(each.at()), each.relation(), reading.quantities());
+                if (drawn == null || !(onTheQuantity(at, drawn, noPlaceOfIt, reading, false)
+                        instanceof AtAPosition line)) {
+                    here = null;
+                    break;
+                }
+                here.add(line);
+            }
+            if (here != null) {
+                out.addAll(here);
+            }
+        }
+        return out;
     }
 
     /**
@@ -966,8 +1025,8 @@ sealed interface ComparisonAssessment {
             // compiler can always say exactly. It is on no position, and writing it out would be as
             // much of it as a pretty-printer got.
             UndividedByARelation relation = relationOf(cutting);
-            return new AcrossPositions(cutting, at, kind, relation, relation.undivided(read),
-                    authored);
+            return AcrossPositions.leaving(cutting, at, kind, relation, relation.left(read),
+                    authored, read);
         }
         // Read off the one place its value is read at, which is not taken as held: an answer that
         // was not is what the position is told, as for every other side that was not worked out.
@@ -981,25 +1040,10 @@ sealed interface ComparisonAssessment {
         };
     }
 
-    /**
-     * What a line over a form of several positions states, as a relation: the form held against
-     * the level the line is at, as the claim states it.
-     *
-     * <p>Held against nought, which is the level taken over to the form's side: a counted level is
-     * that number, and a level on a carrier the number its place counts to where it counts to one
-     * — and no number where it does not, a string being ordered and counting to nothing.
-     */
+    /** What a line over several positions states, as a relation of their numbers: the quantity's
+     *  answer ({@link BorderQuantity#relationAt}). */
     private static UndividedByARelation relationOf(Cutting cutting) {
-        if (!(cutting.of() instanceof LinearQuantity linear)) {
-            return UndividedByARelation.SHOWING_NOTHING;
-        }
-        ExactRatio constant = switch (cutting.at()) {
-            case Level.OfTheQuantity(ExactRatio level) -> level.negated();
-            case Level.OnACarrier(Carrier _, Place place) ->
-                    place instanceof Count count ? count.exactly().negated() : null;
-        };
-        return UndividedByARelation.ofTheInputsNumbers(linear.direction(), constant,
-                cutting.claim().statedRelation());
+        return cutting.of().relationAt(cutting.at(), cutting.claim().statedRelation());
     }
 
     /** A rule whose line is placed and whose sides were not worked out, said at every place the
@@ -1115,9 +1159,13 @@ sealed interface ComparisonAssessment {
             // one line with no position under it, and a line over several positions is a relation
             // between them. Answered from what the quantity is over rather than by the count of its
             // terms, since a form of one term is either.
+            // A place the values settling it are parted at by a line is divided, and is left
+            // nothing here.
             case AcrossPositions across -> across.cutting().of().whyItDividesNoPosition()
                     instanceof BlockReason.ComparisonRelatingTwoValues
-                    ? relatingAt(filedAt(), across.undivided())
+                    ? relatingAt(filedAt().stream()
+                            .filter(place -> !across.dividedBySettling().contains(place))
+                            .toList(), across.undivided())
                     : sameAtEachPlace(across.cutting().of().whyItDividesNoPosition());
             // Another value is no position, and what the rule says is the same thing it says
             // against one: where the value here stands against it.

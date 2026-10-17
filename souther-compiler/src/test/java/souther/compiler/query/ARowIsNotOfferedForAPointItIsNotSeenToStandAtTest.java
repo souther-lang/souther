@@ -40,8 +40,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ARowIsNotOfferedForAPointItIsNotSeenToStandAtTest {
 
     /**
-     * A comparison reached past a condition on a value the body works out, which no composer can
-     * write.
+     * A comparison reached past a condition on what two numbers come to multiplied, which no
+     * composer writes a row at where it is passed on the way.
      *
      * <p>What a product of {@code x} and {@code y} comes to is no form over them, so the condition
      * on it is a condition on a value no position holds, and there is no cut to narrow a search by.
@@ -105,12 +105,12 @@ class ARowIsNotOfferedForAPointItIsNotSeenToStandAtTest {
                     ((ItemAssessment.Owed) item).searches().only());
             assertTrue(no.way().takenIn().stream().allMatch(each ->
                             each.demand() instanceof RowDemand.ForTheRun(var _, var why, var _)
-                                    && why == RowDemand.NoComposer.A_VALUE_THE_BODY_WORKS_OUT),
-                    "the condition is a value the body works out: " + no.way().onTheWay());
+                                    && why == RowDemand.NoComposer.A_PRODUCT_OF_TWO_NUMBERS),
+                    "the condition is on a product of two numbers: " + no.way().onTheWay());
             assertTrue(no.uncomposed().onTheWay().stream().anyMatch(each ->
                             each instanceof ReachabilityGap.Uncomposed(var _,
                                     ReachabilityGap.Why.NoComposerWritesIt(var what, var _))
-                                    && what == RowDemand.NoComposer.A_VALUE_THE_BODY_WORKS_OUT),
+                                    && what == RowDemand.NoComposer.A_PRODUCT_OF_TWO_NUMBERS),
                     "and the composer says it wrote nothing for it: " + no.uncomposed());
         }
     }

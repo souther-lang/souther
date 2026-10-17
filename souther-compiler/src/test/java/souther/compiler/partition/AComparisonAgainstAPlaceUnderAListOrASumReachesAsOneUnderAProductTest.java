@@ -85,10 +85,11 @@ class AComparisonAgainstAPlaceUnderAListOrASumReachesAsOneUnderAProductTest {
                 """));
     }
 
-    /** A rule of the element's field holds it to a run, which a plain number runs past. */
+    /** A rule of the element's field holds it to a run, which a plain number runs past: an owner
+     *  below nought is in no element, which settles the comparison and divides the owner there. */
     @Test
     void aFieldOfAListsElementARuleHoldsReachesNoMoreThanTheRule() {
-        assertEquals(Map.of("a[*].owner", RELATES, "owner", NOT_SHOWN), left("""
+        assertEquals(Map.of("a[*].owner", RELATES), left("""
                 module v2
                 data Owner = Int invariant value >= 0
                 data Meeting = { owner: Owner, m: Int }
@@ -100,7 +101,7 @@ class AComparisonAgainstAPlaceUnderAListOrASumReachesAsOneUnderAProductTest {
     /**
      * A rule of the element relating the field compared to a field it leaves free leaves the
      * field every value; once that field is held to ten, so is the one compared, and an owner of
-     * eleven is in no element.
+     * eleven is in no element, which settles the comparison and divides the owner there.
      */
     @Test
     void aFieldOfAListsElementWhoseRuleRelatesItToAnotherReachesWhatTheRuleLeavesIt() {
@@ -110,7 +111,7 @@ class AComparisonAgainstAPlaceUnderAListOrASumReachesAsOneUnderAProductTest {
                 behavior many : (a: List<Meeting>, owner: Int) -> List<Meeting>
                 let many (a, owner) = List.filter(m -> m.owner == owner, a)
                 """));
-        assertEquals(Map.of("a[*].owner", RELATES, "owner", NOT_SHOWN), left("""
+        assertEquals(Map.of("a[*].owner", RELATES), left("""
                 module v2
                 data Meeting = { owner: Int, m: Int } invariant owner <= m && m <= 10
                 behavior many : (a: List<Meeting>, owner: Int) -> List<Meeting>

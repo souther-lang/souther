@@ -18,6 +18,7 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.inputs.WhatARelationLeavesUndivided;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.Quantity;
+import souther.compiler.numeric.Count;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
@@ -30,8 +31,10 @@ import souther.compiler.values.AdmissibleSet;
 import souther.compiler.values.StoppedReading;
 import souther.compiler.values.UnreadReason;
 
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -90,28 +93,82 @@ import java.util.concurrent.ConcurrentHashMap;
  * container holds weighs each element against the others, which take the values it takes, so no
  * value of the element settles it.
  *
+ * <p>Or what two numbers of the input come to multiplied, held against a number: the two sides
+ * are then the factors, each weighed by one, and what is asked of each is what the other reaches
+ * over every level the product over a value of it leaves
+ * ({@link WhatARelationLeavesUndivided#leavesOfAProduct}).
+ *
  * @param sides           the terms of the relation
  * @param constant        what the terms are held against, or null where that is no number
  * @param relation        how the terms are held against it
  * @param amongThemselves the places whose values it holds against other values of the same place,
  *                        and nothing else
+ * @param multiplied      whether the two sides are the factors of a product, and the relation is
+ *                        the product and the constant held against nought
  */
 record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
-                            List<FilingCoordinate> amongThemselves) {
+                            List<FilingCoordinate> amongThemselves, boolean multiplied) {
 
     /** A relation that shows no place undivided: one nothing here takes apart. */
     static final UndividedByARelation SHOWING_NOTHING =
-            new UndividedByARelation(List.of(), ExactRatio.ZERO, Rel.EQ, List.of());
+            new UndividedByARelation(List.of(), ExactRatio.ZERO, Rel.EQ, List.of(), false);
 
     UndividedByARelation {
         sides = List.copyOf(sides);
         amongThemselves = List.copyOf(amongThemselves);
+        if (multiplied && (sides.size() != 2 || constant == null)) {
+            throw new IllegalArgumentException("a product is of two factors, held against a"
+                    + " number: " + sides);
+        }
     }
 
     /** The values at {@code at} held against other values at {@code at}. */
     static UndividedByARelation amongTheValuesAt(TermPath at) {
         return new UndividedByARelation(List.of(), ExactRatio.ZERO, Rel.EQ,
-                List.of(FilingCoordinate.at(at)));
+                List.of(FilingCoordinate.at(at)), false);
+    }
+
+    /** What {@code one} and {@code other} come to multiplied, held against {@code level} as
+     *  {@code relation}. */
+    static UndividedByARelation ofAProduct(NumericTerm.FromOnePosition one,
+                                           NumericTerm.FromOnePosition other, ExactRatio level,
+                                           Rel relation) {
+        return new UndividedByARelation(List.of(ofTheInput(one, ExactRatio.ONE),
+                ofTheInput(other, ExactRatio.ONE)), level.negated(), relation, List.of(), true);
+    }
+
+    /**
+     * What a relation leaves its places, over the rows some way lets through: the places it is
+     * shown to leave undivided, and the terms some runs of whose values it is shown to settle,
+     * every other value of each leaving it either way. A place in neither is one nothing is shown
+     * of.
+     *
+     * @param undivided the places shown undivided
+     * @param settled   each term shown to be settled by some of its values, and those values
+     */
+    record WhatItLeaves(Set<FilingCoordinate> undivided,
+                        Map<NumericTerm.FromOnePosition,
+                                WhatARelationLeavesUndivided.Leaves.Settled> settled) {
+
+        WhatItLeaves {
+            undivided = Set.copyOf(undivided);
+            settled = Map.copyOf(settled);
+        }
+
+        /** What both this and {@code other} show, for rows that may come along either: a place
+         *  shown one way along one and another way along the other is shown nothing of. */
+        WhatItLeaves alongBoth(WhatItLeaves other) {
+            Set<FilingCoordinate> both = new LinkedHashSet<>(undivided);
+            both.retainAll(other.undivided);
+            Map<NumericTerm.FromOnePosition, WhatARelationLeavesUndivided.Leaves.Settled> alike =
+                    new LinkedHashMap<>();
+            settled.forEach((term, runs) -> {
+                if (runs.equals(other.settled.get(term))) {
+                    alike.put(term, runs);
+                }
+            });
+            return new WhatItLeaves(both, alike);
+        }
     }
 
     /** The places this relation is about, which are the only ones it says anything of. */
@@ -150,7 +207,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 default -> new Side(List.of(), each.getValue(), null);
             });
         }
-        return new UndividedByARelation(sides, form.constant(), relation, List.of());
+        return new UndividedByARelation(sides, form.constant(), relation, List.of(), false);
     }
 
     /**
@@ -162,7 +219,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                                                   ExactRatio constant, Rel relation) {
         List<Side> sides = new ArrayList<>();
         form.coefs().forEach((term, weight) -> sides.add(ofTheInput(term, weight)));
-        return new UndividedByARelation(sides, constant, relation, List.of());
+        return new UndividedByARelation(sides, constant, relation, List.of(), false);
     }
 
     /** The values at two positions held as one value, or not. */
@@ -171,7 +228,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 new Side(List.of(FilingCoordinate.at(one)), ExactRatio.ONE,
                         new NumericTerm.ValueOf(one)),
                 new Side(List.of(FilingCoordinate.at(other)), ExactRatio.ONE.negated(),
-                        new NumericTerm.ValueOf(other))), ExactRatio.ZERO, Rel.EQ, List.of());
+                        new NumericTerm.ValueOf(other))), ExactRatio.ZERO, Rel.EQ, List.of(),
+                false);
     }
 
     private static Side ofTheInput(NumericTerm term, ExactRatio weight) {
@@ -184,19 +242,32 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         return undividedWhereRowsArrive(read, List.of());
     }
 
-    /**
-     * The places shown undivided over the rows that arrive at the relation along {@code ways} —
-     * over what the declarations leave, where there are none.
-     *
-     * <p>Shown along each way apart, and a place is left undivided where every way shows it. Two
-     * ways put together run over more than either, and what a term takes beside another along both
-     * is not what it takes along each: the runs of each may join without a gap while a pair one way
-     * keeps out is one the other never reaches. Nothing here shows what they come to together. A
-     * way split at a choice is each of its branches, so each is a way here, and a way some of whose
-     * branches were not split out shows nothing.
-     */
+    /** The places shown undivided over the rows that arrive along {@code ways}
+     *  ({@link #leftWhereRowsArrive}). */
     Set<FilingCoordinate> undividedWhereRowsArrive(InputReading read,
                                                    List<Reachability.Reaching> ways) {
+        return leftWhereRowsArrive(read, ways).undivided();
+    }
+
+    /** What this leaves its places over what the declarations leave. */
+    WhatItLeaves left(InputReading read) {
+        return leftWhereRowsArrive(read, List.of());
+    }
+
+    /**
+     * What this leaves its places over the rows that arrive at the relation along {@code ways} —
+     * over what the declarations leave, where there are none.
+     *
+     * <p>Shown along each way apart, and a place is left undivided, or settled by some of its
+     * values, where every way shows it so. Two ways put together run over more than either, and
+     * what a term takes beside another along both is not what it takes along each: the runs of each
+     * may join without a gap while a pair one way keeps out is one the other never reaches. Nothing
+     * here shows what they come to together. A way split at a choice is each of its branches, so
+     * each is a way here, and a way some of whose branches were not split out shows nothing.
+     */
+    WhatItLeaves leftWhereRowsArrive(InputReading read, List<Reachability.Reaching> ways) {
+        WhatItLeaves nothingShown = new WhatItLeaves(new LinkedHashSet<>(amongThemselves),
+                Map.of());
         // What the declarations leave each side, which no way changes: asked once for all of them.
         List<Source> sources = new ArrayList<>();
         for (Side each : sides) {
@@ -222,7 +293,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         for (Carrier one : carriers) {
             for (Carrier other : carriers) {
                 if (one != null && other != null && !Carrier.onOneOrder(one, other)) {
-                    return new LinkedHashSet<>(amongThemselves);
+                    return nothingShown;
                 }
             }
         }
@@ -236,23 +307,19 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     carriers.get(1) != null ? carriers.get(1) : known);
         }
         if (ways.isEmpty()) {
-            return undividedAlong(sources, carriers, read.quantities().region(), List.of(), true);
+            return leftAlong(sources, carriers, read.quantities().region(), List.of(), true);
         }
         List<Reachability.Reaching> branches = new ArrayList<>();
         for (Reachability.Reaching each : ways) {
             if (!branchesOf(each, branches)) {
-                return new LinkedHashSet<>(amongThemselves);
+                return nothingShown;
             }
         }
-        Set<FilingCoordinate> out = null;
+        WhatItLeaves out = null;
         for (Reachability.Reaching each : branches) {
-            Set<FilingCoordinate> along = undividedAlong(sources, carriers, each.region(),
-                    conditionsOf(each), each.declined().isEmpty());
-            if (out == null) {
-                out = along;
-            } else {
-                out.retainAll(along);
-            }
+            WhatItLeaves along = leftAlong(sources, carriers, each.region(), conditionsOf(each),
+                    each.declined().isEmpty());
+            out = out == null ? along : out.alongBoth(along);
         }
         return out;
     }
@@ -327,27 +394,124 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                           TakenConstraint.Affine affine) {}
 
     /**
-     * The places shown undivided over the rows in {@code region}, a way stating
+     * What this leaves its places over the rows in {@code region}, a way stating
      * {@code conditions} there.
+     *
+     * <p>A side whose values are whole numbers and that is not shown undivided is asked which of
+     * its values settle the relation, and whether the rest of them leave it either way
+     * ({@link WhatARelationLeavesUndivided#leavesOf}). A product's two factors are asked that of
+     * the product alone, each against what the other reaches.
      *
      * @param sources  what the declarations leave the value each side is, or is taken of, in the
      *                 order of the sides
      * @param carriers the order each side is counted on, or null where it has none
      */
-    private Set<FilingCoordinate> undividedAlong(List<Source> sources, List<Carrier> carriers,
-                                                 SearchRegion region, List<OnAWay> conditions,
-                                                 boolean heldWhole) {
-        List<WhatARelationLeavesUndivided.Term<FilingCoordinate>> terms = new ArrayList<>();
-        // What the way states of each side, asked once and read by both readings.
-        List<List<OnAWay>> stating = new ArrayList<>();
+    private WhatItLeaves leftAlong(List<Source> sources, List<Carrier> carriers,
+                                   SearchRegion region, List<OnAWay> conditions,
+                                   boolean heldWhole) {
+        List<List<OnAWay>> stating = stating(sources, conditions, heldWhole);
+        List<WhatARelationLeavesUndivided.Term<FilingCoordinate>> terms =
+                termsAlong(sources, carriers, region, stating, heldWhole);
+        Set<FilingCoordinate> out = new LinkedHashSet<>(amongThemselves);
+        Map<NumericTerm.FromOnePosition, WhatARelationLeavesUndivided.Leaves.Settled> settled =
+                new LinkedHashMap<>();
+        if (multiplied) {
+            for (int at = 0; at < 2; at++) {
+                int other = 1 - at;
+                boolean apart = !overlapping(sides.get(at), sides.get(other))
+                        && apartByTheDeclarations(at, other, sources);
+                putDown(at, WhatARelationLeavesUndivided.leavesOfAProduct(terms.get(at),
+                        terms.get(other), constant.negated(), relation, apart,
+                        greatestOf(carriers.get(at))), out, settled);
+            }
+            return new WhatItLeaves(out, settled);
+        }
+        // A way that states of a term anything past an end on it leaves the term nothing it is
+        // shown to take (wayOf), so what is asked of a pair is what the declarations tie.
+        out.addAll(WhatARelationLeavesUndivided.of(terms, constant, relation,
+                UndividedByARelation::overlap,
+                (one, other) -> apartByTheDeclarations(one, other, sources)));
+        if (!out.containsAll(places())) {
+            out.addAll(undividedByTheDifference(sources, carriers, stating, heldWhole));
+        }
+        for (int at = 0; at < sides.size(); at++) {
+            if (out.containsAll(sides.get(at).madeOf())
+                    || !(carriers.get(at) instanceof Carrier.Whole)) {
+                continue;
+            }
+            putDown(at, WhatARelationLeavesUndivided.leavesOf(terms, at, constant, relation,
+                    UndividedByARelation::overlap,
+                    (one, other) -> apartByTheDeclarations(one, other, sources), true),
+                    out, settled);
+        }
+        return new WhatItLeaves(out, settled);
+    }
+
+    /** What {@code leaves} says of the side at {@code at}, put where it goes. */
+    private void putDown(int at, WhatARelationLeavesUndivided.Leaves leaves,
+                        Set<FilingCoordinate> undivided,
+                        Map<NumericTerm.FromOnePosition, WhatARelationLeavesUndivided.Leaves.Settled>
+                                settled) {
+        switch (leaves) {
+            case null -> { }
+            case WhatARelationLeavesUndivided.Leaves.Undivided _ ->
+                    undivided.addAll(sides.get(at).madeOf());
+            case WhatARelationLeavesUndivided.Leaves.Settled runs -> {
+                if (sides.get(at).term() != null) {
+                    settled.put(sides.get(at).term(), runs);
+                }
+            }
+        }
+    }
+
+    /** Whether a place of one side is a place of the other, or part of one. */
+    private static boolean overlapping(Side one, Side other) {
+        for (FilingCoordinate each : one.madeOf()) {
+            for (FilingCoordinate that : other.madeOf()) {
+                if (overlap(each, that)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /** The greatest whole number {@code carrier} holds, or null where it holds no greatest or none
+     *  this reads as a number. */
+    private static BigInteger greatestOf(Carrier carrier) {
+        if (carrier == null || carrier.extent().high() == null
+                || !(carrier.extent().high().at() instanceof Count greatest)) {
+            return null;
+        }
+        return greatest.exactly().floor().orNull();
+    }
+
+    /** What the way states of each side, asked once and read by both readings. */
+    private List<List<OnAWay>> stating(List<Source> sources, List<OnAWay> conditions,
+                                       boolean heldWhole) {
+        List<List<OnAWay>> out = new ArrayList<>();
         for (int i = 0; i < sides.size(); i++) {
             Side each = sides.get(i);
             // A value a rule names moves with the places the rule names beside it, so what the
             // way states of any place of its parameter is stated of it.
-            stating.add(each.term() == null || !heldWhole ? List.of()
+            out.add(each.term() == null || !heldWhole ? List.of()
                     : sources.get(i) != null && sources.get(i).named()
                     ? statingAnythingOfItsParameter(each.term(), conditions)
                     : statingAnythingOf(each.term(), conditions));
+        }
+        return out;
+    }
+
+    /**
+     * Each side as a term of the relation over the rows in {@code region}: where it may lie, what
+     * it is shown to take there, and what it takes compared by equality.
+     */
+    private List<WhatARelationLeavesUndivided.Term<FilingCoordinate>> termsAlong(
+            List<Source> sources, List<Carrier> carriers, SearchRegion region,
+            List<List<OnAWay>> stating, boolean heldWhole) {
+        List<WhatARelationLeavesUndivided.Term<FilingCoordinate>> terms = new ArrayList<>();
+        for (int i = 0; i < sides.size(); i++) {
+            Side each = sides.get(i);
             NumericDomain.Bounds holds = asARelationReadsIt(each.term() != null
                     && region.projectionOf(each.term())
                     instanceof NumericDomain.FormProjection.Within(NumericDomain.Bounds within)
@@ -363,16 +527,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             terms.add(new WhatARelationLeavesUndivided.Term<>(each.madeOf(), each.weight(), holds,
                     realizes, takes, each.term() instanceof NumericTerm.ValueOf));
         }
-        Set<FilingCoordinate> out = new LinkedHashSet<>(amongThemselves);
-        // A way that states of a term anything past an end on it leaves the term nothing it is
-        // shown to take (wayOf), so what is asked of a pair is what the declarations tie.
-        out.addAll(WhatARelationLeavesUndivided.of(terms, constant, relation,
-                UndividedByARelation::overlap,
-                (one, other) -> apartByTheDeclarations(one, other, sources)));
-        if (!out.containsAll(places())) {
-            out.addAll(undividedByTheDifference(sources, carriers, stating, heldWhole));
-        }
-        return out;
+        return terms;
     }
 
     /**

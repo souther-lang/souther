@@ -370,6 +370,18 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/partition/Realization;",
                     "collects what the level walks ran out of, the levels it was offered and the"
                             + " members of a class it left untried"),
+            Map.entry("souther.compiler.partition.LevelRealizer#ofAProduct("
+                            + "Lsouther/compiler/partition/Standing$OfAProduct;"
+                            + "Lsouther/compiler/inputs/SearchRegion;"
+                            + "Lsouther/compiler/partition/ValuesTried;)"
+                            + "Lsouther/compiler/partition/Realization;",
+                    "collects the levels it was offered and the divisors of a level it left"
+                            + " untried, beside the item it leaves open"),
+            Map.entry("souther.compiler.partition.LevelRealizer$PairsMultiplyingTo#of("
+                            + "Ljava/math/BigInteger;)"
+                            + "Lsouther/compiler/partition/LevelRealizer$PairsMultiplyingTo;",
+                    "says in what it hands back that not every divisor of the level was tried,"
+                            + " which its caller carries as the figure"),
             Map.entry("souther.compiler.partition.LevelRealizer$Search#stepsLeft()Z",
                     "the steps a search may take, marked where there is no room for another"),
             Map.entry("souther.compiler.partition.LevelRealizer$Search#outward("
