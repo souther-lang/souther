@@ -38,6 +38,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -731,6 +732,132 @@ class WhatADerivationConcludesIsWhatItsRuleComputesTest {
         assertEquals(true, Derivation.SomeElementMeeting.asksWhetherItHoldsAnything(new DecisionSubject.AnInput(XS), truth(A)));
         assertEquals(false, Derivation.SomeElementMeeting.asksWhetherItHoldsAnything(new DecisionSubject.AnInput(XS),
                 Proposition.all(List.of(truth(A), truth(XS.element())))));
+    }
+
+    /**
+     * An arm about the entry it picked out, whose statement picks out another entry of the same
+     * container, is about two entries: inside one quantifier they would be one subject. It
+     * concludes what was not read, for two elements of one container. The same arm about an
+     * entry of another container is read inside the quantifier, beside the other.
+     */
+    @Test
+    void anArmAboutTwoEntriesOfOneContainerIsReadOfNeither() {
+        DecisionSubject xs = new DecisionSubject.AnInput(XS);
+        Derivation filed = new Derivation.SomeElementMeeting(xs, truthAt(XS.element().then("k")),
+                true, Optional.empty());
+        Derivation another = new Derivation.SomeElementMeeting(xs,
+                truthAt(XS.element().then("j")), true, Optional.empty());
+        Proposition stated = concluded(new Derivation.MatchArms(List.of(
+                new Derivation.MatchArms.Arm(filed, another, true),
+                new Derivation.MatchArms.Arm(new Derivation.WrittenOut(true), truthAt(A)))));
+        Proposition unread = new Proposition.Unread(Optional.empty(), 0,
+                new WhyUnread.TwoElementsOfOneContainer(), false, true);
+        Proposition some = new Proposition.Some(xs, truth(XS.element().then("k")), true);
+        assertEquals(Proposition.any(List.of(unread,
+                Proposition.all(List.of(some.denied(), truth(A))))), stated);
+
+        Derivation ofAnother = new Derivation.SomeElementMeeting(
+                new DecisionSubject.AnInput(YS), truthAt(YS.element()), true, Optional.empty());
+        Proposition read = concluded(new Derivation.MatchArms(List.of(
+                new Derivation.MatchArms.Arm(filed, ofAnother, true),
+                new Derivation.MatchArms.Arm(new Derivation.WrittenOut(true), truthAt(A)))));
+        assertEquals(Proposition.any(List.of(
+                new Proposition.Some(xs, Proposition.all(List.of(truth(XS.element().then("k")),
+                        new Proposition.Some(new DecisionSubject.AnInput(YS), truth(YS.element()),
+                                true))), true),
+                Proposition.all(List.of(some.denied(), truth(A))))), read);
+    }
+
+    /**
+     * A statement about the entry a lookup picked out, which quantifies the same container, is
+     * about two entries: the entry picked out stands at the container's element with no quantifier
+     * around it, and the quantifier inside would take it for its own. It concludes what was not
+     * read, for two elements of one container. The same statement quantifying another container is
+     * read beside what picked the entry out.
+     */
+    @Test
+    void aStatementAboutAnEntryPickedOutThatQuantifiesItsContainerIsReadOfNeither() {
+        DecisionSubject xs = new DecisionSubject.AnInput(XS);
+        Derivation picked = new Derivation.SomeElementMeeting(xs, truthAt(XS.element().then("k")),
+                true, Optional.empty());
+        Proposition stated = concluded(new Derivation.OfTheEntryUnderTheKey(picked,
+                new Derivation.SomeElementMeeting(xs, truthAt(XS.element().then("j")), true,
+                        Optional.empty())));
+        assertEquals(new Proposition.Unread(Optional.empty(), 0,
+                new WhyUnread.TwoElementsOfOneContainer(), false, true), stated);
+
+        DecisionSubject ys = new DecisionSubject.AnInput(YS);
+        Proposition read = concluded(new Derivation.OfTheEntryUnderTheKey(picked,
+                new Derivation.SomeElementMeeting(ys, truthAt(YS.element()), true,
+                        Optional.empty())));
+        assertEquals(Proposition.all(List.of(new Proposition.Some(ys, truth(YS.element()), true),
+                truth(XS.element().then("k")))), read);
+    }
+
+    /** A quantifier over a container cannot be made to say another over it of its element. */
+    @Test
+    void aQuantifierOverAContainerHoldsNoOtherOverIt() {
+        DecisionSubject xs = new DecisionSubject.AnInput(XS);
+        Proposition inner = new Proposition.Some(xs, truth(XS.element()), true);
+        assertThrows(IllegalArgumentException.class, () -> new Proposition.Some(xs,
+                Proposition.all(List.of(truth(A), inner)), true));
+    }
+
+    /**
+     * What a search asks of each node it reaches names the places under the node it was written
+     * of, and those are the places under the node reached. A quantifier there over the nodes below
+     * is over the nodes below another node, so a quantifier over the nodes below holds that
+     * search, and the search unfolds one step down; a quantifier there over a container outside
+     * the node is over that container, and is refused as any other.
+     */
+    @Test
+    void aSearchNamesThePlacesUnderTheNodeItReachesAndNoOther() {
+        TermPath node = TermPath.of("n");
+        DecisionSubject below = new DecisionSubject.AnInput(node.then("below"));
+        Proposition belowAsked = new Proposition.Some(below,
+                truth(node.then("below").element().then("v")), true);
+        Proposition.SomeReachable reached = new Proposition.SomeReachable(
+                node.then("below").element(), node, List.of("below"), belowAsked,
+                Optional.empty(), true);
+        assertDoesNotThrow(() -> new Proposition.Some(below, reached, true));
+        assertDoesNotThrow(() -> Derivation.ATreeSearched.unfoldsOnce(reached, belowAsked, node,
+                List.of("below"), ConditionJoin.EITHER));
+
+        DecisionSubject xs = new DecisionSubject.AnInput(XS);
+        Proposition.SomeReachable outside = new Proposition.SomeReachable(
+                node.then("below").element(), node, List.of("below"),
+                new Proposition.Some(xs, truth(XS.element()), true), Optional.empty(), true);
+        assertThrows(IllegalArgumentException.class, () -> new Proposition.Some(xs, outside, true));
+    }
+
+    /**
+     * A search that starts at the node it was written of reaches that node, where the places it
+     * names under the node are the ones spelled: a quantifier over the nodes below in what it asks
+     * is, at that node, over the nodes below the start. And what it says of the start having none
+     * below is said of the start as it stands. Each inside a quantifier over the nodes below the
+     * start is two quantifiers over one container, and is refused; inside one over another
+     * container it is not.
+     */
+    @Test
+    void aSearchFromTheNodeItWasWrittenOfNamesThePlacesUnderThatNode() {
+        TermPath node = TermPath.of("n");
+        DecisionSubject below = new DecisionSubject.AnInput(node.then("below"));
+        DecisionSubject xs = new DecisionSubject.AnInput(XS);
+        Proposition.SomeReachable fromTheNode = new Proposition.SomeReachable(node, node,
+                List.of("below"), new Proposition.Some(below,
+                        truth(node.then("below").element().then("v")), true),
+                Optional.empty(), true);
+        assertThrows(IllegalArgumentException.class,
+                () -> new Proposition.Some(below, fromTheNode, true));
+
+        Proposition.SomeReachable noneBelow = new Proposition.SomeReachable(node, node,
+                List.of("below"), truth(node.then("v")),
+                Optional.of(new Proposition.Some(below, new Proposition.Always(true), false)),
+                true);
+        assertThrows(IllegalArgumentException.class,
+                () -> new Proposition.Some(below, noneBelow, true));
+        assertDoesNotThrow(() -> new Proposition.Some(xs, noneBelow, true));
+        assertDoesNotThrow(() -> new Proposition.Some(xs, fromTheNode, true));
     }
 
     /** A conclusion that has the container's holding anything as a part cannot be made without it. */

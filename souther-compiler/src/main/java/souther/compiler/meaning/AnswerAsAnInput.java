@@ -408,10 +408,13 @@ public final class AnswerAsAnInput {
                 }
                 yield some.holds() ? element : element.denied();
             }
+            // Every answer is said under one name, so a quantifier over one answer whose element
+            // asks of another is two answers under it, which no composer is handed.
             case Proposition.Some some -> {
                 DecisionSubject container = subject(some.container());
                 Proposition element = proposition(some.ofTheElement());
-                yield container == null || element == null ? null
+                yield container == null || element == null
+                        || Proposition.Some.quantifiesOver(container, element) ? null
                         : new Proposition.Some(container, element, some.holds());
             }
         };
