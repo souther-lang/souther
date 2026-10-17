@@ -530,8 +530,8 @@ public final class WhereEachLineDecides {
         private final int whole;
         /** Which ways the parts can come out together ({@link #possible}). */
         private final int possible;
-        /** The values the statement asks the case of more than once, which are what leaves some
-         *  ways out of {@link #possible} and what the statement is read under the cases of. */
+        /** The values the statement asks the case of more than once, which are what the statement
+         *  is read under the cases of, and leave some ways out of {@link #possible}. */
         private final List<AskedTwice> twice;
         /** Whether some part has asked for the statement under each case of a value. */
         private boolean readUnderEachCase;
@@ -622,9 +622,30 @@ public final class WhereEachLineDecides {
          *
          * <p>The cases the parts name need not be every case of the value, so a value none of them
          * names is a case as well: every way holding none of them is possible.
+         *
+         * <p>Two quantifiers over one container are not free of each other either, where one asks
+         * of its element everything the other asks ({@link Proposition.Some#holdsOnlyWhere}): no
+         * row holds an element meeting the first and none meeting the second.
+         * {@code Map.get(k, m)} read with a default is some entry under {@code k} whose value
+         * meets the comparison, or no entry under {@code k} and the default meeting it. Kept in,
+         * the way with the first held and the second failing is one where the default's
+         * comparison turns whether the entry's value is read, and the entry's line is said in two
+         * cases told apart by a comparison of the default.
          */
         private int possible(List<AskedTwice> twice, WhatAStatementComesTo.Asking asking) {
             int out = WhatAStatementComesTo.ALWAYS;
+            for (int stronger = 0; stronger < named.size(); stronger++) {
+                if (!(named.get(stronger) instanceof Proposition.Some some)) {
+                    continue;
+                }
+                for (int weaker = 0; weaker < named.size(); weaker++) {
+                    if (weaker != stronger && named.get(weaker) instanceof Proposition.Some other
+                            && some.holdsOnlyWhere(other)) {
+                        out = asking.both(out, asking.either(asking.part(stronger, false),
+                                asking.part(weaker, true)));
+                    }
+                }
+            }
             for (AskedTwice value : twice) {
                 List<Integer> parts = value.parts();
                 // Which of the parts hold for a value that is each case; and none of them for a
@@ -701,8 +722,13 @@ public final class WhereEachLineDecides {
                                 CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO;
                         case TakenApart.RanOut _ -> CompositionBudget.STEPS_A_STATEMENT_IS_READ_IN;
                         // No one part tells the cases apart only where some ways are left out of
-                        // what is possible, which only a value in twice leaves out; and
-                        // the statement is read under each case of the first of those.
+                        // what is possible, and only a value in twice leaves them out so: the
+                        // statement is read under each case of the first of those. A quantifier
+                        // holding only where another does leaves out only the way with the one
+                        // held and the other failing, so any two possible ways are joined by ways
+                        // each one part apart from the last, every one of them possible, and
+                        // where the line decides at one end and not at the other some part tells
+                        // the two apart.
                         case TakenApart.ByNoOnePart _, TakenApart.Taken _ ->
                                 throw new IllegalStateException("where " + part + " decides in "
                                         + stated + " was told apart by no one part, and the"
@@ -710,7 +736,14 @@ public final class WhereEachLineDecides {
                     })));
         }
 
-        /** Where {@code part} decides, taken apart into {@code most} cases at most. */
+        /**
+         * Where {@code part} decides, taken apart into {@code most} cases at most.
+         *
+         * <p>Only at a way of the other parts where {@code part} can come out either way: where
+         * one of the two is no row's, nothing turns {@code part} there, and the statement coming
+         * out differently with it held and failing is no case where it decides. The cases are then
+         * over the other parts, and so is what is possible of them.
+         */
         private TakenApart takenApart(Proposition part, int most) {
             if (whole < 0) {
                 return new TakenApart.RanOut();
@@ -718,10 +751,13 @@ public final class WhereEachLineDecides {
             WhatAStatementComesTo.Asking asking =
                     ways.asking(CompositionBudget.STEPS_A_STATEMENT_IS_READ_IN.maximum());
             int at = index.get(part.key());
-            int decides = asking.oneNotTheOther(asking.with(whole, at, true),
-                    asking.with(whole, at, false));
+            int held = asking.with(possible, at, true);
+            int failing = asking.with(possible, at, false);
+            int decides = asking.both(asking.oneNotTheOther(asking.with(whole, at, true),
+                    asking.with(whole, at, false)), asking.both(held, failing));
             List<List<Proposition>> cases = new ArrayList<>();
-            return switch (split(asking, decides, possible, new ArrayList<>(), most, cases)) {
+            return switch (split(asking, decides, asking.either(held, failing), new ArrayList<>(),
+                    most, cases)) {
                 case NOT -> new TakenApart.Taken(cases);
                 case PAST_THE_FIGURE -> new TakenApart.MoreThan();
                 case BY_NO_ONE_PART -> new TakenApart.ByNoOnePart();

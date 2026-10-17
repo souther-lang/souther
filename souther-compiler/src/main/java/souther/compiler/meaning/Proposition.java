@@ -12,8 +12,10 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.SortedMap;
 import java.util.TreeMap;
+import java.util.stream.Collectors;
 
 /**
  * What a condition states, about the subjects it is finally about.
@@ -478,6 +480,30 @@ public sealed interface Proposition {
         @Override
         public Proposition denied() {
             return new Some(container, ofTheElement, !holds);
+        }
+
+        /**
+         * Whether {@code other} holds wherever this does: both held, over one container, and every
+         * part {@code other} asks of its element one this asks of its own. An element meeting this
+         * meets {@code other}, so the container holds one.
+         *
+         * <p>Read off the parts as they are written and nothing more: a part {@code other} asks
+         * that this asks only in other words is no part this was seen to ask, and the answer is
+         * no.
+         */
+        public boolean holdsOnlyWhere(Some other) {
+            return holds && other.holds && container.equals(other.container)
+                    && partsOf(ofTheElement).containsAll(partsOf(other.ofTheElement));
+        }
+
+        /** The spellings of what {@code element} asks of the element, each part of it once. */
+        private static Set<String> partsOf(Proposition element) {
+            return switch (element) {
+                case All all -> all.parts().stream().map(Proposition::key)
+                        .collect(Collectors.toSet());
+                case Always(boolean holds) when holds -> Set.of();
+                default -> Set.of(element.key());
+            };
         }
     }
 

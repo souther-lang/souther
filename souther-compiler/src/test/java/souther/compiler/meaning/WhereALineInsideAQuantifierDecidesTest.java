@@ -195,6 +195,56 @@ class WhereALineInsideAQuantifierDecidesTest {
         assertEquals(Set.of(), notTakenApartAt(ofTheRow), ofTheRow::toString);
     }
 
+    /**
+     * Some element meeting {@code k} and the line, or no element meeting {@code k} and {@code d}:
+     * a lookup with a default. The first quantifier holds only where the second does, so with
+     * the second failing the first cannot hold, and {@code d} turns nothing of whether the line is
+     * read. The line decides in one case, where some element meets {@code k}; and {@code d}
+     * decides where none does, with nothing asked of the first quantifier. The same where the
+     * second asks nothing of its element, which is the container holding one.
+     */
+    @Test
+    void aQuantifierHoldingOnlyWhereAnotherDoesIsNotSplitByWhatStandsBesideTheOther() {
+        Proposition.Compared line = compared(N, 0, Rel.GT);
+        Proposition.Compared d = compared(A, 0, Rel.GT);
+        for (Proposition k : List.of(compared(XS.element().then("k"), 0, Rel.GT),
+                new Proposition.Always(true))) {
+            Proposition entry = new Proposition.Some(CONTAINER,
+                    Proposition.all(List.of(k, line)), true);
+            Proposition.Some filed = new Proposition.Some(CONTAINER, k, true);
+            Proposition stated = Proposition.any(List.of(entry,
+                    Proposition.all(List.of(filed.denied(), d))));
+
+            List<Proposition> ofTheLine = casesOf(stated, line);
+            assertEquals(1, ofTheLine.size(), () -> "one case, of " + stated + ": " + ofTheLine);
+            assertFalse(ofTheLine.getFirst().key().contains(d.key()),
+                    () -> "the default's line is no part of where the entry's decides: "
+                            + ofTheLine);
+            assertEquals(List.of(filed.denied()), casesOf(stated, d),
+                    () -> "the default's line decides where nothing meets k, of " + stated);
+        }
+    }
+
+    /**
+     * The control: where the second quantifier asks of its element something the first does not,
+     * an element meeting the first need not meet it, and {@code d} beside it turns whether the
+     * line is read.
+     */
+    @Test
+    void aQuantifierAskingWhatAnotherDoesNotIsSplitByWhatStandsBesideIt() {
+        Proposition.Compared line = compared(N, 0, Rel.GT);
+        Proposition.Compared d = compared(A, 0, Rel.GT);
+        Proposition entry = new Proposition.Some(CONTAINER, Proposition.all(List.of(
+                compared(XS.element().then("k"), 0, Rel.GT), line)), true);
+        Proposition other = new Proposition.Some(CONTAINER,
+                compared(XS.element().then("j"), 0, Rel.GT), false);
+        Proposition stated = Proposition.any(List.of(entry, Proposition.all(List.of(other, d))));
+
+        List<Proposition> ofTheLine = casesOf(stated, line);
+        assertTrue(ofTheLine.stream().anyMatch(each -> each.key().contains(d.key())),
+                () -> "the default's line tells the cases apart: " + ofTheLine);
+    }
+
     /** Every figure some case nobody took apart was stopped at. */
     private static Set<CompositionBudget> notTakenApartAt(List<DecidingCase> cases) {
         Set<CompositionBudget> out = new HashSet<>();

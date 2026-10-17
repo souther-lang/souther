@@ -75,13 +75,35 @@ class AMapLookupIsReadAsTheEntryItSelectsTest {
     }
 
     /**
+     * The entry's line decides wherever an entry is filed under the key, whatever the default is
+     * against the threshold: where none is, the entry's comparison is not what the statement
+     * says. Read so, the threshold runs over every value on the way to the entry, and what the
+     * entry's value is said to be is what the match written out says of it.
+     */
+    @Test
+    void theDefaultsLineDoesNotDivideWhereTheEntrysLineDecides() {
+        String called = report(measured(WITH_DEFAULT));
+        String written = report(measured(WRITTEN_OUT));
+
+        assertEquals(partitionAbout(written, "m[*]"), partitionAbout(called, "m[*]"), called);
+        assertTrue(partitionAbout(called, "m[*]").startsWith("· no line:"), called);
+    }
+
+    /** The partition line about {@code place}, without where its comparison stands. */
+    private static String partitionAbout(String report, String place) {
+        return report.lines().map(String::strip)
+                .filter(line -> line.endsWith("about `" + place + "`"))
+                .map(line -> line.replaceFirst("comparison@\\d+:\\d+", "comparison"))
+                .findFirst().orElse("");
+    }
+
+    /**
      * Whether everything {@code report} says went unread is that a relation is not shown to reach
      * every value of a place.
      *
-     * <p>The entry's line decides where the default's line does not, and that is a case over the
-     * threshold: along each way to it the threshold runs over only some of its values, so along
-     * neither is it shown to reach every entry. What the two ways reach together is not shown
-     * either, and the comparison itself was read.
+     * <p>What is left is the threshold: on the way to the entry the lookup's condition on the map
+     * and the key ties the entry's value, so the entry's value is not shown to reach every
+     * threshold. The comparison itself was read.
      */
     private static boolean readSaveForWhatTheOtherValueReaches(String report) {
         return report.lines().filter(line -> line.strip().startsWith("· not read"))
