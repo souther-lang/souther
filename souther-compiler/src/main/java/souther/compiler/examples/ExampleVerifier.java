@@ -2134,16 +2134,17 @@ public final class ExampleVerifier {
      * value of that type, or the case it states is one a value of that type can be.
      *
      * <p>Both grains, because a row is compared at the grain it states and either can name what no
-     * answer is. A case is asked of the cases the answer's type is made of rather than of the cases
-     * it is said to answer with as a result, which a type that is not a union of declared cases has
-     * none of — and a case named there is still none a value of it can be.
+     * answer is, and both by the one reading of what stands at a position that a stand-in is
+     * admitted by. A case is asked of the cases the answer's type is made of rather than of the
+     * cases it is said to answer with as a result, which a type that is not a union of declared
+     * cases has none of — and a case named there is still none a value of it can be.
      */
     private boolean answerable(FixtureReader fixtures, Expectation.Asserts stated,
                                FixtureReader.ExpectedValue statedValue, Type answers) {
         return switch (stated) {
             case Expectation.TheValue _ ->
-                    fixtures.isAValueOf(projected(statedValue.live(), answers), answers);
-            case Expectation.TheCase(TypeSymbol name) -> fixtures.isACaseOf(name, answers);
+                    fixtures.holds(projected(statedValue.live(), answers), answers);
+            case Expectation.TheCase(TypeSymbol name) -> fixtures.holdsACaseOf(name, answers);
         };
     }
 
@@ -2153,7 +2154,6 @@ public final class ExampleVerifier {
      * and a row writes the value, not the bridge case — which is a name this source does not have.
      * The same projection a Souther caller does, done on the loaded classes.
      */
-
     private Object projected(Object result, Type out) {
         return projected(result, out, module.name(), kinds, sums);
     }

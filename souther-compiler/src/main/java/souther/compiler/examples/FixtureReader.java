@@ -298,8 +298,14 @@ public final class FixtureReader {
      * <p>A position that says none of those holds anything. There is nothing here to refuse it with:
      * a type variable is decided by each call and a position with no declared type says nothing, and
      * both are answered where a fixture's shape is read.
+     *
+     * <p>Asked of an expected value no answer is compared against, too. Every answer is a value of
+     * the answer's type, so a stated value that is not one is what no answer is: what it states of
+     * itself — which collection, which case, which scalar — is what it is compared by, at every depth
+     * it has. A collection holding nothing has no depth below it, which is why this is asked of the
+     * value and not of the type it was built at.
      */
-    private boolean holds(Object value, Type position) {
+    boolean holds(Object value, Type position) {
         return switch (position) {
             // Absence is what an optional makes room for; a value under one is held to what it holds,
             // and a `?` position takes the value itself as well as a `Some` around it.
@@ -317,25 +323,24 @@ public final class FixtureReader {
     }
 
     /**
-     * Whether {@code value} is a value of {@code type}, read by {@link #holds} — the one reading a
-     * built value is put through.
+     * Whether some value {@code position} holds is of the case {@code name}, read the way
+     * {@link #holds} reads a value there: a scalar is its own case, a name is any of the leaves it
+     * holds, an optional is what it holds, a collection is no case, and a position that says none of
+     * those may hold anything.
      *
-     * <p>For an expected value that no answer is compared against. Being a value of the answer's
-     * type is what every answer is, so a stated value that is not one is not what any answer is:
-     * what an expected value states of itself — which collection it is, which case, which scalar —
-     * is what it is compared by, at every depth the value has. A collection holding nothing has no
-     * depth below it, which is why this is asked of the value and not of the type it was built at.
+     * <p>The same reading as the value's, arm for arm, so that a row stating a case and a row stating
+     * a value are held to one account of what stands at a position.
      */
-    boolean isAValueOf(Object value, Type type) {
-        return holds(value, type);
-    }
-
-    /**
-     * Whether a value of {@code type} can be of the case {@code name}: whether it is among the cases
-     * {@code type} is made of, which are the cases {@link #caseOfValue} finds a built value among.
-     */
-    boolean isACaseOf(TypeSymbol name, Type type) {
-        return AtomSpace.subjectAtoms(type, kinds, sums).contains(name);
+    boolean holdsACaseOf(TypeSymbol name, Type position) {
+        return switch (position) {
+            case Type.OptionOf o -> holdsACaseOf(name, o.element());
+            case Type.Prim p -> name.equals(TypeSymbol.primitive(p));
+            case Type.Ref r when r.name().isPrimitive() -> name.equals(r.name());
+            case Type.Ref _, Type.Union _ ->
+                    AtomSpace.subjectAtoms(position, kinds, sums).contains(name);
+            case Type.ListOf _, Type.SetOf _, Type.MapOf _ -> false;
+            case null, default -> true;
+        };
     }
 
     private boolean each(java.util.Collection<?> values, Type element) {
