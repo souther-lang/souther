@@ -2298,7 +2298,7 @@ public final class InvariantChecker {
                         Coordinates byName, Map<RuleRef.Invariant, Required> raised,
                         ReadingEvidence took,
                         Map<ReadingPlace, Required> raisedByPart,
-                        BlockReason.RuleReadingStopped stoppedOn) {
+                        WhereTheFormStopped stoppedOn) {
         raises(raised, rule, states);
         // And what this part of it raises, kept apart from what the rule raises. A reader that found
         // one conjunct wanting reaches for this: the questions of the conjunct written beside it are
@@ -2380,8 +2380,9 @@ public final class InvariantChecker {
         if (stoppedOn != null) {
             ConstructOccurrence wrote = AdmissibleReading.wroteIt(part);
             RuleSite site = RuleSite.at(wrote.origin(), statement.part());
+            BlockReason.RuleReadingStopped why = stoppedOn.said();
             standing.forEach(name -> took.stoppedOnTheForm(rule,
-                    new FormShortfall(wrote, site, stoppedOn, name)));
+                    new FormShortfall(wrote, site, why, name)));
         }
     }
 
@@ -2492,7 +2493,7 @@ public final class InvariantChecker {
         CanonicalForm read = canonicalFormOf(comparison, at, byName);
         // What it stopped on, where it did: the same word for a rule ordering the values that drew
         // no line and for a part of any comparison that nothing took in.
-        BlockReason.RuleReadingStopped formStopped = whereTheFormStopped(read, byName, answering);
+        WhereTheFormStopped formStopped = whereTheFormStopped(read, byName, answering);
         // The places a line over several of them relates and is not shown to leave undivided,
         // worked out once: the question the clause leaves standing at each and what a report is
         // told of it are one answer.
@@ -2973,7 +2974,7 @@ public final class InvariantChecker {
      */
     private ClauseStates states(Core clause, Denotations at,
                                 Coordinates byName, CanonicalForm read,
-                                BlockReason.RuleReadingStopped stoppedOn, Set<RuleKey> notShown,
+                                WhereTheFormStopped stoppedOn, Set<RuleKey> notShown,
                                 Arrivals answering, RunsRead runs) {
         List<RuleKey> found = new ArrayList<>();
         namedIn(clause, at, byName, answering, found);
@@ -3054,7 +3055,7 @@ public final class InvariantChecker {
      * answer about.
      */
     private static SequencedMap<RuleKey, List<BlockReason.RuleReadingStopped>> stoppedOnTheFormOf(
-            List<RuleKey> found, CanonicalForm read, BlockReason.RuleReadingStopped stoppedOn) {
+            List<RuleKey> found, CanonicalForm read, WhereTheFormStopped stoppedOn) {
         SequencedMap<RuleKey, List<BlockReason.RuleReadingStopped>> out = new LinkedHashMap<>();
         // Only a rule that orders the values. An equality singles one out and puts no end anywhere,
         // which is what it states and not what a reading of it managed — so however little of the
@@ -3067,26 +3068,51 @@ public final class InvariantChecker {
         // has a line worked out. What differs between names is settled per conjunct and arrives
         // here as separate readings of separate comparisons, which is why this is asked per name
         // rather than said once of the clause.
-        found.forEach(each -> out.put(each, List.of(stoppedOn)));
+        BlockReason.RuleReadingStopped why = stoppedOn.said();
+        found.forEach(each -> out.put(each, List.of(why)));
         return out;
     }
 
     /**
-     * What the arithmetic stopped on in {@code read}, or null where it read the comparison to the
-     * end or there is no comparison to read.
+     * What the arithmetic stopped on in one comparison, worked out the first time a question asks
+     * and not before.
      *
-     * <p>Worked out once per comparison and handed to both questions that ask it: whether a rule
-     * ordering the values has a line ({@link #stoppedOnTheFormOf}), and what a part no reading took
-     * in was given up on ({@link #settle}). The arithmetic is one for both, so the word is.
+     * <p>Handed to both questions that ask it: whether a rule ordering the values has a line
+     * ({@link #stoppedOnTheFormOf}), and what a part no reading took in was given up on
+     * ({@link #settle}). The arithmetic is one for both, so the word is. Most comparisons the
+     * arithmetic stops on are asked neither — an equality some reading took in raises no line and
+     * leaves nothing standing — and the word is a walk of the expression it stopped at, so it is
+     * not paid for one nobody reads.
      */
-    private BlockReason.RuleReadingStopped whereTheFormStopped(CanonicalForm read,
-                                                               Coordinates byName,
-                                                               Arrivals answering) {
-        return read instanceof CanonicalForm.NotRead stopped
-                ? UnreadComparison.notAboutOwnValues(
+    private final class WhereTheFormStopped {
+
+        private final CanonicalForm.NotRead stopped;
+        private final Coordinates byName;
+        private final Arrivals answering;
+        private BlockReason.RuleReadingStopped said;
+
+        private WhereTheFormStopped(CanonicalForm.NotRead stopped, Coordinates byName,
+                                    Arrivals answering) {
+            this.stopped = stopped;
+            this.byName = byName;
+            this.answering = answering;
+        }
+
+        BlockReason.RuleReadingStopped said() {
+            if (said == null) {
+                said = UnreadComparison.notAboutOwnValues(
                         placesIn(stopped.stoppedAt(), stopped.under(), byName, answering).origin(),
-                        stopped.decided())
-                : null;
+                        stopped.decided());
+            }
+            return said;
+        }
+    }
+
+    /** Where the arithmetic stopped in {@code read}, or null where it read it to the end. */
+    private WhereTheFormStopped whereTheFormStopped(CanonicalForm read, Coordinates byName,
+                                                   Arrivals answering) {
+        return read instanceof CanonicalForm.NotRead stopped
+                ? new WhereTheFormStopped(stopped, byName, answering) : null;
     }
 
     /**

@@ -8,6 +8,7 @@ import souther.compiler.values.UnreadReason;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -15,6 +16,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
+import java.util.function.Predicate;
 import java.util.stream.Stream;
 
 /**
@@ -267,7 +269,7 @@ public final class RuleAccounting {
                 case TheValueReadingSays it -> new WhatAQuestionStandsOn(
                         RuleReasons.from(Stream.concat(
                                 it.shortfalls().stream()
-                                        .filter(each -> !it.toldByTheForm(each))
+                                        .filter(it.toldByTheForm().negate())
                                         .map(each -> new RuleReasons.Said(each.site(),
                                                 sentTo(each),
                                                 BlockReason.ofARuleTheValueReadingLeft(
@@ -346,8 +348,8 @@ public final class RuleAccounting {
             }
 
             /**
-             * Whether {@code shortfall} is a form the reading of values does not take apart, written
-             * at a comparison the arithmetic said of where it stopped, at the same position.
+             * Which shortfalls are a form the reading of values does not take apart, written at a
+             * comparison the arithmetic said of where it stopped, at the same position.
              *
              * <p>Then the arithmetic's word is the one said of it. A form that reading does not
              * take apart is a statement that no reading here took the form apart, which is not true
@@ -360,12 +362,16 @@ public final class RuleAccounting {
              * of values was short of is still that ({@link #why()}), and only the word a reader is
              * told turns on the arithmetic.
              */
-            boolean toldByTheForm(RuleShortfall shortfall) {
-                return shortfall.kind() == RuleShortfall.Kind.LEAF
+            Predicate<RuleShortfall> toldByTheForm() {
+                Set<Told> told = new HashSet<>();
+                theForm.forEach(each -> told.add(new Told(each.site(), each.position())));
+                return shortfall -> shortfall.kind() == RuleShortfall.Kind.LEAF
                         && shortfall.why().why() == UnreadReason.FORM_NOT_READ
-                        && theForm.stream().anyMatch(each -> each.site().equals(shortfall.site())
-                                && each.position().equals(shortfall.position()));
+                        && told.contains(new Told(shortfall.site(), shortfall.position()));
             }
+
+            /** A written construct, at one position. */
+            private record Told(RuleSite site, FactSubject position) {}
 
             /**
              * What a rule of this is answerable for, as reasons alone.
