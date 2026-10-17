@@ -51,6 +51,17 @@ class AComparisonOfAQuotientByAValueIsReadOnEachSignOfTheDivisorTest {
             }
             """;
 
+    /**
+     * One relation of each kind the reading tells apart: an order whose value holds at its line,
+     * one whose value does not, and a value named. The relation is otherwise only handed on and
+     * turned, which {@code Rel.turned} answers for every relation.
+     */
+    private static final List<String> RELATIONS = List.of(">=", ">", "==");
+
+    private static final String ABOVE = "guard b.days > 0 else No";
+
+    private static final String BELOW = "guard b.days < 0 else No";
+
     /** The comparison the issue was about: read, and what it states is all accounted for. */
     @Test
     void theQuotientUnderAPositiveDivisorIsReadAndAccountedFor() {
@@ -67,18 +78,20 @@ class AComparisonOfAQuotientByAValueIsReadOnEachSignOfTheDivisorTest {
      */
     @Test
     void everyRelationOnEitherSignIsTheComparisonWrittenOut() {
-        List<String> relations = List.of(">=", ">", "<=", "<", "==", "/=");
-        List<String> turned = List.of("<=", "<", ">=", ">", "==", "/=");
-        for (int i = 0; i < relations.size(); i++) {
-            String rel = relations.get(i);
-            assertEquals(Set.copyOf(borders("guard b.days > 0 else No",
-                            "a.pay " + rel + " 100 * b.days")),
-                    Set.copyOf(borders("guard b.days > 0 else No",
-                            "a.pay / b.days " + rel + " 100")), "above nought: " + rel);
-            assertEquals(Set.copyOf(borders("guard b.days < 0 else No",
-                            "a.pay " + turned.get(i) + " 100 * b.days")),
-                    Set.copyOf(borders("guard b.days < 0 else No",
-                            "a.pay / b.days " + rel + " 100")), "below nought: " + rel);
+        List<String> turned = List.of("<=", "<", "==");
+        List<String[]> bodies = new ArrayList<>();
+        for (int i = 0; i < RELATIONS.size(); i++) {
+            String rel = RELATIONS.get(i);
+            bodies.add(new String[] {ABOVE, "a.pay " + rel + " 100 * b.days"});
+            bodies.add(new String[] {ABOVE, "a.pay / b.days " + rel + " 100"});
+            bodies.add(new String[] {BELOW, "a.pay " + turned.get(i) + " 100 * b.days"});
+            bodies.add(new String[] {BELOW, "a.pay / b.days " + rel + " 100"});
+        }
+        Map<String, List<BorderAssessment>> each = linesOfEach(modelOf(bodies));
+        for (int i = 0; i < bodies.size(); i += 2) {
+            assertEquals(Set.copyOf(described(each.get("f" + i))),
+                    Set.copyOf(described(each.get("f" + (i + 1)))),
+                    bodies.get(i + 1)[0] + " / " + bodies.get(i + 1)[1]);
         }
     }
 
@@ -88,16 +101,16 @@ class AComparisonOfAQuotientByAValueIsReadOnEachSignOfTheDivisorTest {
      */
     @Test
     void everyPointOfTheLineIsReached() {
-        for (String guard : List.of("guard b.days > 0 else No", "guard b.days < 0 else No")) {
+        List<String[]> bodies = new ArrayList<>();
+        for (String guard : List.of(ABOVE, BELOW)) {
             for (String condition : List.of("a.pay / b.days >= 100", "a.pay / b.days > 100",
                     "100 < a.pay / b.days", "a.pay / b.days == 100")) {
-                String report = human(MODEL.formatted(guard, condition));
-                assertFalse(report.contains("nothing could show"),
-                        guard + " / " + condition + "\n" + report);
-                assertFalse(report.contains("no row can stand"),
-                        guard + " / " + condition + "\n" + report);
+                bodies.add(new String[] {guard, condition});
             }
         }
+        String report = human(modelOf(bodies));
+        assertFalse(report.contains("nothing could show"), report);
+        assertFalse(report.contains("no row can stand"), report);
     }
 
     @Test
@@ -171,17 +184,23 @@ class AComparisonOfAQuotientByAValueIsReadOnEachSignOfTheDivisorTest {
      */
     @Test
     void theRowsBuiltStandOnBothSidesOfTheExactQuotient() {
-        for (String guard : List.of("guard b.days > 0 else No", "guard b.days < 0 else No",
-                "guard b.days /= 0 else No")) {
-            for (String rel : List.of(">=", ">", "<=", "<", "==", "/=")) {
-                String condition = "a.pay / b.days " + rel + " 100";
-                Set<Boolean> sides = new TreeSet<>();
-                for (BigInteger[] row : rows(linesOfModel(MODEL.formatted(guard, condition)))) {
-                    sides.add(holds(rel, row[0], row[1]));
-                }
-                assertEquals(Set.of(false, true), sides,
-                        () -> "rows on both sides of: " + guard + " / " + condition);
+        List<String[]> bodies = new ArrayList<>();
+        List<String> relations = new ArrayList<>();
+        for (String guard : List.of(ABOVE, BELOW, "guard b.days /= 0 else No")) {
+            for (String rel : RELATIONS) {
+                bodies.add(new String[] {guard, "a.pay / b.days " + rel + " 100"});
+                relations.add(rel);
             }
+        }
+        Map<String, List<BorderAssessment>> each = linesOfEach(modelOf(bodies));
+        for (int i = 0; i < bodies.size(); i++) {
+            Set<Boolean> sides = new TreeSet<>();
+            for (BigInteger[] row : rows(each.get("f" + i))) {
+                sides.add(holds(relations.get(i), row[0], row[1]));
+            }
+            String[] body = bodies.get(i);
+            assertEquals(Set.of(false, true), sides,
+                    () -> "rows on both sides of: " + body[0] + " / " + body[1]);
         }
     }
 
@@ -256,20 +275,59 @@ class AComparisonOfAQuotientByAValueIsReadOnEachSignOfTheDivisorTest {
      * not as the denial the source would write — the same line and the same points.
      */
     private static List<String> bordersOfModel(String model) {
-        return linesOfModel(model).stream()
-                .map(line -> line.border().cut() + " " + Set.copyOf(line.items().keySet()))
+        return described(linesOfModel(model));
+    }
+
+    /** Each line, without the name of the behavior it was drawn in. */
+    private static List<String> described(List<BorderAssessment> lines) {
+        assertNotNull(lines, "the behavior was measured");
+        return lines.stream()
+                .map(line -> (line.border().cut() + " " + Set.copyOf(line.items().keySet()))
+                        .replaceAll("behavior=f\\d*", "behavior=f"))
                 .toList();
     }
 
+    /**
+     * One model holding a behavior {@code f0}, {@code f1}, … for each guard and condition, so that
+     * the comparisons a test sets beside one another are read in one compilation.
+     */
+    private static String modelOf(List<String[]> bodies) {
+        StringBuilder out = new StringBuilder("""
+                module demo
+
+                data Month = { pay: Int, days: Int }
+                data Ok
+                data No
+                """);
+        for (int i = 0; i < bodies.size(); i++) {
+            out.append("""
+
+                    behavior f%d : (a: Month, b: Month, c: Month) -> Ok | No
+
+                    let f%d (a, b, c) = {
+                        %s
+                        guard %s else No
+                        Ok
+                    }
+                    """.formatted(i, i, bodies.get(i)[0], bodies.get(i)[1]));
+        }
+        return out.toString();
+    }
+
     private static List<BorderAssessment> linesOfModel(String model) {
+        List<BorderAssessment> lines = linesOfEach(model).get("f");
+        assertNotNull(lines, "f was measured");
+        return lines;
+    }
+
+    /** Every behavior's lines, by its name. */
+    private static Map<String, List<BorderAssessment>> linesOfEach(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         Map<String, List<BorderAssessment>> read = Adequacy.readingsOf(compilation.db(), "demo");
         assertNotNull(read, "the model under test compiles");
-        List<BorderAssessment> lines = read.get("f");
-        assertNotNull(lines, "f was measured");
-        return lines;
+        return read;
     }
 
     private static String human(String model) {

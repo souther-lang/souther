@@ -293,6 +293,15 @@ public sealed interface Derivation {
             Objects.requireNonNull(read, "a comparison is read as another");
         }
 
+        /** What {@code how} was read by, past every comparison it was read as. */
+        public static Derivation through(Derivation how) {
+            Derivation out = how;
+            while (out instanceof Restated(var inner)) {
+                out = inner;
+            }
+            return out;
+        }
+
         @Override
         public Proposition conclusion(Conclusion numbering) {
             return numbering.of(read);

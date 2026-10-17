@@ -480,12 +480,9 @@ final class Pullback {
     /** The reading a comparison was read by, under the entries of lookups it was read through and
      *  the comparison a rule read it as. */
     private static Derivation readingUnderTheEntries(Derivation how) {
-        return switch (how) {
-            case Derivation.OfTheEntryUnderTheKey(var _, var about) ->
-                    readingUnderTheEntries(about);
-            case Derivation.Restated(var read) -> readingUnderTheEntries(read);
-            default -> how;
-        };
+        Derivation read = Derivation.Restated.through(how);
+        return read instanceof Derivation.OfTheEntryUnderTheKey(var _, var about)
+                ? readingUnderTheEntries(about) : read;
     }
 
     /**
@@ -5773,9 +5770,10 @@ final class Pullback {
      * comparison of the dividend with the number times the divisor ({@link QuotientByAValue}) — or
      * null where it is no such comparison.
      *
-     * <p>{@code n / d >= 100} is {@code d > 0 && n >= 100 * d} or {@code d < 0 && n <= 100 * d}.
+     * <p>{@code n / d >= 100} is {@code d > 0 && n >= 100 * d} or {@code !(d > 0) && n <= 100 * d}.
      * Each is read as any comparison is, so a dividend or divisor no form says is left unread for
-     * that, and a sign the path or the declarations rule out is a side no row reaches.
+     * that, and a sign the path or the declarations rule out is a side no row reaches. The divisor's
+     * sign is read once and denied for the other side, which is the one atom both sides turn on.
      */
     private Derivation ofAQuotientByAValue(StatedComparison stated, Denotation at, boolean fixed,
                                            InputReads reads) {
@@ -5784,14 +5782,13 @@ final class Pullback {
         if (quotient == null) {
             return null;
         }
-        Derivation out = null;
-        for (QuotientByAValue.OnASign sign : quotient.signs()) {
-            Derivation here = joined(ConditionJoin.BOTH,
-                    restated(sign.divisor(), at, fixed, quotient.at()),
-                    restated(sign.moved(), at, fixed, quotient.at()));
-            out = out == null ? here : joined(ConditionJoin.EITHER, out, here);
-        }
-        return out;
+        Derivation signed = restated(quotient.signed(), at, fixed, quotient.at());
+        return joined(ConditionJoin.EITHER,
+                joined(ConditionJoin.BOTH, signed,
+                        restated(quotient.above(), at, fixed, quotient.at())),
+                joined(ConditionJoin.BOTH,
+                        signed == null ? null : new Derivation.UnderADenial(signed, true),
+                        restated(quotient.below(), at, fixed, quotient.at())));
     }
 
     /**

@@ -2227,19 +2227,24 @@ final class Terms {
      * <p>The quotient has no meaning of its own here: a Rational is on no carrier and nothing is
      * named of one. Rounded to a whole number it is a value of the narrowing's carrier, and every way
      * of rounding lands it on one of the two whole numbers the exact quotient lies between, which is
-     * what a quotient rounded to a scale is at the scale nought. The quotient is read through the
-     * names it was given, as the argument a rounding takes is.
+     * what a quotient rounded to a scale is at the scale nought.
+     *
+     * <p>The quotient is read through the names it was given where the value is read where the
+     * rounding is. A meaning is read where it is asked, so a quotient handed in from a value written
+     * elsewhere would have its dividend and divisor read among names that are not theirs; it is
+     * left with no meaning instead.
      */
     private NumericMeaning aWholeNumberOfAQuotient(Core e, Denotations at) {
         AnOperationApplied applied = AnOperationApplied.of(e);
         BoundOperationFact.RoundsToAWholeNumber rounds = applied == null ? null
                 : DefaultBoundOperationFacts.get().roundsToAWholeNumber(applied.operation());
         Core value = rounds == null ? null : applied.argument(rounds.value());
-        Denotations in = at;
         while (value != null && Core.withoutStanding(value) instanceof Core.Read name
-                && readThrough(name, in) instanceof ValueStanding.ReadThrough<Denotations> given) {
+                && readThrough(name, at) instanceof ValueStanding.ReadThrough<Denotations> given) {
+            if (given.at() != at) {
+                return null;
+            }
             value = given.value();
-            in = given.at();
         }
         if (value == null || !(Core.withoutStanding(value) instanceof Core.Binary quotient)
                 || quotient.op() != BinOp.DIV) {

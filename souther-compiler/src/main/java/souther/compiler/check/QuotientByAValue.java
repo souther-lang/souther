@@ -17,9 +17,14 @@ import java.util.Objects;
  * <p>A quotient by a value is no form of what it divides ({@link Terms#quotient}), so no reading of
  * it is arithmetic over them. What a comparison of it with a number states is a line all the same,
  * on each sign of the divisor: above nought {@code n / d >= k} is {@code n >= k * d}, and below
- * nought the relation turns. At nought the division aborts, so no row that reaches the comparison
- * has the divisor there and neither side takes it. The quotient is exact, so nothing is dropped
- * between the two statements.
+ * nought the relation turns. The quotient is exact, so nothing is dropped between the two
+ * statements.
+ *
+ * <p><b>The two sides are the divisor above nought and its denial.</b> At nought the division
+ * aborts, so no row that reaches the comparison has the divisor there, and the side that takes
+ * nought in asks nothing of a row that does. Read as one atom and its denial, the two sides are
+ * ones a case of either knows the other excludes; read as two atoms, above and below nought, a case
+ * where one side's line decides could ask a row to stand on the other side's line as well.
  *
  * <p><b>Both signs are read, and which a run is on is not this reader's.</b> Where a guard on the
  * way keeps the divisor above nought, or its type is declared so, the side below has no row, as any
@@ -37,32 +42,23 @@ public final class QuotientByAValue {
     private QuotientByAValue() {}
 
     /**
-     * One sign of the divisor and what the comparison states on it.
-     *
-     * @param divisor the divisor standing on that side of nought
-     * @param moved   the dividend against the number times the divisor, which holds there exactly
-     *                where the comparison of the quotient does
-     */
-    public record OnASign(StatedComparison divisor, StatedComparison moved) {
-
-        public OnASign {
-            Objects.requireNonNull(divisor, "the divisor stands on a side of nought");
-            Objects.requireNonNull(moved, "and the comparison is stated there");
-        }
-    }
-
-    /**
      * What a comparison of a quotient by a value states, on each sign of the divisor.
      *
-     * @param <E>   the environment the dividend and the divisor are read in
-     * @param at    where the quotient was written, which is where its operands are read
-     * @param signs the divisor above nought and below it, and what holds on each
+     * @param <E>    the environment the dividend and the divisor are read in
+     * @param at     where the quotient was written, which is where its operands are read
+     * @param signed the divisor above nought, whose denial is the other side
+     * @param above  the dividend against the number times the divisor, which holds exactly where
+     *               the comparison of the quotient does where the divisor is above nought
+     * @param below  the same, turned, where it is not
      */
-    public record Read<E>(E at, List<OnASign> signs) {
+    public record Read<E>(E at, StatedComparison signed, StatedComparison above,
+                          StatedComparison below) {
 
         public Read {
             Objects.requireNonNull(at, "read somewhere");
-            signs = List.copyOf(signs);
+            Objects.requireNonNull(signed, "the divisor stands on a side of nought");
+            Objects.requireNonNull(above, "the comparison is stated above nought");
+            Objects.requireNonNull(below, "and below it");
         }
     }
 
@@ -73,7 +69,9 @@ public final class QuotientByAValue {
      * of it is no comparison a source could write.
      *
      * <p>A quotient by a number the same on every run is arithmetic over the dividend, and is the
-     * arithmetic's to read.
+     * arithmetic's to read. A quotient by a value on one side leaves nothing to try on the other:
+     * the quotient is no number the same on every run, so the other side is never the quotient
+     * and this one the number.
      */
     public static <E> Read<E> read(StatedComparison comparison, E at,
                                    TheSignOfAnOrder.Sides<E> sides, Symbols symbols) {
@@ -92,28 +90,19 @@ public final class QuotientByAValue {
             }
             Rel written = (quotientFirst ? comparison.claim() : comparison.claim().turned())
                     .statedRelation();
+            Core dividend = quotient.left();
             Core divisor = quotient.right();
-            OnASign above = onASign(Rel.GT, written, quotient.left(), divisor, against, symbols);
-            OnASign below = onASign(Rel.LE, written.turned(), quotient.left(), divisor, against,
-                    symbols);
-            return above == null || below == null ? null
-                    : new Read<>(side.at(), List.of(above, below));
+            StatedComparison signed = ConstantComparison.stated(Rel.GT, divisor, ExactRatio.ZERO);
+            Core times = timesTheDivisor(against, divisor, symbols);
+            Core.BinaryReading reading = times == null ? null
+                    : ConstantComparison.comparedAs(dividend.type(), times.type());
+            return signed == null || reading == null ? null : new Read<>(side.at(), signed,
+                    new StatedComparison(ComparisonClaim.stating(written), dividend, times,
+                            reading),
+                    new StatedComparison(ComparisonClaim.stating(written.turned()), dividend,
+                            times, reading));
         }
         return null;
-    }
-
-    /**
-     * The divisor standing {@code sign} to nought, and the dividend standing {@code rel} to
-     * {@code against} times it — or null where either is no comparison a source could write.
-     */
-    private static OnASign onASign(Rel sign, Rel rel, Core dividend, Core divisor,
-                                   ExactRatio against, Symbols symbols) {
-        StatedComparison signed = ConstantComparison.stated(sign, divisor, ExactRatio.ZERO);
-        Core times = timesTheDivisor(against, divisor, symbols);
-        Core.BinaryReading reading = times == null ? null
-                : ConstantComparison.comparedAs(dividend.type(), times.type());
-        return signed == null || reading == null ? null : new OnASign(signed,
-                new StatedComparison(ComparisonClaim.stating(rel), dividend, times, reading));
     }
 
     /** {@code k} times {@code divisor}, as {@code (p * divisor) / q} for {@code k} at {@code p/q}. */

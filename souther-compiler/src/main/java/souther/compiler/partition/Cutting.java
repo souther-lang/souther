@@ -1471,9 +1471,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                                                     StatedComparison comparison,
                                                     InputReading read, InputReads reads,
                                                     Arrivals answering) {
-        Derivation how = stated.meaning().how() instanceof Derivation.Restated(var restated)
-                ? restated : stated.meaning().how();
-        return how instanceof Derivation.ACutThatCutsNothing cut
+        return Derivation.Restated.through(stated.meaning().how())
+                instanceof Derivation.ACutThatCutsNothing cut
                 && !cut.named().isEmpty()
                 ? AffineReading.filedAt(cut.named())
                 : GuardThresholds.filedAt(comparison, read, reads, answering);
