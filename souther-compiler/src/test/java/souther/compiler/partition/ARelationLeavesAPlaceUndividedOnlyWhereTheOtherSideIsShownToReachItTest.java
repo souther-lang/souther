@@ -505,6 +505,23 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                         "if b >= 0 && a >= b then a < c else false", "4:46"));
     }
 
+    /**
+     * An end on a case's place in its enumeration's order is a relation the region holds as any
+     * other: past {@code level >= Low}, which keeps no level out, {@code level} still takes every
+     * case and is equal to every {@code cap}; past {@code level >= Mid} it is never {@code Low},
+     * so a {@code cap} of {@code Low} settles the comparison.
+     */
+    @Test
+    void anEndOnACasesPlaceInItsOrderNarrowsItAsTheRegionSays() {
+        String declarations = "data Level = Low | Mid | High";
+        assertEquals(Map.of("level", RELATES, "cap", RELATES),
+                left("level: Level, cap: Level", declarations,
+                        "if level >= Low then level == cap else false", "4:49"));
+        assertEquals(Map.of("level", RELATES, "cap", NOT_SHOWN),
+                left("level: Level, cap: Level", declarations,
+                        "if level >= Mid then level == cap else false", "4:49"));
+    }
+
     /** A way over another number of the date a year is taken of ties the year to it: a date on
      *  the twenty-ninth of February is in a leap year. */
     @Test

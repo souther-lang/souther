@@ -75,9 +75,11 @@ import java.util.concurrent.ConcurrentHashMap;
  * is whether anything could tie the term to the others. A relation a way took in ties the term to
  * whatever a chain of statements reaches from the places it relates it to, and that is asked of
  * each pair of terms apart from what the term runs over: past {@code a >= b}, {@code a} is tied to
- * {@code b} and to nothing else. Which case a value around the term is, how many a value around it
- * holds, and which keys a map around it holds an entry under say nothing of its values and tie it
- * to nothing. What a way states of the term otherwise leaves nothing shown of it: a relation over
+ * {@code b} and to nothing else. Which case a value around the term is and how many a value around
+ * it holds say nothing of its values and tie it to nothing; nor, where no rule names the term, does
+ * what other places of an element it is inside are asked to meet — which key a map's entry is under
+ * says nothing of the value there. What a way states of the term otherwise leaves nothing shown of
+ * it: a relation over
  * another number of the place it is taken of — a date on the twenty-ninth of February is in a leap
  * year — or anything the region did not take in. The declarations tie it to nothing where no rule
  * of a value it sits in reads a place at, under or around it, other than for how many a container
@@ -299,52 +301,38 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     private static List<OnAWay> conditionsOf(Reachability.Reaching way) {
         List<OnAWay> out = new ArrayList<>();
         way.boundedOnTheWay().forEach(taken -> {
-            NumericTerm runOf = taken.demand() instanceof RowDemand.Relational(
-                    TakenConstraint.Affine(LinearForm<NumericTerm> form, Rel rel))
-                    && rel != Rel.NE && form.coefs().size() == 1
-                    ? form.coefs().keySet().iterator().next() : null;
-            out.add(new OnAWay(taken.demand().positions(), runOf,
-                    runOf instanceof NumericTerm.TakenOf count
+            TakenConstraint relation = taken.demand() instanceof RowDemand.Relational(
+                    TakenConstraint constraint) ? constraint : null;
+            out.add(new OnAWay(taken.demand().positions(),
+                    relation instanceof TakenConstraint.Affine(var form, var rel)
+                            && rel != Rel.NE && form.coefs().size() == 1
+                            && form.coefs().keySet().iterator().next()
+                            instanceof NumericTerm.TakenOf count
                             && count.takenAs() instanceof TakenAs.HowManyItHolds,
-                    taken.demand() instanceof RowDemand.Relational(
-                            TakenConstraint.Affine affine) ? affine : null,
-                    onlyWhichKeysAreHeld(taken.demand())));
+                    relation, elementsAsked(taken.demand())));
         });
         way.requirements().refinements().keySet()
-                .forEach(at -> out.add(new OnAWay(Set.of(at), null, true, null, null)));
+                .forEach(at -> out.add(new OnAWay(Set.of(at), true, null, null)));
         way.requirements().atANameTheCasesShare()
-                .forEach(at -> out.add(new OnAWay(Set.of(at), null, true, null, null)));
+                .forEach(at -> out.add(new OnAWay(Set.of(at), true, null, null)));
         return out;
     }
 
-    /**
-     * The map {@code demand} asks which keys its entries are held under and nothing else of —
-     * some entry, or none, is under the key a position holds — or null where it asks anything
-     * else.
-     */
-    private static TermPath onlyWhichKeysAreHeld(RowDemand.OfACondition demand) {
+    /** The container {@code demand} asks what some or every element of meets, or null where it
+     *  asks nothing of the elements of one. */
+    private static TermPath elementsAsked(RowDemand.OfACondition demand) {
         return switch (demand) {
-            case RowDemand.Exists exists ->
-                    onlyKeys(exists.ofAnElement()) ? exists.container() : null;
-            case RowDemand.ForAll every ->
-                    onlyKeys(every.ofEachElement()) ? every.container() : null;
+            case RowDemand.Exists exists -> exists.container();
+            case RowDemand.ForAll every -> every.container();
             case RowDemand.Relational _, RowDemand.ATruth _, RowDemand.OneValueAtBoth _,
                  RowDemand.SoMany _, RowDemand.ForTheRun _ -> null;
         };
     }
 
-    /** Whether every way {@code asked} may be met asks the key of the entry and nothing else. */
-    private static boolean onlyKeys(RowDemand.AnElementMeets asked) {
-        return asked.ways().stream().allMatch(way -> way.stream().allMatch(each ->
-                each instanceof RowDemand.KeyedAs || each instanceof RowDemand.NotKeyedAs));
-    }
-
     /**
      * One statement of a way.
      *
-     * @param positions the positions it turns on
-     * @param runOf      the one number it places an end on, where it is an end on one number and
-     *                   nothing else; null where it is anything else
+     * @param positions  the positions it turns on
      * @param whatStands whether it says what stands at a value and nothing of the values that
      *                   stand there beside another: which case the value is, or ends on how many
      *                   it holds. Either of a value around a term says nothing of the term's
@@ -352,25 +340,48 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      *                   holding one says nothing of what it is. Of the term's own value, a case,
      *                   as an enumeration's, is a value taken out of its order, which the region
      *                   holds, and an end on how many is an end on the term itself
-     * @param affine     what it states as a form of the input's numbers held against nought, or
-     *                   null where it states anything else
-     * @param keysOf     the map it asks which keys are held in and nothing else, or null where it
-     *                   asks anything else. That is what stands in the map and says nothing of the
-     *                   value under any key, which holds every value the map's values can be; it
-     *                   still says something of the position the key is held against
+     * @param relation   what it states as a relation the region took in, or null where it states
+     *                   anything else
+     * @param elementsOf the container it asks what some or every element of meets, or null where
+     *                   it asks nothing of the elements of one
      */
-    private record OnAWay(Set<TermPath> positions, NumericTerm runOf, boolean whatStands,
-                          TakenConstraint.Affine affine, TermPath keysOf) {
+    private record OnAWay(Set<TermPath> positions, boolean whatStands, TakenConstraint relation,
+                          TermPath elementsOf) {
+
+        /** What it states as a form of the input's numbers held against nought, or null where it
+         *  states anything else. */
+        TakenConstraint.Affine affine() {
+            return relation instanceof TakenConstraint.Affine affine ? affine : null;
+        }
+
+        /** Whether this says nothing of the values {@code term} takes by saying only what stands
+         *  at a value around it — which case it is, or how many it holds — and nothing at or
+         *  under the term. */
+        boolean saysOnlyWhatStandsAround(NumericTerm.FromOnePosition term) {
+            return whatStands && touches(term, positions) && onlyAround(term, positions);
+        }
 
         /**
-         * Whether this says nothing of the values {@code term} takes: it is about a value around
-         * the term and no place at or under it, and says only what stands there — which case it
-         * is, how many it holds, or which keys a map the term is a value of holds an entry under.
+         * Whether this asks of the elements of a container the term is inside of nothing at, under
+         * or around the term but the container. An element holds every value its other places
+         * leave whatever is asked of those places — which key a map's entry is under, a field
+         * beside the term — so this says nothing of the values the term takes, except where a rule
+         * relates the term to those places, which the caller asks apart. That an element is a
+         * value at another position is asked of the element whole, which is around the term, and
+         * is not this.
          */
-        boolean saysNothingOfTheValuesOf(NumericTerm.FromOnePosition term) {
-            boolean ofWhatStands = whatStands || (keysOf != null && term.placesReadOff().stream()
-                    .allMatch(place -> place.isAtOrUnder(keysOf.element())));
-            return ofWhatStands && touches(term, positions) && onlyAround(term, positions);
+        boolean asksOnlyOtherPlacesOfTheElement(NumericTerm.FromOnePosition term) {
+            if (elementsOf == null || !term.placesReadOff().stream()
+                    .allMatch(place -> place.isAtOrUnder(elementsOf.element()))) {
+                return false;
+            }
+            for (TermPath at : positions) {
+                if (!at.equals(elementsOf) && term.placesReadOff().stream()
+                        .anyMatch(place -> overlap(place, at))) {
+                    return false;
+                }
+            }
+            return true;
         }
     }
 
@@ -525,14 +536,15 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
 
     /**
      * Those of {@code conditions} that state anything of the values {@code term} takes. What
-     * stands at a value around the term says nothing of the values the term takes, so a statement
-     * of only that is left out.
+     * stands at a value around the term, and what other places of an element the term is inside
+     * are asked to meet, say nothing of the values the term takes, so a statement of only that is
+     * left out.
      */
     private static List<OnAWay> statingAnythingOf(NumericTerm.FromOnePosition term,
                                                   List<OnAWay> conditions) {
         List<OnAWay> out = new ArrayList<>();
         for (OnAWay each : conditions) {
-            if (touches(term, each.positions()) && !each.saysNothingOfTheValuesOf(term)) {
+            if (touches(term, each.positions()) && !saysNothingOfTheValuesOf(term, each, false)) {
                 out.add(each);
             }
         }
@@ -552,11 +564,25 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         List<OnAWay> out = new ArrayList<>();
         for (OnAWay each : conditions) {
             boolean inIt = each.positions().stream().anyMatch(at -> heads.contains(at.head()));
-            if (inIt && !each.saysNothingOfTheValuesOf(term)) {
+            if (inIt && !saysNothingOfTheValuesOf(term, each, true)) {
                 out.add(each);
             }
         }
         return out;
+    }
+
+    /**
+     * Whether {@code statement} says nothing of the values {@code term} takes: it says only what
+     * stands at a value around the term, or — where no rule may name the term — asks only other
+     * places of an element the term is inside. A rule naming the term may relate it to those
+     * places, so for such a term what is asked of them is said of it.
+     *
+     * @param named whether a rule of the declarations may name the term
+     */
+    private static boolean saysNothingOfTheValuesOf(NumericTerm.FromOnePosition term,
+                                                    OnAWay statement, boolean named) {
+        return statement.saysOnlyWhatStandsAround(term)
+                || (!named && statement.asksOnlyOtherPlacesOfTheElement(term));
     }
 
     /**
@@ -600,7 +626,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         Way out = Way.UNTOUCHED;
         for (OnAWay each : stating) {
             // Which case the term's own value is takes values out of its order, which narrows it.
-            if (!each.whatStands() && !term.equals(each.runOf()) && !inTheRegion(term, each)) {
+            if (!each.whatStands() && !inTheRegion(term, each)) {
                 return Way.TIES;
             }
             out = Way.NARROWED;
@@ -609,20 +635,27 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     }
 
     /**
-     * Whether {@code statement} is a relation the region took in over {@code term} and numbers of
-     * other places: what it leaves the term over every value of those is the run the region
-     * answers whole ({@link SearchRegion#wholeRunOf}), and whatever it ties the term to is asked
-     * apart ({@link TiedOnTheWay}). A relation over another number of a place the term is read
-     * off — a string's length beside the string — is one the region holds as two numbers it does
-     * not tie, so it is not this. Nor is a relation kept from one value, which a region holds as
-     * no run.
+     * Whether {@code statement} is a relation the region took in over {@code term} alone, or over
+     * it and numbers of other places, placing ends: what it leaves the term over every value of
+     * those is the run the region answers whole ({@link SearchRegion#wholeRunOf}), and whatever
+     * it ties the term to is asked apart ({@link TiedOnTheWay}). A form held against nought and an
+     * end on one position's own order are both that. A relation over another number of a place
+     * the term is read off — a string's length beside the string — is one the region holds as two
+     * numbers it does not tie, so it is not this. Nor is a relation keeping the term off a value,
+     * which leaves a hole where a run is answered by its ends.
      */
     private static boolean inTheRegion(NumericTerm.FromOnePosition term, OnAWay statement) {
-        if (statement.affine() == null || statement.affine().rel() == Rel.NE
-                || !statement.affine().form().coefs().containsKey(term)) {
+        Set<NumericTerm> over = switch (statement.relation()) {
+            case null -> Set.of();
+            case TakenConstraint.Affine affine ->
+                    affine.rel() == Rel.NE ? Set.of() : affine.form().coefs().keySet();
+            case TakenConstraint.Ordered ordered -> Set.of(ordered.term());
+            case TakenConstraint.AwayFrom _ -> Set.of();
+        };
+        if (!over.contains(term)) {
             return false;
         }
-        for (NumericTerm each : statement.affine().form().coefs().keySet()) {
+        for (NumericTerm each : over) {
             if (!each.equals(term) && touches(term, Set.of(each.subjectPath()))) {
                 return false;
             }
@@ -644,8 +677,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             boolean about = side.term() == null
                     ? side.madeOf().stream().anyMatch(place -> each.positions().stream()
                             .anyMatch(that -> overlap(place.path(), that)))
-                    : touches(side.term(), each.positions())
-                            && !each.saysNothingOfTheValuesOf(side.term());
+                    : touches(side.term(), each.positions()) && !saysNothingOfTheValuesOf(
+                            side.term(), each, mayBeNamed(at, sources));
             if (about) {
                 out.add(tied.classOf(each.positions().iterator().next()));
             }
