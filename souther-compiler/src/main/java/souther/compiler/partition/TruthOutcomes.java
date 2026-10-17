@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import souther.compiler.core.Core;
 import souther.compiler.meaning.Proposition;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -163,6 +164,7 @@ final class TruthOutcomes {
                     .reduce(Outcomes.ONLY_FALSE, Outcomes::or);
             case Proposition.OnAnApplication applications -> Outcomes.onSomeApplication(
                     applications.each().stream().map(TruthOutcomes::of).toList());
+            case Proposition.SoManyHold counted -> ofACount(counted);
             case Proposition.Some some -> {
                 Outcomes found = switch (of(some.ofTheElement())) {
                     case ONLY_FALSE -> Outcomes.ONLY_FALSE;
@@ -178,6 +180,29 @@ final class TruthOutcomes {
                 Outcomes found = atANode == Outcomes.FIXED_UNNAMED ? Outcomes.UNKNOWN : atANode;
                 yield reached.holds() ? found : found.denied();
             }
+        };
+    }
+
+    /**
+     * Which answers a count of statements can give, from which each statement can
+     * ({@link Proposition.SoManyHold#comesOut}). A statement fixed at an answer nobody named, or
+     * one this cannot say, leaves the counts unknown, and so the count.
+     */
+    private static Outcomes ofACount(Proposition.SoManyHold counted) {
+        List<Boolean> mayHold = new ArrayList<>();
+        List<Boolean> mayFail = new ArrayList<>();
+        for (Proposition statement : counted.statements()) {
+            Outcomes each = of(statement);
+            if (each == Outcomes.FIXED_UNNAMED || each == Outcomes.UNKNOWN) {
+                return Outcomes.UNKNOWN;
+            }
+            mayHold.add(each.allows(true));
+            mayFail.add(each.allows(false));
+        }
+        return switch (counted.comesOut(mayHold, mayFail)) {
+            case HOLDING -> Outcomes.ONLY_TRUE;
+            case FAILING -> Outcomes.ONLY_FALSE;
+            case EITHER_WAY -> Outcomes.EITHER;
         };
     }
 }

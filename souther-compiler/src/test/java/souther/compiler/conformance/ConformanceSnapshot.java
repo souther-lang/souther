@@ -114,6 +114,8 @@ final class ConformanceSnapshot {
             case Proposition.Any any -> any.parts().forEach(part -> unreadIn(part, into));
             case Proposition.OnAnApplication applications ->
                     applications.each().forEach(each -> unreadIn(each, into));
+            case Proposition.SoManyHold counted ->
+                    counted.statements().forEach(each -> unreadIn(each, into));
             case Proposition.Some some -> unreadIn(some.ofTheElement(), into);
             default -> { }
         }

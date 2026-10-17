@@ -482,10 +482,6 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/meaning/Derivation;)"
                             + "Lsouther/compiler/meaning/Proposition;",
                     "past the figure concludes the step as a part nothing read, naming it"),
-            Map.entry("souther.compiler.meaning.Conclusion#partsIn("
-                            + "Lsouther/compiler/meaning/Proposition;)J",
-                    "counts the parts a statement comes to written out no further than one past"
-                            + " the figure"),
             // Where one line of a statement of several decides: the statement read, its cases
             // taken apart, and each asked whether rows stand on both sides of the line. Past any
             // of the figures the line is one where it decides was not worked out, naming the
@@ -540,35 +536,48 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/partition/Pullback$WrittenOutRead;",
                     "counts the values a law is read of one by one, and past the figure carries"
                             + " the law out as a part nothing read, naming it"),
-            Map.entry("souther.compiler.partition.Pullback#pastTheReadings("
-                            + "Lsouther/compiler/meaning/Relation;)Z",
-                    "counts the choices of which values written out meet a statement that a"
-                            + " comparison of how many do admits against the figure, for the two"
-                            + " places a comparison is made to carry it out as a part nothing"
-                            + " read, naming it"),
-            Map.entry("souther.compiler.partition.Pullback$ALawRead#compared("
-                            + "Lsouther/compiler/semantics/LawProposition$Compared;)"
-                            + "Lsouther/compiler/meaning/Derivation;",
-                    "hands the figure to the comparison a law states, which writes a count of"
-                            + " statements out as no more choices than it, and past the figure"
-                            + " carries the comparison out as a part nothing read, naming it"),
-            Map.entry("souther.compiler.partition.Pullback#onAnOrder("
+            // A count of statements about values written out: written out as its choices where
+            // they come to few enough parts, and otherwise held as the count, which omits nothing.
+            // A reader that takes the count apart is handed its choices no further than its own
+            // figure, and past it says so.
+            Map.entry("souther.compiler.meaning.WhichOfThemHold#stated()"
+                            + "Lsouther/compiler/meaning/Proposition;",
+                    "omits no work a reader is owed: past either figure the count is held whole,"
+                            + " every choice still what it states"),
+            Map.entry("souther.compiler.meaning.Conclusion$Shared#<init>("
+                            + "Ljava/util/Optional;ZLsouther/compiler/partition/CompositionBudget;)V",
+                    "how many parts a concluding counts a statement to and no further than one"
+                            + " past, handed in by whoever asks"),
+            Map.entry("souther.compiler.meaning.Proposition$SoManyHold#writtenOutForAReader()"
+                            + "Lsouther/compiler/meaning/WhichOfThemHold$Written;",
+                    "writes a count's choices out no further than either figure, and past one"
+                            + " hands a reader none and says which, which the reader says as more"
+                            + " choices than are written out, naming it"),
+            Map.entry("souther.compiler.meaning.WhichOfThemHold#written("
+                            + "Lsouther/compiler/partition/CompositionBudget;"
+                            + "Lsouther/compiler/partition/CompositionBudget;)"
+                            + "Lsouther/compiler/meaning/WhichOfThemHold$Written;",
+                    "stops writing the choices out past either figure handed in, and says which"
+                            + " it was past"),
+            // Every count one reader is handed, written out together and held to one figure for
+            // the parts; past it, or past how many choices one count is handed, the reader is told
+            // which.
+            Map.entry("souther.compiler.meaning.CountsWrittenOut#<clinit>()V",
+                    "how many parts every count one reader is handed comes to together"),
+            Map.entry("souther.compiler.meaning.CountsWrittenOut#<init>()V",
+                    "starts a reader's writing out at the figure, which every count it is handed"
+                            + " is charged to, and past which it is handed none and told the figure"),
+            Map.entry("souther.compiler.partition.Cutting#asLines("
+                            + "Ljava/lang/String;"
                             + "Lsouther/compiler/check/StatedComparison;"
-                            + "Lsouther/compiler/partition/AffineReading$OfAComparison;"
-                            + "Lsouther/compiler/inputs/InputReads;)"
-                            + "Lsouther/compiler/meaning/Derivation;",
-                    "hands the figure to a comparison on an order, which holds no count of"
-                            + " statements to write out"),
-            Map.entry("souther.compiler.partition.Pullback#aRelation("
-                            + "Lsouther/compiler/meaning/Derivation$ComparisonReading;"
-                            + "Lsouther/compiler/numeric/LinearForm;"
-                            + "Lsouther/compiler/numeric/Rel;"
-                            + "Ljava/util/Map;"
-                            + "Lsouther/compiler/meaning/Derivation$AComparisonRead$Facing;)"
-                            + "Lsouther/compiler/meaning/Derivation;",
-                    "counts the choices of which values written out meet a statement that a"
-                            + " comparison of how many do admits, and past the figure carries the"
-                            + " comparison out as a part nothing read, naming it"),
+                            + "Lsouther/compiler/meaning/Proposition;"
+                            + "Lsouther/compiler/inputs/InputReading;"
+                            + "Lsouther/compiler/inputs/InputReads;"
+                            + "Lsouther/compiler/coverage/Arrivals;"
+                            + "Ljava/util/Optional;)"
+                            + "Lsouther/compiler/partition/Cutting$Read;",
+                    "files the statement at each place as one where its lines decide was not"
+                            + " worked out, naming the figure its counts' choices were past"),
             Map.entry("souther.compiler.partition.DecisionReading#<clinit>()V",
                     "how many paths through one body a decision is read for"),
             Map.entry("souther.compiler.partition.WaysNoInputTakes#<init>()V",

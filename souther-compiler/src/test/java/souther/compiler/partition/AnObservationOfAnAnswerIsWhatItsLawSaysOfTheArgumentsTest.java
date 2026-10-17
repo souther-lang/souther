@@ -110,9 +110,9 @@ class AnObservationOfAnAnswerIsWhatItsLawSaysOfTheArgumentsTest {
     }
 
     /**
-     * Which of them meet it is read as the choices the comparison admits, and past the readings
-     * one condition is read in the count is not read — said as that, and not as a statement
-     * nothing could read. Exactly one of eighteen is a choice for each; half of them is every way
+     * Which of them meet it is read as the choices the comparison admits, written out where they
+     * are few, and held as the count where they are more than one condition is read in — read to
+     * the end either way. Exactly one of eighteen is a choice for each; half of them is every way
      * of picking nine.
      */
     @Test
@@ -124,29 +124,39 @@ class AnObservationOfAnAnswerIsWhatItsLawSaysOfTheArgumentsTest {
         String written = "[" + String.join(", ", eighteen) + "]";
         assertNull(Proposition.firstStopIn(stated(
                 "if List.length(List.filter(x -> x > 0, " + written + ")) == 1 then 1 else 0")));
-        assertInstanceOf(WhyUnread.MoreReadingsThanAreMade.class, Proposition.firstStopIn(stated(
-                "if List.length(List.filter(x -> x > 0, " + written + ")) == 9 then 1 else 0")));
+        Proposition half = stated(
+                "if List.length(List.filter(x -> x > 0, " + written + ")) == 9 then 1 else 0");
+        assertNull(Proposition.firstStopIn(half), half::toString);
+        assertInstanceOf(Proposition.SoManyHold.class, half);
     }
 
     /**
-     * A count compared by an operation's law and not as written is held to the same figure: what
+     * A count compared by an operation's law and not as written is held the same way: what
      * {@code List.drop} leaves is empty by how many the list holds against how many it drops, so
      * dropping ten of thirty values written out is eleven or more of them kept, every way of
-     * picking eleven. Read where the law's comparison is made, past the readings of a condition it
-     * is said to be — and not written out however many ways that is.
+     * picking eleven. Read where the law's comparison is made, it is held as the count — and not
+     * written out however many ways that is.
      */
     @Test
     @Timeout(value = 30, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
-    void aCountALawComparesIsHeldToTheFigureToo() {
+    void aCountALawComparesIsHeldTheSameWay() {
         List<String> thirty = new ArrayList<>();
         for (int i = 0; i < 30; i++) {
             thirty.add("b.n + " + i);
         }
         String kept = "List.filter(x -> x > 0, [" + String.join(", ", thirty) + "])";
-        assertInstanceOf(WhyUnread.MoreReadingsThanAreMade.class, Proposition.firstStopIn(stated(
-                "if List.isEmpty(List.drop(10, " + kept + ")) then 1 else 0")));
+        Proposition dropped = stated("if List.isEmpty(List.drop(10, " + kept + ")) then 1 else 0");
+        assertNull(Proposition.firstStopIn(dropped), dropped::toString);
+        assertTrue(holdsACount(dropped), dropped::toString);
         assertNull(Proposition.firstStopIn(stated(
                 "if List.isEmpty(List.drop(0, " + kept + ")) then 1 else 0")));
+    }
+
+    /** Whether {@code stated} or some part of it is a count of statements held as the count. */
+    private static boolean holdsACount(Proposition stated) {
+        return stated instanceof Proposition.SoManyHold
+                || stated.partsHeld().stream()
+                        .anyMatch(AnObservationOfAnAnswerIsWhatItsLawSaysOfTheArgumentsTest::holdsACount);
     }
 
     /** What a set holds once a value is taken out is some other value, read as the quantifier over

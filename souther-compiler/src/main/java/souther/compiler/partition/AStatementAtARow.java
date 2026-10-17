@@ -118,6 +118,8 @@ final class AStatementAtARow {
             case Proposition.LastToHold _ -> true;
             case Proposition.All all -> all.parts().stream().allMatch(AStatementAtARow::askable);
             case Proposition.Any any -> any.parts().stream().allMatch(AStatementAtARow::askable);
+            case Proposition.SoManyHold counted ->
+                    counted.statements().stream().allMatch(AStatementAtARow::askable);
             case Proposition.Some some -> askable(some.ofTheElement());
             case Proposition.Compared compared -> switch (compared.relation()) {
                 case Relation.Affine affine ->
@@ -182,6 +184,8 @@ final class AStatementAtARow {
                     gather(part, behavior, quantities, into, elements, positions));
             case Proposition.Any any -> any.parts().forEach(part ->
                     gather(part, behavior, quantities, into, elements, positions));
+            case Proposition.SoManyHold counted -> counted.statements().forEach(part ->
+                    gather(part, behavior, quantities, into, elements, positions));
             case Proposition.Some some -> elements.computeIfAbsent(keyOf(some),
                     _ -> new OverTheElements(some.container().inputPosition(),
                             of(some.ofTheElement(), behavior, quantities)));
@@ -216,6 +220,8 @@ final class AStatementAtARow {
         switch (stated) {
             case Proposition.All all -> all.parts().forEach(part -> gatherNumbers(part, into));
             case Proposition.Any any -> any.parts().forEach(part -> gatherNumbers(part, into));
+            case Proposition.SoManyHold counted ->
+                    counted.statements().forEach(part -> gatherNumbers(part, into));
             case Proposition.Some some -> gatherNumbers(some.ofTheElement(), into);
             case Proposition.Compared compared
                     when compared.relation() instanceof Relation.Affine affine
@@ -235,7 +241,10 @@ final class AStatementAtARow {
                     case Relation.Ordered _ -> { }
                 }
             }
-            default -> { }
+            case Proposition.Always _, Proposition.Truth _, Proposition.InCases _,
+                 Proposition.Present _, Proposition.SameValue _, Proposition.LastToHold _,
+                 Proposition.Carried _, Proposition.SomeReachable _, Proposition.Unread _,
+                 Proposition.OnAnApplication _ -> { }
         }
     }
 
@@ -424,6 +433,8 @@ final class AStatementAtARow {
                     .map(each -> at(each, row, answered)).toList(), true);
             case Proposition.Any any -> joined(any.parts().stream()
                     .map(each -> at(each, row, answered)).toList(), false);
+            case Proposition.SoManyHold counted -> howManyHold(counted, counted.statements()
+                    .stream().map(each -> at(each, row, answered)).toList());
             case Proposition.Some some -> {
                 OverTheElements over = elements.get(keyOf(some));
                 HowManyAtARow counted = over.ofTheElement().howManyMeetIn(over.container(), row);
@@ -504,6 +515,8 @@ final class AStatementAtARow {
                     all.parts().stream().allMatch(part -> readsOf(part, about, read));
             case Proposition.Any any ->
                     any.parts().stream().allMatch(part -> readsOf(part, about, read));
+            case Proposition.SoManyHold counted ->
+                    counted.statements().stream().allMatch(part -> readsOf(part, about, read));
             case Proposition.Some some -> overElementsOf(some.container().inputPosition(), about,
                     read) && readsOf(some.ofTheElement(), about, read);
             case Proposition.Compared compared
@@ -750,7 +763,13 @@ final class AStatementAtARow {
                             && index.containsKey(keyOf(count)) ->
                             add(Kind.COUNTED, null, index.get(keyOf(count)), EITHER,
                                     byNumber(compared, affine));
-                    default -> add(Kind.SETTLED, null, 0, EITHER, null);
+                    // A count of statements comes to either here: that claims nothing of it.
+                    case Proposition.Some _, Proposition.Compared _, Proposition.Truth _,
+                         Proposition.InCases _, Proposition.Present _, Proposition.SameValue _,
+                         Proposition.LastToHold _, Proposition.Carried _,
+                         Proposition.SomeReachable _, Proposition.Unread _,
+                         Proposition.OnAnApplication _, Proposition.SoManyHold _ ->
+                            add(Kind.SETTLED, null, 0, EITHER, null);
                 };
                 read.put(part.key(), out);
                 return out;
@@ -897,6 +916,31 @@ final class AStatementAtARow {
     private static Answer heldAs(boolean holds, Answer answered) {
         return holds || answered instanceof Answer.CouldNotTell ? answered
                 : answered instanceof Answer.Holds ? Answer.FAILS : Answer.HOLDS;
+    }
+
+    /**
+     * Whether as many of {@code counted}'s statements hold as it admits, each answered at the row
+     * as {@code each} says.
+     *
+     * <p>One that could not be told may hold or fail ({@link Proposition.SoManyHold#comesOut}),
+     * and it is settled only where every way those come out says the same.
+     */
+    private static Answer howManyHold(Proposition.SoManyHold counted, List<Answer> each) {
+        Set<ReadingGap> unread = new LinkedHashSet<>();
+        List<Boolean> mayHold = new ArrayList<>();
+        List<Boolean> mayFail = new ArrayList<>();
+        for (Answer one : each) {
+            if (one instanceof Answer.CouldNotTell(Set<ReadingGap> why)) {
+                unread.addAll(why);
+            }
+            mayHold.add(!(one instanceof Answer.Fails));
+            mayFail.add(!(one instanceof Answer.Holds));
+        }
+        return switch (counted.comesOut(mayHold, mayFail)) {
+            case HOLDING -> Answer.HOLDS;
+            case FAILING -> Answer.FAILS;
+            case EITHER_WAY -> new Answer.CouldNotTell(unread);
+        };
     }
 
     /**

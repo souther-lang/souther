@@ -156,6 +156,7 @@
         "readings_of_one_condition",
         "total_readings_of_one_condition",
         "parts_a_derivation_concludes",
+        "parts_the_choices_of_a_count_come_to",
         "alternatives_a_path_tries",
         "steps_a_statement_is_read_in",
         "cases_a_line_is_taken_apart_into",
@@ -165,6 +166,47 @@
         "code_points_a_string_is_searched_in_full",
         "code_points_beyond_a_count_a_string_is_looked_for",
         "runs_repairing_a_row"
+      ]
+    },
+    "workFigure": {
+      "description": "A figure this compiler holds a piece of its work to outside the composing of values: how far a walk writes a container out, how large a machine for the strings a rule admits may grow, how far one row is run or observed. Some are fixed and some are handed to a run.",
+      "enum": [
+        "readings_of_a_row_at_a_point",
+        "elements_a_walk_writes_out",
+        "fields_a_rule_is_followed_down",
+        "pairs_of_classes_counted",
+        "combinations_of_a_group_measured",
+        "runs_replacing_an_arm",
+        "nodes_a_fork_carries",
+        "readings_of_a_combination_tried",
+        "runs_for_one_reading",
+        "candidates_a_repair_builds",
+        "admitted_values_one_machine",
+        "admitted_values_in_all",
+        "ordered_extent_one_machine",
+        "ordered_extent_in_all",
+        "behavior_distinctions_one_machine",
+        "behavior_distinctions_in_all",
+        "rule_sets_one_machine",
+        "rule_sets_in_all",
+        "evaluation_steps",
+        "recursion_depth",
+        "compiler_time",
+        "observed_depth",
+        "observed_nodes",
+        "observed_elements",
+        "observed_text"
+      ]
+    },
+    "figure": {
+      "description": "Any figure of this compiler's a reading was compared against and stopped at, by the name it is declared as: one the composing of values holds itself to, or one of the rest of this compiler's work. The two vocabularies share no word.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/compositionBudget"
+        },
+        {
+          "$ref": "#/$defs/workFigure"
+        }
       ]
     },
     "runSensitivity": {
@@ -3314,7 +3356,7 @@
     },
     "conditionNotReadReason": {
       "type": "object",
-      "description": "One reason a condition nothing read was not: which of the three kinds, and the word within it. The kinds are told apart by what lifts one — a rule of the reading of what a condition means, a wider domain, or a higher figure. `more_ways_than_are_read` is some or every element meeting the condition coming, taken apart, to more ways an element may meet it than a reading of one condition makes; `more_alternatives_than_are_tried` is a condition that is one of several things, whose parts a path takes alone to know which of them it leaves, coming — counted inside one another — to more parts than a reading of one condition takes alone. For neither is anything about the model or about either domain short. Each `outside_domain` word names the reader whose domain stops: what a row is asked is written at the input's positions, so `answer_a_row_stands_in` is what a dependency answered and `node_below_what_a_row_writes` is a node a search reaches further down than a row is written; what a path knows is relations of numbers, truths and what every element was written to meet, about the places of the tree it walks, so the `path_` words and `place_the_path_does_not_read` are where that stops. `size_nothing_measures` and `position_the_reading_holds_no_place_for` are no longer written — every container a condition asks about has a size that is a number of the input, and the reading of the input holds every position a condition names — and a document of this version may still carry them.",
+      "description": "One reason a condition nothing read was not: which of the three kinds, and the word within it. The kinds are told apart by what lifts one — a rule of the reading of what a condition means, a wider domain, or a higher figure. `more_ways_than_are_read` is some or every element meeting the condition coming, taken apart, to more ways an element may meet it than a reading of one condition makes; `more_alternatives_than_are_tried` is a condition that is one of several things, whose parts a path takes alone to know which of them it leaves, coming — counted inside one another — to more parts than a reading of one condition takes alone; `more_choices_than_are_written_out` is a condition counting how many of some statements hold, taken apart into the choices of which of them hold, coming written out to more parts than a reader of them is handed. For none of them is anything about the model or about either domain short. Each `outside_domain` word names the reader whose domain stops: what a row is asked is written at the input's positions, so `answer_a_row_stands_in` is what a dependency answered and `node_below_what_a_row_writes` is a node a search reaches further down than a row is written; what a path knows is relations of numbers, truths and what every element was written to meet, about the places of the tree it walks, so the `path_` words and `place_the_path_does_not_read` are where that stops. `size_nothing_measures` and `position_the_reading_holds_no_place_for` are no longer written — every container a condition asks about has a size that is a number of the input, and the reading of the input holds every position a condition names — and a document of this version may still carry them.",
       "required": [
         "kind",
         "reason"
@@ -3424,7 +3466,8 @@
               "reason": {
                 "enum": [
                   "more_ways_than_are_read",
-                  "more_alternatives_than_are_tried"
+                  "more_alternatives_than_are_tried",
+                  "more_choices_than_are_written_out"
                 ]
               }
             }
@@ -6818,6 +6861,15 @@
                     "reason": {
                       "$ref": "#/$defs/ruleStoppedReadingReason"
                     },
+                    "figures": {
+                      "type": "array",
+                      "minItems": 1,
+                      "uniqueItems": true,
+                      "description": "The figures of this compiler's the parts this entry is about were compared against and stopped at, each by the name it is declared as: what lifting this entry would take. Not part of what tells two entries apart — two parts under one `reason` and one `sentTo` stopped at two figures are one entry naming both. In one order, whatever order the reading met them in. Absent where no figure stopped them.",
+                      "items": {
+                        "$ref": "#/$defs/figure"
+                      }
+                    },
                     "sentTo": {
                       "$ref": "#/$defs/at",
                       "description": "Where inside the rule a reader goes about this one, for an entry about a part of it rather than about the whole. `rule` beside the entry sends them to the rule, which is the whole answer wherever what they lift is the rule; a choice whose other alternative went unread is lifted at the `||`, and the clause `rule` names reads perfectly well. Absent where the rule is the whole of it, and absent where the part is in a text this document cannot point at. The same place the `notRead` entry for the same choice carries, so a consumer holding what the values were short of and what the ends were short of knows the two are one thing to fix."
@@ -6993,6 +7045,15 @@
               },
               "reason": {
                 "$ref": "#/$defs/notReadReason"
+              },
+              "figures": {
+                "type": "array",
+                "minItems": 1,
+                "uniqueItems": true,
+                "description": "Which figures of this compiler's the reading was compared against and stopped at, each by the name it is declared as. `reason` beside it is coarser: several figures stop a reading under one word, and this is which of them a wider run would have to allow. In one order, whatever order the reading met them in. Absent where it stopped at no figure, and for a rule read to the end.",
+                "items": {
+                  "$ref": "#/$defs/figure"
+                }
               },
               "rule": {
                 "$ref": "#/$defs/ruleHandle",

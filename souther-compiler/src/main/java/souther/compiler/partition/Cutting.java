@@ -26,6 +26,7 @@ import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.Towards;
 import souther.compiler.meaning.AuthoredPointMapping;
 import souther.compiler.meaning.AuthorsLines;
+import souther.compiler.meaning.CountsWrittenOut;
 import souther.compiler.meaning.DecidingCase;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.DecisionSubject;
@@ -815,27 +816,21 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                             GuardThresholds.filedAt(comparison, read, reads, answering));
             // Which cases, truths and values the input's positions hold, and no relation of
             // numbers: what an application stating it is ({@link #ofAnApplication}).
-            case Proposition.All _, Proposition.Any _, Proposition.Some _, Proposition.InCases _,
-                 Proposition.Truth _, Proposition.Present _
+            case Proposition.All _, Proposition.Any _, Proposition.SoManyHold _,
+                 Proposition.Some _, Proposition.InCases _, Proposition.Truth _,
+                 Proposition.Present _
                     when statesNoRelation(stated.proposition()) -> new Read.StatesNoRelation();
-            case Proposition.All _, Proposition.Any _
-                    when !Proposition.leavesSomethingUnread(stated.proposition()) -> {
-                Read several = several(behavior, comparison.left(), stated.proposition(), read,
-                        reads, lines.get());
-                yield several != null ? several
-                        : severalNotDrawn(comparison, read, reads, answering);
-            }
+            case Proposition.All _, Proposition.Any _, Proposition.SoManyHold _
+                    when !Proposition.leavesSomethingUnread(stated.proposition()) ->
+                    asLines(behavior, comparison, stated.proposition(), read, reads, answering,
+                            lines.get());
             // Some element meeting several parts, which is the parts read of that element: a
             // lookup's answer compared as a whole is its entry under the key meeting the
             // comparison, and the line is the comparison's on the entry. Inside an either-or it is
             // the same parts, read there.
             case Proposition.Some some when some.holds()
-                    && !Proposition.leavesSomethingUnread(some) -> {
-                Read several = several(behavior, comparison.left(), some, read, reads,
-                        lines.get());
-                yield several != null ? several
-                        : severalNotDrawn(comparison, read, reads, answering);
-            }
+                    && !Proposition.leavesSomethingUnread(some) ->
+                    asLines(behavior, comparison, some, read, reads, answering, lines.get());
             default -> noLine(comparison, stated.proposition(), onTheInput.arithmetic(), read,
                     reads, answering);
         };
@@ -1063,7 +1058,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             case Proposition.Always _, Proposition.Unread _, Proposition.Truth _,
                  Proposition.InCases _, Proposition.Present _, Proposition.SameValue _,
                  Proposition.LastToHold _, Proposition.All _, Proposition.Any _,
-                 Proposition.Some _, Proposition.OnAnApplication _, Proposition.SomeReachable _ ->
+                 Proposition.SoManyHold _, Proposition.Some _, Proposition.OnAnApplication _,
+                 Proposition.SomeReachable _ ->
                     BlockReason.WhatItStatesIsNoLine.Why.NO_RELATION_OF_NUMBERS;
             case Proposition.Carried carried -> throw carried.handedToAReader();
         });
@@ -1107,6 +1103,30 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
     }
 
     /**
+     * {@code stated}, read to the end, as the several lines it draws, each with where it decides —
+     * every count of statements in it written out as the choices of which hold, all of them held
+     * to one figure ({@link CountsWrittenOut}). Past that figure where its lines decide was not
+     * worked out, and where none are drawn it is several lines not drawn, at each place the
+     * comparison is filed at.
+     */
+    private static Read asLines(String behavior, StatedComparison comparison, Proposition stated,
+                                InputReading read, InputReads reads, Arrivals answering,
+                                Optional<AuthorsLines> authors) {
+        return switch (CountsWrittenOut.of(stated)) {
+            case CountsWrittenOut.PastAFigure(CompositionBudget figure) ->
+                    new Read.Stopped(ComparisonAssessment.atEachOf(
+                            GuardThresholds.filedAt(comparison, read, reads, answering),
+                            new BlockReason.WhereALineDecidesNotWorkedOut(figure.figure())));
+            case CountsWrittenOut.Written(Proposition written) -> {
+                Read several = several(behavior, comparison.left(), written, read, reads,
+                        authors);
+                yield several != null ? several
+                        : severalNotDrawn(comparison, read, reads, answering);
+            }
+        };
+    }
+
+    /**
      * What an application of an operation answering a truth states, read to the end, on the input:
      * the lines its relations draw, or the values it relates — or null where it is neither.
      *
@@ -1125,8 +1145,12 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
     static Read ofAnApplication(String behavior, Core application, Proposition stated,
                                 InputReading read, InputReads reads,
                                 AuthorsLines authors) {
-        if (several(behavior, application, stated, read, reads, Optional.of(authors))
-                instanceof Read.Several lines) {
+        // A statement holding counts whose choices are past their figure is no rule of the
+        // application's own, as one holding a part nothing read is not: what it reads is read
+        // where its comparisons are written, each on its own.
+        if (CountsWrittenOut.of(stated) instanceof CountsWrittenOut.Written(Proposition written)
+                && several(behavior, application, written, read, reads,
+                        Optional.of(authors)) instanceof Read.Several lines) {
             return lines;
         }
         List<FilingCoordinate> related = valuesItRelates(stated);
@@ -1182,6 +1206,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             case Proposition.Some some -> sameValuesIn(some.ofTheElement(), out);
             case Proposition.All all -> all.parts().forEach(each -> sameValuesIn(each, out));
             case Proposition.Any any -> any.parts().forEach(each -> sameValuesIn(each, out));
+            case Proposition.SoManyHold counted ->
+                    counted.statements().forEach(each -> sameValuesIn(each, out));
             default -> { }
         }
     }
@@ -1200,6 +1226,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                     && statesNoRelation(some.ofTheElement());
             case Proposition.All all -> all.parts().stream().allMatch(Cutting::statesNoRelation);
             case Proposition.Any any -> any.parts().stream().allMatch(Cutting::statesNoRelation);
+            case Proposition.SoManyHold counted ->
+                    counted.statements().stream().allMatch(Cutting::statesNoRelation);
             // Settled, a relation, two values being one, or something nobody read: each is read
             // as what it is ({@link #readOnce}).
             case Proposition.Always _, Proposition.Compared _, Proposition.SameValue _,
@@ -1239,6 +1267,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             case Proposition.LastToHold _ -> true;
             case Proposition.All all -> all.parts().stream().allMatch(each -> relates(each, out));
             case Proposition.Any any -> any.parts().stream().allMatch(each -> relates(each, out));
+            case Proposition.SoManyHold counted ->
+                    counted.statements().stream().allMatch(each -> relates(each, out));
             default -> false;
         };
     }
@@ -1386,6 +1416,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             case Proposition.Compared _ -> true;
             case Proposition.All all -> all.parts().stream().anyMatch(Cutting::holdsARelation);
             case Proposition.Any any -> any.parts().stream().anyMatch(Cutting::holdsARelation);
+            case Proposition.SoManyHold counted ->
+                    counted.statements().stream().anyMatch(Cutting::holdsARelation);
             case Proposition.Some some -> some.holds() && holdsARelation(some.ofTheElement());
             default -> false;
         };
@@ -1396,6 +1428,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         return switch (stated) {
             case Proposition.All all -> all.parts().stream().allMatch(Cutting::onlyRelations);
             case Proposition.Any any -> any.parts().stream().allMatch(Cutting::onlyRelations);
+            case Proposition.SoManyHold counted ->
+                    counted.statements().stream().allMatch(Cutting::onlyRelations);
             case Proposition.Compared _ -> true;
             default -> false;
         };

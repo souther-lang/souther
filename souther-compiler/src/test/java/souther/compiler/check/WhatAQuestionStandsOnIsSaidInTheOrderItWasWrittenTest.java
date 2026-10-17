@@ -3,11 +3,13 @@ package souther.compiler.check;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.SourceRendering;
+import souther.compiler.observe.WorkFigure;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
 import java.util.List;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -33,9 +35,12 @@ class WhatAQuestionStandsOnIsSaidInTheOrderItWasWrittenTest {
 
     private static final String UNREAD_Y = souther.compiler.ARuleNoReadingTakesIn.about("y");
 
-    /** What the document says about the pattern it will not build. */
+    /** What the document says about the pattern it will not build, and the figure that refused
+     *  it. What the figure stood at is the run's, so the sentence is asked up to its name. */
     private static final String COSTLY = "read to the end, and the values the rules about this"
-            + " position leave between them are more than this compiler will work out";
+            + " position leave between them are more than this compiler will work out, stopped at "
+            + WorkFigure.ADMITTED_VALUES_ONE_MACHINE.counts() + " ("
+            + WorkFigure.ADMITTED_VALUES_ONE_MACHINE.name() + ", ";
 
     /** And about the form nothing takes apart. */
     private static final String UNREAD = "written in a form this compiler does not read";
@@ -82,11 +87,16 @@ class WhatAQuestionStandsOnIsSaidInTheOrderItWasWrittenTest {
                 "which is what makes the order the author's rather than the walk's");
     }
 
-    /** What the document says the question stands on, in the order it says them. */
+    /** What the document says the question stands on, in the order it says them: each entry as
+     *  the one of {@link #COSTLY} and {@link #UNREAD} it begins with, or whole where it begins with
+     *  neither. */
     private static List<String> saidOf(String source) {
         List<String> said = standingOn(source);
         assertEquals(1, said.size(), "one rule, one position, one question that nothing answered");
-        return List.of(said.getFirst().split("; "));
+        return Stream.of(said.getFirst().split("; "))
+                .map(each -> Stream.of(COSTLY, UNREAD).filter(each::startsWith).findFirst()
+                        .orElse(each))
+                .toList();
     }
 
     /** The sentence about every question of this model that nothing answered. */

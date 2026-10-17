@@ -87,7 +87,9 @@ public final class WhereEachLineDecides {
      * with where each decides.
      *
      * <p>Only the relations that a conjunction or a disjunction joins, and the ones a quantifier
-     * says of the element it chose. What a closure says on each application is one part here.
+     * says of the element it chose. What a closure says on each application is one part here, and
+     * so is a count of statements: one to be read as lines is handed in with its counts written out
+     * as the choices of which statements hold ({@link CountsWrittenOut}).
      *
      * <p>A relation inside a quantifier is a line where the row's element the quantifier chose
      * crosses it, and it decides where two things hold at once: the quantifier coming out one way
@@ -272,7 +274,12 @@ public final class WhereEachLineDecides {
                     out.add(of);
             case Proposition.Present(DecisionSubject.AnInput(TermPath of), var _, var _) ->
                     out.add(of);
-            default -> { }
+            case Proposition.Truth _, Proposition.InCases _, Proposition.Present _,
+                 Proposition.Always _, Proposition.SameValue _, Proposition.LastToHold _,
+                 Proposition.All _, Proposition.Any _, Proposition.Some _, Proposition.Carried _,
+                 Proposition.SomeReachable _, Proposition.Unread _,
+                 Proposition.OnAnApplication _ -> { }
+            case Proposition.SoManyHold counted -> throw notWrittenOut(counted);
         }
         return out;
     }
@@ -396,7 +403,11 @@ public final class WhereEachLineDecides {
                     Proposition said = some(some.container(), element);
                     yield said == null ? null : some.holds() ? said : said.denied();
                 }
-                default -> stated;
+                case Proposition.SoManyHold counted -> throw notWrittenOut(counted);
+                case Proposition.Always _, Proposition.Compared _, Proposition.Truth _,
+                     Proposition.InCases _, Proposition.Present _, Proposition.SameValue _,
+                     Proposition.LastToHold _, Proposition.Carried _, Proposition.SomeReachable _,
+                     Proposition.Unread _, Proposition.OnAnApplication _ -> stated;
             };
         }
 
@@ -454,9 +465,14 @@ public final class WhereEachLineDecides {
                     ofTheRow.add(said);
                     yield Proposition.all(ofTheRow);
                 }
+                case Proposition.SoManyHold counted -> throw notWrittenOut(counted);
                 // One part, about the element or not; what holds everywhere is about none, and
                 // some element meeting it is the container holding one.
-                default -> element.mayTurnOnAnElementOf(container)
+                case Proposition.Always _, Proposition.Compared _, Proposition.Truth _,
+                     Proposition.InCases _, Proposition.Present _, Proposition.SameValue _,
+                     Proposition.LastToHold _, Proposition.Some _, Proposition.Carried _,
+                     Proposition.SomeReachable _, Proposition.Unread _,
+                     Proposition.OnAnApplication _ -> element.mayTurnOnAnElementOf(container)
                         ? new Proposition.Some(container, element, true)
                         : Proposition.all(List.of(element, new Proposition.Some(container,
                                 new Proposition.Always(true), true)));
@@ -495,7 +511,11 @@ public final class WhereEachLineDecides {
                 case Proposition.All all -> all.parts().stream().mapToLong(Lifting::placesIn).sum();
                 case Proposition.Any any -> any.parts().stream().mapToLong(Lifting::placesIn).sum();
                 case Proposition.Some some -> 1 + placesIn(some.ofTheElement());
-                default -> 1;
+                case Proposition.SoManyHold counted -> throw notWrittenOut(counted);
+                case Proposition.Always _, Proposition.Compared _, Proposition.Truth _,
+                     Proposition.InCases _, Proposition.Present _, Proposition.SameValue _,
+                     Proposition.LastToHold _, Proposition.Carried _, Proposition.SomeReachable _,
+                     Proposition.Unread _, Proposition.OnAnApplication _ -> 1;
             };
         }
 
@@ -602,7 +622,12 @@ public final class WhereEachLineDecides {
                     }
                     yield out;
                 }
-                default -> {
+                case Proposition.SoManyHold counted -> throw notWrittenOut(counted);
+                case Proposition.Always _, Proposition.Compared _, Proposition.Truth _,
+                     Proposition.InCases _, Proposition.Present _, Proposition.SameValue _,
+                     Proposition.LastToHold _, Proposition.Some _, Proposition.Carried _,
+                     Proposition.SomeReachable _, Proposition.Unread _,
+                     Proposition.OnAnApplication _ -> {
                     Literal leaf = leaves.get(stated.key());
                     yield asking.part(index.get(leaf.part()), leaf.held());
                 }
@@ -886,7 +911,11 @@ public final class WhereEachLineDecides {
                     .anyMatch(WhereEachLineDecides::statesARelation);
             case Proposition.Any any -> any.parts().stream()
                     .anyMatch(WhereEachLineDecides::statesARelation);
-            default -> false;
+            case Proposition.SoManyHold counted -> throw notWrittenOut(counted);
+            case Proposition.Always _, Proposition.Truth _, Proposition.InCases _,
+                 Proposition.Present _, Proposition.SameValue _, Proposition.LastToHold _,
+                 Proposition.Some _, Proposition.Carried _, Proposition.SomeReachable _,
+                 Proposition.Unread _, Proposition.OnAnApplication _ -> false;
         };
     }
 
@@ -902,7 +931,12 @@ public final class WhereEachLineDecides {
         switch (stated) {
             case Proposition.All all -> all.parts().forEach(part -> gather(part, parts, leaves));
             case Proposition.Any any -> any.parts().forEach(part -> gather(part, parts, leaves));
-            default -> {
+            case Proposition.SoManyHold counted -> throw notWrittenOut(counted);
+            case Proposition.Always _, Proposition.Compared _, Proposition.Truth _,
+                 Proposition.InCases _, Proposition.Present _, Proposition.SameValue _,
+                 Proposition.LastToHold _, Proposition.Some _, Proposition.Carried _,
+                 Proposition.SomeReachable _, Proposition.Unread _,
+                 Proposition.OnAnApplication _ -> {
                 Proposition held = held(stated);
                 parts.putIfAbsent(held.key(), held);
                 leaves.putIfAbsent(stated.key(), new Literal(held.key(), held == stated));
@@ -927,6 +961,7 @@ public final class WhereEachLineDecides {
             case Proposition.Carried carried -> throw carried.handedToAReader();
             case Proposition.LastToHold last -> last.holds();
             case Proposition.OnAnApplication _, Proposition.Always _ -> true;
+            case Proposition.SoManyHold counted -> throw notWrittenOut(counted);
             case Proposition.All _, Proposition.Any _ -> throw new IllegalArgumentException(
                     "a part is what a conjunction or a disjunction joins: " + part);
         };
@@ -1267,7 +1302,11 @@ public final class WhereEachLineDecides {
                     atoms.stream().anyMatch(cases.cases().atoms()::contains) == cases.holds());
             case Proposition.Some some -> new Proposition.Some(some.container(),
                     assuming(some.ofTheElement(), value, atoms), some.holds());
-            default -> stated;
+            case Proposition.SoManyHold counted -> throw notWrittenOut(counted);
+            case Proposition.InCases _, Proposition.Always _, Proposition.Compared _,
+                 Proposition.Truth _, Proposition.Present _, Proposition.SameValue _,
+                 Proposition.LastToHold _, Proposition.Carried _, Proposition.SomeReachable _,
+                 Proposition.Unread _, Proposition.OnAnApplication _ -> stated;
         };
     }
 
@@ -1284,12 +1323,27 @@ public final class WhereEachLineDecides {
                     .map(each -> with(each, part, holds)).toList());
             case Proposition.Any any -> Proposition.any(any.parts().stream()
                     .map(each -> with(each, part, holds)).toList());
+            case Proposition.SoManyHold counted -> throw notWrittenOut(counted);
             case Proposition leaf when standsAs(leaf, part) ->
                     new Proposition.Always(leaf.key().equals(part.key()) == holds);
             case Proposition.Some some when !part.mayTurnOnAnElementOf(some.container()) ->
                     new Proposition.Some(some.container(), with(some.ofTheElement(), part, holds),
                             some.holds());
-            default -> stated;
+            case Proposition.Some _, Proposition.Always _, Proposition.Compared _,
+                 Proposition.Truth _, Proposition.InCases _, Proposition.Present _,
+                 Proposition.SameValue _, Proposition.LastToHold _, Proposition.Carried _,
+                 Proposition.SomeReachable _, Proposition.Unread _,
+                 Proposition.OnAnApplication _ -> stated;
         };
+    }
+
+    /**
+     * What is thrown where a count of statements reaches a reader here, which none does: a
+     * statement is handed here with every count in it written out as its choices
+     * ({@link CountsWrittenOut}), inside what a search reaches as well.
+     */
+    private static IllegalArgumentException notWrittenOut(Proposition.SoManyHold counted) {
+        return new IllegalArgumentException(
+                "a count reaches this reader written out as its choices: " + counted);
     }
 }

@@ -43,7 +43,11 @@ final class KeptTruths {
                     return null;
                 }
                 case Proposition.Always _ -> { }
-                default -> out.add(kept);
+                case Proposition.Compared _, Proposition.Truth _, Proposition.InCases _,
+                     Proposition.Present _, Proposition.SameValue _, Proposition.LastToHold _,
+                     Proposition.All _, Proposition.Any _, Proposition.Some _,
+                     Proposition.Carried _, Proposition.SomeReachable _, Proposition.Unread _,
+                     Proposition.OnAnApplication _, Proposition.SoManyHold _ -> out.add(kept);
             }
         }
         return out.size() == keptWhere.size() ? keptWhere : out;

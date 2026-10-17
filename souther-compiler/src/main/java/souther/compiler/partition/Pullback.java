@@ -213,8 +213,13 @@ final class Pullback {
                 case Proposition.Any any -> any.parts().forEach(part -> partsOf(part, into));
                 case Proposition.OnAnApplication applications ->
                         applications.each().forEach(each -> partsOf(each, into));
+                case Proposition.SoManyHold counted ->
+                        counted.statements().forEach(each -> partsOf(each, into));
                 case Proposition.Some some -> partsOf(some.ofTheElement(), into);
-                default -> {
+                case Proposition.Unread _, Proposition.Compared _, Proposition.Truth _,
+                     Proposition.InCases _, Proposition.Present _, Proposition.SameValue _,
+                     Proposition.LastToHold _, Proposition.Carried _,
+                     Proposition.SomeReachable _ -> {
                     into.add(stated.key());
                     into.add(stated.denied().key());
                 }
@@ -749,6 +754,12 @@ final class Pullback {
                                                 boolean fixed, InputReads reads,
                                                 Once<AffineReading.OfAComparison> arithmetic) {
         AnEmptinessCheck.Checked checked = AnEmptinessCheck.checked(stated);
+        // Whether the arithmetic stops at a value to go into decides both of the last two rules:
+        // the one goes in where it does, and the other takes the comparison only where it does
+        // not. Asked of one reading, it is one answer, and reading the sides for it again would
+        // make every reading under them a second time.
+        Once<Optional<Inside>> wayIn = new Once<>(() -> Optional.ofNullable(aWayIn(List.of(
+                new Denotation(stated.left(), reads), new Denotation(stated.right(), reads)))));
         return List.of(
                 () -> checked == null ? null : new Derivation.AnEmptinessCheck(at == null
                         ? observe(checked.container(), AnswerAspect.EMPTINESS, reads)
@@ -766,8 +777,8 @@ final class Pullback {
                 () -> partOf(at, ofItsArguments(stated, fixed, reads)),
                 () -> ofASizeInCases(stated, at, reads),
                 () -> ofAChoice(stated, at, reads),
-                () -> throughWhatItStopsAt(stated, at, fixed, reads),
-                () -> partOf(at, ofBoundValues(stated, fixed, reads)));
+                () -> throughWhatItStopsAt(stated, at, fixed, reads, wayIn.get()),
+                () -> partOf(at, ofBoundValues(stated, fixed, reads, wayIn.get())));
     }
 
     /**
@@ -2737,15 +2748,9 @@ final class Pullback {
                 return switch (numbers(form)) {
                     case Numbers.NotRead(WhyUnread why) ->
                             leaf(new Derivation.Stopped(why, fixed(e, reads)), e, reads);
-                    case Numbers.EachNumber(Map<LawNumber<?>, LinearForm<Quantity>> each) -> {
-                        Relation.OneWay<Quantity> stated =
-                                Derivation.ALawComparison.relationOf(compared, each);
-                        yield leaf(stated != null && pastTheReadings(new Relation.Affine(
-                                        stated.form(), stated.proposition()))
-                                ? pastTheReadings(fixed(e, reads))
-                                : Derivation.ALawComparison.of(compared, each, counting, alike,
-                                        READINGS.maximum()), e, reads);
-                    }
+                    case Numbers.EachNumber(Map<LawNumber<?>, LinearForm<Quantity>> each) ->
+                            leaf(Derivation.ALawComparison.of(compared, each, counting, alike),
+                                    e, reads);
                 };
             } finally {
                 counting = outer;
@@ -3638,9 +3643,12 @@ final class Pullback {
      * value that is is still known, by the binding that names it, and two comparisons over one name
      * are about one number. The arithmetic is {@link AffineForms}'s, the one walk every
      * reader of a number in this compiler composes by; this says only what its atoms are.
+     *
+     * @param wayIn the value its arithmetic stops at that a reading can go into, where there is one
+     *              ({@link #aWayIn}), which the rule before this one reads it through
      */
     private Derivation ofBoundValues(StatedComparison comparison, boolean fixed,
-                                     InputReads reads) {
+                                     InputReads reads, Optional<Inside> wayIn) {
         // A comparison whose answer is the same on every run is no relation between numbers that
         // vary: nothing it compares is followed back to the input.
         if (fixed) {
@@ -3651,7 +3659,7 @@ final class Pullback {
         Denotation right = new Denotation(comparison.right(), reads);
         // One whose arithmetic stops at a value the reading goes into is read through it, by the
         // rule before this one.
-        if (aWayIn(List.of(left, right)) != null) {
+        if (wayIn.isPresent()) {
             return null;
         }
         return overQuantities(left, right, comparison.claim().statedRelation());
@@ -3947,31 +3955,13 @@ final class Pullback {
                     !Relation.OneWay.facesTheOtherWay(form));
         };
         Relation.Affine relation = new Relation.Affine(one.form(), one.proposition());
-        if (pastTheReadings(relation)) {
-            return pastTheReadings(false);
-        }
         List<Derivation.AComparisonRead.Counted> named = new ArrayList<>();
         read.forEach((count, how) -> {
             if (one.form().coefs().containsKey(count)) {
                 named.add(how);
             }
         });
-        return new Derivation.AComparisonRead(by, relation, one.holds(), named,
-                READINGS.maximum(), facing);
-    }
-
-    /**
-     * Whether {@code relation} is a count of statements about values written out that is written
-     * out as more choices of which of them hold than one condition is read in — which a comparison
-     * a reading concludes is never made as ({@link Derivation.AComparisonRead}).
-     */
-    private static boolean pastTheReadings(Relation relation) {
-        return Derivation.AComparisonRead.pastTheChoicesRead(relation, READINGS.maximum());
-    }
-
-    /** A comparison stopped at for being {@link #pastTheReadings}. */
-    private static Derivation pastTheReadings(boolean fixed) {
-        return new Derivation.Stopped(new WhyUnread.MoreReadingsThanAreMade(), fixed);
+        return new Derivation.AComparisonRead(by, relation, one.holds(), named, facing);
     }
 
     /** The block a closure is, read where {@code container} stands. */
@@ -4424,7 +4414,7 @@ final class Pullback {
         return new Derivation.AComparisonRead(Derivation.ComparisonReading.ON_AN_ORDER,
                 new Relation.Ordered(new DecisionAtom.OfTheInput(drawn.term()), drawn.value(),
                         proposition),
-                states == proposition, READINGS.maximum(), facing);
+                states == proposition, facing);
     }
 
     /**
@@ -4494,13 +4484,14 @@ final class Pullback {
      *
      * <p>A value is gone into once: read again with it taken, the arithmetic goes through it, and
      * where it stops next is another such value or none at all.
+     *
+     * @param wayIn the value its arithmetic stops at that a reading can go into, where there is one
+     *              ({@link #aWayIn})
      */
     private Derivation throughWhatItStopsAt(StatedComparison stated, Denotation at, boolean fixed,
-                                            InputReads reads) {
-        Inside inside = aWayIn(List.of(new Denotation(stated.left(), reads),
-                new Denotation(stated.right(), reads)));
-        return inside == null ? null : goingIn(inside, reads, at, fixed,
-                taking -> comparison(stated, at, fixed, taking.apply(reads)));
+                                            InputReads reads, Optional<Inside> wayIn) {
+        return wayIn.map(inside -> goingIn(inside, reads, at, fixed,
+                taking -> comparison(stated, at, fixed, taking.apply(reads)))).orElse(null);
     }
 
     /** A value the arithmetic of a number stopped at, that a reading can go into. */
