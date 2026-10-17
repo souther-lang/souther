@@ -1044,6 +1044,38 @@
                       "$ref": "#/$defs/elementComputation"
                     }
                   }
+                },
+                {
+                  "type": "object",
+                  "description": "Every node of a tree from the node at `root` down, each once: that node and the elements of the fields `through` of every node reached. Where `container` names fields of a node, the values are the elements of the container there in every one of those nodes instead. No position below the root holds these values, since a type that holds itself is not read again below it.",
+                  "required": [
+                    "kind",
+                    "root",
+                    "through",
+                    "container"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "kind": {
+                      "const": "reachable_nodes"
+                    },
+                    "root": {
+                      "type": "string"
+                    },
+                    "through": {
+                      "type": "array",
+                      "minItems": 1,
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "container": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
                 }
               ]
             }
@@ -5673,7 +5705,8 @@
                           "values_that_answer_several_of_their_numbers",
                           "places_in_a_run_that_are_named",
                           "elements_chosen_for_a_count",
-                          "elements_a_computed_total_is_solved_for"
+                          "elements_a_computed_total_is_solved_for",
+                          "trees_written_for_a_count"
                         ]
                       }
                     },

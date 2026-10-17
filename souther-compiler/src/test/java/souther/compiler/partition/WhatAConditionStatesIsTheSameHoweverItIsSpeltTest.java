@@ -9,9 +9,12 @@ import souther.compiler.check.RuleReadings;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReads;
+import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.RunSource;
+import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Proposition;
-import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.Relation;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
@@ -272,8 +275,18 @@ class WhatAConditionStatesIsTheSameHoweverItIsSpeltTest {
                 "List.map(e -> e + 1, b.xs)", "{ let ys = List.flatMap(e -> [e], b.xs)\n ys }")) {
             assertEquals(once, stated(sum.formatted(made)), made);
         }
+        // A walk adding one for every element counts them, and one adding two counts them twice;
+        // so does a walk putting one more in what it carries, and one that doubles what it
+        // carries is no count of anything.
+        assertEquals(once, stated(
+                "List.fold((acc, e) -> acc + 1, 0, b.xs) + List.length(b.items) >= 1"));
+        assertEquals(once, stated(sum.formatted("List.fold((acc, e) -> acc ++ [e], [], b.xs)")));
+        assertInstanceOf(Proposition.Unread.class,
+                stated(sum.formatted("List.fold((acc, e) -> acc ++ acc ++ [e], [], b.xs)")));
         Proposition twice = stated(
                 "List.length(b.xs) + List.length(b.xs) + List.length(b.items) >= 1");
+        assertEquals(twice, stated(
+                "List.fold((acc, e) -> acc + 2, 0, b.xs) + List.length(b.items) >= 1"));
         for (String made : List.of("List.flatMap(e -> [e, e], b.xs)", "List.append(b.xs, b.xs)",
                 "List.concat([b.xs, b.xs])")) {
             assertEquals(twice, stated(sum.formatted(made)), made);
@@ -293,7 +306,8 @@ class WhatAConditionStatesIsTheSameHoweverItIsSpeltTest {
 
     /**
      * A closure answering as many as the element it is handed says is summed over the elements,
-     * the same sum however the lists are put end to end. One answering a number by cases is no
+     * which is how many occurrences of what those lists hold there are in all, the same number
+     * however the lists are put end to end. One answering a number by cases is no
      * number of how many elements there are, and is not read as one.
      */
     @Test
@@ -302,10 +316,20 @@ class WhatAConditionStatesIsTheSameHoweverItIsSpeltTest {
                 + " + List.length(b.xs) >= 1");
         Proposition.Compared compared = assertInstanceOf(Proposition.Compared.class, flattened);
         assertTrue(((Relation.Affine) compared.relation()).form().coefs().keySet().stream()
-                        .anyMatch(Quantity.SumOver.class::isInstance),
-                () -> "a sum over the items: " + flattened);
+                        .anyMatch(number -> number instanceof DecisionAtom.OfTheInput(
+                                NumericTerm.TakenOver over)
+                                && over.source().equals(new RunSource.FlattenedOccurrences(
+                                        TermPath.of("b").then("items").element().then("parts")
+                                                .element()))),
+                () -> "every part of every item: " + flattened);
         assertEquals(stated("List.length(List.concat(List.map(i -> i.parts, b.items)))"
                 + " + List.length(b.xs) >= 1"), flattened);
+        // And the sizes of those lists added up are the same number, by a total or by a fold.
+        for (String added : List.of("List.sum(List.map(i -> List.length(i.parts), b.items))",
+                "List.fold((acc, i) -> acc + List.length(i.parts), 0, b.items)",
+                "List.length(List.fold((acc, i) -> acc ++ i.parts, [], b.items))")) {
+            assertEquals(flattened, stated(added + " + List.length(b.xs) >= 1"), added);
+        }
         for (String byCases : List.of("e -> if e > 0 then [e] else []",
                 "e -> if e > 0 then [e] else [e, e]")) {
             assertInstanceOf(Proposition.Unread.class, stated("List.length(List.flatMap("

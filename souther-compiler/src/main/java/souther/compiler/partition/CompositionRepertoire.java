@@ -107,7 +107,19 @@ public enum CompositionRepertoire {
      * told to raise a number that changes nothing; read as an answer about the model, they are told
      * the rules admit no row when what happened is that this compiler wrote none.
      */
-    ELEMENTS_A_COMPUTED_TOTAL_IS_SOLVED_FOR;
+    ELEMENTS_A_COMPUTED_TOTAL_IS_SOLVED_FOR,
+
+    /**
+     * The trees written for how many nodes, or values inside the nodes, a tree holds.
+     *
+     * <p>Written as a root and nodes below it holding nothing below them. A tree of that many
+     * nodes is one of those wherever a node may hold as many below it as the count leaves; where
+     * the rules hold how many a node holds below it to fewer — one each, a chain — a tree of that
+     * many is deeper, and none of these. A count of values inside the nodes is written by none of
+     * them. Neither is a count no tree comes to: what would reach it is a way of writing deeper
+     * trees, and raising no figure does.
+     */
+    TREES_WRITTEN_FOR_A_COUNT;
 
     /**
      * Whether a wider run could reach the rest: never, since raising anything reaches none of it.

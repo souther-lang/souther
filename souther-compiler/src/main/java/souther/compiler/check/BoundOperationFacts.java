@@ -470,6 +470,16 @@ public final class BoundOperationFacts {
         return one(BoundOperationFact.PutsAValueIn.class, operation);
     }
 
+    /** What an operation gathering a value into a set answers: exactly what {@code into} holds
+     *  and {@code value}, each once. */
+    public record Gathered(DeclaredArgument value, DeclaredArgument into) {}
+
+    /** What {@code operation} gathers into what, or null where nothing says it gathers. */
+    public Gathered gathersIn(ValueName operation) {
+        BoundOperationFact.GathersIn gathers = one(BoundOperationFact.GathersIn.class, operation);
+        return gathers == null ? null : new Gathered(gathers.value(), gathers.into());
+    }
+
     /** The map whose keys {@code operation} answers a map keyed by, or null where it keeps none. */
     public DeclaredArgument keepsTheKeysOf(ValueName operation) {
         BoundOperationFact.KeepsTheKeysOf held =

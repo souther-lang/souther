@@ -18,7 +18,9 @@ import souther.compiler.semantics.TakenAs;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -198,11 +200,72 @@ final class TermReading {
                 return new Reading.Missing(unread.cause());
             }
         }
+        if (term.source() instanceof RunSource.ReachableNodes nodes) {
+            List<ObservedValue> held = new ArrayList<>();
+            Reading stopped = heldBelow(values, nodes, held);
+            if (stopped != null) {
+                return stopped;
+            }
+            values = held;
+        }
         return switch (term.takenAs()) {
             case TakenAs.TheSumOfWhatItHolds _ -> addedUp(values, on);
-            case TakenAs.HowManyItHolds _, TakenAs.PartOfTime _, TakenAs.PartOfDate _,
+            // Each value of the run is one of them, whatever it is.
+            case TakenAs.HowManyItHolds _ -> new Reading.Number(Count.of(values.size()));
+            case TakenAs.PartOfTime _, TakenAs.PartOfDate _,
                     TakenAs.TheTruncatingQuotient _, TakenAs.TheFloorRemainder _ ->
                     new Reading.NotNumber();
+        };
+    }
+
+    /**
+     * The values a tree holds below each of {@code roots}, put into {@code held}: every node from
+     * the root down through the fields {@code nodes} names, or what the container it names holds
+     * in each of them — or why a node has none, where it was not read or is no record holding
+     * those fields as containers.
+     */
+    private static Reading heldBelow(List<ObservedValue> roots, RunSource.ReachableNodes nodes,
+                                     List<ObservedValue> held) {
+        Deque<ObservedValue> below = new ArrayDeque<>(roots);
+        while (!below.isEmpty()) {
+            ObservedValue node = below.removeFirst();
+            Membership.Incomplete unread = Membership.unread(node);
+            if (unread != null) {
+                return new Reading.Missing(unread.cause());
+            }
+            if (nodes.container().isEmpty()) {
+                held.add(node);
+            } else {
+                List<ObservedValue> inside = elementsAt(node, nodes.container());
+                if (inside == null) {
+                    return new Reading.NotNumber();
+                }
+                held.addAll(inside);
+            }
+            for (String field : nodes.through()) {
+                List<ObservedValue> next = elementsAt(node, List.of(field));
+                if (next == null) {
+                    return new Reading.NotNumber();
+                }
+                below.addAll(next);
+            }
+        }
+        return null;
+    }
+
+    /** The elements of the container at {@code fields} of {@code value}, or null where there is
+     *  no container there. */
+    private static List<ObservedValue> elementsAt(ObservedValue value, List<String> fields) {
+        ObservedValue at = value;
+        for (String field : fields) {
+            if (!(at instanceof ObservedValue.Constructed record) || record.field(field) == null) {
+                return null;
+            }
+            at = record.field(field);
+        }
+        return switch (at) {
+            case ObservedValue.Sequence sequence -> sequence.elements();
+            case null, default -> null;
         };
     }
 

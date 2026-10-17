@@ -121,7 +121,9 @@ public sealed interface Proposition {
         return switch (quantity) {
             case DecisionAtom.OfTheInput(var term) ->
                     isAnElementOf(new DecisionSubject.AnInput(term.subjectPath()), container);
-            case DecisionAtom.OfAnAnswer _, Quantity.OfABinding _ -> true;
+            // What a recursion carries stands for any number, which may be any element's.
+            case DecisionAtom.OfAnAnswer _, Quantity.OfABinding _, Quantity.HowManyCarried _ ->
+                    true;
             case DecisionAtom.TakenOfAnAnswer(var _, var _, var taken, var _) ->
                     isAnElementOf(taken, container);
             case Quantity.WhatAnOperationAnswers answers -> answers.of().stream()
@@ -1103,7 +1105,7 @@ public sealed interface Proposition {
             case DecisionAtom.OfAnAnswer _, DecisionAtom.TakenOfAnAnswer _ -> true;
             case DecisionAtom.OfTheInput _, Quantity.OfABinding _,
                  Quantity.CodePointsOfAPiece _, Quantity.RemainderOfADividend _,
-                 Quantity.WhatAnOperationAnswers _ -> false;
+                 Quantity.WhatAnOperationAnswers _, Quantity.HowManyCarried _ -> false;
             case Quantity.HowManyMeet count -> count.container() instanceof DecisionSubject.AnAnswer
                     || aboutAnAnswer(count.ofTheElement());
             case Quantity.HowManyHold held -> held.each().stream()

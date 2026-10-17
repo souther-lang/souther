@@ -3,6 +3,7 @@ package souther.compiler.check;
 import souther.compiler.core.Core;
 import souther.compiler.regex.PatternPlan;
 import souther.compiler.inputs.BlockReason;
+import souther.compiler.types.BindingId;
 import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.Type;
 import souther.compiler.values.AdmittedPlan;
@@ -16,6 +17,7 @@ import souther.compiler.values.ValueSet;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -588,16 +590,24 @@ final class AdmissibleReading {
      */
     private Set<FactSubject> names(Core e, Denotations at) {
         Set<FactSubject> found = new LinkedHashSet<>();
-        gather(e, found, at);
+        gather(e, found, at, new HashSet<>());
         return found;
     }
 
-    private void gather(Core e, Set<FactSubject> found, Denotations at) {
+    /**
+     * The positions {@code e} names, read in {@code at}, into {@code found}.
+     *
+     * @param followed the names already followed to what they were given, each once: what a name
+     *                 was given and where it is read are the binding's, so a name read again names
+     *                 what it named the first time, and a chain of names each reading the one
+     *                 before it twice is walked once and not once for every way down it
+     */
+    private void gather(Core e, Set<FactSubject> found, Denotations at, Set<BindingId> followed) {
         // A binding is crossed as a binding: its body is what the clause states, read inside it,
         // and what it was given is not a part of the clause on its own. Walked as an ordinary node,
         // an argument a helper never reads was counted among the positions the rule names.
         if (e instanceof Core.LetIn li) {
-            gather(li.body(), found, terms.inside(li, at));
+            gather(li.body(), found, terms.inside(li, at), followed);
             return;
         }
         // Every subexpression standing here, and not only the node: a projection's shorter
@@ -607,6 +617,18 @@ final class AdmissibleReading {
             found.add(here);
             return;   // a position names itself, and nothing under it is a position of its own
         }
-        Core.forEachChild(e, child -> gather(child, found, at));
+        // A name that stands for what it was given names what that names, read where it was
+        // given: a library call written in the clause binds its parameters to what the clause
+        // handed it, and the positions handed over are the clause's.
+        if (Core.withoutStanding(e) instanceof Core.Read read) {
+            ValueStanding.ReadThrough<Denotations> given = at.givenTo(read.binding());
+            if (given != null) {
+                if (followed.add(read.binding())) {
+                    gather(given.value(), found, given.at(), followed);
+                }
+                return;
+            }
+        }
+        Core.forEachChild(e, child -> gather(child, found, at, followed));
     }
 }

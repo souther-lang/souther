@@ -73,7 +73,7 @@ public final class WrittenOfANode {
         return switch (quantity) {
             case DecisionAtom.OfTheInput(NumericTerm term) -> reads(term);
             case DecisionAtom.OfAnAnswer _, DecisionAtom.TakenOfAnAnswer _, Quantity.OfABinding _,
-                 Quantity.CodePointsOfAPiece _ -> false;
+                 Quantity.CodePointsOfAPiece _, Quantity.HowManyCarried _ -> false;
             case Quantity.HowManyMeet count -> reads(count.container())
                     && reads(count.ofTheElement());
             case Quantity.HowManyHold held -> held.each().stream().allMatch(this::reads);

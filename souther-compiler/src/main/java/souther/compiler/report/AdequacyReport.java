@@ -6405,6 +6405,14 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         over.put("elements", run.elements().discriminated());
                         elementComputation(over.putObject("computation"), run.computation());
                     }
+                    case RunSource.ReachableNodes run -> {
+                        over.put("kind", "reachable_nodes");
+                        over.put("root", run.root().discriminated());
+                        ArrayNode through = over.putArray("through");
+                        run.through().forEach(through::add);
+                        ArrayNode container = over.putArray("container");
+                        run.container().forEach(container::add);
+                    }
                 }
             }
         }

@@ -129,6 +129,30 @@ class WhatAStandingQuestionIsAccountedForByTest {
                 "and a binding standing in an operand is not a form nothing reads");
     }
 
+    /**
+     * A rule written in a library operation handed two positions.
+     *
+     * <p>The operation is expanded where the clause calls it, and its parameters stand for what the
+     * clause handed it — here a lookup of one field's value in the other. What the rule names is
+     * what those parameters were handed, so the questions it raises at both fields are the ones the
+     * reading of values has to account for, by the form it could not take apart.
+     */
+    private static final String A_LOOKUP_A_LIBRARY_OPERATION_IS_HANDED = """
+            module demo
+
+            data N = { base: String, flags: Map<String, Bool> }
+                invariant ok = Option.withDefault(false, Map.get(base, flags))
+            """;
+
+    @Test
+    void aRuleALibraryOperationIsHandedPositionsIsAccountedForAtThem() {
+        assertEquals(Map.of("invariant N (ok) at base", "TheValueReadingSays",
+                        "invariant N (ok) at flags", "TheValueReadingSays"),
+                whyStanding(A_LOOKUP_A_LIBRARY_OPERATION_IS_HANDED));
+        assertEquals(UnreadReason.FORM_NOT_READ,
+                whyWider(A_LOOKUP_A_LIBRARY_OPERATION_IS_HANDED, "base"));
+    }
+
     /** What the values reading was left short by at one name. */
     private static souther.compiler.values.UnreadReason whyWider(String source, String field) {
         return ((souther.compiler.values.AdmissibleSet.Widening.RuleUnread)

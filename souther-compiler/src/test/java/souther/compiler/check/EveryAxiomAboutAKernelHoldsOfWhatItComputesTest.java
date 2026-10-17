@@ -40,7 +40,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * that takes it is as sound as it is. These are the axioms the proofs of the library's written
  * operations take beside a kernel's laws (which {@code EveryLawHoldsOfWhatTheLibraryComputesTest}
  * runs): what its answer comes to beside what others answer, the containers it is no smaller than,
- * the one value it puts in, what every element of its answer is, which code points it keeps the
+ * the one value it puts in, what it gathers into a set, what every element of its answer is,
+ * which code points it keeps the
  * having of, what it lists, what it builds its answer from, and how far it goes applying its
  * closure. Each is written from the axiom itself and run
  * ({@link WhatTheLibraryComputes}); how far a closure is applied is run through a closure that
@@ -74,6 +75,10 @@ class EveryAxiomAboutAKernelHoldsOfWhatItComputesTest {
             if (facts.putsAValueIn(operation) instanceof BoundOperationFact.PutsAValueIn puts) {
                 statements.add(new WhatTheLibraryComputes.Statement(operation, "puts a value in",
                         putsIn(puts.value().position(), puts.into().position())));
+            }
+            if (facts.gathersIn(operation) instanceof BoundOperationFacts.Gathered gathers) {
+                statements.add(new WhatTheLibraryComputes.Statement(operation, "gathers",
+                        gathers(gathers.value().position(), gathers.into().position())));
             }
             if (Combinators.listing(stdlib, facts, operation)
                     instanceof AppliedClosures.Listing listing) {
@@ -322,6 +327,23 @@ class EveryAxiomAboutAKernelHoldsOfWhatItComputesTest {
                         .denied(), false);
         return new LawProposition.All<>(List.of(compared(Rel.LE, -1, size(ANSWER),
                 size(at(into)).negate()), eachFromTheTwo));
+    }
+
+    /**
+     * What an answer gathering {@code value} into {@code into} holds, both ways: every element of
+     * {@code into} and the value are in the answer, and every element of the answer is one of
+     * those.
+     */
+    private static LawProposition<Slot> gathers(int value, int into) {
+        LawSubject<Slot> element = new LawSubject.ElementOf<>(new Slot.Answer());
+        LawProposition<Slot> fromInto = new LawProposition.SomeElement<>(new Slot.Place(into),
+                same(new LawSubject.ElementOf<>(new Slot.Place(into)), element), true);
+        return new LawProposition.All<>(List.of(
+                among(new Slot.Place(into), new Slot.Answer()),
+                new LawProposition.SomeElement<>(new Slot.Answer(),
+                        same(element, argument(value)), true),
+                new LawProposition.SomeElement<>(new Slot.Answer(), new LawProposition.Any<>(
+                        List.of(same(element, argument(value)), fromInto)).denied(), false)));
     }
 
     /** What an answer listing {@code listing} of an argument holds of it: every element of the

@@ -88,6 +88,21 @@ public final class ElementsMet {
         return true;
     }
 
+    /**
+     * What this comparison has met so far, held apart from it: a reading tried and not taken puts
+     * this back, and leaves no name it met standing for an element.
+     */
+    public ElementsMet copied() {
+        if (!holding) {
+            return this;
+        }
+        ElementsMet copy = new ElementsMet(true);
+        copy.standingFor.putAll(standingFor);
+        copy.names.addAll(names);
+        copy.crowded = crowded;
+        return copy;
+    }
+
     /** Whether a number was refused because it named another element of a container this
      *  comparison was already read of. */
     public boolean crowded() {

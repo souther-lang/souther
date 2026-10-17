@@ -1,6 +1,8 @@
 package souther.compiler.inputs;
 
 import souther.compiler.check.AffineForms;
+import souther.compiler.check.DefaultBoundOperationFacts;
+import souther.compiler.check.NumericMeasures;
 import souther.compiler.check.ValueStanding;
 import souther.compiler.check.DeclarationAccess;
 import souther.compiler.check.ElementAnswer;
@@ -10,6 +12,7 @@ import souther.compiler.core.Core;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
+import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.BindingId;
 
 import java.util.ArrayList;
@@ -18,6 +21,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
 
@@ -266,10 +270,10 @@ public sealed interface ElementValue {
          * {@code x} at nought and {@code 1 + x} at one, and is no addition at two.
          *
          * <p>Null where the form has the answer so far at any weight but exactly one — which is
-         * where it is multiplied, ignored or chosen between — and where nothing of the element is
-         * in what is added, which is a count and no total.
+         * where it is multiplied, ignored or chosen between. What every element adds alike is the
+         * constant, and a step adding nothing else of the element adds that many for each of them.
          */
-        private Affine addedTo(Core answer, BindingId accumulator) {
+        private Added addedTo(Core answer, BindingId accumulator) {
             LinearForm<TheStep> form = AffineForms.of(answer, held, new Names<TheStep>() {
 
                 @Override
@@ -277,6 +281,10 @@ public sealed interface ElementValue {
                     if (Core.withoutStanding(e) instanceof Core.Read read
                             && read.binding().equals(accumulator)) {
                         return LinearForm.atom(new TheStep.TheAnswerSoFar());
+                    }
+                    ElementProjection counted = countedAt(e, element, at, source);
+                    if (counted != null) {
+                        return LinearForm.atom(new TheStep.HowManyAt(counted));
                     }
                     ElementProjection place =
                             ElementProjection.read(e, element, at, source.newtypes());
@@ -288,20 +296,26 @@ public sealed interface ElementValue {
                 return null;
             }
             Map<ElementProjection, ExactRatio> added = new LinkedHashMap<>();
+            Map<ElementProjection, ExactRatio> counted = new LinkedHashMap<>();
             form.coefs().forEach((atom, weight) -> {
-                if (atom instanceof TheStep.OfTheElement(ElementProjection place)) {
-                    added.put(place, weight);
+                switch (atom) {
+                    case TheStep.OfTheElement(ElementProjection place) -> added.put(place, weight);
+                    case TheStep.HowManyAt(ElementProjection place) -> counted.put(place, weight);
+                    case TheStep.TheAnswerSoFar _ -> { }
                 }
             });
-            return added.isEmpty() ? null : new Affine(new LinearForm<>(form.constant(), added));
+            return new Added(new Affine(new LinearForm<>(form.constant(), added)), counted);
         }
 
-        /** What an atom of a step is: the answer so far, or a place of the element. */
+        /** What an atom of a step is: the answer so far, a place of the element, or how many the
+         *  container at a place of the element holds. */
         private sealed interface TheStep {
 
             record TheAnswerSoFar() implements TheStep {}
 
             record OfTheElement(ElementProjection place) implements TheStep {}
+
+            record HowManyAt(ElementProjection place) implements TheStep {}
         }
 
         /**
@@ -348,13 +362,42 @@ public sealed interface ElementValue {
     }
 
     /**
+     * What a step adds to the answer so far for one element: a form of the element's numbers, and
+     * how many each container at a place of the element holds, with the weight it is added at.
+     *
+     * <p>A count is no number of the element's: how many a list inside it holds is as many values
+     * as stand inside, so over every element it is how many occurrences of that list's element
+     * there are, which is a number of the walk and not a total of one value of each element.
+     */
+    record Added(Affine ofTheElement, Map<ElementProjection, ExactRatio> heldAt) {
+
+        public Added {
+            heldAt = Map.copyOf(heldAt);
+        }
+    }
+
+    /**
      * What a step answering the answer so far and something of the element adds to it, or null
      * where it adds anything but that ({@link Reader#addedTo}).
      *
      * @param accumulator the parameter the answer so far arrives on
      */
-    static Affine addedTo(ElementAnswer step, BindingId accumulator, Map<BindingId, Core> held,
-                          RuleReadingSource source) {
+    static Added addedTo(ElementAnswer step, BindingId accumulator, Map<BindingId, Core> held,
+                         RuleReadingSource source) {
         return new Reader(step.parameter(), held, source).addedTo(step.body(), accumulator);
+    }
+
+    /**
+     * The place of the element {@code e} counts what the container there holds of, where it is
+     * how many that container holds taken as it stands — or null where it is anything else.
+     */
+    static ElementProjection countedAt(Core e, BindingId element, Map<BindingId, Core> held,
+                                       RuleReadingSource source) {
+        NumericMeasures.Measured measured = NumericMeasures.takenIn(e, source.symbols(),
+                _ -> Optional.empty());
+        return measured != null && measured.arguments().none()
+                && DefaultBoundOperationFacts.get().takenAs(measured.operation())
+                        instanceof TakenAs.HowManyItHolds
+                ? ElementProjection.read(measured.of(), element, held, source.newtypes()) : null;
     }
 }

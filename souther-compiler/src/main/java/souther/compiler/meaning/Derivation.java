@@ -11,6 +11,7 @@ import souther.compiler.core.WhatABodyReads;
 import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Refinement;
+import souther.compiler.inputs.RunSource;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
@@ -33,6 +34,7 @@ import souther.compiler.types.ValueName;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -1040,9 +1042,13 @@ public sealed interface Derivation {
                     case LawNumber.HowManyDifferent<DeclaredArgument>(var container, var each) -> {
                         TermPath at = positionOf(container);
                         TermPath element = positionOf(each);
+                        DecisionSubject.AnInput over = at == null ? null
+                                : new DecisionSubject.AnInput(at);
                         yield at == null || element == null
-                                || new Quantity.HowManyDifferent(new DecisionSubject.AnInput(at),
-                                new DecisionSubject.AnInput(element)).equals(atom);
+                                || (Quantity.HowManyDifferent.oneOfEach(over,
+                                        new DecisionSubject.AnInput(element))
+                                && new Quantity.HowManyDifferent(over,
+                                        new DecisionSubject.AnInput(element)).equals(atom));
                     }
                     // A sum is held spread over the numbers of each element and how many elements
                     // there are ({@link Quantity.SumOver#over}), so what each element adds is
@@ -1051,6 +1057,27 @@ public sealed interface Derivation {
                         TermPath at = positionOf(container);
                         if (at == null) {
                             yield true;
+                        }
+                        // How many a container inside each element holds, added up, is held as
+                        // the count of every occurrence of that container's element, and is the
+                        // law's number where what each element adds is that container's size.
+                        Map<TermPath, ExactRatio> counted = new LinkedHashMap<>();
+                        Map<Quantity, ExactRatio> rest = new LinkedHashMap<>();
+                        form.coefs().forEach((part, by) -> {
+                            TermPath inside = containerCountedInside(part, at);
+                            if (inside != null) {
+                                counted.put(inside, by);
+                            } else {
+                                rest.put(part, by);
+                            }
+                        });
+                        if (!counted.isEmpty()) {
+                            TermPath sized = each instanceof LawNumber.SizeOf<DeclaredArgument>(
+                                    var of) ? positionOf(of) : null;
+                            yield each instanceof LawNumber.SizeOf<DeclaredArgument>
+                                    && (sized == null || (rest.isEmpty()
+                                            && form.constant().signum() == 0
+                                            && counted.equals(Map.of(sized, ExactRatio.ONE))));
                         }
                         LinearForm<Quantity> added = Quantity.SumOver.addedByEach(
                                 new DecisionSubject.AnInput(at), form,
@@ -1095,6 +1122,23 @@ public sealed interface Derivation {
                 }
                 Map.Entry<Quantity, ExactRatio> only = form.coefs().entrySet().iterator().next();
                 return ExactRatio.ONE.equals(only.getValue()) ? only.getKey() : null;
+            }
+
+            /**
+             * The container inside each element of the container at {@code at} whose element
+             * {@code atom} counts every occurrence of — or null where it is no such count, or the
+             * container at {@code at} stands inside another, whose every occurrence the count is
+             * of.
+             */
+            private static TermPath containerCountedInside(Quantity atom, TermPath at) {
+                if (!(atom instanceof DecisionAtom.OfTheInput(NumericTerm.TakenOver over))
+                        || !(over.takenAs() instanceof TakenAs.HowManyItHolds)
+                        || !(over.source() instanceof RunSource.FlattenedOccurrences(
+                                TermPath every))) {
+                    return null;
+                }
+                TermPath inside = every.containersHoldingIt().getLast();
+                return !at.insideAContainer() && inside.isAtOrUnder(at.element()) ? inside : null;
             }
 
             /** Whether {@code atom} is how many what stands at {@code at} holds. */

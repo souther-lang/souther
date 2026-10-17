@@ -394,6 +394,7 @@ final class MeaningAssumptions {
                 return new AtomAt.AtTheEdge(
                         WhyNotTaken.DomainLimit.A_PLACE_THE_PATH_DOES_NOT_READ);
             }
+            case Quantity.HowManyCarried carried -> throw carried.reachedAReader();
         }
         return named != null ? new AtomAt.Named(named)
                 : new AtomAt.AtTheEdge(WhyNotTaken.DomainLimit.A_PLACE_THE_PATH_DOES_NOT_READ);
