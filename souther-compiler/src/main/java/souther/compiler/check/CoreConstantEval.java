@@ -1,25 +1,20 @@
 package souther.compiler.check;
 
 import souther.compiler.core.Core;
-import souther.compiler.core.Kernel;
 import souther.compiler.types.BindingId;
-import souther.compiler.types.ValueName;
 
-import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 
 /**
  * What a checked expression comes to at compile time, read on the tree the rules are discharged
  * over.
  *
- * <p>Beside {@link ConstEval} and not instead of it. The same question is asked of a body twice —
- * where it is checked, which is {@code Hir}, and where its rules are discharged, which is
- * {@code Core} — and the two trees are two shapes. What an operator makes of the values under it is
- * neither shape's: it is {@link ConstantAlgebra}, which both ask, so a program cannot fold one way
- * at the check and another at the discharge.
+ * <p>The fold is {@link FoldedValue}'s, which the reading of an input folds with as well; this is
+ * what names mean to it here. Beside {@link ConstEval} and not instead of it: the same question is
+ * asked of a body where it is checked, which is {@code Hir}, and where its rules are discharged,
+ * which is {@code Core}, and the two trees are two shapes. What an operator makes of the values under
+ * it is neither shape's: it is {@link ConstantAlgebra}, which both ask.
  *
  * <p><b>It reads the graph rather than rebuilding a tree from it.</b> A binding is an edge, and a
  * name is followed to what it was given — from the binding standing in the tree, or from the
@@ -37,143 +32,97 @@ final class CoreConstantEval {
     /** What the reading was told a name was given, where the binding is no longer in the tree. */
     private final Denotations at;
 
-    /**
-     * What each binding read came to.
-     *
-     * <p>Every binding, however it was answered. A binding has one value and one environment it was
-     * written in, whether the tree still holds the binding or the reading was told about it, so a
-     * second read of a name is the first read asked again and what it comes to cannot differ. Held
-     * for the length of one walk, because what is held is this walk's interpretation of a
-     * denotation and not the denotation (ADR-0111).
-     */
-    private final Map<BindingId, Optional<Object>> folded = new HashMap<>();
+    /** What the values the body builds are defined as, or null where no body is read. */
+    private final ValueTemplates templates;
 
-    private CoreConstantEval(Symbols symbols, Denotations at) {
+    private CoreConstantEval(Symbols symbols, Denotations at, ValueTemplates templates) {
         this.symbols = symbols;
         this.at = at;
+        this.templates = templates;
     }
 
     /** Folding against the library {@code symbols} names, under what {@code at} says a name was
-     *  given. */
+     *  given, where no body's values are built. */
     static CoreConstantEval against(Symbols symbols, Denotations at) {
-        return new CoreConstantEval(symbols, at);
+        return new CoreConstantEval(symbols, at, null);
     }
 
-    /** What a name in force stands for: the value it was given, and the bindings that value is read
-     *  under. The environment travels with the value, because a value stands for the name in the
-     *  environment the binding was made in (ADR-0111). */
-    private record Bound(Core value, Env at) {}
+    /** The same inside a body, whose builds of a value are what {@code templates} defines them
+     *  as. */
+    static CoreConstantEval against(Symbols symbols, Denotations at, ValueTemplates templates) {
+        return new CoreConstantEval(symbols, at, templates);
+    }
 
-    /** The bindings the tree wrote, innermost first. */
-    private record Env(BindingId binding, Bound bound, Env outer) {
+    /** What {@code e} folds to, or empty where it is not a compile-time constant. */
+    Optional<Object> eval(Core e) {
+        return FoldedValue.of(e, Env.NONE, new Told(at, templates), symbols);
+    }
 
-        static final Env NONE = new Env(null, null, null);
+    /**
+     * The bindings the tree wrote, innermost first, each with the environment its value was written
+     * in. A value stands for the name in the environment the binding was made in (ADR-0111).
+     */
+    private record Env(BindingId binding, Core value, Env definedAt, Env outer) {
 
-        Env with(BindingId id, Core value, Env definedAt) {
-            return new Env(id, new Bound(value, definedAt), this);
+        static final Env NONE = new Env(null, null, null, null);
+
+        Env with(BindingId id, Core value) {
+            return new Env(id, value, this, this);
         }
 
-        Bound read(BindingId id) {
+        Env read(BindingId id) {
             for (Env each = this; each != null; each = each.outer()) {
                 if (id.equals(each.binding())) {
-                    return each.bound();
+                    return each;
                 }
             }
             return null;
         }
     }
 
-    /** What {@code e} folds to, or empty where it is not a compile-time constant. */
-    Optional<Object> eval(Core e) {
-        return eval(e, Env.NONE);
-    }
-
-    private Optional<Object> eval(Core e, Env env) {
-        // A constant is the value it is whatever type it stands as.
-        return switch (Core.withoutStanding(e)) {
-            case Core.Int i -> Optional.of(i.value());
-            case Core.Decimal d -> Optional.of(d.value());
-            case Core.Str s -> Optional.of(s.value());
-            case Core.Bool b -> Optional.of(b.value());
-            case Core.Neg n -> ConstantAlgebra.negate(eval(n.operand(), env).orElse(null));
-            case Core.Binary b -> binary(b, env);
-            case Core.PreservedCall call -> call(call, env);
-            // A binding is the value its body is, with the binder standing for what it was given.
-            case Core.LetIn li -> eval(li.body(), env.with(li.binder().binding(), li.value(), env));
-            case Core.Read r -> given(r, env);
-            case null, default -> Optional.empty();
-        };
-    }
-
     /**
-     * What the name {@code r} reads comes to — from the binding the tree holds, or from what the
-     * reading was told where the clause's shape consumed it.
+     * What a name means to a fold here: the value its binding in the tree gave it, read where that
+     * binding was made — or what the reading was told it was given, read where nothing the tree
+     * binds is in force, since it was written where the reading was told.
      *
      * <p>Two places a binding is answered from and one reading of the answer. Which of the two
      * holds it is a fact about how far the tree was rewritten before this walk met it, and not
-     * about the name: a binding has one value either way, so a name read twice is folded once
-     * whichever place answered it.
-     *
-     * <p>And each is read under the environment its value was written in. A binding the tree holds
-     * carries that environment with it; one the reading was told about was written where the
-     * reading was told, and the names in it are answered by the reading again — not by whatever
-     * the tree happens to bind around the place the name is read.
+     * about the name: a binding has one value either way. A build of a value is what it is defined
+     * as, read where nothing the tree binds is in force, since a value names nothing of the body
+     * that builds it.
      */
-    private Optional<Object> given(Core.Read r, Env env) {
-        Optional<Object> already = folded.get(r.binding());
-        if (already != null) {
-            return already;
-        }
-        Bound bound = env.read(r.binding());
-        Core value = bound == null ? at.valueOf(r.binding()) : bound.value();
-        if (value == null) {
-            return Optional.empty();
-        }
-        // Put before the fold as "not a constant", so a binding that reaches itself answers rather
-        // than going round.
-        folded.put(r.binding(), Optional.empty());
-        Optional<Object> answer = eval(value, bound == null ? Env.NONE : bound.at());
-        folded.put(r.binding(), answer);
-        return answer;
-    }
+    private record Told(Denotations at, ValueTemplates templates)
+            implements ValueStanding.Names<Env, Told> {
 
-    private Optional<Object> binary(Core.Binary b, Env env) {
-        Optional<Object> left = eval(b.left(), env);
-        Optional<Object> settled = left.isEmpty() ? Optional.empty()
-                : ConstantAlgebra.settledByTheLeft(b.op(), left.get());
-        if (settled.isPresent()) {
-            return settled;
+        @Override
+        public ValueStanding.ReadThrough<Env> taken(Core node, Env where) {
+            Core built = templates == null ? null : templates.builtBy(node);
+            return built == null ? null : new ValueStanding.ReadThrough<>(built, Env.NONE);
         }
-        Optional<Object> right = eval(b.right(), env);
-        if (left.isEmpty() || right.isEmpty()) {
-            return Optional.empty();
-        }
-        return ConstantAlgebra.binary(b.op(), left.get(), right.get());
-    }
 
-    private Optional<Object> call(Core.PreservedCall call, Env env) {
-        if (!(call.operation() instanceof ValueName.Stdlib.Operation operation)) {
-            return Optional.empty();
-        }
-        Kernel kernel = symbols.kernelOf(operation);
-        if (kernel == null) {
-            return Optional.empty();
-        }
-        // A pattern is not folded to text and read again: the checker read it where it settled the
-        // call, and what it means is on the call. Only the subject is folded, which is the last
-        // argument (spec §pipe).
-        if (call.settled() instanceof Core.KernelFact.StringMatches settled) {
-            return eval(call.args().getLast(), env).orElse(null) instanceof String subject
-                    ? ConstantAlgebra.matching(settled.meaning(), subject) : Optional.empty();
-        }
-        List<Object> args = new ArrayList<>();
-        for (Core arg : call.args()) {
-            Object folds = eval(arg, env).orElse(null);
-            if (folds == null) {
-                return Optional.empty();
+        @Override
+        public ValueStanding.ReadThrough<Env> readThrough(Core.Read read, Env where) {
+            Env bound = where.read(read.binding());
+            if (bound != null) {
+                return new ValueStanding.ReadThrough<>(bound.value(), bound.definedAt());
             }
-            args.add(folds);
+            Core value = at.valueOf(read.binding());
+            return value == null ? null : new ValueStanding.ReadThrough<>(value, Env.NONE);
         }
-        return ConstantAlgebra.computed(kernel, args);
+
+        @Override
+        public List<ValueStanding.ReadThrough<Env>> alternativesOf(Core.Read read, Env where) {
+            return null;
+        }
+
+        @Override
+        public Env inside(Core.LetIn li, Env where) {
+            return where.with(li.binder().binding(), li.value());
+        }
+
+        @Override
+        public Told oneAtATime() {
+            return this;
+        }
     }
 }

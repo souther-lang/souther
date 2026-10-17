@@ -932,7 +932,7 @@ final class Predicates {
      * already standing where it read a field, folded. {@code null} where it does not fold — which is
      * every clause reading anything computed at run time. */
     Boolean decidedAt(Core inv, Denotations at) {
-        Object folded = Terms.folded(inv, terms.symbols(), at);
+        Object folded = terms.folded(inv, at);
         return folded instanceof Boolean b ? b : null;
     }
 
@@ -947,8 +947,8 @@ final class Predicates {
      * states of {@code 1} and {@code 2} is settled here.
      */
     private Boolean decidedAt(StatedComparison stated, Denotations at) {
-        Object left = Terms.folded(stated.left(), terms.symbols(), at);
-        Object right = Terms.folded(stated.right(), terms.symbols(), at);
+        Object left = terms.folded(stated.left(), at);
+        Object right = terms.folded(stated.right(), at);
         return (left == null || right == null) ? null
                 : ConstEval.stands(stated.claim().statedRelation(), left, right);
     }

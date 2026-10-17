@@ -50,6 +50,11 @@ class WhereAWrittenValueIsReadTheMeasureAndTheDischargeAgreeTest {
             Map.entry("c - List.length(String.codePoints(\"" + "0".repeat(48) + "\"))", true),
             Map.entry("c - List.length(List.map(n -> n + 1, String.codePoints(\""
                     + "0".repeat(48) + "\")))", true),
+            Map.entry("c - List.length(List.filter(n -> n > 0, [" + "1, ".repeat(47) + "1]))",
+                    true),
+            Map.entry("c - holding.held", true),
+            Map.entry("{\n        let (a, b) = (48, 1)\n        c - a\n    }", true),
+            Map.entry("{\n        let r = holding\n        c - r.held\n    }", true),
             Map.entry(opening("List.get(0, xs)"), false),
             Map.entry(opening("List.get(0, List.filter(n -> n > k, [48]))"), false),
             Map.entry(opening("List.get(1, List.flatMap(p -> p, [List.filter(n -> n > k, [7]),"
@@ -76,6 +81,9 @@ class WhereAWrittenValueIsReadTheMeasureAndTheDischargeAgreeTest {
                     invariant atLeastNought = value >= 0
 
                 let fortyEight = 48
+
+                data Holder = { held: Int }
+                let holding = Holder { held = 48 }
 
                 let digitValue (c: Int, xs: List<Int>, k: Int): Int =
                     %s
@@ -135,7 +143,7 @@ class WhereAWrittenValueIsReadTheMeasureAndTheDischargeAgreeTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         assertTrue(compilation.errors().isEmpty(), () -> "compiles: " + compilation.errors()
-                .stream().map(e -> e.diagnostic().code()).toList());
+                .stream().map(e -> e.diagnostic().code()).toList() + "\n" + model);
         return compilation;
     }
 

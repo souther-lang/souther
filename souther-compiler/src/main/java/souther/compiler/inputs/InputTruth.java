@@ -120,7 +120,8 @@ public record InputTruth(TermPath at, boolean held) {
     public static InputTruth compared(StatedComparison comparison, boolean holding,
                                       InputReads reads, Symbols symbols,
                                       DeclarationNewtypes newtypes) {
-        return BooleanMeaning.againstATruth(comparison, holding, symbols,
+        return BooleanMeaning.againstATruth(comparison, holding,
+                        side -> reads.folded(side, symbols, newtypes),
                         side -> positionOf(side, reads, newtypes) != null)
                 .map(against -> new InputTruth(positionOf(against.side(), reads, newtypes),
                         against.held()))

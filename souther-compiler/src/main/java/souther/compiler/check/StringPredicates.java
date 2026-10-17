@@ -407,8 +407,8 @@ public enum StringPredicates {
             // of its own.
             case ClauseExpr.Leaf leaf when leaf.positive() -> {
                 Stated stated = statedBy(Clauses.substituted(leaf.of(), given), symbols,
-                        e -> Terms.folded(e, symbols, Denotations.none())
-                                instanceof String written ? written : null);
+                        e -> CoreConstantEval.against(symbols, Denotations.none()).eval(e)
+                                .orElse(null) instanceof String written ? written : null);
                 yield stated == null ? null : new Said(stated.subject(), stated.reading());
             }
             case ClauseExpr.Joined choice when choice.how() == ConditionJoin.EITHER ->
@@ -471,7 +471,7 @@ public enum StringPredicates {
     public static Stated statedByChecked(Core clause, Symbols symbols, Terms terms,
                                          Denotations at) {
         return statedBy(clause, symbols,
-                e -> Terms.folded(e, symbols, at) instanceof String written ? written : null);
+                e -> terms.folded(e, at) instanceof String written ? written : null);
     }
 
     /**

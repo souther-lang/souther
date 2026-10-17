@@ -15,6 +15,7 @@ import souther.compiler.check.ScopeStep;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.ValueStanding;
 import souther.compiler.check.ElementsWrittenOut;
+import souther.compiler.check.FoldedValue;
 import souther.compiler.check.WhatAnOptionHolds;
 import souther.compiler.core.Core;
 import souther.compiler.numeric.LinearForm;
@@ -1364,6 +1365,11 @@ public final class InputReads {
         }
 
         @Override
+        public Optional<Object> folded(ElementsWrittenOut.Stood<InputReads> value) {
+            return value.at().folded(value.value(), symbols, newtypes);
+        }
+
+        @Override
         public WhatItHolds anElement(ElementsWrittenOut.Stood<InputReads> element) {
             return new WhatItHolds.AnElement(new Denotation(element.value(), element.at()));
         }
@@ -2467,15 +2473,22 @@ public final class InputReads {
      * not because the compiler cannot work the second out, but because the reader did not take the
      * answer this already has.
      *
-     * <p>Through the names and no further ({@link #standing}). What comes back is the value the
-     * expression stands for once the names have been followed, and a string is what it is where
-     * that value is one written down. An expression that stands for something computed is a string
-     * nothing here works out, and it is null the way anything else this cannot answer is —
-     * arithmetic over the values is not a question a naming answers.
+     * <p>Folded as the discharge of a rule folds the same argument ({@link #folded}): through the
+     * names, the fields and elements taken off what was written, and the operators over the texts
+     * those reach. An expression that stands for something computed from an input is a string
+     * nothing here works out, and it is null the way anything else this cannot answer is.
      */
     public String writtenStringOf(Core e, Symbols symbols, DeclarationNewtypes newtypes) {
-        return Core.withoutStanding(standing(new Denotation(e, this), symbols, newtypes,
-                new HashSet<>()).value()) instanceof Core.Str written ? written.value() : null;
+        return folded(e, symbols, newtypes).orElse(null) instanceof String written ? written : null;
+    }
+
+    /**
+     * What {@code e} comes to at compile time read here ({@link FoldedValue}), or empty where it is
+     * not a constant: names followed as this reading follows them, and the operators over what they
+     * reach folded as the discharge of a rule folds them.
+     */
+    public Optional<Object> folded(Core e, Symbols symbols, DeclarationNewtypes newtypes) {
+        return FoldedValue.of(e, this, new Followed(symbols, newtypes, new HashSet<>()), symbols);
     }
 
     /** Where an element handed to {@code binding} stands ({@link InputPath#elementAt}), at a

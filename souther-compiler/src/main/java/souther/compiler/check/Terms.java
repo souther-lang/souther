@@ -35,6 +35,7 @@ import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.Set;
 
@@ -767,26 +768,11 @@ final class Terms {
      * asked of the tree alone, {@code atLeast(value, 1)} states a rule about no value this can name
      * where {@code value >= 1} states one. The readings that ask this are the ones saying which
      * values a position holds and which strings a format admits, and both are about the values an
-     * author wrote.
+     * author wrote. A value the body builds is what it is defined as, as it is to the reading of an
+     * input ({@link FoldedValue}).
      */
-    static Object folded(Core e, Symbols symbols, Denotations at) {
-        return CoreConstantEval.against(symbols, at).eval(e).orElse(null);
-    }
-
-    /**
-     * The number {@code e} folds to at compile time, or {@code null} where it folds to none.
-     *
-     * <p>Over the tree alone, for a walk that carries an environment of its own and has entered the
-     * bindings above what it hands over ({@link ValueStanding.Names#inside}). A binding standing
-     * <em>inside</em> what is handed over is not read here, and the walks that meet one are named in
-     * the issue on which readings cross a binding.
-     */
-    static BigDecimal constantNumber(Core e, Symbols symbols) {
-        Object folded = folded(e, symbols, Denotations.none());
-        if (folded instanceof Long n) {
-            return BigDecimal.valueOf(n);
-        }
-        return folded instanceof BigDecimal d ? d : null;
+    Object folded(Core e, Denotations at) {
+        return CoreConstantEval.against(symbols, at, templates).eval(e).orElse(null);
     }
 
     /**
@@ -886,21 +872,21 @@ final class Terms {
     }
 
     /**
-     * What a name denotes, where the name stands for a term of its own and what it was given is
-     * arithmetic this can read (spec §invariant-discharge-terms). The name and the expression it was
-     * given are one value, and reading the name as an atom of its own leaves a guard on it saying
-     * nothing about the value it was built from.
+     * What a name denotes, where the name and the expression it was given are one value (spec
+     * §invariant-discharge-terms): whatever kind of value that is, so that a field or an element
+     * taken off a record or tuple given a name is read off what was written, as the reading of an
+     * input reads it. Reading the name as an atom of its own leaves a guard on it saying nothing
+     * about the value it was built from.
      *
      * <p>A name given a location is not this — {@link #atomOf} answers that with the location, which
-     * is what the seeding wrote about — and neither is a name given a value written in the source,
-     * which {@link #writtenValue} follows whatever the name denotes.
+     * is what the seeding wrote about.
      *
      * <p>What is answered is the expression, and the environment it is read in. Reading it is
      * {@link AffineForms}'s: this once did the reading itself, and a caller that can answer with a
      * form is a caller that can keep an account of the arithmetic beside the one walk that has one.
      */
     ValueStanding.ReadThrough<Denotations> readThrough(Core.Read read, Denotations at) {
-        if (!computesAsWhatItWasGiven(read.binding(), at) || !carriesANumber(read.type())) {
+        if (at.locationOf(read.binding()) != null) {
             return null;
         }
         Core given = at.valueOf(read.binding());
@@ -1491,7 +1477,7 @@ final class Terms {
         }
         Given value = given(held.value(), held.at());
         return isWritten(value.value()) ? value.value()
-                : writtenAs(value.value(), folded(value.value(), symbols, value.at()));
+                : writtenAs(value.value(), folded(value.value(), value.at()));
     }
 
     /**
@@ -1523,6 +1509,11 @@ final class Terms {
         }
 
         @Override
+        public Optional<Object> folded(ElementsWrittenOut.Stood<Denotations> value) {
+            return Optional.ofNullable(Terms.this.folded(value.value(), value.at()));
+        }
+
+        @Override
         public ElementsWrittenOut.Stood<Denotations> anElement(
                 ElementsWrittenOut.Stood<Denotations> element) {
             return element;
@@ -1551,6 +1542,20 @@ final class Terms {
         public ElementsWrittenOut.Stood<Denotations> unsaid() {
             return null;
         }
+    }
+
+    /**
+     * Every element {@code container}, read in {@code at}, holds where it is written out with each
+     * of them there on every run ({@link ElementsWrittenOut}), each with where it is read — or null
+     * where it is not, or one of them is kept on a condition.
+     */
+    List<ElementsWrittenOut.Stood<Denotations>> writtenElements(Core container, Denotations at) {
+        if (!(ElementsWrittenOut.of(new ElementsWrittenOut.Stood<>(container, at), elements)
+                instanceof ElementsWrittenOut.Walked.Each<Denotations>(var each))
+                || each.stream().anyMatch(one -> !one.keptWhere().isEmpty())) {
+            return null;
+        }
+        return each.stream().map(ElementsWrittenOut.Occurrence::value).toList();
     }
 
     /** {@code value} written down as the literal of {@code folded}, or null where it folded to none

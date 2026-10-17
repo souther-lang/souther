@@ -4,6 +4,7 @@ import net.unit8.notation199x.pattern.CodePoints;
 
 import souther.compiler.check.ARecursion;
 import souther.compiler.check.AffineForms;
+import souther.compiler.check.FoldedValue;
 import souther.compiler.check.ValueStanding;
 import souther.compiler.check.AnOperationApplied;
 import souther.compiler.check.BooleanMeaning;
@@ -588,6 +589,11 @@ final class Pullback {
         };
     }
 
+    /** What {@code e} comes to at compile time where {@code reads} reads it. */
+    private Optional<Object> folded(Core e, InputReads reads) {
+        return reads.folded(e, read.rules().symbols(), read.rules().newtypes());
+    }
+
     /**
      * How a truth that is no binding, name or choice was read, by the first rule in this order that
      * reads all of it — or, where none does, the first that takes it at all.
@@ -602,7 +608,7 @@ final class Pullback {
                         new Derivation.UnderADenial(
                                 observe(denied.part(), AnswerAspect.TRUTH, reads),
                                 !denied.positive())).orElse(null),
-                () -> BooleanMeaning.folded(e, read.rules().symbols())
+                () -> BooleanMeaning.truthOf(folded(e, reads))
                         .<Derivation>map(Derivation.Folded::new).orElse(null),
                 () -> joined(e, reads),
                 () -> {
@@ -4228,7 +4234,7 @@ final class Pullback {
             return new Derivation.ATruthCompared(new DecisionSubject.AnInput(truth.at()),
                     truth.held());
         }
-        return BooleanMeaning.againstATruth(comparison, true, read.rules().symbols(),
+        return BooleanMeaning.againstATruth(comparison, true, side -> folded(side, reads),
                         side -> subjects.isTheTruthOfAnAnswer(side, reads))
                 .map(against -> subjects.truthOf(against.side(), against.held(), reads))
                 .<Derivation>map(stood -> new Derivation.ATruthCompared(stood.condition().of(),
@@ -4245,8 +4251,8 @@ final class Pullback {
      * rule before this one, which keeps the comparison as the part it is; this is every other.
      */
     private Derivation heldAgainstAWrittenTruth(StatedComparison stated, InputReads reads) {
-        return BooleanMeaning.againstATruth(stated, true, read.rules().symbols(),
-                        side -> BooleanMeaning.folded(side, read.rules().symbols()).isEmpty())
+        return BooleanMeaning.againstATruth(stated, true, side -> folded(side, reads),
+                        side -> BooleanMeaning.truthOf(folded(side, reads)).isEmpty())
                 .<Derivation>map(against -> new Derivation.HeldAgainstAWrittenTruth(
                         observe(against.side(), AnswerAspect.TRUTH, reads), against.held()))
                 .orElse(null);
@@ -5111,7 +5117,7 @@ final class Pullback {
         StatedComparison.Numbered<Core.PreservedCall> year =
                 stated.at(side -> theYearOfADateNoPositionHolds(side, reads));
         BigDecimal written = year == null ? null
-                : StatedComparison.foldedNumber(year.other(), read.rules().symbols());
+                : FoldedValue.number(folded(year.other(), reads));
         if (written == null) {
             return null;
         }

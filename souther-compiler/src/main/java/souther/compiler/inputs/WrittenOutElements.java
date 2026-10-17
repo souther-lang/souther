@@ -9,6 +9,7 @@ import souther.compiler.types.BindingId;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.Set;
 
@@ -129,6 +130,11 @@ public final class WrittenOutElements {
         public InputReads handing(InputReads at, BindingId element,
                                   ElementsWrittenOut.Stood<InputReads> value) {
             return at.handing(element, denotation(value), newtypes);
+        }
+
+        @Override
+        public Optional<Object> folded(ElementsWrittenOut.Stood<InputReads> value) {
+            return value.at().folded(value.value(), symbols, newtypes);
         }
     }
 }

@@ -10,6 +10,7 @@ import net.unit8.notation199x.ScalarValues;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.OptionalLong;
 
 /**
@@ -32,7 +33,9 @@ import java.util.OptionalLong;
  * kept by is carried down every level, each truth read where it was decided.
  *
  * <p>An occurrence a filter dropped is written out as well, kept where its truth holds. Whether it
- * holds is a question about the values, and the answer is a reader's.
+ * holds is a question about the values, and the answer is a reader's. What this answers itself is
+ * the narrower question of what is there on every run ({@link #sizeOf}, {@link #picked}), where a
+ * truth that comes out the same every time is that answer on every run.
  */
 public final class ElementsWrittenOut {
 
@@ -66,6 +69,10 @@ public final class ElementsWrittenOut {
         /** {@code at} with {@code element} handed {@code value}, as an application of a step to an
          *  element hands its parameter one. */
         E handing(E at, BindingId element, Stood<E> value);
+
+        /** What {@code value} comes to at compile time where it stands ({@link FoldedValue}), or
+         *  empty where it is no constant. */
+        Optional<Object> folded(Stood<E> value);
     }
 
     /** An expression and the environment its names are read in, which travel together. */
@@ -137,9 +144,9 @@ public final class ElementsWrittenOut {
      *
      * <p>A text written down holds as many as its code points, counted as a run counts them. A list
      * written in the source holds as many as it was written with, however each was arrived at and
-     * however many there are. Any other container holds as many as the walk writes out, where every
-     * one of them is there on every run — one a step keeps on a condition makes the count turn on
-     * the run, and one past the figure leaves it unwritten.
+     * however many there are. Any other container holds as many as the walk writes out that are
+     * there on every run ({@link #onEveryRun}) — one a step keeps on a condition that turns on the
+     * run makes the count turn on it too, and one past the figure leaves it unwritten.
      */
     public static <E> OptionalLong sizeOf(Stood<E> container, Reading<E> reading) {
         Core value = Core.withoutStanding(container.value());
@@ -149,11 +156,34 @@ public final class ElementsWrittenOut {
         if (value instanceof Core.ListLit written) {
             return OptionalLong.of(written.elements().size());
         }
-        if (!(of(container, reading) instanceof Walked.Each<E>(List<Occurrence<E>> each))
-                || each.stream().anyMatch(one -> !one.keptWhere().isEmpty())) {
+        if (!(of(container, reading) instanceof Walked.Each<E>(List<Occurrence<E>> each))) {
             return OptionalLong.empty();
         }
-        return OptionalLong.of(each.size());
+        long there = 0;
+        for (Occurrence<E> one : each) {
+            Boolean kept = onEveryRun(one, reading);
+            if (kept == null) {
+                return OptionalLong.empty();
+            }
+            there += kept ? 1 : 0;
+        }
+        return OptionalLong.of(there);
+    }
+
+    /**
+     * Whether {@code one} is there on every run: true where every truth it was kept by comes out the
+     * way it was kept by on every run, false where one comes out the other way on every run, and
+     * null where one turns on the run.
+     */
+    private static <E> Boolean onEveryRun(Occurrence<E> one, Reading<E> reading) {
+        boolean there = true;
+        for (Kept<E> kept : one.keptWhere()) {
+            if (!(reading.folded(kept.truth()).orElse(null) instanceof Boolean holds)) {
+                return null;
+            }
+            there &= holds == kept.holds();
+        }
+        return there;
     }
 
     /**
@@ -161,11 +191,12 @@ public final class ElementsWrittenOut {
      * is not one answer.
      *
      * <p>Where {@code option} stands as such a call, the index stands as a number written down and
-     * the list is written out up to and including that element with every one of them there on
-     * every run. An element some step keeps on some runs and not others moves every element after
-     * it, and is itself the one picked only where it is kept — so where any of the elements up to
-     * and including the one picked is kept on a condition, nothing is said. The list is written out
-     * that far and no further, since the elements past the one picked move nothing.
+     * the list is written out up to and including that element, with each of them there on every
+     * run or on none ({@link #onEveryRun}). An element some step keeps on some runs and not others
+     * moves every element after it, and is itself the one picked only where it is kept — so where
+     * any of the elements up to and including the one picked turns on the run, nothing is said. One
+     * there on no run moves nothing and is passed over. The list is written out that far and no
+     * further, since the elements past the one picked move nothing.
      */
     public static <E> Occurrence<E> picked(Core option, E at, Reading<E> reading) {
         Stood<E> call = reading.standing(option, at);
@@ -177,17 +208,29 @@ public final class ElementsWrittenOut {
                 || index.value() < 0 || index.value() >= MOST_WALKED) {
             return null;
         }
-        int picked = (int) index.value();
-        if (!(of(reading.standing(args.get(1), call.at()), reading, picked + 1, new int[] {0})
-                instanceof Walked.Each<E>(List<Occurrence<E>> each)) || each.size() <= picked) {
-            return null;
-        }
-        for (Occurrence<E> one : each) {
-            if (!one.keptWhere().isEmpty()) {
+        Stood<E> list = reading.standing(args.get(1), call.at());
+        // As many as the index reaches, and as many again for each passed over on the way.
+        int enough = (int) index.value() + 1;
+        while (true) {
+            if (!(of(list, reading, enough, new int[] {0})
+                    instanceof Walked.Each<E>(List<Occurrence<E>> each))) {
                 return null;
             }
+            int left = (int) index.value();
+            for (Occurrence<E> one : each) {
+                Boolean there = onEveryRun(one, reading);
+                if (there == null) {
+                    return null;
+                }
+                if (there && left-- == 0) {
+                    return one;
+                }
+            }
+            if (each.size() < enough || enough >= MOST_WALKED) {
+                return null;
+            }
+            enough = Math.min(MOST_WALKED, enough + left + 1);
         }
-        return each.get(picked);
     }
 
     /** The first {@code enough} occurrences {@code container} holds, or every one where it holds
