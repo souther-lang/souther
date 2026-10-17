@@ -9,8 +9,8 @@ package souther.compiler;
  * compiler reads today, and it moves: {@code String.startsWith} had it until the reading of string
  * predicates learned what such a call says about a position, and eight test files that had each
  * written that call out went quiet about what they were for on the same day (issue #1249). A
- * comparison has lost it too: where the arithmetic stops on one it says where, so a comparison of a
- * value an operation made is told as that and not as a form nobody has a word for.
+ * comparison does not have it: where the arithmetic stops on one it says where, so a comparison of
+ * a value an operation made is told as that and not as a form nobody has a word for.
  *
  * <p>So the spelling is one line, and {@link ARuleNoReadingTakesInIsStillOneTest} is what holds the
  * property to it. The next capability that takes this clause in fails that one test, which says

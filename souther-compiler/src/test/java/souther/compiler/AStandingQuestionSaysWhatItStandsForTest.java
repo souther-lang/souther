@@ -349,6 +349,33 @@ class AStandingQuestionSaysWhatItStandsForTest {
     }
 
     /**
+     * And a statement taken in is no part of the account of the statement beside it in one conjunct.
+     *
+     * <p>A helper's body joining two rules is one conjunct stating both, and so is a denied choice.
+     * The first statement is taken in by the reading of values; the second is a form nothing takes
+     * apart, and that is what the question stands on — however the two were put into one conjunct.
+     */
+    @Test
+    void aStatementTakenInIsNoPartOfTheAccountOfTheOneBesideItInOneConjunct() {
+        String formNotRead = "      · not accounted for: invariant V #1"
+                + " — which values may stand at h.v: written in a form this compiler does not read";
+        assertEquals(List.of(formNotRead), allAbout(reportOf("""
+                        module probe.joined
+                        data V = String
+                            invariant ok(value)
+                        data Held = { v: V }
+                        behavior read : (h: Held) -> Ok
+                        let ok (s: String) : Bool = s /= "abc" && UNREAD_S
+                        """.replace("UNREAD_S", ARuleNoReadingTakesIn.about("s"))),
+                        "invariant V #1"),
+                "a helper's body joining two rules");
+        assertEquals(List.of(formNotRead), allAbout(reportOf(aValueRuledBy("String",
+                        "Bool.not(value == \"abc\" || Bool.not(UNREAD_VALUE))")),
+                        "invariant V #1"),
+                "a denied choice");
+    }
+
+    /**
      * The control on the ones above: an equality something reads leaves no question standing.
      *
      * <p>A value written out, a count, and a value an operation made that the arithmetic reads to

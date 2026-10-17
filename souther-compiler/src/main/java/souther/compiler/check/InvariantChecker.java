@@ -29,7 +29,6 @@ import souther.compiler.inputs.ChoiceToLift;
 import souther.compiler.inputs.RuleSite;
 import souther.compiler.inputs.WhatARelationLeavesUndivided;
 import souther.compiler.types.BindingId;
-import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
@@ -1074,14 +1073,13 @@ public final class InvariantChecker {
             // the part its author wrote, which is the same whichever reading met it. Two readings
             // short of one thing about one part are one fact from here on.
             Map<ClauseOccurrence, PartId<RuleRef.Invariant>> wrote = authoredPartsOf(each);
-            // With the conjunct each was decided in beside it, which is not part of the fact: one
-            // choice a helper wrote, copied into two conjuncts, is one thing to look at — and
-            // whether some other reading took a conjunct in is what decides whether its fact is any
-            // account of the rule.
-            one.account().aboutARule().forEach(met -> {
-                PartId<RuleRef.Invariant> in = wroteIt(met.at(), wrote);
-                took.stoppedBy(each.from(), met.of(in), in);
-            });
+            // With the statements each was decided in beside it, which are not part of the fact:
+            // one choice a helper wrote, copied into two conjuncts, is one thing to look at — and
+            // whether some other reading took a statement in is what decides whether its fact is
+            // any account of the rule.
+            Map<ClauseOccurrence, Set<InvariantStatementId>> stating = statementsOf(each);
+            one.account().aboutARule().forEach(met -> took.stoppedBy(each.from(),
+                    met.of(wroteIt(met.at(), wrote)), wroteIt(met.at(), stating)));
             // Only the rules with one, so that a reader asking a position what is left open there
             // walks the rules that have something rather than every rule of the declaration.
             //
@@ -1722,36 +1720,55 @@ public final class InvariantChecker {
     }
 
     /**
-     * Every occurrence of {@code shape} filed under the part it is written in.
+     * Which statements of its conjunct each occurrence of {@code reading}'s tree is part of.
+     *
+     * <p>The statements {@link ConjunctStatements} numbers, which are the ones every walk over the
+     * clause is handed, and not counted again here. An occurrence inside one of them is part of that
+     * one; an occurrence above them — the conjunction a helper's body joined, a binding crossed on
+     * the way down — is part of every statement of its conjunct.
+     */
+    private static Map<ClauseOccurrence, Set<InvariantStatementId>> statementsOf(
+            Written reading) {
+        Map<ClauseOccurrence, Set<InvariantStatementId>> out = new HashMap<>();
+        reading.parts().forEach(part -> {
+            List<ConjunctStatements.Reached> reached = ConjunctStatements.of(part.of(), part.id());
+            Set<InvariantStatementId> every = new LinkedHashSet<>();
+            reached.forEach(each -> every.add(each.statement()));
+            under(part.of(), Collections.unmodifiableSet(every), out);
+            reached.forEach(each -> under(each.said(), Set.of(each.statement()), out));
+        });
+        return out;
+    }
+
+    /**
+     * Every occurrence of {@code shape} filed under {@code in}, which is what it is written in.
      *
      * <p>Over the shape and not over what some reading of it happened to reach. A walk that stopped
      * where a reading did would leave the coordinates it never got to naming no part, and what was
      * decided under a choice it gave up at is exactly what has to cross.
      */
-    private static void under(ClauseExpr shape, PartId<RuleRef.Invariant> part,
-                              Map<ClauseOccurrence, PartId<RuleRef.Invariant>> out) {
-        out.put(shape.at(), part);
+    private static <V> void under(ClauseExpr shape, V in, Map<ClauseOccurrence, V> out) {
+        out.put(shape.at(), in);
         switch (shape) {
             case ClauseExpr.Leaf _ -> { }
             case ClauseExpr.Joined it -> {
-                under(it.left(), part, out);
-                under(it.right(), part, out);
+                under(it.left(), in, out);
+                under(it.right(), in, out);
             }
-            case ClauseExpr.Scoped it -> under(it.body(), part, out);
+            case ClauseExpr.Scoped it -> under(it.body(), in, out);
         }
     }
 
     /**
-     * Which part its author wrote {@code at} is, refusing a coordinate of no part of the reading.
+     * What its author wrote {@code at} in, refusing a coordinate of no part of the reading.
      *
      * <p>Every coordinate that reaches here was handed out by the same reading, so one that names
      * no part of it is this compiler's two answers disagreeing rather than a fact about a model.
      * Answered with nothing, what a rule is answerable for would be filed under no part and a
      * report would have nowhere to send anybody.
      */
-    private static PartId<RuleRef.Invariant> wroteIt(
-            ClauseOccurrence at, Map<ClauseOccurrence, PartId<RuleRef.Invariant>> wrote) {
-        PartId<RuleRef.Invariant> part = wrote.get(at);
+    private static <V> V wroteIt(ClauseOccurrence at, Map<ClauseOccurrence, V> wrote) {
+        V part = wrote.get(at);
         if (part == null) {
             throw new IllegalStateException(
                     "a reading decided something at " + at + ", which is no part of it");
@@ -2315,8 +2332,8 @@ public final class InvariantChecker {
         // clause has. Asked of the reading and not of the shape: the two were one question while a
         // bound this could fold was the only clause that arrived here as a bound, and reading the
         // shape for it would say that `value <= 10 * 2` went unadopted by a reading that never got
-        // to look at it. Recorded as taken in at the part, so that what another reading was short
-        // of in it is no account of a part beside it that nothing took in.
+        // to look at it. Recorded as taken in at the statement, so that what another reading was
+        // short of in it is no account of a statement beside it that nothing took in.
         //
         // A bound past where the order stops is not named here, and the walk below is what it gets.
         // On a position's own value it leaves nothing standing all the same — the numeric reading
@@ -2328,7 +2345,7 @@ public final class InvariantChecker {
         // a real one: the rule admits nothing, and whether the input is empty is the prover's to
         // say. That it was read is said by the finding its caller files beside it.
         if (placed instanceof InvariantBound.Read.AnEnd) {
-            about.forEach(name -> took.tookInPart(statement.part(), name));
+            about.forEach(name -> took.tookInStatement(statement, name));
             return;
         }
         if (about.isEmpty()) {
@@ -2356,15 +2373,25 @@ public final class InvariantChecker {
         // `value /= "abc" && String.length(value) == 3` is read by the values on one side and by
         // the numbers an operation answers on the other, and came back as a rule nothing read. A
         // part nothing took in is still left standing below, and that outranks this.
+        //
+        // Taken in at a position only where it was taken in under every name the position answers
+        // to. The question stands where any of them is left standing, and a statement counted as
+        // taken in under the others would take what stopped the reading of values there out of
+        // the account of that very question.
         Set<FactSubject> standing = new LinkedHashSet<>();
-        for (FactSubject name : about) {
-            if (here.contains(name)) {
-                took.record(rule, name);
-                took.tookInPart(statement.part(), name);
-            } else if (constrained.contains(name)) {
-                took.tookInPart(statement.part(), name);
-            } else {
-                standing.add(name);
+        for (RuleKey each : states.about()) {
+            Set<FactSubject> names = byName.namesAt(each);
+            boolean left = false;
+            for (FactSubject name : names) {
+                if (here.contains(name)) {
+                    took.record(rule, name);
+                } else if (!constrained.contains(name)) {
+                    standing.add(name);
+                    left = true;
+                }
+            }
+            if (!left) {
+                names.forEach(name -> took.tookInStatement(statement, name));
             }
         }
         if (standing.isEmpty()) {
@@ -2378,11 +2405,10 @@ public final class InvariantChecker {
         // reading of values files what it could not take apart in it, so the two are said of one
         // thing an author wrote.
         if (stoppedOn != null) {
-            ConstructOccurrence wrote = AdmissibleReading.wroteIt(part);
-            RuleSite site = RuleSite.at(wrote.origin(), statement.part());
+            RuleSite site = RuleSite.at(AdmissibleReading.wroteIt(part).origin(), statement.part());
             BlockReason.RuleReadingStopped why = stoppedOn.said();
             standing.forEach(name -> took.stoppedOnTheForm(rule,
-                    new FormShortfall(wrote, site, why, name)));
+                    new FormShortfall(site, why, name)));
         }
     }
 

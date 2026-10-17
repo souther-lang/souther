@@ -54,11 +54,16 @@ final class ReadingEvidence {
     private final Map<RuleRef.Invariant, Set<FactSubject>> left = new LinkedHashMap<>();
 
     /**
-     * Which conjuncts some reading took in, and at which positions: what the reading of values was
+     * Which statements some reading took in, and at which positions: what the reading of values was
      * stopped by in one of these is no account of the rule ({@link #stoppedBy(RuleRef.Invariant,
      * Collection)}).
+     *
+     * <p>Statements and not conjuncts. A helper's body joining two rules is one conjunct stating
+     * both, and one of them taken in says nothing of the other — recorded under the conjunct, what
+     * stopped the reading of values in the one left standing went with the one taken in, and the
+     * question stood with nothing to say for it.
      */
-    private final Set<PartAt> partsTaken = new HashSet<>();
+    private final Set<StatementAt> statementsTaken = new HashSet<>();
 
     /**
      * What stopped the reading of values at each position of each rule.
@@ -82,7 +87,7 @@ final class ReadingEvidence {
      * <p>A set, because nothing here is in an order anybody may read. Which of two an author wrote
      * first is the source's to say and is asked where a document is written.
      */
-    private final Map<RuleRef.Invariant, Map<RuleShortfall, Set<PartId<RuleRef.Invariant>>>>
+    private final Map<RuleRef.Invariant, Map<RuleShortfall, Set<InvariantStatementId>>>
             stopped = new LinkedHashMap<>();
 
     /**
@@ -117,13 +122,13 @@ final class ReadingEvidence {
         left.computeIfAbsent(rule, _ -> new LinkedHashSet<>()).addAll(positions);
     }
 
-    /** Some reading took {@code part} in at {@code position}. */
-    void tookInPart(PartId<RuleRef.Invariant> part, FactSubject position) {
-        partsTaken.add(new PartAt(part, position));
+    /** Some reading took {@code statement} in at {@code position}. */
+    void tookInStatement(InvariantStatementId statement, FactSubject position) {
+        statementsTaken.add(new StatementAt(statement, position));
     }
 
-    /** A conjunct of a rule, at one position. */
-    private record PartAt(PartId<RuleRef.Invariant> part, FactSubject position) {}
+    /** A statement of a rule, at one position. */
+    private record StatementAt(InvariantStatementId statement, FactSubject position) {}
 
     /**
      * What the reading of values made of {@code rule}, as that reading recorded it.
@@ -149,12 +154,12 @@ final class ReadingEvidence {
      * Nothing is asked here because nothing of the wrong kind can be made: what arrives is refused
      * where it would be built, which is one fact away from where a caller could have written it.
      *
-     * @param in the conjunct it was decided in, held beside the fact and not in it: one choice a
+     * @param in the statements it was decided in, held beside the fact and not in it: one choice a
      *           helper wrote, copied into two conjuncts, is one fact decided in both
      */
-    void stoppedBy(RuleRef.Invariant rule, RuleShortfall read, PartId<RuleRef.Invariant> in) {
+    void stoppedBy(RuleRef.Invariant rule, RuleShortfall read, Set<InvariantStatementId> in) {
         stopped.computeIfAbsent(rule, _ -> new LinkedHashMap<>())
-                .computeIfAbsent(read, _ -> new LinkedHashSet<>()).add(in);
+                .computeIfAbsent(read, _ -> new LinkedHashSet<>()).addAll(in);
     }
 
     /**
@@ -165,21 +170,21 @@ final class ReadingEvidence {
      * under whichever the reading recognised. Empty where this reading recorded nothing of the
      * rule there, which a caller has to answer for rather than fill in from the position.
      *
-     * <p>A conjunct some other reading took in was given up on by this reading all the same, and
-     * that is no account of a question the conjunct beside it left standing: {@code value >= 0 &&
+     * <p>A statement some other reading took in was given up on by this reading all the same, and
+     * that is no account of a question the statement beside it left standing: {@code value >= 0 &&
      * Int.floorMod(value, 1000) == 0} is left standing by the remainder, and the ordering beside it
-     * was taken in by the reading of ends. One fact decided in several conjuncts — a choice a
+     * was taken in by the reading of ends. One fact decided in several statements — a choice a
      * helper wrote, copied into each — is kept where any of them was taken in by nothing.
      */
     Set<RuleShortfall> stoppedBy(RuleRef.Invariant rule, Collection<FactSubject> positions) {
-        Map<RuleShortfall, Set<PartId<RuleRef.Invariant>>> here = stopped.get(rule);
+        Map<RuleShortfall, Set<InvariantStatementId>> here = stopped.get(rule);
         if (here == null) {
             return Set.of();
         }
         Set<RuleShortfall> out = new LinkedHashSet<>();
         here.forEach((each, in) -> {
-            if (positions.contains(each.position()) && in.stream()
-                    .anyMatch(part -> !partsTaken.contains(new PartAt(part, each.position())))) {
+            if (positions.contains(each.position()) && in.stream().anyMatch(statement ->
+                    !statementsTaken.contains(new StatementAt(statement, each.position())))) {
                 out.add(each);
             }
         });
