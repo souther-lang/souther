@@ -52,6 +52,8 @@ public final class PositionsAStatementReads {
             case Proposition.Any any -> any.parts().stream().allMatch(part -> reads(part, out));
             case Proposition.OnAnApplication applications -> applications.each().stream()
                     .allMatch(one -> reads(one, out));
+            case Proposition.SoManyHold counted -> counted.statements().stream()
+                    .allMatch(one -> reads(one, out));
             case Proposition.Some some -> reads(some.container(), out)
                     && reads(some.ofTheElement(), out);
         };

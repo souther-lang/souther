@@ -2,6 +2,7 @@ package souther.compiler.meaning;
 
 import java.lang.ref.WeakReference;
 import java.util.Map;
+import java.util.Optional;
 import java.util.WeakHashMap;
 import java.util.function.Supplier;
 
@@ -33,6 +34,8 @@ final class SharedPropositions {
     private static final Map<Proposition, WeakReference<Proposition>> KEPT = new WeakHashMap<>();
     private static final Map<Proposition, WeakReference<Proposition>> DENIED =
             new WeakHashMap<>();
+    private static final Map<Proposition, Optional<WeakReference<Proposition>>> CHOICES =
+            new WeakHashMap<>();
 
     private SharedPropositions() {
     }
@@ -48,6 +51,35 @@ final class SharedPropositions {
             KEPT.put(made, new WeakReference<>(made));
             return made;
         }
+    }
+
+    /**
+     * The choices {@code counted} is written out as, or null where they are not: the ones written
+     * out the first time they were asked for while both are held, or {@code writing}'s, kept from
+     * now on.
+     *
+     * <p>Every reader that takes a count apart asks for them, and written out again for each, the
+     * count is written out as many times as it has readers. That none could be written out is kept
+     * as well, so that it is found out once.
+     */
+    static Proposition choices(Proposition.SoManyHold counted, Supplier<Proposition> writing) {
+        synchronized (CHOICES) {
+            Optional<WeakReference<Proposition>> held = CHOICES.get(counted);
+            if (held != null) {
+                if (held.isEmpty()) {
+                    return null;
+                }
+                Proposition kept = held.get().get();
+                if (kept != null) {
+                    return kept;
+                }
+            }
+        }
+        Proposition made = writing.get();
+        synchronized (CHOICES) {
+            CHOICES.put(counted, Optional.ofNullable(made).map(WeakReference::new));
+        }
+        return made;
     }
 
     /**

@@ -4,6 +4,7 @@ import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
+import souther.compiler.partition.CompositionBudget;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -79,6 +80,67 @@ final class WhichOfThemHold {
         }
         return new WhichOfThemHold(List.copyOf(once.values()), List.copyOf(written.values()),
                 admitted);
+    }
+
+    /** The same count, held as {@code held} holds it. */
+    static WhichOfThemHold of(Proposition.SoManyHold held) {
+        boolean[] admitted = new boolean[held.weight() + 1];
+        held.admitted().forEach(count -> admitted[count] = true);
+        return new WhichOfThemHold(held.statements(), held.weights(), admitted);
+    }
+
+    /**
+     * The same count over {@code remade}, each of the statements made again, in their order: two
+     * that came out one statement are that one, weighed as both were.
+     */
+    WhichOfThemHold over(List<Proposition> remade) {
+        if (remade.size() != statements.size()) {
+            throw new IllegalArgumentException("each of " + statements.size()
+                    + " statements is made again: " + remade);
+        }
+        Map<String, Proposition> once = new LinkedHashMap<>();
+        Map<String, Integer> weighed = new LinkedHashMap<>();
+        for (int one = 0; one < remade.size(); one++) {
+            once.putIfAbsent(remade.get(one).key(), remade.get(one));
+            weighed.merge(remade.get(one).key(), weights.get(one), Integer::sum);
+        }
+        return new WhichOfThemHold(List.copyOf(once.values()), List.copyOf(weighed.values()),
+                admitted);
+    }
+
+    /**
+     * What the relation states: its choices written out, where they are no more than how many
+     * readings one condition makes ({@link CompositionBudget#READINGS_OF_ONE_CONDITION}) and
+     * written out come to no more parts than a step is concluded with — and otherwise the
+     * statements and the counts it admits, held as they are ({@link Proposition.SoManyHold}).
+     *
+     * <p>One relation is stated one way, whichever reader made it: which way turns on the
+     * statements and the counts alone, and on no figure a reader has in hand.
+     */
+    Proposition stated() {
+        Proposition written = written(CompositionBudget.READINGS_OF_ONE_CONDITION.maximum());
+        if (written != null && Conclusion.withinTheParts(written,
+                CompositionBudget.PARTS_A_DERIVATION_CONCLUDES)) {
+            return written;
+        }
+        List<Integer> byKey = new ArrayList<>(statements.size());
+        for (int one = 0; one < statements.size(); one++) {
+            byKey.add(one);
+        }
+        byKey.sort(Comparator.comparing((Integer one) -> statements.get(one).key()));
+        List<Proposition> kept = new ArrayList<>(statements.size());
+        List<Integer> weighed = new ArrayList<>(statements.size());
+        byKey.forEach(one -> {
+            kept.add(statements.get(one));
+            weighed.add(weights.get(one));
+        });
+        List<Integer> counts = new ArrayList<>();
+        for (int count = 0; count < admitted.length; count++) {
+            if (admitted[count]) {
+                counts.add(count);
+            }
+        }
+        return SharedPropositions.shared(new Proposition.SoManyHold(kept, weighed, counts));
     }
 
     /** How many choices this is written as, counted no further than one past {@code most}. */

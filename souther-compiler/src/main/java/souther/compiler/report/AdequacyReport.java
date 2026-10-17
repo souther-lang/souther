@@ -3604,18 +3604,18 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 // And which calls of a helper the rule was read at, after the position: a rule a
                 // helper writes is one place for every call, and the readings of it at different
                 // calls are told apart by the call and by nothing else on the line.
-                out.append(String.format("      %s %s: %s — %s, about `%s`%s%s%n",
+                out.append(String.format("      %s %s: %s — %s%s, about `%s`%s%s%n",
                         mark(f), it.readingStopped() ? "not read" : "no line",
                         cited(it.cited(), rendering, declaredIn, places),
-                        whyUnread(it.reason()), it.at(),
+                        whyUnread(it.reason()), stoppedAt(it.figures()), it.at(),
                         inCopies(it.finding().readAt(), behavior.conditionPlaces().copies(),
                                 rendering, declaredIn),
                         sentTo(it.finding().sentTo(), parts, rendering, declaredIn)));
             }
             if (f.about() instanceof About.ARuleNothingClassified(var it)) {
-                out.append(String.format("      %s not read: %s — %s, about `%s`%s%n",
+                out.append(String.format("      %s not read: %s — %s%s, about `%s`%s%n",
                         mark(f), cited(it.cited(), rendering, declaredIn, places),
-                        whyUnread(it.reason()), it.at(),
+                        whyUnread(it.reason()), stoppedAt(it.figures()), it.at(),
                         inCopies(it.finding().readAt(), behavior.conditionPlaces().copies(),
                                 rendering, declaredIn)));
             }
@@ -3625,8 +3625,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         // to work out which of the two they are being told.
         for (Adequacy.Finding f : behavior.findings()) {
             if (f.about() instanceof About.APositionThisCouldNotRead(var it)) {
-                out.append(String.format("      %s not read: %s (%s)%n",
-                        mark(f), it.at(), whyUnread(it.reason())));
+                out.append(String.format("      %s not read: %s (%s%s)%n",
+                        mark(f), it.at(), whyUnread(it.reason()), stoppedAt(it.figures())));
             }
         }
         // And a third thing, said apart from both: a rule written about a position the axes did
@@ -5331,6 +5331,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case WhyNotTaken.MoreAlternativesThanAreTried _ -> "a condition that is one of"
                     + " several things, inside one another past "
                     + CompositionBudget.ALTERNATIVES_A_PATH_TRIES.counts();
+            // The same kind: read, and taken apart into choices past a figure.
+            case WhyNotTaken.MoreChoicesThanAreWrittenOut _ -> "a condition counting how many of"
+                    + " some statements hold, past "
+                    + CompositionBudget.PARTS_THE_CHOICES_OF_A_COUNT_COME_TO.counts();
         };
     }
 
@@ -5593,7 +5597,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         inCopies(asked.asked().readAt(), behavior.conditionPlaces().copies(),
                                 rendering, declaredIn),
                         publishedStops(asked, parts).stream()
-                                .map(stop -> whyUnread(stop.reason())
+                                .map(stop -> whyUnread(stop.reason()) + stoppedAt(stop.figures())
                                         + sentTo(stop.sentTo(), rendering, declaredIn))
                                 .collect(Collectors.joining("; ")),
                         whatItsPositionWasShortOf(asked).map(AdequacyReport::whyUnread)
@@ -5677,17 +5681,22 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     }
 
     /**
-     * One entry of a question's {@code stopped} array, as a document writes it: the word and where
-     * a reader goes about it, and nothing a reader is not told.
+     * One entry of a question's {@code stopped} array, as a document writes it: the word, where a
+     * reader goes about it and the figures it stopped at, and nothing a reader is not told.
      *
-     * <p>What two entries are told apart by is what the schema says tells them apart, so this is
-     * the value that is compared for a repeat. {@link ReportedReason.Stop} holds what an entry is
-     * made from and where its author put it; two of those that differ only in what the document
-     * does not write are one entry here.
+     * <p>What two entries are told apart by is what the schema says tells them apart — the word and
+     * where a reader goes — so that pair is what is compared for a repeat
+     * ({@link #publishedStops}). {@link ReportedReason.Stop} holds what an entry is made from and
+     * where its author put it; two of those that differ only in what the document does not write,
+     * or only in the figures they stopped at, are one entry here.
      *
-     * @param sentTo empty for the rule itself and for a part this compilation cannot point at
+     * @param sentTo  empty for the rule itself and for a part this compilation cannot point at
+     * @param figures every figure the stops of this entry were met at, each once and in
+     *                {@link Figure#inOrder}: what is said beside the entry and not what tells it
+     *                from another
      */
-    private record PublishedStop(UndividedPosition.Reason reason, Optional<PublishedAt> sentTo) {
+    private record PublishedStop(UndividedPosition.Reason reason, Optional<PublishedAt> sentTo,
+                                 List<Figure> figures) {
     }
 
     /**
@@ -5697,14 +5706,23 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * <p>Told apart after the places are resolved and not before. Two stops about different parts
      * of a rule can send a reader to the same place, or to none, and the order is asked of the
      * parts before that difference is thrown away.
+     *
+     * <p>Two stops one entry writes are met at every figure either was. An entry is one thing to
+     * lift, and the figures are what lifting it would take, so two stops under one word at one
+     * place stopped at two figures are one entry naming both.
      */
     private static List<PublishedStop> publishedStops(PartitionEvidence.Unanswered asked,
                                                       WhereAPartIs parts) {
-        Set<PublishedStop> out = new LinkedHashSet<>();
+        record Entry(UndividedPosition.Reason reason, Optional<PublishedAt> sentTo) {}
+        Map<Entry, List<Figure>> out = new LinkedHashMap<>();
         for (ReportedReason.Stop each : whyStanding(asked, parts).written()) {
-            out.add(new PublishedStop(each.reason(), placeInTheRule(each.sentTo(), parts)));
+            out.computeIfAbsent(new Entry(each.reason(), placeInTheRule(each.sentTo(), parts)),
+                    _ -> new ArrayList<>()).addAll(each.figures());
         }
-        return List.copyOf(out);
+        List<PublishedStop> written = new ArrayList<>();
+        out.forEach((entry, figures) -> written.add(
+                new PublishedStop(entry.reason(), entry.sentTo(), Figure.inOrder(figures))));
+        return List.copyOf(written);
     }
 
     /**
@@ -6088,6 +6106,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case WhyNotTaken.MoreAlternativesThanAreTried _ -> {
                 out.put("kind", "past_a_figure");
                 out.put("reason", "more_alternatives_than_are_tried");
+            }
+            case WhyNotTaken.MoreChoicesThanAreWrittenOut _ -> {
+                out.put("kind", "past_a_figure");
+                out.put("reason", "more_choices_than_are_written_out");
             }
         }
         return out;
@@ -7361,6 +7383,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     publishedStops(each, parts).forEach(stop -> {
                         ObjectNode standsOn = stopped.addObject();
                         standsOn.put("reason", word(stop.reason()));
+                        figuresMet(standsOn, stop.figures());
                         stop.sentTo().ifPresent(
                                 at -> place(standsOn.putObject("sentTo"), at, sources));
                     });
@@ -7578,6 +7601,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             ObjectNode said = row.node();
             said.put("position", each.at());
             said.put("reason", word(each.reason()));
+            // And the figures it stopped at, which the word is coarser than: a consumer told a
+            // part of a rule was not read is told which figure a wider run would have to allow.
+            figuresMet(said, each.figures());
             // And which rule, where one was read and could not be used. Absent where the reading
             // never arrived at the rules of the position: there is nothing to name, and a field
             // holding a placeholder would say this compiler had looked at a rule it never saw.
@@ -9080,6 +9106,40 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         return figures.stream()
                 .map(each -> each.counts() + " (" + each.name() + ", " + each.most() + ")")
                 .collect(Collectors.joining("; "));
+    }
+
+    /**
+     * The figures a reading stopped at, as a clause after the word for what stopped it, and
+     * nothing where it stopped at none.
+     *
+     * <p>Said as the line naming what keeps a verdict open says them ({@link #figuresSaid}), so a
+     * figure reads alike wherever a reader meets it. The word before it is coarser than the
+     * figures: several of them stop a reading under one word, and which one a reader would raise is
+     * what this adds.
+     *
+     * <p>Several figures are joined with "and at" rather than the semicolon that line uses: the
+     * lines this ends a clause of separate what a question stands on with semicolons, and two
+     * figures of one stop read there as two stops.
+     */
+    private static String stoppedAt(List<Figure> figures) {
+        return figures.isEmpty() ? "" : ", stopped at " + figures.stream()
+                .map(each -> figuresSaid(List.of(each)))
+                .collect(Collectors.joining(" and at "));
+    }
+
+    /**
+     * The same figures in a document: each by the name it is declared as, under {@code figures},
+     * and absent where there is none, so an entry with no {@code figures} is one that stopped at no
+     * figure rather than one nobody asked.
+     *
+     * <p>Each name once. What a figure stood at is not written, so one figure met at two numbers is
+     * one word here.
+     */
+    private static void figuresMet(ObjectNode into, List<Figure> figures) {
+        if (!figures.isEmpty()) {
+            ArrayNode out = into.putArray("figures");
+            figures.stream().map(figure -> word(figure.name())).distinct().forEach(out::add);
+        }
     }
 
     /**

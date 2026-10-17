@@ -344,6 +344,18 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
         boolean readingStopped();
 
         /**
+         * Every figure of this compiler's the reading was compared against and stopped at, which is
+         * none for a reading that stopped at no figure and for a rule read to the end.
+         *
+         * <p>Beside the word and not inside it. The word is what a document promises a reader can
+         * tell apart, and several figures stop a reading under one of them; told the word alone, a
+         * reader cannot say which figure to raise. What stopped it carries the figures from where
+         * the comparison was made ({@link BlockReason.ReadingStopReason#figures}), so this hands
+         * them on and works none of them out.
+         */
+        List<Figure> figures();
+
+        /**
          * Every handle a reader was offered for what this is about, which is nothing for an entry
          * about no rule.
          *
@@ -369,6 +381,13 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
             @Override
             public boolean readingStopped() {
                 return finding.why() instanceof BlockReason.RuleReadingStopped;
+            }
+
+            /** A rule read to the end stopped at nothing, so it met no figure. */
+            @Override
+            public List<Figure> figures() {
+                return finding.why() instanceof BlockReason.ReadingStopReason stopped
+                        ? stopped.figures() : List.of();
             }
 
             /** Which rule, which is what tells this finding from the one beside it. */
@@ -412,6 +431,11 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
                 return true;
             }
 
+            @Override
+            public List<Figure> figures() {
+                return finding.why().figures();
+            }
+
             /** Which rule, which is what tells this finding from the one beside it. */
             public RuleRef rule() {
                 return finding.rule();
@@ -443,6 +467,11 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
             @Override
             public boolean readingStopped() {
                 return true;
+            }
+
+            @Override
+            public List<Figure> figures() {
+                return finding.why().figures();
             }
 
             /** None: this entry is about the position and names no rule of the model. */

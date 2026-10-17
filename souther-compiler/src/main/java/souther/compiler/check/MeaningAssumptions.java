@@ -222,6 +222,15 @@ final class MeaningAssumptions {
             }
             case Proposition.Always _ -> { }
             case Proposition.Any any -> takingOneOf(any);
+            // A count of statements is the choices of which of them hold, taken as those are.
+            case Proposition.SoManyHold counted -> {
+                Proposition choices = counted.choices();
+                if (choices != null) {
+                    take(choices);
+                } else {
+                    notTaken(new WhyNotTaken.MoreChoicesThanAreWrittenOut());
+                }
+            }
             // Which application is no fact of a path.
             case Proposition.OnAnApplication _ ->
                     WhyNotTaken.declinedWhole(new WhyNotTaken.OutsideDomain(

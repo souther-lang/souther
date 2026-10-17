@@ -14,8 +14,11 @@ import souther.compiler.report.AdequacyReport;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -331,6 +334,107 @@ class ACountOfWrittenValuesThatComesToWhichCasesAListHoldsIsReadTest {
                 """;
 
         assertEquals(List.of("E1327"), warnings(source));
+    }
+
+    /**
+     * Every seating of three suspects in some rooms, kept where every clue lets it stand, and
+     * exactly one kept: with three rooms each placement a seating holds is asked about once per
+     * seating, and exactly one of the seatings is more choices of which are kept, written out, than
+     * a step is concluded with.
+     */
+    private static String seatings(String rooms) {
+        return """
+                module p
+                import List ( flatMap, map, filter, all, any, length )
+                data Suspect = Alice | Bob | Carol
+                data Room = Kitchen | Study | Garden
+                data Placement = { who: Suspect, room: Room }
+                data SawIn = { who: Suspect, room: Room }
+                data WasElsewhere = { who: Suspect, room: Room }
+                data Clue = SawIn | WasElsewhere
+                let rooms = [ %s ]
+                let seatings =
+                    flatMap(a -> flatMap(b -> map(c -> [ Placement { who = Alice, room = a }
+                                                       , Placement { who = Bob, room = b }
+                                                       , Placement { who = Carol, room = c } ],
+                        rooms), rooms), rooms)
+                let stood (places: List<Placement>, who: Suspect, room: Room): Bool =
+                    any(p -> p.who == who && p.room == room, places)
+                let holds (clue: Clue, places: List<Placement>): Bool =
+                    match clue with
+                        | SawIn { who, room } -> stood(places, who, room)
+                        | WasElsewhere { who, room } -> Bool.not(stood(places, who, room))
+                behavior solved : (clues: List<Clue>) -> Bool
+                let solved (clues) = {
+                    let fitting = filter(s -> all(clue -> holds(clue, s), clues), seatings)
+                    length(fitting) == 1
+                }
+                example solved
+                    | "one" : ([ SawIn { who = Alice, room = Study }, SawIn { who = Bob, room = Study }, SawIn { who = Carol, room = Study } ]) -> true
+                    | "none" : ([ SawIn { who = Alice, room = Study }, WasElsewhere { who = Alice, room = Study } ]) -> false
+                """.formatted(rooms);
+    }
+
+    /**
+     * Exactly one of twenty-seven seatings is read to the end, as exactly one of eight is: the
+     * count is held as the statements and the one count it admits, and a reader that takes it apart
+     * is handed its choices. What is said of the clues is what is said where the choices are few
+     * enough to be written out.
+     */
+    @Test
+    void exactlyOneOfMoreSeatingsThanAreWrittenOutIsReadAsExactlyOneOfFewer() {
+        Measured written = measured(seatings("Kitchen, Study"));
+        Measured held = measured(seatings("Kitchen, Study, Garden"));
+
+        assertEquals("complete", written.status());
+        assertEquals("complete", held.status());
+        assertEquals(kindsAndSubjects(written), kindsAndSubjects(held));
+    }
+
+    /**
+     * Exactly nine of eighteen values written out, each a number of its own, is more choices than a
+     * reader of them is handed: the count is read and held whole, and where its lines decide is
+     * said not to have been worked out at that figure, and not that a part of it was not read.
+     *
+     * <p>Numbers of their own, since statements about one number cannot hold in most of the ways
+     * a choice asks, and written out those ways are none.
+     */
+    @Test
+    void aCountWhoseChoicesArePastWhatAReaderIsHandedSaysThatFigure() {
+        String fields = IntStream.range(0, 18).mapToObj(at -> "f" + at + ": Int")
+                .collect(Collectors.joining(", "));
+        String values = IntStream.range(0, 18).mapToObj(at -> "w.f" + at)
+                .collect(Collectors.joining(", ", "[", "]"));
+        String zeros = IntStream.range(0, 18).mapToObj(at -> "f" + at + " = " + (at < 9 ? 1 : 0))
+                .collect(Collectors.joining(", "));
+        String source = """
+                module p
+                import List ( filter, length )
+                data W = { %s }
+                behavior f : (w: W) -> Int
+                let f (w) = if length(filter(x -> x > 0, %s)) == 9 then 1 else 2
+                example f
+                    | "a" : (W { %s }) -> 1
+                """.formatted(fields, values, zeros);
+        Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        String human = AdequacyReport.of(compilation)
+                .human(SourceRendering.namedByIdentity(compilation.texts()));
+
+        assertTrue(human.contains("PARTS_THE_CHOICES_OF_A_COUNT_COME_TO"), human);
+        assertFalse(human.contains("a part of what it states was not read"), human);
+    }
+
+    /** Each finding's kind and what it is about. */
+    private static List<String> kindsAndSubjects(Measured measured) {
+        List<String> out = new ArrayList<>();
+        for (JsonNode each : measured.findings()) {
+            out.add(each.path("kind").asString("") + " " + each.path("subject").asString("")
+                    + " " + each.path("reason").asString(""));
+        }
+        out.sort(String::compareTo);
+        return out;
     }
 
     /** And an {@code if} whose arms state one thing, the same way. */

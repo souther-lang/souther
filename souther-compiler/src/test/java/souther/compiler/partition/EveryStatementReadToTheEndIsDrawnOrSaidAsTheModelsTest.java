@@ -24,6 +24,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -72,6 +74,10 @@ class EveryStatementReadToTheEndIsDrawnOrSaidAsTheModelsTest {
         Map<String, String> out = new LinkedHashMap<>();
         out.put("always", "List.isEmpty([1, 2])");
         out.put("a relation of numbers", "i.n > 5");
+        out.put("so many of some statements holding",
+                "List.length(List.filter(x -> x > i.n, " + IntStream.range(0, 70)
+                        .mapToObj(String::valueOf).collect(Collectors.joining(", ", "[", "]"))
+                        + ")) == 1");
         out.put("a place on an order", "i.s < \"M\"");
         out.put("a truth", "i.b");
         out.put("a case", "match i.k with | A -> true | B -> false");
@@ -137,6 +143,8 @@ class EveryStatementReadToTheEndIsDrawnOrSaidAsTheModelsTest {
             case Proposition.Some some -> kindsIn(some.ofTheElement(), into);
             case Proposition.SomeReachable reached -> kindsIn(reached.atANode(), into);
             case Proposition.OnAnApplication each -> each.each().forEach(one -> kindsIn(one, into));
+            case Proposition.SoManyHold counted ->
+                    counted.statements().forEach(one -> kindsIn(one, into));
             case Proposition.Carried _, Proposition.Always _, Proposition.Compared _,
                  Proposition.Truth _,
                  Proposition.InCases _, Proposition.Present _, Proposition.SameValue _,

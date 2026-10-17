@@ -50,9 +50,6 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
  */
 class WhatADerivationConcludesIsWhatItsRuleComputesTest {
 
-    /** How many choices of which statements hold a comparison here is written out as. */
-    private static final long CHOICES = 256;
-
     private static final TermPath A = TermPath.of("a");
     private static final TermPath B = TermPath.of("b");
     private static final TermPath C = TermPath.of("c");
@@ -307,7 +304,7 @@ class WhatADerivationConcludesIsWhatItsRuleComputesTest {
         Derivation ofTheSecond = comparison(second, INDEX, LENGTH);
         Derivation aSourceRelation = new Derivation.AComparisonRead(
                 Derivation.ComparisonReading.BY_A_LAW, new Relation.Affine(
-                        LinearForm.atom(LENGTH), Rel.GT), false, CHOICES,
+                        LinearForm.atom(LENGTH), Rel.GT), false,
                 Derivation.AComparisonRead.Facing.NOTHING_WRITTEN);
         Derivation ofAnother = comparison(another, INDEX, LENGTH);
         Derivation aChoiceOfAnotherCase = new Derivation.AComparisonOfAChoice(
@@ -324,7 +321,7 @@ class WhatADerivationConcludesIsWhatItsRuleComputesTest {
         second.form().coefs().keySet().forEach(number -> keyedByTheOther.put(number,
                 LinearForm.atom(INDEX)));
         assertThrows(IllegalArgumentException.class, () -> Derivation.ALawComparison.of(first,
-                keyedByTheOther, Map.of(), List.of(), CHOICES));
+                keyedByTheOther, Map.of(), List.of()));
         // And a choice each of whose cases is the law's comparison, or stopped, is a reading.
         Derivation aChoiceOfTheLaws = new Derivation.AComparisonOfAChoice(
                 new Derivation.IfThenElse(truthAt(A), comparison(first, INDEX, LENGTH),
@@ -441,7 +438,7 @@ class WhatADerivationConcludesIsWhatItsRuleComputesTest {
                 relationOf(NUMBER_AT_A, NUMBER_AT_B, Rel.GE),
                 relationOf(NUMBER_AT_B, NUMBER_AT_A, Rel.GT),
                 new Derivation.AComparisonRead(Derivation.ComparisonReading.BY_A_LAW,
-                        new Relation.Affine(LinearForm.atom(NUMBER_AT_A), Rel.GT), true, CHOICES,
+                        new Relation.Affine(LinearForm.atom(NUMBER_AT_A), Rel.GT), true,
                         Derivation.AComparisonRead.Facing.NOTHING_WRITTEN),
                 relationOf(NUMBER_AT_A, LENGTH, Rel.GT),
                 truthAt(A))) {
@@ -476,7 +473,7 @@ class WhatADerivationConcludesIsWhatItsRuleComputesTest {
         for (Derivation notTheOrder : List.of(truthAt(A), new Derivation.WrittenOut(true),
                 new Derivation.AComparisonRead(Derivation.ComparisonReading.BY_A_LAW,
                         new Relation.Affine(LinearForm.atom(NUMBER_AT_A), Rel.GT), true,
-                        CHOICES, Derivation.AComparisonRead.Facing.NOTHING_WRITTEN))) {
+                        Derivation.AComparisonRead.Facing.NOTHING_WRITTEN))) {
             assertThrows(IllegalArgumentException.class, () -> new Derivation.AnOrderOfItsArguments(
                     compareWithItself, aboveNought, notTheOrder), () -> "refused: " + notTheOrder);
         }
@@ -540,8 +537,7 @@ class WhatADerivationConcludesIsWhatItsRuleComputesTest {
             Map<LawNumber<?>, LinearForm<Quantity>> numbers = Map.of(
                     countingByTheClosure.form().coefs().keySet().iterator().next(), stated.count());
             Derivation read = Derivation.ALawComparison.of(countingByTheClosure, numbers, Map.of(),
-                    List.of(new Derivation.AComparisonRead.Counted(new DecisionSubject.AnInput(B), stated.settled())),
-                    CHOICES);
+                    List.of(new Derivation.AComparisonRead.Counted(new DecisionSubject.AnInput(B), stated.settled())));
             assertEquals(stated.reads(), Derivation.ByALaw.readsTheLaw(countingByTheClosure, read,
                     call), () -> "a count read as " + stated);
         }
@@ -586,8 +582,8 @@ class WhatADerivationConcludesIsWhatItsRuleComputesTest {
     private static boolean readsTheSum(LawProposition.Compared<DeclaredArgument> law,
                                        LinearForm<Quantity> read, Derivation.TheCall call) {
         return Derivation.ByALaw.readsTheLaw(law, Derivation.ALawComparison.of(law,
-                Map.of(law.form().coefs().keySet().iterator().next(), read), Map.of(), List.of(),
-                CHOICES), call);
+                Map.of(law.form().coefs().keySet().iterator().next(), read), Map.of(), List.of()),
+                call);
     }
 
     /** A count read as {@code count} where every element settled the statement as
@@ -600,7 +596,7 @@ class WhatADerivationConcludesIsWhatItsRuleComputesTest {
                                         Quantity count, Derivation.AComparisonRead.Counted how) {
         return Derivation.ALawComparison.of(law, Map.of(law.form().coefs().keySet().iterator()
                 .next(), LinearForm.atom(count)), Map.of((Quantity.HowManyMeet) count, how),
-                List.of(), CHOICES);
+                List.of());
     }
 
     /** {@code first - second states 0}, read as a comparison of the numbers it is over. */
@@ -608,7 +604,7 @@ class WhatADerivationConcludesIsWhatItsRuleComputesTest {
         Relation.OneWay<Quantity> one = Relation.OneWay.of(new LinearForm<>(ExactRatio.ZERO,
                 Map.of(first, ExactRatio.ONE, second, ExactRatio.of(-1))), states);
         return new Derivation.AComparisonRead(Derivation.ComparisonReading.BY_A_LAW,
-                new Relation.Affine(one.form(), one.proposition()), one.holds(), CHOICES,
+                new Relation.Affine(one.form(), one.proposition()), one.holds(),
                 Derivation.AComparisonRead.Facing.NOTHING_WRITTEN);
     }
 
@@ -696,7 +692,7 @@ class WhatADerivationConcludesIsWhatItsRuleComputesTest {
         Map<LawNumber<?>, LinearForm<Quantity>> numbers = new LinkedHashMap<>();
         part.form().coefs().keySet().forEach(number -> numbers.put(number, LinearForm.atom(
                 number instanceof LawNumber.SizeOf<?> ? length : index)));
-        return Derivation.ALawComparison.of(part, numbers, Map.of(), List.of(), CHOICES);
+        return Derivation.ALawComparison.of(part, numbers, Map.of(), List.of());
     }
 
     /** The sameness {@code same} states, said the other way. */

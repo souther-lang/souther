@@ -118,6 +118,8 @@ final class AStatementAtARow {
             case Proposition.LastToHold _ -> true;
             case Proposition.All all -> all.parts().stream().allMatch(AStatementAtARow::askable);
             case Proposition.Any any -> any.parts().stream().allMatch(AStatementAtARow::askable);
+            case Proposition.SoManyHold counted ->
+                    counted.statements().stream().allMatch(AStatementAtARow::askable);
             case Proposition.Some some -> askable(some.ofTheElement());
             case Proposition.Compared compared -> switch (compared.relation()) {
                 case Relation.Affine affine ->
@@ -182,6 +184,8 @@ final class AStatementAtARow {
                     gather(part, behavior, quantities, into, elements, positions));
             case Proposition.Any any -> any.parts().forEach(part ->
                     gather(part, behavior, quantities, into, elements, positions));
+            case Proposition.SoManyHold counted -> counted.statements().forEach(part ->
+                    gather(part, behavior, quantities, into, elements, positions));
             case Proposition.Some some -> elements.computeIfAbsent(keyOf(some),
                     _ -> new OverTheElements(some.container().inputPosition(),
                             of(some.ofTheElement(), behavior, quantities)));
@@ -216,6 +220,8 @@ final class AStatementAtARow {
         switch (stated) {
             case Proposition.All all -> all.parts().forEach(part -> gatherNumbers(part, into));
             case Proposition.Any any -> any.parts().forEach(part -> gatherNumbers(part, into));
+            case Proposition.SoManyHold counted ->
+                    counted.statements().forEach(part -> gatherNumbers(part, into));
             case Proposition.Some some -> gatherNumbers(some.ofTheElement(), into);
             case Proposition.Compared compared
                     when compared.relation() instanceof Relation.Affine affine
@@ -424,6 +430,8 @@ final class AStatementAtARow {
                     .map(each -> at(each, row, answered)).toList(), true);
             case Proposition.Any any -> joined(any.parts().stream()
                     .map(each -> at(each, row, answered)).toList(), false);
+            case Proposition.SoManyHold counted -> howManyHold(counted, counted.statements()
+                    .stream().map(each -> at(each, row, answered)).toList());
             case Proposition.Some some -> {
                 OverTheElements over = elements.get(keyOf(some));
                 HowManyAtARow counted = over.ofTheElement().howManyMeetIn(over.container(), row);
@@ -504,6 +512,8 @@ final class AStatementAtARow {
                     all.parts().stream().allMatch(part -> readsOf(part, about, read));
             case Proposition.Any any ->
                     any.parts().stream().allMatch(part -> readsOf(part, about, read));
+            case Proposition.SoManyHold counted ->
+                    counted.statements().stream().allMatch(part -> readsOf(part, about, read));
             case Proposition.Some some -> overElementsOf(some.container().inputPosition(), about,
                     read) && readsOf(some.ofTheElement(), about, read);
             case Proposition.Compared compared
@@ -897,6 +907,53 @@ final class AStatementAtARow {
     private static Answer heldAs(boolean holds, Answer answered) {
         return holds || answered instanceof Answer.CouldNotTell ? answered
                 : answered instanceof Answer.Holds ? Answer.FAILS : Answer.HOLDS;
+    }
+
+    /**
+     * Whether as many of {@code counted}'s statements hold as it admits, each answered at the row
+     * as {@code each} says.
+     *
+     * <p>The ones that could not be told may come to any count their weights add up to beside the
+     * ones that hold, and it is settled only where every such count says the same.
+     */
+    private static Answer howManyHold(Proposition.SoManyHold counted, List<Answer> each) {
+        Set<ReadingGap> unread = new LinkedHashSet<>();
+        boolean[] comesTo = new boolean[counted.weight() + 1];
+        comesTo[0] = true;
+        for (int one = 0; one < each.size(); one++) {
+            int weight = counted.weights().get(one);
+            boolean[] next = new boolean[comesTo.length];
+            for (int count = 0; count < comesTo.length; count++) {
+                if (!comesTo[count]) {
+                    continue;
+                }
+                switch (each.get(one)) {
+                    case Answer.Holds _ -> next[count + weight] = true;
+                    case Answer.Fails _ -> next[count] = true;
+                    case Answer.CouldNotTell(Set<ReadingGap> why) -> {
+                        unread.addAll(why);
+                        next[count] = true;
+                        next[count + weight] = true;
+                    }
+                }
+            }
+            comesTo = next;
+        }
+        boolean admitted = false;
+        boolean refused = false;
+        for (int count = 0; count < comesTo.length; count++) {
+            if (comesTo[count]) {
+                if (counted.admitted().contains(count)) {
+                    admitted = true;
+                } else {
+                    refused = true;
+                }
+            }
+        }
+        if (admitted && refused) {
+            return new Answer.CouldNotTell(unread);
+        }
+        return admitted ? Answer.HOLDS : Answer.FAILS;
     }
 
     /**

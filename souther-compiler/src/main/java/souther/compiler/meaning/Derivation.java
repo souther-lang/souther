@@ -1225,14 +1225,11 @@ public sealed interface Derivation {
      *               it there; a count on both sides comes to nought and names none
      * @param alike  how each count every element settles alike was read: the statement came out
      *               the same for each, so the count is all of the container or none of it
-     * @param mostChoices how many choices of which statements hold the reading writes the
-     *                    comparison out as ({@link AComparisonRead})
      */
     record ALawComparison(LawProposition.Compared<?> part,
                           Map<LawNumber<?>, LinearForm<Quantity>> numbers,
                           List<AComparisonRead.Counted> counts,
-                          List<AComparisonRead.Counted> alike,
-                          long mostChoices)
+                          List<AComparisonRead.Counted> alike)
             implements ALawPart {
 
         /**
@@ -1243,10 +1240,8 @@ public sealed interface Derivation {
                                         Map<LawNumber<?>, LinearForm<Quantity>> numbers,
                                         Map<Quantity.HowManyMeet, AComparisonRead.Counted>
                                                 counting,
-                                        List<AComparisonRead.Counted> alike,
-                                        long mostChoices) {
-            return new ALawComparison(part, numbers, List.copyOf(counting.values()), alike,
-                    mostChoices);
+                                        List<AComparisonRead.Counted> alike) {
+            return new ALawComparison(part, numbers, List.copyOf(counting.values()), alike);
         }
 
         /**
@@ -1273,12 +1268,6 @@ public sealed interface Derivation {
             if (!numbers.keySet().equals(part.form().coefs().keySet())) {
                 throw new IllegalArgumentException("a comparison over " + part.form().coefs()
                         .keySet() + " is read with " + numbers.keySet());
-            }
-            Relation.OneWay<Quantity> one = relationOf(part, numbers);
-            if (one != null && AComparisonRead.pastTheChoicesRead(
-                    new Relation.Affine(one.form(), one.proposition()), mostChoices)) {
-                throw new IllegalArgumentException("a comparison written out as more choices than"
-                        + " are read is stopped at, and not read: " + part);
             }
         }
 
@@ -1319,7 +1308,7 @@ public sealed interface Derivation {
                     .toList();
             return new AComparisonRead(ComparisonReading.BY_A_LAW,
                     new Relation.Affine(one.form(), one.proposition()), one.holds(), named,
-                    mostChoices, AComparisonRead.Facing.NOTHING_WRITTEN).conclusion(numbering);
+                    AComparisonRead.Facing.NOTHING_WRITTEN).conclusion(numbering);
         }
     }
 
@@ -2518,22 +2507,18 @@ public sealed interface Derivation {
      * meet, and a count the relation names that none of these reads is refused where it is
      * concluded.
      *
-     * <p>Every comparison a reading concludes enters here, so this is where a count of statements
-     * about values written out is held to how many choices of which hold one condition is read in
-     * ({@link WhichOfThemHold}). One that would be written out as more is stopped at by the reading
-     * and never made.
+     * <p>A count of statements about values written out is concluded as which of them hold, written
+     * out as choices or held as the count where those are too many ({@link Proposition#compared}).
      *
-     * @param mostChoices how many choices of which statements hold the reading writes one
-     *                    comparison out as
-     * @param facing      which way the relation faces the sides the comparison was written with
+     * @param facing which way the relation faces the sides the comparison was written with
      */
     record AComparisonRead(ComparisonReading by, Relation relation, boolean holds,
-                           List<Counted> counts, long mostChoices, Facing facing)
+                           List<Counted> counts, Facing facing)
             implements Derivation {
 
         public AComparisonRead(ComparisonReading by, Relation relation, boolean holds,
-                               long mostChoices, Facing facing) {
-            this(by, relation, holds, List.of(), mostChoices, facing);
+                               Facing facing) {
+            this(by, relation, holds, List.of(), facing);
         }
 
         /**
@@ -2569,16 +2554,6 @@ public sealed interface Derivation {
             Objects.requireNonNull(relation, "a comparison states a relation");
             Objects.requireNonNull(facing, "a relation faces its comparison some way, or none");
             counts = List.copyOf(counts);
-            if (pastTheChoicesRead(relation, mostChoices)) {
-                throw new IllegalArgumentException("a comparison written out as more choices than"
-                        + " are read is stopped at, and not read: " + relation);
-            }
-        }
-
-        /** Whether {@code relation} is a count of statements written out as more than
-         *  {@code mostChoices} choices of which of them hold. */
-        public static boolean pastTheChoicesRead(Relation relation, long mostChoices) {
-            return Proposition.choicesIn(relation, mostChoices) > mostChoices;
         }
 
         @Override
@@ -2594,7 +2569,7 @@ public sealed interface Derivation {
                 throw new IllegalStateException("a relation over " + named
                         + " is read from counts of " + read);
             }
-            return Proposition.compared(relation, holds, mostChoices);
+            return Proposition.compared(relation, holds);
         }
 
         /**

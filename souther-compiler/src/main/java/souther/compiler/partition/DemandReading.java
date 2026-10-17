@@ -839,6 +839,13 @@ final class DemandReading {
                 yield projection.joinedAlike(oneOf(parts, each -> each, (each, _) -> each,
                         Optional.of(any)), parts);
             }
+            // A count of statements is the choices of which of them hold, asked as those are; past
+            // what is written out of them, nothing a row is written toward.
+            case Proposition.SoManyHold counted -> {
+                Proposition choices = counted.choices();
+                yield choices != null ? projected(choices, read, projection)
+                        : List.of(new Read.Unread(new WhyNotTaken.MoreChoicesThanAreWrittenOut()));
+            }
             // One of several statements, which one turning on which application a run meets the
             // condition on: one alternative per statement that can hold, as a disjunction is. A
             // statement of an application no run makes is an alternative too many and never one

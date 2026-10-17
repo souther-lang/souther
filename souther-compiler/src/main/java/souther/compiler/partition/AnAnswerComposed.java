@@ -174,16 +174,7 @@ public final class AnAnswerComposed {
                 continue;
             }
             AnswerAsAnInput.Remade remade = AnswerAsAnInput.of(statement.statement(), at,
-                    subject.rules().inners(), subject.symbols(), pinned,
-                    CompositionBudget.READINGS_OF_ONE_CONDITION.maximum());
-            // A number put at a value can leave a count of statements alone against a constant,
-            // read as more choices of which hold than one condition is read in.
-            if (remade instanceof AnswerAsAnInput.Remade.PastTheFigure) {
-                unaccounted.add(new DemandGap.Uncomposed(each,
-                        DemandGap.WhyNotComposed.NoWayComposedBeforeAFigureEnded.by(
-                                List.of(CompositionBudget.READINGS_OF_ONE_CONDITION))));
-                continue;
-            }
+                    subject.rules().inners(), subject.symbols(), pinned);
             Proposition over = remade instanceof AnswerAsAnInput.Remade.Stated(Proposition stated)
                     ? stated : null;
             List<DemandReading.Read> reads = over == null ? null : statements.asked(over);

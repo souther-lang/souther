@@ -41,6 +41,8 @@ public sealed interface WhyNotTaken {
                     Optional.of(CompositionBudget.READINGS_OF_ONE_CONDITION.figure());
             case MoreAlternativesThanAreTried _ ->
                     Optional.of(CompositionBudget.ALTERNATIVES_A_PATH_TRIES.figure());
+            case MoreChoicesThanAreWrittenOut _ ->
+                    Optional.of(CompositionBudget.PARTS_THE_CHOICES_OF_A_COUNT_COME_TO.figure());
             case OutsideDomain _ -> Optional.empty();
         };
     }
@@ -101,6 +103,14 @@ public sealed interface WhyNotTaken {
      * so its limit is not said of it.
      */
     record MoreAlternativesThanAreTried() implements WhyNotTaken {}
+
+    /**
+     * What the condition means was read, and it holds a count of statements a reader takes by the
+     * choices of which of them hold, and those written out came to more parts than such a reader
+     * is handed ({@link Proposition.SoManyHold#choices}). Raising the figure lifts it; the count
+     * was read and stated whole, so nothing about its meaning is said.
+     */
+    record MoreChoicesThanAreWrittenOut() implements WhyNotTaken {}
 
     /**
      * Where a reader's domain has no words for what a condition means.

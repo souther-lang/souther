@@ -45,27 +45,13 @@ public final class AnswerAsAnInput {
     private final Set<NumericTerm> inputs = new LinkedHashSet<>();
     private final List<LinearForm<Quantity>> comparisons = new ArrayList<>();
 
-    /**
-     * How many choices of which statements hold a comparison remade here is written out as.
-     *
-     * <p>A number put at a value can leave a count of statements alone against a constant, where
-     * the reading that formed the comparison held it to its figure with the number still beside
-     * it; so the figure comes with whoever puts numbers at values. A walk that only asks what a
-     * statement is about puts none, and a relation keeps the shape its reading held it to.
-     */
-    private final long mostChoices;
-    /** Whether a comparison remade here came to more choices than {@link #mostChoices}. */
-    private boolean pastTheFigure;
-
     private AnswerAsAnInput(String head, NewtypeInners inners, Symbols symbols,
-                            Map<NumericTerm, ExactRatio> pinned, boolean askingWhatItIsAbout,
-                            long mostChoices) {
+                            Map<NumericTerm, ExactRatio> pinned, boolean askingWhatItIsAbout) {
         this.head = head;
         this.inners = inners;
         this.symbols = symbols;
         this.pinned = pinned;
         this.askingWhatItIsAbout = askingWhatItIsAbout;
-        this.mostChoices = mostChoices;
     }
 
     /**
@@ -73,14 +59,10 @@ public final class AnswerAsAnInput {
      * input put at the value in {@code pinned}.
      */
     public static Remade of(Proposition stated, String head, NewtypeInners inners,
-                            Symbols symbols, Map<NumericTerm, ExactRatio> pinned,
-                            long mostChoices) {
+                            Symbols symbols, Map<NumericTerm, ExactRatio> pinned) {
         AnswerAsAnInput reading = new AnswerAsAnInput(head, inners, symbols,
-                new LinkedHashMap<>(pinned), false, mostChoices);
+                new LinkedHashMap<>(pinned), false);
         Proposition remade = reading.proposition(stated);
-        if (reading.pastTheFigure) {
-            return new Remade.PastTheFigure();
-        }
         return remade == null ? new Remade.NotAboutTheAnswer() : new Remade.Stated(remade);
     }
 
@@ -143,6 +125,12 @@ public final class AnswerAsAnInput {
                     Proposition::any);
             case Proposition.OnAnApplication applications -> oneOf(applications.each(), pinned,
                     positive, Proposition::onAnApplication);
+            // A count of statements is the choices of which of them hold; past what is written out
+            // of those, no row is composed toward it.
+            case Proposition.SoManyHold counted -> {
+                Proposition choices = counted.choices();
+                yield choices == null ? null : ofTheRow(choices, pinned, positive);
+            }
             // An element of a container of the input. Where no element may meet it, every element
             // still asked the rest is held at the value, which the answer was composed to fail at.
             case Proposition.Some some when !(some.container()
@@ -229,13 +217,6 @@ public final class AnswerAsAnInput {
         /** A part of it is about something other than the answer and the numbers put at
          *  values. */
         record NotAboutTheAnswer() implements Remade {}
-
-        /**
-         * A comparison in it came to a count of statements written out as more choices of which
-         * of them hold than the figure handed in; what the rest of it is about was not looked at
-         * past it.
-         */
-        record PastTheFigure() implements Remade {}
     }
 
     /**
@@ -296,14 +277,13 @@ public final class AnswerAsAnInput {
     public static List<LinearForm<Quantity>> comparisonsIn(Proposition stated, String head,
                                                            NewtypeInners inners,
                                                            Symbols symbols) {
-        AnswerAsAnInput reading = new AnswerAsAnInput(head, inners, symbols, Map.of(), true,
-                Long.MAX_VALUE);
+        AnswerAsAnInput reading = new AnswerAsAnInput(head, inners, symbols, Map.of(), true);
         return reading.proposition(stated) == null ? null : List.copyOf(reading.comparisons);
     }
 
     private static AnswerAsAnInput asking(Proposition stated) {
         AnswerAsAnInput reading =
-                new AnswerAsAnInput("$answer", null, null, Map.of(), true, Long.MAX_VALUE);
+                new AnswerAsAnInput("$answer", null, null, Map.of(), true);
         return reading.proposition(stated) == null ? null : reading;
     }
 
@@ -334,11 +314,8 @@ public final class AnswerAsAnInput {
                 // counted, which {@link Proposition#compared} is what writes.
                 Relation.OneWay<Quantity> one =
                         Relation.OneWay.of(over, holds ? rel : rel.denied());
-                Proposition remade = Proposition.compared(
-                        new Relation.Affine(one.form(), one.proposition()), one.holds(),
-                        mostChoices);
-                pastTheFigure |= remade == null;
-                yield remade;
+                yield Proposition.compared(new Relation.Affine(one.form(), one.proposition()),
+                        one.holds());
             }
             case Proposition.Truth(DecisionSubject of, boolean holds, var _) -> {
                 DecisionSubject at = subject(of);
@@ -382,6 +359,17 @@ public final class AnswerAsAnInput {
                 List<Proposition> each = propositions(applications.each());
                 yield each == null ? null : Proposition.onAnApplication(each);
             }
+            // A count of statements is read as the choices of which of them hold, as a disjunction
+            // is; past what is written out of those, as the same count of each statement made
+            // again.
+            case Proposition.SoManyHold counted -> {
+                Proposition choices = counted.choices();
+                if (choices != null) {
+                    yield proposition(choices);
+                }
+                List<Proposition> each = propositions(counted.statements());
+                yield each == null ? null : counted.over(each);
+            }
             // Over a container of the input, the element's numbers are put at values with every
             // other number of the input, so what is asked of the answer is what the element asks
             // of it at those values. Whether the row holds such an element is the row's.
@@ -421,7 +409,7 @@ public final class AnswerAsAnInput {
             case Proposition.Compared _, Proposition.Truth _, Proposition.InCases _,
                  Proposition.Present _, Proposition.SameValue _, Proposition.LastToHold _,
                  Proposition.SomeReachable _, Proposition.All _, Proposition.Any _,
-                 Proposition.OnAnApplication _, Proposition.Some _ ->
+                 Proposition.OnAnApplication _, Proposition.SoManyHold _, Proposition.Some _ ->
                     !Proposition.aboutAnAnswer(stated)
                             && !Proposition.leavesSomethingUnread(stated);
         };

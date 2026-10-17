@@ -125,6 +125,12 @@ public final class WhatTheDeclarationsLeave {
             // On some application, either way: each statement is denied where it stands.
             case Proposition.OnAnApplication applications ->
                     some(applications.each(), want, read);
+            // A count of statements is the choices of which of them hold, ruled out as those are.
+            case Proposition.SoManyHold counted -> {
+                Proposition choices = counted.choices();
+                yield choices != null ? whetherRuledOut(choices, want, read)
+                        : notAsked(new WhyNotTaken.MoreChoicesThanAreWrittenOut());
+            }
             case Proposition.Unread unread ->
                     notAsked(new WhyNotTaken.MeaningUnread(unread.why()));
             case Proposition.Carried carried -> throw carried.handedToAReader();

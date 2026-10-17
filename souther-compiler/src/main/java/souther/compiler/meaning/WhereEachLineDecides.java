@@ -87,7 +87,9 @@ public final class WhereEachLineDecides {
      * with where each decides.
      *
      * <p>Only the relations that a conjunction or a disjunction joins, and the ones a quantifier
-     * says of the element it chose. What a closure says on each application is one part here.
+     * says of the element it chose. What a closure says on each application is one part here, and
+     * so is a count of statements: one to be read as lines is handed in with its counts written out
+     * as the choices of which statements hold ({@link Proposition#withTheCountsWrittenOut}).
      *
      * <p>A relation inside a quantifier is a line where the row's element the quantifier chose
      * crosses it, and it decides where two things hold at once: the quantifier coming out one way
@@ -926,7 +928,9 @@ public final class WhereEachLineDecides {
             case Proposition.SomeReachable reached -> reached.holds();
             case Proposition.Carried carried -> throw carried.handedToAReader();
             case Proposition.LastToHold last -> last.holds();
-            case Proposition.OnAnApplication _, Proposition.Always _ -> true;
+            // A count is no way round, its denial being the other counts.
+            case Proposition.OnAnApplication _, Proposition.SoManyHold _, Proposition.Always _ ->
+                    true;
             case Proposition.All _, Proposition.Any _ -> throw new IllegalArgumentException(
                     "a part is what a conjunction or a disjunction joins: " + part);
         };

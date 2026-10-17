@@ -81,7 +81,7 @@ class AReadingOfAStringsPiecesConcludesOnlyWhatItsEvidenceGivesTest {
         LawNumber<?> number = law.form().coefs().keySet().iterator().next();
         return Optional.of(Derivation.ALawComparison.of(law, Map.of(number,
                         LinearForm.atom(new DecisionAtom.OfTheInput(counting(of, counted)))),
-                Map.of(), List.of(), 1));
+                Map.of(), List.of()));
     }
 
     /** A character read as matching {@code [a-z]}, {@code within} statements about some piece. */

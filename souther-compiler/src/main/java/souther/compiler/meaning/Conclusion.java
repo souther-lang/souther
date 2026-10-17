@@ -56,11 +56,19 @@ public final class Conclusion {
          *  held at one past it. By identity, since a part held twice is one statement counted
          *  twice wherever it is held. */
         private final Map<Proposition, Long> parts = new IdentityHashMap<>();
+        /** The figure parts are counted up to, and held at one past. */
+        private final long mostParts;
         private int unread;
 
         private Shared(Optional<ModelOccurrence> where, boolean reusing) {
+            this(where, reusing, PARTS);
+        }
+
+        private Shared(Optional<ModelOccurrence> where, boolean reusing,
+                       CompositionBudget countedTo) {
             this.where = where;
             this.reusing = reusing;
+            this.mostParts = countedTo.maximum();
         }
     }
 
@@ -137,6 +145,13 @@ public final class Conclusion {
         return out;
     }
 
+    /** Whether {@code stated} comes to no more parts written out than {@code figure}, counted as
+     *  a step is ({@link #partsIn}). */
+    static boolean withinTheParts(Proposition stated, CompositionBudget figure) {
+        return new Conclusion(new Shared(Optional.empty(), false, figure), Map.of())
+                .partsIn(stated) <= figure.maximum();
+    }
+
     /**
      * How many parts {@code stated} comes to written out — each part as many times as it is held,
      * the statements a count is taken over among them — or one past the figure, where it is past
@@ -164,9 +179,9 @@ public final class Conclusion {
                  Proposition.Some _, Proposition.SomeReachable _, Proposition.Always _,
                  Proposition.Truth _, Proposition.InCases _, Proposition.Present _,
                  Proposition.SameValue _, Proposition.LastToHold _, Proposition.Unread _,
-                 Proposition.Carried _ -> 0;
+                 Proposition.Carried _, Proposition.SoManyHold _ -> 0;
         };
-        long kept = Math.min(out, PARTS.maximum() + 1L);
+        long kept = Math.min(out, shared.mostParts + 1L);
         shared.parts.put(stated, kept);
         return kept;
     }

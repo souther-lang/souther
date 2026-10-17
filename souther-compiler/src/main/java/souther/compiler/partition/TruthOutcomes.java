@@ -163,6 +163,7 @@ final class TruthOutcomes {
                     .reduce(Outcomes.ONLY_FALSE, Outcomes::or);
             case Proposition.OnAnApplication applications -> Outcomes.onSomeApplication(
                     applications.each().stream().map(TruthOutcomes::of).toList());
+            case Proposition.SoManyHold counted -> ofACount(counted);
             case Proposition.Some some -> {
                 Outcomes found = switch (of(some.ofTheElement())) {
                     case ONLY_FALSE -> Outcomes.ONLY_FALSE;
@@ -179,5 +180,53 @@ final class TruthOutcomes {
                 yield reached.holds() ? found : found.denied();
             }
         };
+    }
+
+    /**
+     * Which answers a count of statements can give, from which each statement can.
+     *
+     * <p>The counts the statements can come to, taken as though each came out apart from the
+     * others, are every count they do come to and maybe more: two statements that cannot hold
+     * together are counted here as though they could. So it is said to come out only one way
+     * where every one of those counts says so, and either way otherwise — never one way where a
+     * run could bring it out the other. A statement fixed at an answer nobody named, or one this
+     * cannot say, leaves the counts unknown, and the count is read as the choices it is.
+     */
+    private static Outcomes ofACount(Proposition.SoManyHold counted) {
+        boolean[] comesTo = new boolean[counted.weight() + 1];
+        comesTo[0] = true;
+        for (int one = 0; one < counted.statements().size(); one++) {
+            Outcomes each = of(counted.statements().get(one));
+            if (each == Outcomes.FIXED_UNNAMED || each == Outcomes.UNKNOWN) {
+                Proposition choices = counted.choices();
+                return choices == null ? Outcomes.UNKNOWN : of(choices);
+            }
+            int weight = counted.weights().get(one);
+            boolean[] next = new boolean[comesTo.length];
+            for (int count = 0; count < comesTo.length; count++) {
+                if (!comesTo[count]) {
+                    continue;
+                }
+                if (each.allows(false)) {
+                    next[count] = true;
+                }
+                if (each.allows(true)) {
+                    next[count + weight] = true;
+                }
+            }
+            comesTo = next;
+        }
+        boolean admitted = false;
+        boolean refused = false;
+        for (int count = 0; count < comesTo.length; count++) {
+            if (comesTo[count]) {
+                if (counted.admitted().contains(count)) {
+                    admitted = true;
+                } else {
+                    refused = true;
+                }
+            }
+        }
+        return admitted && refused ? Outcomes.EITHER : Outcomes.only(admitted);
     }
 }

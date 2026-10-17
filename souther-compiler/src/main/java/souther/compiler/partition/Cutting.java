@@ -815,13 +815,18 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                             GuardThresholds.filedAt(comparison, read, reads, answering));
             // Which cases, truths and values the input's positions hold, and no relation of
             // numbers: what an application stating it is ({@link #ofAnApplication}).
-            case Proposition.All _, Proposition.Any _, Proposition.Some _, Proposition.InCases _,
-                 Proposition.Truth _, Proposition.Present _
+            case Proposition.All _, Proposition.Any _, Proposition.SoManyHold _,
+                 Proposition.Some _, Proposition.InCases _, Proposition.Truth _,
+                 Proposition.Present _
                     when statesNoRelation(stated.proposition()) -> new Read.StatesNoRelation();
-            case Proposition.All _, Proposition.Any _
+            case Proposition.All _, Proposition.Any _, Proposition.SoManyHold _
                     when !Proposition.leavesSomethingUnread(stated.proposition()) -> {
-                Read several = several(behavior, comparison.left(), stated.proposition(), read,
-                        reads, lines.get());
+                Proposition written = Proposition.withTheCountsWrittenOut(stated.proposition());
+                if (written == null) {
+                    yield choicesNotWrittenOut(comparison, read, reads, answering);
+                }
+                Read several = several(behavior, comparison.left(), written, read, reads,
+                        lines.get());
                 yield several != null ? several
                         : severalNotDrawn(comparison, read, reads, answering);
             }
@@ -831,7 +836,11 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             // the same parts, read there.
             case Proposition.Some some when some.holds()
                     && !Proposition.leavesSomethingUnread(some) -> {
-                Read several = several(behavior, comparison.left(), some, read, reads,
+                Proposition written = Proposition.withTheCountsWrittenOut(some);
+                if (written == null) {
+                    yield choicesNotWrittenOut(comparison, read, reads, answering);
+                }
+                Read several = several(behavior, comparison.left(), written, read, reads,
                         lines.get());
                 yield several != null ? several
                         : severalNotDrawn(comparison, read, reads, answering);
@@ -1063,7 +1072,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             case Proposition.Always _, Proposition.Unread _, Proposition.Truth _,
                  Proposition.InCases _, Proposition.Present _, Proposition.SameValue _,
                  Proposition.LastToHold _, Proposition.All _, Proposition.Any _,
-                 Proposition.Some _, Proposition.OnAnApplication _, Proposition.SomeReachable _ ->
+                 Proposition.SoManyHold _, Proposition.Some _, Proposition.OnAnApplication _,
+                 Proposition.SomeReachable _ ->
                     BlockReason.WhatItStatesIsNoLine.Why.NO_RELATION_OF_NUMBERS;
             case Proposition.Carried carried -> throw carried.handedToAReader();
         });
@@ -1107,6 +1117,20 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
     }
 
     /**
+     * A statement read to the end that holds a count of statements whose choices of which hold,
+     * written out to be read as lines, come to more parts than are written out for that
+     * ({@link Proposition.SoManyHold#choices}): where its lines decide was not worked out, at that
+     * figure, at each place the comparison is filed at.
+     */
+    private static Read choicesNotWrittenOut(StatedComparison comparison, InputReading read,
+                                             InputReads reads, Arrivals answering) {
+        return new Read.Stopped(ComparisonAssessment.atEachOf(
+                GuardThresholds.filedAt(comparison, read, reads, answering),
+                new BlockReason.WhereALineDecidesNotWorkedOut(
+                        CompositionBudget.PARTS_THE_CHOICES_OF_A_COUNT_COME_TO.figure())));
+    }
+
+    /**
      * What an application of an operation answering a truth states, read to the end, on the input:
      * the lines its relations draw, or the values it relates — or null where it is neither.
      *
@@ -1125,8 +1149,9 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
     static Read ofAnApplication(String behavior, Core application, Proposition stated,
                                 InputReading read, InputReads reads,
                                 AuthorsLines authors) {
-        if (several(behavior, application, stated, read, reads, Optional.of(authors))
-                instanceof Read.Several lines) {
+        Proposition written = Proposition.withTheCountsWrittenOut(stated);
+        if (written != null && several(behavior, application, written, read, reads,
+                Optional.of(authors)) instanceof Read.Several lines) {
             return lines;
         }
         List<FilingCoordinate> related = valuesItRelates(stated);
@@ -1182,6 +1207,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             case Proposition.Some some -> sameValuesIn(some.ofTheElement(), out);
             case Proposition.All all -> all.parts().forEach(each -> sameValuesIn(each, out));
             case Proposition.Any any -> any.parts().forEach(each -> sameValuesIn(each, out));
+            case Proposition.SoManyHold counted ->
+                    counted.statements().forEach(each -> sameValuesIn(each, out));
             default -> { }
         }
     }
@@ -1200,6 +1227,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                     && statesNoRelation(some.ofTheElement());
             case Proposition.All all -> all.parts().stream().allMatch(Cutting::statesNoRelation);
             case Proposition.Any any -> any.parts().stream().allMatch(Cutting::statesNoRelation);
+            case Proposition.SoManyHold counted ->
+                    counted.statements().stream().allMatch(Cutting::statesNoRelation);
             // Settled, a relation, two values being one, or something nobody read: each is read
             // as what it is ({@link #readOnce}).
             case Proposition.Always _, Proposition.Compared _, Proposition.SameValue _,
@@ -1239,6 +1268,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             case Proposition.LastToHold _ -> true;
             case Proposition.All all -> all.parts().stream().allMatch(each -> relates(each, out));
             case Proposition.Any any -> any.parts().stream().allMatch(each -> relates(each, out));
+            case Proposition.SoManyHold counted ->
+                    counted.statements().stream().allMatch(each -> relates(each, out));
             default -> false;
         };
     }
@@ -1386,6 +1417,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             case Proposition.Compared _ -> true;
             case Proposition.All all -> all.parts().stream().anyMatch(Cutting::holdsARelation);
             case Proposition.Any any -> any.parts().stream().anyMatch(Cutting::holdsARelation);
+            case Proposition.SoManyHold counted ->
+                    counted.statements().stream().anyMatch(Cutting::holdsARelation);
             case Proposition.Some some -> some.holds() && holdsARelation(some.ofTheElement());
             default -> false;
         };
@@ -1396,6 +1429,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         return switch (stated) {
             case Proposition.All all -> all.parts().stream().allMatch(Cutting::onlyRelations);
             case Proposition.Any any -> any.parts().stream().allMatch(Cutting::onlyRelations);
+            case Proposition.SoManyHold counted ->
+                    counted.statements().stream().allMatch(Cutting::onlyRelations);
             case Proposition.Compared _ -> true;
             default -> false;
         };
