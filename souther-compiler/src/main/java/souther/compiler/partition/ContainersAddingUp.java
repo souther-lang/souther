@@ -785,6 +785,8 @@ final class ContainersAddingUp {
             // choosing which elements repeat ({@link CardinalityComposer#composeAlike}).
             case NumericTerm.Multiplicity among -> throw new IllegalStateException(
                     among + " is composed by repeating elements, and nothing here adds it up");
+            case NumericTerm.ExtremeOfItsKey extreme -> throw new IllegalStateException(
+                    extreme + " is written as one value, and nothing here adds it up");
         };
     }
 

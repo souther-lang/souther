@@ -1006,9 +1006,9 @@ final class Pullback {
      * The position of the input whose holding something is what the container {@code container}
      * holding something comes to, or empty where there is none.
      *
-     * <p>A container at a position of the input is that position. A map built by filing a counter
-     * under the key of each element of a list ({@link KeyedAccumulation}) has an entry for each
-     * element, so it holds something exactly where the list does. Any other container — a filter
+     * <p>A container at a position of the input is that position. A map built by filing under the
+     * key of each element of a list ({@link KeyedAccumulation}) has an entry for each element's
+     * key, so it holds something exactly where the list does. Any other container — a filter
      * of one, say — may be empty with what it was made of not, and is not read back to it.
      */
     static Optional<TermPath> positionHoldingWhatItHolds(Denotation container,
@@ -1428,10 +1428,10 @@ final class Pullback {
         record APiece(Pieces of) implements ElementAt {}
 
         /**
-         * An entry of a map a fold built by filing a counter under the key of each element of a
-         * list ({@link KeyedAccumulation}): whichever element's key the entry is for. It is no
-         * value of the input and stands at no position, so what a statement about it is about is
-         * how often its key occurs.
+         * An entry of a map a fold built by filing under the key of each element of a list
+         * ({@link KeyedAccumulation}): whichever element's key the entry is for. It is no value of
+         * the input and stands at no position, so what a statement about it is about is what the
+         * elements of its key come to.
          */
         record AnEntry() implements ElementAt {}
 
@@ -4368,14 +4368,14 @@ final class Pullback {
 
     /**
      * The value filed under the key of an entry, where {@code node} is the value a walk hands its
-     * closure for each entry of a map built by filing a counter under the key of each element of a
-     * list ({@link KeyedAccumulation}) — or null where it is no such value.
+     * closure for each entry of a map built by filing under the key of each element of a list
+     * ({@link KeyedAccumulation}) — or null where it is no such value.
      *
-     * <p>How often the key occurs among the elements, shifted and scaled by what the fold starts
-     * the counter at and adds to it: the first element of a key files {@code first} and each
-     * further one adds {@code step}, so the value is {@code first + step * (occurrences - 1)}. The
-     * key of an element is one number of it, and the elements' own is the number the entry is
-     * about.
+     * <p>The key of an element is one number of it, and what the elements of that key come to is
+     * a number of the element the entry is about: how often the key occurs, for a counter, and the
+     * end of the values its elements file, for an end kept. An element files under its own key, so
+     * each element of a key reads the same number and some entry meets a statement exactly where
+     * some element does.
      */
     private LinearForm<Quantity> valueOfAnEntry(Core node, InputReads at) {
         Core container = at.containerOfTheElement(node);
@@ -4389,22 +4389,44 @@ final class Pullback {
         }
         Denotation walked = holdingEachAsOften(whole.at().standing(filed.walked(),
                 read.rules().symbols(), read.rules().newtypes()));
-        Denotation key = whole.at().standing(filed.key(), read.rules().symbols(),
-                read.rules().newtypes());
         if (!(walked.at().pathOf(walked.value(), read.rules().newtypes())
-                instanceof PathResolution.At(TermPath held))
-                || !(whole.at().pathOf(key.value(), read.rules().newtypes())
-                instanceof PathResolution.At(TermPath place))) {
+                instanceof PathResolution.At(TermPath held))) {
             return null;
         }
+        TermPath place = placeOf(whole, filed.key());
+        if (place == null) {
+            return null;
+        }
+        return switch (filed.filed()) {
+            case KeyedAccumulation.Filed.Counted counted -> counted(held, place, counted);
+            case KeyedAccumulation.Filed.Kept kept -> {
+                TermPath value = placeOf(whole, kept.value());
+                NumericTerm.ExtremeOfItsKey extreme = value == null ? null
+                        : NumericTerm.ExtremeOfItsKey.of(held, place, value, kept.extreme());
+                yield readOnAnOrder(extreme)
+                        ? LinearForm.atom(new DecisionAtom.OfTheInput(extreme)) : null;
+            }
+        };
+    }
+
+    /** The position {@code e}, read where {@code whole} stands, is, or null where it is none. */
+    private TermPath placeOf(Denotation whole, Core e) {
+        Denotation standing = whole.at().standing(e, read.rules().symbols(),
+                read.rules().newtypes());
+        return whole.at().pathOf(standing.value(), read.rules().newtypes())
+                instanceof PathResolution.At(TermPath place) ? place : null;
+    }
+
+    /**
+     * How often the key at {@code place} occurs among the elements of {@code held}, shifted and
+     * scaled by what the fold starts the counter at and adds to it: the first element of a key
+     * files {@code first} and each further one adds {@code step}, so the value is
+     * {@code first + step * (occurrences - 1)}.
+     */
+    private LinearForm<Quantity> counted(TermPath held, TermPath place,
+                                         KeyedAccumulation.Filed.Counted filed) {
         NumericTerm.Multiplicity occurrences = NumericTerm.Multiplicity.of(held, place);
-        if (occurrences == null) {
-            return null;
-        }
-        // Which values are the same is the order the key stands on, so a key on none is a key
-        // nothing here can count: it is left unread rather than read as a number nothing reads.
-        TermOrders orders = read.quantities().ordersOf(occurrences);
-        if (orders == null || orders.observed() == null) {
+        if (!readOnAnOrder(occurrences)) {
             return null;
         }
         if (filed.step().signum() == 0) {
@@ -4415,6 +4437,24 @@ final class Pullback {
                 ? new LinearForm<>(constant, Map.of(
                         new DecisionAtom.OfTheInput(occurrences), filed.step()))
                 : null;
+    }
+
+    /**
+     * Whether {@code term} is a number of the elements read on an order, and so one a statement
+     * about an entry can be read as.
+     *
+     * <p>Which elements are of one key is the order the key stands on, so a key on none is a key
+     * nothing here can tell apart: it is left unread rather than read as a number nothing reads.
+     * The same for values on no order, one end of which is no number.
+     */
+    private boolean readOnAnOrder(NumericTerm term) {
+        if (term == null) {
+            return false;
+        }
+        TermOrders orders = read.quantities().ordersOf(term);
+        return orders != null && orders.observed() != null
+                && !(term instanceof NumericTerm.ExtremeOfItsKey extreme
+                && orders.fieldCarrier(extreme.keyField()) == null);
     }
 
     /**

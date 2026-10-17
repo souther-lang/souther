@@ -1542,6 +1542,10 @@ class EverySchemaWordIsAccountedForTest {
         // about it for the same reason.
         held.add("/$defs/partition/properties/boundaries/items/properties/besides/items"
                 + "/properties/standing");
+        // Which code points a count of a string is of, and which end of a key's values a number
+        // takes: each written by a switch over a sealed type's arms for the same reason.
+        held.add("/$defs/termId/oneOf/3/properties/class");
+        held.add("/$defs/termId/oneOf/5/properties/extreme");
         // Why a condition nothing read was not, by kind and by the word within it. Written by a
         // switch over the sealed reasons and the enums under them, for the reason the two above
         // are, and held to the schema by the same validation of the corpus documents.
