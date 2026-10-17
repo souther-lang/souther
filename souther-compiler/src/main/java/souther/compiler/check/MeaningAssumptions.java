@@ -612,11 +612,19 @@ final class MeaningAssumptions {
      * fact a path holds however many numbers are in them.
      */
     private void takingOneOf(Proposition.Any any) {
-        Set<FactSubject> numbers = new LinkedHashSet<>();
-        WholeNumberRuns values = leftOf(any, numbers);
-        if (values != null && numbers.size() == 1) {
-            holdingTheValues(numbers.iterator().next(), values);
-            return;
+        // Which number the parts compare is asked of the statement before anything is named, so
+        // a choice over several numbers costs nothing here, and the one number of a choice over
+        // one is named once and not once for each comparison.
+        Set<Quantity> numbers = new LinkedHashSet<>();
+        if (comparesOnlyNumbers(any, numbers) && numbers.size() == 1
+                && isAWholeNumber(numbers.iterator().next())
+                && atomAt(numbers.iterator().next()) instanceof AtomAt.Named(FactSubject number)
+                && terms.kindsOf(LinearForm.atom(number)).get(number) == Granularity.DISCRETE) {
+            WholeNumberRuns values = leftOf(any);
+            if (values != null) {
+                holdingTheValues(number, values);
+                return;
+            }
         }
         List<MeaningAssumptions> left = new ArrayList<>();
         for (Proposition part : any.parts()) {
@@ -657,23 +665,45 @@ final class MeaningAssumptions {
     }
 
     /**
-     * The whole numbers {@code stated} leaves the one number it compares, with that number added to
-     * {@code numbers} — or null where some part of it is no comparison of a whole number a path
-     * names, or a threshold is one the exact arithmetic cannot step from.
+     * Whether every part of {@code stated} is a comparison of one number weighed by something other
+     * than nought, or settled whatever the numbers are — with each number compared added to
+     * {@code numbers}. Asked of the statement alone, so nothing is named.
+     */
+    private static boolean comparesOnlyNumbers(Proposition stated, Set<Quantity> numbers) {
+        return switch (stated) {
+            case Proposition.Always _ -> true;
+            case Proposition.All all ->
+                    all.parts().stream().allMatch(part -> comparesOnlyNumbers(part, numbers));
+            case Proposition.Any any ->
+                    any.parts().stream().allMatch(part -> comparesOnlyNumbers(part, numbers));
+            case Proposition.Compared(Relation.Affine(LinearForm<Quantity> form, Rel _),
+                                      boolean _, var _)
+                    when form.coefs().size() == 1
+                    && form.coefs().values().iterator().next().signum() != 0 -> {
+                numbers.add(form.coefs().keySet().iterator().next());
+                yield true;
+            }
+            default -> false;
+        };
+    }
+
+    /**
+     * The whole numbers {@code stated} leaves the one number it compares, which
+     * {@link #comparesOnlyNumbers} has said it is over — or null where a threshold is one the exact
+     * arithmetic cannot step from.
      *
      * <p>Every part is read, and each exactly: a part this cannot say exactly leaves the whole to be
-     * taken some other way, since a set that left out values a part lets through would be a path
-     * refusing them. Which numbers the parts compare is gathered rather than checked here; the
-     * caller holds the answer only where they are one.
+     * taken some other way, since runs that left out values a part lets through would be a path
+     * refusing them.
      */
-    private WholeNumberRuns leftOf(Proposition stated, Set<FactSubject> numbers) {
+    private static WholeNumberRuns leftOf(Proposition stated) {
         return switch (stated) {
             case Proposition.Always(boolean holds) ->
                     holds ? WholeNumberRuns.EVERY : WholeNumberRuns.NONE;
             case Proposition.All all -> {
                 WholeNumberRuns out = WholeNumberRuns.EVERY;
                 for (Proposition part : all.parts()) {
-                    WholeNumberRuns each = leftOf(part, numbers);
+                    WholeNumberRuns each = leftOf(part);
                     if (each == null) {
                         yield null;
                     }
@@ -684,7 +714,7 @@ final class MeaningAssumptions {
             case Proposition.Any any -> {
                 WholeNumberRuns out = WholeNumberRuns.NONE;
                 for (Proposition part : any.parts()) {
-                    WholeNumberRuns each = leftOf(part, numbers);
+                    WholeNumberRuns each = leftOf(part);
                     if (each == null) {
                         yield null;
                     }
@@ -693,31 +723,21 @@ final class MeaningAssumptions {
                 yield out;
             }
             case Proposition.Compared(Relation.Affine(LinearForm<Quantity> form, Rel p),
-                                      boolean holds, var _) ->
-                    leftBy(form, holds ? p : p.denied(), numbers);
-            default -> null;
+                                      boolean holds, var _) -> leftBy(form, holds ? p : p.denied());
+            default -> throw new IllegalStateException(
+                    "a part that compares no number was let through: " + stated);
         };
     }
 
-    /** The whole numbers {@code form rel 0} leaves the one number it is over, as
-     *  {@link #leftOf} says. */
-    private WholeNumberRuns leftBy(LinearForm<Quantity> form, Rel rel, Set<FactSubject> numbers) {
-        if (form.coefs().size() != 1 || !isAWholeNumber(form.coefs().keySet().iterator().next())
-                || !(formAt(form) instanceof FormAt.Named(LinearForm<FactSubject> over))
-                || over.coefs().size() != 1) {
+    /** The whole numbers {@code form rel 0} leaves the one number it is over. */
+    private static WholeNumberRuns leftBy(LinearForm<Quantity> form, Rel rel) {
+        ExactRatio weight = form.coefs().values().iterator().next();
+        if (!(form.constant().negated().dividedBy(weight)
+                instanceof ExactAnswer.Held<ExactRatio>(ExactRatio threshold))) {
             return null;
         }
-        Map.Entry<FactSubject, ExactRatio> only = over.coefs().entrySet().iterator().next();
-        if (only.getValue().signum() == 0
-                || terms.kindsOf(over).get(only.getKey()) != Granularity.DISCRETE
-                || !(over.constant().negated().dividedBy(only.getValue())
-                        instanceof ExactAnswer.Held<ExactRatio>(ExactRatio threshold))) {
-            return null;
-        }
-        numbers.add(only.getKey());
         // Weighed below nought, the number stands the other way round to where the form does.
-        return WholeNumberRuns.standing(only.getValue().signum() < 0 ? rel.turned() : rel,
-                threshold);
+        return WholeNumberRuns.standing(weight.signum() < 0 ? rel.turned() : rel, threshold);
     }
 
     /**
@@ -735,8 +755,9 @@ final class MeaningAssumptions {
                 yield type != null
                         && Carrier.ofValue(type, terms.declarations()) instanceof Carrier.Whole;
             }
-            case DecisionAtom.OfTheInput(NumericTerm.TakenOf _),
-                 Quantity.RemainderOfADividend _ -> true;
+            case DecisionAtom.OfTheInput(NumericTerm.TakenOf taken) ->
+                    taken.takenAs() instanceof TakenAs.TheFloorRemainder || isASize(taken);
+            case Quantity.RemainderOfADividend _ -> true;
             default -> false;
         };
     }

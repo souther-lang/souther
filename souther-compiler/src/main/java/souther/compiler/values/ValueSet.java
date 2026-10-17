@@ -3,6 +3,7 @@ package souther.compiler.values;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.WholeNumberRuns;
+import net.unit8.notation199x.pattern.Meter;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -32,7 +33,8 @@ import java.util.Set;
  *
  * <p><b>A set, and nothing about what it cost.</b> Two of these are put together by {@link Sets},
  * which is where the allowance for building a machine lives — so a set is a value wherever it came
- * from, and two equal sets are equal. Written here, a meet would be an operation with no answer for
+ * from, and two equal sets are equal, but for the one pair of spellings {@link WholeRuns} says it
+ * keeps. Written here, a meet would be an operation with no answer for
  * the case where the exact one is too much work, and the only thing left to do would be to fail in
  * the middle of a method that is supposed to be total.
  */
@@ -205,7 +207,7 @@ public sealed interface ValueSet {
     /** The one number of each run of {@code apart}, as values. */
     private static Set<Value> numbersOf(WholeNumberRuns apart) {
         Set<Value> out = new LinkedHashSet<>();
-        apart.runs().forEach(run -> out.add(new Value.Number(new BigDecimal(run.from()))));
+        apart.runs().forEach(run -> out.add(Value.number(new BigDecimal(run.from()))));
         return out;
     }
 
@@ -262,9 +264,10 @@ public sealed interface ValueSet {
         if (other instanceof Finite) {
             return other.sharesAnythingWith(this);
         }
-        // Runs against runs is the runs both hold, which is ends and not values.
-        if (this instanceof WholeRuns mine && other instanceof WholeRuns theirs) {
-            return !mine.numbers().and(theirs.numbers()).isNone();
+        // Runs against anything is what the two leave together, which is read off the ends and the
+        // values written out and builds nothing.
+        if (this instanceof WholeRuns || other instanceof WholeRuns) {
+            return !Sets.metUnder(this, other, Meter.refusing()).isEmpty();
         }
         // Neither is finite, so each admits values without end and no finite thing either of them
         // holds out can be the whole of what the other has.

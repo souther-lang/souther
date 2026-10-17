@@ -372,6 +372,36 @@ class AFloorRemainderIsAnOrdinaryNumberOfThePositionItIsTakenOfTest {
         }
     }
 
+    /**
+     * The remainder of a moved place against another position is read as the stretches of the
+     * place's remainder with the moved remainder against the position on each, and the rows built
+     * stand on both sides of what the run time says of them.
+     */
+    @Test
+    void theRowsBuiltForAMovedRemainderAgainstAPositionStandOnBothSides() {
+        for (String relation : List.of("<", "==", ">=")) {
+            String condition = "Int.floorMod(x + 3, 7) " + relation + " y";
+            Set<Boolean> sides = new TreeSet<>();
+            for (BorderAssessment border : linesOf("x: Int, y: Int", condition)) {
+                for (ItemAssessment.Owed owed : owedItems(border)) {
+                    for (ItemAssessment.Attempt attempt : owed.searches().each()) {
+                        if (attempt instanceof ItemAssessment.Attempt.Certified certified) {
+                            long x = Long.parseLong(certified.row().inputs().get(0).text());
+                            long y = Long.parseLong(certified.row().inputs().get(1).text());
+                            long moved = Math.floorMod(x + 3, 7L);
+                            sides.add(switch (relation) {
+                                case "<" -> moved < y;
+                                case "==" -> moved == y;
+                                default -> moved >= y;
+                            });
+                        }
+                    }
+                }
+            }
+            assertEquals(Set.of(false, true), sides, condition);
+        }
+    }
+
     /** Each line {@code body} draws, with the value of {@code x} and the point of each row built
      *  for it. */
     private static List<String> drawn(String body) {

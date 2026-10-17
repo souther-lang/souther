@@ -558,6 +558,44 @@ class AGuardTheGuardsAboveItRuleOutIsProvenTest {
     }
 
     /**
+     * A remainder of a moved place compared with another value is the same stretches of the
+     * place's remainder, each with the moved remainder there against the value — so what a guard
+     * against a number left it reaches the guard against the value, named or written out.
+     */
+    @Test
+    void aGuardOverAMovedRemainderAgainstAnotherValueKeepsWhatTheGuardsAboveSay() {
+        for (String guards : List.of("""
+                guard b.value >= 5 else Free
+                let x = Int.floorMod(a.value + 1, 7)
+                guard x < 5 else Free
+                guard x < b.value else Free
+                """, """
+                guard b.value >= 5 else Free
+                guard Int.floorMod(a.value + 1, 7) < 5 else Free
+                guard Int.floorMod(a.value + 1, 7) < b.value else Free
+                """, """
+                guard b.value >= 7 else Free
+                guard Int.floorMod(a.value + 3, 7) /= b.value else Free
+                """)) {
+            String source = """
+                    module d
+
+                    data Amount = Int invariant value >= 0 && value <= 1000
+                    data Free
+                    data Charged = { yen: Int }
+
+                    behavior charge : (a: Amount, b: Amount) -> Free | Charged
+                        constructs Charged
+                    let charge (a, b) = {
+                    %s    Charged { yen = 1 }
+                    }
+                    """.formatted(guards.indent(4));
+            assertEquals(1, provenIn(source, "charge").size(),
+                    () -> "under five and at least five, or at least seven, is apart:\n" + guards);
+        }
+    }
+
+    /**
      * A choice between comparisons of two numbers is no set of values of either: one being small
      * says nothing of the other, so the second guard's departure is taken by a value the first let
      * through on the other number.

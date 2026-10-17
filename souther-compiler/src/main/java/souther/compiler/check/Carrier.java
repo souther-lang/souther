@@ -1519,7 +1519,7 @@ public sealed interface Carrier extends ValueOrder {
                 for (WholeNumberRuns.Run run : inside.runs()) {
                     for (BigInteger n = run.from(); n.compareTo(run.to()) <= 0;
                          n = n.add(BigInteger.ONE)) {
-                        out.add(new Value.Number(new BigDecimal(n)));
+                        out.add(valueAt(new Count(new BigDecimal(n))));
                     }
                 }
                 yield Admits.of(out, atMost);
