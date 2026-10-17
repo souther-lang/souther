@@ -96,6 +96,18 @@ public record HeldOutcome(List<RowDemand> demands, Reachability.Reaching reachin
             }
         }
 
+        /**
+         * The ways a row could be held to it were more than {@code figure} lets be looked at, and
+         * none was found before it stopped the looking. This compiler's, as nothing found is, and
+         * with the figure, which is a number somebody can raise.
+         */
+        record LeftUnlooked(CompositionBudget figure) implements Bringing {
+
+            public LeftUnlooked {
+                Objects.requireNonNull(figure, "the figure that stopped the looking");
+            }
+        }
+
         /** No value can stand on the side the comparison comes out on, so nothing does. */
         record NoValueCanStandThere() implements Bringing {}
 

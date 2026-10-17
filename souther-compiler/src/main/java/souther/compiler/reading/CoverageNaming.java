@@ -126,7 +126,7 @@ final class CoverageNaming implements Naming<Outcome> {
         }
         // Which construct of the model the decision is of: the application answering here where
         // one does, which is the rule the author wrote and drew a line by, and otherwise the
-        // comparison ({@link CoverageSites.Plan#outcomeAt}).
+        // comparison, which the plan answers (Plan.outcomeAt).
         ControlPlace.Outcome outcome = plan.outcomeAt(comparison, held).orElse(null);
         if (outcome == null) {
             return null;

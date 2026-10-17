@@ -97,27 +97,48 @@ public record RepairShortfall(List<Generator.Purpose> soughtFor, CoverageSites.A
     public sealed interface WayPast {
 
         /**
-         * Looked for, and the search composed nothing that goes this way.
+         * Looked for, and no search composed anything that goes this way.
          *
-         * <p>What the search came to in its own words, with what it found out beside them. A word
-         * this compiler fell short with and a word the model settles stay the words they are —
-         * that nothing here could compose a value is not that the rules leave none.
+         * <p>What the searches came to in their own words, with what they found out beside them.
+         * A word this compiler fell short with and a word the model settles stay the words they
+         * are — that nothing here could compose a value is not that the rules leave none.
+         *
+         * @param came what every search the way was held along came to, each word once
+         *             ({@link CameToNothing#joined}): a way held along several ways is several
+         *             searches, and none of them is the way's alone. One or more
          */
-        record Searched(CameToNothing came) implements WayPast {}
+        record Searched(List<CameToNothing> came) implements WayPast {
+
+            public Searched {
+                came = List.copyOf(came);
+                if (came.isEmpty()) {
+                    throw new IllegalArgumentException("a way searched came to something");
+                }
+            }
+        }
 
         /**
-         * Looked for until a figure stopped the looking: a row the search had to run was one the
-         * runs had none left for, or some of the ways the way can be held along were more than are
-         * looked along.
+         * Looked for until a figure stopped the looking: a row a search had to run was one the
+         * runs had none left for, or the ways the way can be held along were more than are
+         * looked along or looked at.
          *
          * <p>For the runs, only where a run was refused. A row run already costs nothing to look at
          * again, so a search made with no runs left can still answer from rows run before, and one
          * that did is {@link Searched} or a row that goes on — never this.
          *
-         * @param came   what the search had come to when it stopped
+         * @param came   what the searches made had come to, each word once, and none where the
+         *               figure stopped the looking before any search was made
          * @param figure what ran out
          */
-        record CutShort(CameToNothing came, CompositionBudget figure) implements WayPast {}
+        record CutShort(List<CameToNothing> came, CompositionBudget figure) implements WayPast {
+
+            public CutShort {
+                came = List.copyOf(came);
+                if (figure == null) {
+                    throw new IllegalArgumentException("a way cut short was cut by some figure");
+                }
+            }
+        }
 
         /** Not looked for, because nothing here can hold a row to it. */
         record NotSearchable(Barrier why) implements WayPast {}

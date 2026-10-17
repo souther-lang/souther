@@ -251,6 +251,64 @@ final class OneOfEach {
         return new Walked.Open<>(ways, stoppedBy);
     }
 
+    /**
+     * One of each of {@code parts} taken together: every combination where they are no more than
+     * {@code most}, and otherwise each of each part once beside the first of every other part.
+     *
+     * @param ways     every combination, the first part's turning slowest; or the first of every
+     *                 part, and then each part's second beside the others' firsts before any
+     *                 part's third, and no more than the figure — so that where it stops, no part
+     *                 was passed over for another's
+     * @param everyWay whether {@code ways} is every combination
+     */
+    record Taken<T>(List<List<T>> ways, boolean everyWay) {
+
+        Taken {
+            ways = ways.stream().map(List::copyOf).toList();
+        }
+    }
+
+    /** {@code parts}, each one or more, taken together as {@link Taken} says, by {@code most}. */
+    static <T> Taken<T> ofEachPart(List<List<T>> parts, int most) {
+        long every = 1;
+        for (List<T> part : parts) {
+            every = Math.min(every * part.size(), most + 1L);
+        }
+        if (every <= most) {
+            List<List<T>> out = new ArrayList<>();
+            out.add(List.of());
+            for (List<T> part : parts) {
+                List<List<T>> wider = new ArrayList<>();
+                for (List<T> before : out) {
+                    for (T one : part) {
+                        List<T> with = new ArrayList<>(before);
+                        with.add(one);
+                        wider.add(with);
+                    }
+                }
+                out = wider;
+            }
+            return new Taken<>(out, true);
+        }
+        List<T> firsts = parts.stream().map(List::getFirst).toList();
+        List<List<T>> out = new ArrayList<>();
+        out.add(firsts);
+        int longest = parts.stream().mapToInt(List::size).max().orElse(1);
+        for (int way = 1; way < longest; way++) {
+            for (int part = 0; part < parts.size(); part++) {
+                if (out.size() == most) {
+                    return new Taken<>(out, false);
+                }
+                if (way < parts.get(part).size()) {
+                    List<T> one = new ArrayList<>(firsts);
+                    one.set(part, parts.get(part).get(way));
+                    out.add(one);
+                }
+            }
+        }
+        return new Taken<>(out, false);
+    }
+
     /** Whether the combinations of one open way of each group are no more than {@code most}. */
     private static <E> boolean noMoreThan(int most, List<List<Map<E, Integer>>> open) {
         long out = 1;

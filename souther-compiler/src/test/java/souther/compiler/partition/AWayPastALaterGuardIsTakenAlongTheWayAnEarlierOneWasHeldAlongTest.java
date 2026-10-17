@@ -17,7 +17,6 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -58,9 +57,11 @@ class AWayPastALaterGuardIsTakenAlongTheWayAnEarlierOneWasHeldAlongTest {
         HeldOutcome.Bringing.Found later =
                 assertInstanceOf(HeldOutcome.Bringing.Found.class, read.holding(1));
         // The later guard's way whole, which splits at the earlier guard.
-        HeldOutcome whole = later.ways().getLast();
-        assertFalse(whole.reaching().along().isEmpty(),
-                "the way to the later guard splits at the earlier one: " + whole);
+        HeldOutcome whole = later.ways().stream()
+                .filter(one -> !one.reaching().along().isEmpty())
+                .findFirst().orElse(null);
+        assertNotNull(whole, () -> "the way to the later guard splits at the earlier one: "
+                + later.ways());
         // Each of the earlier guard's ways that asks something of one list alone.
         List<HeldOutcome> alongOne = earlier.ways().stream()
                 .filter(one -> !whole.reaching().boundedOnTheWay()

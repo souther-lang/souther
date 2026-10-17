@@ -152,18 +152,29 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
         if (copies == null) {
             return new HeldOutcome.Bringing.NothingFound();
         }
-        // Each copy a way of its own, in the order the walk met them.
+        // Each copy a way of its own, in the order the walk met them, and two copies met alike
+        // one way: told apart here, where one condition is asked, and not where every condition
+        // is filed.
         List<HeldOutcome> ways = new ArrayList<>();
         Optional<CompositionBudget> cutShort = Optional.empty();
-        for (ConditionOnTheWay copy : copies) {
-            if (held(copy, held, declarations)
-                    instanceof HeldOutcome.Bringing.Found(var found, var left)) {
-                ways.addAll(found);
-                cutShort = cutShort.or(() -> left);
+        for (ConditionOnTheWay copy : copies.size() == 1 ? copies
+                : List.copyOf(new LinkedHashSet<>(copies))) {
+            switch (held(copy, held, declarations)) {
+                case HeldOutcome.Bringing.Found(var found, var left) -> {
+                    ways.addAll(found);
+                    cutShort = cutShort.or(() -> left);
+                }
+                case HeldOutcome.Bringing.LeftUnlooked(var figure) ->
+                        cutShort = cutShort.or(() -> Optional.of(figure));
+                case HeldOutcome.Bringing.NothingFound _,
+                     HeldOutcome.Bringing.NoValueCanStandThere _ -> { }
             }
         }
-        return ways.isEmpty() ? new HeldOutcome.Bringing.NothingFound()
-                : new HeldOutcome.Bringing.Found(ways, cutShort);
+        if (!ways.isEmpty()) {
+            return new HeldOutcome.Bringing.Found(ways, cutShort);
+        }
+        return cutShort.<HeldOutcome.Bringing>map(HeldOutcome.Bringing.LeftUnlooked::new)
+                .orElseGet(HeldOutcome.Bringing.NothingFound::new);
     }
 
     /**
@@ -193,8 +204,14 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
      * the way to it splits into, and along the way whole after them, which every row past it is
      * on.
      *
+     * <p>The way whole first, and the ways it splits into after it. A row composed along the way
+     * whole is composed against less, and found there is a row past the condition all the same;
+     * the ways it splits into are each more of what was asked, looked along where the whole came
+     * to nothing.
+     *
      * <p>An alternative asking something this reading could not state is no way to hold a row to,
-     * and neither is one asking nothing; the others still are.
+     * and neither is one asking nothing; the others still are. And where the figure stopped the
+     * walk before it found an alternative to hold a row to, that is said, with the figure.
      */
     private static HeldOutcome.Bringing held(ConditionOnTheWay met, boolean held,
                                              SearchRegion declarations) {
@@ -202,13 +219,21 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
             return new HeldOutcome.Bringing.NothingFound();
         }
         List<OnTheWay> asked = held ? met.holding() : met.failing();
-        if (!(new WayToTheBorder(asked).along()
-                instanceof OneOfEach.Walked.Open<OnTheWay, Reachability>(var alternatives,
-                        var stoppedBy))) {
-            return new HeldOutcome.Bringing.NothingFound();
+        List<OneOfEach.Way<OnTheWay>> alternatives;
+        CompositionBudget cutShort;
+        switch (new WayToTheBorder(asked).along()) {
+            case OneOfEach.Walked.Open<OnTheWay, Reachability>(var open, var stoppedBy) -> {
+                alternatives = open;
+                cutShort = stoppedBy;
+            }
+            case OneOfEach.Walked.Stopped<OnTheWay, Reachability>(var figure) -> {
+                return new HeldOutcome.Bringing.LeftUnlooked(figure);
+            }
+            case OneOfEach.Walked.Closed<OnTheWay, Reachability> _ -> {
+                return new HeldOutcome.Bringing.NothingFound();
+            }
         }
         List<HeldOutcome> ways = new ArrayList<>();
-        CompositionBudget cutShort = stoppedBy;
         for (OneOfEach.Way<OnTheWay> alternative : alternatives) {
             // An alternative whose choices the figure left is not what the condition asks, and the
             // figure is already said.
@@ -225,16 +250,19 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
                     instanceof Reachability.Reaching reaching)) {
                 continue;
             }
+            ways.add(new HeldOutcome(demands, reaching));
             for (Reachability.Reaching along : reaching.along()) {
                 ways.add(new HeldOutcome(demands, along));
             }
-            ways.add(new HeldOutcome(demands, reaching));
             if (cutShort == null && reaching.ways() instanceof Reachability.Ways.Whole whole) {
                 cutShort = whole.figure();
             }
         }
-        return ways.isEmpty() ? new HeldOutcome.Bringing.NothingFound()
-                : new HeldOutcome.Bringing.Found(ways, Optional.ofNullable(cutShort));
+        if (!ways.isEmpty()) {
+            return new HeldOutcome.Bringing.Found(ways, Optional.ofNullable(cutShort));
+        }
+        return cutShort == null ? new HeldOutcome.Bringing.NothingFound()
+                : new HeldOutcome.Bringing.LeftUnlooked(cutShort);
     }
 
     /**
@@ -764,7 +792,7 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
 
         private final Map<ALine, List<OnTheWay>> byLine = new LinkedHashMap<>();
         private final Map<ALine, SaidOnTheWay> saidByLine = new LinkedHashMap<>();
-        private final Map<ModelOccurrence, Set<ConditionOnTheWay>> byOutcome =
+        private final Map<ModelOccurrence, List<ConditionOnTheWay>> byOutcome =
                 new LinkedHashMap<>();
         private final Map<ModelOccurrence, ConditionOnTheWay> byFork = new LinkedHashMap<>();
 
@@ -779,7 +807,9 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
          * every run past it met.
          */
         void answered(ModelOccurrence answers, ConditionOnTheWay met) {
-            byOutcome.computeIfAbsent(answers, _ -> new LinkedHashSet<>()).add(met);
+            // Kept as met, and not in a set: what is filed here is every comparison of every
+            // fork's condition, and a set would hash each deep account of its way to file it.
+            byOutcome.computeIfAbsent(answers, _ -> new ArrayList<>()).add(met);
         }
 
         /**

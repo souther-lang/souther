@@ -244,8 +244,9 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/partition/Generator$CandidateCheck;"
                             + "Lsouther/compiler/partition/FixtureReferences;Ljava/util/List;)"
                             + "Lsouther/compiler/partition/Generator$Composed;",
-                    "says a way past a guard whose search was refused a run was cut short under the"
-                            + " figure, beside the row that goes out"),
+                    "says a way past a guard whose search was refused a run, or whose choices past"
+                            + " the first were more than the ones the guard's ways share, was cut"
+                            + " short under the figure, beside the row that goes out"),
             Map.entry("souther.compiler.partition.Generator$GoingOn#wayOn("
                             + "Lsouther/compiler/coverage/AlignedObservation;Ljava/util/List;"
                             + "Ljava/util/Set;)"

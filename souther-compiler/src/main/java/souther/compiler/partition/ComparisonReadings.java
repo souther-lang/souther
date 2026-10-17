@@ -149,10 +149,13 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      *
      * @param condition the truth or the comparison, never two of them joined
      * @param assumed   every condition on the way to it, each with what became of it
+     * @param holding   what it coming out true says
+     * @param failing   what it coming out false says
      * @param context   where it stands: what a construct answering it is in the model is the copy
      *                  the call a helper's body was read at makes of it
      */
-    record OutcomeMet(Condition condition, List<OnTheWay> assumed, CallContext context) {
+    record OutcomeMet(Condition condition, List<OnTheWay> assumed, List<OnTheWay> holding,
+                      List<OnTheWay> failing, CallContext context) {
 
         OutcomeMet {
             if (condition instanceof Condition.Joined) {
@@ -160,6 +163,8 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                         "a condition a run is seen coming out of is one construct: " + condition);
             }
             assumed = List.copyOf(assumed);
+            holding = List.copyOf(holding);
+            failing = List.copyOf(failing);
         }
     }
 
@@ -607,8 +612,8 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                 List<OnTheWay> failing = numbering.said(
                         ReachingCuts.stating(condition, in.read(), false, in.conditions()));
                 if (live) {
-                    outcomesIn(condition, assumed, in.read(), in.outcomes(), in.conditions(),
-                            in.context(), numbering);
+                    outcomesIn(condition, assumed, holding, failing, in.read(), in.outcomes(),
+                            in.conditions(), in.context(), numbering);
                     if (iff.occurrence() != null) {
                         in.decided().add(new ForkDecided(in.context().of(iff.occurrence()),
                                 assumed, holding, failing));
@@ -1005,22 +1010,34 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      * Every truth and comparison {@code condition} asks, each with what stood on the way to it:
      * what stood before the condition, and for a part after a connective, what the parts before it
      * coming out the way that runs it say.
+     *
+     * <p>{@code holding} and {@code failing} are what {@code condition} coming out each way says,
+     * where the walk has already read that, and null where it has not: a fork's condition whole
+     * is read once for its arms, and a condition that is one truth or one comparison is not read
+     * a second time for itself.
      */
     private static void outcomesIn(Condition condition, List<OnTheWay> assumed,
+                                   List<OnTheWay> holding, List<OnTheWay> failing,
                                    InputReading read, List<OutcomeMet> out,
                                    WhatConditionsState conditions, CallContext context,
                                    ConditionNumbering numbering) {
         switch (condition) {
-            case Condition.Truth _, Condition.Compares _ ->
-                    out.add(new OutcomeMet(condition, assumed, context));
+            case Condition.Truth _, Condition.Compares _ -> out.add(new OutcomeMet(condition,
+                    assumed,
+                    holding != null ? holding
+                            : ReachingCuts.stating(condition, read, true, conditions).entries(),
+                    failing != null ? failing
+                            : ReachingCuts.stating(condition, read, false, conditions).entries(),
+                    context));
             // The right part runs where the left leaves the answer open, which under a conjunction
             // is the left holding and under a disjunction the left failing.
             case Condition.Joined joined -> {
-                outcomesIn(joined.left(), assumed, read, out, conditions, context, numbering);
+                outcomesIn(joined.left(), assumed, null, null, read, out, conditions, context,
+                        numbering);
                 boolean leftHolding = joined.how().under(true) == ConditionJoin.BOTH;
                 outcomesIn(joined.right(),
                         taking(joined.left(), leftHolding, read, assumed, conditions, numbering),
-                        read, out, conditions, context, numbering);
+                        null, null, read, out, conditions, context, numbering);
             }
         }
     }

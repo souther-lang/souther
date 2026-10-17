@@ -1265,15 +1265,24 @@ public final class GeneratedRows {
     private static String wayPast(RepairShortfall.WayPast way, SourceRendering rendering,
                                   PublishedRuleHandle.WhereARuleIs places) {
         return switch (way) {
-            case RepairShortfall.WayPast.Searched(CameToNothing came) ->
+            case RepairShortfall.WayPast.Searched(List<CameToNothing> came) ->
                     saidOf(came, rendering, places);
             // The figure first, the way every search this compiler stopped is said: what the
-            // search had come to is the answer of a search that did not finish.
-            case RepairShortfall.WayPast.CutShort(CameToNothing came, CompositionBudget figure) ->
-                    Reasons.met(CompositionShortfall.of(Set.of(figure)))
-                            + saidOf(came, rendering, places);
+            // searches had come to is the answer of looking that did not finish.
+            case RepairShortfall.WayPast.CutShort(List<CameToNothing> came,
+                                                  CompositionBudget figure) ->
+                    Reasons.met(CompositionShortfall.of(Set.of(figure))) + (came.isEmpty()
+                            ? "nothing was looked for, which does not make it a way no row goes"
+                            : saidOf(came, rendering, places));
             case RepairShortfall.WayPast.NotSearchable(RepairShortfall.Barrier why) -> why(why);
         };
+    }
+
+    /** What each of the searches one way was held along came to, each word once, in turn. */
+    private static String saidOf(List<CameToNothing> came, SourceRendering rendering,
+                                 PublishedRuleHandle.WhereARuleIs places) {
+        return String.join("; ", came.stream()
+                .map(each -> saidOf(each, rendering, places)).toList());
     }
 
     /** Why a way past a guard was not looked for, in the words a reader of the block is shown. */

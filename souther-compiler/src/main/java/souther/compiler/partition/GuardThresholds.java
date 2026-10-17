@@ -292,12 +292,9 @@ public final class GuardThresholds {
         // And every truth and comparison a fork's condition asks, under the construct of the model
         // that answers it, which is the construct a run is seen coming out of. A truth asked of a
         // name the body was handed is answered by no construct, and no run is seen at it.
-        WhatConditionsState conditions = WhatConditionsState.of(read);
         for (ComparisonReadings.OutcomeMet each : comparisons.outcomes()) {
-            List<OnTheWay> holding =
-                    ReachingCuts.stating(each.condition(), read, true, conditions).entries();
-            List<OnTheWay> failing =
-                    ReachingCuts.stating(each.condition(), read, false, conditions).entries();
+            List<OnTheWay> holding = each.holding();
+            List<OnTheWay> failing = each.failing();
             // As the copy the call a helper's body was read at makes of the construct, which is
             // the copy every other fact about that call's reading is filed under.
             Optional<ModelOccurrence> answeredBy =

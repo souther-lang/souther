@@ -578,16 +578,21 @@ class AFillerThatStopsTheBodyIsExchangedForOneThatGoesOnTest {
         for (RepairShortfall.WayPast way
                 : ((RepairShortfall.AtTheGuard.NoWayPast) stop.came()).ways()) {
             out.add(switch (way) {
-                case RepairShortfall.WayPast.Searched(CameToNothing came) ->
-                        "searched: " + came.why().reason();
-                case RepairShortfall.WayPast.CutShort(CameToNothing came,
+                case RepairShortfall.WayPast.Searched(List<CameToNothing> came) ->
+                        "searched: " + reasons(came);
+                case RepairShortfall.WayPast.CutShort(List<CameToNothing> came,
                         CompositionBudget figure) ->
-                        "cut short at " + figure + ": " + came.why().reason();
+                        "cut short at " + figure + ": " + reasons(came);
                 case RepairShortfall.WayPast.NotSearchable(RepairShortfall.Barrier why) ->
                         "not searchable: " + why;
             });
         }
         return out;
+    }
+
+    /** Each word what a way's searches came to, joined in order. */
+    private static String reasons(List<CameToNothing> came) {
+        return String.join(" / ", came.stream().map(each -> String.valueOf(each.why().reason())).toList());
     }
 
     /** Why each row stops where it does, by its label, for the rows that stop at a guard. */
