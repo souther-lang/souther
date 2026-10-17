@@ -4,7 +4,6 @@ import souther.compiler.core.Core;
 import souther.compiler.inputs.Denotation;
 
 import java.util.List;
-import java.util.Optional;
 
 /**
  * Which parts a fork's answer turns on, each with the expression it was read off.
@@ -32,7 +31,8 @@ final class WhatAForkTests {
 
     /** The parts the truth of {@code atom} turns on, each read where it stands. */
     static List<Denotation> partsOfTheAnswer(Core atom, WhatNamesStandFor names) {
-        return Pullback.ofATruth(atom, names.reads(), names.read(), Optional.empty()).turnsOn()
+        return WhatConditionsState.of(names.read()).truth(atom, names.reads(), names.read())
+                .turnsOn()
                 .stream()
                 .map(Pullback.Leaf::from)
                 .toList();

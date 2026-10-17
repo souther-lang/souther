@@ -1,5 +1,6 @@
 package souther.compiler.inputs;
 
+import souther.compiler.check.Choice;
 import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.check.ElementsWrittenOut;
 import souther.compiler.check.Symbols;
@@ -97,9 +98,16 @@ public final class WrittenOutElements {
 
     private static ReadMeaning.Occurrence occurrence(ElementsWrittenOut.Occurrence<InputReads> one) {
         return new ReadMeaning.Occurrence(denotation(one.value()), one.keptWhere().stream()
-                .map(kept -> new ReadMeaning.Occurrence.Kept(denotation(kept.truth()),
-                        kept.holds()))
-                .toList());
+                .map(WrittenOutElements::kept).toList());
+    }
+
+    private static ReadMeaning.Occurrence.Kept kept(ElementsWrittenOut.Kept<InputReads> kept) {
+        return switch (kept) {
+            case ElementsWrittenOut.Kept.ATruth<InputReads>(var truth, boolean holds) ->
+                    new ReadMeaning.Occurrence.Kept.ATruth(denotation(truth), holds);
+            case ElementsWrittenOut.Kept.AnArm<InputReads>(var fork, int part) ->
+                    new ReadMeaning.Occurrence.Kept.AnArm(denotation(fork), part);
+        };
     }
 
     private static Denotation denotation(ElementsWrittenOut.Stood<InputReads> stood) {
@@ -130,6 +138,11 @@ public final class WrittenOutElements {
         public InputReads handing(InputReads at, BindingId element,
                                   ElementsWrittenOut.Stood<InputReads> value) {
             return at.handing(element, denotation(value), newtypes);
+        }
+
+        @Override
+        public InputReads choosing(InputReads at, Choice.Decides decidedBy) {
+            return at.choosing(decidedBy, symbols, newtypes);
         }
 
         @Override
