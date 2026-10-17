@@ -110,7 +110,8 @@ public final class WholeUnitsBetween {
         return first == null || last == null ? null : last.subtract(first).abs();
     }
 
-    private static BigInteger wholeNumberOf(Endpoint end) {
+    /** The whole number {@code end} is at, or null where it is no end or no whole number. */
+    static BigInteger wholeNumberOf(Endpoint end) {
         return end != null && end.at() instanceof Count count
                 && count.exactly().floor() instanceof ExactAnswer.Held<BigInteger> whole
                 ? whole.value() : null;
@@ -123,25 +124,8 @@ public final class WholeUnitsBetween {
     static ConstantComparison statementOf(Rel rel, BigInteger n, long perUnit,
                                           BigInteger widest) {
         BigInteger unit = BigInteger.valueOf(perUnit);
-        BigInteger one = BigInteger.ONE;
-        return switch (rel) {
-            case GE -> atLeast(n, unit, widest);
-            case GT -> atLeast(n.add(one), unit, widest);
-            case LT -> below(n, unit, widest);
-            case LE -> below(n.add(one), unit, widest);
-            case EQ -> ConstantComparison.both(atLeast(n, unit, widest),
-                    below(n.add(one), unit, widest));
-            case NE -> ConstantComparison.either(below(n, unit, widest),
-                    atLeast(n.add(one), unit, widest));
-        };
-    }
-
-    private static ConstantComparison atLeast(BigInteger n, BigInteger unit, BigInteger widest) {
-        return ConstantComparison.of(Rel.GE, leastStepsReaching(n, unit), widest.negate(), widest);
-    }
-
-    private static ConstantComparison below(BigInteger n, BigInteger unit, BigInteger widest) {
-        return ConstantComparison.of(Rel.LT, leastStepsReaching(n, unit), widest.negate(), widest);
+        return ConstantComparison.ofAWholeNumber(rel, n, count -> ConstantComparison.of(Rel.GE,
+                leastStepsReaching(count, unit), widest.negate(), widest));
     }
 
     /**

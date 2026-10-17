@@ -200,8 +200,9 @@ public final class OperationFacts {
             // aborts.
             //
             // `Decimal.toInt` is within one of what it rounds, whichever mode it is handed. What a
-            // single mode does more narrowly — `HALF_UP` rounds to within a half — is a second
-            // statement and is not made here, since the mode is an argument nothing reads.
+            // single mode does more narrowly — `HALF_UP` rounds to within a half — is not a bound
+            // on the result: it is read from the mode where a comparison of the result is, and
+            // only where the mode is one value on every run (`roundsToAWholeNumber` below).
             about("Int", "abs", bounded(Rel.GE, 0)),
             about("Decimal", "abs", bounded(Rel.GE, 0)),
             about("Int", "floorMod", bounded(Rel.GE, 0, aboveZero(at(1)))),
@@ -210,6 +211,11 @@ public final class OperationFacts {
             about("Int", "floorMod", bounded(Rel.GT, at(1), 0, belowZero(at(1)))),
             about("Decimal", "toInt", bounded(Rel.GT, at(1), -1, always())),
             about("Decimal", "toInt", bounded(Rel.LT, at(1), 1, always())),
+            // Both narrowings to a whole number take the policy first and the number last. What
+            // they answer is a step of the number, so a comparison of it is read as a comparison
+            // of the number at the step's edge.
+            about("Decimal", "toInt", roundsToAWholeNumber(at(0), at(1))),
+            about("Rational", "toInt", roundsToAWholeNumber(at(0), at(1))),
 
             // A comparison answers a sign and answers it as one of three numbers. That it is one of
             // three is not what {@code StatesTheOrderOfItsArguments} says: that one says which
@@ -1421,6 +1427,10 @@ public final class OperationFacts {
     private static OperationFact countsWholeUnitsBetween(ArgumentRef from, ArgumentRef to,
                                                          long perUnit) {
         return new OperationFact.CountsWholeUnitsBetween(from, to, perUnit);
+    }
+
+    private static OperationFact roundsToAWholeNumber(ArgumentRef mode, ArgumentRef value) {
+        return new OperationFact.RoundsToAWholeNumber(mode, value);
     }
 
     private static OperationFact shifts(String module, String measure, ArgumentRef of,

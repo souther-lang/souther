@@ -31,6 +31,10 @@ enum TypeRequirement {
     /** A kind of number the domain relates arithmetically ({@link NumericAnswers#isANumber}). */
     NUMBER("a number"),
 
+    /** A number that can have a fraction, which is what a rounding to a whole number drops: a
+     *  decimal or an exact ratio. */
+    FRACTIONAL("a number that can have a fraction"),
+
     /** A type whose values count to a number, which is wider than being one ({@link Carrier}). */
     COUNTED("something that counts to a number"),
 
@@ -75,6 +79,7 @@ enum TypeRequirement {
     boolean admits(Type type) {
         return switch (this) {
             case NUMBER -> NumericAnswers.isANumber(type);
+            case FRACTIONAL -> type == Type.Prim.DECIMAL || type == Type.Prim.RATIONAL;
             case COUNTED -> Carrier.countsToANumber(type);
             case CONTAINER -> Type.elementOfAContainer(type) != null;
             case TEXT -> Type.STRING.equals(type);

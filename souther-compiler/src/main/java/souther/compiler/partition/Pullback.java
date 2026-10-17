@@ -28,6 +28,7 @@ import souther.compiler.check.NumericMeasures;
 import souther.compiler.check.RecursionOverAList;
 import souther.compiler.check.RecursionOverATree;
 import souther.compiler.check.RemainderOfAShiftedValue;
+import souther.compiler.check.RoundedToAWholeNumber;
 import souther.compiler.check.SeededWalk;
 import souther.compiler.check.StatedComparison;
 import souther.compiler.check.StringPredicates;
@@ -763,6 +764,7 @@ final class Pullback {
                 () -> ofTheYearOfADate(stated, at, fixed, reads),
                 () -> ofACountOfWholeUnits(stated, at, fixed, reads),
                 () -> ofAShiftedRemainder(stated, at, fixed, reads),
+                () -> ofARoundedNumber(stated, at, fixed, reads),
                 () -> partOf(at, ofItsArguments(stated, fixed, reads)),
                 () -> ofASizeInCases(stated, at, reads),
                 () -> ofAChoice(stated, at, reads),
@@ -5220,6 +5222,23 @@ final class Pullback {
         }
         return theStatementStands(shifted.statement(), shifted.remainder(), at, fixed,
                 shifted.at());
+    }
+
+    /**
+     * A comparison of a number rounded to a whole one, read as the comparison of the number before
+     * rounding it states ({@link RoundedToAWholeNumber}) — or null where it is no such comparison.
+     *
+     * <p>{@code Rational.toInt(DOWN, x / 2) >= 100} is a line on {@code x / 2} and so on {@code x},
+     * though the rounded number is no form of {@code x}: what was rounded is read as any number is,
+     * and the rounding moves the line and gives the call no form.
+     */
+    private Derivation ofARoundedNumber(StatedComparison stated, Denotation at, boolean fixed,
+                                        InputReads reads) {
+        RoundedToAWholeNumber.Read<InputReads> rounded =
+                RoundedToAWholeNumber.read(stated, reads, sides());
+        return rounded == null ? null
+                : theStatementStands(rounded.statement(), rounded.rounded(), at, fixed,
+                        rounded.at());
     }
 
     /**

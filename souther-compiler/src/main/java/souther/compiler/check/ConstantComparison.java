@@ -4,6 +4,7 @@ import souther.compiler.numeric.Rel;
 
 import java.math.BigInteger;
 import java.util.Objects;
+import java.util.function.Function;
 
 /**
  * What holds of a whole number exactly where a comparison of something else holds: a comparison of
@@ -64,6 +65,39 @@ public sealed interface ConstantComparison {
             return new Settled(atLeast);
         }
         return against.bitLength() > Long.SIZE - 1 ? null : new Against(rel, against);
+    }
+
+    /**
+     * What holds exactly where a whole number stands {@code rel} to {@code n}, said through what
+     * holds where it is at least a given one — or null where that is null for one of the two it is
+     * asked at.
+     *
+     * <p>Above {@code n} is at least {@code n + 1}, below is not at least {@code n}, and equal is
+     * both at least {@code n} and not at least {@code n + 1}. So a reader of a number that is a step
+     * of something else says where the step is at least one number and nothing more.
+     */
+    static ConstantComparison ofAWholeNumber(Rel rel, BigInteger n,
+                                             Function<BigInteger, ConstantComparison> atLeast) {
+        BigInteger next = n.add(BigInteger.ONE);
+        return switch (rel) {
+            case GE -> atLeast.apply(n);
+            case GT -> atLeast.apply(next);
+            case LT -> denied(atLeast.apply(n));
+            case LE -> denied(atLeast.apply(next));
+            case EQ -> both(atLeast.apply(n), denied(atLeast.apply(next)));
+            case NE -> either(denied(atLeast.apply(n)), atLeast.apply(next));
+        };
+    }
+
+    /** What holds exactly where {@code comparison} does not; null where it is null. */
+    static ConstantComparison denied(ConstantComparison comparison) {
+        return switch (comparison) {
+            case null -> null;
+            case Against(Rel rel, BigInteger against) -> new Against(rel.denied(), against);
+            case Settled(boolean holds) -> new Settled(!holds);
+            case Both(var first, var second) -> either(denied(first), denied(second));
+            case Either(var first, var second) -> both(denied(first), denied(second));
+        };
     }
 
     /** Both of these, settled where either settles it; null where either is null. */
