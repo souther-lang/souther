@@ -304,6 +304,10 @@ public final class Partitions {
                 // A string holding any number of the code points of a class is written by
                 // repeating one of them, as a string of any length is.
                 case NumericTerm.CodePointClassCount _ -> true;
+                // Every whole number from nought up is what the code points of some string come
+                // to: none for nought, and for any larger number code points that are no
+                // surrogates, chosen to add up to it.
+                case NumericTerm.CodePointValueSum _ -> true;
                 // An element holding a value as often as asked is written by repeating the value.
                 case NumericTerm.Multiplicity _ -> true;
                 // A run has as many values as a row wrote and each of them is chosen, so whether

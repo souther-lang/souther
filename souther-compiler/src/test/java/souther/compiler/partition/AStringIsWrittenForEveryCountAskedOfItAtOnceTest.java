@@ -62,6 +62,8 @@ class AStringIsWrittenForEveryCountAskedOfItAtOnceTest {
     private static final NumericTerm LENGTH = NumericTerm.TakenOf.asItStands(
             ValueName.Stdlib.operation("String", "length"), AT, Type.STRING,
             ScopedDeclarations.wrapsOf(SYMBOLS), SYMBOLS);
+    private static final NumericTerm SUM = NumericTerm.CodePointValueSum.of(AT, Type.STRING,
+            ScopedDeclarations.wrapsOf(SYMBOLS));
 
     private static NumericTerm.CodePointClassCount counting(CodePointClass counted) {
         return NumericTerm.CodePointClassCount.of(AT, counted, Type.STRING,
@@ -90,7 +92,7 @@ class AStringIsWrittenForEveryCountAskedOfItAtOnceTest {
         }
 
         TermRealizations.Realization written() {
-            return TermRealizations.stringsHoldingTheirCounts(measured, Type.STRING, asked, null,
+            return TermRealizations.stringsHoldingTheirNumbers(measured, Type.STRING, asked, null,
                     READING);
         }
     }
@@ -283,5 +285,74 @@ class AStringIsWrittenForEveryCountAskedOfItAtOnceTest {
                 "no string answers it, which this did not search far enough to say");
         assertEquals(Set.of(CompositionBudget.CODE_POINTS_A_STRING_IS_SEARCHED_IN_FULL),
                 stopped.met().figures(), "and it says which figure it stopped at");
+    }
+
+    /**
+     * What the code points come to beside how many of them there are and how many are not
+     * whitespace: the counts choose the string's kinds of code point, and the sum is reached by
+     * which code points of each kind are written, so every number reads back off one string.
+     */
+    @Test
+    void aStringIsWrittenWhoseCodePointsComeToTheSumBesideItsCounts() {
+        for (long sum : new long[] {32 * 3 + 97, 300, 3 * 0x4E00, 0x10FFFF + 2 * 32}) {
+            List<String> strings = offered(new Demands()
+                    .exactly(SUM, sum)
+                    .exactly(NOT_WHITESPACE, 1)
+                    .exactly(LENGTH, 3).written());
+            for (String each : strings) {
+                assertEquals(sum, sumOf(each), each);
+                assertEquals(1, notWhitespaceIn(each), each);
+                assertEquals(3, lengthOf(each), each);
+            }
+        }
+    }
+
+    /**
+     * A sum is no count, and the counts of a string do not decide it: a sum asked alone is not read
+     * as a length to write the string at. A million is one code point, and the strings offered
+     * beside that one are no longer than a string is searched for in full, and not a million.
+     */
+    @Test
+    void aSumAskedAloneIsNotReadAsALength() {
+        List<String> strings = offered(new Demands().exactly(SUM, 1_000_000).written());
+        for (String each : strings) {
+            assertEquals(1_000_000, sumOf(each), each);
+            assertEquals(true, lengthOf(each)
+                    <= CompositionBudget.CODE_POINTS_A_STRING_IS_SEARCHED_IN_FULL.maximum(), each);
+        }
+        assertEquals(true, strings.stream().anyMatch(each -> lengthOf(each) == 1),
+                strings::toString);
+    }
+
+    /**
+     * Which code points of a kind are written is a few of the ones it has, so a sum nothing moved
+     * reaches is a string this did not write and never a string said not to exist — even where none
+     * does, as no one code point is a surrogate and nothing of none comes to five.
+     */
+    @Test
+    void aSumNothingMovedReachesIsNotSaidToHaveNoString() {
+        for (Demands unreached : List.of(
+                new Demands().exactly(SUM, 0xD800).exactly(LENGTH, 1),
+                new Demands().exactly(SUM, 5).exactly(LENGTH, 0),
+                new Demands().exactly(SUM, 5).exactly(NOT_WHITESPACE, 3).exactly(LENGTH, 3))) {
+            TermRealizations.Realization made = unreached.written();
+            assertEquals(false, made instanceof TermRealizations.Realization.None, made::toString);
+            assertEquals(false, made instanceof TermRealizations.Realization.Built,
+                    made::toString);
+        }
+    }
+
+    /** A sum more code points than a string is searched for come to is said as that figure. */
+    @Test
+    void aSumPastWhatAStringIsSearchedForIsSaidAsTheFigure() {
+        TermRealizations.Realization.Stopped stopped = assertInstanceOf(
+                TermRealizations.Realization.Stopped.class,
+                new Demands().exactly(SUM, 3_000_000_000L).written());
+        assertEquals(Set.of(CompositionBudget.CODE_POINTS_A_STRING_IS_SEARCHED_IN_FULL),
+                stopped.met().figures());
+    }
+
+    private static long sumOf(String text) {
+        return text.codePoints().asLongStream().sum();
     }
 }

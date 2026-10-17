@@ -68,7 +68,7 @@ public sealed interface NumericTerm
      * these may act on the position, and a reader holding a bare {@link NumericTerm} may not.
      */
     sealed interface FromOnePosition extends NumericTerm
-            permits ValueOf, TakenOf, CodePointClassCount {
+            permits ValueOf, TakenOf, CodePointClassCount, CodePointValueSum {
 
         /**
          * The single input position this term is read from.
@@ -417,6 +417,63 @@ public sealed interface NumericTerm
     }
 
     /**
+     * What the code points of the string a location holds come to, each added as the number it is.
+     *
+     * <p>A number of one string, as how long it is and how many of its code points are in a class
+     * are: what a total of the list of its code points answers ({@code ListsTheCodePointsOf}) is
+     * read off the string a row holds and written by writing a string. Not a taking: the operation
+     * that answers it adds up a container, and what would be composed for a container is elements,
+     * which a string is not written out of. Kept apart so that a total stays something a container
+     * is built to have, and this something a string is chosen for.
+     *
+     * <p>Counted by what the run time counts by: scalar values, of the string as it is held.
+     */
+    final class CodePointValueSum implements FromOnePosition {
+
+        private final TermPath position;
+
+        private CodePointValueSum(TermPath position) {
+            this.position = Objects.requireNonNull(position, "added up of somewhere");
+        }
+
+        /**
+         * What the code points of the string at {@code position} come to, or null where what
+         * stands there is no string.
+         *
+         * <p>Asked of what the names wrap, as a taking is: a name around a string is still one.
+         */
+        public static CodePointValueSum of(TermPath position, Type at, NewtypeInners inners) {
+            return at != null && TypeOps.base(at, inners) == Type.STRING
+                    ? new CodePointValueSum(position) : null;
+        }
+
+        @Override
+        public TermPath position() {
+            return position;
+        }
+
+        @Override
+        public CodePointValueSum movedTo(UnaryOperator<TermPath> moved) {
+            return new CodePointValueSum(moved.apply(position));
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof CodePointValueSum sum && position.equals(sum.position);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(CodePointValueSum.class, position);
+        }
+
+        @Override
+        public String toString() {
+            return "List.sum(String.codePoints(" + position + "))";
+        }
+    }
+
+    /**
      * How many elements of a container hold, at one place inside the element, the value the
      * element under consideration holds there.
      *
@@ -709,6 +766,7 @@ public sealed interface NumericTerm
                     inners, symbols);
             case CodePointClassCount count ->
                     CodePointClassCount.of(other, count.counted(), at, inners);
+            case CodePointValueSum _ -> CodePointValueSum.of(other, at, inners);
             // What moves here is where a number is taken, and a run is not taken anywhere: its
             // values come from a place inside a container, and the name that would move is the
             // container's. Answered as "not there" rather than by rebuilding the run at a
@@ -752,6 +810,10 @@ public sealed interface NumericTerm
             // not. What it is at most is the string's own length, which is another number of the
             // same place and is held where the two are realized together.
             case CodePointClassCount _ ->
+                    new NumericDomain.Bounds(Endpoint.inclusive(Count.of(0)), null);
+            // No code point is below nought, so neither is what they come to, and a string of
+            // none comes to nought.
+            case CodePointValueSum _ ->
                     new NumericDomain.Bounds(Endpoint.inclusive(Count.of(0)), null);
             // An element is one of the elements it counts, so there is always at least one.
             case Multiplicity _ ->

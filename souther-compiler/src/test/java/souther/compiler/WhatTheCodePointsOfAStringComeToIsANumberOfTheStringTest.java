@@ -1,0 +1,182 @@
+package souther.compiler;
+
+import org.junit.jupiter.api.Test;
+
+import souther.compiler.ast.Hir;
+import souther.compiler.diag.SourceRendering;
+import souther.compiler.partition.FixtureTemplate;
+import souther.compiler.partition.GenerationOutcome;
+import souther.compiler.query.About;
+import souther.compiler.query.Adequacy;
+import souther.compiler.query.Compilation;
+import souther.compiler.report.AdequacyReport;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.TreeSet;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Function;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+/**
+ * A rule about what the code points of a string add up to is a rule about a number of that string,
+ * as a rule about how long it is: its line is drawn at the string's position, and a row on each
+ * side of it is a string written to come to the number there.
+ *
+ * <p>Held by running the rows. Each row composed for a rule is put back as an example, answered
+ * with what the condition works out to over the string the row holds — added up here, apart from
+ * anything the compiler read — so a string that does not come to what it was written for is an
+ * example the model answers otherwise.
+ */
+class WhatTheCodePointsOfAStringComeToIsANumberOfTheStringTest {
+
+    /** The total written straight over the list of code points. */
+    private static final String STRAIGHT = """
+            module p
+            behavior pick : (s: String) -> Int
+            let pick (s) = {
+                guard List.sum(String.codePoints(s)) >= 10 else 0
+                1
+            }
+            """;
+
+    /** The list bound to a name first, which is the same list. */
+    private static final String NAMED = """
+            module p
+            behavior pick : (s: String) -> Int
+            let pick (s) = {
+                let points = String.codePoints(s)
+                guard List.sum(points) >= 10 else 0
+                1
+            }
+            """;
+
+    /** The string inside a name of its own. */
+    private static final String UNDER_A_NAME = """
+            module p
+            data Code = String
+            behavior pick : (c: Code) -> Int
+            let pick (c) = {
+                guard List.sum(String.codePoints(c.value)) >= 10 else 0
+                1
+            }
+            """;
+
+    /** What the code points come to beside how long the string is, which is one string to write
+     *  for both. */
+    private static final String BESIDE_ITS_LENGTH = """
+            module p
+            behavior pick : (s: String) -> Int
+            let pick (s) = {
+                guard String.length(s) >= 2 else 0
+                guard List.sum(String.codePoints(s)) <= 200 else 1
+                2
+            }
+            """;
+
+    /** Each model, with what its condition works out to over the string a row holds and the
+     *  answers some row of it is composed for. */
+    private static final Map<String, Function<String, Integer>> ANSWERED = Map.of(
+            STRAIGHT, text -> sumOf(text) >= 10 ? 1 : 0,
+            NAMED, text -> sumOf(text) >= 10 ? 1 : 0,
+            UNDER_A_NAME, text -> sumOf(text) >= 10 ? 1 : 0,
+            BESIDE_ITS_LENGTH, text -> lengthOf(text) < 2 ? 0 : sumOf(text) <= 200 ? 2 : 1);
+
+    private static final Map<String, Set<Integer>> COMPOSED_FOR = Map.of(
+            STRAIGHT, Set.of(0, 1),
+            NAMED, Set.of(0, 1),
+            UNDER_A_NAME, Set.of(0, 1),
+            BESIDE_ITS_LENGTH, Set.of(0, 1, 2));
+
+    /** The line is drawn on the string's number, however the list was reached. */
+    @Test
+    void theLineIsDrawnOnWhatTheStringsCodePointsComeTo() {
+        for (String model : List.of(STRAIGHT, NAMED)) {
+            String report = report(measured(model));
+            assertTrue(report.contains("read as pick/List.sum(String.codePoints(s)): = 10"),
+                    () -> report);
+            assertTrue(report.contains("read as pick/List.sum(String.codePoints(s)): = 9"),
+                    () -> report);
+            assertFalse(report.contains("not read:"), () -> report);
+        }
+    }
+
+    /** Every rule some string takes is composed a row that takes it, and the row is answered as
+     *  its string says. */
+    @Test
+    void everyRuleSomeStringTakesIsComposedARowThatTakesIt() {
+        ANSWERED.forEach((model, by) -> {
+            List<String> examples = new ArrayList<>();
+            Set<Integer> answers = new TreeSet<>();
+            for (List<FixtureTemplate> row : composedForTheRules(measured(model))) {
+                int answer = by.apply(textOf(row.getFirst().value()));
+                answers.add(answer);
+                examples.add("    | \"composed " + examples.size() + "\" : ("
+                        + row.getFirst().text() + ") -> " + answer);
+            }
+            assertEquals(COMPOSED_FOR.get(model), answers,
+                    () -> "a row for every rule some string takes: " + examples);
+
+            Compilation answeredBy = measured(model + "example pick\n"
+                    + String.join("\n", examples) + "\n");            assertEquals(List.of(), answeredBy.errors().stream()
+                    .map(each -> each.diagnostic().code() + " " + each.diagnostic().said())
+                    .toList(), () -> "each row is answered as its string says: " + examples);
+        });
+    }
+
+    /** The rows composed for the decision rules no row takes, each as its inputs. */
+    private static List<List<FixtureTemplate>> composedForTheRules(Compilation compilation) {
+        List<List<FixtureTemplate>> out = new ArrayList<>();
+        Adequacy.generatedOf(compilation.db(), compilation.modules().get(0)).get("pick")
+                .generation().stream()
+                .filter(each -> each.finding().about() instanceof About.ARuleNoRowTakes)
+                .forEach(each -> {
+                    if (each.outcome() instanceof GenerationOutcome.Generated made) {
+                        made.candidates().forEach(row -> out.add(row.inputs()));
+                    }
+                });
+        return out;
+    }
+
+    /** What the code points of {@code text} come to, each the number it is. */
+    private static long sumOf(String text) {
+        return text.codePoints().asLongStream().sum();
+    }
+
+    private static long lengthOf(String text) {
+        return text.codePointCount(0, text.length());
+    }
+
+    /** The text {@code value} writes, under whatever names it wears. */
+    private static String textOf(Hir.Expr value) {
+        return switch (value) {
+            case Hir.StringLit text -> text.value();
+            case Hir.Apply applied when applied.args().size() == 1 ->
+                    textOf(applied.args().getFirst());
+            default -> throw new AssertionError("a text: " + value);
+        };
+    }
+
+    /** Each model measured once for the class: the methods read the same models, and only read
+     *  them. */
+    private static final Map<String, Compilation> MEASURED = new ConcurrentHashMap<>();
+
+    private static Compilation measured(String source) {
+        return MEASURED.computeIfAbsent(source, text -> {
+            Compilation compilation = Compilation.ofSource(text, "Main");
+            compilation.measure(Adequacy.Asked.fullReport());
+            compilation.answerEverything();
+            return compilation;
+        });
+    }
+
+    private static String report(Compilation compilation) {
+        return AdequacyReport.of(compilation)
+                .human(SourceRendering.namedByIdentity(compilation.texts()));
+    }
+}
