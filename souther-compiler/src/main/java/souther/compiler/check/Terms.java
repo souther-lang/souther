@@ -1514,6 +1514,11 @@ final class Terms {
         }
 
         @Override
+        public Denotations choosing(Denotations at, Choice.Decides decidedBy) {
+            return Terms.this.choosing(decidedBy, at);
+        }
+
+        @Override
         public Optional<Object> folded(ElementsWrittenOut.Stood<Denotations> value) {
             return Optional.ofNullable(Terms.this.folded(value.value(), value.at()));
         }

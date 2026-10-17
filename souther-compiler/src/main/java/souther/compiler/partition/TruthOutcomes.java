@@ -5,7 +5,6 @@ import souther.compiler.meaning.Proposition;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 
 /**
  * Which answers a truth can give — as far as what the source wrote says.
@@ -136,7 +135,7 @@ final class TruthOutcomes {
      * @param names what the names in it stand for
      */
     static Outcomes ofTheTruth(Core truth, WhatNamesStandFor names) {
-        return of(Pullback.ofATruth(truth, names.reads(), names.read(), Optional.empty())
+        return of(WhatConditionsState.of(names.read()).truth(truth, names.reads(), names.read())
                 .proposition());
     }
 
