@@ -244,8 +244,17 @@ record Adoption<A, L extends ReadingLanguage>(Set<A> read, Set<A> settled, Set<A
      *
      * <p>What a dead alternative settled stays settled. Such a choice is composed at {@link #both}
      * and never arrives here, and a dead branch deeper in either side still imposes nothing.
+     *
+     * <p>A choice between two clauses this reading has no word for is one more clause it has no
+     * word for. Neither names a position, so nothing is missed, and the flag a choice sets is read
+     * only where an opening is worked out — which a reading without a join never has. Kept as the
+     * one account of nothing, the conjunctions above it are the account beside them rather than a
+     * new one each.
      */
     Adoption<A, L> eitherWithoutAJoin(Adoption<A, L> other) {
+        if (this == NOTHING && other == NOTHING) {
+            return this;
+        }
         return new Adoption<>(Set.of(), union(settled, other.settled),
                 union(union(read, missed), union(other.read, other.missed)), true, Set.of());
     }
