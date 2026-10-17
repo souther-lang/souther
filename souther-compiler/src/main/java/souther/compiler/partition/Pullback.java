@@ -422,7 +422,8 @@ final class Pullback {
      * Whether what a written comparison states was carried past it to the input — so that what it
      * states is the parts it was carried to, and not a rule the comparison draws of its own.
      *
-     * <p>Only an emptiness check is carried anywhere: any other comparison is the relation it
+     * <p>Only an emptiness check, or sizes added up that come to whether any of their containers
+     * holds anything, is carried anywhere: any other comparison is the relation it
      * states. And one is carried past only where the container it asks about is no position of its
      * own and every part it was carried to was read — one that stopped on the way is a rule about a
      * value made from the input, which the comparison still is.
@@ -435,16 +436,24 @@ final class Pullback {
      * that comparison's lines, as {@code List.isEmpty(List.filter(x -> x > 5, [a, b]))} is the
      * closure's on each value.
      *
+     * <p>Sizes added up are carried past only to such comparisons: what is no relation at all is
+     * a set only an emptiness check was carried through, and {@code #xs + #ys >= 0} holds on every
+     * row as {@code #xs >= 0} does, which is a rule of the comparison's that cuts nothing.
+     *
      * @param check the node the check is written as
      */
     static boolean carriesPast(StatedComparison comparison, Core check, InputReads reads,
                                InputReading read) {
         return mayBeCarriedPast(comparison)
-                && carriesPast(ofAComparison(comparison, reads, read, Optional.empty()), check);
+                && carriesPast(ofAComparison(comparison, reads, read, Optional.empty()), check,
+                        AnEmptinessCheck.checked(comparison) != null);
     }
 
-    /** The same, of what an emptiness check written as {@code check} was read to state. */
-    static boolean carriesPast(Pulled read, Core check) {
+    /**
+     * The same, of what a comparison written as {@code check} was read to state: an emptiness
+     * check where {@code emptiness}, and sizes added up where not.
+     */
+    private static boolean carriesPast(Pulled read, Core check, boolean emptiness) {
         // Unread anywhere in what is stated, and not among the parts it turns on: a part nothing
         // read that is the same on every run turns on nothing, and is still not read.
         Proposition stated = read.proposition();
@@ -458,9 +467,12 @@ final class Pullback {
             return read.turnsOn().stream()
                     .allMatch(leaf -> aTruthStatedWhereItIsWritten(leaf.from().value(), check));
         }
-        return (!Cutting.onlyRelations(stated) && !Cutting.drawsLines(stated))
-                || read.turnsOn().stream()
-                        .allMatch(leaf -> aComparisonWrittenInside(leaf.from().value(), check));
+        // Relations turning on no part are stated by nothing inside: List.length(xs) +
+        // List.length(ys) >= 1, and counts added up past whether any is above nought, which says
+        // how many.
+        return (emptiness && !Cutting.onlyRelations(stated) && !Cutting.drawsLines(stated))
+                || (!read.turnsOn().isEmpty() && read.turnsOn().stream()
+                        .allMatch(leaf -> aComparisonWrittenInside(leaf.from().value(), check)));
     }
 
     /** Whether {@code from} is a comparison or a call answering a truth, written inside
@@ -482,10 +494,12 @@ final class Pullback {
 
     /**
      * Whether {@code comparison} is one {@link #carriesPast} can answer yes for, which is a question
-     * about its shape alone: only an emptiness check is carried anywhere.
+     * about its shape alone: only an emptiness check is carried anywhere, or sizes added up
+     * against numbers, which can be whether any of their containers holds anything.
      */
     static boolean mayBeCarriedPast(StatedComparison comparison) {
-        return AnEmptinessCheck.checked(comparison) != null;
+        return AnEmptinessCheck.checked(comparison) != null
+                || AnEmptinessCheck.sizesAddedUp(comparison);
     }
 
     /**
