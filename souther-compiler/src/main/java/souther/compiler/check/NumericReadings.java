@@ -155,13 +155,15 @@ final class NumericReadings {
                 // today is written in the language as well, so nothing here has to tell the two
                 // apart. The rest say something else about the operation: where a number runs,
                 // what an operation keeps of a container, what a predicate travels through, what a
-                // shift is stated through, whether every answer has a value that gives it. None
-                // of them is a way of reading the number a call answered.
+                // shift is stated through, whether every answer has a value that gives it, where a
+                // comparison of a rounded number falls on what was rounded. None of them is a way
+                // of reading the number a call answered.
                 case BoundOperationFact.IsDefinedByCases _,
                      BoundOperationFact.BoundsItsResult _,
                      BoundOperationFact.StatesTheOrderOfItsArguments _,
                      BoundOperationFact.ShiftsBy _,
                      BoundOperationFact.CountsWholeUnitsBetween _,
+                     BoundOperationFact.RoundsToAWholeNumber _,
                      BoundOperationFact.BuildsItsResultFrom _,
                      BoundOperationFact.ElementsComeFrom _,
                      BoundOperationFact.HoldsTheImageOfEveryElement _,

@@ -310,6 +310,11 @@ public final class BoundOperationFacts {
         return ones(BoundOperationFact.CountsWholeUnitsBetween.class);
     }
 
+    /** How {@code operation} rounds a number to a whole one, or null where it rounds none. */
+    public BoundOperationFact.RoundsToAWholeNumber roundsToAWholeNumber(ValueName operation) {
+        return one(BoundOperationFact.RoundsToAWholeNumber.class, operation);
+    }
+
     /** What holds of the number {@code operation} answers, wherever it is called, in the order
      *  declared. */
     public List<ResultBound<DeclaredArgument>> boundsOnTheResult(ValueName operation) {

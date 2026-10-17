@@ -77,6 +77,25 @@ class ACountOfWholeUnitsIsReadAsTheStepsBetweenTheTwoValuesTest {
                         """));
     }
 
+    /** A count built as a newtype and held against a value of it is the count held against the
+     *  number, as the arithmetic reads a newtype. */
+    @Test
+    void theCountUnderANewtypeIsTheSameRule() {
+        assertEquals(bordersOf("DateTime.minutesBetween(a, b) >= 10"), bordersOfModel("""
+                module demo
+
+                data Minutes = Int
+                data Ok
+                data No
+
+                behavior f : (a: DateTime, b: DateTime) -> Ok | No
+                let f (a, b) = {
+                    guard Minutes(DateTime.minutesBetween(a, b)) >= Minutes(10) else No
+                    Ok
+                }
+                """));
+    }
+
     /** The two values in the other order are the line from the other end. */
     @Test
     void theValuesTheOtherWayRoundDrawTheLineTheOtherWayRound() {
