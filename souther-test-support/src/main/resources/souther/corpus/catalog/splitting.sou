@@ -17,16 +17,15 @@ data Split = { each: Share }
 
 data Uneven = { remainder: Amount }
 
-// The rounded narrowing. What is dropped is dropped by a rule stated here, and the first guard is what
-// keeps the divisor off nought — a divide by nought aborts, and an amount shared among nobody is not a
-// business outcome. The second guard is what the share owes its own type: nothing about a Rational is
-// counted, so the value a rounding makes of one carries no bound of its own.
+// The rounded narrowing. What is dropped is dropped by a rule stated here, and the guard is what keeps
+// the divisor off nought — a divide by nought aborts, and an amount shared among nobody is not a
+// business outcome. The share owes its own type nothing more: an amount at or above nought over a
+// divisor above it is a quotient at or above nought, and rounding it down leaves it there.
 behavior apportion : (amount: Amount, among: Amount) -> Split | Uneven
     constructs Split, Share, Uneven
 let apportion (amount, among) = {
     guard among >= 1 else Uneven { remainder = amount }
     let each = Rational.toInt(DOWN, amount.value / among.value)
-    guard each >= 0 else Uneven { remainder = amount }
     Split { each = Share(each) }
 }
 

@@ -155,6 +155,10 @@ public final class WrittenLines {
                 walk(read, WrittenChoice.of(at, comparison).isPresent()
                         ? under.inAnotherComparison() : under.outside());
             }
+            case Derivation.Restated(var read) -> {
+                madeHere(step, List.of(read), under);
+                walk(read, under.inAnotherComparison());
+            }
             default -> {
                 if (step instanceof Derivation.ACutThatCutsNothing && !under.decidedOutside()) {
                     settled.add(under.line());
@@ -347,6 +351,10 @@ public final class WrittenLines {
             }
             case Proposition.All all -> all.parts().forEach(each -> gather(each, into));
             case Proposition.Any any -> any.parts().forEach(each -> gather(each, into));
+            case Proposition.WhereItAnswers where -> {
+                gather(where.answers(), into);
+                gather(where.states(), into);
+            }
             case Proposition.Some some -> gather(some.ofTheElement(), into);
             case Proposition.OnAnApplication each -> each.each().forEach(one -> gather(one, into));
             // The relations its statements hold, each one way round whichever way a choice of
@@ -373,6 +381,8 @@ public final class WrittenLines {
             case Derivation.OnEachValueWrittenOut(var each) -> each;
             case Derivation.AChoiceAt(var _, var choice) -> List.of(choice);
             case Derivation.AComparisonAt(var _, var read) -> List.of(read);
+            case Derivation.Restated(var read) -> List.of(read);
+            case Derivation.WhereItAnswers(var answers, var read) -> List.of(answers, read);
             case Derivation.IfThenElse(var condition, var then, var otherwise) ->
                     List.of(condition, then, otherwise);
             case Derivation.MatchArms(var arms) -> ofTheArms(arms);

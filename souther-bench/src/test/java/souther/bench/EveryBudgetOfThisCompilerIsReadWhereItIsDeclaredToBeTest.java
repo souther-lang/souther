@@ -456,13 +456,13 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + " carries it out as a part nothing read, naming the figure"),
             Map.entry("souther.compiler.partition.Pullback#ofAChoice("
                             + "Lsouther/compiler/check/StatedComparison;"
-                            + "Lsouther/compiler/inputs/Denotation;"
+                            + "Lsouther/compiler/inputs/Denotation;Z"
                             + "Lsouther/compiler/inputs/InputReads;)"
                             + "Lsouther/compiler/meaning/Derivation;",
                     "counts the cases a comparison is split into, and past the figure carries"
                             + " the comparison out as a part nothing read, naming it"),
             Map.entry("souther.compiler.partition.Pullback#answered("
-                            + "Lsouther/compiler/inputs/Denotation;"
+                            + "Lsouther/compiler/inputs/Denotation;Z"
                             + "Lsouther/compiler/meaning/WhyUnread$AtNoPosition$Place;)"
                             + "Lsouther/compiler/meaning/WhichCase;",
                     "counts the arms a value chosen by cases is read through — a body's answer, or"

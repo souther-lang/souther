@@ -181,7 +181,7 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects) {
                  Proposition.Present _, Proposition.SameValue _, Proposition.LastToHold _,
                  Proposition.All _, Proposition.Any _, Proposition.Some _, Proposition.Carried _,
                  Proposition.SomeReachable _, Proposition.Unread _, Proposition.OnAnApplication _,
-                 Proposition.SoManyHold _ ->
+                 Proposition.SoManyHold _, Proposition.WhereItAnswers _ ->
                     DecisionCondition.AStatement.of(stated, denying.apply(stated), held);
         };
     }

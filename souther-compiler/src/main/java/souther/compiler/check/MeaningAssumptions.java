@@ -214,6 +214,11 @@ final class MeaningAssumptions {
                 taken = true;
             }
             case Proposition.All all -> all.parts().forEach(this::take);
+            // A path past the statement is one where it answered, and where it came out this way.
+            case Proposition.WhereItAnswers where -> {
+                take(where.answers());
+                take(where.states());
+            }
             case Proposition.Compared(Relation.Affine(LinearForm<Quantity> form, Rel p),
                                       boolean holds, var _) -> {
                 switch (formAt(form)) {

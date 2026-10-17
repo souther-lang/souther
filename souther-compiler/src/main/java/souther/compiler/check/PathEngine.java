@@ -327,9 +327,9 @@ final class PathEngine {
      * have is a rule about nothing.
      */
     private Entered whatTakingThisCaseSays(Core.Case arm, Core scrutinee, Entered in) {
-        Core called = terms.originating(scrutinee, in.at(), new HashSet<>());
-        Core condition = TheOtherCase.conditionAt(called);
-        Type answersIn = TheOtherCase.theCaseItAnswersIn(called);
+        Terms.Given called = terms.originating(scrutinee, in.at(), new HashSet<>());
+        Core condition = called == null ? null : TheOtherCase.conditionAt(called.value());
+        Type answersIn = called == null ? null : TheOtherCase.theCaseItAnswersIn(called.value());
         if (condition == null || answersIn == null) {
             return in;
         }
@@ -337,7 +337,10 @@ final class PathEngine {
         if (answered == null) {
             return in;
         }
-        return new Entered(assuming(condition, in.known(), in.at(), !answered).known(), in.at());
+        // The condition is over the call's arguments, which mean something where the call was
+        // written.
+        return new Entered(assuming(condition, in.known(), called.at(), !answered).known(),
+                in.at());
     }
 
     /** Whether {@code arm} was taken because the union came back carrying the number, or because it
