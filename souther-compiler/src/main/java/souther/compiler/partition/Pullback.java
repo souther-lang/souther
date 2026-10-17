@@ -742,7 +742,6 @@ final class Pullback {
                 () -> ofTheYearOfADate(stated, at, fixed, reads),
                 () -> ofACountOfWholeUnits(stated, at, fixed, reads),
                 () -> ofAShiftedRemainder(stated, at, fixed, reads),
-                () -> partOf(at, ofARemainderOfAForm(stated, reads)),
                 () -> partOf(at, ofItsArguments(stated, fixed, reads)),
                 () -> ofASizeInCases(stated, at, reads),
                 () -> ofAChoice(stated, at, reads),
@@ -5180,7 +5179,7 @@ final class Pullback {
                                            InputReads reads) {
         RemainderOfAShiftedValue.Read<InputReads> shifted =
                 RemainderOfAShiftedValue.read(stated, reads, sides());
-        if (shifted == null) {
+        if (shifted == null || !isAPositionsOwnRemainder(shifted.remainder(), shifted.at())) {
             return null;
         }
         return theStatementStands(shifted.statement(), shifted.remainder(), at, fixed,
@@ -5188,69 +5187,33 @@ final class Pullback {
     }
 
     /**
-     * A comparison of what a division by a written number leaves of a form of the input's numbers,
-     * read as a comparison of that remainder — or null where it is no such comparison.
+     * Whether {@code remainder}, read in {@code at}, is the number taken of one position of the
+     * input — and so a remainder of that position moved by a number is the position's own over one
+     * stretch or the other ({@link #ofAShiftedRemainder}).
      *
-     * <p>{@code Int.floorMod(a - d, 7) >= 1} is no line on {@code a} or on {@code d}: the values it
-     * holds of come round every seventh of their difference. It is a line on the remainder, which is
-     * a number of its own between nought and six, and a row is a pair of values whose difference
-     * leaves it ({@link Quantity.RemainderOfADividend}).
-     *
-     * <p>The dividend is read as any side of a comparison is, so it is the form the arithmetic would
-     * make of it anywhere else; and it is read whole, its moving part of its constant. Only whole
-     * numbers: a remainder of a form that weighs a number by a fraction is the remainder of what
-     * the host cannot hold, and is left unread.
+     * <p>Asked of the call over the unmoved place, by the reading and by the arithmetic both, so
+     * which of the two a remainder is is one answer however it was written. A remainder of anything
+     * else is a number of its own, its moving part of its dividend ({@link #remainderAt}).
      */
-    private Derivation ofARemainderOfAForm(StatedComparison stated, InputReads reads) {
-        RemainderOfAShiftedValue.OfAForm<InputReads> over =
-                RemainderOfAShiftedValue.readOverAForm(stated, reads, sides());
-        if (over == null) {
-            return null;
-        }
-        Quantity.RemainderOfADividend remainder =
-                remainderOf(over.dividend(), over.at(), over.divisor());
-        if (remainder == null) {
-            return null;
-        }
-        return switch (over.statement()) {
-            case ConstantComparison.Settled(boolean holds) -> new Derivation.WrittenOut(holds);
-            case ConstantComparison.Against(Rel rel, BigInteger against) -> {
-                LinearForm<Quantity> relation = LinearForm.<Quantity>atom(remainder)
-                        .minus(LinearForm.<Quantity>constant(ExactRatio.of(against))).orNull();
-                yield relation == null ? null
-                        : aRelation(Derivation.ComparisonReading.AS_A_CUT, relation, rel,
-                                Derivation.AComparisonRead.Facing.AS_WRITTEN);
-            }
-            // What the range of a remainder leaves a comparison is one line or a settled answer.
-            case ConstantComparison.Both _, ConstantComparison.Either _ -> null;
-        };
-    }
-
-    /**
-     * What a division by {@code divisor} leaves of {@code dividend}, read in {@code at}, as the
-     * number of its own it is — or null where the dividend is no form of the input's numbers, or
-     * weighs one or is moved by a fraction.
-     *
-     * <p>The constant is taken by the divisor's own remainder, so a dividend moved by a whole turn
-     * is the dividend it was before the moving.
-     */
-    private Quantity.RemainderOfADividend remainderOf(Core dividend, InputReads at,
-                                                      BigInteger divisor) {
-        LinearForm<NumericTerm> form = AffineReading.formOf(dividend, at, read);
-        if (form == null || form.coefs().isEmpty() || !isWhole(form)) {
-            return null;
-        }
-        return new Quantity.RemainderOfADividend(new LinearForm<>(
-                ExactRatio.of(constantOf(form).mod(divisor)), form.coefs()), divisor);
+    private boolean isAPositionsOwnRemainder(Core.PreservedCall remainder, InputReads at) {
+        return InputNumber.ofAlone(remainder, read.domain(), at, read.rules()) != null;
     }
 
     /**
      * The remainder {@code node} is, as a number of its own — or null where it is no remainder by a
-     * written number of a form of the input's numbers.
+     * written number of a form of the input's numbers, or is a position's own remainder moved.
      *
-     * <p>A dividend that is a place moved by a number is left to the reading that moves it back
-     * ({@link #ofAShiftedRemainder}): its remainder is the place's own round the divisor, which is
-     * a comparison of the place's remainder over one stretch or the other and no number of its own.
+     * <p>{@code Int.floorMod(a - d, 7) >= 1} is no line on {@code a} or on {@code d}: the values it
+     * holds of come round every seventh of their difference. It is a line on the remainder, which is
+     * a number of its own between nought and six, and a row is a pair of values whose difference
+     * leaves it ({@link Quantity.RemainderOfADividend}). The same number in the comparison, behind a
+     * name or with arithmetic round it.
+     *
+     * <p>The dividend is read as any number is, so it is the form the arithmetic makes of it however
+     * it is spelled, and it is read whole: what it is moved by is its constant, taken by the
+     * divisor's own remainder so a dividend moved by a whole turn is the dividend it was. Only whole
+     * numbers: a remainder of a form that weighs a number by a fraction is the remainder of what
+     * the host cannot hold, and is left unread.
      */
     private Quantity.RemainderOfADividend remainderAt(Core node, InputReads at) {
         // Every number the arithmetic meets is asked, so what is no call of a floor remainder is
@@ -5263,10 +5226,21 @@ final class Pullback {
         }
         RemainderOfAShiftedValue.OfADivision<InputReads> division =
                 RemainderOfAShiftedValue.ofADivision(node, at, sides());
-        if (division == null || division.movesAPlace(sides())) {
+        if (division == null) {
             return null;
         }
-        return remainderOf(division.dividend(), division.at(), division.divisor());
+        Core.PreservedCall unmoved = division.unmoved(sides());
+        if (unmoved != null && isAPositionsOwnRemainder(unmoved, division.at())) {
+            return null;
+        }
+        LinearForm<NumericTerm> form = AffineReading.formOf(division.dividend(), division.at(),
+                read);
+        if (form == null || form.coefs().isEmpty() || !isWhole(form)) {
+            return null;
+        }
+        return new Quantity.RemainderOfADividend(division.call().operation(), new LinearForm<>(
+                ExactRatio.of(constantOf(form).mod(division.divisor())), form.coefs()),
+                division.divisor());
     }
 
     /** Whether every number of {@code form}, its constant included, is a whole one. */

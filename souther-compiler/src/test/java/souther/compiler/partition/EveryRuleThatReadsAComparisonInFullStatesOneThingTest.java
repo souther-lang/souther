@@ -9,6 +9,7 @@ import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.check.StatedComparison;
 import souther.compiler.core.Core;
+import souther.compiler.flow.AWayThrough;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
@@ -113,46 +114,59 @@ class EveryRuleThatReadsAComparisonInFullStatesOneThingTest {
     }
 
     /**
-     * What a division leaves of a form of two numbers is read by the rule that reads a comparison
-     * of it and by the arithmetic that reads it as a number among others, and the two state one
-     * thing at every remainder — the remainder the divisor never leaves included.
-     *
-     * <p>A comparison with arithmetic round the remainder is the arithmetic's alone, and is held to
-     * the remainders it holds at.
+     * What a division leaves of a form of two numbers is read in full, written in the comparison or
+     * with arithmetic round it, and every rule that reads it states what the comparison holds at
+     * every remainder — the remainders past the divisor included.
      */
     @Test
     void everyRuleThatReadsARemainderOfAFormInFullStatesOneThing() {
-        Map<String, IntPredicate> writtenInTheComparison = new LinkedHashMap<>();
-        writtenInTheComparison.put("Int.floorMod(b.x - b.y, 7) >= 1", r -> r >= 1);
-        writtenInTheComparison.put("Int.floorMod(b.x - b.y, 7) == 3", r -> r == 3);
-        writtenInTheComparison.put("Int.floorMod(b.x - b.y, 7) >= 7", r -> r >= 7);
-        writtenInTheComparison.put("5 > Int.floorMod(b.x - b.y, 7)", r -> 5 > r);
-        Map<String, IntPredicate> withArithmeticRoundIt = new LinkedHashMap<>();
-        withArithmeticRoundIt.put("Int.floorMod(b.x - b.y, 7) + 1 >= 2", r -> r + 1 >= 2);
-        withArithmeticRoundIt.put("2 * Int.floorMod(b.x - b.y, 7) <= 5", r -> 2 * r <= 5);
-        withArithmeticRoundIt.put("Int.floorMod(b.x - b.y, 7) - 7 >= 0", r -> r - 7 >= 0);
-        writtenInTheComparison.forEach((condition, holds) ->
-                assertEveryRuleHoldsAtTheRemainders(condition, holds, 2));
-        withArithmeticRoundIt.forEach((condition, holds) ->
-                assertEveryRuleHoldsAtTheRemainders(condition, holds, 1));
+        Map<String, IntPredicate> conditions = new LinkedHashMap<>();
+        conditions.put("Int.floorMod(b.x - b.y, 7) >= 1", r -> r >= 1);
+        conditions.put("Int.floorMod(b.x - b.y, 7) == 3", r -> r == 3);
+        conditions.put("Int.floorMod(b.x - b.y, 7) >= 7", r -> r >= 7);
+        conditions.put("5 > Int.floorMod(b.x - b.y, 7)", r -> 5 > r);
+        conditions.put("Int.floorMod(b.x - b.y, 7) + 1 >= 2", r -> r + 1 >= 2);
+        conditions.put("2 * Int.floorMod(b.x - b.y, 7) <= 5", r -> 2 * r <= 5);
+        conditions.put("Int.floorMod(b.x - b.y, 7) - 7 >= 0", r -> r - 7 >= 0);
+        conditions.forEach((condition, holds) -> {
+            Reading reading = reading(condition);
+            List<Proposition> inFull = Pullback.byEachRule(reading.comparison(), reading.reads(),
+                    reading.read()).stream()
+                    .filter(stated -> !(stated instanceof Proposition.Unread))
+                    .toList();
+            assertFalse(inFull.isEmpty(), () -> condition + " is read in full");
+            for (int remainder = 0; remainder < 7; remainder++) {
+                int at = remainder;
+                for (Proposition each : inFull) {
+                    assertEquals(holds.test(at), holdsAtTheRemainder(each, at),
+                            () -> condition + " at the remainder " + at + ": " + inFull);
+                }
+            }
+        });
     }
 
-    private static void assertEveryRuleHoldsAtTheRemainders(String condition, IntPredicate holds,
-                                                            int rules) {
-        Reading reading = reading(condition);
-        List<Proposition> inFull = Pullback.byEachRule(reading.comparison(), reading.reads(),
-                reading.read()).stream()
-                .filter(stated -> !(stated instanceof Proposition.Unread))
-                .toList();
-        assertTrue(inFull.size() >= rules, () -> condition + " is read in full by " + rules
-                + " rules or more: " + inFull);
-        for (int remainder = 0; remainder < 7; remainder++) {
-            int at = remainder;
-            for (Proposition each : inFull) {
-                assertEquals(holds.test(at), holdsAtTheRemainder(each, at),
-                        () -> condition + " at the remainder " + at + ": " + inFull);
-            }
-        }
+    /**
+     * What a remainder of a form states is ruled out by where its operation says it runs, as what a
+     * remainder of one place states is: past one below the divisor nothing holds, and below it
+     * something may.
+     */
+    @Test
+    void whatARemainderStatesPastWhereItRunsIsRuledOut() {
+        Map<String, Boolean> conditions = new LinkedHashMap<>();
+        conditions.put("Int.floorMod(b.x - b.y, 7) >= 7", true);
+        conditions.put("Int.floorMod(b.x - b.y, 7) < 0", true);
+        conditions.put("2 * Int.floorMod(b.x - b.y, 7) + 3 > 15", true);
+        conditions.put("Int.floorMod(b.x - b.y, 7) >= 6", false);
+        conditions.put("Int.floorMod(b.x, 7) >= 7", true);
+        conditions.forEach((condition, ruledOut) -> {
+            Reading reading = reading(condition);
+            Proposition stated = Pullback.ofATruth(reading.truth(), reading.reads(),
+                    reading.read(), Optional.empty()).proposition();
+            assertEquals(ruledOut, WhatTheDeclarationsLeave.whetherRuledOut(stated, true,
+                    reading.read()) instanceof AWayThrough.RuledOut, () -> condition + ": " + stated);
+            assertFalse(WhatTheDeclarationsLeave.whetherRuledOut(stated, false, reading.read())
+                    instanceof AWayThrough.RuledOut, () -> condition + " fails somewhere");
+        });
     }
 
     /**

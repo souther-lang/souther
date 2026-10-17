@@ -34,8 +34,9 @@ import java.util.OptionalInt;
  * <p>What it reads is the arithmetic that leaves a place a place: a sum or a difference with a
  * written number, however it is spelled and however many deep, which is arithmetic the library
  * states of its operations ({@link DischargeRules#operator}). A divisor below nought is not read —
- * it answers the other side of nought and the stretches above are not its — and neither is a value
- * scaled or made of two places.
+ * it answers the other side of nought and the stretches above are not its. Whether the place is one
+ * whose remainder is a number of the place is the caller's to ask: the remainder of a form of several
+ * places is a number of its own, its moving part of its dividend, and no stretch of another.
  */
 public final class RemainderOfAShiftedValue {
 
@@ -83,57 +84,7 @@ public final class RemainderOfAShiftedValue {
             if (statement == null) {
                 return null;
             }
-            List<Core> over = new ArrayList<>(found.call().args());
-            over.set(0, moved.place());
-            Core.PreservedCall call = found.call();
-            return new Read<>(new Core.PreservedCall(call.declared(), over, call.place(),
-                    call.settled(), call.type(), call.pos()), found.at(), statement);
-        }
-        return null;
-    }
-
-    /**
-     * What a comparison states of the remainder of a dividend taken whole, read as the remainder of
-     * a form of the input's numbers where the dividend is no place moved by a number — or null where
-     * neither side is such a remainder, the other side is no whole number the same on every run, or
-     * the divisor is no number above nought.
-     *
-     * <p>The statement is of the remainder the call answers, between nought and one below the
-     * divisor: nothing of the dividend is peeled, because what a form is moved by is the form's own
-     * constant.
-     *
-     * @param <E> the environment the call is read in
-     * @param dividend the first argument of the call, which is the form the division is of
-     * @param at where the call was applied, which is where its arguments are read
-     * @param divisor the number the dividend is divided by
-     * @param statement what holds of the remainder exactly where the comparison holds
-     */
-    public record OfAForm<E>(Core dividend, E at, BigInteger divisor,
-                             ConstantComparison statement) {
-
-        public OfAForm {
-            Objects.requireNonNull(dividend, "a remainder is of something");
-            Objects.requireNonNull(at, "read somewhere");
-            Objects.requireNonNull(divisor, "by something");
-            Objects.requireNonNull(statement, "and the comparison states something of it");
-        }
-    }
-
-    /** The same, of the dividend as the call has it: no moving is peeled off it. */
-    public static <E> OfAForm<E> readOverAForm(StatedComparison comparison, E at,
-                                                TheSignOfAnOrder.Sides<E> sides) {
-        for (boolean remainderFirst : List.of(true, false)) {
-            Located<E> found = locate(comparison, at, sides, remainderFirst);
-            if (found == null) {
-                continue;
-            }
-            if (found.against() == null) {
-                return null;
-            }
-            ConstantComparison statement = ConstantComparison.of(found.written(), found.against(),
-                    BigInteger.ZERO, found.divisor().subtract(BigInteger.ONE));
-            return statement == null ? null : new OfAForm<>(found.division().dividend(),
-                    found.at(), found.divisor(), statement);
+            return new Read<>(found.division().over(moved.place()), found.at(), statement);
         }
         return null;
     }
@@ -164,12 +115,24 @@ public final class RemainderOfAShiftedValue {
         }
 
         /**
-         * Whether the dividend is a place moved by a number, whose remainder is the place's own
-         * remainder round the divisor and so a comparison of it is read by
-         * {@link RemainderOfAShiftedValue#read}.
+         * The same division of the place the dividend is moved from by a number — or null where the
+         * dividend is no place moved by a number.
+         *
+         * <p>Whether a comparison of this remainder is one of that remainder over a stretch
+         * ({@link RemainderOfAShiftedValue#read}) is the caller's: it turns on whether the place's
+         * remainder is a number of the place, which is no question of the arithmetic here.
          */
-        public boolean movesAPlace(TheSignOfAnOrder.Sides<E> sides) {
-            return Moved.of(dividend(), at, sides) != null;
+        public Core.PreservedCall unmoved(TheSignOfAnOrder.Sides<E> sides) {
+            Moved moved = Moved.of(dividend(), at, sides);
+            return moved == null ? null : over(moved.place());
+        }
+
+        /** The same call with {@code dividend} in place of its own. */
+        Core.PreservedCall over(Core dividend) {
+            List<Core> args = new ArrayList<>(call.args());
+            args.set(0, dividend);
+            return new Core.PreservedCall(call.declared(), args, call.place(), call.settled(),
+                    call.type(), call.pos());
         }
     }
 
@@ -227,10 +190,6 @@ public final class RemainderOfAShiftedValue {
      * is a whole one.
      */
     private record Located<E>(OfADivision<E> division, BigInteger against, Rel written) {
-
-        Core.PreservedCall call() {
-            return division.call();
-        }
 
         E at() {
             return division.at();
