@@ -25,6 +25,7 @@ import souther.compiler.check.KeyedAccumulation;
 import souther.compiler.check.Location;
 import souther.compiler.check.NonAffineOperation;
 import souther.compiler.check.NumericMeasures;
+import souther.compiler.check.QuotientByAValue;
 import souther.compiler.check.RecursionOverAList;
 import souther.compiler.check.RecursionOverATree;
 import souther.compiler.check.RemainderOfAShiftedValue;
@@ -476,10 +477,15 @@ final class Pullback {
                 && carriesPast(stated, check, emptiness);
     }
 
-    /** The reading a comparison was read by, under the entries of lookups it was read through. */
+    /** The reading a comparison was read by, under the entries of lookups it was read through and
+     *  the comparison a rule read it as. */
     private static Derivation readingUnderTheEntries(Derivation how) {
-        return how instanceof Derivation.OfTheEntryUnderTheKey(var _, var about)
-                ? readingUnderTheEntries(about) : how;
+        return switch (how) {
+            case Derivation.OfTheEntryUnderTheKey(var _, var about) ->
+                    readingUnderTheEntries(about);
+            case Derivation.Restated(var read) -> readingUnderTheEntries(read);
+            default -> how;
+        };
     }
 
     /**
@@ -750,6 +756,17 @@ final class Pullback {
         return firstThatReadsIt(rulesFor(stated, at, fixed, reads));
     }
 
+    /**
+     * {@code stated}, a comparison a rule reads the written one as, read by the same rules: one
+     * that holds exactly where the written one does, over sides the source did not write
+     * ({@link Derivation.Restated}).
+     */
+    private Derivation restated(StatedComparison stated, Denotation at, boolean fixed,
+                                InputReads reads) {
+        Derivation read = comparison(stated, at, fixed, reads);
+        return read == null ? null : new Derivation.Restated(read);
+    }
+
     /** The rules that take a comparison the source wrote, in the order they are tried. */
     private List<Supplier<Derivation>> rulesFor(StatedComparison stated, Denotation at,
                                                 boolean fixed, InputReads reads) {
@@ -788,6 +805,7 @@ final class Pullback {
                 () -> ofACountOfWholeUnits(stated, at, fixed, reads),
                 () -> ofAShiftedRemainder(stated, at, fixed, reads),
                 () -> ofARoundedNumber(stated, at, fixed, reads),
+                () -> ofAQuotientByAValue(stated, at, fixed, reads),
                 () -> partOf(at, ofItsArguments(stated, fixed, reads)),
                 () -> ofASizeInCases(stated, at, reads),
                 () -> ofAChoice(stated, at, reads),
@@ -5725,7 +5743,7 @@ final class Pullback {
                             ConstructOccurrence.unwritten(), Type.INT, remainder.pos());
             Derivation here = new Derivation.Joined(ConditionJoin.BOTH,
                     theStatementStands(stretch.within(), remainder, at, fixed, value.at()),
-                    comparison(new StatedComparison(ComparisonClaim.stating(value.written()),
+                    restated(new StatedComparison(ComparisonClaim.stating(value.written()),
                             moved, value.other(), Core.BinaryReading.AS_THEY_STAND), at, fixed,
                             value.at()));
             out = out == null ? here : new Derivation.Joined(ConditionJoin.EITHER, out, here);
@@ -5748,6 +5766,32 @@ final class Pullback {
         return rounded == null ? null
                 : theStatementStands(rounded.statement(), rounded.rounded(), at, fixed,
                         rounded.at());
+    }
+
+    /**
+     * A comparison of a quotient by a value with a number, read on each sign of the divisor as the
+     * comparison of the dividend with the number times the divisor ({@link QuotientByAValue}) — or
+     * null where it is no such comparison.
+     *
+     * <p>{@code n / d >= 100} is {@code d > 0 && n >= 100 * d} or {@code d < 0 && n <= 100 * d}.
+     * Each is read as any comparison is, so a dividend or divisor no form says is left unread for
+     * that, and a sign the path or the declarations rule out is a side no row reaches.
+     */
+    private Derivation ofAQuotientByAValue(StatedComparison stated, Denotation at, boolean fixed,
+                                           InputReads reads) {
+        QuotientByAValue.Read<InputReads> quotient =
+                QuotientByAValue.read(stated, reads, sides(), read.rules().symbols());
+        if (quotient == null) {
+            return null;
+        }
+        Derivation out = null;
+        for (QuotientByAValue.OnASign sign : quotient.signs()) {
+            Derivation here = joined(ConditionJoin.BOTH,
+                    restated(sign.divisor(), at, fixed, quotient.at()),
+                    restated(sign.moved(), at, fixed, quotient.at()));
+            out = out == null ? here : joined(ConditionJoin.EITHER, out, here);
+        }
+        return out;
     }
 
     /**
@@ -5841,7 +5885,7 @@ final class Pullback {
                             theStatementStands(second, subject, at, fixed, reads));
             case ConstantComparison.Against(Rel rel, ExactRatio against) -> {
                 StatedComparison written = ConstantComparison.stated(rel, subject, against);
-                yield written == null ? null : comparison(written, at, fixed, reads);
+                yield written == null ? null : restated(written, at, fixed, reads);
             }
         };
     }
@@ -5879,7 +5923,7 @@ final class Pullback {
         }
         Core start = new Core.Temporal(Type.Prim.DATE, LocalDate.of((int) year, 1, 1).toString(),
                 taking.application(), taking.pos());
-        return comparison(new StatedComparison(ComparisonClaim.stating(relation),
+        return restated(new StatedComparison(ComparisonClaim.stating(relation),
                 taking.args().getFirst(), start, new Core.BinaryReading.AsTheyStand()), at, fixed,
                 reads);
     }

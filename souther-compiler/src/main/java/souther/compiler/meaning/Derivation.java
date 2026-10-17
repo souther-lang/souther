@@ -276,6 +276,34 @@ public sealed interface Derivation {
         }
     }
 
+    /**
+     * A comparison read as another one that holds exactly where it does, and what that one states:
+     * a comparison of a rounded number as one of the number before rounding, of a quotient as one
+     * of the dividend and the divisor.
+     *
+     * <p>Concludes what the other comparison does. The sides that comparison is read off are no
+     * sides the source wrote, and its line can stand where the written comparison has a point
+     * beside its own: {@code Rational.toInt(DOWN, x / 2) > 100} is {@code x / 2 >= 101}, whose
+     * value holds where the written line's value does not. So its relations face nothing written,
+     * and each claims what it draws ({@link WrittenLines}).
+     */
+    record Restated(Derivation read) implements Derivation {
+
+        public Restated {
+            Objects.requireNonNull(read, "a comparison is read as another");
+        }
+
+        @Override
+        public Proposition conclusion(Conclusion numbering) {
+            return numbering.of(read);
+        }
+
+        @Override
+        public List<Derivation> oneOf() {
+            return List.of(read);
+        }
+    }
+
     /** An {@code if}: its arm under its condition, and its other arm under the denial of it — or
      *  what both state, where they state one thing. */
     record IfThenElse(Derivation condition, Derivation then, Derivation otherwise)

@@ -90,12 +90,17 @@ class AProductOfTwoInputsIsReportedAsAProductWhateverCarriesItTest {
                         """));
     }
 
+    /**
+     * A quotient by an input held against another value is no line: the value times the divisor is
+     * a product. Held against a number it is one on each sign of the divisor, so it is held against
+     * a value here.
+     */
     @Test
     void aQuotientByAnInputIsADivisorAndNotAProduct() {
         assertEquals(List.of("xs[*].p: NON_CONSTANT_DIVISOR", "xs[*].q: NON_CONSTANT_DIVISOR"),
                 reasons("""
                         behavior f : (xs: List<A>) -> Bool
-                        let f (xs) = List.any(i -> i.q / i.p >= 10, xs)
+                        let f (xs) = List.any(i -> i.q / i.p >= i.q, xs)
                         """));
     }
 
@@ -114,7 +119,7 @@ class AProductOfTwoInputsIsReportedAsAProductWhateverCarriesItTest {
                 reasons("""
                         behavior f : (xs: List<A>) -> Bool
                         let f (xs) = List.length(List.filter(
-                            i -> i.q * i.p >= 1000 && i.q / i.p >= 10, xs)) >= 1
+                            i -> i.q * i.p >= 1000 && i.q / i.p >= i.q, xs)) >= 1
                         """));
     }
 

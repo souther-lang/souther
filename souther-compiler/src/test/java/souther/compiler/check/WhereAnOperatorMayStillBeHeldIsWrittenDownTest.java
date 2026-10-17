@@ -297,6 +297,18 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                     "writes what a moved remainder is on a stretch of the place's remainder as the"
                             + " place's moved by a number, so that its comparison with another"
                             + " value is read where any comparison of a sum is"),
+            new Held("souther.compiler.check.QuotientByAValue.read",
+                    "asks whether a side is a quotient, so that its comparison with a number is"
+                            + " read as the dividend's with the number times the divisor"),
+            new Held("souther.compiler.check.QuotientByAValue.operated",
+                    "writes the number times the divisor as the source would, through the rule"
+                            + " for the operator, so that the comparison is read where any"
+                            + " comparison of a product is"),
+            new Held("souther.compiler.check.QuotientByAValue.timesTheDivisor",
+                    "names the two operators the number times the divisor is written with"),
+            new Held("souther.compiler.check.Terms.aWholeNumberOfAQuotient",
+                    "asks whether what a narrowing to a whole number rounds is a quotient, which"
+                            + " is then a quotient rounded to the scale nought"),
             new Held("souther.compiler.partition.ClauseStatements.walk",
                     "walks into both halves, and stops where the connective composes either of"
                             + " them because what such a rule states is neither of its sides"),

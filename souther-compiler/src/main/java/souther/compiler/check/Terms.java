@@ -2205,6 +2205,10 @@ final class Terms {
         if (result != null && answersIn(result, answered)) {
             return computedBy(result, argsOf(e), answered);
         }
+        NumericMeaning whole = aWholeNumberOfAQuotient(e, at);
+        if (whole != null) {
+            return whole;
+        }
         // An operator answers a number, and the domain carries the numbers on a carrier. Exact
         // division answers one that is on none — a Rational is a number and no position holds one
         // (ADR-0116) — so there is no atom for it to be about and no meaning to give. Asked of the
@@ -2214,6 +2218,35 @@ final class Terms {
             return new NumericMeaning.Operator(b.op(), b.left(), b.right());
         }
         return null;
+    }
+
+    /**
+     * {@code e} as a quotient rounded to a scale of nought, where it rounds the exact quotient
+     * {@code /} answers to a whole number — or null where it is no such rounding.
+     *
+     * <p>The quotient has no meaning of its own here: a Rational is on no carrier and nothing is
+     * named of one. Rounded to a whole number it is a value of the narrowing's carrier, and every way
+     * of rounding lands it on one of the two whole numbers the exact quotient lies between, which is
+     * what a quotient rounded to a scale is at the scale nought. The quotient is read through the
+     * names it was given, as the argument a rounding takes is.
+     */
+    private NumericMeaning aWholeNumberOfAQuotient(Core e, Denotations at) {
+        AnOperationApplied applied = AnOperationApplied.of(e);
+        BoundOperationFact.RoundsToAWholeNumber rounds = applied == null ? null
+                : DefaultBoundOperationFacts.get().roundsToAWholeNumber(applied.operation());
+        Core value = rounds == null ? null : applied.argument(rounds.value());
+        Denotations in = at;
+        while (value != null && Core.withoutStanding(value) instanceof Core.Read name
+                && readThrough(name, in) instanceof ValueStanding.ReadThrough<Denotations> given) {
+            value = given.value();
+            in = given.at();
+        }
+        if (value == null || !(Core.withoutStanding(value) instanceof Core.Binary quotient)
+                || quotient.op() != BinOp.DIV) {
+            return null;
+        }
+        return new NumericMeaning.RoundedQuotient(quotient.left(), quotient.right(),
+                new Core.Int(0, Type.INT, e.pos()), applied.argument(rounds.mode()));
     }
 
     /** Whether {@code result} says the operation answers a value of {@code answered}: its own, or

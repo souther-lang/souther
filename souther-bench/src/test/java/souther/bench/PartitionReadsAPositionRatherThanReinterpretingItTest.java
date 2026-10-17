@@ -104,6 +104,9 @@ class PartitionReadsAPositionRatherThanReinterpretingItTest {
                     "souther.compiler.check.ClausesInOrder#at", Traversal.OPAQUE),
             new Authority("how a type is written where an author reads it",
                     "souther.compiler.types.Type#show", Traversal.OPAQUE),
+            new Authority("what an operator answers over the types of its two operands, and what"
+                            + " it reads them as, as the elaborator types it",
+                    "souther.compiler.check.ArithmeticCheck#of", Traversal.OPAQUE),
 
             // An owner all the same, walked through. It cannot stand as a boundary: it hands its
             // decision to whichever term it is about, so a stop here would leave the place that

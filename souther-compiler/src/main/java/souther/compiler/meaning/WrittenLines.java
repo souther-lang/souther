@@ -155,6 +155,10 @@ public final class WrittenLines {
                 walk(read, WrittenChoice.of(at, comparison).isPresent()
                         ? under.inAnotherComparison() : under.outside());
             }
+            case Derivation.Restated(var read) -> {
+                madeHere(step, List.of(read), under);
+                walk(read, under.inAnotherComparison());
+            }
             default -> {
                 if (step instanceof Derivation.ACutThatCutsNothing && !under.decidedOutside()) {
                     settled.add(under.line());
@@ -373,6 +377,7 @@ public final class WrittenLines {
             case Derivation.OnEachValueWrittenOut(var each) -> each;
             case Derivation.AChoiceAt(var _, var choice) -> List.of(choice);
             case Derivation.AComparisonAt(var _, var read) -> List.of(read);
+            case Derivation.Restated(var read) -> List.of(read);
             case Derivation.IfThenElse(var condition, var then, var otherwise) ->
                     List.of(condition, then, otherwise);
             case Derivation.MatchArms(var arms) -> ofTheArms(arms);
