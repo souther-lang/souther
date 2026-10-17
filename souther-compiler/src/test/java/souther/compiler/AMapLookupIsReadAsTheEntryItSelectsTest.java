@@ -89,26 +89,6 @@ class AMapLookupIsReadAsTheEntryItSelectsTest {
         assertTrue(partitionAbout(called, "m[*]").startsWith("· no line:"), called);
     }
 
-    /**
-     * Two lookups in one map, each with a default, added in one comparison: where both keys are
-     * filed the comparison is about two entries, which inside one quantifier over the map would
-     * be one subject and read as twice one value. It is read of neither, as the same sum of two
-     * entries written under two matches is, and no line is drawn on the map's values.
-     */
-    @Test
-    void twoLookupsInOneMapAreNotReadAsOneEntry() {
-        String report = report(measured("""
-                module p
-                behavior f : (k: String, j: String, m: Map<String, Int>, q: Int) -> Bool
-                let f (k, j, m, q) =
-                    Option.withDefault(0, Map.get(k, m)) + Option.withDefault(0, Map.get(j, m)) >= q
-                """));
-
-        assertTrue(report.contains("written in a form this compiler does not read, about `m[*]`"),
-                report);
-        assertFalse(report.contains("read as f/m[*]"), report);
-    }
-
     /** The partition line about {@code place}, without where its comparison stands. */
     private static String partitionAbout(String report, String place) {
         return report.lines().map(String::strip)

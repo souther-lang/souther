@@ -499,32 +499,32 @@ public sealed interface Proposition {
          * spelled; one over any other container is over the container it names.
          */
         public static boolean quantifiesOver(DecisionSubject container, Proposition stated) {
-            return quantifiesOver(container, stated, List.of());
+            return quantifiesOverInside(container, stated, List.of());
         }
 
         /** {@link #quantifiesOver}, inside searches written of each of {@code rebound}. */
-        private static boolean quantifiesOver(DecisionSubject container, Proposition stated,
-                                              List<TermPath> rebound) {
+        private static boolean quantifiesOverInside(DecisionSubject container, Proposition stated,
+                                                    List<TermPath> rebound) {
             return switch (stated) {
-                case Some some -> some.container.equals(container)
-                        && !reboundBy(some.container, rebound)
-                        || quantifiesOver(container, some.ofTheElement, rebound);
+                case Some some -> (some.container.equals(container)
+                        && !reboundBy(some.container, rebound))
+                        || quantifiesOverInside(container, some.ofTheElement, rebound);
                 case All all -> all.parts().stream()
-                        .anyMatch(part -> quantifiesOver(container, part, rebound));
+                        .anyMatch(part -> quantifiesOverInside(container, part, rebound));
                 case Any any -> any.parts().stream()
-                        .anyMatch(part -> quantifiesOver(container, part, rebound));
+                        .anyMatch(part -> quantifiesOverInside(container, part, rebound));
                 case SomeReachable reached -> {
                     List<TermPath> inside = new ArrayList<>(rebound);
                     inside.add(reached.writtenAt());
-                    yield quantifiesOver(container, reached.atANode(), inside)
+                    yield quantifiesOverInside(container, reached.atANode(), inside)
                             || reached.noneBelow()
-                                    .filter(each -> quantifiesOver(container, each, inside))
+                                    .filter(each -> quantifiesOverInside(container, each, inside))
                                     .isPresent();
                 }
                 case OnAnApplication applied -> applied.each().stream()
-                        .anyMatch(each -> quantifiesOver(container, each, rebound));
+                        .anyMatch(each -> quantifiesOverInside(container, each, rebound));
                 case SoManyHold counted -> counted.statements().stream()
-                        .anyMatch(each -> quantifiesOver(container, each, rebound));
+                        .anyMatch(each -> quantifiesOverInside(container, each, rebound));
                 case Always _, Compared _, Truth _, InCases _, Present _, SameValue _,
                      LastToHold _, Carried _, Unread _ -> false;
             };
@@ -577,6 +577,11 @@ public sealed interface Proposition {
              * <p>Read off the parts as they are written and nothing more: a part {@code other}
              * asks that this asks only in other words is no part this was seen to ask, and the
              * answer is no. And never both ways round, since each asks more than the other.
+             *
+             * <p>Asked of two quantifiers standing side by side in one statement, where a
+             * container and a part spelled alike are one container and one part. Inside a search
+             * a place is named by the node the search was written of ({@link SomeReachable}), so
+             * a quantifier there is not compared with one outside it by how they are spelled.
              */
             public boolean holdsOnlyWhere(ElementAsked other) {
                 return quantifier.holds && other.quantifier.holds

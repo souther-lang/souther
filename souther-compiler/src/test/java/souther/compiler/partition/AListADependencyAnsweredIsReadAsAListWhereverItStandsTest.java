@@ -5,14 +5,20 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
+import souther.compiler.inputs.Evaluations;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReading;
+import souther.compiler.meaning.AnswerAsAnInput;
 import souther.compiler.meaning.DecisionAtom;
+import souther.compiler.meaning.DecisionSubject;
+import souther.compiler.meaning.InjectedAnswer;
+import souther.compiler.meaning.Proposition;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.RuleRequirement;
 import souther.compiler.query.RuleSettlement;
 import souther.compiler.report.AdequacyReport;
+import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -26,6 +32,7 @@ import java.util.regex.Pattern;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -614,6 +621,28 @@ class AListADependencyAnsweredIsReadAsAListWhereverItStandsTest {
             assertTrue(each.demands().stated().isEmpty(),
                     () -> "and nothing is composed to it: " + each.demands());
         }
+    }
+
+    /**
+     * Every answer is said under one name for a composer, so a statement about some element of
+     * one answer and some element of another is two answers under that name, and is no statement
+     * about one: a composer is handed neither it nor a quantifier over the name holding another.
+     * About one answer, it is that answer's.
+     */
+    @Test
+    void aStatementAboutTwoAnswersIsNoneAboutOneUnderTheNameTheyAreSaidBy() {
+        InjectedAnswer one = new InjectedAnswer(
+                Evaluations.of(new ValueName.Behavior("demo", "sched1"), 0), List.of());
+        InjectedAnswer other = new InjectedAnswer(
+                Evaluations.of(new ValueName.Behavior("demo", "sched2"), 0), List.of());
+        Proposition aboutOther = new Proposition.Some(
+                new DecisionSubject.AnAnswer(other, List.of()), new Proposition.Always(true), true);
+        Proposition aboutBoth = new Proposition.Some(
+                new DecisionSubject.AnAnswer(one, List.of()), aboutOther, true);
+
+        assertNull(AnswerAsAnInput.inputNumbersIn(aboutBoth), aboutBoth::toString);
+        assertNull(AnswerAsAnInput.onlyAnswerIn(aboutBoth), aboutBoth::toString);
+        assertEquals(Set.of(), AnswerAsAnInput.inputNumbersIn(aboutOther), aboutOther::toString);
     }
 
     /**

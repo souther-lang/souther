@@ -29,6 +29,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -45,7 +46,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class AnObservationOfAnAnswerIsWhatItsLawSaysOfTheArgumentsTest {
 
     private static final String INPUT = """
-            data Box = { xs: List<Int>, ys: List<Int>, n: Int, s: String, t: String, set: Set<Int> }
+            data Box = { xs: List<Int>, ys: List<Int>, n: Int, s: String, t: String, set: Set<Int>,
+                         m: Map<String, Int> }
             """;
 
     /** Asked for some and handed some: a disjunction over the arguments, and not a silence. */
@@ -247,6 +249,23 @@ class AnObservationOfAnAnswerIsWhatItsLawSaysOfTheArgumentsTest {
                 + " == 1, b.xs) then 1 else 0");
         assertInstanceOf(WhyUnread.TwoElementsOfOneContainer.class,
                 Proposition.firstStopIn(nested), nested.toString());
+    }
+
+    /**
+     * Two lookups in one map, each with a default, added in one comparison: where both keys are
+     * filed it is about two entries, which said under one quantifier over the map would be one
+     * subject, and it is not read — as the sum of two elements of one container is not, however
+     * the two were taken out of it. One lookup beside a number is read.
+     */
+    @Test
+    void twoLookupsInOneMapAreNotReadAsOneEntry() {
+        Proposition two = stated("if Option.withDefault(0, Map.get(b.s, b.m))"
+                + " + Option.withDefault(0, Map.get(b.t, b.m)) >= b.n then 1 else 0");
+        assertInstanceOf(WhyUnread.TwoElementsOfOneContainer.class,
+                Proposition.firstStopIn(two), two.toString());
+
+        Proposition one = stated("if Option.withDefault(0, Map.get(b.s, b.m)) >= b.n then 1 else 0");
+        assertFalse(Proposition.leavesSomethingUnread(one), one.toString());
     }
 
     /** How many what a mapping answers holds is how many it was handed, read as that one's size. */

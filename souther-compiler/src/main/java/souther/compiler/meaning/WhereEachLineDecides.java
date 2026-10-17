@@ -682,6 +682,10 @@ public final class WhereEachLineDecides {
          * and {@code x > 0} failing is no row: whether rows on both sides of a line can be in a
          * case is asked of the rows, and said here it would be a part of every case the line is
          * read in.
+         *
+         * <p>The quantifiers compared are the parts of one statement, side by side: what stands
+         * inside a quantifier or a search is not a part here, so two spelled over one container
+         * are over one container.
          */
         private static List<Proposition> canBe(List<Proposition> named, List<AskedTwice> twice) {
             List<Proposition> out = new ArrayList<>();
