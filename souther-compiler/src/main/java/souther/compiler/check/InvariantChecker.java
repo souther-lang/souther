@@ -296,25 +296,6 @@ public final class InvariantChecker {
      * neither of them has.
      */
     private StringMachineAnswers answers;
-    /**
-     * What the rest of the rules leave a place with one conjunct left out — or null where this
-     * reading is not the declaration's own, which is every reading that settles or leaves out
-     * something already.
-     *
-     * <p>What a relation asks of the places it is written over is what the rest of the rules leave
-     * them, since what it leaves them itself is what the relation is being asked about. Asked only
-     * of the declaration's own reading, so a reading made to answer it asks nothing of the kind
-     * and none is made inside another.
-     */
-    private LeftWithoutAPart withoutAPart;
-
-    /** A run every value of which the rules other than {@code part} leave the value at
-     *  {@code place}, or null where none is shown ({@link FieldDomains#wholeRunAt}). */
-    @FunctionalInterface
-    private interface LeftWithoutAPart {
-
-        NumericDomain.Bounds at(PartId<RuleRef.Invariant> part, RuleKey place);
-    }
     private final List<CompileException> errors = new ArrayList<>();
     private final List<InvariantFinding> warnings = new ArrayList<>();
 
@@ -833,22 +814,6 @@ public final class InvariantChecker {
         // The world this was handed, handed on: a reader below is given what this reader was given.
         InvariantChecker c = new InvariantChecker(world);
         c.answers = answers;
-        if (settled.isEmpty() && reach.everything()) {
-            // Each read again once, the first time a relation in it asks, and each place asked of
-            // once: a clause is read at every place the walk opens a value at, and asks again
-            // each time.
-            Map<PartId<RuleRef.Invariant>, FieldDomains> without = new HashMap<>();
-            Map<PartId<RuleRef.Invariant>, Map<RuleKey, Optional<NumericDomain.Bounds>>> runs =
-                    new HashMap<>();
-            // What it borrows is the machines this reading has come to when it is asked, and what
-            // it builds stays with it rather than in what this reading comes to.
-            c.withoutAPart = (part, place) -> runs.computeIfAbsent(part, _ -> new HashMap<>())
-                    .computeIfAbsent(place, at -> Optional.ofNullable(without.computeIfAbsent(part,
-                            each -> FieldDomains.withoutParts(named, world, Set.of(each),
-                                    c.answers.facts()))
-                            .wholeRunAt(at)))
-                    .orElse(null);
-        }
         // A newtype's value is the same location as the newtype, so it is at no name of its own and
         // its fields are the first step there is. Read from the world rather than off a node handed
         // in, and turned into a name here, where the names a rule may write are decided.
@@ -1170,7 +1135,8 @@ public final class InvariantChecker {
         // And which of the clauses place an edge, asked once the positions have names to be
         // recognised by.
         Reading reading = c.directsIn(accounted, at, numbers, took,
-                new RulesRead(narrowedBy));
+                new RulesRead(narrowedBy), settled.isEmpty() && reach.everything()
+                        ? new WithoutAPart(named, world, c.answers) : null);
         ConstraintState<FactSubject> constraints = k.constraints()
                 .takingRead(answered.whole().confinement(), allowed, c.answers);
         // How each atom's values are spaced, kept so that settling one afterwards states the
@@ -1913,6 +1879,49 @@ public final class InvariantChecker {
     }
 
     /**
+     * What the rest of the rules leave a place of the declaration being read, one conjunct left
+     * out, for the declaration's own reading while it is made.
+     *
+     * <p>What a relation asks of the places it is written over is what the rest of the rules leave
+     * them, since what it leaves them itself is what the relation is being asked about. Each
+     * conjunct asked about is read again once, without it, and each place asked of once: a clause
+     * is read at every place the walk opens a value at, and asks again each time.
+     *
+     * <p>The reading made without a conjunct borrows the machines this reading has come to when it
+     * is asked, and what it builds stays with it rather than in what this reading comes to
+     * ({@link FieldDomains#withoutParts}). It asks nothing of the kind itself, so none is made
+     * inside another. Handed down the walk and not kept: it holds this reading's own answers,
+     * which nothing outlives the reading with.
+     */
+    static final class WithoutAPart {
+
+        private final TypeSymbol.AtModule named;
+        private final RuleReadingContext world;
+        private final StringMachineAnswers machines;
+        private final Map<PartId<RuleRef.Invariant>, FieldDomains> read = new HashMap<>();
+        private final Map<PartId<RuleRef.Invariant>, Map<RuleKey, Optional<NumericDomain.Bounds>>>
+                runs = new HashMap<>();
+
+        WithoutAPart(TypeSymbol.AtModule named, RuleReadingContext world,
+                     StringMachineAnswers machines) {
+            this.named = named;
+            this.world = world;
+            this.machines = machines;
+        }
+
+        /** A run every value of which the rules other than {@code part} leave the value at
+         *  {@code place}, or null where none is shown ({@link FieldDomains#wholeRunAt}). */
+        NumericDomain.Bounds runAt(PartId<RuleRef.Invariant> part, RuleKey place) {
+            return runs.computeIfAbsent(part, _ -> new HashMap<>())
+                    .computeIfAbsent(place, at -> Optional.ofNullable(read.computeIfAbsent(part,
+                            each -> FieldDomains.withoutParts(named, world, Set.of(each),
+                                    machines.facts()))
+                            .wholeRunAt(at)))
+                    .orElse(null);
+        }
+    }
+
+    /**
      * What each rule's own tree came to, once every branch of the value is decided.
      *
      * <p>What a part of a rule came to is not here. That is the reading's own and is held by the
@@ -2200,9 +2209,16 @@ public final class InvariantChecker {
         }
     }
 
+    /**
+     * Which of the clauses in {@code stated} place an edge, and what each of them raises.
+     *
+     * @param withoutAPart what the rest of the rules leave a place with one conjunct left out, or
+     *                     null where this is not the declaration's own reading
+     */
     private Reading directsIn(List<Written> stated, Denotations at,
                                    Coordinates byName,
-                                   ReadingEvidence took, RulesRead rules) {
+                                   ReadingEvidence took, RulesRead rules,
+                                   WithoutAPart withoutAPart) {
         List<Direct> out = new ArrayList<>();
         // Sets in the order they were filed: one finding is filed by every rule that comes to it, and
         // a list asked whether it holds one already is asked across everything filed before.
@@ -2233,7 +2249,8 @@ public final class InvariantChecker {
                         direct(reached.said(), reached.statement(), each, part.id(),
                                 inside(reached.crossed(), at), byName, out, noLines,
                                 withoutAnEnd, aboutOneCoordinate, narrowers,
-                                raised, took, rules, raisedByPart, standing, partsNaming))));
+                                raised, took, rules, raisedByPart, standing, partsNaming,
+                                withoutAPart))));
         // Insertion order, kept: `Map.copyOf` iterates in an order salted once per JVM run, and
         // what a report prints for a position is these in the order the declaration writes them.
         return new Reading(List.copyOf(out), List.copyOf(noLines.values()),
@@ -2389,7 +2406,7 @@ public final class InvariantChecker {
                         Map<ReadingPlace, Required> raisedByPart,
                         Map<FieldDomains.BoundaryQuestion,
                                 FieldDomains.BoundaryStanding> standing,
-                        PartsNaming partsNaming) {
+                        PartsNaming partsNaming, WithoutAPart withoutAPart) {
         // Which rule this is a part of, asked of the part. Carried beside it, a reading could be
         // given a part of one rule and told it was reading another.
         RuleRef.Invariant from = part.rule();
@@ -2452,7 +2469,7 @@ public final class InvariantChecker {
         if (read instanceof CanonicalForm.Over over && over.positions().size() > 1
                 && comparison.claim() instanceof ComparisonClaim.Cut) {
             Set<RuleKey> undivided = undividedBy(over, part, partsNaming, withoutAPart == null
-                    ? _ -> null : place -> withoutAPart.at(part, place));
+                    ? _ -> null : place -> withoutAPart.runAt(part, place));
             over.positions().stream().filter(place -> !undivided.contains(place))
                     .forEach(notShown::add);
         }

@@ -742,11 +742,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         if (bounds == null) {
             return null;
         }
-        if (!byARule) {
-            return bounds.admissible();
-        }
-        NumericDomain.Bounds left = bounds.rangeLeft();
-        return left == null || left.saysNothing() ? null : left;
+        NumericDomain.Bounds ends = byARule ? bounds.rangeLeft() : bounds.admissible();
+        return ends == null || ends.saysNothing() ? null : ends;
     }
 
     /** Whether all that kept {@code admitted} from being the values the rules leave is a rule
