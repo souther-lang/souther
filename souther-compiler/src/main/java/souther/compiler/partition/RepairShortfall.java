@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import souther.compiler.coverage.CoverageSites;
 
 import java.util.List;
+import java.util.Set;
 
 /**
  * What looking for a row that goes further found out, where it took a row no further than a guard.
@@ -97,36 +98,78 @@ public record RepairShortfall(List<Generator.Purpose> soughtFor, CoverageSites.A
     public sealed interface WayPast {
 
         /**
-         * Looked for, and the search composed nothing that goes this way.
+         * Looked for, and no search composed anything that goes this way.
          *
-         * <p>What the search came to in its own words, with what it found out beside them. A word
-         * this compiler fell short with and a word the model settles stay the words they are —
-         * that nothing here could compose a value is not that the rules leave none.
+         * <p>What the searches came to in their own words, with what they found out beside them.
+         * A word this compiler fell short with and a word the model settles stay the words they
+         * are — that nothing here could compose a value is not that the rules leave none.
+         *
+         * @param came what every search the way was held along came to, each word once
+         *             ({@link CameToNothing#joined}): a way held along several ways is several
+         *             searches, and none of them is the way's alone. One or more
          */
-        record Searched(CameToNothing came) implements WayPast {}
+        record Searched(List<CameToNothing> came) implements WayPast {
+
+            public Searched {
+                came = List.copyOf(came);
+                if (came.isEmpty()) {
+                    throw new IllegalArgumentException("a way searched came to something");
+                }
+            }
+        }
 
         /**
-         * Looked for until a row the search had to run was one the runs had none left for.
+         * Looked for until a figure stopped the looking: a row a search had to run was one the
+         * runs had none left for, or the ways the way can be held along were more than are
+         * looked along or looked at.
          *
-         * <p>Only where a run was refused. A row run already costs nothing to look at again, so a
-         * search made with no runs left can still answer from rows run before, and one that did is
-         * {@link Searched} or a row that goes on — never this.
+         * <p>For the runs, only where a run was refused. A row run already costs nothing to look at
+         * again, so a search made with no runs left can still answer from rows run before, and one
+         * that did is {@link Searched} or a row that goes on — never this.
          *
-         * @param came   what the search had come to when it stopped
-         * @param figure what ran out
+         * @param came    what the searches made had come to, each word once, and none where a
+         *                figure stopped the looking before any search was made
+         * @param figures what ran out, every one of them: each is a number somebody would have to
+         *                raise, and told one of two, a reader who raises it meets the other
          */
-        record CutShort(CameToNothing came, CompositionBudget figure) implements WayPast {}
+        record CutShort(List<CameToNothing> came, Set<CompositionBudget> figures)
+                implements WayPast {
 
-        /** Not looked for, because nothing here can hold a row to it. */
-        record NotSearchable(Barrier why) implements WayPast {}
+            public CutShort {
+                came = List.copyOf(came);
+                figures = InDeclaredOrder.of(figures);
+                if (figures.isEmpty()) {
+                    throw new IllegalArgumentException("a way cut short was cut by some figure");
+                }
+            }
+        }
+
+        /**
+         * Not looked for, because nothing here can hold a row to it.
+         *
+         * @param why     why, every reason a part of the way gave: each is a thing somebody would
+         *                have to do, and told one of two, a reader who does it meets the other
+         * @param figures the figures that left a part of it unlooked at besides, none where none did
+         */
+        record NotSearchable(Set<Barrier> why, Set<CompositionBudget> figures) implements WayPast {
+
+            public NotSearchable {
+                why = InDeclaredOrder.of(why);
+                figures = InDeclaredOrder.of(figures);
+                if (why.isEmpty()) {
+                    throw new IllegalArgumentException("a way not looked for is not for a reason");
+                }
+            }
+        }
     }
 
     /** Why a way past a guard is one no search can be made for. */
     public enum Barrier {
 
         /**
-         * A part of it is an arm, or a comparison no border offers a point on the side the way
-         * asks for. What a search holds a row to is a point of a border, and there is none here.
+         * A part of it is one nothing here states a demand for: no border offers a point on the
+         * side the way asks for, and what the part coming out that way states is nothing this
+         * reading could put as a demand on a row.
          */
         NOTHING_HOLDS_A_ROW_TO_IT,
 

@@ -105,6 +105,27 @@ class TheWaysOfConditionsOfSeveralWaysAreTheirGroupsAddedUpTest {
                         () -> "every choice chosen: " + walked)).entries()).toList();
     }
 
+    /**
+     * Two choices alike standing at two places are two choices, walked apart and handed on apart:
+     * a way taking one of them one way and the other the other way says both, and neither is lost
+     * for being equal to the other.
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    void twoChoicesAlikeAreBothSaidOfAWayThatTookThemApart() {
+        Choice first = oneOf(ask(X, 1, 2), ask(X, 2, 3));
+        Choice second = oneOf(ask(X, 1, 2), ask(X, 2, 3));
+        assertEquals(first, second, "the two choices are alike");
+        List<List<Integer>> taken = new ArrayList<>();
+        for (OneOfEach.Way<Entry> way : open(walked(first, second)).ways()) {
+            OneOfEach.Way.Chosen<Entry> chosen = assertInstanceOf(OneOfEach.Way.Chosen.class, way);
+            assertEquals(2, chosen.choices().size(), () -> "both choices are said: " + chosen);
+            taken.add(chosen.choices().stream().map(OneOfEach.Choice::alternative).toList());
+        }
+        assertTrue(taken.contains(List.of(0, 1)) && taken.contains(List.of(1, 0)),
+                () -> "a way takes the two apart, either way round: " + taken);
+    }
+
     /** Two conditions on two positions, every combination within the figure: each of them,
      *  since a row past both is along one. */
     @Test

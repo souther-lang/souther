@@ -122,17 +122,12 @@ final class WhatARunIsSeenDoing implements Naming<List<ControlClaim>> {
     }
 
     /**
-     * Where a run is seen bringing {@code value} out {@code held}: at the comparison it is, or at
-     * the application of one of the language's operations whose answer it is — or empty where the
-     * plan records neither.
+     * Where a run is seen bringing {@code value} out {@code held}: at the application of one of
+     * the language's operations whose answer it is, or at the comparison it is — or empty where
+     * the plan records neither ({@link CoverageSites.Plan#outcomeAt}).
      */
     private Optional<ControlPlace.Outcome> outcomeAt(Core value, boolean held) {
-        Core e = Core.withoutStanding(value);
-        if (e instanceof Core.Binary comparison) {
-            return CoverageNaming.outcomeAt(plan, comparison, held);
-        }
-        return plan.applicationAnsweringAt(e)
-                .flatMap(application -> plan.outcomeOf(application, held));
+        return plan.outcomeAt(value, held);
     }
 
     @Override
