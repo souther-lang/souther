@@ -367,8 +367,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         // A way that states of a term anything past an end on it leaves the term nothing it is
         // shown to take (wayOf), so what is asked of a pair is what the declarations tie.
         out.addAll(WhatARelationLeavesUndivided.of(terms, constant, relation,
-                UndividedByARelation::overlap, (one, other) -> apartByTheDeclarations(
-                        indexOf(terms, one), indexOf(terms, other), sources)));
+                UndividedByARelation::overlap,
+                (one, other) -> apartByTheDeclarations(one, other, sources)));
         if (!out.containsAll(places())) {
             out.addAll(undividedByTheDifference(sources, carriers, stating, heldWhole));
         }
@@ -406,18 +406,6 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     private boolean mayBeNamed(int at, List<Source> sources) {
         Source source = sources.get(at);
         return sides.get(at).term() == null || source == null || source.named();
-    }
-
-    /** Where {@code term} is in {@code terms}, by identity: two terms may be equal and stand for
-     *  sides the declarations leave differently. */
-    private static int indexOf(List<WhatARelationLeavesUndivided.Term<FilingCoordinate>> terms,
-                               WhatARelationLeavesUndivided.Term<FilingCoordinate> term) {
-        for (int i = 0; i < terms.size(); i++) {
-            if (terms.get(i) == term) {
-                return i;
-            }
-        }
-        throw new IllegalArgumentException("not a term of this relation: " + term);
     }
 
     /**
@@ -618,11 +606,30 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     /**
      * What the declarations leave the value at a position, compared as one value with another's.
      *
-     * @param every whether that is every value its type holds: the declarations admit every value
-     *              there, nothing of them went unread, and no rule places an end on it
+     * <p>Every value of its type, or what the reading of the values there and the ends on it leave
+     * it. Two claims and not one set, because the first is shown two ways: by that reading taking
+     * in every rule there and finding nothing held back, or by a relation being the one rule it
+     * did not take in and the bounds being shown to hold all the rules leave
+     * ({@link Position#projection}). The second proves nothing about that reading, which still
+     * did not take the relation in, so what it found is kept as it found it.
      */
-    private record Takes(Type type, AdmissibleSet admitted, NumericDomain.Bounds ends,
-                         boolean every) {}
+    private sealed interface Takes {
+
+        /** Every value {@code type} holds. */
+        record Every(Type type) implements Takes {}
+
+        /**
+         * What {@code admitted} and {@code ends} leave of {@code type}.
+         *
+         * @param ends the ends the rules place on it ({@link #endsOf}), or null where none does
+         */
+        record Some(Type type, AdmissibleSet admitted, NumericDomain.Bounds ends)
+                implements Takes {}
+
+        default boolean every() {
+            return this instanceof Every;
+        }
+    }
 
     /**
      * What the declarations leave the value at a position, with whether that is shown to be the
@@ -702,18 +709,18 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         boolean byARule = named == Named.BY_A_RULE;
         NumericDomain.Bounds ends = endsOf(at.boundsFor(value), byARule);
         AdmissibleSet admitted = at.admitted();
-        // The relation is the one rule the set of values here could not read, and the bounds are
-        // shown to hold all it leaves the place: with no end on any number of it, that is every
-        // value. An end on how long a string is keeps it from the longer ones.
-        if (byARule && admitted.approximation().isAny() && onlyARelationWentUnread(admitted)
-                && at.bounds().stream().allMatch(each -> endsOf(each, true) == null)) {
-            admitted = AdmissibleSet.complete(admitted.approximation());
-        }
-        boolean every = admitted.approximation().isAny()
-                && admitted.completeness() instanceof AdmissibleSet.Completeness.Complete
-                && ends == null;
-        return new Source(new Takes(at.type(), admitted, ends, every),
-                !every && onlyItsEnds(at, value, byARule), byARule);
+        // Every value where nothing holds any back: the reading of the values here took every rule
+        // in, or the relation is the one rule it did not and the bounds, shown to hold all the
+        // rules leave, place no end on any number of it. An end on how long a string is keeps it
+        // from the longer ones.
+        boolean every = ends == null && admitted.approximation().isAny()
+                && (admitted.completeness() instanceof AdmissibleSet.Completeness.Complete
+                        || (byARule && onlyARelationWentUnread(admitted)
+                                && at.bounds().stream()
+                                        .allMatch(each -> endsOf(each, true) == null)));
+        Takes takes = every ? new Takes.Every(at.type())
+                : new Takes.Some(at.type(), admitted, ends);
+        return new Source(takes, !every && onlyItsEnds(at, value, byARule), byARule);
     }
 
     /**

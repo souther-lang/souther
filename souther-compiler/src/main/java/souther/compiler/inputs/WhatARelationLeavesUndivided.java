@@ -108,11 +108,11 @@ public final class WhatARelationLeavesUndivided {
      *                    of the type the terms are values of, which only two terms weighed alike and
      *                    held against nought have
      * @param overlap     whether two places are one, or one is part of the other
-     * @param independent whether nothing ties where one term lies to where another does
+     * @param independent whether nothing ties where the term at one place in {@code terms} lies to
+     *                    where the term at another does
      */
     public static <P> Set<P> of(List<Term<P>> terms, ExactRatio constant, Rel relation,
-                                BiPredicate<P, P> overlap,
-                                BiPredicate<Term<P>, Term<P>> independent) {
+                                BiPredicate<P, P> overlap, Independence independent) {
         Set<P> out = new LinkedHashSet<>();
         for (int at = 0; at < terms.size(); at++) {
             for (int other = 0; other < terms.size(); other++) {
@@ -125,6 +125,17 @@ public final class WhatARelationLeavesUndivided {
             }
         }
         return out;
+    }
+
+    /**
+     * Whether nothing ties where one term of a relation lies to where another does, asked of where
+     * the two are in the relation's terms: what ties them is the caller's to say, and two terms
+     * the same in every way it hands over may be tied differently.
+     */
+    @FunctionalInterface
+    public interface Independence {
+
+        boolean between(int one, int other);
     }
 
     /**
@@ -368,10 +379,9 @@ public final class WhatARelationLeavesUndivided {
     }
 
     /** Whether nothing ties the term at {@code at} to any other. */
-    private static <P> boolean untied(List<Term<P>> terms, int at,
-                                      BiPredicate<Term<P>, Term<P>> independent) {
+    private static <P> boolean untied(List<Term<P>> terms, int at, Independence independent) {
         for (int other = 0; other < terms.size(); other++) {
-            if (other != at && !independent.test(terms.get(at), terms.get(other))) {
+            if (other != at && !independent.between(at, other)) {
                 return false;
             }
         }

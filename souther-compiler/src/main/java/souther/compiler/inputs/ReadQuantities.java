@@ -20,7 +20,6 @@ import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
-import souther.compiler.numeric.ProjectionCertification;
 import souther.compiler.numeric.Rel;
 import souther.compiler.semantics.Arithmetic;
 import souther.compiler.semantics.TakenAs;
@@ -1358,18 +1357,9 @@ final class ReadQuantities implements Quantities {
 
     /**
      * A run of {@code term} every value of which, at the term's own spacing, the rules leave it —
-     * or null where that is not shown.
+     * or null where that is not shown ({@link NumericDomain#wholeRunOf}).
      *
-     * <p>Not what {@link #projectionOf} answers, which is where the values lie and may be wider:
-     * three things are shown of it together, and the run is answered with them rather than beside
-     * them so that a caller cannot take one answer for another. The rules are shown to leave each
-     * number they relate the whole of its run ({@link NumericDomain#projectionCertification}). Its
-     * ends are the rules' own and not rounded past them: an end at a third is handed over as a
-     * decimal a hair below, which no value of the term is ({@link
-     * NumericDomain#endsAreWrittenExactly}). And each end is one the term takes: a whole number at
-     * or inside a strict end where the values step by one, and an end that is not taken only where
-     * they are dense, so that some value lies as near it as any other value asked of. A term whose
-     * spacing nothing recorded is a value the arithmetic does not count, and no run of it is shown.
+     * <p>Not what {@link #projectionOf} answers, which is where the values lie and may be wider.
      *
      * <p>About the run and nothing else. A value taken out of it, or a class of whole numbers it is
      * held to, are asked of the region beside this. Where no one value has the term together with
@@ -1381,50 +1371,7 @@ final class ReadQuantities implements Quantities {
             return null;
         }
         ConstraintState<InputAtom> rules = holding(effectiveConstraints(under), term, under);
-        NumericDomain<InputAtom> numbers = rules.numbers();
-        InputAtom atom = called(term, under);
-        if (!(numbers.projectionCertification() instanceof ProjectionCertification.Certified)
-                || !numbers.endsAreWrittenExactly(atom)
-                || !(numbers.projectionOf(LinearForm.atom(atom))
-                        instanceof NumericDomain.FormProjection.Within(NumericDomain.Bounds run))) {
-            return null;
-        }
-        return switch (numbers.spacingOf(atom)) {
-            case null -> null;
-            case DENSE -> run;
-            case DISCRETE -> onWholeNumbers(run);
-        };
-    }
-
-    /** {@code run} with each end the whole number nearest it that the run takes — or null where an
-     *  end is no number this can step from. An absent end, which runs to the end of the type, is
-     *  kept absent. */
-    private static NumericDomain.Bounds onWholeNumbers(NumericDomain.Bounds run) {
-        Endpoint low = run.min() == null ? null : wholeAt(run.min(), true);
-        Endpoint high = run.max() == null ? null : wholeAt(run.max(), false);
-        if ((run.min() != null && low == null) || (run.max() != null && high == null)) {
-            return null;
-        }
-        return new NumericDomain.Bounds(low, high);
-    }
-
-    /**
-     * The whole number nearest {@code end} on the run's side of it that the run takes.
-     *
-     * @return null where the end is no number this can step from
-     */
-    private static Endpoint wholeAt(Endpoint end, boolean least) {
-        if (!(end.at() instanceof Count count)) {
-            return null;
-        }
-        ExactRatio at = count.exactly();
-        ExactAnswer<BigInteger> stepped = least ? at.ceiling() : at.floor();
-        if (!(stepped instanceof ExactAnswer.Held<BigInteger>(BigInteger whole))) {
-            return null;
-        }
-        BigInteger taken = end.inclusive() || !ExactRatio.of(whole).equals(at) ? whole
-                : least ? whole.add(BigInteger.ONE) : whole.subtract(BigInteger.ONE);
-        return Endpoint.inclusive(Count.of(new BigDecimal(taken)));
+        return rules.numbers().wholeRunOf(called(term, under));
     }
 
     /**

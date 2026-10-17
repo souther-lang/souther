@@ -11,6 +11,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeSet;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -580,13 +581,24 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                         "today <= q.expiresOn", 26));
     }
 
-    /** A value taken out of the field compared is a rule its bounds do not hold, so nothing is
-     *  shown of what it takes. */
+    /**
+     * A rule beside the relation that the bounds do not hold — a value taken out of the field
+     * compared, a square of it — leaves nothing shown of what it takes, and so does an end the
+     * relation carries over at a value no decimal writes, which is handed on rounded past it.
+     */
     @Test
     void aRuleRelatingTheFieldComparedBesideOneItsBoundsDoNotHoldShowsNothingOfIt() {
-        assertEquals(Map.of("today", NOT_SHOWN, "q.expiresOn", RELATES),
-                leftAt("q: Quote, today: Int", QUOTE + "expiresOn >= issuedOn && expiresOn /= 5",
-                        "today <= q.expiresOn", 26));
+        for (String rule : List.of("expiresOn >= issuedOn && expiresOn /= 5",
+                "expiresOn >= issuedOn && expiresOn * expiresOn >= 4")) {
+            assertEquals(Map.of("today", NOT_SHOWN, "q.expiresOn", RELATES),
+                    leftAt("q: Quote, today: Int", QUOTE + rule, "today <= q.expiresOn", 26),
+                    rule);
+        }
+        assertEquals(Map.of("today", NOT_SHOWN, "q.expiresOn", RELATES), leftAt(
+                "q: Quote, today: Decimal",
+                "data Quote = { issuedOn: Decimal, expiresOn: Decimal } invariant "
+                        + "issuedOn * 3m >= 1m && expiresOn >= issuedOn",
+                "today <= q.expiresOn", 26));
     }
 
     /**
@@ -639,6 +651,68 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                 data A = { ...C, e: Int } invariant d >= e
                 data B = { ...C }
                 data S = A | B""", "s.d >= n", 20));
+    }
+
+    /**
+     * The words each place of {@code name} is left with by its invariant {@code rule}, the rule's
+     * place in the declaration counted from one.
+     */
+    private static Map<String, Set<String>> leftByTheInvariant(String declaration, String name,
+                                                              int rule) {
+        Compilation compilation = Compilation.ofSource("""
+                module w1
+                %s
+                behavior m : (v: %s) -> Bool
+                let m (v) = true
+                """.formatted(declaration, name), "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        String report = AdequacyReport.of(compilation)
+                .human(SourceRendering.namedByIdentity(compilation.texts()));
+        Map<String, Set<String>> out = new LinkedHashMap<>();
+        for (String line : report.lines().map(String::strip).toList()) {
+            if (!line.contains("invariant " + name + " #" + rule + " ") || !line.contains("about `")
+                    || !(line.startsWith("· no line") || line.startsWith("· not read"))) {
+                continue;
+            }
+            String place = line.substring(line.lastIndexOf("about `") + 7, line.length() - 1);
+            out.computeIfAbsent(place, _ -> new TreeSet<>()).add(
+                    line.contains("rather than dividing the values here") ? RELATES
+                            : line.contains("not shown to reach every value here") ? NOT_SHOWN
+                            : line);
+        }
+        return out;
+    }
+
+    /**
+     * A conjunct relating two places another conjunct relates to a free place: what it is asked of
+     * is what the rest of the rules leave them, and {@code b >= c} with {@code c} free leaves
+     * {@code b} every value beside the {@code a} no other conjunct names, as {@code a >= b} with
+     * {@code a} free leaves it beside {@code c}. Held at nought, {@code b} reaches only the values
+     * of {@code a} from nought on, and an {@code a} below nought settles the rule.
+     */
+    @Test
+    void aConjunctIsAskedWhatTheRestOfTheRulesLeaveThePlacesItRelates() {
+        assertEquals(Map.of("v.a", Set.of(RELATES), "v.b", Set.of(RELATES), "v.c", Set.of(RELATES)),
+                leftByTheInvariant("data Q = { a: Int, b: Int, c: Int } invariant b >= c && a >= b",
+                        "Q", 1));
+        assertEquals(Map.of("v.a", Set.of(NOT_SHOWN), "v.b", Set.of(RELATES)),
+                leftByTheInvariant("data Q = { a: Int, b: Int } invariant b >= 0 && a >= b",
+                        "Q", 1));
+    }
+
+    /**
+     * Two places the rest of the rules hold together each take every value and are not apart:
+     * held one or two apart, {@code x >= y} holds at every {@code x}, which settles it.
+     */
+    @Test
+    void twoPlacesTheRestOfTheRulesHoldTogetherAreNotTakenToReachEachOther() {
+        Map<String, Set<String>> left = leftByTheInvariant("""
+                data T = { x: Int, y: Int }
+                    invariant x >= y + 1
+                    invariant x <= y + 2
+                    invariant x >= y""", "T", 3);
+        assertEquals(Map.of("v.x", Set.of(NOT_SHOWN), "v.y", Set.of(NOT_SHOWN)), left);
     }
 
     /**

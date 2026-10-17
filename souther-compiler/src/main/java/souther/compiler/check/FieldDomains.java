@@ -452,6 +452,13 @@ public final class FieldDomains {
         return read.fields(seeded -> leftBy(seeded, read.owner(), reading, Map.of(), reach));
     }
 
+    /** The same, with nothing settled and reading only as far as {@code reach} says: what the rest
+     *  of the rules leave once some of them are left out. */
+    static FieldDomains of(TypeSymbol.AtModule named, RuleReadingContext reading,
+                           InvariantChecker.Reach reach) {
+        return of(named, reading, Map.of(), reach);
+    }
+
     /** The same, reading only as far as {@code reach} says — see {@link #narrowedBy}. */
     private static FieldDomains of(TypeSymbol.AtModule named, RuleReadingContext reading,
                                    Map<NumberAt<RuleKey>, Count> settled,
@@ -2302,6 +2309,18 @@ public final class FieldDomains {
             case NumberAt.OfWhatNumber.OfHowManyCodePointsAreIn _,
                  NumberAt.OfWhatNumber.OfItsMultiplicity _ -> null;
         };
+    }
+
+    /**
+     * A run every value of which the rules leave the value at {@code path}, or null where none is
+     * shown: what the bounds say is shown to be the whole of what the rules leave ({@link
+     * #projection}), and the run is the one the arithmetic shows the value fills
+     * ({@link NumericDomain#wholeRunOf}).
+     */
+    NumericDomain.Bounds wholeRunAt(RuleKey path) {
+        FactSubject atom = atomAt.get(path);
+        return atom == null || !projection().isCertified() ? null
+                : constraints.numbers().wholeRunOf(atom);
     }
 
     /**
