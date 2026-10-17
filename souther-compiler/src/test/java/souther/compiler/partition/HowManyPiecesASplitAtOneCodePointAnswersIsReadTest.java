@@ -114,27 +114,6 @@ class HowManyPiecesASplitAtOneCodePointAnswersIsReadTest {
                 """);
     }
 
-    /**
-     * A string whose code points have no count, split at one code point, is left unread with the
-     * split's own word for how many pieces it answers, which names the call, rather than with
-     * where the count stopped, which names nothing.
-     */
-    @Test
-    void aStringWhoseCountIsNotReadIsLeftWithTheSplitsOwnWord() {
-        assertNotRead("""
-                module example.pieces
-
-                data Yes
-                data No
-
-                behavior g : (email: String) -> Yes | No
-                let g (email) = {
-                    guard List.length(String.split("@", String.lowercase(email))) >= 2 else No
-                    Yes
-                }
-                """);
-    }
-
     private static void assertCovered(String model, int obligations) {
         Compilation compilation = measured(model);
         assertEquals(List.of(), compilation.errors(), "the rows hold");

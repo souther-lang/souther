@@ -1421,13 +1421,10 @@ final class Pullback {
             return new Sized.AsAForm(inACase);
         }
         // The pieces of a string parted at one code point: the operation has no number for how
-        // many, and this call's separator gives one. Where that number is not read either, what
-        // is said is the operation's own word for its size.
+        // many, and this call's separator gives one.
         ALawRead call = new ALawRead(applied, e, made.at());
-        if (call.piecesOf(made) instanceof Pieces pieces && pieces.separator().isPresent()
-                && call.number(pieces.parted().howManyPartedAt(pieces.separator().getAsInt()))
-                        instanceof Sized.AsAForm read) {
-            return read;
+        if (call.piecesOf(made) instanceof Pieces pieces && pieces.separator().isPresent()) {
+            return call.number(pieces.parted().howManyPartedAt(pieces.separator().getAsInt()));
         }
         return switch (DefaultBoundOperationFacts.get().settled(operation,
                 OperationLaw.Observed.SIZE)) {
@@ -3019,7 +3016,8 @@ final class Pullback {
         /**
          * How many of the code points of {@code value}, read in {@code in}, are in
          * {@code counted}: of the string at a position, where it stands at one; as many as are,
-         * of a string written out; and of a piece, where it is one ({@link #somePiece}).
+         * of a string written out; and of a piece, where it is one ({@link #somePiece}). Where it is
+         * what an operation answered and none of those, the reason names the operation.
          */
         private Sized codePointsOfTheValue(Core value, InputReads in, CodePointClass counted) {
             if (in.pathOf(value, read.rules().newtypes()) instanceof PathResolution.At(TermPath at)) {
@@ -3032,9 +3030,14 @@ final class Pullback {
                         written.value().codePoints().filter(counted::contains).count())));
             }
             Pieces piece = pieceThatIs(value, in);
-            return piece != null ? codePointsOfAPiece(piece, counted)
-                    : new Sized.NotSized(new WhyUnread.AtNoPosition(
-                            WhyUnread.AtNoPosition.Place.SUBJECT));
+            if (piece != null) {
+                return codePointsOfAPiece(piece, counted);
+            }
+            return new Sized.NotSized(AnOperationApplied.of(Core.withoutStanding(standing.value()))
+                    instanceof AnOperationApplied made
+                    && made.operation() instanceof ValueName.Stdlib madeBy
+                    ? new WhyUnread.CodePointsOfWhatAnOperationAnswers(madeBy)
+                    : new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.SUBJECT));
         }
 
         /** How many of the code points of the string at {@code at} are in {@code counted}. */

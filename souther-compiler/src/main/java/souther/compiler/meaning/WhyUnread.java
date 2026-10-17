@@ -76,7 +76,7 @@ public sealed interface WhyUnread {
                  NotArithmetic _, ANumberNotHeld _, NoNumberOnARun _,
                  TwoElementsOfOneContainer _, NoLawFor _, NoWordsFor _, NotProvedOfItsBody _,
                  NoFormOfWhatItAnswers _, ANumberOfWhatAnOperationAnswers _,
-                 AClauseOfAnInvariant _, AnInvariantNotReached _, InACalledBody _,
+                 CodePointsOfWhatAnOperationAnswers _, AClauseOfAnInvariant _, AnInvariantNotReached _, InACalledBody _,
                  WhatARecursiveHelperAnswers _, SeveralValuesNotGoneInto _,
                  CopiesStateDifferentThings _, NotMetByTheReading _ -> Optional.empty();
         };
@@ -218,6 +218,18 @@ public sealed interface WhyUnread {
         public ANumberOfWhatAnOperationAnswers {
             Objects.requireNonNull(measure, "a number is taken by an operation");
             Objects.requireNonNull(madeBy, "of what an operation answered");
+        }
+    }
+
+    /**
+     * How many of the code points of what {@code madeBy} answers are in a class, where that string
+     * stands at no position: no law of {@code madeBy} says that count in terms of what it was
+     * handed.
+     */
+    record CodePointsOfWhatAnOperationAnswers(ValueName.Stdlib madeBy) implements WhyUnread {
+
+        public CodePointsOfWhatAnOperationAnswers {
+            Objects.requireNonNull(madeBy, "the string was answered by an operation");
         }
     }
 
