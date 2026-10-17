@@ -137,15 +137,30 @@ public record RepairShortfall(List<Generator.Purpose> soughtFor, CoverageSites.A
 
             public CutShort {
                 came = List.copyOf(came);
-                figures = Set.copyOf(figures);
+                figures = InDeclaredOrder.of(figures);
                 if (figures.isEmpty()) {
                     throw new IllegalArgumentException("a way cut short was cut by some figure");
                 }
             }
         }
 
-        /** Not looked for, because nothing here can hold a row to it. */
-        record NotSearchable(Barrier why) implements WayPast {}
+        /**
+         * Not looked for, because nothing here can hold a row to it.
+         *
+         * @param why     why, every reason a part of the way gave: each is a thing somebody would
+         *                have to do, and told one of two, a reader who does it meets the other
+         * @param figures the figures that left a part of it unlooked at besides, none where none did
+         */
+        record NotSearchable(Set<Barrier> why, Set<CompositionBudget> figures) implements WayPast {
+
+            public NotSearchable {
+                why = InDeclaredOrder.of(why);
+                figures = InDeclaredOrder.of(figures);
+                if (why.isEmpty()) {
+                    throw new IllegalArgumentException("a way not looked for is not for a reason");
+                }
+            }
+        }
     }
 
     /** Why a way past a guard is one no search can be made for. */

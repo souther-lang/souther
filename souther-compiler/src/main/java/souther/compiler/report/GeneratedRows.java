@@ -1274,7 +1274,13 @@ public final class GeneratedRows {
                     Reasons.met(CompositionShortfall.of(figures)) + (came.isEmpty()
                             ? "nothing was looked for, which does not make it a way no row goes"
                             : saidOf(came, rendering, places));
-            case RepairShortfall.WayPast.NotSearchable(RepairShortfall.Barrier why) -> why(why);
+            // Every reason a part gave, in the order the reasons are declared, and the figures that
+            // left a part unlooked at first where any did.
+            case RepairShortfall.WayPast.NotSearchable(Set<RepairShortfall.Barrier> why,
+                                                       Set<CompositionBudget> figures) ->
+                    (figures.isEmpty() ? "" : Reasons.met(CompositionShortfall.of(figures)))
+                            + String.join("; ", why.stream().sorted()
+                                    .map(GeneratedRows::why).toList());
         };
     }
 

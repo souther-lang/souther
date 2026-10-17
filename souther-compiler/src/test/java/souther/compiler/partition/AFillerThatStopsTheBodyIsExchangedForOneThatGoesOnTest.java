@@ -615,12 +615,18 @@ class AFillerThatStopsTheBodyIsExchangedForOneThatGoesOnTest {
                         "searched: " + reasons(came);
                 case RepairShortfall.WayPast.CutShort(List<CameToNothing> came,
                         Set<CompositionBudget> figures) ->
-                        "cut short at " + figures + ": " + reasons(came);
-                case RepairShortfall.WayPast.NotSearchable(RepairShortfall.Barrier why) ->
-                        "not searchable: " + why;
+                        "cut short at " + inOrder(figures) + ": " + reasons(came);
+                case RepairShortfall.WayPast.NotSearchable(Set<RepairShortfall.Barrier> why,
+                        Set<CompositionBudget> figures) -> "not searchable: " + inOrder(why)
+                        + (figures.isEmpty() ? "" : " beside " + inOrder(figures));
             });
         }
         return out;
+    }
+
+    /** {@code these}, in the order they are declared in. */
+    private static <E extends Enum<E>> String inOrder(Set<E> these) {
+        return String.join(", ", these.stream().sorted().map(String::valueOf).toList());
     }
 
     /** Each word what a way's searches came to, joined in order. */

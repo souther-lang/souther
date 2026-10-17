@@ -95,6 +95,44 @@ class AWayPastALaterGuardIsTakenAlongTheWayAnEarlierOneWasHeldAlongTest {
         }
     }
 
+    /** A guard asking one thing of one list, which is no choice of several. */
+    private static final String SINGLE = """
+            module example.settle
+
+            data No
+
+            behavior settle : (xs: List<Int>, n: Int) -> Bool | No
+
+            let settle (xs, n) = {
+                guard List.length(List.filter(x -> x > 0, xs)) >= 1 else No
+                guard n > 0 else No
+                true
+            }
+            """;
+
+    /**
+     * What an earlier way asked that is no choice — some element of {@code xs} above nought — is
+     * asked of the way to a later guard that does not take it in, as much as a choice would be:
+     * the row is held to all of it wherever it goes next.
+     */
+    @Test
+    void whatAnEarlierWayAskedThatIsNoChoiceIsAskedOfALaterWayThatLacksIt() {
+        Read read = read(SINGLE);
+        HeldOutcome earlier = assertInstanceOf(HeldOutcome.Bringing.Found.class,
+                read.holding(0)).ways().getFirst();
+        assertTrue(earlier.chosen().isEmpty() && !earlier.reaching().boundedOnTheWay().isEmpty(),
+                () -> "the earlier way asks of the list and chooses nothing: " + earlier);
+        HeldOutcome later = assertInstanceOf(HeldOutcome.Bringing.Found.class,
+                read.holding(1)).ways().getFirst();
+        HeldOutcome laterAlone = new HeldOutcome(later.demands(), List.of(),
+                WayToTheBorder.UNTOUCHED, Map.of(), Reachability.untouched(read.declarations()));
+        Reachability.Reaching taken = assertInstanceOf(Reachability.Reaching.class,
+                HeldOutcome.along(List.of(earlier, laterAlone), read.declarations()));
+        assertTrue(taken.boundedOnTheWay().containsAll(earlier.reaching().boundedOnTheWay()),
+                () -> "the way to the later guard asks what the earlier asked: "
+                        + taken.boundedOnTheWay());
+    }
+
     /**
      * Two ways of one condition taken together: a row held to some element of {@code xs} above
      * nought and to some element of {@code ys} above nought is held to both, which a row is; a

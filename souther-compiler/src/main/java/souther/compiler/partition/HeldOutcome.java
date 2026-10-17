@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -110,35 +111,30 @@ public record HeldOutcome(List<RowDemand> demands, List<OnTheWay.Narrowed> cases
      * that meets its predicate is a way, and a value two cases at once is none
      * ({@link WayToTheBorder#choosing}).
      *
-     * <p>And a choice of a condition the last way does not take in is still a choice the row is
-     * held to: a way to a comparison read through several copies holds what every copy's way
-     * holds, and a condition one copy is reached without is not on it. What the alternatives
-     * chosen ask is then asked beside the way, since a row held past the guard above along them
-     * has to be all of that wherever it goes next.
+     * <p>And not the last way alone. A row held past a guard above is held to everything that way
+     * asked, what it chose and what it did not; the way to a later guard usually takes all of that
+     * in, but a way to a comparison read through several copies holds only what every copy's way
+     * holds, and a condition one copy is reached without is not on it. So the way taken is every
+     * one of them, each along the choices made, each condition once: what a row has to be to be
+     * past every guard it was held past and at the last, and nothing told apart by which of them
+     * happened to say it.
      *
      * @param declarations what the declarations leave, which the way narrows
      */
     static Reachability along(List<HeldOutcome> held, SearchRegion declarations) {
+        if (held.size() == 1) {
+            return held.getFirst().reaching();
+        }
         Map<OnTheWay, Set<Integer>> chosen = new LinkedHashMap<>();
         for (HeldOutcome each : held) {
             each.chosen().forEach((condition, alternatives) -> chosen
                     .computeIfAbsent(condition, _ -> new TreeSet<>()).addAll(alternatives));
         }
-        HeldOutcome last = held.getLast();
-        if (chosen.equals(last.chosen())) {
-            return last.reaching();
+        Set<OnTheWay> entries = new LinkedHashSet<>();
+        for (HeldOutcome each : held) {
+            entries.addAll(each.way().choosing(chosen).onTheWay());
         }
-        List<OnTheWay> onIt = last.way().stated();
-        List<OnTheWay> entries = new ArrayList<>(last.way().choosing(chosen).onTheWay());
-        for (Map.Entry<OnTheWay, Set<Integer>> each : chosen.entrySet()) {
-            if (!onIt.contains(each.getKey())) {
-                for (int alternative : each.getValue()) {
-                    entries.addAll(new WayToTheBorder(each.getKey().alternatives()
-                            .get(alternative)).choosing(chosen).onTheWay());
-                }
-            }
-        }
-        return Reachability.of(new WayToTheBorder(entries), declarations);
+        return Reachability.of(new WayToTheBorder(List.copyOf(entries)), declarations);
     }
 
     /**
@@ -203,7 +199,7 @@ public record HeldOutcome(List<RowDemand> demands, List<OnTheWay.Narrowed> cases
                 if (ways.isEmpty()) {
                     throw new IllegalArgumentException("what brings a run somewhere is some way");
                 }
-                cutShort = Set.copyOf(cutShort);
+                cutShort = InDeclaredOrder.of(cutShort);
             }
 
             /**
@@ -230,7 +226,7 @@ public record HeldOutcome(List<RowDemand> demands, List<OnTheWay.Narrowed> cases
             record NoneLookedAtWas(Set<CompositionBudget> figures) implements Kept {
 
                 public NoneLookedAtWas {
-                    figures = Set.copyOf(figures);
+                    figures = InDeclaredOrder.of(figures);
                     if (figures.isEmpty()) {
                         throw new IllegalArgumentException("ways left unlooked at were left by"
                                 + " some figure");
@@ -250,7 +246,7 @@ public record HeldOutcome(List<RowDemand> demands, List<OnTheWay.Narrowed> cases
         record LeftUnlooked(Set<CompositionBudget> figures) implements Bringing {
 
             public LeftUnlooked {
-                figures = Set.copyOf(figures);
+                figures = InDeclaredOrder.of(figures);
                 if (figures.isEmpty()) {
                     throw new IllegalArgumentException("the looking was stopped by some figure");
                 }

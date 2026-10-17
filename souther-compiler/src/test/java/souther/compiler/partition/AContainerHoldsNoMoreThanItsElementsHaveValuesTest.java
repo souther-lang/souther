@@ -208,7 +208,7 @@ class AContainerHoldsNoMoreThanItsElementsHaveValuesTest {
     @Test
     void aGuardAskingForMoreValuesThanThereAreIsOneNoRowGoesPast() {
         RepairShortfall.WayPast leftNoValue = new RepairShortfall.WayPast.NotSearchable(
-                RepairShortfall.Barrier.NO_VALUE_CAN_GO_THAT_WAY);
+                Set.of(RepairShortfall.Barrier.NO_VALUE_CAN_GO_THAT_WAY), Set.of());
         record Case(String type, String guard, boolean past) {}
         for (Case each : List.of(
                 new Case("Set<Code>", "Set.size(s) >= 3", false),

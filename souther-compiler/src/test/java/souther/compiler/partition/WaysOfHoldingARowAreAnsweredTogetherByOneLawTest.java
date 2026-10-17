@@ -82,6 +82,25 @@ class WaysOfHoldingARowAreAnsweredTogetherByOneLawTest {
                         .keeping(_ -> false));
     }
 
+    /**
+     * The parts of one way, which a row is held to all at once: every figure that left a part
+     * unlooked at, and every reason a part cannot be held, are said together; a part no row goes
+     * settles the way.
+     */
+    @Test
+    void thePartsOfAWaySayEveryFigureAndEveryReasonTogether() {
+        Generator.PartsHeld figures = Generator.partsHeld(List.of(STOPPED,
+                new HeldOutcome.Bringing.LeftUnlooked(
+                        Set.of(CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG))), _ -> true);
+        assertEquals(Set.of(CompositionBudget.CHOICES_ON_A_WAY_LOOKED_AT,
+                CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG), figures.unlooked());
+        Generator.PartsHeld reasons = Generator.partsHeld(List.of(SHORT,
+                new HeldOutcome.Bringing.Found(List.of(aWay()), Set.of())), _ -> false);
+        assertEquals(Set.of(RepairShortfall.Barrier.NOTHING_HOLDS_A_ROW_TO_IT,
+                RepairShortfall.Barrier.IT_WOULD_REWRITE_A_STATED_VALUE), reasons.why());
+        assertEquals(true, Generator.partsHeld(List.of(SHORT, NO_ROW), _ -> true).noRowGoes());
+    }
+
     /** One way of holding a row, to a truth of {@code open}, over nothing on the way. */
     private static HeldOutcome aWay() {
         return new HeldOutcome(List.of(new RowDemand.ATruth(TermPath.of("open"), true)),
