@@ -96,6 +96,32 @@ class AWayPastALaterGuardIsTakenAlongTheWayAnEarlierOneWasHeldAlongTest {
     }
 
     /**
+     * Two ways of one condition taken together: a row held to some element of {@code xs} above
+     * nought and to some element of {@code ys} above nought is held to both, which a row is; a
+     * value held to two of its cases is held to what no value is.
+     */
+    @Test
+    void twoWaysOfOneConditionTakenTogetherAreBothOrNone() {
+        Read summed = read(MODEL);
+        List<HeldOutcome> eachList = assertInstanceOf(HeldOutcome.Bringing.Found.class,
+                summed.holding(0)).ways();
+        assertEquals(2, eachList.size(), () -> "either list: " + eachList);
+        Reachability.Reaching both = assertInstanceOf(Reachability.Reaching.class,
+                HeldOutcome.along(eachList, summed.declarations()));
+        for (HeldOutcome each : eachList) {
+            assertTrue(both.boundedOnTheWay().containsAll(each.reaching().boundedOnTheWay()),
+                    () -> "a row along both is held to each: " + both.boundedOnTheWay());
+        }
+        Read cased = read(CASED);
+        List<HeldOutcome> eachCase = assertInstanceOf(HeldOutcome.Bringing.Found.class,
+                cased.holding(0)).ways().stream().filter(one -> !one.chosen().isEmpty())
+                .toList();
+        assertInstanceOf(Reachability.NothingReaches.class,
+                HeldOutcome.along(eachCase, cased.declarations()),
+                "no value is two of its cases");
+    }
+
+    /**
      * A later way that does not take the earlier guard's condition in — a way read through copies,
      * which holds only what every copy's way holds — still asks of the row what the earlier guard
      * was held along: the row has to be that wherever it goes next.

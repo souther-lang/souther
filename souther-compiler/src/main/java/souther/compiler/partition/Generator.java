@@ -2128,7 +2128,7 @@ public final class Generator {
                             Pins pins = Pins.of(axes, Map.of(at, cls));
                             seen = looking.tookFromSearching(() -> search(axes, pins, purposes,
                                     origins, (_, _) -> true, check, references, answers,
-                                    List.of(), row -> looking.of(row, null), true,
+                                    HeldTogether.Asked.NOTHING, row -> looking.of(row, null), true,
                                     goingOn.answersNothing()));
                             if (seen != null) {
                                 break;
@@ -2825,23 +2825,21 @@ public final class Generator {
                         List<HeldOutcome> choice = way.choices().get(choosing);
                         List<HeldOutcome> both = new ArrayList<>(held);
                         both.addAll(choice);
-                        // A choice taking a condition another way than the row was held past a
-                        // guard above along is no way for that row, and is not looked for. The
-                        // first choice of every way takes no condition above any way of its own,
-                        // so a way always has one.
-                        if (!HeldOutcome.agree(both)) {
-                            if (choosing == 0) {
-                                throw new IllegalStateException("the first way of holding each part"
-                                        + " of a way chooses nothing above it: " + choice);
-                            }
-                            continue;
-                        }
                         ChoiceCame already = asked.get(new AChoice(choice));
                         if (already != null) {
                             each.add(already.came());
                             if (already.stopped()) {
                                 cutShort.add(CompositionBudget.RUNS_REPAIRING_A_ROW);
                             }
+                            continue;
+                        }
+                        // What the choice asks beside what the row was held to above, put together
+                        // once. A later choice no row is — one that takes a value two cases at
+                        // once along the ways held above, or a number to two places — is no way
+                        // for this row, and is not looked for nor counted. The first choice is
+                        // looked for whatever it is, so that what the way came to says why.
+                        HeldTogether together = heldTogether(axes.subject(), both, check);
+                        if (choosing > 0 && together instanceof HeldTogether.Refused) {
                             continue;
                         }
                         if (choosing > 0 && more == 0) {
@@ -2853,7 +2851,7 @@ public final class Generator {
                         }
                         runs.stopped = false;
                         Searched searched = search(axes, pins, purposes, List.of(from.from()),
-                                keeping, check, references, answers, List.copyOf(both),
+                                keeping, check, references, answers, together,
                                 row -> switch (watched(row, runs).orElse(null)) {
                                     case null -> {
                                         runs.stopped = true;
@@ -3197,7 +3195,8 @@ public final class Generator {
                                    FixtureReferences references,
                                    List<StoodInAnswer> answers, GoingOn goingOn) {
         Searched searched = search(axes, pins, purposes, origins, (_, _) -> true, check,
-                references, answers, List.of(), _ -> Acceptance.TAKEN, goingOn.answersNothing());
+                references, answers, HeldTogether.Asked.NOTHING, _ -> Acceptance.TAKEN,
+                goingOn.answersNothing());
         if (searched.row() == null) {
             return new Composed(null, null, searched.came());
         }
@@ -3267,7 +3266,10 @@ public final class Generator {
      *
      * @param origins what a row may be written against
      * @param admits  the classes each position may stand at beside the pins
-     * @param held    the comparisons every candidate is held to beside the pins
+     * @param held    the conditions every candidate is held to beside the pins, put together
+     *                ({@link #heldTogether}) by whoever holds the row to them: what they ask is
+     *                the same of every candidate, and whether it is anything a row can be is what
+     *                a caller holding a choice of several asks before it searches
      * @param accepts what a row that holds every pin has to be besides
      * @param answersNothing where the body answers nothing, which no row taken may sit
      */
@@ -3275,7 +3277,7 @@ public final class Generator {
                                    List<Purpose> purposes, List<ResolvedOrigin> origins,
                                    Admits admits, CandidateCheck check,
                                    FixtureReferences references, List<StoodInAnswer> answers,
-                                   List<HeldOutcome> held,
+                                   HeldTogether held,
                                    Function<GeneratedRow, Acceptance> accepts,
                                    WhereNothingIsAnswered answersNothing) {
         return search(axes, pins, purposes, origins, admits, check, references, answers, held,
@@ -3291,7 +3293,7 @@ public final class Generator {
                                    List<Purpose> purposes, List<ResolvedOrigin> origins,
                                    Admits admits, CandidateCheck check,
                                    FixtureReferences references, List<StoodInAnswer> answers,
-                                   List<HeldOutcome> held,
+                                   HeldTogether held,
                                    Function<GeneratedRow, Acceptance> accepts,
                                    boolean rechoosing, WhereNothingIsAnswered answersNothing) {
         String label = String.join(" with ", pins.labels());
@@ -3303,12 +3305,8 @@ public final class Generator {
         // row of every behavior taking it — a change somewhere else in the file, answering a
         // question nobody asked it. What order they are walked in is {@link #nearestFirst}'s to
         // say; how many of them may be built is this class's own budget.
-        // What the held conditions ask, put together once for both walks: it is the same of every
-        // candidate either walk builds.
-        HeldTogether together = held.isEmpty() ? HeldTogether.Asked.NOTHING
-                : heldTogether(axes.subject(), held, check);
         Building building = new Building(axes, pins, purposes, label, check, MOST_REPAIRS,
-                references, answers, together, accepts, rechoosing, answersNothing);
+                references, answers, held, accepts, rechoosing, answersNothing);
         WhatEachClassRequires requires = new WhatEachClassRequires(axes.axes());
         Traversal stated = nearestFirst(requires, reading, origins, admits, building);
         if (stated == Traversal.SATISFIED) {
@@ -3317,7 +3315,7 @@ public final class Generator {
         }
         // The composition, whatever the stated values spent, and with a budget of its own.
         Building composing = new Building(axes, pins, purposes, label, check, MOST_REPAIRS,
-                references, answers, together, accepts, rechoosing, answersNothing);
+                references, answers, held, accepts, rechoosing, answersNothing);
         Traversal composed = composing(requires, reading, origins, admits, composing);
         if (composed == Traversal.SATISFIED) {
             return new Searched(composing.found, composing.foundAt, composing.foundAgainst, null,

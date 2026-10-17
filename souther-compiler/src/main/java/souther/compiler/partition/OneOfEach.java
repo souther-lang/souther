@@ -4,7 +4,6 @@ import souther.compiler.inputs.TermPath;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Deque;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
@@ -96,15 +95,17 @@ final class OneOfEach {
          * Every choice on it chosen.
          *
          * @param entries what the way asks, each choice replaced by its alternative's entries
-         * @param choices which alternative each choice was taken as, by the choice: the way's
-         *                identity among the ways of the same entries, which {@code entries} no
-         *                longer says once two alternatives ask alike
+         * @param choices each choice taken and the alternative it was taken as, where it stands
+         *                and in the order the way holds them: the way's identity among the ways of
+         *                the same entries, which {@code entries} no longer says once two
+         *                alternatives ask alike. Every one of them — two entries alike are two
+         *                choices the walk made apart, as it walks them apart
          */
-        record Chosen<E>(List<E> entries, Map<E, Integer> choices) implements Way<E> {
+        record Chosen<E>(List<E> entries, List<Choice<E>> choices) implements Way<E> {
 
             public Chosen {
                 entries = List.copyOf(entries);
-                choices = Collections.unmodifiableMap(new LinkedHashMap<>(choices));
+                choices = List.copyOf(choices);
             }
         }
 
@@ -123,6 +124,24 @@ final class OneOfEach {
                 if (unchosen.isEmpty()) {
                     throw new IllegalArgumentException("a way that left a choice left one");
                 }
+            }
+        }
+    }
+
+    /**
+     * One choice a way made: the entry that was one of several things, and which of its
+     * alternatives the way took.
+     *
+     * <p>The entry where it stood, which is what the walk chooses by: two entries alike standing
+     * at two places are two choices, and each may be taken another way. What is said by them
+     * together — that a row along the way meets both alternatives — is for a reader of the way to
+     * say.
+     */
+    record Choice<E>(E entry, int alternative) {
+
+        Choice {
+            if (alternative < 0) {
+                throw new IllegalArgumentException("an alternative is one of the entry's");
             }
         }
     }
@@ -215,7 +234,7 @@ final class OneOfEach {
             }
         }
         if (choices.isEmpty()) {
-            return new Walked.Open<>(List.of(new Way.Chosen<>(entries, Map.of())), null);
+            return new Walked.Open<>(List.of(new Way.Chosen<>(entries, List.of())), null);
         }
         int[] left = {looking.maximum()};
         CompositionBudget stoppedBy = null;
@@ -253,8 +272,9 @@ final class OneOfEach {
                 break;
             }
             List<E> unchosen = new ArrayList<>();
-            List<E> taken = rebuilt(entries, vocabulary, chosen, unchosen);
-            ways.add(unchosen.isEmpty() ? new Way.Chosen<>(taken, chosen)
+            List<Choice<E>> made = new ArrayList<>();
+            List<E> taken = rebuilt(entries, vocabulary, chosen, unchosen, made);
+            ways.add(unchosen.isEmpty() ? new Way.Chosen<>(taken, made)
                     : new Way.LeftUnchosen<>(taken, unchosen));
         }
         return new Walked.Open<>(ways, stoppedBy);
@@ -382,6 +402,14 @@ final class OneOfEach {
      */
     private static <E, S, R> List<E> rebuilt(List<E> entries, Vocabulary<E, S, R> vocabulary,
                                              Map<E, Integer> chosen, List<E> unchosen) {
+        return rebuilt(entries, vocabulary, chosen, unchosen, null);
+    }
+
+    /** The same, and each choice taken, where it stands, added to {@code taken} where that is
+     *  given. */
+    private static <E, S, R> List<E> rebuilt(List<E> entries, Vocabulary<E, S, R> vocabulary,
+                                             Map<E, Integer> chosen, List<E> unchosen,
+                                             List<Choice<E>> taken) {
         List<E> out = new ArrayList<>();
         for (E each : entries) {
             List<List<E>> alternatives = vocabulary.alternatives(each);
@@ -389,9 +417,12 @@ final class OneOfEach {
                 out.add(each);
                 continue;
             }
-            Integer taken = chosen.get(each);
-            if (taken != null) {
-                out.addAll(rebuilt(alternatives.get(taken), vocabulary, chosen, unchosen));
+            Integer which = chosen.get(each);
+            if (which != null) {
+                if (taken != null) {
+                    taken.add(new Choice<>(each, which));
+                }
+                out.addAll(rebuilt(alternatives.get(which), vocabulary, chosen, unchosen, taken));
             } else if (unchosen != null) {
                 unchosen.add(each);
             }

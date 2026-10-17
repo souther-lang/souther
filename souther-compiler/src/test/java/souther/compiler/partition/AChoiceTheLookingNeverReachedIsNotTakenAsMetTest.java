@@ -10,7 +10,6 @@ import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
@@ -69,7 +68,7 @@ class AChoiceTheLookingNeverReachedIsNotTakenAsMetTest {
         AnAnswerComposed.Attempt attempt = AnAnswerComposed.composedAlongTheWays(
                 new OneOfEach.Walked.Open<>(List.of(new OneOfEach.Way.Chosen<>(
                         List.of(ASKED_OF_CHOSEN, new AnAnswerComposed.Asked(LEFT,
-                                truth("b1"))), Map.of())), null),
+                                truth("b1"))), List.of())), null),
                 way -> composed(way, composedAlong), List.of(), PENDING);
 
         assertInstanceOf(AnAnswerComposed.Outcome.Composed.class, attempt.outcome());

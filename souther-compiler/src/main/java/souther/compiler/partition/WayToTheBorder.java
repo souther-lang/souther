@@ -346,26 +346,34 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
     }
 
     /**
-     * This way with each condition of several ways {@code chosen} names taken as the alternative
+     * This way with each condition of several ways {@code chosen} names taken as every alternative
      * it names, where it stands, and every other left as it is.
      *
      * <p>By the condition and not by where it stands, so that what was chosen along one way is
      * chosen along another that takes the same condition in: a guard below another takes the
      * other's condition in, and a row held past the first along one of its ways is past it along
      * that way wherever it goes next.
+     *
+     * <p>Every alternative named, all at once. A row held to two alternatives of one condition is
+     * held to both: some element of one container meeting a predicate and some element of another
+     * meeting its own hold together, and whether two cases of one value do is what reading the way
+     * says ({@link Reachability#of}), as for any two conditions on it.
      */
-    public WayToTheBorder choosing(Map<OnTheWay, Integer> chosen) {
+    public WayToTheBorder choosing(Map<OnTheWay, Set<Integer>> chosen) {
         return chosen.isEmpty() ? this : new WayToTheBorder(choosing(onTheWay, chosen));
     }
 
-    private static List<OnTheWay> choosing(List<OnTheWay> entries, Map<OnTheWay, Integer> chosen) {
+    private static List<OnTheWay> choosing(List<OnTheWay> entries,
+                                           Map<OnTheWay, Set<Integer>> chosen) {
         List<OnTheWay> out = new ArrayList<>();
         for (OnTheWay each : entries) {
-            Integer taken = each.ofSeveralWays() ? chosen.get(each) : null;
+            Set<Integer> taken = each.ofSeveralWays() ? chosen.get(each) : null;
             if (taken == null) {
                 out.add(each);
             } else {
-                out.addAll(choosing(each.alternatives().get(taken), chosen));
+                for (int alternative : taken) {
+                    out.addAll(choosing(each.alternatives().get(alternative), chosen));
+                }
             }
         }
         return out;

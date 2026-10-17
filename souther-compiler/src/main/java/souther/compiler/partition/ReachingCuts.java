@@ -33,6 +33,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.function.BiPredicate;
 
 /**
@@ -228,7 +229,8 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
                     // asks, and the figure is said above.
                     if (alternative instanceof OneOfEach.Way.Chosen<OnTheWay>(var entries,
                             var choices)) {
-                        each.add(alongEach(whole, entries, choices, declarations));
+                        each.add(alongEach(whole, entries, HeldOutcome.byCondition(choices),
+                                declarations));
                     }
                 }
             }
@@ -252,7 +254,7 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
      * it takes, so that a guard below takes them the same way.
      */
     private static HeldOutcome.Bringing alongEach(WayToTheBorder whole, List<OnTheWay> asks,
-                                                  Map<OnTheWay, Integer> choices,
+                                                  Map<OnTheWay, Set<Integer>> choices,
                                                   SearchRegion declarations) {
         List<RowDemand> demands = new ArrayList<>();
         List<OnTheWay.Narrowed> cases = new ArrayList<>();
@@ -286,8 +288,12 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
                             || more.isEmpty()) {
                         continue;
                     }
-                    Map<OnTheWay, Integer> both = new LinkedHashMap<>(choices);
-                    both.putAll(more);
+                    Map<OnTheWay, Set<Integer>> both = new LinkedHashMap<>();
+                    choices.forEach((condition, alternatives) -> both.put(condition,
+                            new TreeSet<>(alternatives)));
+                    HeldOutcome.byCondition(more).forEach((condition, alternatives) -> both
+                            .computeIfAbsent(condition, _ -> new TreeSet<>())
+                            .addAll(alternatives));
                     if (Reachability.of(whole.choosing(both), declarations)
                             instanceof Reachability.Reaching along) {
                         ways.add(new HeldOutcome(demands, cases, whole, both, along));

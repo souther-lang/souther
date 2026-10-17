@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.function.Predicate;
 
 /**
@@ -44,14 +45,15 @@ import java.util.function.Predicate;
  *                 here as well because holding a row to them writes the value there
  * @param way      the way to the condition and the condition coming out that way, every condition
  *                 of several ways on it as it stands
- * @param chosen   which alternative each condition of several ways on {@code way} is taken as,
- *                 by the condition; one not named here is left as it stands
+ * @param chosen   which alternatives each condition of several ways on {@code way} is taken as,
+ *                 by the condition ({@link #byCondition}) — every one a row along the way meets;
+ *                 one not named here is left as it stands
  * @param reaching {@code way} taken along {@code chosen}, as a composer reads it — and, where a
  *                 demand is one a condition makes ({@link RowDemand.OfACondition}), the condition
  *                 itself, which a composer meets the way it meets every condition on the way
  */
 public record HeldOutcome(List<RowDemand> demands, List<OnTheWay.Narrowed> cases,
-                          WayToTheBorder way, Map<OnTheWay, Integer> chosen,
+                          WayToTheBorder way, Map<OnTheWay, Set<Integer>> chosen,
                           Reachability.Reaching reaching) {
 
     public HeldOutcome {
@@ -59,7 +61,15 @@ public record HeldOutcome(List<RowDemand> demands, List<OnTheWay.Narrowed> cases
         cases = List.copyOf(cases);
         Objects.requireNonNull(way, "the way to the condition");
         Objects.requireNonNull(reaching, "the way as a composer reads it");
-        chosen = Collections.unmodifiableMap(new LinkedHashMap<>(chosen));
+        Map<OnTheWay, Set<Integer>> copied = new LinkedHashMap<>();
+        chosen.forEach((condition, alternatives) -> {
+            if (alternatives.isEmpty()) {
+                throw new IllegalArgumentException("a condition chosen is taken some way: "
+                        + condition);
+            }
+            copied.put(condition, Collections.unmodifiableSet(new TreeSet<>(alternatives)));
+        });
+        chosen = Collections.unmodifiableMap(copied);
         if (demands.isEmpty() && cases.isEmpty()) {
             throw new IllegalArgumentException(
                     "a condition held to coming out a way asks something of the row");
@@ -67,26 +77,22 @@ public record HeldOutcome(List<RowDemand> demands, List<OnTheWay.Narrowed> cases
     }
 
     /**
-     * Whether {@code held} take every condition any two of them chose a way of the same way, so
-     * that one row can be held to all of them at once.
+     * The choices a walk made along one way, as the conditions they are of: each condition with
+     * every alternative of it the way took.
+     *
+     * <p>Two identities, and this is where one becomes the other. The walk chooses by where an
+     * entry stands, and two entries alike standing at two places are two choices
+     * ({@link OneOfEach.Choice}); what a way past one guard carries to the next is which
+     * condition was taken which way, and the way to the next reads the same condition as an entry
+     * of its own, alike and not the same object. So a condition is the entry as the reading
+     * states it, and two choices of it are two alternatives a row along the way meets at once.
      */
-    static boolean agree(List<HeldOutcome> held) {
-        return chosenAlong(held) != null;
-    }
-
-    /** Every choice any of {@code held} made, or null where two of them chose one condition two
-     *  ways. */
-    private static Map<OnTheWay, Integer> chosenAlong(List<HeldOutcome> held) {
-        Map<OnTheWay, Integer> chosen = new LinkedHashMap<>();
-        for (HeldOutcome each : held) {
-            for (Map.Entry<OnTheWay, Integer> one : each.chosen().entrySet()) {
-                Integer before = chosen.putIfAbsent(one.getKey(), one.getValue());
-                if (before != null && !before.equals(one.getValue())) {
-                    return null;
-                }
-            }
+    static Map<OnTheWay, Set<Integer>> byCondition(List<OneOfEach.Choice<OnTheWay>> made) {
+        Map<OnTheWay, Set<Integer>> out = new LinkedHashMap<>();
+        for (OneOfEach.Choice<OnTheWay> each : made) {
+            out.computeIfAbsent(each.entry(), _ -> new TreeSet<>()).add(each.alternative());
         }
-        return chosen;
+        return out;
     }
 
     /**
@@ -99,21 +105,24 @@ public record HeldOutcome(List<RowDemand> demands, List<OnTheWay.Narrowed> cases
      * — the same element of the same container, under two cases of one value — are two ways all
      * the same.
      *
+     * <p>Where two of them took one condition two ways, the row is held to both alternatives, and
+     * whether a row is both is what reading the way says: two containers each holding an element
+     * that meets its predicate is a way, and a value two cases at once is none
+     * ({@link WayToTheBorder#choosing}).
+     *
      * <p>And a choice of a condition the last way does not take in is still a choice the row is
      * held to: a way to a comparison read through several copies holds what every copy's way
-     * holds, and a condition one copy is reached without is not on it. What the alternative chosen
-     * asks is then asked beside the way, since a row held past the guard above along it has to be
-     * all of that wherever it goes next.
+     * holds, and a condition one copy is reached without is not on it. What the alternatives
+     * chosen ask is then asked beside the way, since a row held past the guard above along them
+     * has to be all of that wherever it goes next.
      *
-     * @param held         ways that agree ({@link #agree}); asked of ones that do not, there is
-     *                     no row held to all of them to say a way of
      * @param declarations what the declarations leave, which the way narrows
      */
     static Reachability along(List<HeldOutcome> held, SearchRegion declarations) {
-        Map<OnTheWay, Integer> chosen = chosenAlong(held);
-        if (chosen == null) {
-            throw new IllegalArgumentException("ways that take one condition two ways are held"
-                    + " to by no one row: " + held);
+        Map<OnTheWay, Set<Integer>> chosen = new LinkedHashMap<>();
+        for (HeldOutcome each : held) {
+            each.chosen().forEach((condition, alternatives) -> chosen
+                    .computeIfAbsent(condition, _ -> new TreeSet<>()).addAll(alternatives));
         }
         HeldOutcome last = held.getLast();
         if (chosen.equals(last.chosen())) {
@@ -121,10 +130,12 @@ public record HeldOutcome(List<RowDemand> demands, List<OnTheWay.Narrowed> cases
         }
         List<OnTheWay> onIt = last.way().stated();
         List<OnTheWay> entries = new ArrayList<>(last.way().choosing(chosen).onTheWay());
-        for (Map.Entry<OnTheWay, Integer> each : chosen.entrySet()) {
+        for (Map.Entry<OnTheWay, Set<Integer>> each : chosen.entrySet()) {
             if (!onIt.contains(each.getKey())) {
-                entries.addAll(new WayToTheBorder(each.getKey().alternatives()
-                        .get(each.getValue())).choosing(chosen).onTheWay());
+                for (int alternative : each.getValue()) {
+                    entries.addAll(new WayToTheBorder(each.getKey().alternatives()
+                            .get(alternative)).choosing(chosen).onTheWay());
+                }
             }
         }
         return Reachability.of(new WayToTheBorder(entries), declarations);
