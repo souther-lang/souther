@@ -3425,9 +3425,10 @@ final class Pullback {
             }
             LawProposition.Same<DeclaredArgument> apart = new LawProposition.Same<>(
                     new LawSubject.ElementOf<>(at), new LawSubject.ElementOf<>(at), false);
-            long settled = 0;
+            // The first of them is none of those before it, whatever it is.
+            long settled = subjects.isEmpty() ? 0 : 1;
             List<Proposition> unsettled = new ArrayList<>();
-            for (int i = 0; i < subjects.size(); i++) {
+            for (int i = 1; i < subjects.size(); i++) {
                 Derivation fromEachBefore = null;
                 for (int j = 0; j < i; j++) {
                     Derivation pair = leaf(new Derivation.TheSameValue(apart, subjects.get(i),
@@ -3435,8 +3436,7 @@ final class Pullback {
                     fromEachBefore = fromEachBefore == null ? pair
                             : new Derivation.Joined(ConditionJoin.BOTH, fromEachBefore, pair);
                 }
-                Proposition stated = fromEachBefore == null ? new Proposition.Always(true)
-                        : trying.of(fromEachBefore);
+                Proposition stated = trying.of(fromEachBefore);
                 if (stated instanceof Proposition.Always(boolean holds)) {
                     settled += holds ? 1 : 0;
                 } else {
