@@ -151,28 +151,30 @@ class AFloorRemainderOfAFormIsALineOnTheRemainderTest {
      */
     @Test
     void theRemainderIsOneLineHoweverTheComparisonMeetingItIsWritten() {
-        List<String> inline = List.of("guard Int.floorMod(a - d, 7) >= 1 else No", "Ok");
-        assertEquals(List.of("1"), bordersOf("a: Int, d: Int", inline));
-        List<String> labels = labelsOf("a: Int, d: Int", inline);
-        assertFalse(labels.isEmpty(), "the line is owed rows");
+        List<BorderAssessment> inline = linesOf("a: Int, d: Int",
+                List.of("guard Int.floorMod(a - d, 7) >= 1 else No", "Ok"));
+        assertEquals(List.of("1"), bordersOf(inline));
+        assertFalse(labelsOf(inline).isEmpty(), "the line is owed rows");
         for (List<String> body : List.of(
                 List.of("let w = Int.floorMod(a - d, 7)", "guard w >= 1 else No", "Ok"),
                 List.of("guard Int.floorMod(a - d, 7) + 1 >= 2 else No", "Ok"),
                 List.of("let w = Int.floorMod(a - d, 7)", "guard 2 * w - 2 >= 0 else No", "Ok"))) {
-            assertEquals(List.of("1"), bordersOf("a: Int, d: Int", body), body.toString());
-            assertEquals(labels, labelsOf("a: Int, d: Int", body), body.toString());
+            List<BorderAssessment> lines = linesOf("a: Int, d: Int", body);
+            assertEquals(List.of("1"), bordersOf(lines), body.toString());
+            assertEquals(labelsOf(inline), labelsOf(lines), body.toString());
         }
     }
 
     /** And so is a remainder of a number that is no place of the input, given a name. */
     @Test
     void aRemainderOfASumGivenANameIsTheLineItIsWrittenInline() {
-        List<String> inline = List.of("guard Int.floorMod(List.sum(xs), 11) <= 1 else No", "Ok");
-        List<String> named = List.of("let r = Int.floorMod(List.sum(xs), 11)",
-                "guard r <= 1 else No", "Ok");
-        assertEquals(List.of("1"), bordersOf("xs: List<Int>", inline));
-        assertEquals(List.of("1"), bordersOf("xs: List<Int>", named));
-        assertEquals(labelsOf("xs: List<Int>", inline), labelsOf("xs: List<Int>", named));
+        List<BorderAssessment> inline = linesOf("xs: List<Int>",
+                List.of("guard Int.floorMod(List.sum(xs), 11) <= 1 else No", "Ok"));
+        List<BorderAssessment> named = linesOf("xs: List<Int>", List.of(
+                "let r = Int.floorMod(List.sum(xs), 11)", "guard r <= 1 else No", "Ok"));
+        assertEquals(List.of("1"), bordersOf(inline));
+        assertEquals(List.of("1"), bordersOf(named));
+        assertEquals(labelsOf(inline), labelsOf(named));
     }
 
     /**
@@ -190,8 +192,7 @@ class AFloorRemainderOfAFormIsALineOnTheRemainderTest {
                     | (0, 6) -> No
                     | (0, 7) -> No
                 """);
-        assertEquals(List.of("1", "5"), linesOf(compilation).stream()
-                .map(BorderAssessment::value).toList());
+        assertEquals(List.of("1", "5"), bordersOf(linesOf(compilation)));
         assertEquals(AdequacyReport.AdequacyStatus.SATISFIED,
                 AdequacyReport.of(compilation).adequacy());
     }
@@ -319,15 +320,19 @@ class AFloorRemainderOfAFormIsALineOnTheRemainderTest {
         return linesOf(parameters, condition).stream().map(BorderAssessment::value).toList();
     }
 
-    private static List<String> bordersOf(String parameters, List<String> body) {
-        return linesOf(compiled(parameters, body, "")).stream().map(BorderAssessment::value)
-                .toList();
+    /** The lines of {@code f}, its body the lines given. */
+    private static List<BorderAssessment> linesOf(String parameters, List<String> body) {
+        return linesOf(compiled(parameters, body, ""));
     }
 
-    /** What each certified row of {@code body}'s lines is labelled with, in order. */
-    private static List<String> labelsOf(String parameters, List<String> body) {
+    private static List<String> bordersOf(List<BorderAssessment> lines) {
+        return lines.stream().map(BorderAssessment::value).toList();
+    }
+
+    /** What each certified row of {@code lines} is labelled with, in order. */
+    private static List<String> labelsOf(List<BorderAssessment> lines) {
         List<String> labels = new ArrayList<>();
-        for (Row row : certifiedRows(linesOf(compiled(parameters, body, "")))) {
+        for (Row row : certifiedRows(lines)) {
             labels.addAll(row.labels());
         }
         return labels.stream().sorted().toList();

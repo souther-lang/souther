@@ -5253,6 +5253,14 @@ final class Pullback {
      * a comparison of the place's remainder over one stretch or the other and no number of its own.
      */
     private Quantity.RemainderOfADividend remainderAt(Core node, InputReads at) {
+        // Every number the arithmetic meets is asked, so what is no call of a floor remainder is
+        // turned away before anything is read through. A name comes here only once what it was
+        // given has been asked and stopped, so it is no remainder either.
+        if (!(Core.withoutStanding(node) instanceof Core.PreservedCall call)
+                || DefaultBoundOperationFacts.get().divisorOfAFloorRemainder(call.operation())
+                        .isEmpty()) {
+            return null;
+        }
         RemainderOfAShiftedValue.OfADivision<InputReads> division =
                 RemainderOfAShiftedValue.ofADivision(node, at, sides());
         if (division == null || division.movesAPlace(sides())) {
