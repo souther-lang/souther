@@ -5,6 +5,7 @@ import souther.compiler.numeric.Place;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.values.Value;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -131,19 +132,54 @@ public final class TermOrders {
         return TermReading.among(this, own, every);
     }
 
+    /** The term, for a reader of a number of an element read off the elements beside it. */
+    public NumericTerm.OfAnElementsNeighbours amongItsNeighbours() {
+        if (!(term instanceof NumericTerm.OfAnElementsNeighbours among)) {
+            throw new IllegalArgumentException(term + " is a number of no element's neighbours");
+        }
+        return among;
+    }
+
     /**
-     * The end of what the elements {@code each} hold at the term's value among those holding at its
-     * key what {@code own} holds there, for a term that takes it.
+     * The number the element {@code own} reads among {@code each}, the elements of the occurrence
+     * of the container it is in, for a term read off an element's neighbours.
+     *
+     * <p>An element is handed as what it holds at each way into it, and holding nothing at one the
+     * number is read from is an answer the caller has and says: the reading stops there.
      *
      * @param own  the element under consideration, as what it holds at each way into it
      * @param each every element of its container, the same way
      */
-    public NumericTerm.Reading readAtItsKey(Function<ElementProjection, ObservedValue> own,
-                                            List<Function<ElementProjection, ObservedValue>> each) {
-        if (!(term instanceof NumericTerm.ExtremeOfItsKey)) {
-            throw new IllegalArgumentException(term + " is not an end of the values of a key");
+    public NumericTerm.Reading readInItsOccurrence(
+            Function<ElementProjection, ObservedValue> own,
+            List<Function<ElementProjection, ObservedValue>> each) {
+        return switch (amongItsNeighbours()) {
+            case NumericTerm.Multiplicity often -> TermReading.among(this,
+                    own.apply(often.placeField()), heldAt(often.placeField(), each));
+            case NumericTerm.ExtremeOfItsKey _ -> TermReading.extremeOfItsKey(this, own, each);
+        };
+    }
+
+    /**
+     * What each of {@code each} reads, in their order — {@link #readInItsOccurrence} for all of
+     * them, over one pass of the container rather than one per element.
+     */
+    public List<NumericTerm.Reading> readEachInItsOccurrence(
+            List<Function<ElementProjection, ObservedValue>> each) {
+        return switch (amongItsNeighbours()) {
+            case NumericTerm.Multiplicity often ->
+                    TermReading.amongEach(this, heldAt(often.placeField(), each));
+            case NumericTerm.ExtremeOfItsKey _ -> TermReading.extremeOfEachKey(this, each);
+        };
+    }
+
+    private static List<ObservedValue> heldAt(ElementProjection field,
+                                              List<Function<ElementProjection, ObservedValue>> each) {
+        List<ObservedValue> held = new ArrayList<>(each.size());
+        for (Function<ElementProjection, ObservedValue> one : each) {
+            held.add(one.apply(field));
         }
-        return TermReading.extremeOfItsKey(this, own, each);
+        return held;
     }
 
     /**
@@ -155,19 +191,6 @@ public final class TermOrders {
             throw new IllegalArgumentException(term + " is not a count of an element's equals");
         }
         return TermReading.amongEach(this, every);
-    }
-
-    /**
-     * What each of {@code each} reads, in their order, for a term that takes an end of a key's
-     * values — {@link #readAtItsKey} for all of them, keeping one end per key rather than walking
-     * every element for each.
-     */
-    public List<NumericTerm.Reading> readEachAtItsKey(
-            List<Function<ElementProjection, ObservedValue>> each) {
-        if (!(term instanceof NumericTerm.ExtremeOfItsKey)) {
-            throw new IllegalArgumentException(term + " is not an end of the values of a key");
-        }
-        return TermReading.extremeOfEachKey(this, each);
     }
 
     /**

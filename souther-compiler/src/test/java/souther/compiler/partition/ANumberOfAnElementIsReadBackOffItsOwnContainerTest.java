@@ -105,6 +105,24 @@ class ANumberOfAnElementIsReadBackOffItsOwnContainerTest {
                 Generator.readBack(on, orders, Count.of(2)));
     }
 
+    /** And an element read whole that holds nothing where the number is read is no element the
+     *  walk says, rather than one whose number is none. */
+    @Test
+    void anElementOfAnotherShapeIsNoElementWithoutANumber() {
+        NumericTerm.ExtremeOfItsKey least = NumericTerm.ExtremeOfItsKey.of(LINES,
+                LINES.element().then("sku"), LINES.element().then("qty"), Extreme.LEAST);
+        TermOrders on = TermOrdersFixtures.computed(least, WHOLE, WHOLE,
+                Map.of(least.keyField(), Carrier.TEXT));
+        ObservedValue noSku = new ObservedValue.Constructed(
+                TypeSymbols.declared(new TypeKey("demo", "Line")),
+                Map.of("qty", new ObservedValue.Integer(1)));
+        List<ObservedValue> orders = List.of(new ObservedValue.Sequence(List.of(noSku)),
+                new ObservedValue.Sequence(List.of(line("x", 2))));
+        assertEquals(new Generator.RealizationReadback.CouldNotTell(
+                        new Generator.ReadbackGap.WalkAndTypeDisagree()),
+                Generator.readBack(on, orders, Count.of(9)));
+    }
+
     private static ObservedValue line(String sku, long qty) {
         return new ObservedValue.Constructed(TypeSymbols.declared(new TypeKey("demo", "Line")),
                 Map.of("sku", new ObservedValue.Text(sku), "qty", new ObservedValue.Integer(qty)));

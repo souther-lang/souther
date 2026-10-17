@@ -58,8 +58,29 @@ import java.util.function.UnaryOperator;
  * written for it.
  */
 public sealed interface NumericTerm
-        permits NumericTerm.FromOnePosition, NumericTerm.TakenOver, NumericTerm.Multiplicity,
-                NumericTerm.ExtremeOfItsKey {
+        permits NumericTerm.FromOnePosition, NumericTerm.TakenOver,
+                NumericTerm.OfAnElementsNeighbours {
+
+    /**
+     * A number of an element read off the elements beside it in its container: how often its value
+     * occurs, the end of its key's values.
+     *
+     * <p>One kind and not two terms each asked about separately, because what follows from being one
+     * is the same for both: the number is read among the elements of the one occurrence of
+     * {@link #container()} the element is in, the elements are looked at only at
+     * {@link #fieldsRead()}, and nothing about it is read off one position. A reader asks it of this type rather than of
+     * the two, so a third number of the kind is one that reader already handles.
+     */
+    sealed interface OfAnElementsNeighbours extends NumericTerm
+            permits Multiplicity, ExtremeOfItsKey {
+
+        /** The container among whose elements the number is read. */
+        TermPath container();
+
+        /** The ways from an element of {@link #container()} to every value its number is read
+         *  from, each of which an element of the shape the walk says holds. */
+        List<ElementProjection> fieldsRead();
+    }
 
     /**
      * A number a row can be asked for at one place, because one value stands there.
@@ -435,7 +456,7 @@ public sealed interface NumericTerm
      * same value at {@code place} read the same number, and every element reads at least one, since
      * it is one of those it counts.
      */
-    final class Multiplicity implements NumericTerm {
+    final class Multiplicity implements OfAnElementsNeighbours {
 
         private final TermPath container;
         private final TermPath place;
@@ -459,6 +480,7 @@ public sealed interface NumericTerm
         }
 
         /** The container whose elements are counted. */
+        @Override
         public TermPath container() {
             return container;
         }
@@ -471,6 +493,11 @@ public sealed interface NumericTerm
         /** The way from an element of the container to {@link #place()}. */
         public ElementProjection placeField() {
             return fieldsTo(container, place);
+        }
+
+        @Override
+        public List<ElementProjection> fieldsRead() {
+            return List.of(placeField());
         }
 
         /** Where the value compared stands, which is where a reader is sent and no place the
@@ -519,7 +546,7 @@ public sealed interface NumericTerm
      * <p>Every element reads one of the values of its key, so the number is among the values the
      * place holds; an element alone under its key reads its own.
      */
-    final class ExtremeOfItsKey implements NumericTerm {
+    final class ExtremeOfItsKey implements OfAnElementsNeighbours {
 
         private final TermPath container;
         private final TermPath key;
@@ -573,7 +600,13 @@ public sealed interface NumericTerm
             return fieldsTo(container, value);
         }
 
+        @Override
+        public List<ElementProjection> fieldsRead() {
+            return List.of(keyField(), valueField());
+        }
+
         /** The container whose elements are looked at. */
+        @Override
         public TermPath container() {
             return container;
         }
@@ -822,9 +855,9 @@ public sealed interface NumericTerm
             // A run of values is answered by no single place, which is the whole of what this term
             // is. Every reader that goes on to draw a line or ask for a value gets the answer here.
             case TakenOver _ -> null;
-            // And how often a value occurs among its neighbours is read off all of them, so no
-            // value standing at one place is it; nor is the end of the values of a key.
-            case Multiplicity _, ExtremeOfItsKey _ -> null;
+            // And a number of an element read off its neighbours is read off all of them, so no
+            // value standing at one place is it.
+            case OfAnElementsNeighbours _ -> null;
         };
     }
 
@@ -859,10 +892,9 @@ public sealed interface NumericTerm
             // container's. Answered as "not there" rather than by rebuilding the run at a
             // location, which would be this reading inventing where a walk got its values.
             case TakenOver _ -> null;
-            // How often a value occurs is read off the container it stands in, so a place moved
-            // alone is a count of some other container's elements; the end of a key's values the
-            // same.
-            case Multiplicity _, ExtremeOfItsKey _ -> null;
+            // A number of an element read off its neighbours is read off the container it stands
+            // in, so a place moved alone is a number of some other container's elements.
+            case OfAnElementsNeighbours _ -> null;
         };
     }
 

@@ -106,13 +106,7 @@ sealed interface WhatATermRead {
      * nothing.
      */
     static WhatATermRead inItsOccurrence(TermOrders on, BorderQuantity.Observation row) {
-        TermPath container = switch (on.term()) {
-            case NumericTerm.Multiplicity often -> often.container();
-            case NumericTerm.ExtremeOfItsKey extreme -> extreme.container();
-            case NumericTerm.FromOnePosition _, NumericTerm.TakenOver _ ->
-                    throw new IllegalArgumentException(on.term() + " is a number of no element's"
-                            + " neighbours");
-        };
+        TermPath container = on.amongItsNeighbours().container();
         if (!(row.eachElementOf(container) instanceof WalkResult.Reached<
                 List<BorderQuantity.Observation>>(List<BorderQuantity.Observation> elements))) {
             return new CameToNothing(ReadingGap.COULD_NOT_WALK);
@@ -124,23 +118,9 @@ sealed interface WhatATermRead {
         for (BorderQuantity.Observation one : elements) {
             each.add(field -> left.at(one, field.from(element)));
         }
-        NumericTerm.Reading read = switch (on.term()) {
-            // Every element's value is what is counted among, so every one is asked for.
-            case NumericTerm.Multiplicity often -> {
-                ObservedValue mine = own.apply(often.placeField());
-                if (mine == null) {
-                    yield null;
-                }
-                List<ObservedValue> every = new ArrayList<>();
-                for (Function<ElementProjection, ObservedValue> one : each) {
-                    every.add(one.apply(often.placeField()));
-                }
-                yield every.contains(null) ? null : on.readAmong(mine, every);
-            }
-            case NumericTerm.ExtremeOfItsKey _ -> on.readAtItsKey(own, each);
-            case NumericTerm.FromOnePosition _, NumericTerm.TakenOver _ ->
-                    throw new IllegalStateException("the container was settled for " + on.term());
-        };
+        // A field the row gave nothing at is recorded where it was asked, and is what the row is
+        // told whatever the reading made of it.
+        NumericTerm.Reading read = on.readInItsOccurrence(own, each);
         return left.stopped() != null ? left.stopped() : of(read);
     }
 

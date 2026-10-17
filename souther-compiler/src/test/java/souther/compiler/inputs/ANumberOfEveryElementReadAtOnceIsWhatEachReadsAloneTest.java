@@ -74,9 +74,9 @@ class ANumberOfEveryElementReadAtOnceIsWhatEachReadsAloneTest {
                 }
                 List<NumericTerm.Reading> alone = new ArrayList<>();
                 for (Function<ElementProjection, ObservedValue> own : each) {
-                    alone.add(on.readAtItsKey(own, each));
+                    alone.add(on.readInItsOccurrence(own, each));
                 }
-                assertEquals(alone, on.readEachAtItsKey(each),
+                assertEquals(alone, on.readEachInItsOccurrence(each),
                         () -> extreme + " over " + every);
             }
         }
@@ -124,9 +124,9 @@ class ANumberOfEveryElementReadAtOnceIsWhatEachReadsAloneTest {
                 }
                 List<NumericTerm.Reading> alone = new ArrayList<>();
                 for (Function<ElementProjection, ObservedValue> own : each) {
-                    alone.add(on.readAtItsKey(own, each));
+                    alone.add(on.readInItsOccurrence(own, each));
                 }
-                assertEquals(alone, on.readEachAtItsKey(each), () -> extreme + " over " + every);
+                assertEquals(alone, on.readEachInItsOccurrence(each), () -> extreme + " over " + every);
             }
         }
     }
@@ -184,8 +184,8 @@ class ANumberOfEveryElementReadAtOnceIsWhatEachReadsAloneTest {
         for (ObservedValue element : every) {
             each.add(field -> field.in(element));
         }
-        NumericTerm.Reading four = on.readEachAtItsKey(each).getFirst();
-        assertEquals(on.readAtItsKey(each.getFirst(), each), four);
+        NumericTerm.Reading four = on.readEachInItsOccurrence(each).getFirst();
+        assertEquals(on.readInItsOccurrence(each.getFirst(), each), four);
         assertEquals(WHOLE.placeOf(new ObservedValue.Integer(4)),
                 ((NumericTerm.Reading.Number) four).value());
     }

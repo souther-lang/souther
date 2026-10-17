@@ -105,11 +105,11 @@ final class TermReading {
      *
      * <p>What stops the reading is its own value where that was not read, and otherwise the first
      * of {@code every} in order that was not: the law {@link Counted#of} states once, for this and
-     * for {@link #amongEach}.
+     * for {@link #amongEach}. A value that is none is an element holding nothing at the place
+     * ({@link #whereHeld}).
      */
     static Reading among(TermOrders on, ObservedValue own, List<ObservedValue> every) {
-        Objects.requireNonNull(own, "a term is read at a value the walk came to");
-        return Counted.over(on, every).of(whereTheOrderPuts(on.observed(), own));
+        return Counted.over(on, every).of(whereHeld(on.observed(), own));
     }
 
     /**
@@ -141,8 +141,7 @@ final class TermReading {
             Reading firstStop = null;
             Map<Place, Long> counted = new HashMap<>();
             for (ObservedValue each : every) {
-                Objects.requireNonNull(each, "every value the walk came to is a value");
-                Where where = whereTheOrderPuts(on.observed(), each);
+                Where where = whereHeld(on.observed(), each);
                 places.add(where);
                 switch (where) {
                     case Where.At(Place place) -> counted.merge(place.canonical(), 1L, Long::sum);
@@ -175,9 +174,8 @@ final class TermReading {
      *
      * <p>An element's value is read only where its key is the one asked about: what an element of
      * another key holds, or failed to hold, is no part of this key's end. An element whose key is
-     * not read may be of any key, so no end is read beside it. Holding nothing at a place is a row
-     * that wrote nothing there, which the caller has said already; a value the order puts nowhere
-     * is no number read.
+     * not read may be of any key, so no end is read beside it. Holding nothing at a place is the
+     * caller's to say ({@link #whereHeld}); a value the order puts nowhere is no number read.
      *
      * @param own  the element under consideration, as what it holds at each way into it
      * @param each every element of the container, the same way
@@ -284,20 +282,30 @@ final class TermReading {
     }
 
     /** Where the key's order puts what {@code element} holds at the term's key, or why it puts it
-     *  nowhere: nothing held there is no number of it. */
+     *  nowhere. */
     private static Where keyOf(NumericTerm.ExtremeOfItsKey term, Carrier keyedOn,
                                Function<ElementProjection, ObservedValue> element) {
-        ObservedValue held = element.apply(term.keyField());
-        return held == null ? new Where.Nowhere(new Reading.NotNumber())
-                : whereTheOrderPuts(keyedOn, held);
+        return whereHeld(keyedOn, element.apply(term.keyField()));
     }
 
     /** The same at the term's value, on the order the values stand on. */
     private static Where valueOf(NumericTerm.ExtremeOfItsKey term, Carrier observed,
                                  Function<ElementProjection, ObservedValue> element) {
-        ObservedValue held = element.apply(term.valueField());
+        return whereHeld(observed, element.apply(term.valueField()));
+    }
+
+    /**
+     * Where {@code on} puts what an element holds at a way into it, which is null where it holds
+     * nothing there.
+     *
+     * <p>Holding nothing is no number, and what it is otherwise is the caller's to say, since only
+     * the caller knows where the element came from: a row that wrote nothing at the place, or a
+     * value read whole that is of another shape than the walk's. Every reading of an element's
+     * neighbours stops at it by this one law, so no reader decides it again.
+     */
+    private static Where whereHeld(Carrier on, ObservedValue held) {
         return held == null ? new Where.Nowhere(new Reading.NotNumber())
-                : whereTheOrderPuts(observed, held);
+                : whereTheOrderPuts(on, held);
     }
 
     /** The one of {@code kept} and {@code other} at {@code extreme}, the first where they are

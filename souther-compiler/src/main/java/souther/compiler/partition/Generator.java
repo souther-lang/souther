@@ -7795,8 +7795,7 @@ public final class Generator {
         // the values at the place gathered across containers would count, or take an end of, the
         // elements of one container among those of another.
         TermPath readAt = switch (target.term()) {
-            case NumericTerm.Multiplicity among -> among.container();
-            case NumericTerm.ExtremeOfItsKey extreme -> extreme.container();
+            case NumericTerm.OfAnElementsNeighbours among -> among.container();
             case NumericTerm.FromOnePosition _, NumericTerm.TakenOver _ ->
                     target.term().subjectPath();
         };
@@ -7830,8 +7829,7 @@ public final class Generator {
                                         Place at) {
         NumericTerm term = on.term();
         boolean nothingToRead = switch (term) {
-            case NumericTerm.Multiplicity _, NumericTerm.ExtremeOfItsKey _ ->
-                    values.stream().allMatch(each -> AnOccurrence.of(each)
+            case NumericTerm.OfAnElementsNeighbours _ -> values.stream().allMatch(each -> AnOccurrence.of(each)
                             instanceof AnOccurrence.Read(List<ObservedValue> held)
                             && held.isEmpty());
             case NumericTerm.FromOnePosition _ -> values.isEmpty();
@@ -7857,7 +7855,7 @@ public final class Generator {
         boolean stands = switch (term) {
             // How often a value occurs, or the end of the values of a key, among the elements of
             // each container: a row stands at a point where some element's number comes to it.
-            case NumericTerm.Multiplicity _, NumericTerm.ExtremeOfItsKey _ -> {
+            case NumericTerm.OfAnElementsNeighbours _ -> {
                 boolean any = false;
                 for (ObservedValue container : values) {
                     switch (AnOccurrence.of(container)) {
@@ -7956,35 +7954,21 @@ public final class Generator {
 
     /**
      * What each of {@code held}, the elements of one container, reads as {@code on}'s number among
-     * them — or null where an element read whole holds nothing where the number is read, which is
-     * an element of another shape than the walk's.
+     * them — or null where an element read whole holds nothing at a way the number is read from,
+     * which is an element of another shape than the walk's.
      */
     private static List<NumericTerm.Reading> readEachOf(TermOrders on, List<ObservedValue> held) {
+        List<ElementProjection> read = on.amongItsNeighbours().fieldsRead();
         List<Function<ElementProjection, ObservedValue>> each = new ArrayList<>();
         for (ObservedValue element : held) {
+            for (ElementProjection field : read) {
+                if (field.in(element) == null) {
+                    return null;
+                }
+            }
             each.add(field -> field.in(element));
         }
-        return switch (on.term()) {
-            case NumericTerm.Multiplicity among -> {
-                List<ObservedValue> placed = new ArrayList<>();
-                for (Function<ElementProjection, ObservedValue> one : each) {
-                    placed.add(one.apply(among.placeField()));
-                }
-                yield placed.contains(null) ? null : on.readEachAmong(placed);
-            }
-            case NumericTerm.ExtremeOfItsKey extreme -> {
-                for (Function<ElementProjection, ObservedValue> one : each) {
-                    if (one.apply(extreme.keyField()) == null
-                            || one.apply(extreme.valueField()) == null) {
-                        yield null;
-                    }
-                }
-                yield on.readEachAtItsKey(each);
-            }
-            case NumericTerm.FromOnePosition _, NumericTerm.TakenOver _ ->
-                    throw new IllegalArgumentException(on.term() + " is a number of no element's"
-                            + " neighbours");
-        };
+        return on.readEachInItsOccurrence(each);
     }
 
     /**
