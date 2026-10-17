@@ -75,8 +75,8 @@ public final class PositionsAStatementReads {
                     reads(counted, out) && reads(each, out);
             case Quantity.SumOver(DecisionSubject summed, Quantity each) ->
                     reads(summed, out) && reads(each, out);
-            case Quantity.RemainderOfADividend(var dividend, var _) -> dividend.coefs().keySet()
-                    .stream().allMatch(term -> reads(term, out));
+            case Quantity.RemainderOfADividend(var _, var dividend, var _) ->
+                    dividend.coefs().keySet().stream().allMatch(term -> reads(term, out));
         };
     }
 

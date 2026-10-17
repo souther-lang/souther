@@ -1987,6 +1987,29 @@ final class Terms {
                         Granularity.DISCRETE);
     }
 
+    /**
+     * What {@code remainder} by {@code divisor} leaves of {@code constant} and each atom of
+     * {@code weighed} weighed by its number, named by the operation, the constant, each weight with
+     * its atom and the divisor — so a guard on it in one condition and one in the next are about
+     * one number. The atoms are taken in the order given, which is the caller's to hold the same
+     * for one form.
+     *
+     * <p>Named as a call of the operation over all of those, which is no call the source writes: a
+     * written call of the remainder has its dividend and its divisor and nothing else.
+     */
+    FactSubject remainderOfAForm(ValueName remainder,
+                                 List<Map.Entry<FactSubject, BigDecimal>> weighed,
+                                 BigDecimal constant, long divisor) {
+        List<Term> named = new ArrayList<>();
+        named.add(interned.written(constant));
+        for (Map.Entry<FactSubject, BigDecimal> each : weighed) {
+            named.add(interned.written(each.getValue()));
+            named.add(each.getKey().identity());
+        }
+        named.add(interned.written(divisor));
+        return named(interned.called(remainder, named), Granularity.DISCRETE);
+    }
+
     /** The size {@code size} takes of what stands at {@code place}, named as {@link #sizeKeyOf}
      *  names it, so a guard on the size here and a proposition about it are about one atom. */
     FactSubject sizeAtPlace(ValueName size, FactSubject place) {

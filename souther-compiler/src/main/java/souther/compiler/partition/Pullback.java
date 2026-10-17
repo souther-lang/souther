@@ -424,29 +424,51 @@ final class Pullback {
      * Whether what a written comparison states was carried past it to the input — so that what it
      * states is the parts it was carried to, and not a rule the comparison draws of its own.
      *
-     * <p>Only an emptiness check is carried anywhere: any other comparison is the relation it
-     * states. And one is carried past only where the container it asks about is no position of its
-     * own and every part it was carried to was read — one that stopped on the way is a rule about a
-     * value made from the input, which the comparison still is.
+     * <p>Only a comparison read as one that leaves no relation of its own is carried anywhere: an
+     * emptiness check, or counts held against nought, which is whether some element of one of them
+     * meets what it counts. Any other comparison is the relation it states, through whatever
+     * comparisons chose the values it compares. Which reading it was is what was read, however
+     * the counts reached it: {@code c + d >= 1} with {@code c} and {@code d} named counts is one.
      *
-     * <p>And not where what it states is relations — beside what a row answers of its own values,
-     * if anything — some of which nothing else written there states. Those are lines, and the
-     * check draws them: {@code List.isEmpty(List.take(n, xs))}
-     * holds where {@code n} is below one or {@code xs} is empty, and neither is a comparison
-     * anybody wrote. Relations every one of which was read off a comparison written inside it are
-     * that comparison's lines, as {@code List.isEmpty(List.filter(x -> x > 5, [a, b]))} is the
+     * <p>Carried past where every part it was carried to was read — one that stopped on the way is
+     * a rule about a value made from the input, which the comparison still is — and what it states
+     * is relations every one of which was read off another comparison: those are that
+     * comparison's lines, as {@code List.isEmpty(List.filter(x -> x > 5, [a, b]))} is the
      * closure's on each value.
      *
-     * @param check the node the check is written as
+     * <p>And not where some of the relations it states nothing else written there states. Those
+     * are lines, and the comparison draws them: {@code List.isEmpty(List.take(n, xs))} holds where
+     * {@code n} is below one or {@code xs} is empty, and neither is a comparison anybody wrote.
+     * Turning on no part, what it states is stated by nothing else either.
+     *
+     * <p>An emptiness check is carried past what is no relation at all, the cases and values a
+     * container holds where it holds anything: what it asks about is that container, which the
+     * operation it was carried through answers. No other comparison is: {@code #xs + #ys >= 0}
+     * holds on every row as {@code #xs >= 0} does, which is a rule of the comparison's that cuts
+     * nothing.
+     *
+     * @param check  the node the check is written as
+     * @param stated what the comparison was read to state
      */
-    static boolean carriesPast(StatedComparison comparison, Core check, InputReads reads,
-                               InputReading read) {
-        return mayBeCarriedPast(comparison)
-                && carriesPast(ofAComparison(comparison, reads, read, Optional.empty()), check);
+    static boolean carriesPast(Core check, Pulled stated) {
+        Derivation reading = readingUnderTheEntries(stated.meaning().how());
+        boolean emptiness = reading instanceof Derivation.AnEmptinessCheck;
+        return (emptiness || (reading instanceof Derivation.AComparisonRead read
+                        && Proposition.comesToWhetherAnyMeets(read.relation())))
+                && carriesPast(stated, check, emptiness);
     }
 
-    /** The same, of what an emptiness check written as {@code check} was read to state. */
-    static boolean carriesPast(Pulled read, Core check) {
+    /** The reading a comparison was read by, under the entries of lookups it was read through. */
+    private static Derivation readingUnderTheEntries(Derivation how) {
+        return how instanceof Derivation.OfTheEntryUnderTheKey(var _, var about)
+                ? readingUnderTheEntries(about) : how;
+    }
+
+    /**
+     * The same, of what a comparison written as {@code check} was read to state, read as an
+     * emptiness check where {@code emptiness}.
+     */
+    private static boolean carriesPast(Pulled read, Core check, boolean emptiness) {
         // Unread anywhere in what is stated, and not among the parts it turns on: a part nothing
         // read that is the same on every run turns on nothing, and is still not read.
         Proposition stated = read.proposition();
@@ -454,40 +476,32 @@ final class Pullback {
             return false;
         }
         // Values of the input stood against one another are a relation the check itself states,
-        // unless something written inside it states it: a call answering a truth reads its own
+        // unless something else written states it: a call answering a truth reads its own
         // relation, and the operation an emptiness check was carried through answers a set.
         if (Cutting.valuesItRelates(stated) != null) {
             return read.turnsOn().stream()
                     .allMatch(leaf -> aTruthStatedWhereItIsWritten(leaf.from().value(), check));
         }
-        return (!Cutting.onlyRelations(stated) && !Cutting.drawsLines(stated))
-                || read.turnsOn().stream()
-                        .allMatch(leaf -> aComparisonWrittenInside(leaf.from().value(), check));
+        return (emptiness && !Cutting.onlyRelations(stated) && !Cutting.drawsLines(stated))
+                || (!read.turnsOn().isEmpty() && read.turnsOn().stream()
+                        .allMatch(leaf -> anotherComparison(leaf.from().value(), check)));
     }
 
-    /** Whether {@code from} is a comparison or a call answering a truth, written inside
-     *  {@code check}, which states its own relation. */
+    /** Whether {@code from} is a comparison or a call answering a truth other than {@code check},
+     *  which states its own relation. */
     private static boolean aTruthStatedWhereItIsWritten(Core from, Core check) {
         Core node = Core.withoutStanding(from);
-        return aComparisonWrittenInside(from, check)
+        return anotherComparison(from, check)
                 || (node != Core.withoutStanding(check) && node instanceof Core.PreservedCall call
                         && Type.BOOL.equals(call.type()));
     }
 
-    /** Whether {@code from} is a comparison written inside {@code check}, which draws its own
+    /** Whether {@code from} is a comparison other than {@code check}, which draws its own
      *  lines. */
-    private static boolean aComparisonWrittenInside(Core from, Core check) {
+    private static boolean anotherComparison(Core from, Core check) {
         Core node = Core.withoutStanding(from);
         return node != Core.withoutStanding(check) && node instanceof Core.Binary
                 && BooleanMeaning.asAComparison(node).isPresent();
-    }
-
-    /**
-     * Whether {@code comparison} is one {@link #carriesPast} can answer yes for, which is a question
-     * about its shape alone: only an emptiness check is carried anywhere.
-     */
-    static boolean mayBeCarriedPast(StatedComparison comparison) {
-        return AnEmptinessCheck.checked(comparison) != null;
     }
 
     /**
@@ -749,7 +763,6 @@ final class Pullback {
                 () -> ofTheYearOfADate(stated, at, fixed, reads),
                 () -> ofACountOfWholeUnits(stated, at, fixed, reads),
                 () -> ofAShiftedRemainder(stated, at, fixed, reads),
-                () -> partOf(at, ofARemainderOfAForm(stated, reads)),
                 () -> partOf(at, ofItsArguments(stated, fixed, reads)),
                 () -> ofASizeInCases(stated, at, reads),
                 () -> ofAChoice(stated, at, reads),
@@ -1366,7 +1379,7 @@ final class Pullback {
 
     /**
      * The pieces {@code split}, a call of {@code operation} read in {@code at}, answers of the
-     * string it was handed as {@code string}: what a split at {@code separator}, one code point,
+     * string {@code parted} says it was handed: what a split at {@code separator}, one code point,
      * leaves — or, with no separator, its characters, each code point a piece.
      *
      * <p>One call in one reading is one set of pieces: the call by identity, since a name stands
@@ -1374,7 +1387,7 @@ final class Pullback {
      * is what that call and reading say.
      */
     private record Pieces(Core.PreservedCall split, ValueName.Stdlib operation, InputReads at,
-                          DeclaredArgument string, OptionalInt separator) {
+                          BoundOperationFacts.Pieces parted, OptionalInt separator) {
 
         @Override
         public boolean equals(Object other) {
@@ -1430,6 +1443,12 @@ final class Pullback {
         if (inACase != null) {
             return new Sized.AsAForm(inACase);
         }
+        // The pieces of a string parted at one code point: the operation has no number for how
+        // many, and this call's separator gives one.
+        ALawRead call = new ALawRead(applied, e, made.at());
+        if (call.piecesOf(made) instanceof Pieces pieces && pieces.separator().isPresent()) {
+            return call.number(pieces.parted().howManyPartedAt(pieces.separator().getAsInt()));
+        }
         return switch (DefaultBoundOperationFacts.get().settled(operation,
                 OperationLaw.Observed.SIZE)) {
             case null -> {
@@ -1451,7 +1470,7 @@ final class Pullback {
                 // one number, and stands at no position either.
                 yield equalTo == null ? new Sized.NotSized(
                         new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.SUBJECT))
-                        : new ALawRead(applied, e, made.at()).number(equalTo);
+                        : call.number(equalTo);
             }
             case BoundOperationFacts.Settled.ByALaw(
                     OperationLaw.Observation<DeclaredArgument> _, var _) ->
@@ -2071,7 +2090,7 @@ final class Pullback {
             // Met as a part of its own, as how many a container holds above nought is: it is a
             // statement about a number of the string, which is what a line is drawn on.
             return leaf(new Derivation.SomePieceMeeting(
-                    callOf(pieces.operation(), split, pieces.at(), Set.of(pieces.string())),
+                    callOf(pieces.operation(), split, pieces.at(), Set.of(pieces.parted().string())),
                     pieces.separator(), within, ofTheString, answered),
                     askedAt != null ? askedAt : new Denotation(e, reads));
         }
@@ -2398,7 +2417,7 @@ final class Pullback {
                 }
                 separatedBy = OptionalInt.of(written.value().codePointAt(0));
             }
-            return new Pieces(call, operation, container.at(), parted.string(), separatedBy);
+            return new Pieces(call, operation, container.at(), parted, separatedBy);
         }
 
         /**
@@ -3020,7 +3039,8 @@ final class Pullback {
         /**
          * How many of the code points of {@code value}, read in {@code in}, are in
          * {@code counted}: of the string at a position, where it stands at one; as many as are,
-         * of a string written out; and of a piece, where it is one ({@link #somePiece}).
+         * of a string written out; and of a piece, where it is one ({@link #somePiece}). Where it is
+         * what an operation answered and none of those, the reason names the operation.
          */
         private Sized codePointsOfTheValue(Core value, InputReads in, CodePointClass counted) {
             if (in.pathOf(value, read.rules().newtypes()) instanceof PathResolution.At(TermPath at)) {
@@ -3033,9 +3053,14 @@ final class Pullback {
                         written.value().codePoints().filter(counted::contains).count())));
             }
             Pieces piece = pieceThatIs(value, in);
-            return piece != null ? codePointsOfAPiece(piece, counted)
-                    : new Sized.NotSized(new WhyUnread.AtNoPosition(
-                            WhyUnread.AtNoPosition.Place.SUBJECT));
+            if (piece != null) {
+                return codePointsOfAPiece(piece, counted);
+            }
+            return new Sized.NotSized(AnOperationApplied.of(Core.withoutStanding(standing.value()))
+                    instanceof AnOperationApplied made
+                    && made.operation() instanceof ValueName.Stdlib madeBy
+                    ? new WhyUnread.CodePointsOfWhatAnOperationAnswers(madeBy)
+                    : new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.SUBJECT));
         }
 
         /** How many of the code points of the string at {@code at} are in {@code counted}. */
@@ -4050,7 +4075,8 @@ final class Pullback {
 
     /**
      * What this reading calls an atom of a number: a number of the input where the expression is
-     * one, a number a dependency answered where the call is written, and otherwise a number of a
+     * one, what a division by a written number leaves of a form of them, a number a dependency
+     * answered where the call is written, and otherwise a number of a
      * value the body bound, named by its binding and the fields read off it — an answer given a name
      * among them.
      *
@@ -4106,6 +4132,13 @@ final class Pullback {
                         && measured.args().size() == 1) {
                     return sizeOf(measured.args().getFirst(), at)
                             instanceof Sized.AsAForm(LinearForm<Quantity> form) ? form : null;
+                }
+                // What a division by a written number leaves of a form of the input's numbers,
+                // which is the same number however the comparison it is met in is written: in it,
+                // behind a name, or with arithmetic round it.
+                Quantity.RemainderOfADividend remainder = remainderAt(node, at);
+                if (remainder != null) {
+                    return LinearForm.atom(remainder);
                 }
                 List<TermPath.Step> steps = new ArrayList<>();
                 Core under = Core.withoutStanding(node);
@@ -5182,7 +5215,7 @@ final class Pullback {
                                            InputReads reads) {
         RemainderOfAShiftedValue.Read<InputReads> shifted =
                 RemainderOfAShiftedValue.read(stated, reads, sides());
-        if (shifted == null) {
+        if (shifted == null || !isAPositionsOwnRemainder(shifted.remainder(), shifted.at())) {
             return null;
         }
         return theStatementStands(shifted.statement(), shifted.remainder(), at, fixed,
@@ -5190,46 +5223,60 @@ final class Pullback {
     }
 
     /**
-     * A comparison of what a division by a written number leaves of a form of the input's numbers,
-     * read as a comparison of that remainder — or null where it is no such comparison.
+     * Whether {@code remainder}, read in {@code at}, is the number taken of one position of the
+     * input — and so a remainder of that position moved by a number is the position's own over one
+     * stretch or the other ({@link #ofAShiftedRemainder}).
+     *
+     * <p>Asked of the call over the unmoved place, by the reading and by the arithmetic both, so
+     * which of the two a remainder is is one answer however it was written. A remainder of anything
+     * else is a number of its own, its moving part of its dividend ({@link #remainderAt}).
+     */
+    private boolean isAPositionsOwnRemainder(Core.PreservedCall remainder, InputReads at) {
+        return InputNumber.ofAlone(remainder, read.domain(), at, read.rules()) != null;
+    }
+
+    /**
+     * The remainder {@code node} is, as a number of its own — or null where it is no remainder by a
+     * written number of a form of the input's numbers, or is a position's own remainder moved.
      *
      * <p>{@code Int.floorMod(a - d, 7) >= 1} is no line on {@code a} or on {@code d}: the values it
      * holds of come round every seventh of their difference. It is a line on the remainder, which is
      * a number of its own between nought and six, and a row is a pair of values whose difference
-     * leaves it ({@link Quantity.RemainderOfADividend}).
+     * leaves it ({@link Quantity.RemainderOfADividend}). The same number in the comparison, behind a
+     * name or with arithmetic round it.
      *
-     * <p>The dividend is read as any side of a comparison is, so it is the form the arithmetic would
-     * make of it anywhere else; and it is read whole, its moving part of its constant. Only whole
+     * <p>The dividend is read as any number is, so it is the form the arithmetic makes of it however
+     * it is spelled, and it is read whole: what it is moved by is its constant, taken by the
+     * divisor's own remainder so a dividend moved by a whole turn is the dividend it was. Only whole
      * numbers: a remainder of a form that weighs a number by a fraction is the remainder of what
      * the host cannot hold, and is left unread.
      */
-    private Derivation ofARemainderOfAForm(StatedComparison stated, InputReads reads) {
-        RemainderOfAShiftedValue.OfAForm<InputReads> over =
-                RemainderOfAShiftedValue.readOverAForm(stated, reads, sides());
-        if (over == null) {
+    private Quantity.RemainderOfADividend remainderAt(Core node, InputReads at) {
+        // Every number the arithmetic meets is asked, so what is no call of a floor remainder is
+        // turned away before anything is read through. A name comes here only once what it was
+        // given has been asked and stopped, so it is no remainder either.
+        if (!(Core.withoutStanding(node) instanceof Core.PreservedCall call)
+                || DefaultBoundOperationFacts.get().divisorOfAFloorRemainder(call.operation())
+                        .isEmpty()) {
             return null;
         }
-        LinearForm<NumericTerm> dividend = AffineReading.formOf(over.dividend(), over.at(), read);
-        if (dividend == null || dividend.coefs().isEmpty() || !isWhole(dividend)) {
+        RemainderOfAShiftedValue.OfADivision<InputReads> division =
+                RemainderOfAShiftedValue.ofADivision(node, at, sides());
+        if (division == null) {
             return null;
         }
-        return switch (over.statement()) {
-            case ConstantComparison.Settled(boolean holds) -> new Derivation.WrittenOut(holds);
-            case ConstantComparison.Against(Rel rel, BigInteger against) -> {
-                // The constant by the divisor's own remainder, so a dividend moved by a whole turn
-                // is the dividend it was before the moving.
-                LinearForm<NumericTerm> moved = new LinearForm<>(
-                        ExactRatio.of(constantOf(dividend).mod(over.divisor())), dividend.coefs());
-                Quantity remainder = new Quantity.RemainderOfADividend(moved, over.divisor());
-                LinearForm<Quantity> relation = LinearForm.<Quantity>atom(remainder)
-                        .minus(LinearForm.<Quantity>constant(ExactRatio.of(against))).orNull();
-                yield relation == null ? null
-                        : aRelation(Derivation.ComparisonReading.AS_A_CUT, relation, rel,
-                                Derivation.AComparisonRead.Facing.AS_WRITTEN);
-            }
-            // What the range of a remainder leaves a comparison is one line or a settled answer.
-            case ConstantComparison.Both _, ConstantComparison.Either _ -> null;
-        };
+        Core.PreservedCall unmoved = division.unmoved(sides());
+        if (unmoved != null && isAPositionsOwnRemainder(unmoved, division.at())) {
+            return null;
+        }
+        LinearForm<NumericTerm> form = AffineReading.formOf(division.dividend(), division.at(),
+                read);
+        if (form == null || form.coefs().isEmpty() || !isWhole(form)) {
+            return null;
+        }
+        return new Quantity.RemainderOfADividend(division.call().operation(), new LinearForm<>(
+                ExactRatio.of(constantOf(form).mod(division.divisor())), form.coefs()),
+                division.divisor());
     }
 
     /** Whether every number of {@code form}, its constant included, is a whole one. */

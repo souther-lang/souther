@@ -236,8 +236,8 @@ public sealed interface NumericTerm
          * to build one today and not an invariant (#1027).
          *
          * <p>And a value made into something is one the account reads
-         * ({@link TakenAs#readsWhatItWasMadeFrom}): the year of a moved date is a number a row is
-         * written for and a month of one is not.
+         * ({@link TakenAs#readsWhatItWasMadeFrom}): every part of a moved date is a number a row is
+         * written for.
          *
          * <p>Null and not a refusal. Whether a call names a number the model has a term for is a
          * question every reader of an expression asks, and the answer "it does not" is one they all

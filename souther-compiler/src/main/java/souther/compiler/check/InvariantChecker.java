@@ -16,6 +16,7 @@ import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.Rel;
 import souther.compiler.core.Core;
 import souther.compiler.semantics.ConditionJoin;
 import souther.compiler.core.Evaluated;
@@ -49,6 +50,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.BiConsumer;
+import java.util.function.BiPredicate;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -3196,12 +3198,18 @@ public final class InvariantChecker {
      * of it, and no part but this one names it: the rules of its type and of every value it sits in
      * are parts reaching this value, and one of them naming the place narrows what it takes. That
      * is also what leaves it tied to nothing — the only rule naming it is the one being asked of —
-     * and where a place may lie is left open, which no place is outside of.
+     * and where a place may lie is every value of its order, open where the order stops only
+     * because what carries it does ({@link Carrier#asARelationReadsIt}). Two such places on one
+     * carrier take the same values, so a form over the two alone is also asked of how far apart
+     * they are ({@link WhatARelationLeavesUndivided#ofTheirDifference}), with nothing else held of
+     * them.
      */
     private static Set<RuleKey> undividedBy(CanonicalForm.Over over,
                                             PartId<RuleRef.Invariant> part,
                                             PartsNaming partsNaming) {
         List<WhatARelationLeavesUndivided.Term<RuleKey>> terms = new ArrayList<>();
+        // The same terms, each taking the values of its carrier, for how far apart two of them are.
+        List<WhatARelationLeavesUndivided.Term<RuleKey>> apart = new ArrayList<>();
         for (Map.Entry<Coordinate, ExactRatio> each : over.weights().entrySet()) {
             if (each.getValue() == null || each.getValue().signum() == 0) {
                 return Set.of();
@@ -3209,14 +3217,27 @@ public final class InvariantChecker {
             Coordinate at = each.getKey();
             boolean itsPlace = at.at().of() instanceof NumberAt.OfWhatNumber.OfItsOwnValue;
             boolean every = itsPlace && partsNaming.onlyNamedBy(at.path(), part);
+            // Every value of the place, ending where its order ends at a value a model holds.
+            NumericDomain.Bounds values = at.carrier() == null ? NumericDomain.Bounds.OPEN
+                    : at.carrier().asARelationReadsIt();
             terms.add(new WhatARelationLeavesUndivided.Term<>(List.of(at.path()), each.getValue(),
-                    NumericDomain.Bounds.OPEN, every ? NumericDomain.Bounds.OPEN : null, null,
-                    itsPlace));
+                    values, every ? values : null, null, itsPlace));
+            apart.add(new WhatARelationLeavesUndivided.Term<>(List.of(at.path()), each.getValue(),
+                    values, every ? values : null, every ? at.carrier() : null, itsPlace));
         }
-        return WhatARelationLeavesUndivided.of(terms, over.constant(),
-                over.comparison().claim().statedRelation(),
-                (one, other) -> one.isAtOrUnder(other) || other.isAtOrUnder(one),
-                (one, other) -> true);
+        // Where the type the places take stops: read only where the two take the same values, so
+        // the first place's is the other's.
+        Carrier first = over.weights().keySet().iterator().next().carrier();
+        NumericDomain.Bounds extent = first == null ? NumericDomain.Bounds.OPEN
+                : new NumericDomain.Bounds(first.extent().low(), first.extent().high());
+        Rel relation = over.comparison().claim().statedRelation();
+        BiPredicate<RuleKey, RuleKey> overlap =
+                (one, other) -> one.isAtOrUnder(other) || other.isAtOrUnder(one);
+        Set<RuleKey> out = new LinkedHashSet<>(WhatARelationLeavesUndivided.of(terms,
+                over.constant(), relation, overlap, (one, other) -> true));
+        out.addAll(WhatARelationLeavesUndivided.ofTheirDifference(apart, over.constant(), relation,
+                List.of(), extent, overlap));
+        return out;
     }
 
     /**

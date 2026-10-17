@@ -223,10 +223,6 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
                     "(Ljava/util/List;" + TYPE + "L" + CHECK + "Carrier;" + SOURCE + ")"
                             + REALIZATION,
                     THE_POSITION),
-            row(PARTITION + "TermRealizations", "onThoseParts",
-                    "(Ljava/util/Map;" + TYPE + "L" + CHECK + "Carrier;" + SOURCE + ")"
-                            + REALIZATION,
-                    THE_POSITION),
             row(PARTITION + "TermRealizations", "oneValue",
                     "(L" + PARTITION + "FixtureTemplate;" + TYPE + SOURCE + ")" + REALIZATION,
                     THE_POSITION),

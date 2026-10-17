@@ -79,6 +79,8 @@ public final class WrittenLines {
     private final ExpansionLineage comparison;
     private final Conclusion concluded;
     private final Map<Derivation, Set<String>> made = new IdentityHashMap<>();
+    /** What each step whose relations were gathered concludes. */
+    private final Map<Derivation, Proposition> conclusions = new IdentityHashMap<>();
     private final Map<Derivation, Set<Under>> walked = new IdentityHashMap<>();
     private final Map<String, Map<WrittenLine, Seen>> seen = new LinkedHashMap<>();
     /** The lines some relation of the comparison's own was made under. */
@@ -273,11 +275,14 @@ public final class WrittenLines {
         // reading read off them. A comparison written inside it faces the sides it wrote itself,
         // and so does what a count of statements about values written out was written out as: the
         // reading faces the count, and the statements it counts are no side of the comparison's.
+        // Nor are the statements counts held against nought come to, which some element of what
+        // they count meeting them is: the reading's relation is its own only where it is concluded.
         Derivation.AComparisonRead.Facing facing = null;
         String own = null;
-        if (step instanceof Derivation.AComparisonRead read && !under.inAnother()) {
+        if (step instanceof Derivation.AComparisonRead read && !under.inAnother()
+                && conclusionOf(step) instanceof Proposition.Compared compared) {
             facing = read.facing();
-            own = new Proposition.Compared(read.relation(), true).heldKey();
+            own = compared.heldKey();
         }
         if (!under.decidedOutside()) {
             drawn.add(under.line());
@@ -320,10 +325,18 @@ public final class WrittenLines {
         Set<String> known = made.get(step);
         if (known == null) {
             known = new LinkedHashSet<>();
-            gather(concluded.of(step), known);
+            Proposition out = concluded.of(step);
+            conclusions.put(step, out);
+            gather(out, known);
             made.put(step, known);
         }
         return known;
+    }
+
+    /** What {@code step} concludes, concluded once with its relations. */
+    private Proposition conclusionOf(Derivation step) {
+        relationsOf(step);
+        return conclusions.get(step);
     }
 
     private void gather(Proposition stated, Set<String> into) {

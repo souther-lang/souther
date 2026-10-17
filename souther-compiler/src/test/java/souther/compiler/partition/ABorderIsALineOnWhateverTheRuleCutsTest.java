@@ -187,15 +187,19 @@ class ABorderIsALineOnWhateverTheRuleCutsTest {
         assertTrue(report.contains("read as f/3 * a + 6 * b: = 48"), report);
         assertTrue(report.contains("read as f/3 * a + 6 * b: = 51"), report);
         // And what it leaves the positions is said in the same words as well, whoever wrote it. The
-        // positions are held to their declared runs, so neither reaches every value of the other:
-        // which values of a settle the rule on their own is not worked out.
-        String relating = "it relates the value here to another value not shown to reach every"
+        // positions are held to their declared runs, which are all their rules say: every a has a b
+        // of nought, under which the rule holds, and one of ten, under which it fails. A b of ten
+        // fails it whatever a is, so which values of b settle it on their own is not worked out.
+        String relating = "it relates the value here to another value rather than dividing the"
+                + " values here, about `a`";
+        String notShown = "it relates the value here to another value not shown to reach every"
                 + " value here, so which values here settle it on their own is not worked out,"
-                + " about `a`";
+                + " about `b`";
         assertTrue(report.contains(relating), report);
-        assertTrue(report(guarded(
-                        "Int.add(Int.multiply(3, a.value), Int.multiply(6, b.value)) <= 48"))
-                        .contains(relating),
+        assertTrue(report.contains(notShown), report);
+        String again = report(guarded(
+                "Int.add(Int.multiply(3, a.value), Int.multiply(6, b.value)) <= 48"));
+        assertTrue(again.contains(relating) && again.contains(notShown),
                 "a body's conditions say it the same way");
     }
 

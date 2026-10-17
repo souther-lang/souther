@@ -8,6 +8,7 @@ import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Rel;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Set;
 
@@ -61,8 +62,9 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherTermStandsWhereItIsNeededTe
 
     /**
      * {@code Date.daysBetween(a, b) == 1}: at the last date {@code a} needs a {@code b} no date
-     * is, so the two taking the same values does not leave it undivided. Held to be one value, each
-     * is the other's.
+     * is, so the two taking the same values does not leave it undivided by what the other reaches.
+     * Held to be one value, each is the other's. How far apart the two are is the other reading,
+     * below.
      */
     @Test
     void twoTermsTakingTheSameValuesLeaveEachOtherUndividedOnlyWhereEachIsTheOthersValue() {
@@ -78,7 +80,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherTermStandsWhereItIsNeededTe
     }
 
     /** {@code x + 1 < y} over values nothing restricts: the least {@code y} needs an {@code x}
-     *  below the least, which no value is. */
+     *  below the least, which no value is, so what the other reaches leaves nothing undivided. */
     @Test
     void anEndOfTheTypeMovedByAConstantIsNeededPastTheEnd() {
         for (long by : List.of(1L, 0L)) {
@@ -107,5 +109,128 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherTermStandsWhereItIsNeededTe
                     ExactRatio.ZERO, Rel.LT);
             assertEquals(itsPlace ? Set.of("s") : Set.of(), left, "its place: " + itsPlace);
         }
+    }
+
+    /** Two values at their places, weighed {@code first} and {@code second}, the first a date and
+     *  the second taking {@code takes}, each every value of what it takes. */
+    private static List<WhatARelationLeavesUndivided.Term<String>> pair(long first, long second,
+                                                                       Object takes) {
+        return List.of(
+                term("a", first, NumericDomain.Bounds.OPEN, NumericDomain.Bounds.OPEN, A_DATE,
+                        true),
+                term("b", second, NumericDomain.Bounds.OPEN, NumericDomain.Bounds.OPEN, takes,
+                        true));
+    }
+
+    private static WhatARelationLeavesUndivided.OnTheDifference held(long weight, long constant,
+                                                                     Rel relation) {
+        return new WhatARelationLeavesUndivided.OnTheDifference(ExactRatio.of(weight),
+                ExactRatio.of(constant), relation);
+    }
+
+    /** The days a date can be written on, which is where the type two dates take stops. */
+    private static final NumericDomain.Bounds DATES =
+            run(LocalDate.MIN.toEpochDay(), LocalDate.MAX.toEpochDay());
+
+    private static Set<String> apart(List<WhatARelationLeavesUndivided.Term<String>> terms,
+                                     long constant, Rel relation,
+                                     WhatARelationLeavesUndivided.OnTheDifference... held) {
+        return WhatARelationLeavesUndivided.ofTheirDifference(terms, ExactRatio.of(constant),
+                relation, List.of(held), DATES, String::equals);
+    }
+
+    /**
+     * No two dates are ten trillion days apart, so {@code a - b > 10^13} holds for none of them and
+     * {@code a} settles it wherever it stands. Fourteen days apart, every date but those beside the
+     * two ends has partners on both sides.
+     */
+    @Test
+    void aDifferenceNoTwoValuesAreApartByIsNoOutcome() {
+        assertEquals(Set.of(), apart(pair(1, -1, A_DATE), -10_000_000_000_000L, Rel.GT));
+        assertEquals(Set.of("a", "b"), apart(pair(1, -1, A_DATE), -14, Rel.GT));
+    }
+
+    /**
+     * Four hundred billion days is more than half the dates there are: only dates nearer the two
+     * ends than the middle is are that far apart, and every other date settles
+     * {@code a - b > 4 * 10^11} alone. Three hundred billion is less than half, and the middle date
+     * has a partner on either side of it, so the dates settling it alone are those beside an end.
+     */
+    @Test
+    void theMiddleOfTheTypeHasToSeeBothOutcomes() {
+        assertEquals(Set.of(), apart(pair(1, -1, A_DATE), -400_000_000_000L, Rel.GT));
+        assertEquals(Set.of("a", "b"), apart(pair(1, -1, A_DATE), -300_000_000_000L, Rel.GT));
+    }
+
+    /** A type with no end, as a decimal is, leaves every difference one some value is apart by. */
+    @Test
+    void aTypeWithNoEndLeavesEveryDifference() {
+        assertEquals(Set.of("a", "b"), WhatARelationLeavesUndivided.ofTheirDifference(
+                pair(1, -1, A_DATE), ExactRatio.of(-10_000_000_000_000L), Rel.GT, List.of(),
+                NumericDomain.Bounds.OPEN, String::equals));
+    }
+
+    /**
+     * {@code Date.daysBetween(b, a) == 1}: moved together, the two are a day apart wherever they
+     * stand, and only how far apart they are settles it. A date and a count of days are not moved
+     * together: the count runs far past the last date.
+     */
+    @Test
+    void twoValuesTakingTheSameValuesAreMovedTogetherByAnyConstant() {
+        assertEquals(Set.of("a", "b"), apart(pair(1, -1, A_DATE), -1, Rel.EQ));
+        assertEquals(Set.of(), apart(pair(1, -1, "Int"), -1, Rel.EQ));
+    }
+
+    /** {@code 2a - 2b <= 14} is about how far apart the two are; {@code 2a - b <= 14} is not, and
+     *  an {@code a} past half the greatest value needs a {@code b} past the greatest. */
+    @Test
+    void twoWeightsMoveTwoValuesTogetherOnlyWhereOneIsTheOthersNegation() {
+        assertEquals(Set.of("a", "b"), apart(pair(2, -2, A_DATE), -14, Rel.LE));
+        assertEquals(Set.of(), apart(pair(2, -1, A_DATE), -14, Rel.LE));
+    }
+
+    /**
+     * Held at nought or more, the difference is at nought, where {@code a - b <= 0} holds, and at
+     * one, where it fails. Held at nought to ten, every difference is at fourteen or less; held at
+     * nought exactly, none is past fourteen.
+     */
+    @Test
+    void whatTheWayHoldsOfTheDifferenceIsWhereItHasToComeOutBothWays() {
+        assertEquals(Set.of("a", "b"),
+                apart(pair(1, -1, A_DATE), 0, Rel.LE, held(1, 0, Rel.GE)));
+        assertEquals(Set.of(),
+                apart(pair(1, -1, A_DATE), -14, Rel.LE, held(1, 0, Rel.GE), held(1, -10, Rel.LE)));
+        assertEquals(Set.of(),
+                apart(pair(1, -1, A_DATE), -14, Rel.GT, held(1, 0, Rel.EQ)));
+    }
+
+    /** Held apart from fourteen, the difference is no run, and nothing is shown of it. */
+    @Test
+    void aDifferenceHeldApartFromOneValueShowsNothing() {
+        assertEquals(Set.of(), apart(pair(1, -1, A_DATE), -14, Rel.EQ, held(1, -14, Rel.NE)));
+        assertEquals(Set.of("a", "b"), apart(pair(1, -1, A_DATE), -14, Rel.EQ));
+    }
+
+    /**
+     * {@code -(a - b) <= 0} holds the difference at nought or more, where {@code a - b + 1 <= 0}
+     * never holds; {@code a - b <= 0} holds it at nought or less, where it holds at minus one and
+     * fails at nought.
+     */
+    @Test
+    void aNegativeWeightTurnsWhatAStatementHolds() {
+        assertEquals(Set.of(), apart(pair(1, -1, A_DATE), 1, Rel.LE, held(-1, 0, Rel.LE)));
+        assertEquals(Set.of("a", "b"), apart(pair(1, -1, A_DATE), 1, Rel.LE, held(1, 0, Rel.LE)));
+    }
+
+    /**
+     * {@code 2(a - b) - 1 < 0} holds at a difference of nought and fails at one, both in a run from
+     * nought to one; strictly between them is no whole difference, and nothing is shown.
+     */
+    @Test
+    void onlyAWholeDifferenceIsAskedOf() {
+        assertEquals(Set.of("a", "b"), apart(pair(2, -2, A_DATE), -1, Rel.LT,
+                held(1, 0, Rel.GE), held(1, -1, Rel.LE)));
+        assertEquals(Set.of(), apart(pair(2, -2, A_DATE), -1, Rel.LT,
+                held(1, 0, Rel.GT), held(1, -1, Rel.LT)));
     }
 }

@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import net.unit8.notation199x.pattern.CodePoints;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
@@ -359,7 +360,23 @@ public final class BoundOperationFacts {
 
     /** The separator and the string an operation answers the pieces of; with no separator, each
      *  piece is one code point. */
-    public record Pieces(Optional<DeclaredArgument> separator, DeclaredArgument string) {}
+    public record Pieces(Optional<DeclaredArgument> separator, DeclaredArgument string) {
+
+        /**
+         * How many pieces a call answers whose separator is the one code point {@code separator}:
+         * one more than the times it stands in the string. Every place it stands parts the string
+         * once and the empty pieces are answered too, so this holds of a string of separators
+         * alone and of one that has none.
+         *
+         * <p>A number of the call and not of the operation: which code points are counted is the
+         * separator the call was handed.
+         */
+        public LinearForm<LawNumber<DeclaredArgument>> howManyPartedAt(int separator) {
+            LawNumber<DeclaredArgument> standing = new LawNumber.CodePointsOf<>(
+                    new LawSubject.Argument<>(string), CodePointClass.of(CodePoints.of(separator)));
+            return new LinearForm<>(ExactRatio.ONE, Map.of(standing, ExactRatio.ONE));
+        }
+    }
 
     /**
      * The option whose value {@code operation} hands its closure, and the closure, where what it
