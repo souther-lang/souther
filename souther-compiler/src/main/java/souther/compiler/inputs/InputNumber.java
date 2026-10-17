@@ -1,6 +1,9 @@
 package souther.compiler.inputs;
 
+import souther.compiler.check.AnOperationApplied;
+import souther.compiler.check.BoundOperationFacts;
 import souther.compiler.check.DateShifts;
+import souther.compiler.check.DeclaredArgument;
 import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.ElementAnswer;
 import souther.compiler.check.NumericMeasures;
@@ -82,6 +85,11 @@ public final class InputNumber {
             if (of != null) {
                 return NumericTerm.TakenOf.of(measured.operation(), of, measured.arguments(),
                         inputs.typeAt(of.position(), source), source.inners(), symbols);
+            }
+            // A total of the code points of a string standing somewhere is a number of that string.
+            NumericTerm ofAString = codePointsAddedUp(measured, inputs, reads, source);
+            if (ofAString != null) {
+                return ofAString;
             }
             // A location the operation is not taken of, or a value standing at none. The second is
             // a walk's answer, and a number over the values it walked is a term of its own where
@@ -165,6 +173,35 @@ public final class InputNumber {
             }
         }
         return new ObservationSource(from, ValueTransformation.of(translation));
+    }
+
+    /**
+     * What the code points of a string at a location come to, where {@code measured} totals what an
+     * operation lists of them — or null where it is anything else.
+     *
+     * <p>Two statements and each is the library's: that the operation measured adds up what a
+     * container holds, and that the list it is handed is the string's code points, each the number
+     * it is. The list is followed through the names and the helpers it was handed through, as a
+     * walk is, so a total of a list bound to a name first is the same number of the same string.
+     */
+    private static NumericTerm codePointsAddedUp(NumericMeasures.Measured measured,
+                                                 InputDomain inputs, InputReads reads,
+                                                 RuleReadingSource source) {
+        BoundOperationFacts facts = DefaultBoundOperationFacts.get();
+        if (!measured.arguments().none()
+                || !(facts.takenAs(measured.operation()) instanceof TakenAs.TheSumOfWhatItHolds)) {
+            return null;
+        }
+        Denotation listed = reads.standing(measured.of(), source.symbols(), source.newtypes());
+        AnOperationApplied applied = AnOperationApplied.of(listed.value());
+        DeclaredArgument string = applied == null ? null
+                : facts.codePointsListedOf(applied.operation());
+        Core argument = string == null ? null : applied.argument(string);
+        if (argument == null || !(listed.at().pathOf(argument, source.newtypes())
+                instanceof PathResolution.At(var at))) {
+            return null;
+        }
+        return NumericTerm.CodePointValueSum.of(at, inputs.typeAt(at, source), source.inners());
     }
 
     /**

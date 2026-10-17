@@ -1976,6 +1976,7 @@ final class ReadQuantities implements Quantities {
                             taken.transformation());
             case NumericTerm.CodePointClassCount count ->
                     NumberAt.countOf(at.named(), count.counted());
+            case NumericTerm.CodePointValueSum _ -> NumberAt.codePointSumOf(at.named());
             case NumericTerm.Multiplicity _ -> NumberAt.multiplicityOf(at.named());
             case NumericTerm.TakenOver over ->
                     NumberAt.takenAsItStands(at.named(), over.operation());

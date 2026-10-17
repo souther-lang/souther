@@ -373,6 +373,13 @@ final class OperationFactBinder {
                         holdToTheDeclaration(declaration, pieces.string(), null,
                                 TypeRequirement.TEXT, "the string that falls into pieces"));
             }
+            case OperationFact.ListsTheCodePointsOf listed -> {
+                holdTheResultToTheDeclaration(declaration, TypeRequirement.CONTAINER,
+                        "the code points of a string");
+                yield new BoundOperationFact.ListsTheCodePointsOf(operation,
+                        holdToTheDeclaration(declaration, listed.string(), null,
+                                TypeRequirement.TEXT, "the string whose code points are listed"));
+            }
             // An option of what the closure answers, made of an option of what it is handed.
             case OperationFact.AnswersTheClosureOnWhatItHolds answers -> {
                 if (stdlib.intrinsicOf(theLibraryOperation(operation.operation())) == null) {

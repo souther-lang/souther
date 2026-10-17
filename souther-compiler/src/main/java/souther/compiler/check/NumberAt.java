@@ -88,6 +88,11 @@ public record NumberAt<P>(P position, NumberAt.OfWhatNumber of) {
         return new NumberAt<>(position, new OfWhatNumber.OfHowManyCodePointsAreIn(counted));
     }
 
+    /** What the code points of the string at {@code position} come to, each the number it is. */
+    public static <P> NumberAt<P> codePointSumOf(P position) {
+        return new NumberAt<>(position, new OfWhatNumber.OfWhatItsCodePointsComeTo());
+    }
+
     /** How many elements of the container {@code position} stands inside hold there what the
      *  element under consideration holds. */
     public static <P> NumberAt<P> multiplicityOf(P position) {
@@ -162,6 +167,16 @@ public record NumberAt<P>(P position, NumberAt.OfWhatNumber of) {
         }
 
         /**
+         * What the code points of the string standing there come to, each added as the number it
+         * is.
+         *
+         * <p>Not what {@code List.sum} answers of the place, which is a total of a container
+         * standing there: here the place holds a string, and its length, how many of its code
+         * points are in a class and this are three numbers of it.
+         */
+        record OfWhatItsCodePointsComeTo() implements OfWhatNumber {}
+
+        /**
          * How many elements of the container the place stands inside hold at it what the element
          * under consideration holds there.
          *
@@ -191,6 +206,8 @@ public record NumberAt<P>(P position, NumberAt.OfWhatNumber of) {
                             taken.from().writtenAround(position.toString()));
             case OfWhatNumber.OfHowManyCodePointsAreIn count ->
                     "#(" + count.counted() + ")(" + position + ")";
+            case OfWhatNumber.OfWhatItsCodePointsComeTo _ ->
+                    "List.sum(String.codePoints(" + position + "))";
             case OfWhatNumber.OfItsMultiplicity _ -> "multiplicity(" + position + ")";
         };
     }

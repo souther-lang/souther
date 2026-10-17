@@ -92,6 +92,8 @@ public record PlacementSeed(RuleAddress address, Placed placed, RuleCitation cit
                             taken.arguments(), taken.transformation());
             case NumericTerm.CodePointClassCount count ->
                     new NumberAt.OfWhatNumber.OfHowManyCodePointsAreIn(count.counted());
+            case NumericTerm.CodePointValueSum _ ->
+                    new NumberAt.OfWhatNumber.OfWhatItsCodePointsComeTo();
             case NumericTerm.Multiplicity _ -> new NumberAt.OfWhatNumber.OfItsMultiplicity();
             // The operation likewise, since what a rule about this number is about is what the
             // operation answered. That it answered it over a run rather than of one value is not a

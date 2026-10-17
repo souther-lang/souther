@@ -12529,10 +12529,11 @@ public final class Generator {
                                 ? one.value() : null;
                 // What an operation answered is not what its root holds — three characters is not
                 // the position standing at three, and a hundred is not what the list adding up to
-                // it holds. Nor is how many of a string's code points are in a class, or how often
-                // a value occurs among the elements beside it.
+                // it holds. Nor is how many of a string's code points are in a class, what they
+                // come to, or how often a value occurs among the elements beside it.
                 case NumericTerm.TakenOf _, NumericTerm.CodePointClassCount _,
-                     NumericTerm.Multiplicity _, NumericTerm.TakenOver _ -> null;
+                     NumericTerm.CodePointValueSum _, NumericTerm.Multiplicity _,
+                     NumericTerm.TakenOver _ -> null;
             };
             // Nor is how many of its elements meet a statement, or that they meet one together.
             case RealizationTarget.ACount _, RealizationTarget.ElementsMeetingTogether _ -> null;

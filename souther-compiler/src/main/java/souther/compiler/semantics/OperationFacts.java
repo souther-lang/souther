@@ -355,6 +355,8 @@ public final class OperationFacts {
                     at(1))),
             about("String", "characters", new OperationFact.HoldsThePiecesOf(Optional.empty(),
                     at(0))),
+            // And the code points of one, each the number it is.
+            about("String", "codePoints", new OperationFact.ListsTheCodePointsOf(at(0))),
 
             // Which keys a map an operation answers is keyed by, where they are keys of a map it
             // was given. A rewrite of the values keeps every key, and taking entries out keeps the

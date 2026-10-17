@@ -350,6 +350,23 @@ public sealed interface OperationFact {
     }
 
     /**
+     * The operation answers the code points of {@code string}, each as the number it is, in order:
+     * every one of them once, and nothing else.
+     *
+     * <p>The values and not only how many. A size law says the answer is as long as the string, and
+     * {@code [1, 2]} is as long as {@code "AB"}; what a total of the answer comes to is a number of
+     * the string only where each element is the code point standing at its place. So a number an
+     * operation answers of the list — a total — is that number of the string, read off the string
+     * a row holds.
+     */
+    record ListsTheCodePointsOf(ArgumentRef string) implements OperationFact {
+
+        public ListsTheCodePointsOf {
+            Objects.requireNonNull(string, "this one names the string whose code points it lists");
+        }
+    }
+
+    /**
      * Every element of what the operation answers comes out on {@code side}: each word a string is
      * split into at whitespace holds something, and so does each character of one.
      *
