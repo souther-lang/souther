@@ -480,6 +480,48 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                         "if x + y <= 1 then x == y else false", "4:37"));
     }
 
+    /**
+     * A way relating the value compared to a place it leaves free narrows nothing of it: past
+     * {@code a >= b}, {@code b} can be anything, so {@code a} still runs over every value. It is
+     * tied to {@code b} and to nothing else, so {@code c} and {@code a} each reach every value the
+     * other holds.
+     */
+    @Test
+    void aWayRelatingTheValueComparedToAFreePlaceLeavesItEveryValue() {
+        assertEquals(Map.of("a", RELATES, "c", RELATES),
+                left("a: Int, b: Int, c: Int", "data Unused = Int",
+                        "if a >= b then a < c else false", "4:36"));
+    }
+
+    /**
+     * A way relating the value compared to a place held at nought or more leaves it the run that
+     * gives: past {@code b >= 0 && a >= b}, no {@code a} is below nought, so a {@code c} at nought
+     * or below is above no {@code a} and settles the comparison.
+     */
+    @Test
+    void aWayRelatingTheValueComparedToABoundedPlaceLeavesItTheRunThatBoundGives() {
+        assertEquals(Map.of("a", RELATES, "c", NOT_SHOWN),
+                left("a: Int, b: Int, c: Int", "data Unused = Int",
+                        "if b >= 0 && a >= b then a < c else false", "4:46"));
+    }
+
+    /**
+     * An end on a case's place in its enumeration's order is a relation the region holds as any
+     * other: past {@code level >= Low}, which keeps no level out, {@code level} still takes every
+     * case and is equal to every {@code cap}; past {@code level >= Mid} it is never {@code Low},
+     * so a {@code cap} of {@code Low} settles the comparison.
+     */
+    @Test
+    void anEndOnACasesPlaceInItsOrderNarrowsItAsTheRegionSays() {
+        String declarations = "data Level = Low | Mid | High";
+        assertEquals(Map.of("level", RELATES, "cap", RELATES),
+                left("level: Level, cap: Level", declarations,
+                        "if level >= Low then level == cap else false", "4:49"));
+        assertEquals(Map.of("level", RELATES, "cap", NOT_SHOWN),
+                left("level: Level, cap: Level", declarations,
+                        "if level >= Mid then level == cap else false", "4:49"));
+    }
+
     /** A way over another number of the date a year is taken of ties the year to it: a date on
      *  the twenty-ninth of February is in a leap year. */
     @Test
