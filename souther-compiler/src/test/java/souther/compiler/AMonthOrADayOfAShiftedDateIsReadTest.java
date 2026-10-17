@@ -275,6 +275,34 @@ class AMonthOrADayOfAShiftedDateIsReadTest {
                 leftUnread(moved, "(birthday -1 days)"), moved);
     }
 
+    /** The issue's rows: on each side of the sixty-fifth year, attained on the day before the
+     *  birthday. */
+    private static final String THE_ISSUES_ROWS = """
+
+            example bandOf
+                | (Date("1950-04-01"), Date("2026-04-01")) -> Old
+                | (Date("1961-04-02"), Date("2026-04-01")) -> Old
+                | (Date("1961-04-03"), Date("2026-04-01")) -> Young
+                | (Date("1990-04-01"), Date("2026-04-01")) -> Young
+            """;
+
+    /**
+     * The age is attained on the day before the birthday: a birthday on the second of April is
+     * sixty-five on the first, and one on the third is not. The rows on each side of that are the
+     * answers of the program, and the same rows read against an age worked out from the birthday
+     * itself refuse the one the move decides, so the rows tell the two apart.
+     */
+    @Test
+    void theRowsEitherSideOfTheAgeTheMoveDecidesAreItsAnswers() {
+        Compilation moved = compiled(AGE.formatted("", "", "Date.addDays(0 - 1, birthday)",
+                THE_ISSUES_ROWS));
+        Compilation itself = compiled(AGE.formatted("", "", "birthday", THE_ISSUES_ROWS));
+
+        assertEquals(0, moved.errors().size(), report(moved));
+        assertEquals(1, itself.errors().size(), report(itself));
+        assertTrue(report(itself).contains("bandOf #2"), report(itself));
+    }
+
     /**
      * A birthday moved by a count another input supplies is no moved date of one position, so the
      * condition about its month and its day is no comparison of numbers this reads, and the age

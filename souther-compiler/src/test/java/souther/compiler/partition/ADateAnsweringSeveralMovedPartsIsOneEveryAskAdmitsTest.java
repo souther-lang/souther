@@ -12,6 +12,7 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
+import java.util.TreeSet;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -321,6 +322,37 @@ class ADateAnsweringSeveralMovedPartsIsOneEveryAskAdmitsTest {
 
         assertNotNull(atTheEnd.on());
         assertEquals(12, atTheEnd.on().plusDays(late.offsetDays()).getMonthValue());
+    }
+
+    /**
+     * A day of the month is cut where what its set leaves turns and where a month starts, and at no
+     * other day: a set that leaves one day of the month cuts a month in at most three.
+     *
+     * <p>What a walk over a cycle costs is how many days it cuts at, so this is that cost held as
+     * what the cuts are rather than as a time. Cut at every day, a cycle no date answers would be
+     * walked a day at a time.
+     */
+    @Test
+    void aDayOfTheMonthIsCutOnlyWhereWhatItsSetLeavesTurns() {
+        DateTranslation back = DateTranslation.none().thenAddDays(-1);
+        TermRealizations.PutToTheDays put = new TermRealizations.DatePartAsk(DatePart.DAY, back,
+                new NumericSet.At(Count.of(30))).putToTheDays(Carrier.DATE);
+        long from = LocalDate.of(2001, 1, 1).toEpochDay();
+        long to = LocalDate.of(2001, 12, 31).toEpochDay();
+        TreeSet<Long> cuts = new TreeSet<>();
+
+        put.cutsInto(cuts, from, to);
+
+        TreeSet<Long> expected = new TreeSet<>();
+        for (long day = from + 1; day <= to; day++) {
+            int moved = LocalDate.ofEpochDay(day - 1).getDayOfMonth();
+            int before = LocalDate.ofEpochDay(day - 2).getDayOfMonth();
+            if (moved == 1 || (moved == 30) != (before == 30)) {
+                expected.add(day);
+            }
+        }
+        assertEquals(expected, cuts);
+        assertTrue(cuts.size() <= 3 * 12, cuts.size() + " cuts in a year");
     }
 
     /** The year before a move is the one the date is in, and the one after it is the next day's. */
