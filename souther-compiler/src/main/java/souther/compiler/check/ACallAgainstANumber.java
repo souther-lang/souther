@@ -91,7 +91,7 @@ record ACallAgainstANumber<E, F>(AnOperationApplied applied, Core answered, F fa
                                                          TheSignOfAnOrder.Sides<E> sides) {
         ValueStanding.ReadThrough<E> stands = sides.standing(side, at);
         while (Core.withoutStanding(stands.value()) instanceof Core.Construct built
-                && built.values().size() == 1 && sides.newtypes().of(built.typeName().key())) {
+                && sides.newtypes().of(built.typeName().key())) {
             stands = sides.standing(built.values().getFirst().value(), stands.at());
         }
         return stands;

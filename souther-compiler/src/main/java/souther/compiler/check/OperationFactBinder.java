@@ -776,7 +776,7 @@ final class OperationFactBinder {
                     + ", and a rounding to a whole number answers an Int");
         }
         DeclaredArgument value = holdToTheDeclaration(declaration, rounds.value(), null,
-                TypeRequirement.FRACTIONAL, "the number that is rounded");
+                TypeRequirement.EXACT, "the number that is rounded");
         DeclaredArgument mode = holdToTheDeclaration(declaration, rounds.mode(), null,
                 TypeRequirement.ANY, "the policy it is rounded by");
         Type policy = mode.stands();

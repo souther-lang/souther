@@ -3,7 +3,6 @@ package souther.compiler.check;
 import souther.compiler.core.Core;
 import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.Rel;
-import souther.compiler.types.Type;
 
 import java.math.BigInteger;
 import java.util.Objects;
@@ -71,10 +70,11 @@ public final class RoundedToAWholeNumber {
         if (value == null || way == null) {
             return null;
         }
-        // What is rounded to is an Int, which is what the fact was held to where it was bound.
-        OrderedInterval ends = Carrier.ofValue(Type.INT, sides.declarations()).extent();
-        BigInteger least = WholeUnitsBetween.wholeNumberOf(ends.low());
-        BigInteger most = WholeUnitsBetween.wholeNumberOf(ends.high());
+        // The ends of what the call answers, which a rounding past them aborts at.
+        Carrier answered = Carrier.ofValue(rounding.answered().type(), sides.declarations());
+        OrderedInterval ends = answered == null ? null : answered.extent();
+        BigInteger least = ends == null ? null : WholeUnitsBetween.wholeNumberOf(ends.low());
+        BigInteger most = ends == null ? null : WholeUnitsBetween.wholeNumberOf(ends.high());
         return least == null || most == null ? null : new Read<>(value, rounding.at(),
                 statementOf(way, rounding.written(), whole, least, most));
     }

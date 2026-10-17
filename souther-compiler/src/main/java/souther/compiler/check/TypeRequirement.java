@@ -31,9 +31,9 @@ enum TypeRequirement {
     /** A kind of number the domain relates arithmetically ({@link NumericAnswers#isANumber}). */
     NUMBER("a number"),
 
-    /** A number that can have a fraction, which is what a rounding to a whole number drops: a
-     *  decimal or an exact ratio. */
-    FRACTIONAL("a number that can have a fraction"),
+    /** A number with an exact value, which an exact operator reads it at
+     *  ({@link BinaryElaborator#exactlyReadable}): what a rounding to a whole number is given. */
+    EXACT("a number with an exact value"),
 
     /** A type whose values count to a number, which is wider than being one ({@link Carrier}). */
     COUNTED("something that counts to a number"),
@@ -79,7 +79,7 @@ enum TypeRequirement {
     boolean admits(Type type) {
         return switch (this) {
             case NUMBER -> NumericAnswers.isANumber(type);
-            case FRACTIONAL -> type == Type.Prim.DECIMAL || type == Type.Prim.RATIONAL;
+            case EXACT -> BinaryElaborator.exactlyReadable(type);
             case COUNTED -> Carrier.countsToANumber(type);
             case CONTAINER -> Type.elementOfAContainer(type) != null;
             case TEXT -> Type.STRING.equals(type);

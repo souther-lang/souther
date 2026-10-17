@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.core.Core;
+import souther.compiler.diag.SourcePos;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Rel;
@@ -8,6 +9,8 @@ import souther.compiler.types.Type;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Function;
@@ -78,36 +81,66 @@ public sealed interface ConstantComparison {
      * could write of a value of the subject's type and a number — or null where no number written
      * beside one says {@code against}.
      *
-     * <p>Beside an Int a whole number an Int says, beside a Decimal a decimal, and beside a Rational a
-     * decimal read at its exact value, which is how an exact number meets any other (ADR-0116). So
-     * what the reading of a comparison is handed is the comparison it already reads, and a half, or
-     * a number past a signed 64-bit one, is a line on a Decimal or a Rational like any written there.
+     * <p>Which number that is, and what the two are read as, is {@link #writtenBeside}'s.
      */
     public static StatedComparison stated(Rel rel, Core subject, ExactRatio against) {
-        Type type = subject.type();
-        Core number;
-        Core.BinaryReading reading = Core.BinaryReading.AS_THEY_STAND;
-        if (type == Type.INT) {
-            if (!against.isWhole()
-                    || !(against.floor() instanceof ExactAnswer.Held<BigInteger>(var whole))
-                    || whole.bitLength() > Long.SIZE - 1) {
-                return null;
-            }
-            number = new Core.Int(whole.longValueExact(), Type.INT, subject.pos());
-        } else if (type == Type.DECIMAL || type == Type.RATIONAL) {
-            if (!(against.writtenDecimal()
-                    instanceof ExactAnswer.Held<Optional<BigDecimal>>(var written))
-                    || written.isEmpty()) {
-                return null;
-            }
-            number = new Core.Decimal(written.get(), Type.DECIMAL, subject.pos());
-            if (type == Type.RATIONAL) {
-                reading = Core.BinaryReading.EXACT_NUMBERS;
-            }
-        } else {
-            return null;
+        WrittenBeside written = writtenBeside(subject, against);
+        return written == null ? null : new StatedComparison(ComparisonClaim.stating(rel), subject,
+                written.number(), written.reading());
+    }
+
+    /**
+     * A number written beside a value, and what a comparison of the two reads them as.
+     *
+     * @param number the literal, at the type a source writes it at
+     * @param reading what the comparison reads the value and the literal as
+     */
+    record WrittenBeside(Core number, Core.BinaryReading reading) {
+
+        public WrittenBeside {
+            Objects.requireNonNull(number, "a number is written");
+            Objects.requireNonNull(reading, "and read some way");
         }
-        return new StatedComparison(ComparisonClaim.stating(rel), subject, number, reading);
+    }
+
+    /**
+     * {@code against} as a literal the source could write beside {@code subject} — or null where no
+     * literal it could write there is that number.
+     *
+     * <p>A literal is an Int or a decimal, and a comparison of one with a value is read as the
+     * source's is: as they stand where the two are one type, at their exact values where the rule
+     * for that says so ({@link BinaryElaborator#exactlyComparable}), and not at all otherwise. The
+     * first of the two that compares is the one written, so beside an Int a whole number an Int
+     * says, beside a Decimal a decimal, and beside a Rational a whole number or a decimal read at
+     * its exact value (ADR-0116). A half, or a number past a signed 64-bit one, is a line on a
+     * Decimal or a Rational like any written there, and on an Int it is none.
+     */
+    static WrittenBeside writtenBeside(Core subject, ExactRatio against) {
+        for (Core number : literalsOf(against, subject.pos())) {
+            Type type = subject.type();
+            Core.BinaryReading reading = type.equals(number.type())
+                    ? Core.BinaryReading.AS_THEY_STAND
+                    : BinaryElaborator.exactlyComparable(type, number.type())
+                            ? Core.BinaryReading.EXACT_NUMBERS : null;
+            if (reading != null) {
+                return new WrittenBeside(number, reading);
+            }
+        }
+        return null;
+    }
+
+    /** The literals that are {@code n}: an Int where an Int says it, then a decimal where one does. */
+    private static List<Core> literalsOf(ExactRatio n, SourcePos pos) {
+        List<Core> out = new ArrayList<>();
+        if (n.isWhole() && n.floor() instanceof ExactAnswer.Held<BigInteger>(var whole)
+                && whole.bitLength() <= Long.SIZE - 1) {
+            out.add(new Core.Int(whole.longValueExact(), Type.INT, pos));
+        }
+        if (n.writtenDecimal() instanceof ExactAnswer.Held<Optional<BigDecimal>>(var written)
+                && written.isPresent()) {
+            out.add(new Core.Decimal(written.get(), Type.DECIMAL, pos));
+        }
+        return out;
     }
 
     /**
