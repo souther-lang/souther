@@ -19,7 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
  * whole numbers the exact quotient lies between — a quotient rounded to the scale nought
  * (spec §invariant-discharge-arithmetic). Where the path holds the divisor off nought, what holds of
  * the dividend and the divisor is what holds of the narrowed answer, and a guard restating it is one
- * the model need not write.
+ * the model need not write. A whole divisor the path leaves on both sides of nought is read on each.
  */
 class ANarrowedQuotientByAValueLiesBetweenItsCornersTest {
 
@@ -116,14 +116,31 @@ class ANarrowedQuotientByAValueLiesBetweenItsCornersTest {
     }
 
     /**
-     * The control. A divisor that may be on either side of nought is no divisor the rule reads, and
-     * the share is not taken to be at or above nought for want of a sign.
+     * A whole divisor that may be on either side of nought divides by at least one either way, so
+     * the share lies within the span of the shares by each side: a hundred among one, and a hundred
+     * among minus one. Not nearer than that, and not on one side of nought for want of a sign.
      */
     @Test
-    void aDivisorOfEitherSignStatesNothing() {
-        assertEquals(List.of("E2011"), reported("value >= 0", """
-                guard amount >= 0 else Share(1)
+    void aWholeDivisorOfEitherSignBoundsTheShareByEachSide() {
+        String amongAny = """
+                guard amount >= 0 && amount <= 100 else Share(1)
                     guard among /= 0 else Share(1)
+                    Share(Rational.toInt(DOWN, amount / among))""";
+        assertEquals(List.of(), reported("value >= 0 - 100 && value <= 100", amongAny));
+        assertEquals(List.of("E2011"), reported("value <= 99", amongAny),
+                "a hundred among one is a hundred");
+        assertEquals(List.of("E2011"), reported("value >= 0 - 99", amongAny),
+                "a hundred among minus one is minus a hundred");
+        assertEquals(List.of("E2011"), reported("value >= 0", amongAny),
+                "a divisor below nought turns the share below it");
+    }
+
+    /** And without a guard on the divisor: a divide by nought answers nothing, so what is judged is
+     * the share by the divisor's other values. */
+    @Test
+    void aWholeDivisorNoughtIsAmongBoundsTheShareByTheOthers() {
+        assertEquals(List.of(), reported("value >= 0 - 100 && value <= 100", """
+                guard amount >= 0 && amount <= 100 else Share(1)
                     Share(Rational.toInt(DOWN, amount / among))"""));
     }
 

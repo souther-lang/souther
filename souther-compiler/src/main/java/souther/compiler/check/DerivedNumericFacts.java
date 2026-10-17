@@ -19,6 +19,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.UnaryOperator;
 
 /**
  * What follows about the values the domain holds as atoms: arithmetic outside the affine fragment,
@@ -892,15 +893,11 @@ final class DerivedNumericFacts {
      * ({@link Derivation.TruncatingQuotient#divisorExtent}). The second is not a sharpening of the
      * first — a form is composed over numbers of any size, so what a reading proves of one can be a
      * range of numbers the operand never is. Where the two share nothing, this operator has no
-     * divisor here. Where they share values but zero is among them, it has one and this rule says
-     * nothing about it: what a divide by a range straddling zero comes to depends on how the values
-     * are spaced, and a rule stated over the ends of a range is not a rule that can answer for it.
-     *
-     * <p>Neither answer is a claim about the quotients. In particular the second is not a statement
-     * that they run past every value: over the whole numbers a divisor between zero and five divides
-     * by one at the nearest, and the successful divides are bounded. What is said is that this rule
-     * does not establish where they are — which is what an unapplied rule contributes, and is not
-     * the same thing as a bound.
+     * divisor here, and that is not a claim about the quotients. Where they share values and zero is
+     * among them, a divide by zero answers no number, and the divides that answer are by the
+     * divisor's other values: a whole number other than nought is at least one away from it, so the
+     * divisor is read as the range below nought and the range above it, and the quotient lies in the
+     * span of what each answers ({@link Divisor}).
      *
      * <p><b>Nothing derived, and not an empty range.</b> That a rule has no operands to fire on is
      * not a proof that the path has no execution: read as an empty range it would be taken into the
@@ -914,14 +911,14 @@ final class DerivedNumericFacts {
     private static Says quotient(FactSubject atom, Derivation.TruncatingQuotient quotient,
                                  ReadingDomain base, Terms terms,
                                  Memo done, Deriving deriving, ContextMultiplicity copies) {
-        Operand<Bounds> read = divisorOf(quotient.divisor(), quotient.divisorExtent(), base, terms,
+        Operand<Divisor> read = divisorOf(quotient.divisor(), quotient.divisorExtent(), base, terms,
                 done, deriving, copies);
-        if (!(read instanceof Operand.Usable<Bounds>(Bounds divisor))) {
+        if (!(read instanceof Operand.Usable<Divisor>(Divisor divisor))) {
             return read.saying(atom);
         }
         Bounds numerator = boundsOf(quotient.numerator(), base, terms, done, deriving, copies);
         Says where = projected(atom,
-                Intervals.truncatingQuotient(numerator, divisor), terms);
+                divisor.each(side -> Intervals.truncatingQuotient(numerator, side)), terms);
         // Nothing at all, and not the halves that do not mention the range. What is left of a
         // dividend relates the quotient to it, so a reading that dropped where the quotient lies and
         // kept that relation would put the quotient back where the arithmetic had it — a number no
@@ -935,13 +932,13 @@ final class DerivedNumericFacts {
         // product of two values and relating the quotient to what it divided would mean deriving that
         // product — from a range this rule has just derived, which is the reading that tightens
         // under its own answers.
-        BigDecimal by = theOneValueOf(divisor);
+        BigDecimal by = theOneValueOf(divisor.whole());
         // A relation whose form no ratio holds is a relation not stated, and the quotient keeps
         // the range it was given above.
         if (by != null && quotient.numerator().minus(
                 LinearForm.weighing(atom, ExactRatio.of(by)))
                 instanceof ExactAnswer.Held<LinearForm<FactSubject>> left) {
-            facts.addAll(leftOver(left.value(), divisor, numerator));
+            facts.addAll(leftOver(left.value(), divisor.whole(), numerator));
         }
         return new Says.These(List.copyOf(facts));
     }
@@ -957,12 +954,12 @@ final class DerivedNumericFacts {
     private static Says remainder(FactSubject atom, Derivation.TruncatingRemainder remainder,
                                   ReadingDomain base, Terms terms,
                                   Memo done, Deriving deriving, ContextMultiplicity copies) {
-        Operand<Bounds> read = divisorOf(remainder.divisor(), remainder.divisorExtent(), base,
+        Operand<Divisor> read = divisorOf(remainder.divisor(), remainder.divisorExtent(), base,
                 terms, done, deriving, copies);
-        if (!(read instanceof Operand.Usable<Bounds>(Bounds divisor))) {
+        if (!(read instanceof Operand.Usable<Divisor>(Divisor divisor))) {
             return read.saying(atom);
         }
-        return new Says.These(leftOver(LinearForm.atom(atom), divisor,
+        return new Says.These(leftOver(LinearForm.atom(atom), divisor.whole(),
                 boundsOf(remainder.numerator(), base, terms, done, deriving, copies)));
     }
 
@@ -1039,9 +1036,9 @@ final class DerivedNumericFacts {
     private static Says rounded(FactSubject atom, Derivation.RoundedQuotient rounded,
                                       ReadingDomain base, Terms terms,
                                       Memo done, Deriving deriving, ContextMultiplicity copies) {
-        Operand<Bounds> read = divisorOf(rounded.divisor(), rounded.divisorExtent(), base, terms,
+        Operand<Divisor> read = divisorOf(rounded.divisor(), rounded.divisorExtent(), base, terms,
                 done, deriving, copies);
-        if (!(read instanceof Operand.Usable<Bounds>(Bounds divisor))) {
+        if (!(read instanceof Operand.Usable<Divisor>(Divisor divisor))) {
             return read.saying(atom);
         }
         Bounds numerator = boundsOf(rounded.numerator(), base, terms, done, deriving, copies);
@@ -1051,8 +1048,8 @@ final class DerivedNumericFacts {
             return scale.saying(atom);
         }
         Integer places = scale instanceof Operand.Usable<Integer>(Integer at) ? at : null;
-        Bounds answered = Intervals.roundedQuotient(numerator, divisor,
-                places == null ? 0 : places);
+        int grid = places == null ? 0 : places;
+        Bounds answered = divisor.each(side -> Intervals.roundedQuotient(numerator, side, grid));
         if (places != null) {
             return projected(atom, answered, terms);
         }
@@ -1146,28 +1143,87 @@ final class DerivedNumericFacts {
         return Count.number(bounds.min().at()).at();
     }
 
+    /**
+     * What a divisor is read as: the ranges it lies in, each of one sign.
+     *
+     * <p>One range where the reading holds the divisor off nought, and one either side of it where
+     * the divisor is a whole number the reading leaves on both sides. A rule stated over the ends of
+     * a range is stated of each, and what the divide answers is in the span of what each answers:
+     * every divide that answers divides by a value in one of them.
+     *
+     * @param sides never empty, and none of them holds nought.
+     */
+    private record Divisor(List<Bounds> sides) {
+
+        Divisor {
+            sides = List.copyOf(sides);
+            if (sides.isEmpty()) {
+                throw new IllegalArgumentException("a divisor was read as no range at all");
+            }
+        }
+
+        /** Every value the divisor is read as taking. */
+        Bounds whole() {
+            return each(side -> side);
+        }
+
+        /** The span of what {@code rule} answers of each side. */
+        Bounds each(UnaryOperator<Bounds> rule) {
+            Bounds span = null;
+            for (Bounds side : sides) {
+                Bounds answered = rule.apply(side);
+                span = span == null ? answered : Bounds.spanning(span, answered);
+            }
+            return span;
+        }
+    }
+
+    /** A whole number below nought: at most minus one. */
+    private static final Bounds BELOW_NOUGHT_AS_A_WHOLE_NUMBER =
+            new Bounds(null, Endpoint.inclusive(Count.of(-1)));
+
+    /** A whole number above nought: at least one. */
+    private static final Bounds ABOVE_NOUGHT_AS_A_WHOLE_NUMBER =
+            new Bounds(Endpoint.inclusive(Count.of(1)), null);
+
     /** What the operator divided by, or null where this rule has no divisor to fire on — see
      * {@link #quotient}. */
-    private static Operand<Bounds> divisorOf(LinearForm<FactSubject> form, Bounds extent,
-                                    ReadingDomain base, Terms terms,
-                                    Memo done, Deriving deriving, ContextMultiplicity copies) {
-        Bounds divisor = boundsOf(form, base, terms, done, deriving, copies).meet(extent);
+    private static Operand<Divisor> divisorOf(LinearForm<FactSubject> form,
+                                              Derivation.DivisorExtent extent,
+                                              ReadingDomain base, Terms terms,
+                                              Memo done, Deriving deriving,
+                                              ContextMultiplicity copies) {
+        Bounds divisor = boundsOf(form, base, terms, done, deriving, copies).meet(extent.within());
         if (!divisor.holdsAValue()) {
             // The form and what the operator's divisor can be share nothing, so this operator has no
             // divisor here at all — a rule that does not apply.
             return new Operand.AndNotEnoughIsKnown<>();
         }
         if (!divisor.admits(Count.ZERO)) {
-            return new Operand.Usable<>(divisor);
+            return new Operand.Usable<>(new Divisor(List.of(divisor)));
         }
-        // A divide by nought answers no number whichever way it is spelled (spec §stdlib-int), so a
-        // reading that holds the divisor to nought has settled that the operation produced none; one
-        // that leaves nought among other values has settled nothing, since what a divide by a range
-        // straddling it comes to depends on how the values are spaced.
-        BigDecimal only = theOneValueOf(divisor);
-        return only != null && only.signum() == 0
+        // A divide by nought answers no number whichever way it is spelled (spec §stdlib-int), so
+        // what the divide answers is what it answers by the divisor's other values. Over the whole
+        // numbers those are at least one away from nought, and each side of it is a range of one
+        // sign. Over a dense order there is no nearest value to nought, and a divide by values
+        // nearer and nearer to it runs past every number.
+        if (extent.spacing() != Granularity.DISCRETE) {
+            BigDecimal only = theOneValueOf(divisor);
+            return only != null && only.signum() == 0
+                    ? new Operand.AndSoNoValueCameOfIt<>()
+                    : new Operand.AndNotEnoughIsKnown<>();
+        }
+        List<Bounds> sides = new ArrayList<>();
+        for (Bounds side : List.of(BELOW_NOUGHT_AS_A_WHOLE_NUMBER, ABOVE_NOUGHT_AS_A_WHOLE_NUMBER)) {
+            Bounds held = divisor.meet(side);
+            if (held.holdsAValue()) {
+                sides.add(held);
+            }
+        }
+        // Nothing either side is a divisor held to nought, and the operation produced no number.
+        return sides.isEmpty()
                 ? new Operand.AndSoNoValueCameOfIt<>()
-                : new Operand.AndNotEnoughIsKnown<>();
+                : new Operand.Usable<>(new Divisor(sides));
     }
 
     /**

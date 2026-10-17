@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.LinearForm;
 
@@ -50,7 +51,22 @@ sealed interface Derivation {
      * and asked by switching on the kind it is a place a recipe added later is silently left out of.
      * Answered by the recipe, so that the reader comparing two of them has every part of both.
      */
-    NumericDomain.Bounds divisorExtent();
+    DivisorExtent divisorExtent();
+
+    /**
+     * Every value the operator's divisor can take, which is what its type holds: the range its
+     * values run between, and how they are spaced along it.
+     *
+     * <p>Both, because what a divide by a range holding nought comes to is decided by the spacing
+     * and not by the ends. A whole number that is not nought is at least one away from it, so a
+     * divisor of whole numbers either side of nought divides by each side's values and no nearer;
+     * over a dense order there is no nearest value to nought, and the quotients run past every
+     * value.
+     *
+     * @param within  the range the type's values run between.
+     * @param spacing how they are spaced along it.
+     */
+    record DivisorExtent(NumericDomain.Bounds within, Granularity spacing) {}
 
     /**
      * Whether {@code other} is this recipe.
@@ -77,7 +93,7 @@ sealed interface Derivation {
 
         boolean forms(LinearForm<FactSubject> a, LinearForm<FactSubject> b);
 
-        boolean extents(NumericDomain.Bounds a, NumericDomain.Bounds b);
+        boolean extents(DivisorExtent a, DivisorExtent b);
     }
 
 
@@ -96,7 +112,7 @@ sealed interface Derivation {
 
 
         @Override
-        public NumericDomain.Bounds divisorExtent() {
+        public DivisorExtent divisorExtent() {
             return null;
         }
     }
@@ -213,7 +229,7 @@ sealed interface Derivation {
         }
 
         @Override
-        public NumericDomain.Bounds divisorExtent() {
+        public DivisorExtent divisorExtent() {
             return null;
         }
 
@@ -224,9 +240,9 @@ sealed interface Derivation {
      *
      * @param numerator     what is divided.
      * @param divisor       what it is divided by. A form and not a written number: a divisor the
-     *                      path bounds away from zero has the sign and the magnitude the rule needs
-     *                      as surely as a written one does, and holding it as a number was what left
-     *                      every divisor with a coefficient unread.
+     *                      path bounds has the sign and the magnitude the rule needs as surely as a
+     *                      written one does, and holding it as a number was what left every divisor
+     *                      with a coefficient unread.
      * @param divisorExtent every value the operator's divisor can take, which is what its type
      *                      holds. Not a bound the path proves — the arithmetic composed over a form
      *                      runs over numbers of any size, and the operator's divisor is a value of
@@ -235,7 +251,7 @@ sealed interface Derivation {
      *                      path.
      */
     record TruncatingQuotient(LinearForm<FactSubject> numerator, LinearForm<FactSubject> divisor,
-                              NumericDomain.Bounds divisorExtent) implements Derivation {
+                              DivisorExtent divisorExtent) implements Derivation {
 
         @Override
         public List<LinearForm<FactSubject>> formsRead() {
@@ -263,7 +279,7 @@ sealed interface Derivation {
      * it does not (spec §stdlib-int).
      */
     record TruncatingRemainder(LinearForm<FactSubject> numerator, LinearForm<FactSubject> divisor,
-                               NumericDomain.Bounds divisorExtent) implements Derivation {
+                               DivisorExtent divisorExtent) implements Derivation {
 
         @Override
         public List<LinearForm<FactSubject>> formsRead() {
@@ -295,7 +311,7 @@ sealed interface Derivation {
      * of which value this is — {@link NumericMeaning} keeps it — and not part of where it lies.
      */
     record RoundedQuotient(LinearForm<FactSubject> numerator, LinearForm<FactSubject> divisor,
-                           NumericDomain.Bounds divisorExtent, LinearForm<FactSubject> scale)
+                           DivisorExtent divisorExtent, LinearForm<FactSubject> scale)
             implements Derivation {
 
         @Override
@@ -364,7 +380,7 @@ sealed interface Derivation {
         }
 
         @Override
-        public NumericDomain.Bounds divisorExtent() {
+        public DivisorExtent divisorExtent() {
             return null;
         }
 

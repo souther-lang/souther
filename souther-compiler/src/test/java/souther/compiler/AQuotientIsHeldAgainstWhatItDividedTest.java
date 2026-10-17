@@ -231,6 +231,33 @@ class AQuotientIsHeldAgainstWhatItDividedTest {
                 .map(Diagnostic::code).distinct().toList());
     }
 
+    /**
+     * A divisor the guards leave on either side of nought divides by at least one either way, so the
+     * quotient lies within the span of the quotients by each side: a hundred by one, and a hundred by
+     * minus one. The control is one short of that span, which a hundred by minus one is below.
+     */
+    @Test
+    void aQuotientByADivisorEitherSideOfNoughtLiesWithinWhatEachSideAnswers() {
+        String byEither = """
+                match Int.truncatingDivide(100, 額 - 50) with
+                        | Int as k -> 硬貨枚数(k + %s)
+                        | DivisionByZero -> 硬貨枚数(0)""";
+        assertEquals(List.of(), reported("額 >= 0 && 額 <= 100", byEither.formatted("100")));
+        assertEquals(List.of("E2011"), reported("額 >= 0 && 額 <= 100", byEither.formatted("99")));
+    }
+
+    /** And what such a divide leaves is smaller than the divisor furthest from nought, as it is by
+     * a divisor of one sign: by values from minus fifty to fifty, below fifty. */
+    @Test
+    void aRemainderByADivisorEitherSideOfNoughtIsBelowItsFurthestEnd() {
+        String byEither = """
+                match Int.truncatingRemainder(額, 額 - 50) with
+                        | Int as r -> 硬貨枚数(%s - r)
+                        | DivisionByZero -> 硬貨枚数(0)""";
+        assertEquals(List.of(), reported("額 >= 0 && 額 <= 100", byEither.formatted("49")));
+        assertEquals(List.of("E2011"), reported("額 >= 0 && 額 <= 100", byEither.formatted("48")));
+    }
+
     /** The control beside both: the value arm says the divisor is not zero and says nothing about
      * which side of nought it is on. */
     @Test
