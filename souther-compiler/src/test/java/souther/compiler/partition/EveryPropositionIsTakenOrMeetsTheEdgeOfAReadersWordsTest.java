@@ -28,6 +28,7 @@ import souther.compiler.query.Compilation;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -36,6 +37,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -274,6 +276,9 @@ class EveryPropositionIsTakenOrMeetsTheEdgeOfAReadersWordsTest {
         out.put("either", new Proposition.Any(List.of(above, truth)));
         out.put("some element", new Proposition.Some(new DecisionSubject.AnInput(TermPath.of("xs")), element, true));
         out.put("on some application", new Proposition.OnAnApplication(List.of(above, truth)));
+        out.put("so many of them holding", new Proposition.SoManyHold(Stream.of(above, truth)
+                .sorted(Comparator.comparing(Proposition::key)).toList(), List.of(1, 1),
+                List.of(1)));
         TermPath node = TermPath.of("t");
         out.put("some node a search reaches", new Proposition.SomeReachable(node, node,
                 List.of("below"), new Proposition.Compared(new Relation.Affine(

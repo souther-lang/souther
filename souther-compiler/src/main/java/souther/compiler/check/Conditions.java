@@ -311,6 +311,11 @@ final class Conditions {
             public DeclarationAccess declarations() {
                 return terms.declarations();
             }
+
+            @Override
+            public DeclarationNewtypes newtypes() {
+                return terms.newtypes();
+            }
         };
     }
 

@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.core.Core;
 import souther.compiler.core.DeclaredOperation;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.proof.Slot;
@@ -21,9 +22,11 @@ import souther.compiler.semantics.Unsayable;
 import souther.compiler.semantics.TakenArguments;
 import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.Type;
+import souther.compiler.types.TypeSymbol;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
@@ -100,6 +103,28 @@ sealed interface BoundOperationFact permits BoundOperationFact.OneAboutAnOperati
     record CountsWholeUnitsBetween(DeclaredOperation operation, DeclaredArgument from,
                                    DeclaredArgument to, long perUnit)
             implements OneAboutAnOperation {}
+
+    /**
+     * The operation answers {@code value} rounded to a whole number the way {@code mode} says, and
+     * {@code ways} is what each case of the policy at {@code mode} does.
+     *
+     * <p>Keyed by the case's declaration, which is what a written mode is once it is read: the cases
+     * were matched to the ways of rounding once, here, against what the library declares.
+     */
+    record RoundsToAWholeNumber(DeclaredOperation operation, DeclaredArgument mode,
+                                DeclaredArgument value, Map<TypeSymbol, WholeRounding> ways)
+            implements OneAboutAnOperation {
+
+        public RoundsToAWholeNumber {
+            ways = Map.copyOf(ways);
+        }
+
+        /** The way {@code written} rounds, where it is a case of the policy, and null otherwise. */
+        WholeRounding wayOf(Core written) {
+            return Core.withoutStanding(written) instanceof Core.UnitValue unit
+                    ? ways.get(unit.data()) : null;
+        }
+    }
 
     /** The operation builds a container out of another, and this says where its elements came from
      *  and how many of them there are. */

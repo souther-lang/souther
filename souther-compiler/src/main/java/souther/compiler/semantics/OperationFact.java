@@ -144,6 +144,25 @@ public sealed interface OperationFact {
     }
 
     /**
+     * The operation answers the number at {@code value} rounded to a whole one, the way the rounding
+     * policy at {@code mode} says.
+     *
+     * <p>A rounded number is a step of what was rounded, so the answer is no form of it. What a
+     * comparison of the answer with a whole number states is exact all the same: each policy puts
+     * the least number rounding to at least {@code k} at {@code k}, at {@code k - 1} or at
+     * {@code k - 1/2}, and says whether that number is itself one of them. Which of these a policy
+     * does is the compiler's to know, and this says only which argument is the policy and which the
+     * number.
+     */
+    record RoundsToAWholeNumber(ArgumentRef mode, ArgumentRef value) implements OperationFact {
+
+        public RoundsToAWholeNumber {
+            Objects.requireNonNull(mode, "a number is rounded some way");
+            Objects.requireNonNull(value, "and a number is rounded");
+        }
+    }
+
+    /**
      * Something that holds of the number the operation answers, wherever it is called.
      *
      * <p>One fact per bound rather than a list in one: an operation with two bounds carries two

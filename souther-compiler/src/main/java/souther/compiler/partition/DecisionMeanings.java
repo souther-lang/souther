@@ -177,7 +177,12 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects) {
                                       boolean holds, var _) when overDecisionAtoms(form) ->
                     new DecidedCondition.Compared(new DecisionCondition.AComparison(
                             decisionForm(form), proposition), holds == held);
-            default -> DecisionCondition.AStatement.of(stated, denying.apply(stated), held);
+            case Proposition.Compared _, Proposition.Always _, Proposition.InCases _,
+                 Proposition.Present _, Proposition.SameValue _, Proposition.LastToHold _,
+                 Proposition.All _, Proposition.Any _, Proposition.Some _, Proposition.Carried _,
+                 Proposition.SomeReachable _, Proposition.Unread _, Proposition.OnAnApplication _,
+                 Proposition.SoManyHold _ ->
+                    DecisionCondition.AStatement.of(stated, denying.apply(stated), held);
         };
     }
 

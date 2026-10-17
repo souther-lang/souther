@@ -33,6 +33,12 @@ final class SharedPropositions {
     private static final Map<Proposition, WeakReference<Proposition>> KEPT = new WeakHashMap<>();
     private static final Map<Proposition, WeakReference<Proposition>> DENIED =
             new WeakHashMap<>();
+    /**
+     * The choices each count is written out as, held as long as the count is. Held strongly: what
+     * is written out names the count's statements and never the count, so it keeps nothing alive
+     * that the count does not, and held weakly it was let go between one reader and the next.
+     */
+    private static final Map<Proposition, WhichOfThemHold.Written> CHOICES = new WeakHashMap<>();
 
     private SharedPropositions() {
     }
@@ -50,6 +56,29 @@ final class SharedPropositions {
         }
     }
 
+    /**
+     * The choices {@code counted} is written out as, or null where they are not: the ones written
+     * out the first time they were asked for while both are held, or {@code writing}'s, kept from
+     * now on.
+     *
+     * <p>Every reader that takes a count apart asks for them, and written out again for each, the
+     * count is written out as many times as it has readers. That none could be written out is kept
+     * as well, so that it is found out once.
+     */
+    static WhichOfThemHold.Written choices(Proposition.SoManyHold counted,
+                                           Supplier<WhichOfThemHold.Written> writing) {
+        synchronized (CHOICES) {
+            WhichOfThemHold.Written held = CHOICES.get(counted);
+            if (held != null) {
+                return held;
+            }
+        }
+        WhichOfThemHold.Written made = writing.get();
+        synchronized (CHOICES) {
+            CHOICES.putIfAbsent(counted, made);
+        }
+        return made;
+    }
     /**
      * What holds exactly where {@code stated} does not: the one made the first time it was asked
      * while both are held, or {@code denying}'s, kept from now on.

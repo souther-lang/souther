@@ -162,7 +162,12 @@ public final class WhereAnApplicationIsMade {
                         return List.of(met);
                     }
                     case Proposition.Always(boolean holds) when !holds -> { }
-                    default -> kept.add(met);
+                    case Proposition.Always _, Proposition.Compared _, Proposition.Truth _,
+                         Proposition.InCases _, Proposition.Present _, Proposition.SameValue _,
+                         Proposition.LastToHold _, Proposition.All _, Proposition.Any _,
+                         Proposition.Some _, Proposition.Carried _, Proposition.SomeReachable _,
+                         Proposition.Unread _, Proposition.OnAnApplication _,
+                         Proposition.SoManyHold _ -> kept.add(met);
                 }
             }
         }

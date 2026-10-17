@@ -335,14 +335,18 @@ public enum CompositionBudget {
     TOTAL_READINGS_OF_ONE_CONDITION(512),
 
     /**
-     * How many parts the statement one step of a reading concludes comes to, written out: every
+     * How many parts the statement one step of a reading concludes comes to, as it is held: every
      * part it holds counted as many times as it holds it, however many of them are one value.
      *
      * <p>Beside the readings and not in place of them. A reading stated more than once — a
      * condition where it holds and denied where it does not, the arms of a match each beside the
      * denial of every arm before it — makes a statement that grows with how deep such steps stand
-     * inside one another, so a few readings can come to more parts than any figure; and every
-     * reader of a statement walks it written out.
+     * inside one another, so a few readings can come to more parts than any figure.
+     *
+     * <p>What is held and not what a reader of it does. A reader walks a statement as it is held,
+     * and so walks no more of it than this; except a count of statements, which is held as the
+     * statements and the counts it admits, each statement once, and which a reader that takes it
+     * apart into its choices walks as {@link #PARTS_THE_CHOICES_OF_A_COUNT_COME_TO} bounds.
      *
      * <p><b>Reaching it gives the step up and says so.</b> The step is concluded as a part nothing
      * read, naming this as why ({@link souther.compiler.meaning.WhyUnread.MorePartsThanAreConcluded}).
@@ -350,6 +354,24 @@ public enum CompositionBudget {
      * what the step itself builds before it is counted is not bounded by this.
      */
     PARTS_A_DERIVATION_CONCLUDES(4096),
+
+    /**
+     * How many parts the choices of which of some statements hold come to written out, every count
+     * one reader is handed together, for a reader that takes counts apart into those choices
+     * ({@link souther.compiler.meaning.CountsWrittenOut}).
+     *
+     * <p>Beside {@link #PARTS_A_DERIVATION_CONCLUDES} and not in place of it. That one bounds what
+     * a step states, and a count of statements is stated as the statements and the counts it
+     * admits, each statement once. Written out as choices, every choice names every statement it
+     * needs, so exactly one of {@code n} is {@code n} choices of {@code n} statements — and what a
+     * reader that needs the choices walks grows with that and not with what is stated. This bounds
+     * that walk: what every count one reader is handed comes to together, and not each count on
+     * its own, so a statement holding several counts is held to it once.
+     *
+     * <p><b>Reaching it gives the choices up and says so.</b> The reader is handed none, and takes
+     * the count as it takes a part it could not see into, naming this as why.
+     */
+    PARTS_THE_CHOICES_OF_A_COUNT_COME_TO(1 << 16),
 
     /**
      * How many parts of a disjunction one reading of a condition takes alone, to know which of them
@@ -607,6 +629,9 @@ public enum CompositionBudget {
                     "how many times one condition is read in all, along every case and value";
             case PARTS_A_DERIVATION_CONCLUDES ->
                     "how many parts what one step of a reading states comes to, written out";
+            case PARTS_THE_CHOICES_OF_A_COUNT_COME_TO ->
+                    "how many parts the choices of which of some statements hold come to, written"
+                            + " out for a reader that takes a count of them apart";
             case ALTERNATIVES_A_PATH_TRIES ->
                     "how many parts of one of several things a path takes alone, to know which of"
                             + " them it leaves";
@@ -676,6 +701,7 @@ public enum CompositionBudget {
                  PATHS_OF_A_DECISION_READ, CONDITIONS_A_DECISION_TAKES_IN_TO_PROVE,
                  READINGS_OF_ONE_CONDITION,
                  TOTAL_READINGS_OF_ONE_CONDITION, PARTS_A_DERIVATION_CONCLUDES,
+                 PARTS_THE_CHOICES_OF_A_COUNT_COME_TO,
                  ALTERNATIVES_A_PATH_TRIES, STEPS_A_STATEMENT_IS_READ_IN,
                  CASES_A_LINE_IS_TAKEN_APART_INTO, CASES_A_LINE_IS_ASKED_IN,
                  WAYS_A_WAY_IS_LOOKED_ALONG,

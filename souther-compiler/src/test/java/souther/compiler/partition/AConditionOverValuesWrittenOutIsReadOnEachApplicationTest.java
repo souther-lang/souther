@@ -219,6 +219,8 @@ class AConditionOverValuesWrittenOutIsReadOnEachApplicationTest {
                     .toList();
             case Proposition.OnAnApplication on -> on.each().stream()
                     .flatMap(p -> whysIn(p).stream()).toList();
+            case Proposition.SoManyHold counted -> counted.statements().stream()
+                    .flatMap(p -> whysIn(p).stream()).toList();
             case Proposition.Some some -> whysIn(some.ofTheElement());
             default -> List.of();
         };

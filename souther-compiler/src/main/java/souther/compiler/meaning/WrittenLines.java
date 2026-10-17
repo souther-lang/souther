@@ -349,6 +349,10 @@ public final class WrittenLines {
             case Proposition.Any any -> any.parts().forEach(each -> gather(each, into));
             case Proposition.Some some -> gather(some.ofTheElement(), into);
             case Proposition.OnAnApplication each -> each.each().forEach(one -> gather(one, into));
+            // The relations its statements hold, each one way round whichever way a choice of
+            // them holds it.
+            case Proposition.SoManyHold counted ->
+                    counted.statements().forEach(one -> gather(one, into));
             case Proposition.SomeReachable reachable -> {
                 gather(reachable.atANode(), into);
                 reachable.noneBelow().ifPresent(none -> gather(none, into));

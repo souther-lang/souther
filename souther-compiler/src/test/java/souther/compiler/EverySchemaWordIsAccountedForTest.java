@@ -12,6 +12,7 @@ import souther.compiler.diag.SourceProvenance;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.MeasurementStatus;
 import souther.compiler.observe.RunSensitivity;
+import souther.compiler.observe.WorkFigure;
 import souther.compiler.coverage.DecidedBy;
 import souther.compiler.coverage.SuppliedRules;
 import souther.compiler.query.Adequacy;
@@ -551,6 +552,9 @@ class EverySchemaWordIsAccountedForTest {
             // compiler is one the document admits without anybody editing the schema by hand.
             new Vocabulary("$defs.compositionBudget", List.of("$defs", "compositionBudget"),
                     CompositionBudget.class),
+            // And the rest of this compiler's figures, which a reading that stopped names beside
+            // the composing's own under `figure`. Held against the type for the reason above.
+            new Vocabulary("$defs.workFigure", List.of("$defs", "workFigure"), WorkFigure.class),
             new Vocabulary("decision.obligations[].synthesisShortfalls[].figures[]",
                     List.of("$defs", "decision", "properties", "obligations", "items",
                             "properties", "synthesisShortfalls", "items", "properties", "figures",

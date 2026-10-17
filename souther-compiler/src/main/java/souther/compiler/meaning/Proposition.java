@@ -6,9 +6,11 @@ import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
+import souther.compiler.partition.CompositionBudget;
 import souther.compiler.types.ModelOccurrence;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -62,6 +64,7 @@ public sealed interface Proposition {
             case All all -> all.parts();
             case Any any -> any.parts();
             case OnAnApplication applications -> applications.each();
+            case SoManyHold counted -> counted.statements();
             case Some some -> List.of(some.ofTheElement());
             case SomeReachable reached -> reached.noneBelow()
                     .map(none -> List.of(reached.atANode(), none))
@@ -96,7 +99,8 @@ public sealed interface Proposition {
                     || mayBeAnElementOf(same.other(), container);
             case LastToHold last ->
                     isAnElementOf(new DecisionSubject.AnInput(last.position()), container);
-            case All _, Any _, OnAnApplication _ -> somePartMayTurnOnAnElementOf(container);
+            case All _, Any _, OnAnApplication _, SoManyHold _ ->
+                    somePartMayTurnOnAnElementOf(container);
             case Some some -> isAnElementOf(some.container(), container)
                     || somePartMayTurnOnAnElementOf(container);
             // What it is written over is not what it is about, so it is taken to turn on an element
@@ -488,8 +492,11 @@ public sealed interface Proposition {
             return new ElementAsked(this, switch (ofTheElement) {
                 case All all -> all.parts().stream().map(Proposition::key)
                         .collect(Collectors.toUnmodifiableSet());
-                case Always(boolean always) when always -> Set.of();
-                default -> Set.of(ofTheElement.key());
+                case Always(boolean always) -> always ? Set.of() : Set.of(ofTheElement.key());
+                // One part, whatever it says: two spelled alike are one statement.
+                case Compared _, Truth _, InCases _, Present _, SameValue _, LastToHold _, Any _,
+                     Some _, Carried _, SomeReachable _, Unread _, OnAnApplication _,
+                     SoManyHold _ -> Set.of(ofTheElement.key());
             });
         }
 
@@ -736,6 +743,183 @@ public sealed interface Proposition {
     }
 
     /**
+     * How many of {@code statements} hold, each weighed as many times as it was written, being one
+     * of the counts {@code admitted}. Made through {@link #compared(Relation, boolean)}, and
+     * only where the choices of which of them hold are more than a reading writes out, or come to
+     * more parts than a step is concluded with.
+     *
+     * <p>The statements and the count, and not the choices. Written out, a choice names every
+     * statement — each one chosen holding and, for a count that admits no more, each other one
+     * failing — so exactly one of {@code n} is {@code n} choices of {@code n} statements each. Held
+     * here, each statement is held once, and a reader that needs the choices is handed them
+     * through {@link CountsWrittenOut}, held to how many they are and how many parts every count
+     * it is handed comes to together.
+     *
+     * <p>Denied, it is the count being one of the others. No statement is denied by that, and no
+     * choice is made.
+     *
+     * <p>Nothing is supposed of how the statements stand to one another. A statement and its denial
+     * can both be among them, and then no choice holds both; which counts some choice comes to is
+     * the choices', and not anything worked out from the weights alone.
+     *
+     * @param statements each kept once, in the order of their keys
+     * @param weights    how many times each of {@code statements} was written, in the same order
+     * @param admitted   the counts this holds at, rising — none of them every count there is, and
+     *                   not none
+     * @param key        spelled from the rest when it is made, whatever is handed in
+     */
+    record SoManyHold(List<Proposition> statements, List<Integer> weights, List<Integer> admitted,
+                      String key) implements Proposition {
+
+        @Override
+        public int hashCode() {
+            return key.hashCode();
+        }
+
+        /** Every component, the spelling first, as {@link All} compares them. */
+        @Override
+        public boolean equals(Object other) {
+            return this == other || (other instanceof SoManyHold that
+                    && key.hashCode() == that.key.hashCode() && key.equals(that.key)
+                    && statements.equals(that.statements) && weights.equals(that.weights)
+                    && admitted.equals(that.admitted));
+        }
+
+        public SoManyHold(List<Proposition> statements, List<Integer> weights,
+                          List<Integer> admitted) {
+            this(statements, weights, admitted, null);
+        }
+
+        public SoManyHold {
+            statements = List.copyOf(statements);
+            weights = List.copyOf(weights);
+            admitted = List.copyOf(admitted);
+            if (statements.isEmpty() || statements.size() != weights.size()) {
+                throw new IllegalArgumentException("a count is of some statements, each weighed: "
+                        + statements + " " + weights);
+            }
+            for (int at = 1; at < statements.size(); at++) {
+                if (statements.get(at - 1).key().compareTo(statements.get(at).key()) >= 0) {
+                    throw new IllegalArgumentException("statements are kept once, in the order of"
+                            + " their keys: " + statements);
+                }
+            }
+            if (weights.stream().anyMatch(weight -> weight < 1)) {
+                throw new IllegalArgumentException("a statement counted is written at least once: "
+                        + weights);
+            }
+            int all = weights.stream().mapToInt(Integer::intValue).sum();
+            if (admitted.isEmpty() || admitted.size() > all) {
+                throw new IllegalArgumentException("a count admitted at none or at every count is"
+                        + " no count of statements: " + admitted);
+            }
+            for (int at = 0; at < admitted.size(); at++) {
+                if (admitted.get(at) < 0 || admitted.get(at) > all
+                        || (at > 0 && admitted.get(at - 1) >= admitted.get(at))) {
+                    throw new IllegalArgumentException("the counts admitted rise, from nought to "
+                            + all + ": " + admitted);
+                }
+            }
+            StringBuilder spelled = new StringBuilder("so many hold").append(admitted).append(" of [");
+            for (int at = 0; at < statements.size(); at++) {
+                spelled.append(at == 0 ? "" : ", ").append(weights.get(at)).append('*')
+                        .append(statements.get(at).key());
+            }
+            key = spelled.append(']').toString();
+        }
+
+        /** How many the statements come to where every one of them holds. */
+        public int weight() {
+            return weights.stream().mapToInt(Integer::intValue).sum();
+        }
+
+        @Override
+        public Proposition denied() {
+            List<Integer> others = new ArrayList<>();
+            for (int count = 0; count <= weight(); count++) {
+                if (Collections.binarySearch(admitted, count) < 0) {
+                    others.add(count);
+                }
+            }
+            return SharedPropositions.denied(this,
+                    () -> SharedPropositions.shared(new SoManyHold(statements, weights, others)));
+        }
+
+        /** Which way a count comes out, as far as what each statement can come out as says. */
+        public enum ComesOut {
+            /** It holds however the statements come out. */
+            HOLDING,
+            /** It fails however the statements come out. */
+            FAILING,
+            /** Some way the statements come out holds it and some way fails it. */
+            EITHER_WAY
+        }
+
+        /**
+         * Which way this comes out, where each of {@link #statements} can hold as {@code mayHold}
+         * says and fail as {@code mayFail} says, in the same order.
+         *
+         * <p>The counts the statements come to, each taken apart from the others, are every count
+         * they do come to and maybe more: two statements that cannot hold together are counted
+         * here as though they could. So it comes out one way only where every one of those counts
+         * says so — never one way where the statements could bring it out the other.
+         */
+        public ComesOut comesOut(List<Boolean> mayHold, List<Boolean> mayFail) {
+            boolean[] comesTo = new boolean[weight() + 1];
+            comesTo[0] = true;
+            for (int one = 0; one < statements.size(); one++) {
+                int weighs = weights.get(one);
+                boolean[] next = new boolean[comesTo.length];
+                for (int count = 0; count < comesTo.length; count++) {
+                    if (comesTo[count]) {
+                        next[count] |= mayFail.get(one);
+                        if (mayHold.get(one)) {
+                            next[count + weighs] = true;
+                        }
+                    }
+                }
+                comesTo = next;
+            }
+            boolean holding = false;
+            boolean failing = false;
+            for (int count = 0; count < comesTo.length; count++) {
+                if (comesTo[count]) {
+                    if (Collections.binarySearch(admitted, count) >= 0) {
+                        holding = true;
+                    } else {
+                        failing = true;
+                    }
+                }
+            }
+            return holding && failing ? ComesOut.EITHER_WAY
+                    : holding ? ComesOut.HOLDING : ComesOut.FAILING;
+        }
+
+        /**
+         * Some one of the choices of which statements hold that put the count where this admits it,
+         * written out, with how many parts they come to — or none, where they are more than one
+         * condition is read in ({@link CompositionBudget#READINGS_OF_ONE_CONDITION}) or written out
+         * come to more parts than {@link CompositionBudget#PARTS_THE_CHOICES_OF_A_COUNT_COME_TO},
+         * and which of the two.
+         *
+         * <p>What holds exactly where this does, for a reader that can read a disjunction of
+         * conjunctions and not a count. Written out once for the count, and handed to a reader
+         * only through {@link CountsWrittenOut}, which holds the reader to what every count it is
+         * handed comes to together.
+         */
+        WhichOfThemHold.Written writtenForAReader() {
+            return SharedPropositions.choices(this, this::writtenOutForAReader);
+        }
+
+        /** The choices written out no further than {@link #writtenForAReader} says, each time it
+         *  is asked. */
+        private WhichOfThemHold.Written writtenOutForAReader() {
+            return WhichOfThemHold.of(this).written(CompositionBudget.READINGS_OF_ONE_CONDITION,
+                    CompositionBudget.PARTS_THE_CHOICES_OF_A_COUNT_COME_TO);
+        }
+    }
+
+    /**
      * What a condition states on one of the applications {@code each} is read on, each statement
      * kept once in one order, and one statement where every application states it.
      */
@@ -777,7 +961,7 @@ public sealed interface Proposition {
     private static boolean stopsIn(Proposition stated, List<WhyUnread> into, boolean first) {
         return switch (stated) {
             case Unread unread -> into.add(unread.why());
-            case All _, Any _, OnAnApplication _, Some _, SomeReachable _ ->
+            case All _, Any _, OnAnApplication _, SoManyHold _, Some _, SomeReachable _ ->
                     stopsIn(stated.partsHeld(), into, first);
             case Always _, Compared _, Truth _, InCases _, Present _, SameValue _,
                  LastToHold _, Carried _ -> false;
@@ -802,7 +986,7 @@ public sealed interface Proposition {
     static boolean saysTheLastToHold(Proposition stated) {
         return switch (stated) {
             case LastToHold _ -> true;
-            case All _, Any _, OnAnApplication _, Some _, SomeReachable _ ->
+            case All _, Any _, OnAnApplication _, SoManyHold _, Some _, SomeReachable _ ->
                     stated.partsHeld().stream().anyMatch(Proposition::saysTheLastToHold);
             case Always _, Compared _, Truth _, InCases _, Present _, SameValue _, Unread _,
                  Carried _ -> false;
@@ -830,7 +1014,7 @@ public sealed interface Proposition {
             case Present present -> present.of() instanceof DecisionSubject.AnAnswer;
             case SameValue same -> same.one() instanceof DecisionSubject.AnAnswer
                     || same.other() instanceof DecisionSubject.AnAnswer;
-            case All _, Any _, OnAnApplication _, SomeReachable _ ->
+            case All _, Any _, OnAnApplication _, SoManyHold _, SomeReachable _ ->
                     stated.partsHeld().stream().anyMatch(Proposition::aboutAnAnswer);
             case Some some -> some.container() instanceof DecisionSubject.AnAnswer
                     || some.partsHeld().stream().anyMatch(Proposition::aboutAnAnswer);
@@ -859,52 +1043,19 @@ public sealed interface Proposition {
 
     /**
      * {@code relation} held or failing as {@code holds}, written as what it comes to where it holds
-     * counts of elements against nought ({@link #ofCounts}), or a count of statements about values
-     * written out as which of them hold ({@link WhichOfThemHold}).
-     *
-     * <p>For a relation that is no count of statements: how many choices one of those is written
-     * out as is held to a figure, and a figure is what a reading that compares one has in hand
-     * ({@link #compared(Relation, boolean, long)}).
-     *
-     * @throws IllegalArgumentException where {@code relation} is a count of statements
+     * counts of elements against nought ({@link #ofCounts}), or, where it holds a count of
+     * statements about values written out, as which of them hold ({@link WhichOfThemHold#stated}).
      */
     static Proposition compared(Relation relation, boolean holds) {
-        if (WhichOfThemHold.of(relation) != null) {
-            throw new IllegalArgumentException("a count of statements is compared with how many"
-                    + " choices of which hold are read: " + relation);
-        }
-        return compared(relation, holds, 0);
-    }
-
-    /**
-     * The same, or null where {@code relation} is a count of statements written out as more than
-     * {@code most} choices of which of them hold.
-     */
-    static Proposition compared(Relation relation, boolean holds, long most) {
         Proposition counted = ofCounts(relation);
         if (counted == null) {
             WhichOfThemHold choosing = WhichOfThemHold.of(relation);
             if (choosing != null) {
-                counted = choosing.written(most);
-                if (counted == null) {
-                    return null;
-                }
+                counted = choosing.stated();
             }
         }
         Proposition held = counted != null ? counted : new Compared(relation, true);
         return holds ? held : held.denied();
-    }
-
-    /**
-     * How many choices of which statements hold {@code relation} is written as, counted no further
-     * than one past {@code most} — or none where it is no relation over one count of statements.
-     *
-     * <p>For a reading to hold a comparison of such a count to how many readings of one condition
-     * it makes, before the comparison is concluded.
-     */
-    public static long choicesIn(Relation relation, long most) {
-        WhichOfThemHold choosing = WhichOfThemHold.of(relation);
-        return choosing == null ? 0 : choosing.choices(most);
     }
 
     /**

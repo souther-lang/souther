@@ -4,6 +4,7 @@ import souther.compiler.inputs.AuthoredOrder;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.RuleReasons;
 import souther.compiler.inputs.RuleSite;
+import souther.compiler.observe.Figure;
 import souther.compiler.publish.SourceOrdered;
 
 import java.util.ArrayList;
@@ -38,15 +39,21 @@ public final class ReportedReason {
      * may not be able to point at, so two of these that differ are not thereby two entries. What
      * is compared for a repeat is what the document writes.
      *
-     * @param reason what kind of thing stopped the derivation, at the coarseness promised
-     * @param sentTo where inside the rule a reader goes about it — the rule itself for a reason
-     *               about the whole of it
+     * @param reason  what kind of thing stopped the derivation, at the coarseness promised
+     * @param sentTo  where inside the rule a reader goes about it — the rule itself for a reason
+     *                about the whole of it
+     * @param figures every figure of this compiler's the reason was compared against and stopped
+     *                at, which the word does not say: several figures stop a reading under one
+     *                word, and a reader told only the word cannot tell which one to raise. Empty
+     *                where it stopped at none
      */
-    public record Stop(UndividedPosition.Reason reason, RuleSite about, RuleSite sentTo) {
+    public record Stop(UndividedPosition.Reason reason, RuleSite about, RuleSite sentTo,
+                       List<Figure> figures) {
 
         /**
          * These in a steady order, which two of them are equal in only where they are equal: the
-         * word in the vocabulary's own order, then what it is about, then where it sends a reader.
+         * word in the vocabulary's own order, then what it is about, then where it sends a reader,
+         * then the figures it stopped at.
          *
          * <p>The vocabulary's order is a set of words and says nothing about a model. What an author
          * wrote is asked of the places.
@@ -54,18 +61,20 @@ public final class ReportedReason {
         public static final Comparator<Stop> IN_A_STEADY_ORDER =
                 Comparator.comparing(Stop::reason)
                         .thenComparing(Stop::about, RuleSite.IN_A_STEADY_ORDER)
-                        .thenComparing(Stop::sentTo, RuleSite.IN_A_STEADY_ORDER);
+                        .thenComparing(Stop::sentTo, RuleSite.IN_A_STEADY_ORDER)
+                        .thenComparing(Stop::figures, Figure::compare);
 
         public Stop {
-            if (reason == null || about == null || sentTo == null) {
+            if (reason == null || about == null || sentTo == null || figures == null) {
                 throw new IllegalArgumentException(
                         "a question stands on some reason, about something, somewhere in its rule");
             }
+            figures = Figure.inOrder(figures);
         }
     }
 
     private static Stop stop(RuleReasons.Said said) {
-        return new Stop(of(said.reason()), said.about(), said.sentTo());
+        return new Stop(of(said.reason()), said.about(), said.sentTo(), said.reason().figures());
     }
 
     /**
@@ -117,11 +126,11 @@ public final class ReportedReason {
     /**
      * Each of them once, keeping where it first stood, which is what a coarsening leaves.
      *
-     * <p>Told apart by the word, what it is about and where it sends a reader. Two producers a
-     * document offers one word for are one thing to lift where they are about the same part of the
-     * rule, and two where they are not — folded on the word alone, a clause with two choices in it
-     * came out as one. Whether two of these are one entry of a document is a later question, asked
-     * of what the document writes.
+     * <p>Told apart by the word, what it is about, where it sends a reader and the figures it
+     * stopped at. Two producers a document offers one word for are one thing to lift where they are
+     * about the same part of the rule, and two where they are not — folded on the word alone, a
+     * clause with two choices in it came out as one. Whether two of these are one entry of a
+     * document is a later question, asked of what the document writes.
      *
      * <p>Kept in a set, because how many of these there are is how many parts of the rule a reader
      * is sent to and not how many words the vocabulary has. A scan of what is already held was

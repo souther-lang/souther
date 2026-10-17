@@ -785,6 +785,10 @@ public final class Generator {
                              // is carried as a part nothing read, naming it.
                              READINGS_OF_ONE_CONDITION, TOTAL_READINGS_OF_ONE_CONDITION,
                              PARTS_A_DERIVATION_CONCLUDES,
+                             // It stops a reader taking a count of statements apart into its
+                             // choices, which takes the count as a part it could not see into,
+                             // naming it.
+                             PARTS_THE_CHOICES_OF_A_COUNT_COME_TO,
                              // It stops what a path takes in of a condition, and what it stopped
                              // is carried as a condition the path did not take in, naming it.
                              ALTERNATIVES_A_PATH_TRIES,
