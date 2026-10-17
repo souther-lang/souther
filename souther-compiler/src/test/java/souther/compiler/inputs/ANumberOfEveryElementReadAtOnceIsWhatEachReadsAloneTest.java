@@ -18,6 +18,8 @@ import java.util.Map;
 import java.util.function.Function;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 /**
  * A number of an element read off the elements beside it, read for every element in one pass, is
@@ -78,6 +80,96 @@ class ANumberOfEveryElementReadAtOnceIsWhatEachReadsAloneTest {
                         () -> extreme + " over " + every);
             }
         }
+    }
+
+    /**
+     * Every list of up to three elements over keys and values some of which were not read, each
+     * in its own way: what stops each element's reading is what stops it alone, and two values
+     * stopped for two reasons are not reported as one of them.
+     */
+    @Test
+    void everyElementReadsAloneWhatItReadsAtOnceWhateverWasNotRead() {
+        List<ObservedValue> keys = List.of(new ObservedValue.Text("a"),
+                new ObservedValue.Text("b"), new ObservedValue.Unknown("unreadable"),
+                new ObservedValue.Truncated(Limits.DEFAULT.nodesFigure()));
+        List<ObservedValue> values = List.of(new ObservedValue.Integer(1),
+                new ObservedValue.Integer(2), new ObservedValue.Unknown("unreadable"),
+                new ObservedValue.Truncated(Limits.DEFAULT.nodesFigure()));
+        TermOrders counted = TermOrdersFixtures.itself(
+                NumericTerm.Multiplicity.of(XS, XS.element()), Carrier.TEXT);
+        for (List<ObservedValue> every : listsOf(keys)) {
+            List<NumericTerm.Reading> alone = new ArrayList<>();
+            for (ObservedValue own : every) {
+                alone.add(counted.readAmong(own, every));
+            }
+            assertEquals(alone, counted.readEachAmong(every), () -> "counted over " + every);
+        }
+        List<ObservedValue> touches = new ArrayList<>();
+        for (ObservedValue key : keys) {
+            for (ObservedValue value : values) {
+                touches.add(new ObservedValue.Constructed(
+                        TypeSymbols.declared(new TypeKey("demo", "Touch")),
+                        Map.of("account", key, "days", value)));
+            }
+        }
+        for (Extreme extreme : List.of(Extreme.LEAST, Extreme.GREATEST)) {
+            NumericTerm.ExtremeOfItsKey term = NumericTerm.ExtremeOfItsKey.of(XS,
+                    XS.element().then("account"), XS.element().then("days"), extreme);
+            TermOrders on = TermOrdersFixtures.computed(term, WHOLE, WHOLE,
+                    Map.of(term.keyField(), Carrier.TEXT));
+            for (List<ObservedValue> every : listsOf(touches)) {
+                List<Function<ElementProjection, ObservedValue>> each = new ArrayList<>();
+                for (ObservedValue element : every) {
+                    each.add(field -> field.in(element));
+                }
+                List<NumericTerm.Reading> alone = new ArrayList<>();
+                for (Function<ElementProjection, ObservedValue> own : each) {
+                    alone.add(on.readAtItsKey(own, each));
+                }
+                assertEquals(alone, on.readEachAtItsKey(each), () -> extreme + " over " + every);
+            }
+        }
+    }
+
+    /** Two values not read for two reasons, each read as its own reason. */
+    @Test
+    void twoValuesNotReadAreEachReadAsWhatStoppedThem() {
+        TermOrders counted = TermOrdersFixtures.itself(
+                NumericTerm.Multiplicity.of(XS, XS.element()), Carrier.TEXT);
+        List<ObservedValue> every = List.of(new ObservedValue.Unknown("unreadable"),
+                new ObservedValue.Truncated(Limits.DEFAULT.nodesFigure()));
+        List<NumericTerm.Reading> read = counted.readEachAmong(every);
+        assertEquals(List.of(counted.readAmong(every.get(0), every),
+                counted.readAmong(every.get(1), every)), read);
+        assertNotEquals(read.get(0), read.get(1), "two reasons are two readings");
+    }
+
+    /** A field of an element not read whole is what stopped it, and not a field it lacks. */
+    @Test
+    void aFieldOfAnElementNotReadWholeIsWhatStoppedIt() {
+        ObservedValue cut = new ObservedValue.Truncated(Limits.DEFAULT.nodesFigure());
+        assertEquals(cut, new ElementProjection(List.of("days")).in(cut));
+        assertNull(new ElementProjection(List.of("hours")).in(touch("a", 1)),
+                "a field a value read whole does not hold is none");
+    }
+
+    /** Every list of one to three of {@code palette}, in every order and with repeats. */
+    private static List<List<ObservedValue>> listsOf(List<ObservedValue> palette) {
+        List<List<ObservedValue>> out = new ArrayList<>();
+        List<List<ObservedValue>> shorter = List.of(List.of());
+        for (int length = 1; length <= 3; length++) {
+            List<List<ObservedValue>> longer = new ArrayList<>();
+            for (List<ObservedValue> each : shorter) {
+                for (ObservedValue one : palette) {
+                    List<ObservedValue> grown = new ArrayList<>(each);
+                    grown.add(one);
+                    longer.add(grown);
+                }
+            }
+            out.addAll(longer);
+            shorter = longer;
+        }
+        return out;
     }
 
     /** What an element of another key holds, or failed to hold, is no part of this key's end. */

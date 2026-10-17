@@ -7821,7 +7821,9 @@ public final class Generator {
      * something of.
      *
      * <p>For a number of an element read off the elements beside it the values are the containers
-     * the elements stand in, each read on its own; no element in any of them is no value there.
+     * the elements stand in, each read on its own ({@link AnOccurrence}); no element in any of them
+     * is no value there. A container not read whole is a reading that could not be made, and never
+     * a container holding nothing.
      */
     static RealizationReadback readBack(TermOrders on,
                                         List<souther.compiler.observe.ObservedValue> values,
@@ -7829,7 +7831,9 @@ public final class Generator {
         NumericTerm term = on.term();
         boolean nothingToRead = switch (term) {
             case NumericTerm.Multiplicity _, NumericTerm.ExtremeOfItsKey _ ->
-                    elementsOfEach(values).stream().allMatch(List::isEmpty);
+                    values.stream().allMatch(each -> AnOccurrence.of(each)
+                            instanceof AnOccurrence.Read(List<ObservedValue> held)
+                            && held.isEmpty());
             case NumericTerm.FromOnePosition _ -> values.isEmpty();
             case NumericTerm.TakenOver _ -> false;
         };
@@ -7846,55 +7850,37 @@ public final class Generator {
         // one added later is not a reading of its own.
         Set<Incompleteness.Code> unread = EnumSet.noneOf(Incompleteness.Code.class);
         Set<UnheldNumber> notWorkedOut = EnumSet.noneOf(UnheldNumber.class);
+        // A container, or an element in one, that is not of the shape the walk and the type say:
+        // no reading of it is made, which is neither the value standing elsewhere nor an
+        // observation that came back short.
+        boolean ofAnotherShape = false;
         boolean stands = switch (term) {
-            // The end of the values of a key, among the elements standing there: a row stands at
-            // a point where some element's key comes to it.
-            case NumericTerm.ExtremeOfItsKey _ -> {
-                List<NumericTerm.Reading> readings = new ArrayList<>();
-                for (List<ObservedValue> held : elementsOfEach(values)) {
-                    List<Function<ElementProjection, ObservedValue>> each = new ArrayList<>();
-                    for (ObservedValue element : held) {
-                        each.add(field -> field.in(element));
-                    }
-                    readings.addAll(on.readEachAtItsKey(each));
-                }
+            // How often a value occurs, or the end of the values of a key, among the elements of
+            // each container: a row stands at a point where some element's number comes to it.
+            case NumericTerm.Multiplicity _, NumericTerm.ExtremeOfItsKey _ -> {
                 boolean any = false;
-                for (NumericTerm.Reading read : readings) {
-                    switch (read) {
-                        case NumericTerm.Reading.Number number ->
-                                any |= number.value().compareTo(at) == 0;
-                        case NumericTerm.Reading.Missing missing -> unread.add(missing.code());
-                        case NumericTerm.Reading.NotNumber _ -> { }
-                        case NumericTerm.Reading.NotWorkedOut(UnheldNumber why) ->
-                                notWorkedOut.add(why);
-                    }
-                }
-                yield any;
-            }
-            // How often a value occurs among the values standing there: a row stands at a point
-            // where some element's value is that frequent.
-            case NumericTerm.Multiplicity among -> {
-                List<NumericTerm.Reading> readings = new ArrayList<>();
-                for (List<ObservedValue> held : elementsOfEach(values)) {
-                    // An element holding nothing at the place leaves its container no count of
-                    // which values are alike.
-                    List<ObservedValue> placed = new ArrayList<>();
-                    for (ObservedValue element : held) {
-                        placed.add(among.placeField().in(element));
-                    }
-                    if (!placed.contains(null)) {
-                        readings.addAll(on.readEachAmong(placed));
-                    }
-                }
-                boolean any = false;
-                for (NumericTerm.Reading read : readings) {
-                    switch (read) {
-                        case NumericTerm.Reading.Number number ->
-                                any |= number.value().compareTo(at) == 0;
-                        case NumericTerm.Reading.Missing missing -> unread.add(missing.code());
-                        case NumericTerm.Reading.NotNumber _ -> { }
-                        case NumericTerm.Reading.NotWorkedOut(UnheldNumber why) ->
-                                notWorkedOut.add(why);
+                for (ObservedValue container : values) {
+                    switch (AnOccurrence.of(container)) {
+                        case AnOccurrence.NotRead(Incompleteness.Code why) -> unread.add(why);
+                        case AnOccurrence.OfAnotherShape _ -> ofAnotherShape = true;
+                        case AnOccurrence.Read(List<ObservedValue> held) -> {
+                            List<NumericTerm.Reading> readings = readEachOf(on, held);
+                            if (readings == null) {
+                                ofAnotherShape = true;
+                                continue;
+                            }
+                            for (NumericTerm.Reading read : readings) {
+                                switch (read) {
+                                    case NumericTerm.Reading.Number number ->
+                                            any |= number.value().compareTo(at) == 0;
+                                    case NumericTerm.Reading.Missing missing ->
+                                            unread.add(missing.code());
+                                    case NumericTerm.Reading.NotNumber _ -> { }
+                                    case NumericTerm.Reading.NotWorkedOut(UnheldNumber why) ->
+                                            notWorkedOut.add(why);
+                                }
+                            }
+                        }
                     }
                 }
                 yield any;
@@ -7939,18 +7925,66 @@ public final class Generator {
         if (!unread.isEmpty()) {
             return new RealizationReadback.CouldNotTell(new ReadbackGap.Observation(unread));
         }
+        if (ofAnotherShape) {
+            return new RealizationReadback.CouldNotTell(new ReadbackGap.WalkAndTypeDisagree());
+        }
         return new RealizationReadback.Elsewhere("it was composed to put " + term + " at " + at
                 + " and does not stand there");
     }
 
-    /** The elements each of {@code containers} holds, one list per container; a value that holds
-     *  no elements in order holds none here. */
-    private static List<List<ObservedValue>> elementsOfEach(List<ObservedValue> containers) {
-        List<List<ObservedValue>> out = new ArrayList<>(containers.size());
-        for (ObservedValue each : containers) {
-            out.add(each instanceof ObservedValue.Sequence held ? held.elements() : List.of());
+    /**
+     * What a container the walk stood at reads as, for a number of each of its elements: the
+     * elements, where it was read whole and holds them in order; why it was not read, where it was
+     * not; and neither, where it was read and is no container of elements.
+     */
+    private sealed interface AnOccurrence {
+
+        record Read(List<ObservedValue> elements) implements AnOccurrence {}
+
+        record NotRead(Incompleteness.Code why) implements AnOccurrence {}
+
+        record OfAnotherShape() implements AnOccurrence {}
+
+        static AnOccurrence of(ObservedValue container) {
+            if (container.cause() != null) {
+                return new NotRead(container.cause().code());
+            }
+            return container instanceof ObservedValue.Sequence held ? new Read(held.elements())
+                    : new OfAnotherShape();
         }
-        return out;
+    }
+
+    /**
+     * What each of {@code held}, the elements of one container, reads as {@code on}'s number among
+     * them — or null where an element read whole holds nothing where the number is read, which is
+     * an element of another shape than the walk's.
+     */
+    private static List<NumericTerm.Reading> readEachOf(TermOrders on, List<ObservedValue> held) {
+        List<Function<ElementProjection, ObservedValue>> each = new ArrayList<>();
+        for (ObservedValue element : held) {
+            each.add(field -> field.in(element));
+        }
+        return switch (on.term()) {
+            case NumericTerm.Multiplicity among -> {
+                List<ObservedValue> placed = new ArrayList<>();
+                for (Function<ElementProjection, ObservedValue> one : each) {
+                    placed.add(one.apply(among.placeField()));
+                }
+                yield placed.contains(null) ? null : on.readEachAmong(placed);
+            }
+            case NumericTerm.ExtremeOfItsKey extreme -> {
+                for (Function<ElementProjection, ObservedValue> one : each) {
+                    if (one.apply(extreme.keyField()) == null
+                            || one.apply(extreme.valueField()) == null) {
+                        yield null;
+                    }
+                }
+                yield on.readEachAtItsKey(each);
+            }
+            case NumericTerm.FromOnePosition _, NumericTerm.TakenOver _ ->
+                    throw new IllegalArgumentException(on.term() + " is a number of no element's"
+                            + " neighbours");
+        };
     }
 
     /**

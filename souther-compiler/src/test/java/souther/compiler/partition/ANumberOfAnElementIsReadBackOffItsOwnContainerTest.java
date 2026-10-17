@@ -10,6 +10,7 @@ import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermOrdersFixtures;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
+import souther.compiler.observe.Limits;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
@@ -18,6 +19,7 @@ import souther.compiler.types.TypeSymbols;
 import java.util.List;
 import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 
 /**
@@ -57,6 +59,50 @@ class ANumberOfAnElementIsReadBackOffItsOwnContainerTest {
         assertInstanceOf(Generator.RealizationReadback.Elsewhere.class,
                 Generator.readBack(on, orders, Count.of(2)),
                 "x occurs once in each order, and twice in none");
+    }
+
+    /**
+     * A container not read whole is a reading that could not be made, never a container holding
+     * nothing: an order whose lines were cut short may hold the second `x` the number asks for.
+     */
+    @Test
+    void aContainerNotReadWholeLeavesTheNumberUntold() {
+        NumericTerm.Multiplicity often = NumericTerm.Multiplicity.of(LINES,
+                LINES.element().then("sku"));
+        TermOrders on = TermOrdersFixtures.itself(often, Carrier.TEXT);
+        List<ObservedValue> orders = List.of(
+                new ObservedValue.Sequence(List.of(line("x", 1))),
+                new ObservedValue.Truncated(Limits.DEFAULT.nodesFigure()));
+        assertInstanceOf(Generator.ReadbackGap.Observation.class,
+                assertInstanceOf(Generator.RealizationReadback.CouldNotTell.class,
+                        Generator.readBack(on, orders, Count.of(2))).why());
+    }
+
+    /** And an element not read whole the same, for the end of a key's values. */
+    @Test
+    void anElementNotReadWholeLeavesTheEndUntold() {
+        NumericTerm.ExtremeOfItsKey least = NumericTerm.ExtremeOfItsKey.of(LINES,
+                LINES.element().then("sku"), LINES.element().then("qty"), Extreme.LEAST);
+        TermOrders on = TermOrdersFixtures.computed(least, WHOLE, WHOLE,
+                Map.of(least.keyField(), Carrier.TEXT));
+        List<ObservedValue> orders = List.of(new ObservedValue.Sequence(List.of(line("x", 9),
+                new ObservedValue.Truncated(Limits.DEFAULT.nodesFigure()))));
+        Generator.RealizationReadback read = Generator.readBack(on, orders, Count.of(9));
+        assertInstanceOf(Generator.ReadbackGap.Observation.class,
+                assertInstanceOf(Generator.RealizationReadback.CouldNotTell.class, read).why(),
+                "the line cut short may be an x below nine, which is the observation's to say");
+    }
+
+    /** A value read whole that holds no elements in order is no container the walk says. */
+    @Test
+    void aValueOfAnotherShapeIsNoContainerHoldingNothing() {
+        TermOrders on = TermOrdersFixtures.itself(
+                NumericTerm.Multiplicity.of(LINES, LINES.element().then("sku")), Carrier.TEXT);
+        List<ObservedValue> orders = List.of(new ObservedValue.Sequence(List.of(line("x", 1))),
+                new ObservedValue.Text("not lines"));
+        assertEquals(new Generator.RealizationReadback.CouldNotTell(
+                        new Generator.ReadbackGap.WalkAndTypeDisagree()),
+                Generator.readBack(on, orders, Count.of(2)));
     }
 
     private static ObservedValue line(String sku, long qty) {
