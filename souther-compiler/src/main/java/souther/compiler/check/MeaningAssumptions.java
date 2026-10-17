@@ -4,6 +4,7 @@ import souther.compiler.inputs.AnEvaluation;
 import souther.compiler.inputs.Case;
 import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.NumericTerms;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.TermPath;
@@ -368,11 +369,11 @@ final class MeaningAssumptions {
                 return new AtomAt.AtTheEdge(
                         WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_NUMBER_OVER_ELEMENTS);
             }
-            // Taken of a form of several places, which is a fact about none of them: a path would
-            // have to know the remainder of a sum it holds no name for — or what an operation
-            // answered of a place, which it names only by what it was made of.
-            case Quantity.CodePointsOfAPiece _, Quantity.RemainderOfADividend _,
-                 DecisionAtom.TakenOfAnAnswer _, Quantity.WhatAnOperationAnswers _ -> {
+            case Quantity.RemainderOfADividend remainder -> named = remainderOfAForm(remainder);
+            // Taken of a form of several places, which is a fact about none of them — or what an
+            // operation answered of a place, which a path names only by what it was made of.
+            case Quantity.CodePointsOfAPiece _, DecisionAtom.TakenOfAnAnswer _,
+                 Quantity.WhatAnOperationAnswers _ -> {
                 return new AtomAt.AtTheEdge(
                         WhyNotTaken.DomainLimit.A_PLACE_THE_PATH_DOES_NOT_READ);
             }
@@ -418,6 +419,39 @@ final class MeaningAssumptions {
             }
             default -> null;
         };
+    }
+
+    /**
+     * What a division leaves of a form of places, named by the form's places and the divisor, so a
+     * guard on it here and one in the next condition are about one number however each was
+     * written; it carries both ends its operation bounds it to by this divisor, the account a
+     * remainder of one place carries. Null where a place of the form is none this names.
+     *
+     * <p>A fact about the remainder and none about its places: a path that knows it holds no more
+     * of what the places are than that their form leaves it.
+     */
+    private FactSubject remainderOfAForm(Quantity.RemainderOfADividend remainder) {
+        if (remainder.divisor().bitLength() >= Long.SIZE
+                || !(remainder.dividend().constant().floor()
+                        instanceof ExactAnswer.Held<BigInteger>(BigInteger constant))) {
+            return null;
+        }
+        List<Map.Entry<FactSubject, BigDecimal>> weighed = new ArrayList<>();
+        for (Map.Entry<NumericTerm, ExactRatio> each
+                : NumericTerms.entriesInOrder(remainder.dividend().coefs())) {
+            FactSubject place = atomOf(each.getKey());
+            if (place == null || !(each.getValue().floor()
+                    instanceof ExactAnswer.Held<BigInteger>(BigInteger weight))) {
+                return null;
+            }
+            weighed.add(Map.entry(place, new BigDecimal(weight)));
+        }
+        FactSubject left = terms.remainderOfAForm(remainder.operation(), weighed,
+                new BigDecimal(constant), remainder.divisor().longValue());
+        if (left != null) {
+            carryingBothEnds(left, remainder.operation(), remainder.arguments());
+        }
+        return left;
     }
 
     /** Whether {@code number} is a whole number other than nought that a signed 64-bit number holds,

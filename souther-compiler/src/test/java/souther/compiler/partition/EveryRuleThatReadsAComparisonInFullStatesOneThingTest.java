@@ -9,11 +9,13 @@ import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.check.StatedComparison;
 import souther.compiler.core.Core;
+import souther.compiler.flow.AWayThrough;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.meaning.Derivation;
 import souther.compiler.meaning.Proposition;
+import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.Relation;
 import souther.compiler.meaning.WhyUnread;
 import souther.compiler.numeric.ExactRatio;
@@ -25,8 +27,11 @@ import souther.compiler.semantics.OperationLaw;
 import souther.compiler.semantics.Unsayable;
 import souther.compiler.types.ValueName;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.function.IntPredicate;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -53,7 +58,7 @@ class EveryRuleThatReadsAComparisonInFullStatesOneThingTest {
             data Grade = Low | Mid | High
             data Level = Grade
             data Box = { xs: List<Int>, tags: Set<String>, m: Map<String, Int>, s: String,
-                         g: Grade, l: Level }
+                         g: Grade, l: Level, x: Int, y: Int }
             """;
 
     /**
@@ -106,6 +111,83 @@ class EveryRuleThatReadsAComparisonInFullStatesOneThingTest {
                 }
             }
         }
+    }
+
+    /**
+     * What a division leaves of a form of two numbers is read in full, written in the comparison or
+     * with arithmetic round it, and every rule that reads it states what the comparison holds at
+     * every remainder — the remainders past the divisor included.
+     */
+    @Test
+    void everyRuleThatReadsARemainderOfAFormInFullStatesOneThing() {
+        Map<String, IntPredicate> conditions = new LinkedHashMap<>();
+        conditions.put("Int.floorMod(b.x - b.y, 7) >= 1", r -> r >= 1);
+        conditions.put("Int.floorMod(b.x - b.y, 7) == 3", r -> r == 3);
+        conditions.put("Int.floorMod(b.x - b.y, 7) >= 7", r -> r >= 7);
+        conditions.put("5 > Int.floorMod(b.x - b.y, 7)", r -> 5 > r);
+        conditions.put("Int.floorMod(b.x - b.y, 7) + 1 >= 2", r -> r + 1 >= 2);
+        conditions.put("2 * Int.floorMod(b.x - b.y, 7) <= 5", r -> 2 * r <= 5);
+        conditions.put("Int.floorMod(b.x - b.y, 7) - 7 >= 0", r -> r - 7 >= 0);
+        conditions.forEach((condition, holds) -> {
+            Reading reading = reading(condition);
+            List<Proposition> inFull = Pullback.byEachRule(reading.comparison(), reading.reads(),
+                    reading.read()).stream()
+                    .filter(stated -> !(stated instanceof Proposition.Unread))
+                    .toList();
+            assertFalse(inFull.isEmpty(), () -> condition + " is read in full");
+            for (int remainder = 0; remainder < 7; remainder++) {
+                int at = remainder;
+                for (Proposition each : inFull) {
+                    assertEquals(holds.test(at), holdsAtTheRemainder(each, at),
+                            () -> condition + " at the remainder " + at + ": " + inFull);
+                }
+            }
+        });
+    }
+
+    /**
+     * What a remainder of a form states is ruled out by where its operation says it runs, as what a
+     * remainder of one place states is: past one below the divisor nothing holds, and below it
+     * something may.
+     */
+    @Test
+    void whatARemainderStatesPastWhereItRunsIsRuledOut() {
+        Map<String, Boolean> conditions = new LinkedHashMap<>();
+        conditions.put("Int.floorMod(b.x - b.y, 7) >= 7", true);
+        conditions.put("Int.floorMod(b.x - b.y, 7) < 0", true);
+        conditions.put("2 * Int.floorMod(b.x - b.y, 7) + 3 > 15", true);
+        conditions.put("Int.floorMod(b.x - b.y, 7) >= 6", false);
+        conditions.put("Int.floorMod(b.x, 7) >= 7", true);
+        conditions.forEach((condition, ruledOut) -> {
+            Reading reading = reading(condition);
+            Proposition stated = Pullback.ofATruth(reading.truth(), reading.reads(),
+                    reading.read(), Optional.empty()).proposition();
+            assertEquals(ruledOut, WhatTheDeclarationsLeave.whetherRuledOut(stated, true,
+                    reading.read()) instanceof AWayThrough.RuledOut, () -> condition + ": " + stated);
+            assertFalse(WhatTheDeclarationsLeave.whetherRuledOut(stated, false, reading.read())
+                    instanceof AWayThrough.RuledOut, () -> condition + " fails somewhere");
+        });
+    }
+
+    /**
+     * Whether {@code stated}, a relation over one remainder or an answer settled for every one,
+     * holds where that remainder is {@code remainder}.
+     */
+    private static boolean holdsAtTheRemainder(Proposition stated, int remainder) {
+        if (stated instanceof Proposition.Always(boolean holds)) {
+            return holds;
+        }
+        Proposition.Compared compared = assertInstanceOf(Proposition.Compared.class, stated,
+                "a remainder compared with a number is a relation over the remainder");
+        Relation.Affine affine = assertInstanceOf(Relation.Affine.class, compared.relation());
+        LinearForm<?> form = affine.form();
+        assertEquals(1, form.coefs().size(), () -> "a relation over the one remainder: " + form);
+        assertInstanceOf(Quantity.RemainderOfADividend.class, form.coefs().keySet().iterator()
+                .next(), () -> "over the remainder as a number of its own: " + form);
+        ExactRatio value = form.coefs().values().iterator().next()
+                .times(ExactRatio.of(remainder)).flatMap(form.constant()::plus).orNull();
+        assertNotNull(value, "a small remainder is held");
+        return affine.proposition().holds(value.signum()) == compared.holds();
     }
 
     /**

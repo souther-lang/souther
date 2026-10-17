@@ -1,15 +1,20 @@
 package souther.compiler.meaning;
 
+import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.NumericTerms;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.NumericDomain;
 import souther.compiler.semantics.CodePointClass;
+import souther.compiler.semantics.ResultRange;
+import souther.compiler.semantics.TakenArguments;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
+import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -116,18 +121,40 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
      * <p>Whole numbers throughout. A form that weighs a number by a fraction, or is moved by one, is
      * no dividend of a remainder, and nothing here reads it as one.
      *
+     * @param operation the library's floor remainder that answers it
      * @param dividend the form the division is of, constant included
      * @param divisor the number it is divided by, above nought
      */
-    record RemainderOfADividend(LinearForm<NumericTerm> dividend, BigInteger divisor)
-            implements Quantity {
+    record RemainderOfADividend(ValueName operation, LinearForm<NumericTerm> dividend,
+                                BigInteger divisor) implements Quantity {
 
         public RemainderOfADividend {
-            if (dividend == null || dividend.coefs().isEmpty() || divisor == null
-                    || divisor.signum() <= 0) {
-                throw new IllegalArgumentException("a remainder is of a form of some numbers and"
-                        + " by a divisor above nought: " + dividend + " by " + divisor);
+            if (operation == null || dividend == null || dividend.coefs().isEmpty()
+                    || divisor == null || divisor.signum() <= 0
+                    || DefaultBoundOperationFacts.get().divisorOfAFloorRemainder(operation)
+                            .isEmpty()) {
+                throw new IllegalArgumentException("a remainder is a floor remainder of a form of"
+                        + " some numbers by a divisor above nought: " + operation + " of "
+                        + dividend + " by " + divisor);
             }
+        }
+
+        /** What the operation was handed beside the dividend: the divisor, where it takes it. */
+        public TakenArguments arguments() {
+            return TakenArguments.at(
+                    DefaultBoundOperationFacts.get().divisorOfAFloorRemainder(operation)
+                            .getAsInt(), new BigDecimal(divisor));
+        }
+
+        /**
+         * Where the operation states its answers lie by this divisor, whatever the dividend comes
+         * to — the same account a remainder of one place is bounded by
+         * ({@link NumericTerm.TakenOf#whatTheOperationStates}).
+         */
+        public NumericDomain.Bounds whatTheOperationStates() {
+            TakenArguments given = arguments();
+            return ResultRange.of(DefaultBoundOperationFacts.get().boundsOnTheResult(operation),
+                    argument -> Optional.ofNullable(given.at(argument.position())));
         }
 
         @Override
