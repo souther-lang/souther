@@ -243,10 +243,10 @@ class AFloorRemainderOfAFormIsALineOnTheRemainderTest {
             for (BorderAssessment border : lines) {
                 border.items().forEach((point, assessed) -> {
                     boolean atOrPast = point instanceof DomainPoint.AtTheLine
-                            || point instanceof DomainPoint.BesideTheLine(var side)
-                                    && side == Towards.ABOVE
-                            || point instanceof DomainPoint.InTheRegion(var side)
-                                    && side == Towards.ABOVE;
+                            || (point instanceof DomainPoint.BesideTheLine(var side)
+                                    && side == Towards.ABOVE)
+                            || (point instanceof DomainPoint.InTheRegion(var side)
+                                    && side == Towards.ABOVE);
                     if (atOrPast) {
                         assertInstanceOf(ItemAssessment.NotOwed.class, assessed,
                                 () -> body + ": " + point + " is past what the remainder runs to");
