@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.RuleSite;
+import souther.compiler.types.ConstructOccurrence;
 
 /**
  * Where the arithmetic stopped on a part of a rule that no reading took in, at one position.
@@ -17,18 +18,22 @@ import souther.compiler.inputs.RuleSite;
  * <p>Filed only where no reading took the part in at {@link #position}. Where one did, the
  * question is answered and what the arithmetic stopped on is no account of anything.
  *
- * <p>No copy of the comparison. A helper expanded at two calls stops the arithmetic at one
- * comparison its author wrote, and what a reader is told of it is that comparison; told apart by
- * copy, the two would be one word said twice.
+ * <p>Which copy, as well as which comparison. A helper expanded at two calls is one comparison its
+ * author wrote and two copies of it, each read with what its own call handed it — the arithmetic
+ * can stop on one and read the other to the end. What the reading of values was short of is said
+ * of a copy ({@link RuleShortfall#occurrence}), so the arithmetic's word stands in for it only
+ * where it was said of the same one; the place a reader is sent is the same for both.
  *
- * @param site     where a reader goes about it, which is what the author wrote
- * @param why      what the arithmetic stopped on
- * @param position what was left with no reading of the part
+ * @param occurrence the comparison the arithmetic stopped on, and which copy of it this is
+ * @param site       where a reader goes about it, which is what the author wrote
+ * @param why        what the arithmetic stopped on
+ * @param position   what was left with no reading of the part
  */
-record FormShortfall(RuleSite site, BlockReason.RuleReadingStopped why, FactSubject position) {
+record FormShortfall(ConstructOccurrence occurrence, RuleSite site,
+                     BlockReason.RuleReadingStopped why, FactSubject position) {
 
     FormShortfall {
-        if (site == null || why == null || position == null) {
+        if (occurrence == null || site == null || why == null || position == null) {
             throw new IllegalArgumentException(
                     "where the arithmetic stopped is about a comparison somebody wrote, and says"
                             + " what it stopped on and at which position");

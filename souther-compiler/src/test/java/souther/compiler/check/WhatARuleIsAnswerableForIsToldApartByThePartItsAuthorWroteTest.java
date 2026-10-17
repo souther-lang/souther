@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.RuleSite;
 import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.SourceConstruct;
@@ -106,6 +107,35 @@ class WhatARuleIsAnswerableForIsToldApartByThePartItsAuthorWroteTest {
                         + " other");
         assertEquals(2, positions.size(),
                 "one part leaving two positions short is two facts, and a reader is owed both");
+    }
+
+    /**
+     * And where the arithmetic stopped stands in for a form the reading of values had no word for
+     * only in the copy it was said of.
+     *
+     * <p>Two copies of one comparison are one place to go and two readings, each with what its own
+     * call handed it. Matched by the place, the arithmetic stopping on one copy would take the other
+     * copy's word away, and the question that copy left would be told a reason that is not its own.
+     */
+    @Test
+    void andTheArithmeticsWordStandsInOnlyForTheCopyItWasSaidOf() {
+        BlockReason.RuleReadingStopped derived = new BlockReason.RuleAboutADerivedValue();
+        RuleShortfall formNotRead = new RuleShortfall(wrote(3), RuleSite.at(FIRST),
+                RuleShortfall.Kind.LEAF, StoppedReading.of(UnreadReason.FORM_NOT_READ), POSITION);
+
+        assertEquals(List.of(derived), said(formNotRead,
+                        new FormShortfall(wrote(3), RuleSite.at(FIRST), derived, POSITION)),
+                "in the copy the arithmetic stopped on, its word is the one said");
+        assertEquals(2, said(formNotRead,
+                        new FormShortfall(wrote(7), RuleSite.at(FIRST), derived, POSITION)).size(),
+                "in another copy at the same place, both words are said");
+    }
+
+    /** What the question standing on {@code shortfall} and {@code stopped} is told. */
+    private static List<BlockReason.RuleReadingStopped> said(RuleShortfall shortfall,
+                                                             FormShortfall stopped) {
+        return new RuleAccounting.Why.TheValueReadingSays(Set.of(shortfall), Set.of(stopped),
+                AnswerShortfalls.none()).stopped().itsRuleLeft().reasons();
     }
 
     /** What crosses out of a reading, as the set that files it holds them. */

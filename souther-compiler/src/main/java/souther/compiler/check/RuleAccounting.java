@@ -4,6 +4,7 @@ import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.RuleReasons;
 import souther.compiler.inputs.RuleSite;
 import souther.compiler.inputs.WhatAQuestionStandsOn;
+import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.values.UnreadReason;
 
 import java.util.ArrayList;
@@ -348,8 +349,8 @@ public final class RuleAccounting {
             }
 
             /**
-             * Which shortfalls are a form the reading of values does not take apart, written at a
-             * comparison the arithmetic said of where it stopped, at the same position.
+             * Which shortfalls are a form the reading of values does not take apart, in the copy of
+             * a comparison the arithmetic said of where it stopped, at the same position.
              *
              * <p>Then the arithmetic's word is the one said of it. A form that reading does not
              * take apart is a statement that no reading here took the form apart, which is not true
@@ -364,14 +365,18 @@ public final class RuleAccounting {
              */
             Predicate<RuleShortfall> toldByTheForm() {
                 Set<Told> told = new HashSet<>();
-                theForm.forEach(each -> told.add(new Told(each.site(), each.position())));
+                theForm.forEach(each -> told.add(new Told(each.occurrence(), each.position())));
                 return shortfall -> shortfall.kind() == RuleShortfall.Kind.LEAF
                         && shortfall.why().why() == UnreadReason.FORM_NOT_READ
-                        && told.contains(new Told(shortfall.site(), shortfall.position()));
+                        && told.contains(new Told(shortfall.occurrence(), shortfall.position()));
             }
 
-            /** A written construct, at one position. */
-            private record Told(RuleSite site, FactSubject position) {}
+            /**
+             * One copy of a written construct, at one position. The copy and not the place: two
+             * copies of one comparison are read with what two calls handed them, and the
+             * arithmetic stopping on one says nothing of the other ({@link FormShortfall}).
+             */
+            private record Told(ConstructOccurrence occurrence, FactSubject position) {}
 
             /**
              * What a rule of this is answerable for, as reasons alone.
