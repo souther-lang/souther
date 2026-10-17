@@ -26,6 +26,7 @@ import souther.compiler.semantics.SideAnswered;
 import souther.compiler.semantics.SizeAgainstItsSource;
 import souther.compiler.semantics.TakenArguments;
 import souther.compiler.semantics.TakenAs;
+import souther.compiler.semantics.WhatIsGathered;
 import souther.compiler.semantics.Unsayable;
 import souther.compiler.stdlib.Stdlib;
 import souther.compiler.types.BinOp;
@@ -463,6 +464,19 @@ public final class BoundOperationFacts {
      *  condition. */
     BoundOperationFact.PutsAValueIn putsAValueIn(ValueName operation) {
         return one(BoundOperationFact.PutsAValueIn.class, operation);
+    }
+
+    /**
+     * What an operation gathering values into a set answers: exactly what {@code into} holds and
+     * {@code what} — the value itself, or every element of it — each once.
+     */
+    public record Gathered(DeclaredArgument what, WhatIsGathered how, DeclaredArgument into) {}
+
+    /** What {@code operation} gathers into what, or null where nothing says it gathers. */
+    public Gathered gathersIn(ValueName operation) {
+        BoundOperationFact.GathersIn gathers = one(BoundOperationFact.GathersIn.class, operation);
+        return gathers == null ? null
+                : new Gathered(gathers.what(), gathers.how(), gathers.into());
     }
 
     /** The map whose keys {@code operation} answers a map keyed by, or null where it keeps none. */

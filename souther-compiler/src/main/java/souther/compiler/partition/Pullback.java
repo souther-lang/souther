@@ -1456,6 +1456,10 @@ final class Pullback {
         if (walked != null) {
             return walked;
         }
+        Sized gathered = differentOverAWalk(Core.withoutStanding(made.value()), made.at());
+        if (gathered != null) {
+            return gathered;
+        }
         if (!(AnOperationApplied.of(Core.withoutStanding(made.value()))
                 instanceof AnOperationApplied applied
                 && applied.operation() instanceof ValueName.Stdlib operation)) {
@@ -1549,6 +1553,45 @@ final class Pullback {
         LinearForm<Quantity> all = seed.plus(over).orNull();
         return all == null ? new Sized.NotSized(new WhyUnread.NoMeasureOfItsSize())
                 : new Sized.AsAForm(all);
+    }
+
+    /**
+     * How many what a walk from an empty set ends with holds, where each step gathers into what
+     * it carried a value standing at a place of the element, or every element of a set standing
+     * there ({@link BoundOperationFacts#gathersIn}): how many different values stand where those
+     * are over the elements — or null where {@code e} is no such walk.
+     *
+     * <p>By induction over the walk, which hands every element to the step once: what it ends
+     * with is exactly the values gathered, each once, which is how many differ among them.
+     */
+    private Sized differentOverAWalk(Core e, InputReads reads) {
+        SeededWalk walk = SeededWalk.of(e, blocksAt(new Denotation(e, reads)));
+        if (walk == null || !(subjectOf(walk.container(), reads)
+                instanceof DecisionSubject.AnInput held)
+                || !(sizeOf(walk.seed(), reads) instanceof Sized.AsAForm(LinearForm<Quantity> seed))
+                || !seed.equals(LinearForm.constant(ExactRatio.ZERO))) {
+            return null;
+        }
+        Denotation step = reads.standing(walk.step().body(), read.rules().symbols(),
+                read.rules().newtypes());
+        if (!(AnOperationApplied.of(Core.withoutStanding(step.value()))
+                instanceof AnOperationApplied applied)
+                || !(DefaultBoundOperationFacts.get().gathersIn(applied.operation())
+                        instanceof BoundOperationFacts.Gathered gathers)
+                || !(Core.withoutStanding(applied.args().get(gathers.into().position()))
+                        instanceof Core.Read carried)
+                || !carried.binding().equals(walk.accumulator().binding())
+                || !(step.at().pathOf(applied.args().get(gathers.what().position()),
+                        read.rules().newtypes()) instanceof PathResolution.At(TermPath what))
+                || !what.isAtOrUnder(held.at().element())) {
+            return null;
+        }
+        TermPath each = switch (gathers.how()) {
+            case THE_VALUE -> what;
+            case EVERY_ELEMENT -> what.element();
+        };
+        return new Sized.AsAForm(LinearForm.atom(
+                new Quantity.HowManyDifferent(held, new DecisionSubject.AnInput(each))));
     }
 
     /** How many {@code walk}'s step holds, with what it carried holding {@code soFar}. */
@@ -3343,16 +3386,67 @@ final class Pullback {
             if (occurrences.stream().anyMatch(each -> !each.keptWhere().isEmpty())) {
                 return null;
             }
-            Set<Object> different = new HashSet<>();
+            List<Denotation> taken = new ArrayList<>();
             for (ReadMeaning.Occurrence occurrence : occurrences) {
-                Denotation taken = takenOf(at, ofTheElement, occurrence.value());
-                Object value = taken == null ? null : writtenValueOf(taken);
-                if (value == null) {
+                Denotation each = takenOf(at, ofTheElement, occurrence.value());
+                if (each == null) {
                     return null;
+                }
+                taken.add(each);
+            }
+            Set<Object> different = new HashSet<>();
+            for (Denotation each : taken) {
+                Object value = writtenValueOf(each);
+                if (value == null) {
+                    return differentAt(at, taken);
                 }
                 different.add(value);
             }
             return new Sized.AsAForm(LinearForm.constant(ExactRatio.of(different.size())));
+        }
+
+        /**
+         * How many different values {@code taken}, values standing at positions, come to: one for
+         * each that is none of those before it, which is the law's sameness of two elements
+         * denied of it and each of them — or null where one of them stands at no position.
+         *
+         * <p>Exactly, whatever the row: each of them adds one where it differs from every one
+         * before it and nothing where it is one of them, so how many differ is how many of those
+         * statements hold.
+         */
+        private Sized differentAt(DeclaredArgument at, List<Denotation> taken) {
+            List<DecisionSubject> subjects = new ArrayList<>();
+            for (Denotation each : taken) {
+                DecisionSubject subject = subjectOf(each);
+                if (subject == null) {
+                    return null;
+                }
+                subjects.add(subject);
+            }
+            LawProposition.Same<DeclaredArgument> apart = new LawProposition.Same<>(
+                    new LawSubject.ElementOf<>(at), new LawSubject.ElementOf<>(at), false);
+            long settled = 0;
+            List<Proposition> unsettled = new ArrayList<>();
+            for (int i = 0; i < subjects.size(); i++) {
+                Derivation fromEachBefore = null;
+                for (int j = 0; j < i; j++) {
+                    Derivation pair = leaf(new Derivation.TheSameValue(apart, subjects.get(i),
+                            subjects.get(j)), e, reads);
+                    fromEachBefore = fromEachBefore == null ? pair
+                            : new Derivation.Joined(ConditionJoin.BOTH, fromEachBefore, pair);
+                }
+                Proposition stated = fromEachBefore == null ? new Proposition.Always(true)
+                        : trying.of(fromEachBefore);
+                if (stated instanceof Proposition.Always(boolean holds)) {
+                    settled += holds ? 1 : 0;
+                } else {
+                    unsettled.add(stated);
+                }
+            }
+            LinearForm<Quantity> counted = LinearForm.constant(ExactRatio.of(settled));
+            return new Sized.AsAForm(unsettled.isEmpty() ? counted
+                    : new LinearForm<>(counted.constant(),
+                            Map.of(new Quantity.HowManyHold(unsettled), ExactRatio.ONE)));
         }
 
         /**

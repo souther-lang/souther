@@ -24,8 +24,10 @@ import souther.compiler.semantics.TakenAs;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
@@ -45,7 +47,8 @@ class ANumberOverTheElementsIsReadAsTheNumberItIsTest {
     private static final String MODEL = """
             module probe.overElements
 
-            data Shelf = { codes: List<Int>, bins: List<List<Int>> }
+            data Shelf = { codes: List<Int>, bins: List<List<Int>>, tags: List<Set<Int>>,
+                           left: Int, right: Int }
 
             behavior varied : (s: Shelf) -> Bool
             let varied (s) = List.length(List.distinct(s.codes)) >= 2
@@ -66,6 +69,17 @@ class ANumberOverTheElementsIsReadAsTheNumberItIsTest {
             let variedOfSome (items) = List.length(List.distinct(
                 List.map(.code, List.filter(i -> i.code > 0, items)))) >= 2
 
+            behavior gatheredItems : (items: List<Item>) -> Bool
+            let gatheredItems (items) =
+                Set.size(List.fold((acc, i) -> Set.insert(i.code, acc), Set.empty, items)) >= 2
+
+            behavior joined : (s: Shelf) -> Bool
+            let joined (s) =
+                Set.size(List.fold((acc, t) -> Set.union(acc, t), Set.empty, s.tags)) >= 2
+
+            behavior apart : (s: Shelf) -> Bool
+            let apart (s) = Set.size(Set.fromList([s.left, s.right])) >= 2
+
             behavior variedWorkedOut : (items: List<Item>) -> Bool
             let variedWorkedOut (items) =
                 List.length(List.distinct(List.map(i -> i.code + 1, items))) >= 2
@@ -75,6 +89,8 @@ class ANumberOverTheElementsIsReadAsTheNumberItIsTest {
     private static final TermPath CODES = TermPath.of("s").then("codes");
     private static final TermPath BINS = TermPath.of("s").then("bins");
     private static final TermPath ITEMS = TermPath.of("items");
+    private static final TermPath S = TermPath.of("s");
+    private static final TermPath TAGS = S.then("tags");
 
     @Test
     void howManyADistinctListHoldsIsHowManyDifferentValuesTheListHolds() {
@@ -93,6 +109,33 @@ class ANumberOverTheElementsIsReadAsTheNumberItIsTest {
         assertEquals(new Quantity.HowManyDifferent(new DecisionSubject.AnInput(ITEMS),
                 new DecisionSubject.AnInput(ITEMS.element().then("code"))),
                 theOnlyNumber("variedItems"));
+    }
+
+    /**
+     * A walk gathering into a set the value at a place of each element ends with as many as there
+     * are different values there; one gathering every element of a set at each holds as many as
+     * differ among all of theirs.
+     */
+    @Test
+    void whatAWalkGathersIntoASetIsHowManyDifferentValuesItGathers() {
+        assertEquals(theOnlyNumber("variedItems"), theOnlyNumber("gatheredItems"));
+        assertEquals(new Quantity.HowManyDifferent(new DecisionSubject.AnInput(TAGS),
+                new DecisionSubject.AnInput(TAGS.element().element())), theOnlyNumber("joined"));
+    }
+
+    /**
+     * Two values written out come to two where they differ and one where they do not, so holding
+     * how many there are at two is asking a row to hold the two apart — what {@code a /= b}
+     * asks.
+     */
+    @Test
+    void howManyDifferentValuesTwoPositionsWrittenOutComeToIsWhetherTheyDiffer() {
+        List<OnTheWay> stated = statedAll("apart");
+        assertEquals(1, stated.size(), () -> "one statement: " + stated);
+        RowDemand.OneValueAtBoth apart = assertInstanceOf(RowDemand.OneValueAtBoth.class,
+                assertInstanceOf(OnTheWay.TakenIn.class, stated.getFirst()).demand());
+        assertFalse(apart.same(), () -> "held apart: " + apart);
+        assertEquals(Set.of(S.then("left"), S.then("right")), Set.of(apart.one(), apart.other()));
     }
 
     @Test
