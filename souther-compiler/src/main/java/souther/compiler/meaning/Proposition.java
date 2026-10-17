@@ -1272,8 +1272,50 @@ public sealed interface Proposition {
      * on every row.
      */
     static Proposition whereItAnswers(Proposition answers, Proposition states) {
-        return answers instanceof Always(boolean everywhere) && everywhere ? states
+        if (answers instanceof Always(boolean everywhere) && everywhere) {
+            return states;
+        }
+        // Where it answers is one region however many operations it was said of.
+        return states instanceof WhereItAnswers(Proposition inner, Proposition stated, String _)
+                ? new WhereItAnswers(all(List.of(answers, inner)), stated)
                 : new WhereItAnswers(answers, states);
+    }
+
+    /**
+     * The rows {@code stated} answers on, or null where it answers on every row: where each
+     * operation a part of it is read through answers ({@link WhereItAnswers}), and past that, where
+     * the parts that do answer decide it without the ones that do not.
+     *
+     * <p>Read off what the parts state and nothing else. Which part a run works out first is not in
+     * a statement, so where that decides whether a run stops, it was said where the statement was
+     * made ({@link #afterIt}).
+     */
+    static Proposition answeredWhere(Proposition stated) {
+        if (!holdsAnAnswering(stated)) {
+            return null;
+        }
+        if (stated instanceof WhereItAnswers(Proposition answers, Proposition states, String _)) {
+            Proposition inside = answeredWhere(states);
+            return inside == null ? answers : all(List.of(answers, inside));
+        }
+        return any(List.of(stated, stated.denied()));
+    }
+
+    /** Whether some part of {@code stated} answers only where an operation does. */
+    private static boolean holdsAnAnswering(Proposition stated) {
+        return stated instanceof WhereItAnswers
+                || stated.partsHeld().stream().anyMatch(Proposition::holdsAnAnswering);
+    }
+
+    /**
+     * {@code then}, read where {@code first} answers: what a run that works {@code first} out before
+     * anything {@code then} reads comes to. Where {@code first} stops, the run stops there, whatever
+     * the rest would have decided — which is what a statement of both parts side by side cannot
+     * say, since a part that fails decides it there.
+     */
+    static Proposition afterIt(Proposition first, Proposition then) {
+        Proposition answered = answeredWhere(first);
+        return answered == null ? then : whereItAnswers(answered, then);
     }
 
     /** Some one of {@code parts} holding, the same way round. */

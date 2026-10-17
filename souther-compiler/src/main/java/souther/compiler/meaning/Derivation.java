@@ -351,11 +351,13 @@ public sealed interface Derivation {
             Proposition cond = numbering.of(condition);
             Proposition yes = numbering.of(then);
             Proposition no = numbering.of(otherwise);
+            // The condition is worked out before either arm, so where it stops the if does.
             if (yes.key().equals(no.key()) && Proposition.firstStopIn(yes) == null) {
-                return yes;
+                return Proposition.afterIt(cond, yes);
             }
-            return Proposition.any(List.of(Proposition.all(List.of(cond, yes)),
-                    Proposition.all(List.of(cond.denied(), no))));
+            return Proposition.afterIt(cond, Proposition.any(List.of(
+                    Proposition.all(List.of(cond, yes)),
+                    Proposition.all(List.of(cond.denied(), no)))));
         }
 
         @Override
@@ -753,8 +755,12 @@ public sealed interface Derivation {
 
         @Override
         public Proposition conclusion(Conclusion numbering) {
-            List<Proposition> parts = List.of(numbering.of(left), numbering.of(right));
-            return how == ConditionJoin.BOTH ? Proposition.all(parts) : Proposition.any(parts);
+            Proposition first = numbering.of(left);
+            List<Proposition> parts = List.of(first, numbering.of(right));
+            // The left half is worked out first, so where it stops the join does; the right is
+            // worked out only where the left leaves it open, which is where its own stops count.
+            return Proposition.afterIt(first,
+                    how == ConditionJoin.BOTH ? Proposition.all(parts) : Proposition.any(parts));
         }
     }
 

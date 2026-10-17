@@ -90,6 +90,7 @@ class EveryStatementReadToTheEndIsDrawnOrSaidAsTheModelsTest {
         out.put("the last element of a value",
                 "match Map.get(i.key, List.indexBy(k -> k, i.keys)) with"
                         + " | Some v -> true | None -> false");
+        out.put("where an operation answers", "10 / i.m >= 2");
         out.put("both", "i.n > 5 && i.b");
         out.put("either", "i.n > 5 || i.b");
         out.put("both, in one check", "List.length(if i.b then i.xs else []) >= 1");
@@ -109,9 +110,6 @@ class EveryStatementReadToTheEndIsDrawnOrSaidAsTheModelsTest {
         missing.removeAll(met);
         missing.remove(Proposition.OnAnApplication.class);
         missing.remove(Proposition.Carried.class);
-        // A comparison where the operation answers is read only where the comparison is itself
-        // what is read; a truth reads its comparison as a part met there, and leaves it unread.
-        missing.remove(Proposition.WhereItAnswers.class);
         assertEquals(Set.of(), missing, "a kind of statement no condition here states");
     }
 

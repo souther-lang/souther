@@ -236,6 +236,59 @@ class AComparisonOfAQuotientByAValueIsReadOnEachSignOfTheDivisorTest {
     }
 
     /**
+     * A quotient on the left of a join is worked out first, so where its divisor is nought the run
+     * stops there whatever the right half says: past a divisor held at nought, neither way of the
+     * guard is taken. Read as the two halves side by side, a right half that fails would decide
+     * the join, and the guard's failing way would be one a row is owed at.
+     */
+    @Test
+    void aQuotientWorkedOutFirstStopsTheJoinAtANoughtDivisor() {
+        String report = human(atANoughtDivisor("n / d >= 100 && c > 0"));
+        assertTrue(report.contains("measurement: complete"), report);
+        assertTrue(report.contains("no input takes 1 way through this body"), report);
+        assertTrue(report.contains("no value can reach that arm"), report);
+        assertFalse(report.contains("it goes through `else`"), report);
+    }
+
+    /**
+     * And on the right, it is worked out only where the left half leaves the join open: past a
+     * divisor held at nought, the guard fails wherever the left half does, and holds nowhere.
+     */
+    @Test
+    void aQuotientWorkedOutSecondStopsOnlyWhereItIsReached() {
+        String report = human(atANoughtDivisor("c > 0 && n / d >= 100"));
+        assertTrue(report.contains("measurement: complete"), report);
+        assertTrue(report.contains("no input takes 1 way through this body"), report);
+        assertTrue(report.contains("it goes through `else`"), report);
+    }
+
+    /** The same of a choice: its condition is worked out before either arm. */
+    @Test
+    void aQuotientAChoiceIsDecidedByStopsItAtANoughtDivisor() {
+        String report = human(atANoughtDivisor("if n / d >= 100 then c > 0 else c < 0"));
+        assertTrue(report.contains("measurement: complete"), report);
+        assertTrue(report.contains("no input takes 2 ways through this body"), report);
+    }
+
+    /** A body with a divisor held at nought, then a guard on {@code condition}. */
+    private static String atANoughtDivisor(String condition) {
+        return """
+                module demo
+
+                data Ok
+                data No
+
+                behavior f : (n: Int, d: Int, c: Int) -> Ok | No
+
+                let f (n, d, c) = {
+                    guard d == 0 else No
+                    guard %s else No
+                    Ok
+                }
+                """.formatted(condition);
+    }
+
+    /**
      * With nothing settling the divisor's sign the comparison is read all the same, on each; and
      * where the division answers is no line of it, so the divisor carries the one line its sign
      * turns at and not a second at the nought no run divides by.

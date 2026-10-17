@@ -40,7 +40,9 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Each rule concludes what its own semantics says of what its premises conclude, and the parts
@@ -89,6 +91,47 @@ class WhatADerivationConcludesIsWhatItsRuleComputesTest {
                 concluded(new Derivation.Joined(ConditionJoin.BOTH, truthAt(A), truthAt(B))));
         assertEquals(Proposition.any(List.of(truth(A), truth(B))),
                 concluded(new Derivation.Joined(ConditionJoin.EITHER, truthAt(A), truthAt(B))));
+    }
+
+    /**
+     * A part worked out first that answers only where {@code a} holds stops what it is part of
+     * wherever {@code a} fails: there neither the conclusion nor its denial holds, whatever the
+     * rest would decide. Of an if's condition, whether its arms differ or not, and of a join's left
+     * half.
+     */
+    @Test
+    void wherePartWorkedOutFirstStopsTheWholeComesOutNoWay() {
+        Derivation stopping = new Derivation.WhereItAnswers(truthAt(A), truthAt(B));
+        List<Derivation> each = List.of(
+                new Derivation.IfThenElse(stopping, truthAt(C), truthAt(S)),
+                new Derivation.IfThenElse(stopping, truthAt(C), truthAt(C)),
+                new Derivation.Joined(ConditionJoin.BOTH, stopping, truthAt(C)),
+                new Derivation.Joined(ConditionJoin.EITHER, stopping, truthAt(C)));
+        for (Derivation whole : each) {
+            Proposition stated = concluded(whole);
+            for (Proposition way : List.of(stated, stated.denied())) {
+                assertTrue(TruthTable.failsWhateverItsPartsAre(
+                        Proposition.all(List.of(way, truth(A).denied()))),
+                        () -> whole + " comes out " + way + " where it stopped");
+            }
+        }
+    }
+
+    /**
+     * The control: a join's right half is worked out only where the left leaves the join open, so
+     * where the left decides it, the join comes out that way whether the right would have stopped.
+     */
+    @Test
+    void aPartWorkedOutOnlyWhereItIsReachedStopsNothingTheRestDecides() {
+        Derivation stopping = new Derivation.WhereItAnswers(truthAt(A), truthAt(B));
+        Proposition both = concluded(new Derivation.Joined(ConditionJoin.BOTH, truthAt(C),
+                stopping));
+        assertFalse(TruthTable.failsWhateverItsPartsAre(Proposition.all(List.of(
+                both.denied(), truth(A).denied(), truth(C).denied()))), both::toString);
+        Proposition either = concluded(new Derivation.Joined(ConditionJoin.EITHER, truthAt(C),
+                stopping));
+        assertFalse(TruthTable.failsWhateverItsPartsAre(Proposition.all(List.of(
+                either, truth(A).denied(), truth(C)))), either::toString);
     }
 
     @Test
