@@ -65,6 +65,20 @@ class WhatARowStatesOfTheAnswerIsHandedOverAsAComputationTest {
 
             example lookUp
                 | "owed" : (3) -> <?>
+
+            behavior pick : (n: Int) -> Int | Missing
+
+            example pick
+                | "a number" : (1) -> 1
+                | "missing" : (2) -> Missing
+            """;
+
+    /** Rows of the same module written in a file of their own, after the module's. */
+    private static final String ATTACHED = """
+            examples for orders
+
+            example receiptOf
+                | "five" : (5) -> Receipt { total = 5 }
             """;
 
     private static CheckedRow row(CheckedProgram program, String behavior, String named) {
@@ -133,6 +147,43 @@ class WhatARowStatesOfTheAnswerIsHandedOverAsAComputationTest {
                 assertionOf(row(program, "find", "found")));
         assertEquals(new CheckedAssertion.Case(declared("Missing")),
                 assertionOf(row(program, "find", "missing")));
+    }
+
+    /**
+     * A row written in an attached file is handed the definition of its own stated value, and not
+     * one of the rows written before it in the module's source: the definitions are numbered over
+     * every row the module has, wherever it is written.
+     */
+    @Test
+    void aRowOfAnAttachedFileIsHandedWhatComputesItsOwnStatedValue() {
+        CheckedProgram program = CheckedProgram.of(List.of(MODULE, ATTACHED));
+
+        CheckedHelper inline = assertInstanceOf(CheckedAssertion.Value.class,
+                assertionOf(row(program, "receiptOf", "three"))).computing();
+        CheckedHelper attached = assertInstanceOf(CheckedAssertion.Value.class,
+                assertionOf(row(program, "receiptOf", "five"))).computing();
+
+        assertEquals(3L, totalBuiltBy(inline));
+        assertEquals(5L, totalBuiltBy(attached));
+        assertNotSame(inline, attached);
+    }
+
+    private static long totalBuiltBy(CheckedHelper computing) {
+        Core.Construct receipt = assertInstanceOf(Core.Construct.class, computing.body());
+        return assertInstanceOf(Core.Int.class, receipt.values().getFirst().value()).value();
+    }
+
+    /**
+     * Where the answer is a union with a scalar among its members, a row stating a case is handed the
+     * case, and one stating a number the value.
+     */
+    @Test
+    void aUnionWithAScalarHandsOverACaseAsACaseAndANumberAsAValue() {
+        CheckedProgram program = CheckedProgram.of(List.of(MODULE));
+
+        assertEquals(new CheckedAssertion.Case(declared("Missing")),
+                assertionOf(row(program, "pick", "missing")));
+        assertInstanceOf(CheckedAssertion.Value.class, assertionOf(row(program, "pick", "a number")));
     }
 
     /** A row that needs something stood in for states its answer the same way. */

@@ -279,7 +279,7 @@ public final class ExampleVerifier {
         // one stopping with nothing said would otherwise carry a phase and nothing that says why.
         whyNothingWasHandedOver(target, row.pos()).ifPresent(said::add);
         List<RowOutcome> outcomes = new ArrayList<>();
-        checkRow(target, sig, outCases(sig.outputType()), row, said, outcomes);
+        checkRow(target, sig, row, said, outcomes);
         if (outcomes.size() != 1) {
             throw new IllegalStateException("a row was run and " + outcomes.size()
                     + " outcomes were recorded");
@@ -871,9 +871,8 @@ public final class ExampleVerifier {
         if (sig == null) {
             throw new IllegalStateException("`" + target.name() + "` is evaluable but has no signature");
         }
-        Set<TypeSymbol> outCases = outCases(sig.outputType());
         for (Hir.ExampleRow row : ex.rows()) {
-            checkRow(target, sig, outCases, row, out, rows);
+            checkRow(target, sig, row, out, rows);
         }
     }
 
@@ -1255,17 +1254,14 @@ public final class ExampleVerifier {
         private final ExampleVerifier verifier;
         private final ExampleTarget target;
         private final Sig sig;
-        private final Set<TypeSymbol> outCases;
         private final Hir.ExampleRow row;
         private final Map<Integer, Integer> replacing;
 
-        ReplacedWork(ExampleVerifier verifier, ExampleTarget target, Sig sig,
-                     Set<TypeSymbol> outCases, Hir.ExampleRow row,
+        ReplacedWork(ExampleVerifier verifier, ExampleTarget target, Sig sig, Hir.ExampleRow row,
                      Map<Integer, Integer> replacing) {
             this.verifier = verifier;
             this.target = target;
             this.sig = sig;
-            this.outCases = outCases;
             this.row = row;
             this.replacing = replacing;
         }
@@ -1283,7 +1279,7 @@ public final class ExampleVerifier {
             EvaluationContext.begin(verifier.policy.stepLimit(),
                     verifier.policy.recursionDepthLimit());
             try {
-                verifier.checkRowNow(verifier.newFixtureReader(), target, sig, outCases, row,
+                verifier.checkRowNow(verifier.newFixtureReader(), target, sig, row,
                         new ArrayList<>(), state);
             } finally {
                 EvaluationContext.end();
@@ -1315,17 +1311,14 @@ public final class ExampleVerifier {
         private final FixtureReader fixtures;
         private final ExampleTarget target;
         private final Sig sig;
-        private final Set<TypeSymbol> outCases;
         private final Hir.ExampleRow row;
         private final RowState state = new RowState();
 
-        RowWork(ExampleVerifier of, ExampleTarget target, Sig sig,
-                      Set<TypeSymbol> outCases, Hir.ExampleRow row) {
+        RowWork(ExampleVerifier of, ExampleTarget target, Sig sig, Hir.ExampleRow row) {
             this.verifier = of;
             this.fixtures = of.newFixtureReader();
             this.target = target;
             this.sig = sig;
-            this.outCases = outCases;
             this.row = row;
         }
 
@@ -1351,7 +1344,7 @@ public final class ExampleVerifier {
             EvaluationContext.begin(verifier.policy.stepLimit(),
                     verifier.policy.recursionDepthLimit());
             try {
-                verifier.checkRowNow(fixtures, target, sig, outCases, row, mine, state);
+                verifier.checkRowNow(fixtures, target, sig, row, mine, state);
                 if (verifier.probes instanceof ProbeImage.Instrumented) {
                     state.recorded = new RunRecord.Recorded(Probe.snapshot());
                 }
@@ -1554,8 +1547,8 @@ public final class ExampleVerifier {
      * rewrite of every arm the row went through has a run in this list, so a reader never has to
      * read anything off one being missing.
      */
-    private List<ReplacedRun> replacedRuns(ExampleTarget target, Sig sig, Set<TypeSymbol> outCases,
-                                           Hir.ExampleRow row, RowState state) {
+    private List<ReplacedRun> replacedRuns(ExampleTarget target, Sig sig, Hir.ExampleRow row,
+                                           RowState state) {
         if (!(probes instanceof ProbeImage.Instrumented(var _, ArmReplacements replacements))
                 || !(state.recorded instanceof RunRecord.Recorded(Observation seen))) {
             return List.of();
@@ -1564,7 +1557,7 @@ public final class ExampleVerifier {
         boolean givenUp = false;
         for (ArmReplacements.Rewrite each : replacements.through(seen.arms())) {
             Optional<ReplacedRun> ran = givenUp ? Optional.empty()
-                    : replacedRun(target, sig, outCases, row, state.reached, state.disposition,
+                    : replacedRun(target, sig, row, state.reached, state.disposition,
                             each.fork(), each.part(), each.with(), each.replacing());
             givenUp = ran.isEmpty();
             out.add(ran.orElseGet(() -> ranOut(each.fork(), each.part(), each.with(),
@@ -1582,12 +1575,11 @@ public final class ExampleVerifier {
      * differing only past what that keeps would be cut short at the same place, and nothing could
      * be said of either; read inside a run, the reading would be counted against it.
      */
-    private Optional<ReplacedRun> replacedRun(ExampleTarget target, Sig sig,
-                                              Set<TypeSymbol> outCases, Hir.ExampleRow row,
+    private Optional<ReplacedRun> replacedRun(ExampleTarget target, Sig sig, Hir.ExampleRow row,
                                               Reached written, Disposition asWritten,
                                               SourceConstructOrigin fork, int part, int with,
                                               Map<Integer, Integer> replacing) {
-        ReplacedWork work = new ReplacedWork(this, target, sig, outCases, row, replacing);
+        ReplacedWork work = new ReplacedWork(this, target, sig, row, replacing);
         return switch (deadline.given(
                 new Deadline.Work.Replaced(target.name(), row.pos(), row.identity()), work)) {
             case Deadline.Outcome.Finished(RowState state) -> {
@@ -1695,16 +1687,16 @@ public final class ExampleVerifier {
      * time by applying more helpers (ADR-0077). Only this thread adds to {@code out} — see
      * {@link RowEvaluation} for why the row's own worker must not.
      */
-    private void checkRow(ExampleTarget target, Sig sig, Set<TypeSymbol> outCases, Hir.ExampleRow row,
+    private void checkRow(ExampleTarget target, Sig sig, Hir.ExampleRow row,
                           List<Diagnostic> out, List<RowOutcome> rows) {
-        RowWork evaluation = new RowWork(this, target, sig, outCases, row);
+        RowWork evaluation = new RowWork(this, target, sig, row);
         switch (deadline.given(
                 new Deadline.Work.WholeRow(target.name(), row.pos(), row.identity()),
                 evaluation)) {
             case Deadline.Outcome.Finished(List<Diagnostic> found) -> {
                 out.addAll(found);
                 rows.add(outcomeOf(target, row, evaluation.state,
-                        replacedRuns(target, sig, outCases, row, evaluation.state)));
+                        replacedRuns(target, sig, row, evaluation.state)));
             }
             case Deadline.Outcome.Overran(Runnable abandon) -> {
                 // Only what the worker publishes: the rest of its state is still being written. How
@@ -1851,8 +1843,7 @@ public final class ExampleVerifier {
     }
 
     private void checkRowNow(FixtureReader fixtures, ExampleTarget target, Sig sig,
-                             Set<TypeSymbol> outCases, Hir.ExampleRow row, List<Diagnostic> out,
-                             RowState state) {
+                             Hir.ExampleRow row, List<Diagnostic> out, RowState state) {
         List<BoundaryInput> ins = sig.ins();
         if (row.inputs().size() != ins.size()) {
             out.add(Diagnostic.at(row.pos())
@@ -1892,18 +1883,18 @@ public final class ExampleVerifier {
                 // name a case. Only where that answers is there an arm to hold against the target's: a
                 // helper answers with a case nothing here can read off the text, and reporting that as
                 // an arm the target cannot produce refused a row whose expectation was right.
+                //
+                // Asked of every row and of whatever the answer's type is. A case is one an answer
+                // can be by the reading a value at the position is admitted by, so a number or a
+                // list, which is made of no case, is no case a row can name — and a row naming one
+                // there is told so here, before its expectation is built or anything is applied.
                 TypeSymbol named = fixtures.constructedCase(answer);
                 state.expectedArm = named;
-                if (named != null && !outCases.isEmpty() && !outCases.contains(named)) {
+                if (named != null && !fixtures.holdsACaseOf(named, sig.outputType())) {
                     String expectedArm = fixtures.expectedArm(answer);
-                    List<String> names = new ArrayList<>();
-                    for (TypeSymbol c : outCases) {
-                        names.add(c.name());
-                    }
-                    out.add(Diagnostic.at(row.pos())
+                    out.add(withTheCasesOf(sig.outputType(), Diagnostic.at(row.pos())
                             .say(new ExampleMessage.NotOneOfTheResultCases(
-                                    expectedArm != null ? expectedArm : named.name(), target.name()))
-                            .hint(new ExampleMessage.TheResultCasesAre(String.join(", ", names)))
+                                    expectedArm != null ? expectedArm : named.name(), target.name())))
                             .build());
                     state.failed(FailurePhase.EXPECTED_FIXTURE);
                     return;
@@ -1985,17 +1976,19 @@ public final class ExampleVerifier {
                 // A fake is not it — a fake stands in for a dependency while some *other* behavior's
                 // row runs, and this row is about this behavior.
                 //
-                // Except where what the row states is not something the behavior can answer with: no
-                // implementation holds that row, which is what a run of one compares its way to.
-                // Waiting would hand it to whatever runs the implementation later, outside this
+                // Except where the value the row states is not a value of what the behavior answers
+                // with: no implementation holds that row, which is what a run of one compares its way
+                // to. Waiting would hand it to whatever runs the implementation later, outside this
                 // compile, to find out there. A row that is applied finds it out by the comparison,
-                // which says where the two part and what was answered there.
-                if (stated instanceof Expectation.Asserts asserts
-                        && !answerable(fixtures, asserts, statedValue, sig.outputType())) {
+                // which says where the two part and what was answered there. A case no answer can be
+                // was refused for every row above, where the arm the row names is read.
+                if (statedValue != null && !fixtures.holds(
+                        projected(statedValue.live(), sig.outputType()), sig.outputType())) {
                     out.add(Diagnostic.at(row.expected().pos())
                             .say(new ExampleMessage.TheRowDoesNotHold())
                             .hint(new ExampleMessage.NoAnswerIsWhatTheRowStates(
-                                    fixtures.typeShown(asserts), Type.show(sig.outputType())))
+                                    fixtures.typeShown(statedValue.asserted()),
+                                    Type.show(sig.outputType())))
                             .build());
                     state.failed(FailurePhase.EXPECTED_FIXTURE);
                     return;
@@ -2127,25 +2120,6 @@ public final class ExampleVerifier {
             EvaluationContext.rethrowIfOverspent(e);
             return null;
         }
-    }
-
-    /**
-     * Whether some answer at {@code answers} can keep what the row states: the value it states is a
-     * value of that type, or the case it states is one a value of that type can be.
-     *
-     * <p>Both grains, because a row is compared at the grain it states and either can name what no
-     * answer is, and both by the one reading of what stands at a position that a stand-in is
-     * admitted by. A case is asked of the cases the answer's type is made of rather than of the
-     * cases it is said to answer with as a result, which a type that is not a union of declared
-     * cases has none of — and a case named there is still none a value of it can be.
-     */
-    private boolean answerable(FixtureReader fixtures, Expectation.Asserts stated,
-                               FixtureReader.ExpectedValue statedValue, Type answers) {
-        return switch (stated) {
-            case Expectation.TheValue _ ->
-                    fixtures.holds(projected(statedValue.live(), answers), answers);
-            case Expectation.TheCase(TypeSymbol name) -> fixtures.holdsACaseOf(name, answers);
-        };
     }
 
     /**
@@ -2640,8 +2614,21 @@ public final class ExampleVerifier {
         return b.build();
     }
 
-    private Set<TypeSymbol> outCases(Type out) {
-        return TypeOps.outputCases(out, kinds, sums);
+    /**
+     * {@code said}, told which cases a row could have named: the cases {@code out} is made of, or
+     * that it is made of none — a number or a list is not a case list, and an empty one written out
+     * would say nothing.
+     */
+    private Diagnostic.Builder withTheCasesOf(Type out, Diagnostic.Builder said) {
+        Set<TypeSymbol> cases = TypeOps.outputCases(out, kinds, sums);
+        if (cases.isEmpty()) {
+            return said.hint(new ExampleMessage.ItAnswersWithNoCase(Type.show(out)));
+        }
+        List<String> names = new ArrayList<>();
+        for (TypeSymbol c : cases) {
+            names.add(c.name());
+        }
+        return said.hint(new ExampleMessage.TheResultCasesAre(String.join(", ", names)));
     }
 
     // --- what a row hands over, and what it makes of a failure ---------------------------------

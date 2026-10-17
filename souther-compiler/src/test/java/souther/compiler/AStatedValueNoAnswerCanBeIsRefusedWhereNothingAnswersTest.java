@@ -42,6 +42,9 @@ class AStatedValueNoAnswerCanBeIsRefusedWhereNothingAnswersTest {
 
             behavior groupsDefined : (n: Int) -> List<List<Int>>
             let groupsDefined (n) = []
+
+            behavior groupOfOne : (n: Int) -> List<List<Int>>
+            let groupOfOne (n) = [[n]]
             """;
 
     private static Diagnostic refused(String rows) {
@@ -88,6 +91,18 @@ class AStatedValueNoAnswerCanBeIsRefusedWhereNothingAnswersTest {
                 """);
     }
 
+    /** A behavior with a body is told the same by the comparison, which says where the two part. */
+    @Test
+    void aBehaviorWithABodyFindsTheSameByTheComparison() {
+        Diagnostic d = refused("""
+                example groupOfOne
+                    | "a set inside" : (1) -> [Set.fromList([1])]
+                """);
+        assertTrue(d.notes().stream().anyMatch(note ->
+                        note.said() instanceof ExampleMessage.TheTwoAreOfDifferentTypes),
+                "told by the comparison: " + d.notes());
+    }
+
     /**
      * A list holding nothing is the list the behavior can answer with, whatever its elements would
      * have been — and a body answering with an empty list holds the same row, which is what keeps the
@@ -104,26 +119,6 @@ class AStatedValueNoAnswerCanBeIsRefusedWhereNothingAnswersTest {
                 """);
     }
 
-    /**
-     * A case and nothing under it, where the answer is not made of cases: a number or a list has none
-     * a row can name, so no value of it is that case.
-     */
-    @Test
-    void aCaseStatedWhereANumberIsAnsweredIsRefused() {
-        saysNoAnswerIs(refused("""
-                example counted
-                    | "found" : (1) -> Found
-                """), "Found", "Int");
-    }
-
-    @Test
-    void aCaseStatedWhereAListIsAnsweredIsRefused() {
-        saysNoAnswerIs(refused("""
-                example labels
-                    | "found" : (1) -> Found
-                """), "Found", "List<Int>");
-    }
-
     /** A value an answer can be waits for one, a list as much as a case of the answer's sum. */
     @Test
     void aValueAnAnswerCanBeIsNotRefused() {
@@ -133,8 +128,6 @@ class AStatedValueNoAnswerCanBeIsRefusedWhereNothingAnswersTest {
 
                 example find
                     | "found" : (1) -> Found { v = 1 }
-                    | "a found" : (2) -> Found
-                    | "missing" : (3) -> Missing
                 """);
     }
 }

@@ -45,6 +45,9 @@ public sealed interface ExampleMessage extends Message {
     /** Which cases it does answer with. */
     record TheResultCasesAre(String cases) implements ExampleMessage, Supporting {}
 
+    /** That what it answers with is made of no case a row can name. */
+    record ItAnswersWithNoCase(String answers) implements ExampleMessage, Supporting {}
+
     /** The row does not hold. */
     @Code(DiagnosticCode.E1905)
     record TheRowDoesNotHold() implements ExampleMessage, Reported {}
