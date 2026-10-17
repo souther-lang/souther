@@ -422,29 +422,51 @@ final class Pullback {
      * Whether what a written comparison states was carried past it to the input — so that what it
      * states is the parts it was carried to, and not a rule the comparison draws of its own.
      *
-     * <p>Only an emptiness check is carried anywhere: any other comparison is the relation it
-     * states. And one is carried past only where the container it asks about is no position of its
-     * own and every part it was carried to was read — one that stopped on the way is a rule about a
-     * value made from the input, which the comparison still is.
+     * <p>Only a comparison read as one that leaves no relation of its own is carried anywhere: an
+     * emptiness check, or counts held against nought, which is whether some element of one of them
+     * meets what it counts. Any other comparison is the relation it states, through whatever
+     * comparisons chose the values it compares. Which reading it was is what was read, however
+     * the counts reached it: {@code c + d >= 1} with {@code c} and {@code d} named counts is one.
      *
-     * <p>And not where what it states is relations — beside what a row answers of its own values,
-     * if anything — some of which nothing else written there states. Those are lines, and the
-     * check draws them: {@code List.isEmpty(List.take(n, xs))}
-     * holds where {@code n} is below one or {@code xs} is empty, and neither is a comparison
-     * anybody wrote. Relations every one of which was read off a comparison written inside it are
-     * that comparison's lines, as {@code List.isEmpty(List.filter(x -> x > 5, [a, b]))} is the
+     * <p>Carried past where every part it was carried to was read — one that stopped on the way is
+     * a rule about a value made from the input, which the comparison still is — and what it states
+     * is relations every one of which was read off another comparison: those are that
+     * comparison's lines, as {@code List.isEmpty(List.filter(x -> x > 5, [a, b]))} is the
      * closure's on each value.
      *
-     * @param check the node the check is written as
+     * <p>And not where some of the relations it states nothing else written there states. Those
+     * are lines, and the comparison draws them: {@code List.isEmpty(List.take(n, xs))} holds where
+     * {@code n} is below one or {@code xs} is empty, and neither is a comparison anybody wrote.
+     * Turning on no part, what it states is stated by nothing else either.
+     *
+     * <p>An emptiness check is carried past what is no relation at all, the cases and values a
+     * container holds where it holds anything: what it asks about is that container, which the
+     * operation it was carried through answers. No other comparison is: {@code #xs + #ys >= 0}
+     * holds on every row as {@code #xs >= 0} does, which is a rule of the comparison's that cuts
+     * nothing.
+     *
+     * @param check  the node the check is written as
+     * @param stated what the comparison was read to state
      */
-    static boolean carriesPast(StatedComparison comparison, Core check, InputReads reads,
-                               InputReading read) {
-        return mayBeCarriedPast(comparison)
-                && carriesPast(ofAComparison(comparison, reads, read, Optional.empty()), check);
+    static boolean carriesPast(Core check, Pulled stated) {
+        Derivation reading = readingUnderTheEntries(stated.meaning().how());
+        boolean emptiness = reading instanceof Derivation.AnEmptinessCheck;
+        return (emptiness || (reading instanceof Derivation.AComparisonRead read
+                        && Proposition.comesToWhetherAnyMeets(read.relation())))
+                && carriesPast(stated, check, emptiness);
     }
 
-    /** The same, of what an emptiness check written as {@code check} was read to state. */
-    static boolean carriesPast(Pulled read, Core check) {
+    /** The reading a comparison was read by, under the entries of lookups it was read through. */
+    private static Derivation readingUnderTheEntries(Derivation how) {
+        return how instanceof Derivation.OfTheEntryUnderTheKey(var _, var about)
+                ? readingUnderTheEntries(about) : how;
+    }
+
+    /**
+     * The same, of what a comparison written as {@code check} was read to state, read as an
+     * emptiness check where {@code emptiness}.
+     */
+    private static boolean carriesPast(Pulled read, Core check, boolean emptiness) {
         // Unread anywhere in what is stated, and not among the parts it turns on: a part nothing
         // read that is the same on every run turns on nothing, and is still not read.
         Proposition stated = read.proposition();
@@ -452,40 +474,32 @@ final class Pullback {
             return false;
         }
         // Values of the input stood against one another are a relation the check itself states,
-        // unless something written inside it states it: a call answering a truth reads its own
+        // unless something else written states it: a call answering a truth reads its own
         // relation, and the operation an emptiness check was carried through answers a set.
         if (Cutting.valuesItRelates(stated) != null) {
             return read.turnsOn().stream()
                     .allMatch(leaf -> aTruthStatedWhereItIsWritten(leaf.from().value(), check));
         }
-        return (!Cutting.onlyRelations(stated) && !Cutting.drawsLines(stated))
-                || read.turnsOn().stream()
-                        .allMatch(leaf -> aComparisonWrittenInside(leaf.from().value(), check));
+        return (emptiness && !Cutting.onlyRelations(stated) && !Cutting.drawsLines(stated))
+                || (!read.turnsOn().isEmpty() && read.turnsOn().stream()
+                        .allMatch(leaf -> anotherComparison(leaf.from().value(), check)));
     }
 
-    /** Whether {@code from} is a comparison or a call answering a truth, written inside
-     *  {@code check}, which states its own relation. */
+    /** Whether {@code from} is a comparison or a call answering a truth other than {@code check},
+     *  which states its own relation. */
     private static boolean aTruthStatedWhereItIsWritten(Core from, Core check) {
         Core node = Core.withoutStanding(from);
-        return aComparisonWrittenInside(from, check)
+        return anotherComparison(from, check)
                 || (node != Core.withoutStanding(check) && node instanceof Core.PreservedCall call
                         && Type.BOOL.equals(call.type()));
     }
 
-    /** Whether {@code from} is a comparison written inside {@code check}, which draws its own
+    /** Whether {@code from} is a comparison other than {@code check}, which draws its own
      *  lines. */
-    private static boolean aComparisonWrittenInside(Core from, Core check) {
+    private static boolean anotherComparison(Core from, Core check) {
         Core node = Core.withoutStanding(from);
         return node != Core.withoutStanding(check) && node instanceof Core.Binary
                 && BooleanMeaning.asAComparison(node).isPresent();
-    }
-
-    /**
-     * Whether {@code comparison} is one {@link #carriesPast} can answer yes for, which is a question
-     * about its shape alone: only an emptiness check is carried anywhere.
-     */
-    static boolean mayBeCarriedPast(StatedComparison comparison) {
-        return AnEmptinessCheck.checked(comparison) != null;
     }
 
     /**

@@ -10,6 +10,7 @@ import souther.compiler.types.ModelOccurrence;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.SortedMap;
 import java.util.TreeMap;
@@ -182,9 +183,9 @@ public sealed interface Proposition {
             if (relation == null) {
                 throw new IllegalArgumentException("a comparison states some relation");
             }
-            if (ofACount(relation) != null) {
-                throw new IllegalArgumentException("a count held against nought is whether some"
-                        + " element meets what is counted, and is written as that: " + relation);
+            if (ofCounts(relation) != null) {
+                throw new IllegalArgumentException("counts held against nought are whether some"
+                        + " element meets what is counted, and are written as that: " + relation);
             }
             key = (holds ? "" : "!") + relation;
         }
@@ -815,7 +816,7 @@ public sealed interface Proposition {
 
     /**
      * {@code relation} held or failing as {@code holds}, written as what it comes to where it holds
-     * a count of elements against nought ({@link #ofACount}), or a count of statements about values
+     * counts of elements against nought ({@link #ofCounts}), or a count of statements about values
      * written out as which of them hold ({@link WhichOfThemHold}).
      *
      * <p>For a relation that is no count of statements: how many choices one of those is written
@@ -837,7 +838,7 @@ public sealed interface Proposition {
      * {@code most} choices of which of them hold.
      */
     static Proposition compared(Relation relation, boolean holds, long most) {
-        Proposition counted = ofACount(relation);
+        Proposition counted = ofCounts(relation);
         if (counted == null) {
             WhichOfThemHold choosing = WhichOfThemHold.of(relation);
             if (choosing != null) {
@@ -864,8 +865,9 @@ public sealed interface Proposition {
     }
 
     /**
-     * What a relation over one count of elements meeting something says, where that is whether
-     * some element meets it, or the same whatever is counted — or null where it says how many.
+     * What a relation over counts of elements meeting something, each weighed above nought, says,
+     * where that is whether some element of one of them meets what it counts, or the same whatever
+     * is counted — or null where it says how many.
      *
      * <p>A count is never fewer than none and comes to none exactly where no element meets what is
      * counted. So {@code count >= 1}, {@code count > 0} and {@code count /= 0} are some element
@@ -873,33 +875,74 @@ public sealed interface Proposition {
      * every row: one statement each, made one proposition whichever was written, and the same one
      * the element that witnesses a filter's answer holding something is read as. A relation that
      * says how many beyond that — exactly one, two or more — is kept as the relation.
+     *
+     * <p>A sum of counts weighed above nought is above nought exactly where one of them is, and is
+     * then at least the least weight. So it held at or past nought and no further than that weight
+     * is some element of one of them meeting what it counts — {@code #xs + #ys >= 1} is one of xs
+     * or one of ys — and held to nought is none of them doing so. A weight below nought would let
+     * one count make up for another, and the relation is kept.
      */
-    private static Proposition ofACount(Relation relation) {
+    private static Proposition ofCounts(Relation relation) {
         if (!(relation instanceof Relation.Affine(LinearForm<Quantity> form, Rel rel))
-                || form.coefs().size() != 1
-                || !(form.coefs().keySet().iterator().next()
-                        instanceof Quantity.HowManyMeet(DecisionSubject container, Proposition each))) {
+                || form.coefs().isEmpty()) {
             return null;
         }
-        // a·count + k rel 0 with a positive, as a relation is written: count rel t.
-        ExactRatio by = form.coefs().values().iterator().next();
-        ExactAnswer<ExactRatio> at = form.constant().negated().dividedBy(by);
+        ExactRatio least = null;
+        for (Map.Entry<Quantity, ExactRatio> each : form.coefs().entrySet()) {
+            if (!(each.getKey() instanceof Quantity.HowManyMeet) || each.getValue().signum() <= 0) {
+                return null;
+            }
+            least = least == null || each.getValue().compareTo(least) < 0 ? each.getValue() : least;
+        }
+        // Σ a·count + k rel 0 with every a positive, in steps of the least a: Σ (a/least)·count
+        // rel t, which is nought or one step and more wherever it is above nought.
+        ExactAnswer<ExactRatio> at = form.constant().negated().dividedBy(least);
         if (!(at instanceof ExactAnswer.Held<ExactRatio>(ExactRatio t))) {
             return null;
         }
-        Proposition some = new Some(container, each, true);
         int againstNought = t.signum();
         boolean atMostOne = t.compareTo(ExactRatio.ONE) <= 0;
         boolean belowOne = t.compareTo(ExactRatio.ONE) < 0;
         return switch (rel) {
-            case GE -> againstNought <= 0 ? new Always(true) : atMostOne ? some : null;
+            case GE -> againstNought <= 0 ? new Always(true) : atMostOne ? someMeets(form) : null;
             case GT -> againstNought < 0 ? new Always(true)
-                    : belowOne ? some : null;
-            case EQ -> againstNought < 0 || !t.isWhole() ? new Always(false)
-                    : againstNought == 0 ? some.denied() : null;
+                    : belowOne ? someMeets(form) : null;
+            case EQ -> againstNought < 0 || (!t.isWhole() && inWholeSteps(form, least))
+                    ? new Always(false)
+                    : againstNought == 0 ? someMeets(form).denied() : null;
             case LE, LT, NE -> throw new IllegalStateException(
                     "a relation is written under the canonical one of it and its denial");
         };
+    }
+
+    /**
+     * Whether {@code relation} is counts held against nought, which is written as whether some
+     * element of one of them meets what it counts, or the same whatever is counted ({@link
+     * #ofCounts}) — so that no relation of its own is left.
+     */
+    public static boolean comesToWhetherAnyMeets(Relation relation) {
+        return ofCounts(relation) != null;
+    }
+
+    /** Some element of one of the containers {@code counts} counts meeting what it counts. */
+    private static Proposition someMeets(LinearForm<Quantity> counts) {
+        List<Proposition> meeting = new ArrayList<>(counts.coefs().size());
+        for (Quantity count : counts.coefs().keySet()) {
+            if (count instanceof Quantity.HowManyMeet meets) {
+                meeting.add(meets.someMeets());
+            }
+        }
+        return any(meeting);
+    }
+
+    /**
+     * Whether every weight {@code counts} has is a whole number of {@code step}s, so that the sum
+     * comes only to whole steps: two of each, held equal to three, is never.
+     */
+    private static boolean inWholeSteps(LinearForm<Quantity> counts, ExactRatio step) {
+        return counts.coefs().values().stream().allMatch(weight ->
+                weight.dividedBy(step) instanceof ExactAnswer.Held<ExactRatio>(ExactRatio steps)
+                        && steps.isWhole());
     }
 
     /**
