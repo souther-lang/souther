@@ -295,14 +295,18 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     private Set<FilingCoordinate> undividedAlong(List<Takes> sources, SearchRegion region,
                                                  List<OnAWay> conditions, boolean heldWhole) {
         List<WhatARelationLeavesUndivided.Term<FilingCoordinate>> terms = new ArrayList<>();
+        // What the way states of each side, asked once and read by both readings.
+        List<List<OnAWay>> stating = new ArrayList<>();
         for (int i = 0; i < sides.size(); i++) {
             Side each = sides.get(i);
+            stating.add(each.term() == null || !heldWhole ? List.of()
+                    : statingAnythingOf(each.term(), conditions));
             NumericDomain.Bounds holds = each.term() != null
                     && region.projectionOf(each.term())
                     instanceof NumericDomain.FormProjection.Within(NumericDomain.Bounds within)
                     ? within : NumericDomain.Bounds.OPEN;
             Way way = each.term() == null || !heldWhole ? Way.TIES
-                    : wayOf(each.term(), conditions);
+                    : wayOf(each.term(), stating.get(i));
             Takes source = way == Way.TIES ? null : sources.get(i);
             NumericDomain.Bounds realizes = source == null ? null
                     : realized(each.term(), source, region, way);
@@ -316,13 +320,15 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         // taken to reach at all; nothing else needs saying of a pair.
         out.addAll(WhatARelationLeavesUndivided.of(terms, constant, relation,
                 UndividedByARelation::overlap, (one, other) -> true));
-        out.addAll(undividedByTheDifference(sources, conditions, heldWhole));
+        if (!out.containsAll(places())) {
+            out.addAll(undividedByTheDifference(sources, stating, heldWhole));
+        }
         return out;
     }
 
     /**
-     * The places shown undivided because the relation, and everything a way stating
-     * {@code conditions} holds of its two sides, is about how far apart the two are
+     * The places shown undivided because the relation, and everything a way states of its two
+     * sides — {@code stating}, side by side — is about how far apart the two are
      * ({@link WhatARelationLeavesUndivided#ofTheirDifference}).
      *
      * <p>Each side is the value at a position the declarations leave every value of its type, so
@@ -332,7 +338,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * since it may keep a side from values of its own.
      */
     private Set<FilingCoordinate> undividedByTheDifference(List<Takes> sources,
-                                                         List<OnAWay> conditions,
+                                                         List<List<OnAWay>> stating,
                                                          boolean heldWhole) {
         if (!heldWhole || sides.size() != 2) {
             return Set.of();
@@ -348,12 +354,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             terms.add(new WhatARelationLeavesUndivided.Term<>(each.madeOf(), each.weight(),
                     NumericDomain.Bounds.OPEN, NumericDomain.Bounds.OPEN, source, true));
         }
+        // A statement about both sides is in each side's list; it is one statement.
+        Set<OnAWay> aboutEither = new LinkedHashSet<>(stating.get(0));
+        aboutEither.addAll(stating.get(1));
         List<WhatARelationLeavesUndivided.OnTheDifference> held = new ArrayList<>();
-        for (OnAWay each : conditions) {
-            if (!statesAnythingOf(sides.get(0).term(), each)
-                    && !statesAnythingOf(sides.get(1).term(), each)) {
-                continue;
-            }
+        for (OnAWay each : aboutEither) {
             WhatARelationLeavesUndivided.OnTheDifference statement = each.affine() == null ? null
                     : onTheDifference(each.affine().form(), each.affine().rel());
             if (statement == null) {
@@ -365,11 +370,21 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 UndividedByARelation::overlap);
     }
 
-    /** Whether {@code condition} states anything of the values {@code term} takes, as
-     *  {@link #wayOf} asks it. */
-    private static boolean statesAnythingOf(NumericTerm.FromOnePosition term, OnAWay condition) {
-        return touches(term, condition.positions())
-                && !(condition.whatStands() && onlyAround(term, condition.positions()));
+    /**
+     * Those of {@code conditions} that state anything of the values {@code term} takes. What
+     * stands at a value around the term says nothing of the values the term takes, so a statement
+     * of only that is left out.
+     */
+    private static List<OnAWay> statingAnythingOf(NumericTerm.FromOnePosition term,
+                                                  List<OnAWay> conditions) {
+        List<OnAWay> out = new ArrayList<>();
+        for (OnAWay each : conditions) {
+            if (touches(term, each.positions())
+                    && !(each.whatStands() && onlyAround(term, each.positions()))) {
+                out.add(each);
+            }
+        }
+        return out;
     }
 
     /**
@@ -404,15 +419,12 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         TIES
     }
 
-    private static Way wayOf(NumericTerm.FromOnePosition term, List<OnAWay> conditions) {
+    /** What a way does to {@code term}, {@code stating} being what it states of the term
+     *  ({@link #statingAnythingOf}). */
+    private static Way wayOf(NumericTerm.FromOnePosition term, List<OnAWay> stating) {
         Way out = Way.UNTOUCHED;
-        for (OnAWay each : conditions) {
-            // What stands at a value around the term says nothing of the values the term takes;
-            // which case the term's own value is takes values out of its order, which narrows it.
-            if (!touches(term, each.positions())
-                    || (each.whatStands() && onlyAround(term, each.positions()))) {
-                continue;
-            }
+        for (OnAWay each : stating) {
+            // Which case the term's own value is takes values out of its order, which narrows it.
             if (!each.whatStands() && !term.equals(each.runOf())) {
                 return Way.TIES;
             }
