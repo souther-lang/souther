@@ -5218,8 +5218,40 @@ final class Pullback {
         if (shifted == null || !isAPositionsOwnRemainder(shifted.remainder(), shifted.at())) {
             return null;
         }
-        return theStatementStands(shifted.statement(), shifted.remainder(), at, fixed,
-                shifted.at());
+        return switch (shifted) {
+            case RemainderOfAShiftedValue.Read.AgainstANumber<InputReads> number ->
+                    theStatementStands(number.statement(), number.remainder(), at, fixed,
+                            number.at());
+            case RemainderOfAShiftedValue.Read.AgainstAValue<InputReads> value ->
+                    onEachStretch(value, at, fixed);
+        };
+    }
+
+    /**
+     * A comparison of a moved remainder against another value, as the stretch of the place's
+     * remainder a run is on and the comparison there: the place's remainder moved by a number,
+     * against the value. One stretch or the other.
+     */
+    private Derivation onEachStretch(RemainderOfAShiftedValue.Read.AgainstAValue<InputReads> value,
+                                     Denotation at, boolean fixed) {
+        Core.PreservedCall remainder = value.remainder();
+        Derivation out = null;
+        for (RemainderOfAShiftedValue.Stretch stretch : value.stretches()) {
+            Core by = new Core.Int(stretch.by().longValue(), Type.INT, remainder.pos());
+            Core moved = stretch.negated()
+                    ? new Core.Binary(BinOp.SUB, by, remainder, Core.BinaryReading.AS_THEY_STAND,
+                            ConstructOccurrence.unwritten(), Type.INT, remainder.pos())
+                    : stretch.by().signum() == 0 ? remainder
+                    : new Core.Binary(BinOp.ADD, remainder, by, Core.BinaryReading.AS_THEY_STAND,
+                            ConstructOccurrence.unwritten(), Type.INT, remainder.pos());
+            Derivation here = new Derivation.Joined(ConditionJoin.BOTH,
+                    theStatementStands(stretch.within(), remainder, at, fixed, value.at()),
+                    comparison(new StatedComparison(ComparisonClaim.stating(value.written()),
+                            moved, value.other(), Core.BinaryReading.AS_THEY_STAND), at, fixed,
+                            value.at()));
+            out = out == null ? here : new Derivation.Joined(ConditionJoin.EITHER, out, here);
+        }
+        return out;
     }
 
     /**

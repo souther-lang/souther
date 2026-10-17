@@ -135,10 +135,11 @@ final class Terms {
     private final GuaranteeWalk walk;
 
     private final Map<TypeSymbol, java.util.Optional<Type>> affineScalarBases = new HashMap<>();
-    /** How the values of each atom this has named are spaced. Kept here because this is where an
-     * atom's name is made: the key and the kind of number behind it are decided in one step, and
-     * anywhere else would be a second place that has to agree about which is which. */
-    private final Map<FactSubject, Granularity> atomKinds = new HashMap<>();
+    /** The order each atom this has named is counted on, which is where how its values are spaced
+     * is read from. Kept here because this is where an atom's name is made: the key and the kind of
+     * number behind it are decided in one step, and anywhere else would be a second place that has
+     * to agree about which is which. */
+    private final Map<FactSubject, Carrier> atomCarriers = new HashMap<>();
 
     /**
      * Every value each atom's own kind of number can take, for the atoms named at an expression.
@@ -1077,7 +1078,7 @@ final class Terms {
      * is a parameter because it is not always {@code e}'s own — an operation answering a union
      * computes a number one of its cases carries. */
     private FactSubject atomOfIdentity(FactSubject identity, Type type, Core e, Denotations at) {
-        FactSubject atom = named(identity, granularityOf(type));
+        FactSubject atom = named(identity, carrierOf(type));
         if (atom != null) {
             // Of the type itself, which is what the carrier is asked of. An atom named with nothing
             // said about where its counts run starts every rule about it from a range that admits
@@ -1207,7 +1208,7 @@ final class Terms {
         }
         // The accumulator is a number of the kind the walk answers, whether or not the step read it:
         // a step that ignores it names it nowhere, and a range is still asserted about it here.
-        named(accumulator, granularityOf(e.type()));
+        named(accumulator, carrierOf(e.type()));
         // What the step reaches is asked after the step has been read, which is what names the atoms
         // inside it and files what each of them carries. A place a relation of theirs names is one
         // this has to keep, so the reaching is taken over both kinds of edge and not over the
@@ -1239,7 +1240,7 @@ final class Terms {
      */
     private void recordingAccumulation(FactSubject atom, Accumulations.Accumulating accumulating,
                                        Core e, Denotations at) {
-        Granularity spacing = granularityOf(e.type());
+        Carrier spacing = carrierOf(e.type());
         FactSubject accumulator =
                 named(FactSubject.of(interned.handed(atom.identity(), 0)), spacing);
         FactSubject element = named(FactSubject.of(interned.handed(atom.identity(), 1)), spacing);
@@ -1279,7 +1280,7 @@ final class Terms {
      */
     private LinearForm<FactSubject> repeating(Accumulation.Combine combine,
                                               FactSubject accumulator, FactSubject element,
-                                              Granularity spacing) {
+                                              Carrier spacing) {
         return switch (combine) {
             case ADD -> LinearForm.sumOfAtoms(accumulator, element);
             case MULTIPLY -> {
@@ -1970,7 +1971,7 @@ final class Terms {
         if (carrier == null || !carrier.counts()) {
             return null;
         }
-        FactSubject atom = named(place, granularityOf(type));
+        FactSubject atom = named(place, carrier);
         if (atom != null) {
             atomExtents.putIfAbsent(atom, extentOf(type));
         }
@@ -1984,7 +1985,7 @@ final class Terms {
         return place == null ? null
                 : named(interned.called(remainder,
                         List.of(place.identity(), interned.written(divisor))),
-                        Granularity.DISCRETE);
+                        Carrier.WHOLE);
     }
 
     /**
@@ -2007,7 +2008,7 @@ final class Terms {
             named.add(each.getKey().identity());
         }
         named.add(interned.written(divisor));
-        return named(interned.called(remainder, named), Granularity.DISCRETE);
+        return named(interned.called(remainder, named), Carrier.WHOLE);
     }
 
     /** The size {@code size} takes of what stands at {@code place}, named as {@link #sizeKeyOf}
@@ -2022,7 +2023,7 @@ final class Terms {
      * guard stating one builds — so the two are one value rather than two writings that have to keep
      * spelling each other alike. */
     private FactSubject sizeKeyOf(ValueName size, Term container) {
-        return named(interned.called(size, List.of(container)), Granularity.DISCRETE);
+        return named(interned.called(size, List.of(container)), Carrier.WHOLE);
     }
 
 
@@ -2073,41 +2074,53 @@ final class Terms {
         }
     }
 
-    /** {@code key}, with how its values are spaced recorded against it. A key is what a value is
-     * called and a kind is what the value is, so one key is one kind: two would mean this named two
-     * values alike, and everything recorded under the name would be about neither of them. */
-    private FactSubject named(Term key, Granularity g) {
-        return key == null ? null : named(FactSubject.of(key), g);
+    /** {@code key}, with the order its values are counted on recorded against it. A key is what a
+     * value is called and a kind is what the value is, so one key is one kind: two would mean this
+     * named two values alike, and everything recorded under the name would be about neither of
+     * them. */
+    private FactSubject named(Term key, Carrier carrier) {
+        return key == null ? null : named(FactSubject.of(key), carrier);
     }
 
     /** The same, of a subject already made. Both spellings record here, so an atom reached by either
      * is held to the one kind. */
-    private FactSubject named(FactSubject subject, Granularity g) {
+    private FactSubject named(FactSubject subject, Carrier carrier) {
         if (subject == null) {
             return null;
         }
-        Granularity had = atomKinds.putIfAbsent(subject, g);
-        if (had != null && had != g) {
+        Carrier had = atomCarriers.putIfAbsent(subject, carrier);
+        if (had != null && !had.equals(carrier)) {
             throw new OneTermTwoKinds("atom `" + subject.rendered() + "` is " + had
-                    + " and " + g);
+                    + " and " + carrier);
         }
         return subject;
     }
 
     /**
-     * How the values of a numeric type are spaced.
+     * The order {@code atom}'s values are counted on, or null where this did not name it.
+     *
+     * <p>What a reader holding values of the atom holds them on: a value of a date is a date, and a
+     * remainder or a size is a whole number, whatever the arithmetic around either reads alike.
+     */
+    Carrier carrierOf(FactSubject atom) {
+        return atomCarriers.get(atom);
+    }
+
+    /**
+     * The order the values of a numeric type are counted on, which is where how they are spaced is
+     * read from.
      *
      * <p>The carrier's answer, which is where the spacing of every order this language has is
      * written. An atom cannot be named without one, so a spacing decided here from whichever of two
      * scalars a type reaches would leave every other counted carrier out of the domain rather than
      * in it.
      */
-    Granularity granularityOf(Type t) {
+    Carrier carrierOf(Type t) {
         Carrier carrier = Carrier.ofValue(t, declarations());
         if (carrier == null || !carrier.counts()) {
             throw new IllegalStateException("not a number the domain carries: " + Type.show(t));
         }
-        return carrier.spacing();
+        return carrier;
     }
 
     /** The spacing of every atom {@code f} is written over, for the domain to record. Every one of
@@ -2119,11 +2132,11 @@ final class Terms {
     private Map<FactSubject, Granularity> kindsOfAtoms(Set<FactSubject> atoms) {
         Map<FactSubject, Granularity> out = new HashMap<>();
         for (FactSubject atom : atoms) {
-            Granularity g = atomKinds.get(atom);
-            if (g == null) {
+            Carrier carrier = atomCarriers.get(atom);
+            if (carrier == null) {
                 throw new IllegalStateException("atom `" + atom.rendered() + "` was not named here");
             }
-            out.put(atom, g);
+            out.put(atom, carrier.spacing());
         }
         return out;
     }

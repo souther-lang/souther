@@ -1146,7 +1146,7 @@ public final class InvariantChecker {
         atoms.forEach((path, atom) -> {
             Type type = typeAt.get(path);
             if (type != null) {
-                spacing.put(atom, c.terms.granularityOf(type));
+                spacing.put(atom, c.terms.carrierOf(type).spacing());
             }
         });
         held.forEach((path, counted) ->
