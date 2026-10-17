@@ -623,8 +623,9 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
             Map.entry("souther.compiler.partition.TermRealizations#dateAnsweringMovedParts("
                             + "Ljava/util/List;Lsouther/compiler/check/Carrier;)"
                             + "Lsouther/compiler/partition/TermRealizations$Search;",
-                    "how many years the first ask is walked over, and whether they were all of"
-                            + " them"),
+                    "how many years the first year asked is walked over, and whether they were all"
+                            + " of them; with no year asked, one cycle of the calendar is walked,"
+                            + " which is every day there is"),
             Map.entry("souther.compiler.partition.TermRealizations#wholeNumbers("
                             + "Lsouther/compiler/numeric/NumericDomain$Bounds;"
                             + "Ljava/util/function/Predicate;"

@@ -16,6 +16,7 @@ import java.util.Random;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -29,7 +30,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * {@code Date.addDays} comes to ({@link DateTranslation#thenAddDays}).
  *
  * <p>Years, months and days are asked together and moved or not, since a group is one question
- * about one date whichever parts it is made of.
+ * about one date whichever parts it is made of. A group with no year in it is walked over a cycle
+ * of the calendar, and is compared with a walk over every day of that cycle.
  */
 class ADateAnsweringSeveralMovedPartsIsOneEveryAskAdmitsTest {
 
@@ -146,6 +148,175 @@ class ADateAnsweringSeveralMovedPartsIsOneEveryAskAdmitsTest {
         // right every time.
         assertTrue(offered > 50, "only " + offered + " rounds had a date");
         assertTrue(refused > 50, "only " + refused + " rounds had none");
+    }
+
+    /** The first day a walk of one cycle starts at, where the asks are defined there. */
+    private static final long CYCLE_FROM = LocalDate.of(2000, 1, 1).toEpochDay();
+
+    /** The days of one Gregorian cycle, counted with {@code java.time}. */
+    private static final long CYCLE = LocalDate.of(2400, 1, 1).toEpochDay() - CYCLE_FROM;
+
+    /** The month and the day of every date from a little before the cycle to a little after it,
+     *  so a walk over all of them reads an array rather than the calendar. */
+    private static final long WIDE_FROM = CYCLE_FROM - 4 * REACH;
+    private static final int[] MONTHS = new int[(int) (CYCLE + 8 * REACH)];
+    private static final int[] DAYS = new int[MONTHS.length];
+
+    static {
+        for (int at = 0; at < MONTHS.length; at++) {
+            LocalDate date = LocalDate.ofEpochDay(WIDE_FROM + at);
+            MONTHS[at] = date.getMonthValue();
+            DAYS[at] = date.getDayOfMonth();
+        }
+    }
+
+    private static boolean admitsWide(TermRealizations.DatePartAsk ask, long day) {
+        if (!ask.moved().definedAt(day)) {
+            return false;
+        }
+        int at = (int) (day + ask.moved().offsetDays() - WIDE_FROM);
+        int value = ask.part() == DatePart.MONTH ? MONTHS[at] : DAYS[at];
+        return ask.wanted().holds(Count.of(value), Carrier.WHOLE);
+    }
+
+    /**
+     * Months and days with no year among them are answered by the first date of the cycle that
+     * answers them, and nothing is offered only where no date of the cycle does.
+     *
+     * <p>The walk is held against every day of the cycle it says it walks, one by one: what it
+     * offers is the first of them that every ask admits, so neither the cuts nor the years it is
+     * walked in leave a date out.
+     */
+    @Test
+    void monthsAndDaysWithNoYearAreAnsweredByTheFirstDateOfTheCycleThatAnswersThem() {
+        Random random = new Random(2443);
+        List<DatePart> noYear = List.of(DatePart.MONTH, DatePart.DAY);
+        int offered = 0;
+        int refused = 0;
+        for (int round = 0; round < 300; round++) {
+            List<TermRealizations.DatePartAsk> asks = new ArrayList<>();
+            int many = 1 + random.nextInt(3);
+            for (int each = 0; each < many; each++) {
+                DatePart part = noYear.get(random.nextInt(noYear.size()));
+                asks.add(new TermRealizations.DatePartAsk(part, chain(random),
+                        numbers(random, part, random.nextBoolean())));
+            }
+            long first = asks.stream().mapToLong(each -> each.moved().first()).max()
+                    .orElseThrow();
+            long last = asks.stream().mapToLong(each -> each.moved().last()).min().orElseThrow();
+            long from = Math.max(first, Math.min(CYCLE_FROM, last - CYCLE + 1));
+            long to = Math.min(last, from + CYCLE - 1);
+            LocalDate expected = null;
+            for (long day = from; day <= to && expected == null; day++) {
+                final long on = day;
+                if (asks.stream().allMatch(ask -> admitsWide(ask, on))) {
+                    expected = LocalDate.ofEpochDay(day);
+                }
+            }
+
+            TermRealizations.Search found =
+                    TermRealizations.dateAnsweringMovedParts(asks, Carrier.DATE);
+
+            assertTrue(found.everyOne(), "a cycle is every day there is to ask: " + asks);
+            assertEquals(expected, found.on(), asks.toString());
+            if (expected == null) {
+                refused++;
+            } else {
+                offered++;
+            }
+        }
+        assertTrue(offered > 50, "only " + offered + " rounds had a date");
+        assertTrue(refused > 20, "only " + refused + " rounds had none");
+    }
+
+    /**
+     * A combination only a century that is no leap year makes is found, though no decade around the
+     * start of the cycle has it.
+     *
+     * <p>Four years of days after the first of March are the first of March again where a leap day
+     * falls between, and the second where none does: the years from 2096 to 2100 have none, since
+     * 2100 is not a leap year.
+     */
+    @Test
+    void aCombinationOnlyACenturyWithNoLeapDayMakesIsFound() {
+        long fourYears = 4 * 365 + 1;
+        TermRealizations.Search found = TermRealizations.dateAnsweringMovedParts(List.of(
+                part(DatePart.MONTH, 3), part(DatePart.DAY, 1),
+                new TermRealizations.DatePartAsk(DatePart.DAY,
+                        DateTranslation.none().thenAddDays(fourYears),
+                        new NumericSet.At(Count.of(2)))), Carrier.DATE);
+
+        LocalDate first = null;
+        for (LocalDate on = LocalDate.of(2000, 1, 1); first == null; on = on.plusDays(1)) {
+            if (on.getMonthValue() == 3 && on.getDayOfMonth() == 1
+                    && on.plusDays(fourYears).getDayOfMonth() == 2) {
+                first = on;
+            }
+        }
+        assertEquals(LocalDate.of(2096, 3, 1), first);
+        assertEquals(first, found.on());
+        assertTrue(found.everyOne());
+    }
+
+    /** A month and a day no date has together are refused as the calendar's answer and not as a
+     *  search that stopped. */
+    @Test
+    void aMonthAndADayNoDateHasAreRefusedAsTheCalendarsAnswer() {
+        TermRealizations.Search found = TermRealizations.dateAnsweringMovedParts(List.of(
+                new TermRealizations.DatePartAsk(DatePart.MONTH,
+                        DateTranslation.none().thenAddDays(-1), new NumericSet.At(Count.of(2))),
+                new TermRealizations.DatePartAsk(DatePart.DAY,
+                        DateTranslation.none().thenAddDays(-1), new NumericSet.At(Count.of(30)))),
+                Carrier.DATE);
+
+        assertNull(found.on());
+        assertTrue(found.everyOne());
+    }
+
+    /** The day before the first of March is the last of February, whichever year it is in. */
+    @Test
+    void theDayBeforeTheFirstOfMarchIsTheLastOfFebruary() {
+        DateTranslation back = DateTranslation.none().thenAddDays(-1);
+        TermRealizations.Search leap = TermRealizations.dateAnsweringMovedParts(List.of(
+                new TermRealizations.DatePartAsk(DatePart.DAY, back,
+                        new NumericSet.At(Count.of(29))),
+                part(DatePart.MONTH, 3), part(DatePart.DAY, 1)), Carrier.DATE);
+        TermRealizations.Search common = TermRealizations.dateAnsweringMovedParts(List.of(
+                new TermRealizations.DatePartAsk(DatePart.DAY, back,
+                        new NumericSet.At(Count.of(28))),
+                part(DatePart.MONTH, 3), part(DatePart.DAY, 1)), Carrier.DATE);
+
+        assertEquals(LocalDate.of(2000, 3, 1), leap.on());
+        assertEquals(LocalDate.of(2001, 3, 1), common.on());
+    }
+
+    /**
+     * Asks defined at fewer days than a cycle are walked over those days, wherever they are, and
+     * asks defined only near the end of the calendar are walked there.
+     */
+    @Test
+    void asksDefinedAtFewerDaysThanACycleAreWalkedOverThoseDays() {
+        long from = LocalDate.of(5000, 1, 1).toEpochDay();
+        DateTranslation narrow = new DateTranslation(1, from, from + 40);
+        TermRealizations.Search inside = TermRealizations.dateAnsweringMovedParts(List.of(
+                new TermRealizations.DatePartAsk(DatePart.DAY, narrow,
+                        new NumericSet.At(Count.of(9)))), Carrier.DATE);
+        TermRealizations.Search outside = TermRealizations.dateAnsweringMovedParts(List.of(
+                new TermRealizations.DatePartAsk(DatePart.MONTH, narrow,
+                        new NumericSet.At(Count.of(5)))), Carrier.DATE);
+
+        assertEquals(LocalDate.of(5000, 1, 8), inside.on());
+        assertNull(outside.on());
+        assertTrue(outside.everyOne());
+
+        DateTranslation late = DateTranslation.none().thenAddDays(
+                LocalDate.MAX.toEpochDay() - LocalDate.of(2000, 1, 1).toEpochDay());
+        TermRealizations.Search atTheEnd = TermRealizations.dateAnsweringMovedParts(List.of(
+                new TermRealizations.DatePartAsk(DatePart.MONTH, late,
+                        new NumericSet.At(Count.of(12)))), Carrier.DATE);
+
+        assertNotNull(atTheEnd.on());
+        assertEquals(12, atTheEnd.on().plusDays(late.offsetDays()).getMonthValue());
     }
 
     /** The year before a move is the one the date is in, and the one after it is the next day's. */

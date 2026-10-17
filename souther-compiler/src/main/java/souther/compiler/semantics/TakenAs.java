@@ -355,17 +355,20 @@ public sealed interface TakenAs {
         }
 
         /**
-         * The year of a date moved by days, and no other part of it.
+         * Every part of a date moved by days.
          *
-         * <p>The dates of one year are a run of days, so the dates a moved date falls in a year at
-         * are a run of days as well, and a row is written by the run. A month or a day of the month
-         * comes round every year: the dates it falls on are no run.
+         * <p>A moved date is a date, so each of its parts is a number of the date it was moved from,
+         * read off a row by moving the row's date. A row is written by looking among the days for
+         * one whose moved date has the parts asked for. The dates a moved year falls on are a run
+         * of days, and the dates a moved month or day falls on are not, but that is a question for
+         * the search and not for what the number is: the calendar repeats, so the days of one
+         * cycle of it are every day a month and a day can be asked of.
          */
         @Override
         public boolean readsWhatItWasMadeFrom(ValueTransformation from) {
             return switch (from) {
                 case ValueTransformation.Identity _ -> true;
-                case ValueTransformation.DateShift _ -> part == DatePart.YEAR;
+                case ValueTransformation.DateShift _ -> true;
             };
         }
 

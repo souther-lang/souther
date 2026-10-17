@@ -454,12 +454,9 @@ final class TermRealizations {
         // A date moved before a part of it is taken is not a value spelled in parts: two years of
         // one date are two numbers, and what writes a date answering them is a search over the
         // days. Every part asked of the date, moved or not, is a condition on the days it comes
-        // from, so the group is one search. What bounds it is a year asked of it; a number of a
-        // moved date is only ever a year ({@link NumericTerm.TakenOf#of}), so a group holding one
-        // has that.
+        // from, so the group is one search.
         if (moved.values().stream().anyMatch(each -> !each.isNone())) {
             return times.isEmpty() && dates.size() == numbers.size()
-                    && dates.containsValue(TakenAs.DatePart.YEAR)
                     ? wholly(targets, dates.keySet(),
                             () -> new JointBuilder.OnThoseMovedDateParts(dates, moved))
                     : nothingSolvesAGroup();
@@ -803,10 +800,9 @@ final class TermRealizations {
                 implements JointBuilder {
 
             public OnThoseMovedDateParts {
-                if (parts.isEmpty() || !parts.keySet().equals(moved.keySet())
-                        || !parts.containsValue(TakenAs.DatePart.YEAR)) {
+                if (parts.isEmpty() || !parts.keySet().equals(moved.keySet())) {
                     throw new IllegalArgumentException("a way of writing a moved date says how"
-                            + " each part was moved, and is walked by the year asked of it");
+                            + " each part was moved");
                 }
                 parts = Collections.unmodifiableSequencedMap(new LinkedHashMap<>(parts));
                 moved = Collections.unmodifiableSequencedMap(new LinkedHashMap<>(moved));
@@ -3309,11 +3305,12 @@ final class TermRealizations {
      * leave. What a group asks of one date is the meeting of those conditions, so a year after one
      * move, a year after another and a month with no move are one question and not three.
      *
-     * <p>The years of the first year asked for are walked, and the days of the run each of them is
-     * are cut where any ask is answered otherwise than on the day before: between two cuts nothing
-     * the group asks changes, so the first day of each is every day of it. What this walks is
-     * therefore every combination there is, and an answer of nothing is a statement about the
-     * calendar, as it is for the parts of a date.
+     * <p>The years of the first year asked for are walked, or one cycle of the calendar where no
+     * year is asked for ({@link #dateAnsweringMovedParts}), and the days walked are cut where any
+     * ask is answered otherwise than on the day before: between two cuts nothing the group asks
+     * changes, so the first day of each is every day of it. What this walks is therefore every
+     * combination there is, and an answer of nothing is a statement about the calendar, as it is
+     * for the parts of a date.
      */
     private static Realization onMovedDates(List<DatePartAsk> asks, Type sourceType,
                                             Carrier observed, RuleReadingSource ruleSource) {
@@ -3342,16 +3339,24 @@ final class TermRealizations {
     }
 
     /**
-     * The first date every one of {@code asks} admits, walking the years of the first year asked
-     * for.
+     * The first date every one of {@code asks} admits.
      *
-     * <p>At least one of the asks is for a year, since that is what bounds the walk: the dates of
-     * a year are a run, and the parts of a date are not.
+     * <p>Where a year is asked for, the years the first such ask leaves are walked, and the dates
+     * whose moved date is in one of them are a run of days.
+     *
+     * <p>Where none is, one cycle of the calendar is walked. The Gregorian calendar repeats every
+     * four hundred years, and those are a whole number of days, so a month or a day of a date moved
+     * by a count of days is the same at every date a cycle away. Every combination the asks can
+     * meet at is therefore met within one cycle of days they are all defined at, or within all of
+     * those days where there are fewer than a cycle of them, and the walk is over every one there
+     * is.
      */
     static Search dateAnsweringMovedParts(List<DatePartAsk> asks, Carrier observed) {
         DatePartAsk lead = asks.stream().filter(each -> each.part() == TakenAs.DatePart.YEAR)
-                .findFirst().orElseThrow(() -> new IllegalArgumentException(
-                        "a date answering moved parts is walked by the years asked of it"));
+                .findFirst().orElse(null);
+        if (lead == null) {
+            return new Search(dateInOneCycle(asks, observed), true);
+        }
         Tried years = wholeNumbers(lead.wanted(), observed,
                 LocalDate.MIN.getYear(), LocalDate.MAX.getYear(),
                 CompositionBudget.NUMBERS_OF_A_SET_TRIED.maximum());
@@ -3376,11 +3381,44 @@ final class TermRealizations {
                 LocalDate.of(year, 1, 1).toEpochDay() - moved.offsetDays());
         long to = Math.min(moved.last(),
                 LocalDate.of(year, 12, 31).toEpochDay() - moved.offsetDays());
-        if (from > to) {
+        return from > to ? null : firstAdmittedIn(from, to, asks, observed);
+    }
+
+    /**
+     * The first date of a cycle of the calendar that every one of {@code asks} admits, or null where
+     * there is none.
+     *
+     * <p>The cycle is the one from the first of January of {@link #A_LEAP_YEAR} where every ask is
+     * defined there, and otherwise the nearest one that is. It is walked a year of the date at a
+     * time, so that a date found early is found without cutting the rest of the cycle.
+     */
+    private static LocalDate dateInOneCycle(List<DatePartAsk> asks, Carrier observed) {
+        long first = asks.stream().mapToLong(each -> each.moved().first()).max().orElseThrow();
+        long last = asks.stream().mapToLong(each -> each.moved().last()).min().orElseThrow();
+        if (first > last) {
             return null;
         }
-        // The run is at most a year of days, and each ask is answered the same way between two of
-        // the days it changes at, so the first day of each stretch is every day of it.
+        long from = Math.max(first, Math.min(LocalDate.of(A_LEAP_YEAR, 1, 1).toEpochDay(),
+                last - DAYS_OF_A_CYCLE + 1));
+        long to = Math.min(last, from + DAYS_OF_A_CYCLE - 1);
+        for (long start = from; start <= to; ) {
+            long end = Math.min(to,
+                    LocalDate.of(LocalDate.ofEpochDay(start).getYear(), 12, 31).toEpochDay());
+            LocalDate found = firstAdmittedIn(start, end, asks, observed);
+            if (found != null) {
+                return found;
+            }
+            start = end + 1;
+        }
+        return null;
+    }
+
+    /** The first date from {@code from} to {@code to} that every one of {@code asks} admits, or
+     *  null where there is none. The days are at most a year of them. */
+    private static LocalDate firstAdmittedIn(long from, long to, List<DatePartAsk> asks,
+                                             Carrier observed) {
+        // Each ask is answered the same way between two of the days it changes at, so the first
+        // day of each stretch is every day of it.
         TreeSet<Long> cuts = new TreeSet<>();
         cuts.add(from);
         for (DatePartAsk each : asks) {
@@ -3447,6 +3485,10 @@ final class TermRealizations {
     /** How far the days run in the longest month there is, which is as far as a day of any date
      *  runs. How far they run in the month a date is actually built in is asked of that month. */
     private static final int DAYS_THE_LONGEST_MONTH_HAS = 31;
+
+    /** How many days the Gregorian calendar takes to repeat: four hundred years, of which ninety-seven
+     *  are leap years. */
+    private static final long DAYS_OF_A_CYCLE = 400L * 365 + 97;
 
     /**
      * One value, wearing every name the position declares, or the reason there is none.
