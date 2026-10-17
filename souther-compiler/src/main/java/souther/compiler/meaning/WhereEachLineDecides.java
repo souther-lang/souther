@@ -528,10 +528,13 @@ public final class WhereEachLineDecides {
         private final WhatAStatementComesTo ways;
         /** What the statement comes to, or {@link WhatAStatementComesTo#NOT_WORKED_OUT}. */
         private final int whole;
-        /** Which ways the parts can come out together ({@link #possible}). */
+        /** Which ways the parts can come out together ({@link #canBe}), as a statement of
+         *  {@link #ways}. */
         private final int possible;
+        /** What every row meets of the parts, each a statement of its own ({@link #canBe}). */
+        private final List<Proposition> canBe;
         /** The values the statement asks the case of more than once, which are what the statement
-         *  is read under the cases of, and leave some ways out of {@link #possible}. */
+         *  is read under the cases of, and leave some ways out of {@link #canBe}. */
         private final List<AskedTwice> twice;
         /** Whether some part has asked for the statement under each case of a value. */
         private boolean readUnderEachCase;
@@ -556,6 +559,7 @@ public final class WhereEachLineDecides {
             }
             this.twice = askedTwice(named);
             this.ways = new WhatAStatementComesTo();
+            this.canBe = lifted ? canBe(named, twice) : List.of();
             if (!lifted) {
                 this.whole = WhatAStatementComesTo.NOT_WORKED_OUT;
                 this.possible = WhatAStatementComesTo.NOT_WORKED_OUT;
@@ -564,7 +568,7 @@ public final class WhereEachLineDecides {
             WhatAStatementComesTo.Asking asking =
                     ways.asking(CompositionBudget.STEPS_A_STATEMENT_IS_READ_IN.maximum());
             int comesTo = comesTo(stated, asking);
-            int canBe = possible(twice, asking);
+            int canBe = comesTo(Proposition.all(this.canBe), asking);
             boolean read = comesTo >= 0 && canBe >= 0;
             this.whole = read ? comesTo : WhatAStatementComesTo.NOT_WORKED_OUT;
             this.possible = read ? canBe : WhatAStatementComesTo.NOT_WORKED_OUT;
@@ -585,7 +589,8 @@ public final class WhereEachLineDecides {
             return named;
         }
 
-        /** What {@code stated} comes to as a statement of {@link #ways}, built by {@code asking}. */
+        /** What {@code stated}, a statement of the parts, comes to as a statement of
+         *  {@link #ways}, built by {@code asking}. */
         private int comesTo(Proposition stated, WhatAStatementComesTo.Asking asking) {
             return switch (stated) {
                 case Proposition.All all -> {
@@ -602,15 +607,23 @@ public final class WhereEachLineDecides {
                     }
                     yield out;
                 }
+                case Proposition.Always(boolean holds) ->
+                        holds ? WhatAStatementComesTo.ALWAYS : WhatAStatementComesTo.NEVER;
                 default -> {
-                    Literal leaf = leaves.get(stated.key());
-                    yield asking.part(index.get(leaf.part()), leaf.held());
+                    Proposition held = held(stated);
+                    yield asking.part(index.get(held.key()), held == stated);
                 }
             };
         }
 
         /**
-         * Which ways the parts can come out together, as a statement of {@link #ways}.
+         * Which ways the parts {@code named} can come out together, as statements of them every
+         * row meets.
+         *
+         * <p>Said once and read twice: as what is possible when a line's cases are taken apart
+         * ({@link #takenApart}), and as what a line said in one condition is said with
+         * ({@link #whereItTurns}). Asked of each on its own, a way one of them knew no row is
+         * would be one the other still read a line as deciding in.
          *
          * <p>Parts that say which cases one value of the input is are not free of each other: the
          * value is one case, so a way is one a row can be only where some one case is in every set
@@ -644,22 +657,23 @@ public final class WhereEachLineDecides {
          * case is asked of the rows, and said here it would be a part of every case the line is
          * read in.
          */
-        private int possible(List<AskedTwice> twice, WhatAStatementComesTo.Asking asking) {
-            int out = WhatAStatementComesTo.ALWAYS;
-            Map<Integer, Proposition.Some.ElementAsked> quantifiers = new LinkedHashMap<>();
-            for (int i = 0; i < named.size(); i++) {
-                if (named.get(i) instanceof Proposition.Some some) {
-                    quantifiers.put(i, some.elementAsked());
+        private static List<Proposition> canBe(List<Proposition> named, List<AskedTwice> twice) {
+            List<Proposition> out = new ArrayList<>();
+            Map<DecisionSubject, List<Proposition.Some.ElementAsked>> byContainer =
+                    new LinkedHashMap<>();
+            for (Proposition part : named) {
+                if (part instanceof Proposition.Some some) {
+                    byContainer.computeIfAbsent(some.container(), _ -> new ArrayList<>())
+                            .add(some.elementAsked());
                 }
             }
-            for (Map.Entry<Integer, Proposition.Some.ElementAsked> stronger
-                    : quantifiers.entrySet()) {
-                for (Map.Entry<Integer, Proposition.Some.ElementAsked> weaker
-                        : quantifiers.entrySet()) {
-                    if (stronger.getValue().holdsOnlyWhere(weaker.getValue())) {
-                        out = asking.both(out, asking.either(
-                                asking.part(stronger.getKey(), false),
-                                asking.part(weaker.getKey(), true)));
+            for (List<Proposition.Some.ElementAsked> overOne : byContainer.values()) {
+                for (Proposition.Some.ElementAsked stronger : overOne) {
+                    for (Proposition.Some.ElementAsked weaker : overOne) {
+                        if (stronger.holdsOnlyWhere(weaker)) {
+                            out.add(Proposition.any(List.of(stronger.quantifier().denied(),
+                                    weaker.quantifier())));
+                        }
                     }
                 }
             }
@@ -679,17 +693,16 @@ public final class WhereEachLineDecides {
                     }
                     holding.add(those);
                 }
-                int ofTheValue = WhatAStatementComesTo.NEVER;
+                List<Proposition> ofTheValue = new ArrayList<>();
                 for (Set<Integer> those : holding) {
-                    int way = WhatAStatementComesTo.ALWAYS;
-                    for (int each : parts) {
-                        way = asking.both(way, asking.part(each, those.contains(each)));
-                    }
-                    ofTheValue = asking.either(ofTheValue, way);
+                    ofTheValue.add(Proposition.all(parts.stream()
+                            .map(each -> those.contains(each) ? named.get(each)
+                                    : named.get(each).denied())
+                            .toList()));
                 }
-                out = asking.both(out, ofTheValue);
+                out.add(Proposition.any(ofTheValue));
             }
-            return out;
+            return List.copyOf(out);
         }
 
         /**
@@ -726,7 +739,7 @@ public final class WhereEachLineDecides {
             if (ofAValue != null && ofAValue.size() <= MOST_CASES) {
                 return ofAValue;
             }
-            Proposition said = heldAgainstItsDenial(stated, part);
+            Proposition said = whereItTurns(part);
             if (taken instanceof TakenApart.Taken(var cases)) {
                 return List.of(new DecidingCase(said, DecidingCase.Cases.ofConjunctions(cases)));
             }
@@ -741,14 +754,35 @@ public final class WhereEachLineDecides {
                         // No one part tells the cases apart only where some ways are left out of
                         // what is possible, and only a value in twice leaves them out so: the
                         // statement is read under each case of the first of those. What else
-                        // possible() leaves out joins any two possible ways by ways each one part
-                        // apart from the last, every one of them possible, so where the line
-                        // decides at one end and not at the other some part tells the two apart.
+                        // canBe leaves out joins any two possible ways by ways each one part apart
+                        // from the last, every one of them possible, so where the line decides at
+                        // one end and not at the other some part tells the two apart.
                         case TakenApart.ByNoOnePart _, TakenApart.Taken _ ->
                                 throw new IllegalStateException("where " + part + " decides in "
                                         + stated + " was told apart by no one part, and the"
                                         + " statement asks no value's case twice");
                     })));
+        }
+
+        /**
+         * Where {@code part} turns the statement, said in one condition: the statement with it
+         * held against the statement with it failing, where it can come out either way. Of what
+         * every row meets ({@link #canBe}), the parts that ask {@code part} are said with it held
+         * and with it failing; the rest hold of every row whichever way it comes out, and say
+         * nothing of where it turns.
+         */
+        private Proposition whereItTurns(Proposition part) {
+            List<Proposition> parts = new ArrayList<>();
+            parts.add(heldAgainstItsDenial(stated, part));
+            for (Proposition each : canBe) {
+                Proposition held = with(each, part, true);
+                Proposition failing = with(each, part, false);
+                if (!held.key().equals(each.key()) || !failing.key().equals(each.key())) {
+                    parts.add(held);
+                    parts.add(failing);
+                }
+            }
+            return Proposition.all(parts);
         }
 
         /**
@@ -1072,7 +1106,7 @@ public final class WhereEachLineDecides {
      * where they stand among the statement's parts, and every case they name.
      *
      * <p>One answer for the two things that turn on it. Those parts are not free of each other
-     * ({@link Reading#possible}), and so where the line decides may be told apart by no one part;
+     * ({@link Reading#canBe}), and so where the line decides may be told apart by no one part;
      * read under each case of the value instead ({@link #underEachCase}), they come out one way
      * each. Each asking which values those are on its own, the second answer was the first's only
      * by both being written alike.

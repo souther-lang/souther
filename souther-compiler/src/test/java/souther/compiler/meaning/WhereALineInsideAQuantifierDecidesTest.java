@@ -221,13 +221,40 @@ class WhereALineInsideAQuantifierDecidesTest {
             Proposition stated = Proposition.any(List.of(entry,
                     Proposition.all(List.of(filed.denied(), d))));
 
-            List<Proposition> ofTheLine = casesOf(stated, line);
-            assertEquals(1, ofTheLine.size(), () -> "one case, of " + stated + ": " + ofTheLine);
-            assertFalse(ofTheLine.getFirst().key().contains(d.key()),
-                    () -> "the default's line is no part of where the entry's decides: "
-                            + ofTheLine);
+            assertEquals(List.of(Proposition.all(List.of(filed, k))), casesOf(stated, line),
+                    () -> "where some element meets k, and of the element at the line, k: "
+                            + stated);
             assertEquals(List.of(filed.denied()), casesOf(stated, d),
                     () -> "the default's line decides where nothing meets k, of " + stated);
+        }
+    }
+
+    /**
+     * The same lookup beside five pairs of truths, any of which is enough: the entry's line
+     * decides where none of the pairs holds, which is more cases than are said one by one, and is
+     * said in one condition. That condition is where some element meets {@code k} as well, as the
+     * cases it stands for are: said without it, it would hold where no element does, which is
+     * no row's.
+     */
+    @Test
+    void aLineSaidInOneConditionIsSaidWhereTheQuantifierItImpliesHolds() {
+        Proposition.Compared line = compared(N, 0, Rel.GT);
+        Proposition k = compared(XS.element().then("k"), 0, Rel.GT);
+        Proposition.Some filed = new Proposition.Some(CONTAINER, k, true);
+        List<Proposition> parts = new ArrayList<>(List.of(
+                new Proposition.Some(CONTAINER, Proposition.all(List.of(k, line)), true),
+                Proposition.all(List.of(filed.denied(), compared(A, 0, Rel.GT)))));
+        for (int i = 0; i < 5; i++) {
+            parts.add(Proposition.all(List.of(truth("t" + i), truth("u" + i))));
+        }
+        List<DecidingCase> cases = decidingCasesOf(Proposition.any(parts), line);
+
+        assertFalse(cases.isEmpty() || cases.stream().allMatch(DecidingCase::saidAlone),
+                () -> "said in one condition: " + cases);
+        for (DecidingCase each : cases) {
+            assertTrue(each.condition() instanceof Proposition.All all
+                            && all.parts().contains(filed),
+                    () -> "said where some element meets k: " + each.condition());
         }
     }
 
@@ -254,52 +281,48 @@ class WhereALineInsideAQuantifierDecidesTest {
     /**
      * Three quantifiers each holding only where the next does: some element meeting {@code k},
      * {@code j} and the line, or none meeting {@code k} and {@code j} and {@code d}, or none
-     * meeting {@code k} and {@code e}. The line decides in one case, and neither {@code d} nor
-     * {@code e} is any part of it.
+     * meeting {@code k} and {@code e}. The line decides in one case, where some element meets
+     * {@code k} and {@code j}, which is where the first can hold at all; neither {@code d} nor
+     * {@code e} is any part of it. Each quantifier holding only where the next does leaves no
+     * way that two parts have to cross at once.
      */
     @Test
     void aChainOfQuantifiersIsNotSplitByWhatStandsBesideAnyOfThem() {
         Proposition.Compared line = compared(N, 0, Rel.GT);
         Proposition k = compared(XS.element().then("k"), 0, Rel.GT);
         Proposition j = compared(XS.element().then("j"), 0, Rel.GT);
-        Proposition d = truth("d");
-        Proposition e = truth("e");
+        Proposition.Some both = new Proposition.Some(CONTAINER, Proposition.all(List.of(k, j)),
+                true);
         Proposition stated = Proposition.any(List.of(
                 new Proposition.Some(CONTAINER, Proposition.all(List.of(k, j, line)), true),
-                Proposition.all(List.of(new Proposition.Some(CONTAINER,
-                        Proposition.all(List.of(k, j)), false), d)),
-                Proposition.all(List.of(new Proposition.Some(CONTAINER, k, false), e))));
+                Proposition.all(List.of(both.denied(), truth("d"))),
+                Proposition.all(List.of(new Proposition.Some(CONTAINER, k, false), truth("e")))));
 
-        List<Proposition> ofTheLine = casesOf(stated, line);
-        assertEquals(1, ofTheLine.size(), ofTheLine::toString);
-        assertTrue(unquantified(ofTheLine.getFirst()).stream()
-                        .noneMatch(atom -> atom.equals(d.key()) || atom.equals(e.key())),
-                ofTheLine::toString);
+        assertEquals(List.of(Proposition.all(List.of(both, k, j))), casesOf(stated, line),
+                stated::toString);
     }
 
     /**
      * A quantifier holding only where another does, in a statement that also asks one value's
      * case twice: the value is one case and the quantifiers leave out one way, and both are kept
-     * out together. The line decides wherever some element meets {@code k} and {@code d} does not
-     * stand beside the other case, which the default's case is no part of.
+     * out together. The line decides where some element meets {@code k} and the other case with
+     * {@code d} does not hold, which the default's case is no part of.
      */
     @Test
     void aQuantifierBesideAValueAskedTwiceIsReadWithBoth() {
         Proposition.Compared line = compared(N, 0, Rel.GT);
         Proposition k = compared(XS.element().then("k"), 0, Rel.GT);
-        Proposition one = inCases("One");
+        Proposition.Some filed = new Proposition.Some(CONTAINER, k, true);
+        Proposition other = inCases("Other");
+        Proposition d = truth("d");
         Proposition stated = Proposition.any(List.of(
                 new Proposition.Some(CONTAINER, Proposition.all(List.of(k, line)), true),
-                Proposition.all(List.of(new Proposition.Some(CONTAINER, k, false), one)),
-                Proposition.all(List.of(inCases("Other"), truth("d")))));
+                Proposition.all(List.of(filed.denied(), inCases("One"))),
+                Proposition.all(List.of(other, d))));
 
-        List<Proposition> ofTheLine = casesOf(stated, line);
-        assertFalse(ofTheLine.isEmpty(), "the line decides somewhere");
-        for (Proposition each : ofTheLine) {
-            assertTrue(unquantified(each).stream().noneMatch(atom -> atom.equals(one.key())
-                            || atom.equals(one.denied().key())),
-                    () -> "the default's case is no part of where the line decides: " + each);
-        }
+        assertEquals(Set.of(Proposition.all(List.of(filed, d.denied(), k)),
+                        Proposition.all(List.of(filed, d, other.denied(), k))),
+                Set.copyOf(casesOf(stated, line)), stated::toString);
     }
 
     /**
