@@ -7,7 +7,6 @@ import souther.compiler.check.Extreme;
 import souther.compiler.check.NumberAt;
 import souther.compiler.check.NumericAnswers;
 import souther.compiler.check.NumericMeasures;
-import souther.compiler.check.RuleKey;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.numeric.Count;
@@ -550,29 +549,23 @@ public sealed interface NumericTerm
         }
 
         /**
-         * The same, with the key named as the rules of the element the value at {@code value}
-         * stands in call it — or null where the value stands in no container.
+         * The same, with the key named by the fields read from the element the value at
+         * {@code value} stands in — or null where the value stands in no container.
          */
-        public static ExtremeOfItsKey ofTheValueAt(TermPath value, RuleKey key,
+        public static ExtremeOfItsKey ofTheValueAt(TermPath value, List<String> key,
                                                    Extreme extreme) {
             List<TermPath> holding = value.containersHoldingIt();
             if (holding.isEmpty()) {
                 return null;
             }
             TermPath container = holding.getLast();
-            return of(container, new ElementProjection(key.steps()).from(container.element()),
-                    value, extreme);
+            return of(container, new ElementProjection(key).from(container.element()), value,
+                    extreme);
         }
 
         /** The way from an element of the container to {@link #key()}. */
         public ElementProjection keyField() {
             return fieldsTo(container, key);
-        }
-
-        /** What the rules of an element call {@link #key()}, which is what a question about this
-         *  number names the key by. */
-        public RuleKey keyNamed() {
-            return new RuleKey(keyField().steps());
         }
 
         /** The way from an element of the container to {@link #value()}. */
@@ -628,7 +621,7 @@ public sealed interface NumericTerm
 
         @Override
         public String toString() {
-            return new NumberAt.OfWhatNumber.OfTheExtremeOfItsKey(extreme, keyNamed())
+            return new NumberAt.OfWhatNumber.OfTheExtremeOfItsKey(extreme, keyField().steps())
                     .spelledAt(value.toString());
         }
     }

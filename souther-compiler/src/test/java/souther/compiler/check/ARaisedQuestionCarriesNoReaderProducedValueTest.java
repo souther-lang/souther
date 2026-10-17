@@ -114,8 +114,8 @@ class ARaisedQuestionCarriesNoReaderProducedValueTest {
      * <p>{@code OfTheExtremeOfItsKey} and {@code Extreme} belong to the least or greatest of the
      * values the elements of a key hold: which end and which field of the element the key is are
      * what make it one number of the place, and both are what the author's fold wrote — the end
-     * its closure keeps, and the field it files under, which is named as the element's rules name
-     * a field ({@link RuleKey}).
+     * its closure keeps, and the field it files under, carried as the field names read from the
+     * element.
      */
     private static final Set<String> THE_QUESTIONS_OWN_VOCABULARY = Set.of(
             "souther/compiler/check/Owed",

@@ -5,6 +5,7 @@ import souther.compiler.semantics.CodePointClass;
 import souther.compiler.semantics.TakenArguments;
 import souther.compiler.types.ValueName;
 
+import java.util.List;
 import java.util.Objects;
 
 /**
@@ -98,7 +99,7 @@ public record NumberAt<P>(P position, NumberAt.OfWhatNumber of) {
      *  hold there, among those holding at {@code key} what the element under consideration holds
      *  there. */
     public static <P> NumberAt<P> extremeOf(P position, Extreme extreme,
-                                            RuleKey key) {
+                                            List<String> key) {
         return new NumberAt<>(position, new OfWhatNumber.OfTheExtremeOfItsKey(extreme, key));
     }
 
@@ -181,19 +182,19 @@ public record NumberAt<P>(P position, NumberAt.OfWhatNumber of) {
 
         /**
          * The least or the greatest of what the elements of the container the place stands inside
-         * hold there, among the elements holding at {@code key} — what the rules of an element
-         * call the field the key is — what the element under consideration holds there.
+         * hold there, among the elements holding at {@code key} — the fields read from an element
+         * to reach it — what the element under consideration holds there.
          *
          * <p>A number of an element read off the elements beside it, as how often is. The key is
          * part of which number it is: the least of one place by one key and by another are two
          * numbers at one place.
          */
-        record OfTheExtremeOfItsKey(Extreme extreme, RuleKey key)
+        record OfTheExtremeOfItsKey(Extreme extreme, List<String> key)
                 implements OfWhatNumber {
 
             public OfTheExtremeOfItsKey {
                 Objects.requireNonNull(extreme, "this one names the end taken");
-                Objects.requireNonNull(key, "and the field of an element the key is");
+                key = List.copyOf(key);
             }
 
             /** This number of what stands at the place spelled {@code position}, in the words a
@@ -203,7 +204,7 @@ public record NumberAt<P>(P position, NumberAt.OfWhatNumber of) {
                     case Extreme.Least _ -> "least";
                     case Extreme.Greatest _ -> "greatest";
                 };
-                return end + "(" + position + " by " + key + ")";
+                return end + "(" + position + " by " + String.join(".", key) + ")";
             }
         }
     }
