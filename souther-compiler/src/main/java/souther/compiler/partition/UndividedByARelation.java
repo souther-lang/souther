@@ -16,6 +16,7 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.inputs.WhatARelationLeavesUndivided;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.Quantity;
+import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
@@ -254,12 +255,14 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     ? form.coefs().keySet().iterator().next() : null;
             out.add(new OnAWay(taken.demand().positions(), runOf,
                     runOf instanceof NumericTerm.TakenOf count
-                            && count.takenAs() instanceof TakenAs.HowManyItHolds));
+                            && count.takenAs() instanceof TakenAs.HowManyItHolds,
+                    taken.demand() instanceof RowDemand.Relational(
+                            TakenConstraint.Affine affine) ? affine : null));
         });
         way.requirements().refinements().keySet()
-                .forEach(at -> out.add(new OnAWay(Set.of(at), null, true)));
+                .forEach(at -> out.add(new OnAWay(Set.of(at), null, true, null)));
         way.requirements().atANameTheCasesShare()
-                .forEach(at -> out.add(new OnAWay(Set.of(at), null, true)));
+                .forEach(at -> out.add(new OnAWay(Set.of(at), null, true, null)));
         return out;
     }
 
@@ -276,8 +279,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      *                   holding one says nothing of what it is. Of the term's own value, a case,
      *                   as an enumeration's, is a value taken out of its order, which the region
      *                   holds, and an end on how many is an end on the term itself
+     * @param affine     what it states as a form of the input's numbers held against nought, or
+     *                   null where it states anything else
      */
-    private record OnAWay(Set<TermPath> positions, NumericTerm runOf, boolean whatStands) {}
+    private record OnAWay(Set<TermPath> positions, NumericTerm runOf, boolean whatStands,
+                          TakenConstraint.Affine affine) {}
 
     /**
      * The places shown undivided over the rows in {@code region}, a way stating
@@ -310,7 +316,77 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         // taken to reach at all; nothing else needs saying of a pair.
         out.addAll(WhatARelationLeavesUndivided.of(terms, constant, relation,
                 UndividedByARelation::overlap, (one, other) -> true));
+        out.addAll(undividedByTheDifference(sources, conditions, heldWhole));
         return out;
+    }
+
+    /**
+     * The places shown undivided because the relation, and everything a way stating
+     * {@code conditions} holds of its two sides, is about how far apart the two are
+     * ({@link WhatARelationLeavesUndivided#ofTheirDifference}).
+     *
+     * <p>Each side is the value at a position the declarations leave every value of its type, so
+     * nothing of them ties it and none is unread. What the way holds of either is taken only as a
+     * form over the two weighed one way and the other. A statement about either that is anything
+     * else — an end on one of them alone, a form with a third number in it — leaves nothing shown,
+     * since it may keep a side from values of its own.
+     */
+    private Set<FilingCoordinate> undividedByTheDifference(List<Takes> sources,
+                                                         List<OnAWay> conditions,
+                                                         boolean heldWhole) {
+        if (!heldWhole || sides.size() != 2) {
+            return Set.of();
+        }
+        List<WhatARelationLeavesUndivided.Term<FilingCoordinate>> terms = new ArrayList<>();
+        for (int i = 0; i < sides.size(); i++) {
+            Side each = sides.get(i);
+            Takes source = sources.get(i);
+            if (!(each.term() instanceof NumericTerm.ValueOf) || source == null
+                    || !source.every()) {
+                return Set.of();
+            }
+            terms.add(new WhatARelationLeavesUndivided.Term<>(each.madeOf(), each.weight(),
+                    NumericDomain.Bounds.OPEN, NumericDomain.Bounds.OPEN, source, true));
+        }
+        List<WhatARelationLeavesUndivided.OnTheDifference> held = new ArrayList<>();
+        for (OnAWay each : conditions) {
+            if (!statesAnythingOf(sides.get(0).term(), each)
+                    && !statesAnythingOf(sides.get(1).term(), each)) {
+                continue;
+            }
+            WhatARelationLeavesUndivided.OnTheDifference statement = each.affine() == null ? null
+                    : onTheDifference(each.affine().form(), each.affine().rel());
+            if (statement == null) {
+                return Set.of();
+            }
+            held.add(statement);
+        }
+        return WhatARelationLeavesUndivided.ofTheirDifference(terms, constant, relation, held,
+                UndividedByARelation::overlap);
+    }
+
+    /** Whether {@code condition} states anything of the values {@code term} takes, as
+     *  {@link #wayOf} asks it. */
+    private static boolean statesAnythingOf(NumericTerm.FromOnePosition term, OnAWay condition) {
+        return touches(term, condition.positions())
+                && !(condition.whatStands() && onlyAround(term, condition.positions()));
+    }
+
+    /**
+     * {@code form} held against nought as {@code rel}, as a statement about the difference of the
+     * two sides — or null where it is over anything else, or weighs them other than one way and the
+     * other.
+     */
+    private WhatARelationLeavesUndivided.OnTheDifference onTheDifference(
+            LinearForm<NumericTerm> form, Rel rel) {
+        ExactRatio first = form.coefs().get(sides.get(0).term());
+        ExactRatio second = form.coefs().get(sides.get(1).term());
+        if (form.coefs().size() != 2 || first == null || second == null
+                || !(first.plus(second) instanceof ExactAnswer.Held<ExactRatio>(ExactRatio sum))
+                || sum.signum() != 0) {
+            return null;
+        }
+        return new WhatARelationLeavesUndivided.OnTheDifference(first, form.constant(), rel);
     }
 
     /** What a way does to a term: nothing, an end on it alone, or more than this can read. */

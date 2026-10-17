@@ -10,8 +10,10 @@ import souther.compiler.report.AdequacyReport;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -108,13 +110,42 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                         + " || value == Date(\"2022-01-01\")", "y == Date.year(d.value)", "4:18"));
     }
 
-    /** A day apart, the last date has no date after it and the first none before: two values of
-     *  one type each settle it at an end, which taking the same values does not reach. */
+    /**
+     * A day apart, the last date has no date after it and the first none before; that is where the
+     * dates stop and no line the model draws. Moved together, two dates are a day apart wherever
+     * they stand, and only how far apart they are settles it. A date and a count of days are not
+     * moved together.
+     */
     @Test
-    void twoValuesADayApartAreNotShownToReachEachOther() {
-        assertEquals(Map.of("a", NOT_SHOWN, "b", NOT_SHOWN),
+    void twoValuesADayApartRelateEachOther() {
+        assertEquals(Map.of("a", RELATES, "b", RELATES),
                 left("a: Date, b: Date", "data Unused = Int", "Date.daysBetween(a, b) == 1",
                         "4:39"));
+        assertEquals(Map.of("a", NOT_SHOWN, "n", NOT_SHOWN),
+                left("a: Date, n: Int", "data Unused = Int",
+                        "Date.daysBetween(Date(\"2026-01-01\"), a) <= n", "4:56"));
+    }
+
+    /**
+     * A guard on how far apart two dates are leaves them moved together: at nought or more, the
+     * difference is at fourteen or less and past it. A guard on one of them alone keeps it from
+     * values of its own, and a guard holding the difference to ten or less leaves it never past
+     * fourteen.
+     */
+    @Test
+    void aGuardOnHowFarApartTwoValuesAreLeavesThemMovedTogether() {
+        String apart = "Date.daysBetween(a, b)";
+        assertEquals(Map.of("a", RELATES, "b", RELATES),
+                left("a: Date, b: Date", "data Unused = Int",
+                        "if " + apart + " >= 0 then " + apart + " <= 14 else false", "4:75"));
+        assertEquals(Map.of("a", NOT_SHOWN, "b", NOT_SHOWN),
+                left("a: Date, b: Date", "data Unused = Int",
+                        "if a >= Date(\"2020-01-01\") then " + apart + " <= 14 else false",
+                        "4:71"));
+        Map<String, String> under = left("a: Date, b: Date", "data Unused = Int",
+                "if " + apart + " <= 10 then " + apart + " <= 14 else false", "4:76");
+        assertEquals(Set.of("a", "b"), under.keySet());
+        assertFalse(under.containsValue(RELATES), under.toString());
     }
 
     @Test
@@ -205,7 +236,8 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                         "if x > 0m && x < 1m then x == y.value else false", "4:43"));
     }
 
-    /** A way over two places ties them, however each runs on its own. */
+    /** A way over the sum of two places ties them, however each runs on its own: moved together,
+     *  the two are no longer as far from nought as they were. */
     @Test
     void aWayOverTwoPlacesTiesThem() {
         assertEquals(Map.of("x", NOT_SHOWN, "y", NOT_SHOWN),

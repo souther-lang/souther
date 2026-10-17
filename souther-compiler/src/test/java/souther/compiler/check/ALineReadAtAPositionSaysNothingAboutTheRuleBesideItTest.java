@@ -369,8 +369,8 @@ class ALineReadAtAPositionSaysNothingAboutTheRuleBesideItTest {
      * as {@code x < y} is, and the arithmetic is on the far side of the relation rather than in
      * place of it. Read off whether a side <em>is</em> a coordinate, {@code y + 1} named nothing and
      * this came back as a form nobody could read — which is not what a {@code guard} writing the
-     * same comparison is told. Moved by one, neither reaches the other at its end: the least
-     * {@code x} is below every {@code y + 1}.
+     * same comparison is told. Moved by one, the two are still about how far apart they are, and
+     * moved together they stay as far apart: neither is divided, as under {@code low < high}.
      */
     @Test
     void andSoDoesOneWhereTheSecondPositionIsInsideAnExpression() {
@@ -381,10 +381,8 @@ class ALineReadAtAPositionSaysNothingAboutTheRuleBesideItTest {
                     invariant x < y + 1
                 """, "Pair");
 
-        assertEquals(List.of(new BlockReason.RelationNotShownToReachEveryValue()),
-                reasonsAt(read, "x"));
-        assertEquals(List.of(new BlockReason.RelationNotShownToReachEveryValue()),
-                reasonsAt(read, "y"));
+        assertEquals(List.of(new BlockReason.ComparisonRelatingTwoValues()), reasonsAt(read, "x"));
+        assertEquals(List.of(new BlockReason.ComparisonRelatingTwoValues()), reasonsAt(read, "y"));
     }
 
     /**
@@ -392,9 +390,10 @@ class ALineReadAtAPositionSaysNothingAboutTheRuleBesideItTest {
      *
      * <p>What a clause counting two dates apart relates is the two dates: the operation states what
      * it answers in the counts of its arguments, so the quantity it cuts is over both positions.
-     * Held within thirty days, neither date is shown to reach the other at the ends: no date is
-     * thirty days before the first. Arithmetic written outside the call moves the threshold and
-     * not the quantity, so each spelling is the same rule and is said the same way.
+     * Held within thirty days, the two are about how far apart they are, which moving both by any
+     * number of days leaves as it was, so neither is divided. Arithmetic written outside the call
+     * moves the threshold and not the quantity, so each spelling is the same rule and is said the
+     * same way.
      *
      * <p>Read off the shape of the whole side rather than off the quantity, one token of arithmetic
      * outside the call is the difference between two sentences for one rule.
@@ -411,9 +410,9 @@ class ALineReadAtAPositionSaysNothingAboutTheRuleBesideItTest {
                         invariant within = %s
                     """.formatted(clause), "Span");
 
-            assertEquals(List.of(new BlockReason.RelationNotShownToReachEveryValue()),
+            assertEquals(List.of(new BlockReason.ComparisonRelatingTwoValues()),
                     reasonsAt(read, "from"), clause);
-            assertEquals(List.of(new BlockReason.RelationNotShownToReachEveryValue()),
+            assertEquals(List.of(new BlockReason.ComparisonRelatingTwoValues()),
                     reasonsAt(read, "to"), clause);
         }
     }
