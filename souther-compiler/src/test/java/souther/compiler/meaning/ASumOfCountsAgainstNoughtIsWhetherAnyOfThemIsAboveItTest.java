@@ -64,6 +64,14 @@ class ASumOfCountsAgainstNoughtIsWhetherAnyOfThemIsAboveItTest {
         assertInstanceOf(Proposition.Compared.class, stated(2, 3, Rel.GT, 2));
     }
 
+    /** Weighed two each, the sum is even; held equal to three it is no row. Weighed two and three it
+     *  can be any whole number past one, and is kept. */
+    @Test
+    void aSumHeldBetweenTheStepsItComesInIsNoRow() {
+        assertEquals(new Proposition.Always(false), stated(2, 2, Rel.EQ, 3));
+        assertInstanceOf(Proposition.Compared.class, stated(2, 3, Rel.EQ, 5));
+    }
+
     @Test
     void aSumHeldPastWhetherAnyIsAboveNoughtSaysHowMany() {
         assertInstanceOf(Proposition.Compared.class, stated(1, 1, Rel.GE, 2));

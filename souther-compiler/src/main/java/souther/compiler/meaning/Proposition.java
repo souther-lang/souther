@@ -887,14 +887,11 @@ public sealed interface Proposition {
                 || form.coefs().isEmpty()) {
             return null;
         }
-        List<Proposition> meeting = new ArrayList<>(form.coefs().size());
         ExactRatio least = null;
         for (Map.Entry<Quantity, ExactRatio> each : form.coefs().entrySet()) {
-            if (!(each.getKey() instanceof Quantity.HowManyMeet count)
-                    || each.getValue().signum() <= 0) {
+            if (!(each.getKey() instanceof Quantity.HowManyMeet) || each.getValue().signum() <= 0) {
                 return null;
             }
-            meeting.add(count.someMeets());
             least = least == null || each.getValue().compareTo(least) < 0 ? each.getValue() : least;
         }
         // Σ a·count + k rel 0 with every a positive, in steps of the least a: Σ (a/least)·count
@@ -903,21 +900,40 @@ public sealed interface Proposition {
         if (!(at instanceof ExactAnswer.Held<ExactRatio>(ExactRatio t))) {
             return null;
         }
-        Proposition some = any(meeting);
         int againstNought = t.signum();
         boolean atMostOne = t.compareTo(ExactRatio.ONE) <= 0;
         boolean belowOne = t.compareTo(ExactRatio.ONE) < 0;
-        // One count comes only to whole steps; a sum of differently weighed ones need not.
-        boolean noStepThere = meeting.size() == 1 && !t.isWhole();
         return switch (rel) {
-            case GE -> againstNought <= 0 ? new Always(true) : atMostOne ? some : null;
+            case GE -> againstNought <= 0 ? new Always(true) : atMostOne ? someMeets(form) : null;
             case GT -> againstNought < 0 ? new Always(true)
-                    : belowOne ? some : null;
-            case EQ -> againstNought < 0 || noStepThere ? new Always(false)
-                    : againstNought == 0 ? some.denied() : null;
+                    : belowOne ? someMeets(form) : null;
+            case EQ -> againstNought < 0 || (!t.isWhole() && inWholeSteps(form, least))
+                    ? new Always(false)
+                    : againstNought == 0 ? someMeets(form).denied() : null;
             case LE, LT, NE -> throw new IllegalStateException(
                     "a relation is written under the canonical one of it and its denial");
         };
+    }
+
+    /** Some element of one of the containers {@code counts} counts meeting what it counts. */
+    private static Proposition someMeets(LinearForm<Quantity> counts) {
+        List<Proposition> meeting = new ArrayList<>(counts.coefs().size());
+        for (Quantity count : counts.coefs().keySet()) {
+            if (count instanceof Quantity.HowManyMeet meets) {
+                meeting.add(meets.someMeets());
+            }
+        }
+        return any(meeting);
+    }
+
+    /**
+     * Whether every weight {@code counts} has is a whole number of {@code step}s, so that the sum
+     * comes only to whole steps: two of each, held equal to three, is never.
+     */
+    private static boolean inWholeSteps(LinearForm<Quantity> counts, ExactRatio step) {
+        return counts.coefs().values().stream().allMatch(weight ->
+                weight.dividedBy(step) instanceof ExactAnswer.Held<ExactRatio>(ExactRatio steps)
+                        && steps.isWhole());
     }
 
     /**

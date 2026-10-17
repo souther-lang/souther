@@ -1138,22 +1138,26 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         }
 
         private final String behavior;
-        private final Map<Asked, Boolean> carried = new HashMap<>();
         private final Map<Asked, Optional<Cutting.Read>> applications = new HashMap<>();
 
         StatedHere(String behavior) {
             this.behavior = behavior;
         }
 
-        /** Whether what a comparison states is carried past it ({@link Pullback#carriesPast}). */
+        /**
+         * Whether what a comparison states is carried past it ({@link Pullback#carriesPast}).
+         *
+         * <p>What it states is kept where every other reader of the comparison under these names
+         * takes it ({@link WhatConditionsState#comparison}), and where it is not carried past it is
+         * read next for the rule it is.
+         */
         boolean carriesPast(Core e, StatedComparison statement,
                             Supplier<WhatNamesStandFor> names) {
-            if (!Pullback.mayBeCarriedPast(statement)) {
-                return false;
-            }
-            WhatNamesStandFor standing = names.get();
-            return carried.computeIfAbsent(new Asked(e, standing.reads()),
-                    _ -> Pullback.carriesPast(statement, e, standing.reads(), standing.read()));
+            return Pullback.carriesPast(statement, e, () -> {
+                WhatNamesStandFor standing = names.get();
+                return WhatConditionsState.of(standing.read()).comparison(statement,
+                        standing.reads(), standing.read()).stated();
+            });
         }
 
         /**

@@ -440,13 +440,16 @@ final class Pullback {
      * a set only an emptiness check was carried through, and {@code #xs + #ys >= 0} holds on every
      * row as {@code #xs >= 0} does, which is a rule of the comparison's that cuts nothing.
      *
-     * @param check the node the check is written as
+     * <p>Which comparisons can be is a question about their shape alone, asked before what one
+     * states is read.
+     *
+     * @param check  the node the check is written as
+     * @param stated what the comparison was read to state
      */
-    static boolean carriesPast(StatedComparison comparison, Core check, InputReads reads,
-                               InputReading read) {
-        return mayBeCarriedPast(comparison)
-                && carriesPast(ofAComparison(comparison, reads, read, Optional.empty()), check,
-                        AnEmptinessCheck.checked(comparison) != null);
+    static boolean carriesPast(StatedComparison comparison, Core check, Supplier<Pulled> stated) {
+        boolean emptiness = AnEmptinessCheck.checked(comparison) != null;
+        return (emptiness || AnEmptinessCheck.sizesAddedUp(comparison))
+                && carriesPast(stated.get(), check, emptiness);
     }
 
     /**
@@ -490,16 +493,6 @@ final class Pullback {
         Core node = Core.withoutStanding(from);
         return node != Core.withoutStanding(check) && node instanceof Core.Binary
                 && BooleanMeaning.asAComparison(node).isPresent();
-    }
-
-    /**
-     * Whether {@code comparison} is one {@link #carriesPast} can answer yes for, which is a question
-     * about its shape alone: only an emptiness check is carried anywhere, or sizes added up
-     * against numbers, which can be whether any of their containers holds anything.
-     */
-    static boolean mayBeCarriedPast(StatedComparison comparison) {
-        return AnEmptinessCheck.checked(comparison) != null
-                || AnEmptinessCheck.sizesAddedUp(comparison);
     }
 
     /**

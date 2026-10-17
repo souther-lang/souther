@@ -79,6 +79,8 @@ public final class WrittenLines {
     private final ExpansionLineage comparison;
     private final Conclusion concluded;
     private final Map<Derivation, Set<String>> made = new IdentityHashMap<>();
+    /** What each step whose relations were gathered concludes. */
+    private final Map<Derivation, Proposition> conclusions = new IdentityHashMap<>();
     private final Map<Derivation, Set<Under>> walked = new IdentityHashMap<>();
     private final Map<String, Map<WrittenLine, Seen>> seen = new LinkedHashMap<>();
     /** The lines some relation of the comparison's own was made under. */
@@ -278,7 +280,7 @@ public final class WrittenLines {
         Derivation.AComparisonRead.Facing facing = null;
         String own = null;
         if (step instanceof Derivation.AComparisonRead read && !under.inAnother()
-                && concluded.of(step) instanceof Proposition.Compared compared) {
+                && conclusionOf(step) instanceof Proposition.Compared compared) {
             facing = read.facing();
             own = compared.heldKey();
         }
@@ -323,10 +325,18 @@ public final class WrittenLines {
         Set<String> known = made.get(step);
         if (known == null) {
             known = new LinkedHashSet<>();
-            gather(concluded.of(step), known);
+            Proposition out = concluded.of(step);
+            conclusions.put(step, out);
+            gather(out, known);
             made.put(step, known);
         }
         return known;
+    }
+
+    /** What {@code step} concludes, concluded once with its relations. */
+    private Proposition conclusionOf(Derivation step) {
+        relationsOf(step);
+        return conclusions.get(step);
     }
 
     private void gather(Proposition stated, Set<String> into) {
