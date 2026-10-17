@@ -293,14 +293,30 @@ final class AdmissibleReading {
      * for the position keeps.
      */
     private boolean relatesElements(ClauseExpr.Part part, Denotations at) {
+        return keptApartAt(part, at) != null;
+    }
+
+    /**
+     * The position whose elements {@code part} keeps apart and the run they are apart at, or null
+     * where it states nothing of the kind this compiler builds for.
+     *
+     * <p>The one recognition of the leaf, asked by two readings. This one makes of it a reason its
+     * set of values is short of the rule; the reading of how elements stand to each other holds it
+     * against what the builders of the position keep ({@link ReadingLanguage.Elements}).
+     */
+    KeptApart keptApartAt(ClauseExpr.Part part, Denotations at) {
         if (!part.positive()
                 || !(Core.withoutStanding(part.of()) instanceof Core.PreservedCall call)) {
-            return false;
+            return null;
         }
         ElementsApart.Stated stated = ElementsApart.stated(call);
-        return stated != null && ElementsApart.readsAPlace(stated.container())
-                && positionIn(stated.container(), at) != null;
+        FactSubject container = stated != null && ElementsApart.readsAPlace(stated.container())
+                ? positionIn(stated.container(), at) : null;
+        return container == null ? null : new KeptApart(container, stated.run());
     }
+
+    /** A leaf saying no two elements of {@code container} share what {@code run} reads off one. */
+    record KeptApart(FactSubject container, List<String> run) {}
 
     /**
      * What {@code e} leaves the positions it names, said twice: to the places, and about the clause.
