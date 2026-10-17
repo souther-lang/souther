@@ -66,6 +66,77 @@ class OneClosureStandsForEveryQuestionEqualToItTest {
         assertEquals(2, kept.workedOut());
     }
 
+    /**
+     * And a closure is lent to rules said after it only where they are spaced as it was: the same
+     * rules spaced another way are another question, whoever is lending.
+     */
+    @Test
+    void aClosureIsNotLentToTheSameRulesSpacedAnotherWay() {
+        ClosedStates kept = ClosedStates.kept();
+        List<AffineConstraint<String>> rules = List.of(
+                rule("a", 1, "b", -1, -2), rule("a", 1, "a", 0, -3));
+
+        ClosedStates.Parted<String> whole = kept.of(rules, atom -> Granularity.DISCRETE,
+                CanonicalOrder.asTheyAreSpelled(), null);
+        ClosedStates.Parted<String> dense = kept.of(rules,
+                atom -> atom.equals("a") ? Granularity.DENSE : Granularity.DISCRETE,
+                CanonicalOrder.asTheyAreSpelled(), whole);
+
+        assertNotSame(whole.state(), dense.state());
+        assertEquals(2, kept.workedOut());
+    }
+
+    /**
+     * And only where they are walked in an order that puts their positions where it put them: an
+     * order written apart that places them alike is lent the closure, and one that places them the
+     * other way round is another question.
+     */
+    @Test
+    void aClosureIsLentToTheSameRulesOnlyWhereTheyArePlacedAlike() {
+        ClosedStates kept = ClosedStates.kept();
+        List<AffineConstraint<String>> rules = List.of(rule("a", 1, "b", -1, -2));
+        ClosedStates.Parted<String> whole = kept.of(rules, atom -> Granularity.DISCRETE,
+                String::compareTo, null);
+
+        kept.of(rules, atom -> Granularity.DISCRETE, (one, other) -> one.compareTo(other), whole);
+        assertEquals(1, kept.workedOut(), "an order placing them alike was not lent the closure");
+
+        kept.of(rules, atom -> Granularity.DISCRETE, (one, other) -> other.compareTo(one), whole);
+        assertEquals(2, kept.workedOut(), "an order placing them the other way was lent it");
+    }
+
+    /**
+     * A domain made from one whose closure was worked out, by a rule over one of its two parts,
+     * asks about that part and is lent the other — and a domain met into one holding no rules is
+     * lent the closure of what was met into it.
+     */
+    @Test
+    void aDomainMadeFromAClosedOneAsksOnlyAboutThePartItsRuleReaches() {
+        ClosedStates kept = ClosedStates.kept();
+        Map<String, Granularity> spacing = Map.of("a", Granularity.DISCRETE,
+                "b", Granularity.DISCRETE, "c", Granularity.DISCRETE, "d", Granularity.DISCRETE);
+        NumericDomain<String> twoParts = NumericDomain.top(CanonicalOrder.asTheyAreSpelled(), kept)
+                .assume(form("a", 1, "b", -1, -2), Rel.LE, spacing)
+                .assume(form("c", 1, "d", -1, -3), Rel.LE, spacing);
+        assertTrue(!twoParts.isBottom(), "two differences leave something");
+        long asked = kept.questionsAsked();
+
+        NumericDomain<String> onePartMore =
+                twoParts.assume(form("a", 1, "a", 0, -7), Rel.LE, spacing);
+        assertTrue(!onePartMore.isBottom(), "a bound on one of them leaves something");
+
+        assertEquals(1, kept.questionsAsked() - asked,
+                "the part the bound does not reach was asked about again");
+
+        long beforeMeeting = kept.questionsAsked();
+        NumericDomain<String> met =
+                NumericDomain.top(CanonicalOrder.asTheyAreSpelled(), kept).meet(onePartMore);
+        assertTrue(!met.isBottom(), "the same rules leave the same thing");
+
+        assertEquals(0, kept.questionsAsked() - beforeMeeting,
+                "rules met into a domain holding none were asked about again");
+    }
+
     /** What is spaced at a position no rule weighs is nothing the closure reads. */
     @Test
     void theSpacingOfAPositionNoRuleWeighsIsNoPartOfTheQuestion() {

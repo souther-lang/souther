@@ -80,17 +80,40 @@ public final class NumericDomain<A> {
      * to.
      */
     private final ClosedStates closedStates;
+
+    /**
+     * What the domain this one was made from had worked out by then, or the one before it — or
+     * null where none had.
+     *
+     * <p>Carried like {@link #closedStates} and for the same kind of reason: its rules come first
+     * among this one's, so the parts of them the rules said since do not reach are closures this one
+     * need not work out again ({@link ClosedStates.Parted}). What this domain is, it never decides.
+     */
+    private final ClosedStates.Parted<A> closedBefore;
     private List<AffineConstraint<A>> distinctRules;
-    private ClosedState<A> closed;
+    private ClosedStates.Parted<A> closed;
 
     private NumericDomain(StatedRules<A> stated, AppendOnly<A, Granularity> kinds,
                           boolean readARuleNothingSatisfies, CanonicalOrder<A> order,
-                          ClosedStates closedStates) {
+                          ClosedStates closedStates, ClosedStates.Parted<A> closedBefore) {
         this.stated = stated;
         this.kinds = kinds;
         this.readARuleNothingSatisfies = readARuleNothingSatisfies;
         this.order = order;
         this.closedStates = closedStates;
+        this.closedBefore = closedBefore;
+    }
+
+    /**
+     * What a domain made from this one by saying more of its rules is lent: this one's closure where
+     * it has been worked out, and otherwise what this one was lent.
+     *
+     * <p>Not worked out for the asking. A closure nobody asked this domain for is one a domain made
+     * from it may never need either.
+     */
+    private ClosedStates.Parted<A> lent() {
+        ClosedStates.Parted<A> had = closed;
+        return had != null ? had : closedBefore;
     }
 
     /**
@@ -113,7 +136,7 @@ public final class NumericDomain<A> {
      */
     public static <A> NumericDomain<A> top(CanonicalOrder<A> order, ClosedStates closedStates) {
         return new NumericDomain<>(StatedRules.none(), AppendOnly.empty(), false, order,
-                closedStates);
+                closedStates, null);
     }
 
     /**
@@ -176,7 +199,7 @@ public final class NumericDomain<A> {
             // Nothing satisfies it, so nothing satisfies it together with anything else.
             case AffineConstraint.Read.HoldsNever<A> _ ->
                     new NumericDomain<>(StatedRules.none(), knowing.kinds, true, knowing.order,
-                            closedStates);
+                            closedStates, null);
             // Every value satisfies it, so there is nothing to keep.
             case AffineConstraint.Read.HoldsAlways<A> _ -> knowing;
             case AffineConstraint.Read.Stated<A> stated -> knowing.keeping(stated.constraint());
@@ -196,7 +219,7 @@ public final class NumericDomain<A> {
      */
     private NumericDomain<A> keeping(AffineConstraint<A> rule) {
         return new NumericDomain<>(stated.and(StatedRules.of(rule)), kinds, false, order,
-                closedStates);
+                closedStates, lent());
     }
 
     /**
@@ -248,7 +271,7 @@ public final class NumericDomain<A> {
         }
         return next == kinds ? this
                 : new NumericDomain<>(stated, next, readARuleNothingSatisfies, order,
-                        closedStates);
+                        closedStates, lent());
     }
 
     // --- renaming and joining ---------------------------------------------------------------------
@@ -292,7 +315,7 @@ public final class NumericDomain<A> {
         // Nothing is lent across either: rules under other names are another reader's rules, and
         // they join the closures of the reading they are met into.
         return new NumericDomain<>(out, AppendOnly.of(spacing), readARuleNothingSatisfies, order,
-                ClosedStates.NONE);
+                ClosedStates.NONE, null);
     }
 
     /**
@@ -330,7 +353,9 @@ public final class NumericDomain<A> {
             }
         }
         return new NumericDomain<>(stated.and(other.stated), both,
-                readARuleNothingSatisfies || other.readARuleNothingSatisfies, order, closedStates);
+                readARuleNothingSatisfies || other.readARuleNothingSatisfies, order, closedStates,
+                // The rules said first are this one's, unless it has none and they are the other's.
+                stated.isNothing() ? other.lent() : lent());
     }
 
     // --- what the rules leave, worked out once ----------------------------------------------------
@@ -343,10 +368,12 @@ public final class NumericDomain<A> {
      * on the order, which is the thing this arrangement exists to be rid of.
      */
     private ClosedState<A> closed() {
-        if (closed == null) {
-            closed = closedStates.of(rules(), kinds::get, order);
+        ClosedStates.Parted<A> had = closed;
+        if (had == null) {
+            had = closedStates.of(rules(), kinds::get, order, closedBefore);
+            closed = had;
         }
-        return closed;
+        return had.state();
     }
 
     // --- entails / refutes --------------------------------------------------------------------------
