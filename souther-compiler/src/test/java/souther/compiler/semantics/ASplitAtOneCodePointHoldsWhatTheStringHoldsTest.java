@@ -2,18 +2,27 @@ package souther.compiler.semantics;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.check.BoundOperationFacts;
+import souther.compiler.check.DeclaredArgument;
+import souther.compiler.check.DefaultBoundOperationFacts;
+import souther.compiler.numeric.ExactAnswer;
+import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.LinearForm;
+import souther.compiler.types.ValueName;
 import souther.runtime.Strings;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Some piece of a string split at one code point holding a code point of a class is the string
- * holding one that is in the class and is not that code point — checked against what the run time
- * answers rather than against the statement of it.
+ * holding one that is in the class and is not that code point, and there is one more piece than
+ * the times the code point stands in the string — checked against what the run time answers
+ * rather than against the statement of it.
  *
  * <p>Every string up to a length over an alphabet that has what could part the two: the separator,
  * the whitespace the library trims at either end and at no other — the ideographic space and the
@@ -91,6 +100,51 @@ class ASplitAtOneCodePointHoldsWhatTheStringHoldsTest {
             assertEquals(somePiece, each.codePoints().anyMatch(outside::contains),
                     "of " + show(each));
         }
+    }
+
+    /**
+     * How many pieces a split at one code point answers, read off the number the library gives
+     * for it: every string of the alphabet, with each of a separator in the basic plane, one
+     * outside it and one that is whitespace — so the empty pieces at either end and between two
+     * separators are counted, and a code point of two UTF-16 units is counted once.
+     */
+    @Test
+    void howManyPiecesThereAreIsOneMoreThanTheTimesTheSeparatorStands() {
+        BoundOperationFacts.Pieces parted = DefaultBoundOperationFacts.get()
+                .piecesOf(ValueName.Stdlib.operation("String", "split"));
+        for (String separator : List.of(",", "😀", " ")) {
+            LinearForm<LawNumber<DeclaredArgument>> howMany =
+                    parted.howManyPartedAt(separator.codePointAt(0));
+            for (String each : strings()) {
+                int pieces = Strings.split(each, separator).size();
+                ExactRatio read = valueOf(howMany, each);
+                assertEquals(0, ExactRatio.of(pieces).compareTo(read), () -> "of " + show(each)
+                        + " at " + show(separator) + ": " + pieces + " pieces, read as "
+                        + read.spelled());
+            }
+        }
+    }
+
+    /** What {@code form} comes to where the string split is {@code text}. */
+    private static ExactRatio valueOf(LinearForm<LawNumber<DeclaredArgument>> form, String text) {
+        List<ExactRatio> terms = new ArrayList<>(List.of(form.constant()));
+        for (Map.Entry<LawNumber<DeclaredArgument>, ExactRatio> each : form.coefs().entrySet()) {
+            if (!(each.getKey() instanceof LawNumber.CodePointsOf<DeclaredArgument>(
+                    LawSubject.Argument<DeclaredArgument> _, CodePointClass counted))) {
+                throw new AssertionError("a number of pieces is a count of the string's code"
+                        + " points, and this is " + each.getKey());
+            }
+            long count = text.codePoints().filter(counted::contains).count();
+            if (!(each.getValue().times(ExactRatio.of(count))
+                    instanceof ExactAnswer.Held<ExactRatio>(ExactRatio term))) {
+                throw new AssertionError("a small weight times a small count is held");
+            }
+            terms.add(term);
+        }
+        if (!(ExactRatio.sum(terms) instanceof ExactAnswer.Held<ExactRatio>(ExactRatio sum))) {
+            throw new AssertionError("a sum of small numbers is held");
+        }
+        return sum;
     }
 
     /**

@@ -1420,6 +1420,13 @@ final class Pullback {
         if (inACase != null) {
             return new Sized.AsAForm(inACase);
         }
+        // The pieces of a string parted at one code point: the operation has no number for how
+        // many, and this call's separator gives one.
+        ALawRead call = new ALawRead(applied, e, made.at());
+        if (call.piecesOf(made) instanceof Pieces pieces && pieces.separator().isPresent()) {
+            return call.number(DefaultBoundOperationFacts.get().piecesOf(operation)
+                    .howManyPartedAt(pieces.separator().getAsInt()));
+        }
         return switch (DefaultBoundOperationFacts.get().settled(operation,
                 OperationLaw.Observed.SIZE)) {
             case null -> {
@@ -1441,7 +1448,7 @@ final class Pullback {
                 // one number, and stands at no position either.
                 yield equalTo == null ? new Sized.NotSized(
                         new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.SUBJECT))
-                        : new ALawRead(applied, e, made.at()).number(equalTo);
+                        : call.number(equalTo);
             }
             case BoundOperationFacts.Settled.ByALaw(
                     OperationLaw.Observation<DeclaredArgument> _, var _) ->
