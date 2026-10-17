@@ -22,8 +22,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>Each model below is one relation, and what is asked is the word the report gives each place
  * it relates. Three things are shown apart and none of them stands in for another: that the other
- * side takes every value of a run (an unrestricted value, or a number taken of one whose operation
- * declares every number it could answer is one some value answers), that its run is every value
+ * side takes every value of a run (an unrestricted value, a value whose rules are ends on it and
+ * nothing else, or a number taken of an unrestricted value whose operation declares every number it
+ * could answer is one some value answers), that its run is every value
  * between the ends and not only where the values lie, and that nothing on the way to the relation
  * ties it to another place.
  */
@@ -69,11 +70,79 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                         "n == a.value", "4:18"));
     }
 
+    /**
+     * Two amounts held at nought or more, the one at or above the other. Every gross has a
+     * deduction at it and one above it, so the comparison leaves the gross undivided; a deduction
+     * of nought has no gross below it, and settles the comparison whatever the gross is. Written
+     * the other way round, it is the same comparison.
+     */
+    @Test
+    void anAmountHeldAtNoughtOrMoreReachesEveryOtherAmountFromItsEndOn() {
+        String yen = "data Yen = Int invariant value >= 0";
+        assertEquals(Map.of("g", RELATES, "d", NOT_SHOWN),
+                left("g: Yen, d: Yen", yen, "g.value >= d.value", "4:24"));
+        assertEquals(Map.of("g", RELATES, "d", NOT_SHOWN),
+                left("g: Yen, d: Yen", yen, "d.value <= g.value", "4:24"));
+    }
+
+    /**
+     * Two amounts held equal take the same values, however much of the rules beside one of them
+     * was read: a rule of the record over another of its fields leaves the amount's ends not shown
+     * to be all the rules say, and the amount still every value the other amount is.
+     */
+    @Test
+    void twoAmountsTakeTheSameValuesHoweverMuchOfTheRulesBesideOneWasRead() {
+        assertEquals(Map.of("e", RELATES, "r.c", RELATES),
+                leftAt("e: Yen, r: Rec", "data Yen = Int invariant value >= 0"
+                                + "\ndata Rec = { c: Yen, n: Int } invariant n * n >= 4",
+                        "e.value == r.c.value", 24));
+    }
+
+    /** Held to nought through ten, the greatest gross has no deduction above it, as the least
+     *  deduction has no gross below it. */
+    @Test
+    void anAmountHeldBetweenTwoEndsIsDividedAtTheEndNothingReachesPast() {
+        assertEquals(Map.of("g", NOT_SHOWN, "d", NOT_SHOWN),
+                left("g: Yen, d: Yen", "data Yen = Int invariant value >= 0 && value <= 10",
+                        "g.value >= d.value", "4:24"));
+    }
+
+    /**
+     * Ends that are not all the rules say leave the value no run shown: a value taken out of the
+     * middle, values held to a class of whole numbers, a rule no reading of ends took in — under
+     * which no deduction is nought, so a gross of nought is below every one — and an end on another
+     * number of the position: a string of one character has no string above the greatest of them,
+     * however far up from {@code "b"} its order runs.
+     *
+     * <p>The last is kept back twice. The region shows no run of a string's own order whole, ends
+     * or none, so a string held at {@code "b"} or above is not shown to reach anything either; the
+     * end on its length is what keeps it back where the region shows one.
+     */
+    @Test
+    void endsThatAreNotAllTheRulesSayLeaveTheValueReachingNothingShown() {
+        for (String rule : List.of("value >= 0 && value /= 5",
+                "value >= 0 && Int.floorMod(value, 2) == 0",
+                "value >= 0 && value * value >= 4")) {
+            assertEquals(Map.of("g", NOT_SHOWN, "d", NOT_SHOWN),
+                    leftAt("g: Amount, d: Yen", "data Amount = Int invariant value >= 0"
+                            + "\ndata Yen = Int invariant " + rule, "g.value >= d.value", 24),
+                    rule);
+        }
+        for (String rule : List.of("value >= \"b\" && String.length(value) <= 1",
+                "value >= \"b\"")) {
+            assertEquals(Map.of("g", NOT_SHOWN, "d", NOT_SHOWN),
+                    left("g: Letter, d: Letter", "data Letter = String invariant " + rule,
+                            "g.value >= d.value", "4:24"), rule);
+        }
+    }
+
+    /** Held at nought or more, a number reaches every length, as a length reaches every number
+     *  it is held to. */
     @Test
     void aLengthReachesEveryNumberAtOrAboveNoughtAndNothingBelow() {
         assertEquals(Map.of("String.length(s)", RELATES, "n", NOT_SHOWN),
                 left("n: Int, s: String", "data Unused = Int", "n == String.length(s)", "4:18"));
-        assertEquals(Map.of("n", RELATES, "String.length(s)", NOT_SHOWN),
+        assertEquals(Map.of("n", RELATES, "String.length(s)", RELATES),
                 left("n: N, s: String", "data N = Int invariant value >= 0",
                         "n.value == String.length(s)", "4:24"));
     }
@@ -86,12 +155,13 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                         "n == String.length(s.value)", "4:18"));
     }
 
-    /** An hour is one of twenty-four, which a number running past them is not. */
+    /** An hour is one of twenty-four, which a number running past them is not, and a number held
+     *  to them is. */
     @Test
     void anHourReachesTheHoursOfADay() {
         assertEquals(Map.of("Time.hour(t)", RELATES, "n", NOT_SHOWN),
                 left("n: Int, t: Time", "data Unused = Int", "n == Time.hour(t)", "4:18"));
-        assertEquals(Map.of("h", RELATES, "Time.hour(t)", NOT_SHOWN),
+        assertEquals(Map.of("h", RELATES, "Time.hour(t)", RELATES),
                 left("h: H, t: Time", "data H = Int invariant value >= 0 && value <= 23",
                         "h.value == Time.hour(t)", "4:24"));
     }
