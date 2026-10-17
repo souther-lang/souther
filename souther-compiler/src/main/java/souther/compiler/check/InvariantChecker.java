@@ -1009,7 +1009,8 @@ public final class InvariantChecker {
         // the one that decides the choices in what they came to.
         StatedByClauses.Reading reader = StatedByClauses
                 .readingOf(c.terms, positions, symbols, alternatives, allowed, c.answers,
-                        c.linesStatedAgainst(numbers), boundariesOf(c.terms, numbers));
+                        c.linesStatedAgainst(numbers), boundariesOf(c.terms, numbers),
+                        keptApartAt(named, atoms, keys, typeAt, world.source()));
         // What each clause said and what each part of it said, kept as they were read and
         // asked afterwards. Which branch of a choice anybody can take turns on clauses not yet
         // read and on machines nobody has made at this point, and every one of these questions
@@ -1404,6 +1405,41 @@ public final class InvariantChecker {
                     path.then(field.getKey()), field.getValue(), at, symbols, depth + 1,
                     atoms, typeAt, held, keys);
         }
+    }
+
+    /**
+     * What the builders of each position of a value of {@code named} keep its elements apart at,
+     * for the positions where they keep anything apart ({@link ElementsApart#keptAt}).
+     *
+     * <p>Asked of the builders' reading: the containers composed for a position are what the
+     * reading of how its elements stand to each other speaks for. Each name's rules are read once
+     * for the whole value, however many of its positions pass through the name.
+     */
+    private static Map<FactSubject, List<List<String>>> keptApartAt(
+            TypeSymbol.AtModule named, Map<RuleKey, FactSubject> atoms,
+            Map<RuleKey, FactSubject> keys, Map<RuleKey, Type> typeAt, RuleReadingSource source) {
+        Map<TypeSymbol.AtModule, Map<RuleKey, List<List<String>>>> written = new HashMap<>();
+        Map<FactSubject, List<List<String>>> out = new LinkedHashMap<>();
+        typeAt.forEach((path, there) -> {
+            List<List<String>> kept = ElementsApart.keptAt(named, path, there,
+                    each -> written.computeIfAbsent(each,
+                            declared -> ElementsApart.writtenOn(declared, source)),
+                    source);
+            if (kept.isEmpty()) {
+                return;
+            }
+            // Under every name the position has, as the reading files a clause under whichever
+            // it recognised ({@link #positions}).
+            FactSubject key = keys.get(path);
+            if (key != null) {
+                out.put(key, kept);
+            }
+            FactSubject atom = atoms.get(path);
+            if (atom != null) {
+                out.put(atom, kept);
+            }
+        });
+        return out;
     }
 
     /**
