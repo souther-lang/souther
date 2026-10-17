@@ -5331,6 +5331,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case WhyNotTaken.MoreAlternativesThanAreTried _ -> "a condition that is one of"
                     + " several things, inside one another past "
                     + CompositionBudget.ALTERNATIVES_A_PATH_TRIES.counts();
+            case WhyNotTaken.MoreValuesThanAreHeld _ -> "a condition that is one of several"
+                    + " comparisons of one number, leaving it values past "
+                    + CompositionBudget.VALUES_A_PATH_HOLDS_OF_ONE_NUMBER.counts();
         };
     }
 
@@ -6088,6 +6091,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case WhyNotTaken.MoreAlternativesThanAreTried _ -> {
                 out.put("kind", "past_a_figure");
                 out.put("reason", "more_alternatives_than_are_tried");
+            }
+            case WhyNotTaken.MoreValuesThanAreHeld _ -> {
+                out.put("kind", "past_a_figure");
+                out.put("reason", "more_values_than_are_held");
             }
         }
         return out;

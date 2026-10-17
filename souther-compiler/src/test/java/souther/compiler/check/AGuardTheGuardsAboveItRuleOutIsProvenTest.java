@@ -3,6 +3,7 @@ package souther.compiler.check;
 import souther.compiler.diag.SourceRendering;
 import org.junit.jupiter.api.Test;
 import souther.compiler.coverage.ControlPlace;
+import souther.compiler.meaning.WhyNotTaken;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.reach.PathDecision;
@@ -502,16 +503,128 @@ class AGuardTheGuardsAboveItRuleOutIsProvenTest {
     }
 
     /**
-     * A remainder of a place moved by a number keeps what the guards say of it.
+     * A remainder of a place moved by a number keeps what the guards say of it, written in the
+     * guard or named first.
      *
      * <p>Read as the remainder of the place over two stretches, what a guard over the moved
-     * remainder says is one of two things, and a path holds facts that all hold and not one of
-     * several. The guards still rule the same departure out, since they are about one value, and
-     * what they say of it is taken in as the value they are about.
+     * remainder says is one of two things: {@code x < 5} is the place's remainder below four or at
+     * six. Both are about one number, so a path holds them as the values of it they leave, and the
+     * guards rule the same departure out however the remainder was spelled.
      */
     @Test
     void aGuardOverARemainderOfAMovedPlaceStillRulesOutWhatItRulesOut() {
+        String named = """
+                let x = Int.floorMod(a.value + 1, 7)
+                guard x < 5 else Free
+                guard x < 6 else Free
+                """;
+        String inline = """
+                guard Int.floorMod(a.value + 1, 7) < 5 else Free
+                guard Int.floorMod(a.value + 1, 7) < 6 else Free
+                """;
+        for (String guards : List.of(named, inline)) {
+            assertEquals(1, provenIn(charging(guards), "charge").size(),
+                    () -> "nothing under five is six or more, whatever `x` is:\n" + guards);
+        }
+        // A control: under four is no less under five, and nothing above settles the second.
+        assertEquals(List.of(), provenIn(charging("""
+                let x = Int.floorMod(a.value + 1, 7)
+                guard x < 5 else Free
+                guard x < 4 else Free
+                """), "charge"));
+    }
+
+    /**
+     * And what they say of the place's own remainder: a remainder of six moved by one is nought,
+     * whichever of the two the guards name and however the moved one is spelled.
+     */
+    @Test
+    void aGuardOverTheRemainderOfAPlaceRulesOutWhatItLeavesTheMovedRemainder() {
+        List<String> eachWay = List.of("""
+                guard Int.floorMod(a.value, 7) == 6 else Free
+                guard Int.floorMod(a.value + 1, 7) /= 0 else Free
+                """, """
+                guard Int.floorMod(a.value, 7) == 6 else Free
+                let x = Int.floorMod(a.value + 1, 7)
+                guard x /= 0 else Free
+                """, """
+                guard Int.floorMod(a.value, 7) < 3 else Free
+                let x = Int.floorMod(a.value + 1, 7)
+                guard x == 0 else Free
+                """);
+        for (String guards : eachWay) {
+            assertEquals(1, provenIn(charging(guards), "charge").size(),
+                    () -> "the remainder the first leaves is one the second refuses:\n" + guards);
+        }
+    }
+
+    /**
+     * A choice between comparisons of two numbers is no set of values of either: one being small
+     * says nothing of the other, so the second guard's departure is taken by a value the first let
+     * through on the other number.
+     */
+    @Test
+    void aChoiceOverTwoNumbersIsNotHeldAsTheValuesOfOne() {
         String source = """
+                module d
+
+                data Amount = Int invariant value >= 0 && value <= 1000
+                data Free
+                data Charged = { yen: Int }
+
+                behavior charge : (a: Amount, b: Amount) -> Free | Charged
+                    constructs Charged
+                let charge (a, b) = {
+                    guard a.value < 3 || b.value < 3 else Free
+                    guard a.value < 3 || a.value > 10 else Free
+                    Charged { yen = 1 }
+                }
+                """;
+
+        assertEquals(List.of(), provenIn(source, "charge"),
+                "a value of five and b of nought takes the second departure");
+    }
+
+    /**
+     * A remainder by a divisor so large that the values a guard leaves it, and the values it leaves
+     * out, are each more than a path holds: nothing is proven, and the figure is named.
+     */
+    @Test
+    void valuesPastWhatAPathHoldsProveNothingAndNameTheFigure() {
+        String source = charging("""
+                let x = Int.floorMod(a.value + 1, 1000003)
+                guard x < 500 else Free
+                guard x < 600 else Free
+                """);
+
+        assertEquals(List.of(), provenIn(source, "charge"));
+        assertTrue(armsOf(source, "charge").stream()
+                        .filter(Reachability.Unsettled.class::isInstance)
+                        .flatMap(each -> WhatAnAnswerSays.whyAConditionWasNotTakenIn(
+                                ((Reachability.Unsettled) each).why()).stream())
+                        .anyMatch(new WhyNotTaken.MoreValuesThanAreHeld()::equals),
+                "the figure that stopped it is said");
+    }
+
+    /**
+     * By the same divisor, a guard that leaves the remainder all but a few values is held as the
+     * values it leaves out, and those are what the next guard's departure needs.
+     */
+    @Test
+    void theFewValuesAGuardLeavesOutAreHeldWhereTheyAreFewer() {
+        String source = charging("""
+                let x = Int.floorMod(a.value + 1, 1000003)
+                guard x < 1000000 else Free
+                guard x < 1000001 else Free
+                """);
+
+        assertEquals(1, provenIn(source, "charge").size(),
+                "nothing under a million is a million and one or more");
+    }
+
+    /** A behavior charging an amount past {@code guards}, which may name {@code a}. */
+    private static String charging(String guards) {
+        return """
                 module d
 
                 data Amount = Int invariant value >= 0 && value <= 1000
@@ -521,15 +634,9 @@ class AGuardTheGuardsAboveItRuleOutIsProvenTest {
                 behavior charge : (a: Amount) -> Free | Charged
                     constructs Charged
                 let charge (a) = {
-                    let x = Int.floorMod(a.value + 1, 7)
-                    guard x < 5 else Free
-                    guard x < 6 else Free
-                    Charged { yen = 1 }
+                %s    Charged { yen = 1 }
                 }
-                """;
-
-        assertEquals(1, provenIn(source, "charge").size(),
-                "nothing under five is six or more, whatever `x` is");
+                """.formatted(guards.indent(4));
     }
 
     /**

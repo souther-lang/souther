@@ -29,7 +29,8 @@ import java.util.OptionalInt;
  * ({@link ConstantComparison}), and the reading that holds those is the reading of any remainder of
  * a place. Nothing here is a second account of a remainder: a number taken of a place is still taken
  * of the place, and what moved it is arithmetic round the call that is peeled off before the call is
- * asked.
+ * asked. A name given the call is read through to the call, so a comparison of the name is this
+ * same comparison; a path holds the stretches as the values of the place's remainder they leave.
  *
  * <p>What it reads is the arithmetic that leaves a place a place: a sum or a difference with a
  * written number, however it is spelled and however many deep, which is arithmetic the library
@@ -168,12 +169,6 @@ public final class RemainderOfAShiftedValue {
                                          TheSignOfAnOrder.Sides<E> sides,
                                          boolean remainderFirst) {
         Core spelled = remainderFirst ? comparison.left() : comparison.right();
-        // The call itself and not a name given it: a guard over a bound value is a fact about
-        // that value, which a path holds as the number it is, and a disjunction of stretches
-        // of the place's remainder is a fact it cannot take in its place.
-        if (Core.withoutStanding(spelled) instanceof Core.Read) {
-            return null;
-        }
         OfADivision<E> division = ofADivision(spelled, at, sides);
         if (division == null) {
             return null;

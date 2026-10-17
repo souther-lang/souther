@@ -204,24 +204,58 @@ class WhetherAPathIsReachedIsAskedOfEveryDomainTest {
                 "c lies at or after b and at or before c");
     }
 
+    /**
+     * The same values, left by a condition on the path rather than by the position's rules.
+     *
+     * <p>What they rule out with a range is ruled out on the path and not of the value: the
+     * reading that ignores the path is left as it was, where the declaration's values reach it.
+     */
+    @Test
+    void theValuesAConditionLeavesAreKnownOnThePathAndNotOfTheValue() {
+        Known guarded = range(holdingOdd(Known.top()), 2, 3, Known.Held.OF_THE_VALUE);
+        assertTrue(guarded.reachesNothing(), "no value of 1, 3 and 7 lies at or above 2 and below 3");
+        assertFalse(guarded.unguarded().constraints().isBottom(),
+                "it is the condition that leaves only those, not the value");
+
+        Known declared = range(admittingOdd(Known.top()), 2, 3, Known.Held.OF_THE_VALUE);
+        assertTrue(declared.unguarded().constraints().isBottom(),
+                "where the rules leave only those, the value does");
+    }
+
+    /** {@code known} with the position held to 1, 3 and 7 on the path, as a condition says. */
+    private static Known holdingOdd(Known known) {
+        Allowance<FactSubject> sets = AsACompilationAllows.forAdmittedValues();
+        return known.holdingOnThePath(odd().resolve(sets), sets);
+    }
+
     /** {@code known} with the position held to 1, 3 and 7, as a reading of its rules says. */
     private static Known admittingOdd(Known known) {
         Allowance<FactSubject> sets = AsACompilationAllows.forAdmittedValues();
-        return known.admitting(new Confinement.Planned<>(
+        return known.admitting(odd().resolve(sets), sets);
+    }
+
+    private static Confinement.Planned<FactSubject> odd() {
+        return new Confinement.Planned<>(
                 PlannedValues.at(A_POSITION, AdmittedPlan.of(new ValueSet.Finite(Set.of(
                         Value.number(1), Value.number(3), Value.number(7))))),
-                OrderedIntervals.top(), Map.of(A_POSITION, Carrier.WHOLE)).resolve(sets), sets);
+                OrderedIntervals.top(), Map.of(A_POSITION, Carrier.WHOLE));
+    }
+
+    /** {@code known} with the position at or above {@code low} and below {@code high}, as far as
+     *  {@code held} reaches. */
+    private static Known range(Known known, long low, long high, Known.Held held) {
+        Map<FactSubject, Granularity> whole = Map.of(A_POSITION, Granularity.DISCRETE);
+        return known
+                .taking(LinearForm.atomMinusConstant(A_POSITION, ExactRatio.of(low)), Rel.GE,
+                        held, whole)
+                .taking(LinearForm.atomMinusConstant(A_POSITION, ExactRatio.of(high)), Rel.LT,
+                        held, whole);
     }
 
     /** {@code known} with the position taken on the path to lie at or above {@code low} and below
      *  {@code high}. */
     private static Known between(Known known, long low, long high) {
-        Map<FactSubject, Granularity> whole = Map.of(A_POSITION, Granularity.DISCRETE);
-        return known
-                .taking(LinearForm.atomMinusConstant(A_POSITION, ExactRatio.of(low)), Rel.GE,
-                        Known.Held.ON_THE_PATH, whole)
-                .taking(LinearForm.atomMinusConstant(A_POSITION, ExactRatio.of(high)), Rel.LT,
-                        Known.Held.ON_THE_PATH, whole);
+        return range(known, low, high, Known.Held.ON_THE_PATH);
     }
 
     private static Known reaching(ConstraintState<FactSubject> constraints) {
