@@ -471,10 +471,10 @@ class AListADependencyAnsweredIsReadAsAListWhereverItStandsTest {
      * A count of statements about the answer held against a number of the input is two numbers,
      * and the reading of what the comparison means has nothing to hold to a figure; put at the
      * value the way leaves the input's number at, it is a count alone against a constant, which is
-     * as many choices of which statements hold as there are ways of picking that many. Past what is
-     * written out of those for a reader, the statement is said to be one that figure stopped the
-     * composing of — and not one nothing composes for, or one about something other than the
-     * answer.
+     * as many choices of which statements hold as there are ways of picking that many. Past the
+     * readings of one condition, which is as many choices as are handed to a reader of them, the
+     * statement is said to be one that figure stopped the composing of — and not one nothing
+     * composes for, or one about something other than the answer.
      */
     @Test
     void aCountLeftAloneByANumberPutAtAValueIsHeldToTheFigure() {
@@ -521,7 +521,7 @@ class AListADependencyAnsweredIsReadAsAListWhereverItStandsTest {
                         why instanceof DemandGap.WhyNotComposed.NoWayComposedBeforeAFigureEnded(
                                 var figures)
                                 && figures.written().contains(
-                                        CompositionBudget.PARTS_THE_CHOICES_OF_A_COUNT_COME_TO)),
+                                        CompositionBudget.READINGS_OF_ONE_CONDITION)),
                 () -> "the statement is said to be one the figure stopped: " + said);
     }
 

@@ -5332,9 +5332,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     + " several things, inside one another past "
                     + CompositionBudget.ALTERNATIVES_A_PATH_TRIES.counts();
             // The same kind: read, and taken apart into choices past a figure.
-            case WhyNotTaken.MoreChoicesThanAreWrittenOut _ -> "a condition counting how many of"
-                    + " some statements hold, past "
-                    + CompositionBudget.PARTS_THE_CHOICES_OF_A_COUNT_COME_TO.counts();
+            case WhyNotTaken.MoreChoicesThanAreWrittenOut(CompositionBudget figure) ->
+                    "a condition counting how many of some statements hold, taken apart into the"
+                            + " choices of which do, past " + figure.counts();
         };
     }
 

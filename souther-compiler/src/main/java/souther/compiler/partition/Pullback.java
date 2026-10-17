@@ -213,6 +213,8 @@ final class Pullback {
                 case Proposition.Any any -> any.parts().forEach(part -> partsOf(part, into));
                 case Proposition.OnAnApplication applications ->
                         applications.each().forEach(each -> partsOf(each, into));
+                case Proposition.SoManyHold counted ->
+                        counted.statements().forEach(each -> partsOf(each, into));
                 case Proposition.Some some -> partsOf(some.ofTheElement(), into);
                 default -> {
                     into.add(stated.key());

@@ -2,7 +2,6 @@ package souther.compiler.meaning;
 
 import java.lang.ref.WeakReference;
 import java.util.Map;
-import java.util.Optional;
 import java.util.WeakHashMap;
 import java.util.function.Supplier;
 
@@ -34,8 +33,12 @@ final class SharedPropositions {
     private static final Map<Proposition, WeakReference<Proposition>> KEPT = new WeakHashMap<>();
     private static final Map<Proposition, WeakReference<Proposition>> DENIED =
             new WeakHashMap<>();
-    private static final Map<Proposition, Optional<WeakReference<Proposition>>> CHOICES =
-            new WeakHashMap<>();
+    /**
+     * The choices each count is written out as, held as long as the count is. Held strongly: what
+     * is written out names the count's statements and never the count, so it keeps nothing alive
+     * that the count does not, and held weakly it was let go between one reader and the next.
+     */
+    private static final Map<Proposition, WhichOfThemHold.Written> CHOICES = new WeakHashMap<>();
 
     private SharedPropositions() {
     }
@@ -62,24 +65,27 @@ final class SharedPropositions {
      * count is written out as many times as it has readers. That none could be written out is kept
      * as well, so that it is found out once.
      */
-    static Proposition choices(Proposition.SoManyHold counted, Supplier<Proposition> writing) {
+    static WhichOfThemHold.Written choices(Proposition.SoManyHold counted,
+                                           Supplier<WhichOfThemHold.Written> writing) {
         synchronized (CHOICES) {
-            Optional<WeakReference<Proposition>> held = CHOICES.get(counted);
+            WhichOfThemHold.Written held = CHOICES.get(counted);
             if (held != null) {
-                if (held.isEmpty()) {
-                    return null;
-                }
-                Proposition kept = held.get().get();
-                if (kept != null) {
-                    return kept;
-                }
+                return held;
             }
         }
-        Proposition made = writing.get();
+        WhichOfThemHold.Written made = writing.get();
         synchronized (CHOICES) {
-            CHOICES.put(counted, Optional.ofNullable(made).map(WeakReference::new));
+            CHOICES.putIfAbsent(counted, made);
         }
         return made;
+    }
+
+    /** {@code written}, kept as what {@code counted} is written out as for a reader, where nothing
+     *  is kept for it yet: whoever wrote the choices out on the way to holding the count. */
+    static void choicesWritten(Proposition.SoManyHold counted, WhichOfThemHold.Written written) {
+        synchronized (CHOICES) {
+            CHOICES.putIfAbsent(counted, written);
+        }
     }
 
     /**

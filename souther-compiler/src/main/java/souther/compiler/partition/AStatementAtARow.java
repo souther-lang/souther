@@ -913,47 +913,25 @@ final class AStatementAtARow {
      * Whether as many of {@code counted}'s statements hold as it admits, each answered at the row
      * as {@code each} says.
      *
-     * <p>The ones that could not be told may come to any count their weights add up to beside the
-     * ones that hold, and it is settled only where every such count says the same.
+     * <p>One that could not be told may hold or fail ({@link Proposition.SoManyHold#comesOut}),
+     * and it is settled only where every way those come out says the same.
      */
     private static Answer howManyHold(Proposition.SoManyHold counted, List<Answer> each) {
         Set<ReadingGap> unread = new LinkedHashSet<>();
-        boolean[] comesTo = new boolean[counted.weight() + 1];
-        comesTo[0] = true;
-        for (int one = 0; one < each.size(); one++) {
-            int weight = counted.weights().get(one);
-            boolean[] next = new boolean[comesTo.length];
-            for (int count = 0; count < comesTo.length; count++) {
-                if (!comesTo[count]) {
-                    continue;
-                }
-                switch (each.get(one)) {
-                    case Answer.Holds _ -> next[count + weight] = true;
-                    case Answer.Fails _ -> next[count] = true;
-                    case Answer.CouldNotTell(Set<ReadingGap> why) -> {
-                        unread.addAll(why);
-                        next[count] = true;
-                        next[count + weight] = true;
-                    }
-                }
+        List<Boolean> mayHold = new ArrayList<>();
+        List<Boolean> mayFail = new ArrayList<>();
+        for (Answer one : each) {
+            if (one instanceof Answer.CouldNotTell(Set<ReadingGap> why)) {
+                unread.addAll(why);
             }
-            comesTo = next;
+            mayHold.add(!(one instanceof Answer.Fails));
+            mayFail.add(!(one instanceof Answer.Holds));
         }
-        boolean admitted = false;
-        boolean refused = false;
-        for (int count = 0; count < comesTo.length; count++) {
-            if (comesTo[count]) {
-                if (counted.admitted().contains(count)) {
-                    admitted = true;
-                } else {
-                    refused = true;
-                }
-            }
-        }
-        if (admitted && refused) {
-            return new Answer.CouldNotTell(unread);
-        }
-        return admitted ? Answer.HOLDS : Answer.FAILS;
+        return switch (counted.comesOut(mayHold, mayFail)) {
+            case HOLDING -> Answer.HOLDS;
+            case FAILING -> Answer.FAILS;
+            case EITHER_WAY -> new Answer.CouldNotTell(unread);
+        };
     }
 
     /**

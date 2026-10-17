@@ -129,7 +129,8 @@ public final class WhatTheDeclarationsLeave {
             case Proposition.SoManyHold counted -> {
                 Proposition choices = counted.choices();
                 yield choices != null ? whetherRuledOut(choices, want, read)
-                        : notAsked(new WhyNotTaken.MoreChoicesThanAreWrittenOut());
+                        : notAsked(new WhyNotTaken.MoreChoicesThanAreWrittenOut(
+                                counted.choicesStoppedAt()));
             }
             case Proposition.Unread unread ->
                     notAsked(new WhyNotTaken.MeaningUnread(unread.why()));

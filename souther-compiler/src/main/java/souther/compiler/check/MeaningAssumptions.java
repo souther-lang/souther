@@ -228,7 +228,8 @@ final class MeaningAssumptions {
                 if (choices != null) {
                     take(choices);
                 } else {
-                    notTaken(new WhyNotTaken.MoreChoicesThanAreWrittenOut());
+                    notTaken(new WhyNotTaken.MoreChoicesThanAreWrittenOut(
+                            counted.choicesStoppedAt()));
                 }
             }
             // Which application is no fact of a path.

@@ -63,21 +63,24 @@ class EveryStatementReadToTheEndIsDrawnOrSaidAsTheModelsTest {
             data Kind = A | B
             data Held = { o: Int? }
             data Node = { v: Int, below: List<Node> }
+            data Flags = { %s }
             data In = { n: Int, m: Int, b: Bool, s: String, h: Held, k: Kind, xs: List<Int>,
-                        key: String, keys: List<String>, t: Node }
+                        key: String, keys: List<String>, t: Node, f: Flags }
 
             let reaches (node: Node): Bool = node.v > 5 || List.any(c -> reaches(c), node.below)
-            """;
+            """.formatted(IntStream.range(0, 20).mapToObj(at -> "f" + at + ": Bool")
+            .collect(Collectors.joining(", ")));
 
     /** One condition for each way a statement can come out, each read to the end but the last. */
     private static Map<String, String> samples() {
         Map<String, String> out = new LinkedHashMap<>();
         out.put("always", "List.isEmpty([1, 2])");
         out.put("a relation of numbers", "i.n > 5");
+        // Half of twenty truths of their own is more choices of which hold than are written out.
         out.put("so many of some statements holding",
-                "List.length(List.filter(x -> x > i.n, " + IntStream.range(0, 70)
-                        .mapToObj(String::valueOf).collect(Collectors.joining(", ", "[", "]"))
-                        + ")) == 1");
+                "List.length(List.filter(x -> x, " + IntStream.range(0, 20)
+                        .mapToObj(at -> "i.f.f" + at)
+                        .collect(Collectors.joining(", ", "[", "]")) + ")) == 10");
         out.put("a place on an order", "i.s < \"M\"");
         out.put("a truth", "i.b");
         out.put("a case", "match i.k with | A -> true | B -> false");

@@ -798,6 +798,56 @@ public sealed interface Proposition {
                     () -> SharedPropositions.shared(new SoManyHold(statements, weights, others)));
         }
 
+        /** Which way a count comes out, as far as what each statement can come out as says. */
+        public enum ComesOut {
+            /** It holds however the statements come out. */
+            HOLDING,
+            /** It fails however the statements come out. */
+            FAILING,
+            /** Some way the statements come out holds it and some way fails it. */
+            EITHER_WAY
+        }
+
+        /**
+         * Which way this comes out, where each of {@link #statements} can hold as {@code mayHold}
+         * says and fail as {@code mayFail} says, in the same order.
+         *
+         * <p>The counts the statements come to, each taken apart from the others, are every count
+         * they do come to and maybe more: two statements that cannot hold together are counted
+         * here as though they could. So it comes out one way only where every one of those counts
+         * says so — never one way where the statements could bring it out the other.
+         */
+        public ComesOut comesOut(List<Boolean> mayHold, List<Boolean> mayFail) {
+            boolean[] comesTo = new boolean[weight() + 1];
+            comesTo[0] = true;
+            for (int one = 0; one < statements.size(); one++) {
+                int weighs = weights.get(one);
+                boolean[] next = new boolean[comesTo.length];
+                for (int count = 0; count < comesTo.length; count++) {
+                    if (comesTo[count]) {
+                        next[count] |= mayFail.get(one);
+                        if (mayHold.get(one)) {
+                            next[count + weighs] = true;
+                        }
+                    }
+                }
+                comesTo = next;
+            }
+            boolean holding = false;
+            boolean failing = false;
+            for (int count = 0; count < comesTo.length; count++) {
+                if (comesTo[count]) {
+                    if (Collections.binarySearch(admitted, count) >= 0) {
+                        holding = true;
+                    } else {
+                        failing = true;
+                    }
+                }
+            }
+            return holding && failing ? ComesOut.EITHER_WAY
+                    : holding ? ComesOut.HOLDING : ComesOut.FAILING;
+        }
+
         /**
          * The same count over {@code remade}, each of {@link #statements} made again by a reader,
          * in the same order and each weighed as before: two that come out one statement are that
@@ -810,20 +860,32 @@ public sealed interface Proposition {
 
         /**
          * Some one of the choices of which statements hold that put the count where this admits it,
-         * written out — or null where written out they come to more parts than
-         * {@link CompositionBudget#PARTS_THE_CHOICES_OF_A_COUNT_COME_TO}.
+         * written out — or null where they are more than one condition is read in
+         * ({@link CompositionBudget#READINGS_OF_ONE_CONDITION}), or written out come to more parts
+         * than {@link CompositionBudget#PARTS_THE_CHOICES_OF_A_COUNT_COME_TO}
+         * ({@link #choicesStoppedAt} says which).
          *
          * <p>What holds exactly where this does, for a reader that can read a disjunction of
-         * conjunctions and not a count; and the one place such a reader is held to a figure for
-         * it.
+         * conjunctions and not a count; and the one place such a reader is held to figures for it.
+         * Both: a reader takes each choice as one of several things, and how many it is handed is
+         * a cost of its own beside how many parts they come to.
          */
         public Proposition choices() {
-            return SharedPropositions.choices(this, () -> {
-                long most = CompositionBudget.PARTS_THE_CHOICES_OF_A_COUNT_COME_TO.maximum();
-                Proposition written = WhichOfThemHold.of(this).written(most);
-                return written != null && Conclusion.withinTheParts(written,
-                        CompositionBudget.PARTS_THE_CHOICES_OF_A_COUNT_COME_TO) ? written : null;
-            });
+            return SharedPropositions.choices(this, this::writtenOutForAReader).choices();
+        }
+
+        /**
+         * The figure the choices were past, where {@link #choices} hands a reader none — or null
+         * where it hands them.
+         */
+        public CompositionBudget choicesStoppedAt() {
+            return SharedPropositions.choices(this, this::writtenOutForAReader).stoppedAt();
+        }
+
+        /** The choices written out no further than {@link #choices} says, each time it is asked. */
+        private WhichOfThemHold.Written writtenOutForAReader() {
+            return WhichOfThemHold.of(this).written(CompositionBudget.READINGS_OF_ONE_CONDITION,
+                    CompositionBudget.PARTS_THE_CHOICES_OF_A_COUNT_COME_TO);
         }
     }
 
@@ -985,6 +1047,34 @@ public sealed interface Proposition {
             case Always _, Compared _, Truth _, InCases _, Present _, SameValue _, LastToHold _,
                  Carried _, Unread _, SomeReachable _ -> stated;
         };
+    }
+
+    /**
+     * The first count of statements in {@code stated} whose choices are handed to no reader, where
+     * {@link #withTheCountsWrittenOut} found one — or null where it found none — walked as that
+     * walks.
+     */
+    public static SoManyHold aCountNotWrittenOut(Proposition stated) {
+        return switch (stated) {
+            case SoManyHold counted -> counted.choices() == null ? counted
+                    : aCountNotWrittenOut(counted.choices());
+            case All all -> aCountNotWrittenOut(all.parts());
+            case Any any -> aCountNotWrittenOut(any.parts());
+            case OnAnApplication applications -> aCountNotWrittenOut(applications.each());
+            case Some some -> aCountNotWrittenOut(some.ofTheElement());
+            case Always _, Compared _, Truth _, InCases _, Present _, SameValue _, LastToHold _,
+                 Carried _, Unread _, SomeReachable _ -> null;
+        };
+    }
+
+    private static SoManyHold aCountNotWrittenOut(List<Proposition> parts) {
+        for (Proposition part : parts) {
+            SoManyHold found = aCountNotWrittenOut(part);
+            if (found != null) {
+                return found;
+            }
+        }
+        return null;
     }
 
     /** Each of {@code parts} so written out, the list itself where none changed, or null where

@@ -142,16 +142,33 @@ class HowManyOfSomeStatementsHoldIsWhichOfThemDoTest {
     }
 
     /**
-     * Choices that come to more parts than a reader of them is handed are handed to none: the
-     * reader is told so, and the count is not written out on the way.
+     * Choices more than one condition is read in, or that come to more parts than a reader of
+     * them is handed, are handed to none, and which of the two is what the reader is told.
+     *
+     * <p>Half of eighteen is past how many; exactly one of two hundred and fifty-six is as many
+     * choices as one condition is read in, each naming every statement, and past the parts.
      */
     @Test
     void choicesPastWhatAReaderIsHandedAreHandedToNone() {
         Proposition.SoManyHold half = assertInstanceOf(Proposition.SoManyHold.class,
                 howMany(distinct(18), Rel.EQ, 9));
-        assertNull(half.choices(), "48620 choices of eighteen statements each");
+        assertNull(half.choices());
+        assertEquals(CompositionBudget.READINGS_OF_ONE_CONDITION, half.choicesStoppedAt());
+
+        int most = CompositionBudget.READINGS_OF_ONE_CONDITION.maximum();
+        Proposition.SoManyHold one = assertInstanceOf(Proposition.SoManyHold.class,
+                howMany(distinct(most), Rel.EQ, 1));
+        assertNull(one.choices());
+        assertEquals(CompositionBudget.PARTS_THE_CHOICES_OF_A_COUNT_COME_TO,
+                one.choicesStoppedAt());
         assertEquals(CompositionBudget.PARTS_THE_CHOICES_OF_A_COUNT_COME_TO.figure(),
-                new WhyNotTaken.MoreChoicesThanAreWrittenOut().figure().orElseThrow());
+                new WhyNotTaken.MoreChoicesThanAreWrittenOut(one.choicesStoppedAt()).figure()
+                        .orElseThrow());
+
+        Proposition.SoManyHold fewer = assertInstanceOf(Proposition.SoManyHold.class,
+                howMany(distinct(70), Rel.EQ, 1));
+        assertEquals(exactlyOneOf(distinct(70)), fewer.choices());
+        assertNull(fewer.choicesStoppedAt());
     }
 
     /**

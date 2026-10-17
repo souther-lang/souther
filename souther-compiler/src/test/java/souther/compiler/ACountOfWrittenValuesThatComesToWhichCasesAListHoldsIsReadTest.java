@@ -8,6 +8,7 @@ import tools.jackson.databind.json.JsonMapper;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.Severity;
 import souther.compiler.diag.SourceRendering;
+import souther.compiler.partition.CompositionBudget;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
@@ -393,8 +394,9 @@ class ACountOfWrittenValuesThatComesToWhichCasesAListHoldsIsReadTest {
 
     /**
      * Exactly nine of eighteen values written out, each a number of its own, is more choices than a
-     * reader of them is handed: the count is read and held whole, and where its lines decide is
-     * said not to have been worked out at that figure, and not that a part of it was not read.
+     * reader of them is handed — more than one condition is read in: the count is read and held
+     * whole, and where its lines decide is said not to have been worked out at that figure, and
+     * not that a part of it was not read.
      *
      * <p>Numbers of their own, since statements about one number cannot hold in most of the ways
      * a choice asks, and written out those ways are none.
@@ -422,7 +424,9 @@ class ACountOfWrittenValuesThatComesToWhichCasesAListHoldsIsReadTest {
         String human = AdequacyReport.of(compilation)
                 .human(SourceRendering.namedByIdentity(compilation.texts()));
 
-        assertTrue(human.contains("PARTS_THE_CHOICES_OF_A_COUNT_COME_TO"), human);
+        CompositionBudget figure = CompositionBudget.READINGS_OF_ONE_CONDITION;
+        assertTrue(human.contains("stopped at " + figure.counts() + " (" + figure.name() + ", "
+                + figure.maximum() + ")"), human);
         assertFalse(human.contains("a part of what it states was not read"), human);
     }
 

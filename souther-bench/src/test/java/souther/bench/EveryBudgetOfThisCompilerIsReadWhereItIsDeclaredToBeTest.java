@@ -553,19 +553,26 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/partition/CompositionBudget;)Z",
                     "answers whether a statement is within the figure handed in, which the"
                             + " caller answered no says or holds whole"),
-            Map.entry("souther.compiler.meaning.Proposition$SoManyHold#lambda$choices$0()"
-                            + "Lsouther/compiler/meaning/Proposition;",
-                    "writes a count's choices out no further than the figure, and past it hands"
-                            + " a reader none, which the reader says as more choices than are"
-                            + " written out, naming the figure"),
+            Map.entry("souther.compiler.meaning.Proposition$SoManyHold#writtenOutForAReader()"
+                            + "Lsouther/compiler/meaning/WhichOfThemHold$Written;",
+                    "writes a count's choices out no further than either figure, and past one"
+                            + " hands a reader none and says which, which the reader says as more"
+                            + " choices than are written out, naming it"),
+            Map.entry("souther.compiler.meaning.WhichOfThemHold#written("
+                            + "Lsouther/compiler/partition/CompositionBudget;"
+                            + "Lsouther/compiler/partition/CompositionBudget;)"
+                            + "Lsouther/compiler/meaning/WhichOfThemHold$Written;",
+                    "stops writing the choices out past either figure handed in, and says which"
+                            + " it was past"),
             Map.entry("souther.compiler.partition.Cutting#choicesNotWrittenOut("
                             + "Lsouther/compiler/check/StatedComparison;"
+                            + "Lsouther/compiler/meaning/Proposition;"
                             + "Lsouther/compiler/inputs/InputReading;"
                             + "Lsouther/compiler/inputs/InputReads;"
                             + "Lsouther/compiler/coverage/Arrivals;)"
                             + "Lsouther/compiler/partition/Cutting$Read;",
                     "files the statement at each place as one where its lines decide was not"
-                            + " worked out, naming the figure"),
+                            + " worked out, naming the figure the count's choices were past"),
             Map.entry("souther.compiler.partition.DecisionReading#<clinit>()V",
                     "how many paths through one body a decision is read for"),
             Map.entry("souther.compiler.partition.WaysNoInputTakes#<init>()V",

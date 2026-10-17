@@ -1018,6 +1018,18 @@ public sealed interface BorderQuantity
                                     : ordered.proposition().denied())
                             + " " + ordered.at().spelled();
                 };
+                // How many of the statements hold, each as many times as it was written, and the
+                // counts that holds at.
+                case Proposition.SoManyHold counted -> {
+                    List<String> each = new ArrayList<>();
+                    for (int one = 0; one < counted.statements().size(); one++) {
+                        each.addAll(Collections.nCopies(counted.weights().get(one),
+                                said(counted.statements().get(one))));
+                    }
+                    yield "#[" + String.join(", ", each) + "] " + (counted.admitted().size() == 1
+                            ? "== " + counted.admitted().getFirst()
+                            : "in " + counted.admitted());
+                }
                 default -> stated.key();
             };
         }

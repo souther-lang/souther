@@ -407,15 +407,16 @@ final class DemandReading {
          * {@code reads}, made of {@code from}, each told it was read off the parts {@code from}
          * turns on where those were read off another construct.
          *
-         * <p>Told of a part and of what some element meets, and not of a conjunction or of one of
-         * several things: what those ask is what their parts ask, each read off where that part
-         * was, and a read of one part told every part's copies would send a reader to calls the
-         * part never read.
+         * <p>Told of a part and of what some element meets, and not of a conjunction, of one of
+         * several things or of a count of them: what those ask is what their parts ask, each read
+         * off where that part was, and a read of one part told every part's copies would send a
+         * reader to calls the part never read.
          */
         List<Read> readOff(List<Read> reads, Proposition from) {
             if (byPart.isEmpty() || from instanceof Proposition.All
                     || from instanceof Proposition.Any
                     || from instanceof Proposition.OnAnApplication
+                    || from instanceof Proposition.SoManyHold
                     || from instanceof Proposition.SomeReachable) {
                 return reads;
             }
@@ -844,7 +845,8 @@ final class DemandReading {
             case Proposition.SoManyHold counted -> {
                 Proposition choices = counted.choices();
                 yield choices != null ? projected(choices, read, projection)
-                        : List.of(new Read.Unread(new WhyNotTaken.MoreChoicesThanAreWrittenOut()));
+                        : List.of(new Read.Unread(new WhyNotTaken.MoreChoicesThanAreWrittenOut(
+                                counted.choicesStoppedAt())));
             }
             // One of several statements, which one turning on which application a run meets the
             // condition on: one alternative per statement that can hold, as a disjunction is. A

@@ -823,7 +823,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                     when !Proposition.leavesSomethingUnread(stated.proposition()) -> {
                 Proposition written = Proposition.withTheCountsWrittenOut(stated.proposition());
                 if (written == null) {
-                    yield choicesNotWrittenOut(comparison, read, reads, answering);
+                    yield choicesNotWrittenOut(comparison, stated.proposition(), read, reads,
+                            answering);
                 }
                 Read several = several(behavior, comparison.left(), written, read, reads,
                         lines.get());
@@ -838,7 +839,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                     && !Proposition.leavesSomethingUnread(some) -> {
                 Proposition written = Proposition.withTheCountsWrittenOut(some);
                 if (written == null) {
-                    yield choicesNotWrittenOut(comparison, read, reads, answering);
+                    yield choicesNotWrittenOut(comparison, some, read, reads, answering);
                 }
                 Read several = several(behavior, comparison.left(), written, read, reads,
                         lines.get());
@@ -1117,17 +1118,18 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
     }
 
     /**
-     * A statement read to the end that holds a count of statements whose choices of which hold,
-     * written out to be read as lines, come to more parts than are written out for that
-     * ({@link Proposition.SoManyHold#choices}): where its lines decide was not worked out, at that
-     * figure, at each place the comparison is filed at.
+     * {@code stated}, read to the end, holding a count of statements whose choices of which hold
+     * are not written out to be read as lines ({@link Proposition.SoManyHold#choices}): where its
+     * lines decide was not worked out, at the figure the choices were past, at each place the
+     * comparison is filed at.
      */
-    private static Read choicesNotWrittenOut(StatedComparison comparison, InputReading read,
-                                             InputReads reads, Arrivals answering) {
+    private static Read choicesNotWrittenOut(StatedComparison comparison, Proposition stated,
+                                             InputReading read, InputReads reads,
+                                             Arrivals answering) {
         return new Read.Stopped(ComparisonAssessment.atEachOf(
                 GuardThresholds.filedAt(comparison, read, reads, answering),
                 new BlockReason.WhereALineDecidesNotWorkedOut(
-                        CompositionBudget.PARTS_THE_CHOICES_OF_A_COUNT_COME_TO.figure())));
+                        Proposition.aCountNotWrittenOut(stated).choicesStoppedAt().figure())));
     }
 
     /**
