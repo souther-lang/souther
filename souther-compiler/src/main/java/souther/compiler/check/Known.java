@@ -147,6 +147,19 @@ record Known(ConstraintState<FactSubject> constraints, List<Quantified> quantifi
     }
 
     /**
+     * This, with the values a condition leaves a number taken in, on the path only.
+     *
+     * <p>Met with what is known as {@link #admitting} meets a declaration's values, and kept from
+     * the reading that ignores the path: a condition says it, so a contradiction it takes part in
+     * is one the guards on the way make and not one the values make wherever they are named.
+     */
+    Known holdingOnThePath(Confinement.Worked<FactSubject> read, Allowance<FactSubject> sets) {
+        ConstraintState<FactSubject> values =
+                ConstraintState.top(FactSubject.inOneOrder()).takingRead(read, sets);
+        return new Known(constraints.meet(values, sets), quantified, spoken, unguarded, cases);
+    }
+
+    /**
      * This, with {@code bounded} taken as holding on the path, on the orders {@code on} says the
      * positions are counted by.
      *

@@ -28,8 +28,9 @@ import java.util.Set;
  * every branch some language refused and neither refused alone.
  *
  * <p><b>Why it is not the interval algebra.</b> That one carries one number per position and relates
- * positions to each other by differences, which is worth having and is available only where a model
- * adds and subtracts — so it holds an {@code Int} and a {@code Decimal} and nothing else. This holds
+ * positions to each other by the sums a model writes over them, which is worth having and is
+ * available only where a model adds and subtracts — so it holds an {@code Int} and a
+ * {@code Decimal} and nothing else. This holds
  * every order there is and relates no two positions. Both may read one rule about an {@code Int},
  * and neither is the other's copy: what each can show is its own.
  *

@@ -30,10 +30,10 @@ import java.util.Set;
  * admits values neither alternative does; a state that narrowed there would refuse a model somebody
  * can write.
  *
- * <p>Apart from {@link NumericDomain}, which relates positions to each other by differences and can
- * only do so over numbers a model adds. This relates no two positions and holds every order there
- * is — so a rule comparing a date against a written one lands here, and one comparing two fields of
- * a record lands there. Both may hold the same rule about an {@code Int}, and neither is the other's
+ * <p>Apart from {@link NumericDomain}, which relates positions to each other by the sums a model adds
+ * and subtracts them in, and can only do so over numbers. This relates no two positions and holds
+ * every order there is — so a rule comparing a date against a written one lands here, and one
+ * comparing two fields of a record lands there. Both may hold the same rule about an {@code Int}, and neither is the other's
  * copy: what each of them can show is its own, and a contradiction shown anywhere is a contradiction.
  *
  * <p><b>The states are the ones these operations reach.</b> The two parts depend on each other —
