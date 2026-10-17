@@ -85,6 +85,8 @@ public sealed interface Owed {
                 case NumberAt.OfWhatNumber.OfHowManyCodePointsAreIn count ->
                         "#(" + count.counted() + ")(" + where + ")";
                 case NumberAt.OfWhatNumber.OfItsMultiplicity _ -> "multiplicity(" + where + ")";
+                case NumberAt.OfWhatNumber.OfTheExtremeOfItsKey extreme ->
+                        extreme.spelledAt(where);
             };
         }
     }

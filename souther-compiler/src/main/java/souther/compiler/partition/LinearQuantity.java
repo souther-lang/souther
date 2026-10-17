@@ -126,8 +126,8 @@ public sealed interface LinearQuantity extends BorderQuantity
         for (NumericTerm term : terms()) {
             TermOrders orders = ordersOf(term);
             WhatATermRead read = switch (term) {
-                case NumericTerm.Multiplicity among ->
-                        WhatATermRead.among(orders, observation, among.place());
+                case NumericTerm.OfAnElementsNeighbours _ ->
+                        WhatATermRead.inItsOccurrence(orders, observation);
                 case NumericTerm.FromOnePosition one ->
                         WhatATermRead.at(orders, observation.at(one.position()));
                 case NumericTerm.TakenOver over -> switch (over.source()) {

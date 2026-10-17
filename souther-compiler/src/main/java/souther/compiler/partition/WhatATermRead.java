@@ -86,26 +86,42 @@ sealed interface WhatATermRead {
     }
 
     /**
-     * What {@code on} reads at the place the element {@code row} has chosen stands at, among every
-     * value the elements of its container hold there: how often the element's own value occurs.
+     * What {@code on} reads of the element {@code row} chose in the container its term is taken
+     * over, among the elements of the occurrence of that container it chose it in: how often the
+     * element's value occurs, or the end of its key's values.
+     *
+     * <p>Of one occurrence and of nothing gathered beside it. The values standing at a place inside
+     * a container are every occurrence's ({@link BorderQuantity.Observation#everyValueAt}), and two
+     * orders each holding lines are two sets of lines: a line of one is no neighbour of a line of
+     * the other. So the elements are those of the occurrence the reading is in ({@link
+     * BorderQuantity.Observation#eachElementOf}, under whatever the reading chose of every other
+     * container), each read with it chosen, so a field one element holds is paired with that
+     * element's others; and the element under consideration is the one the reading chose, read
+     * off the reading itself.
+     *
+     * <p>A walk that cannot reach the occurrence could not walk to a number; a reading that chose
+     * no element of the container holds nothing at the element's place, which is the row's own
+     * answer. Only the fields the number's reading asks for are looked at, so what stopped the
+     * first of those is what the row is told, and a field of an element nothing asked about stops
+     * nothing.
      */
-    static WhatATermRead among(TermOrders on, BorderQuantity.Observation row, TermPath place) {
-        return switch (row.at(place)) {
-            case WalkResult.CouldNotWalk<ObservationAtPoint> _ ->
-                    new CameToNothing(ReadingGap.COULD_NOT_WALK);
-            case WalkResult.Reached(ObservationAtPoint standing) -> switch (standing) {
-                case ObservationAtPoint.Value(ObservedValue own) -> {
-                    yield switch (row.everyValueAt(place)) {
-                        case WalkResult.CouldNotWalk<List<ObservedValue>> _ ->
-                                new CameToNothing(ReadingGap.COULD_NOT_WALK);
-                        case WalkResult.Reached(List<ObservedValue> every) ->
-                                of(on.readAmong(own, every));
-                    };
-                }
-                case ObservationAtPoint.WroteNothing _,
-                     ObservationAtPoint.BelongsToAnotherReading _ -> new NothingWrittenThere();
-            };
-        };
+    static WhatATermRead inItsOccurrence(TermOrders on, BorderQuantity.Observation row) {
+        TermPath container = on.amongItsNeighbours().container();
+        if (!(row.eachElementOf(container) instanceof WalkResult.Reached<
+                List<BorderQuantity.Observation>>(List<BorderQuantity.Observation> elements))) {
+            return new CameToNothing(ReadingGap.COULD_NOT_WALK);
+        }
+        TermPath element = container.element();
+        WhatRowsLeft left = new WhatRowsLeft();
+        Function<ElementProjection, ObservedValue> own = field -> left.at(row, field.from(element));
+        List<Function<ElementProjection, ObservedValue>> each = new ArrayList<>();
+        for (BorderQuantity.Observation one : elements) {
+            each.add(field -> left.at(one, field.from(element)));
+        }
+        // A field the row gave nothing at is recorded where it was asked, and is what the row is
+        // told whatever the reading made of it.
+        NumericTerm.Reading read = on.readInItsOccurrence(own, each);
+        return left.stopped() != null ? left.stopped() : of(read);
     }
 
     /** The same over the values of a run, which a walk that was not taken has none of. */

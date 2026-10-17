@@ -5,6 +5,7 @@ import souther.compiler.numeric.Place;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.values.Value;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -129,6 +130,67 @@ public final class TermOrders {
             throw new IllegalArgumentException(term + " is not a count of an element's equals");
         }
         return TermReading.among(this, own, every);
+    }
+
+    /** The term, for a reader of a number of an element read off the elements beside it. */
+    public NumericTerm.OfAnElementsNeighbours amongItsNeighbours() {
+        if (!(term instanceof NumericTerm.OfAnElementsNeighbours among)) {
+            throw new IllegalArgumentException(term + " is a number of no element's neighbours");
+        }
+        return among;
+    }
+
+    /**
+     * The number the element {@code own} reads among {@code each}, the elements of the occurrence
+     * of the container it is in, for a term read off an element's neighbours.
+     *
+     * <p>An element is handed as what it holds at each way into it, and holding nothing at one the
+     * number is read from is an answer the caller has and says: the reading stops there.
+     *
+     * @param own  the element under consideration, as what it holds at each way into it
+     * @param each every element of its container, the same way
+     */
+    public NumericTerm.Reading readInItsOccurrence(
+            Function<ElementProjection, ObservedValue> own,
+            List<Function<ElementProjection, ObservedValue>> each) {
+        return switch (amongItsNeighbours()) {
+            case NumericTerm.Multiplicity often -> TermReading.among(this,
+                    own.apply(often.placeField()), heldAt(often.placeField(), each));
+            case NumericTerm.ExtremeOfItsKey _ -> TermReading.extremeOfItsKey(this, own, each);
+        };
+    }
+
+    /**
+     * What each of {@code each} reads, in their order — {@link #readInItsOccurrence} for all of
+     * them, over one pass of the container rather than one per element.
+     */
+    public List<NumericTerm.Reading> readEachInItsOccurrence(
+            List<Function<ElementProjection, ObservedValue>> each) {
+        return switch (amongItsNeighbours()) {
+            case NumericTerm.Multiplicity often ->
+                    TermReading.amongEach(this, heldAt(often.placeField(), each));
+            case NumericTerm.ExtremeOfItsKey _ -> TermReading.extremeOfEachKey(this, each);
+        };
+    }
+
+    private static List<ObservedValue> heldAt(ElementProjection field,
+                                              List<Function<ElementProjection, ObservedValue>> each) {
+        List<ObservedValue> held = new ArrayList<>(each.size());
+        for (Function<ElementProjection, ObservedValue> one : each) {
+            held.add(one.apply(field));
+        }
+        return held;
+    }
+
+    /**
+     * What each of {@code every} reads, in their order, for a term that counts an element's equals
+     * — {@link #readAmong} for all of them, counting each value once rather than once per value.
+     */
+    public List<NumericTerm.Reading> readEachAmong(List<ObservedValue> every) {
+        if (!(term instanceof NumericTerm.Multiplicity)) {
+            throw new IllegalArgumentException(term + " is not a count of an element's equals");
+        }
+        return TermReading.amongEach(this, every);
     }
 
     /**
