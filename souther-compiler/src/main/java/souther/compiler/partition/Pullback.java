@@ -1359,7 +1359,7 @@ final class Pullback {
 
     /**
      * The pieces {@code split}, a call of {@code operation} read in {@code at}, answers of the
-     * string it was handed as {@code string}: what a split at {@code separator}, one code point,
+     * string {@code parted} says it was handed: what a split at {@code separator}, one code point,
      * leaves — or, with no separator, its characters, each code point a piece.
      *
      * <p>One call in one reading is one set of pieces: the call by identity, since a name stands
@@ -1367,7 +1367,7 @@ final class Pullback {
      * is what that call and reading say.
      */
     private record Pieces(Core.PreservedCall split, ValueName.Stdlib operation, InputReads at,
-                          DeclaredArgument string, OptionalInt separator) {
+                          BoundOperationFacts.Pieces parted, OptionalInt separator) {
 
         @Override
         public boolean equals(Object other) {
@@ -1420,6 +1420,12 @@ final class Pullback {
         if (inACase != null) {
             return new Sized.AsAForm(inACase);
         }
+        // The pieces of a string parted at one code point: the operation has no number for how
+        // many, and this call's separator gives one.
+        ALawRead call = new ALawRead(applied, e, made.at());
+        if (call.piecesOf(made) instanceof Pieces pieces && pieces.separator().isPresent()) {
+            return call.number(pieces.parted().howManyPartedAt(pieces.separator().getAsInt()));
+        }
         return switch (DefaultBoundOperationFacts.get().settled(operation,
                 OperationLaw.Observed.SIZE)) {
             case null -> {
@@ -1441,7 +1447,7 @@ final class Pullback {
                 // one number, and stands at no position either.
                 yield equalTo == null ? new Sized.NotSized(
                         new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.SUBJECT))
-                        : new ALawRead(applied, e, made.at()).number(equalTo);
+                        : call.number(equalTo);
             }
             case BoundOperationFacts.Settled.ByALaw(
                     OperationLaw.Observation<DeclaredArgument> _, var _) ->
@@ -2061,7 +2067,7 @@ final class Pullback {
             // Met as a part of its own, as how many a container holds above nought is: it is a
             // statement about a number of the string, which is what a line is drawn on.
             return leaf(new Derivation.SomePieceMeeting(
-                    callOf(pieces.operation(), split, pieces.at(), Set.of(pieces.string())),
+                    callOf(pieces.operation(), split, pieces.at(), Set.of(pieces.parted().string())),
                     pieces.separator(), within, ofTheString, answered),
                     askedAt != null ? askedAt : new Denotation(e, reads));
         }
@@ -2388,7 +2394,7 @@ final class Pullback {
                 }
                 separatedBy = OptionalInt.of(written.value().codePointAt(0));
             }
-            return new Pieces(call, operation, container.at(), parted.string(), separatedBy);
+            return new Pieces(call, operation, container.at(), parted, separatedBy);
         }
 
         /**
@@ -3010,7 +3016,8 @@ final class Pullback {
         /**
          * How many of the code points of {@code value}, read in {@code in}, are in
          * {@code counted}: of the string at a position, where it stands at one; as many as are,
-         * of a string written out; and of a piece, where it is one ({@link #somePiece}).
+         * of a string written out; and of a piece, where it is one ({@link #somePiece}). Where it is
+         * what an operation answered and none of those, the reason names the operation.
          */
         private Sized codePointsOfTheValue(Core value, InputReads in, CodePointClass counted) {
             if (in.pathOf(value, read.rules().newtypes()) instanceof PathResolution.At(TermPath at)) {
@@ -3023,9 +3030,14 @@ final class Pullback {
                         written.value().codePoints().filter(counted::contains).count())));
             }
             Pieces piece = pieceThatIs(value, in);
-            return piece != null ? codePointsOfAPiece(piece, counted)
-                    : new Sized.NotSized(new WhyUnread.AtNoPosition(
-                            WhyUnread.AtNoPosition.Place.SUBJECT));
+            if (piece != null) {
+                return codePointsOfAPiece(piece, counted);
+            }
+            return new Sized.NotSized(AnOperationApplied.of(Core.withoutStanding(standing.value()))
+                    instanceof AnOperationApplied made
+                    && made.operation() instanceof ValueName.Stdlib madeBy
+                    ? new WhyUnread.CodePointsOfWhatAnOperationAnswers(madeBy)
+                    : new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.SUBJECT));
         }
 
         /** How many of the code points of the string at {@code at} are in {@code counted}. */
