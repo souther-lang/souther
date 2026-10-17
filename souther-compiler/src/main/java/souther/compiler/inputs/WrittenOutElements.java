@@ -1,10 +1,14 @@
 package souther.compiler.inputs;
 
+import souther.compiler.check.AnOperationApplied;
 import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.Symbols;
+import souther.compiler.check.WrittenCodePoints;
 import souther.compiler.core.Core;
+import souther.compiler.core.Kernel;
 import souther.compiler.types.BindingId;
+import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -13,8 +17,8 @@ import java.util.Set;
 
 /**
  * Every element a container holds, written out, in the order a walk of it meets them and each with
- * what it was kept by — where the container is a list written in the source, or a list an
- * operation put together of a piece of each element of one
+ * what it was kept by — where the container is a list written in the source, the code points of a
+ * text written in the source, or a list an operation put together of a piece of each element of one
  * ({@link ElementBindings#piecesOfEachElement}).
  *
  * <p>One walk for every reader that writes a container out. What a name an operation handed an
@@ -113,6 +117,12 @@ public final class WrittenOutElements {
             }
             return new Walked.Each(out);
         }
+        if (AnOperationApplied.of(value) instanceof AnOperationApplied(
+                ValueName.Stdlib.Operation operation, List<Core> args)
+                && symbols.kernelOf(operation) == Kernel.STRING_CODE_POINTS && args.size() == 1) {
+            return codePointsOf(at.writtenStringOf(args.getFirst(), symbols, newtypes), value, at,
+                    walked);
+        }
         ElementBindings.PiecesOfEachElement pieces = ElementBindings.piecesOfEachElement(value,
                 closure -> Core.withoutStanding(InputReads.standing(new Denotation(closure, at),
                         symbols, newtypes, new HashSet<>(met)).value())
@@ -156,6 +166,22 @@ public final class WrittenOutElements {
                     made.asWritten().forEach(one -> out.add(one.keptAlsoWhere(each.keptWhere())));
                 }
             }
+        }
+        return new Walked.Each(out);
+    }
+
+    /** The code points of {@code text} ({@link WrittenCodePoints}), or nothing written out where
+     *  the text is not one written down. */
+    private static Walked codePointsOf(String text, Core call, InputReads at, int[] walked) {
+        if (text == null) {
+            return new Walked.NotWrittenOut();
+        }
+        List<ReadMeaning.Occurrence> out = new ArrayList<>();
+        for (Core each : WrittenCodePoints.of(text, call.pos())) {
+            if (++walked[0] > MOST_WALKED) {
+                return new Walked.PastTheFigure();
+            }
+            out.add(ReadMeaning.Occurrence.always(new Denotation(each, at)));
         }
         return new Walked.Each(out);
     }

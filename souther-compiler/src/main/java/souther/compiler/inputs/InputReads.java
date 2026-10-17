@@ -17,6 +17,7 @@ import souther.compiler.check.ScopeStep;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.ValueStanding;
 import souther.compiler.core.Core;
+import souther.compiler.core.Kernel;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.semantics.HowAClosureIsApplied;
 import souther.compiler.types.BindingId;
@@ -1295,6 +1296,23 @@ public final class InputReads {
             }
         }
 
+        /**
+         * The element of a list written out that an index written out picks, read where the list
+         * wrote it. Made of no entry: the list is no map, and the element is what it was before it
+         * was put in.
+         */
+        record AnElement(Denotation element) implements WhatItHolds {
+
+            public AnElement {
+                Objects.requireNonNull(element, "the element the index picks");
+            }
+
+            @Override
+            public EntryLookedUp madeOf() {
+                return null;
+            }
+        }
+
         /** Nothing says. */
         record Unsaid() implements WhatItHolds {
 
@@ -1308,7 +1326,8 @@ public final class InputReads {
     /**
      * What {@code option}, read here, holds where it holds a value ({@link WhatItHolds}).
      *
-     * <p>A lookup in the input's map holds the entry under the key. An operation answering its
+     * <p>A lookup in the input's map holds the entry under the key, and a lookup in a list written
+     * out holds the element its index picks ({@link #elementPicked}). An operation answering its
      * closure on what another option holds holds what the closure's body answers, read with the
      * closure's parameter standing for what the other holds — worked out the same way, down to a
      * lookup, an optional's position, or nothing said. The closure is read where it stands, and
@@ -1327,6 +1346,11 @@ public final class InputReads {
                 EntryLookedUp entry = args.size() == 2
                         ? entryLookedUp(looked, args, symbols, newtypes) : null;
                 return entry == null ? new WhatItHolds.Unsaid() : new WhatItHolds.AnEntry(entry);
+            }
+            if (operation instanceof ValueName.Stdlib.Operation listed
+                    && symbols.kernelOf(listed) == Kernel.LIST_GET) {
+                return args.size() == 2 ? at.elementPicked(args.get(0), args.get(1), symbols,
+                        newtypes) : new WhatItHolds.Unsaid();
             }
             BoundOperationFacts.ClosureOnWhatItHolds made =
                     DefaultBoundOperationFacts.get().answersTheClosureOnWhatItHolds(operation);
@@ -1375,26 +1399,66 @@ public final class InputReads {
                     declared, dependencies, applied);
             case WhatItHolds.AtAPosition(TermPath at) -> new InputReads(names.naming(name, at),
                     alternatives, declared, dependencies, applied);
-            case WhatItHolds.MadeByAClosure(Denotation answered, var _)
-                    when answered.at().pathOf(answered.value(), newtypes)
-                            instanceof PathResolution.At(TermPath at) ->
-                    new InputReads(names.naming(name, at), alternatives, declared, dependencies,
-                            applied);
-            case WhatItHolds.MadeByAClosure(Denotation answered, var _) -> {
-                Map<BindingId, Denotation> given = new LinkedHashMap<>(applied.given());
-                given.put(name, answered);
-                yield new InputReads(names, alternatives, declared, dependencies,
-                        new Applied(applied.handed(), applied.readings(), applied.taken(), given,
-                                applied.entered()));
-            }
+            case WhatItHolds.MadeByAClosure(Denotation answered, var _) ->
+                    standingFor(name, answered, newtypes);
+            case WhatItHolds.AnElement(Denotation element) -> standingFor(name, element, newtypes);
             case WhatItHolds.Unsaid _ -> this;
         };
     }
 
+    /** This reading, with {@code name} standing for {@code value}: at its position where it stands
+     *  at one, and otherwise for the value read where it was. */
+    private InputReads standingFor(BindingId name, Denotation value,
+                                   DeclarationNewtypes newtypes) {
+        if (value.at().pathOf(value.value(), newtypes) instanceof PathResolution.At(TermPath at)) {
+            return new InputReads(names.naming(name, at), alternatives, declared, dependencies,
+                    applied);
+        }
+        Map<BindingId, Denotation> given = new LinkedHashMap<>(applied.given());
+        given.put(name, value);
+        return new InputReads(names, alternatives, declared, dependencies,
+                new Applied(applied.handed(), applied.readings(), applied.taken(), given,
+                        applied.entered()));
+    }
+
+    /**
+     * What {@code List.get(index, list)} holds where it holds a value, read here: the element the
+     * index picks, where the index is a number written down and the list is written out up to that
+     * element with every one of them there on every run.
+     *
+     * <p>The index, the list and a text whose code points it is are each found through the names
+     * they were given ({@link #standing}), as the discharge of a rule finds them.
+     *
+     * <p>An element some step keeps on some runs and not others moves every element after it, and
+     * is itself the one picked only where it is kept — so where any of the elements up to and
+     * including the one picked is kept on a condition, which element the index picks is not one
+     * answer, and nothing is said.
+     */
+    private WhatItHolds elementPicked(Core index, Core list, Symbols symbols,
+                                      DeclarationNewtypes newtypes) {
+        if (!(Core.withoutStanding(standing(index, symbols, newtypes).value())
+                instanceof Core.Int written) || written.value() < 0
+                || !(WrittenOutElements.of(standing(list, symbols, newtypes), symbols, newtypes)
+                        instanceof WrittenOutElements.Walked.Each each)) {
+            return new WhatItHolds.Unsaid();
+        }
+        List<ReadMeaning.Occurrence> elements = each.asWritten();
+        if (written.value() >= elements.size()) {
+            return new WhatItHolds.Unsaid();
+        }
+        int picked = (int) written.value();
+        for (int i = 0; i <= picked; i++) {
+            if (!elements.get(i).keptWhere().isEmpty()) {
+                return new WhatItHolds.Unsaid();
+            }
+        }
+        return new WhatItHolds.AnElement(elements.get(picked).value());
+    }
+
     /**
      * This reading inside an arm opening {@code option}, with {@code name} standing for what it
-     * holds — or null where neither a lookup nor a closure says what that is, and what the arm
-     * narrows a position to is left to say it.
+     * holds — or null where no lookup, closure or written-out list says what that is, and what the
+     * arm narrows a position to is left to say it.
      *
      * <p>What a lookup in the input's map answered is the value of the entry under the key: the
      * name stands at the map's elements, and is read of that entry and no other. What an operation
@@ -1407,7 +1471,7 @@ public final class InputReads {
                                           DeclarationNewtypes newtypes) {
         WhatItHolds held = whatItHolds(option, symbols, newtypes);
         return switch (held) {
-            case WhatItHolds.AnEntry _, WhatItHolds.MadeByAClosure _ ->
+            case WhatItHolds.AnEntry _, WhatItHolds.MadeByAClosure _, WhatItHolds.AnElement _ ->
                     holding(name.binding(), held, newtypes);
             case WhatItHolds.AtAPosition _, WhatItHolds.Unsaid _ -> null;
         };

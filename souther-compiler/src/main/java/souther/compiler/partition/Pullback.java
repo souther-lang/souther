@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import net.unit8.notation199x.ScalarValues;
 import net.unit8.notation199x.pattern.CodePoints;
 
 import souther.compiler.check.ARecursion;
@@ -1407,6 +1408,12 @@ final class Pullback {
         // A list written out holds as many as it was written with.
         if (Core.withoutStanding(made.value()) instanceof Core.ListLit written) {
             return new Sized.AsAForm(LinearForm.constant(ExactRatio.of(written.elements().size())));
+        }
+        // And a text written out holds as many code points as it was written with, counted as a
+        // run counts them.
+        if (Core.withoutStanding(made.value()) instanceof Core.Str written) {
+            return new Sized.AsAForm(LinearForm.constant(
+                    ExactRatio.of(ScalarValues.count(written.value()))));
         }
         if (!(AnOperationApplied.of(Core.withoutStanding(made.value()))
                 instanceof AnOperationApplied applied
