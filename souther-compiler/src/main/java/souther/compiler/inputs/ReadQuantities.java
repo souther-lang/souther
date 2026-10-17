@@ -1921,15 +1921,7 @@ final class ReadQuantities implements Quantities {
      * fixings arrived in, which is the caller's business and not the model's.
      */
     private List<Map.Entry<NumericTerm, Fixed>> inOrder() {
-        // Each term spelled once, as in whereItStands: the sort asks for two spellings at every
-        // comparison, and a spelling is built out of the term's whole path.
-        List<Map.Entry<String, Map.Entry<NumericTerm, Fixed>>> spelled =
-                new ArrayList<>(fixed.size());
-        fixed.entrySet().forEach(each -> spelled.add(Map.entry(each.getKey().toString(), each)));
-        spelled.sort(Map.Entry.comparingByKey());
-        List<Map.Entry<NumericTerm, Fixed>> out = new ArrayList<>(spelled.size());
-        spelled.forEach(each -> out.add(each.getValue()));
-        return out;
+        return NumericTerms.entriesInOrder(fixed);
     }
 
     /**

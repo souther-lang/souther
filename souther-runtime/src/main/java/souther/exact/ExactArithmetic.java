@@ -193,11 +193,18 @@ public final class ExactArithmetic {
         return out;
     }
 
-    /** Whether both whole numbers of {@code parts} take the long route: a long holds each with a
-     *  bit to spare, as it does for {@link #canonical(long, long, long, long)}. */
+    /**
+     * Whether both whole numbers of {@code parts} take the long route: a long holds each with a bit
+     * to spare, as it does for {@link #canonical(long, long, long, long)}, and the denominator is
+     * not nought.
+     *
+     * <p>Parts are not a value and hold no rule against a nought below the line. What one fails
+     * with is said at any width, so the long route leaves it there.
+     */
     private static boolean inLongs(ExactParts parts) {
         return parts.numerator().bitLength() < Long.SIZE - 1
-                && parts.denominator().bitLength() < Long.SIZE - 1;
+                && parts.denominator().bitLength() < Long.SIZE - 1
+                && parts.denominator().signum() != 0;
     }
 
     /** How many bits the magnitude of {@code whole} takes, which the long route holds below
@@ -317,18 +324,24 @@ public final class ExactArithmetic {
         if (!addedInALong(a.twos(), b.twos()) || !addedInALong(a.fives(), b.fives())) {
             return null;
         }
-        long twos = a.twos() + b.twos();
-        long fives = a.fives() + b.fives();
-        long aNumerator = a.numerator().longValue();
-        long aDenominator = a.denominator().longValue();
-        long bNumerator = b.numerator().longValue();
-        long bDenominator = b.denominator().longValue();
-        long acrossOne = commonFactor(Math.abs(aNumerator), Math.abs(bDenominator));
-        long acrossTwo = commonFactor(Math.abs(bNumerator), Math.abs(aDenominator));
-        long numeratorOne = aNumerator / acrossOne;
-        long numeratorTwo = bNumerator / acrossTwo;
-        long denominatorOne = aDenominator / acrossTwo;
-        long denominatorTwo = bDenominator / acrossOne;
+        return crossed(a.numerator().longValue(), a.denominator().longValue(),
+                b.numerator().longValue(), b.denominator().longValue(),
+                a.twos() + b.twos(), a.fives() + b.fives());
+    }
+
+    /**
+     * {@code above / below × aboveToo / belowToo} with the exponents given, each fraction's
+     * numerator reduced by the other's denominator before anything is multiplied, as a product and
+     * a quotient both take it; or null where a product of the two is past the long route.
+     */
+    private static ExactParts crossed(long above, long below, long aboveToo, long belowToo,
+                                      long twos, long fives) {
+        long acrossOne = commonFactor(Math.abs(above), Math.abs(belowToo));
+        long acrossTwo = commonFactor(Math.abs(aboveToo), Math.abs(below));
+        long numeratorOne = above / acrossOne;
+        long numeratorTwo = aboveToo / acrossTwo;
+        long denominatorOne = below / acrossTwo;
+        long denominatorTwo = belowToo / acrossOne;
         if (!multipliesInALong(numeratorOne, numeratorTwo)
                 || !multipliesInALong(denominatorOne, denominatorTwo)) {
             return null;
@@ -383,24 +396,11 @@ public final class ExactArithmetic {
         if (!lessenedInALong(a.twos(), b.twos()) || !lessenedInALong(a.fives(), b.fives())) {
             return null;
         }
-        long twos = a.twos() - b.twos();
-        long fives = a.fives() - b.fives();
-        long aNumerator = a.numerator().longValue();
-        long aDenominator = a.denominator().longValue();
-        long bNumerator = b.numerator().longValue();
-        long bDenominator = b.denominator().longValue();
-        long acrossOne = commonFactor(Math.abs(aNumerator), Math.abs(bNumerator));
-        long acrossTwo = commonFactor(Math.abs(aDenominator), Math.abs(bDenominator));
-        long numeratorOne = aNumerator / acrossOne;
-        long numeratorTwo = bDenominator / acrossTwo;
-        long denominatorOne = aDenominator / acrossTwo;
-        long denominatorTwo = bNumerator / acrossOne;
-        if (!multipliesInALong(numeratorOne, numeratorTwo)
-                || !multipliesInALong(denominatorOne, denominatorTwo)) {
-            return null;
-        }
-        return new ExactParts(BigInteger.valueOf(numeratorOne * numeratorTwo),
-                BigInteger.valueOf(denominatorOne * denominatorTwo), twos, fives);
+        // The divisor turned over: its denominator above the line and its numerator, with its
+        // sign, below it.
+        return crossed(a.numerator().longValue(), a.denominator().longValue(),
+                b.denominator().longValue(), b.numerator().longValue(),
+                a.twos() - b.twos(), a.fives() - b.fives());
     }
 
     /** {@link #dividedBy}, in whole numbers of whatever size the operands are. */
@@ -883,7 +883,8 @@ public final class ExactArithmetic {
                 || !multipliesInALong(overThis, bDenominator)) {
             return null;
         }
-        // Both below sixty-two bits, so their sum is held whatever their signs.
+        // Each of a magnitude below two to the sixty-two, so their sum is held whatever their
+        // signs, and so is the halving of each below.
         long one = here * overThat;
         long other = there * overThis;
         long whole;

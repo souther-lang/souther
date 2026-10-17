@@ -87,23 +87,24 @@ sealed interface StatedRules<A> {
      * <p>What is passed is the part itself and not one equal to it. A composition compares by what
      * it holds, all the way down, so asking a set whether it has already seen one is asking the
      * question this walk is a stack for.
+     *
+     * <p>Only a part that holds others is kept as read. A single rule reached again is one the
+     * rules already hold, and they say so for the price of the one lookup keeping it would cost.
      */
     default List<AffineConstraint<A>> distinct() {
         Set<AffineConstraint<A>> out = new LinkedHashSet<>();
-        Set<StatedRules<A>> read = Collections.newSetFromMap(new IdentityHashMap<>());
+        Set<Both<A>> read = Collections.newSetFromMap(new IdentityHashMap<>());
         Deque<StatedRules<A>> left = new ArrayDeque<>();
         left.push(this);
         while (!left.isEmpty()) {
-            StatedRules<A> next = left.pop();
-            if (!read.add(next)) {
-                continue;
-            }
-            switch (next) {
+            switch (left.pop()) {
                 case None<A> ignored -> { }
                 case One<A> one -> out.add(one.rule());
                 case Both<A> both -> {
-                    left.push(both.right());
-                    left.push(both.left());
+                    if (read.add(both)) {
+                        left.push(both.right());
+                        left.push(both.left());
+                    }
                 }
             }
         }

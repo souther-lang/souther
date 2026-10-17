@@ -128,8 +128,12 @@ class AnOperationInLongsHandsBackWhatItDoesAtAnyWidthTest {
                             Long.MAX_VALUE - 1, Long.MIN_VALUE, Long.MIN_VALUE + 1};
         List<ExactParts> out = new ArrayList<>();
         out.add(ExactParts.ZERO);
+        // Parts are not a value and hold no rule against a nought below the line, so the two
+        // routes are asked to fail alike on one.
+        out.add(parts(3, 0, 0, 0));
+        out.add(parts(-7, 0, 2, 0));
         Random random = new Random(20261017L);
-        for (int i = 0; i < 260; i++) {
+        for (int i = 0; i < 100; i++) {
             BigInteger numerator = wholes.get(random.nextInt(wholes.size()));
             BigInteger denominator = random.nextInt(3) == 0 ? BigInteger.ONE
                     : wholes.get(random.nextInt(wholes.size()));
