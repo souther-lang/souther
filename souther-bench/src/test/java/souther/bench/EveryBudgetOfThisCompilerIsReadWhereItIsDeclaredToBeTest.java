@@ -548,11 +548,6 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Ljava/util/Optional;ZLsouther/compiler/partition/CompositionBudget;)V",
                     "how many parts a concluding counts a statement to and no further than one"
                             + " past, handed in by whoever asks"),
-            Map.entry("souther.compiler.meaning.Conclusion#withinTheParts("
-                            + "Lsouther/compiler/meaning/Proposition;"
-                            + "Lsouther/compiler/partition/CompositionBudget;)Z",
-                    "answers whether a statement is within the figure handed in, which the"
-                            + " caller answered no says or holds whole"),
             Map.entry("souther.compiler.meaning.Proposition$SoManyHold#writtenOutForAReader()"
                             + "Lsouther/compiler/meaning/WhichOfThemHold$Written;",
                     "writes a count's choices out no further than either figure, and past one"

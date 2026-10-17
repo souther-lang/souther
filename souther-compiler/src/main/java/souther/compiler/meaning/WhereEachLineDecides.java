@@ -278,7 +278,8 @@ public final class WhereEachLineDecides {
                  Proposition.Always _, Proposition.SameValue _, Proposition.LastToHold _,
                  Proposition.All _, Proposition.Any _, Proposition.Some _, Proposition.Carried _,
                  Proposition.SomeReachable _, Proposition.Unread _,
-                 Proposition.OnAnApplication _, Proposition.SoManyHold _ -> { }
+                 Proposition.OnAnApplication _ -> { }
+            case Proposition.SoManyHold counted -> throw notWrittenOut(counted);
         }
         return out;
     }
@@ -959,9 +960,8 @@ public final class WhereEachLineDecides {
             case Proposition.SomeReachable reached -> reached.holds();
             case Proposition.Carried carried -> throw carried.handedToAReader();
             case Proposition.LastToHold last -> last.holds();
-            // A count is no way round, its denial being the other counts.
-            case Proposition.OnAnApplication _, Proposition.SoManyHold _, Proposition.Always _ ->
-                    true;
+            case Proposition.OnAnApplication _, Proposition.Always _ -> true;
+            case Proposition.SoManyHold counted -> throw notWrittenOut(counted);
             case Proposition.All _, Proposition.Any _ -> throw new IllegalArgumentException(
                     "a part is what a conjunction or a disjunction joins: " + part);
         };

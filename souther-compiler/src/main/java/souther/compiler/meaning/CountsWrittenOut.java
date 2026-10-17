@@ -4,7 +4,10 @@ import souther.compiler.partition.CompositionBudget;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
+import java.util.WeakHashMap;
 
 /**
  * A statement with every count of statements in it written out as the choices of which of them
@@ -44,6 +47,14 @@ public final class CountsWrittenOut {
         }
     }
 
+    /**
+     * What each statement was handed as, kept while the statement is held: every reader asks where
+     * a statement enters it, and some of them are asked of one statement again and again. A
+     * statement handed as itself is kept as nothing and not as itself, which the entry holding it
+     * would keep from ever being let go.
+     */
+    private static final Map<Proposition, Optional<Handed>> HANDED = new WeakHashMap<>();
+
     private long partsLeft = PARTS.maximum();
     private CompositionBudget stoppedAt;
 
@@ -52,9 +63,19 @@ public final class CountsWrittenOut {
 
     /** What {@code stated} is handed to such a reader as. */
     public static Handed of(Proposition stated) {
+        synchronized (HANDED) {
+            Optional<Handed> kept = HANDED.get(stated);
+            if (kept != null) {
+                return kept.orElseGet(() -> new Written(stated));
+            }
+        }
         CountsWrittenOut writing = new CountsWrittenOut();
         Proposition written = writing.writtenOut(stated);
-        return written == null ? new PastAFigure(writing.stoppedAt) : new Written(written);
+        Handed handed = written == null ? new PastAFigure(writing.stoppedAt) : new Written(written);
+        synchronized (HANDED) {
+            HANDED.putIfAbsent(stated, written == stated ? Optional.empty() : Optional.of(handed));
+        }
+        return handed;
     }
 
     /** {@code stated} written out, or null where the writing stopped. */

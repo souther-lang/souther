@@ -1145,6 +1145,9 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
     static Read ofAnApplication(String behavior, Core application, Proposition stated,
                                 InputReading read, InputReads reads,
                                 AuthorsLines authors) {
+        // A statement holding counts whose choices are past their figure is no rule of the
+        // application's own, as one holding a part nothing read is not: what it reads is read
+        // where its comparisons are written, each on its own.
         if (CountsWrittenOut.of(stated) instanceof CountsWrittenOut.Written(Proposition written)
                 && several(behavior, application, written, read, reads,
                         Optional.of(authors)) instanceof Read.Several lines) {

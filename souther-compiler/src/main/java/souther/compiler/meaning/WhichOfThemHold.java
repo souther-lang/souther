@@ -105,8 +105,6 @@ final class WhichOfThemHold {
         if (within.choices() != null) {
             return within.choices();
         }
-        long wholeParts = within.whole() == null ? 0 : Conclusion.partsWrittenOut(within.whole(),
-                CompositionBudget.PARTS_THE_CHOICES_OF_A_COUNT_COME_TO);
         List<Integer> byKey = new ArrayList<>(statements.size());
         for (int one = 0; one < statements.size(); one++) {
             byKey.add(one);
@@ -124,17 +122,7 @@ final class WhichOfThemHold {
                 counts.add(count);
             }
         }
-        Proposition held =
-                SharedPropositions.shared(new Proposition.SoManyHold(kept, weighed, counts));
-        // Written out whole on the way here and past a step's parts, they are still what a reader
-        // of the count is handed where they are within that reader's figure, and are not written
-        // out again for it.
-        if (within.whole() != null && held instanceof Proposition.SoManyHold counted
-                && wholeParts <= CompositionBudget.PARTS_THE_CHOICES_OF_A_COUNT_COME_TO.maximum()) {
-            SharedPropositions.choicesWritten(counted,
-                    new Written(within.whole(), null, null, wholeParts));
-        }
-        return held;
+        return SharedPropositions.shared(new Proposition.SoManyHold(kept, weighed, counts));
     }
 
     /**
@@ -143,47 +131,48 @@ final class WhichOfThemHold {
      *
      * @param choices   the choices within both figures, or null
      * @param stoppedAt the figure they were past, or null where they were within both
-     * @param whole     every choice written out, where the walk made them all and only their parts
-     *                  were past the figure; null otherwise
      * @param parts     how many parts {@code choices} come to written out, and nought where there
      *                  are none — what a reader walking them is charged
      */
-    record Written(Proposition choices, CompositionBudget stoppedAt, Proposition whole,
-                   long parts) {}
+    record Written(Proposition choices, CompositionBudget stoppedAt, long parts) {}
 
     /**
      * What {@link Written} says of the choices, held to {@code choicesFigure} by how many they are
      * and to {@code partsFigure} by how many parts they come to.
      *
-     * <p>The parts are counted as the choices are made, each at no more than it comes to — the
-     * choice and the statements it names — so a walk past the parts stops there and writes no more
-     * choices; what is written is then counted in full.
+     * <p>Each choice is counted as it is made, in the parts a step is counted in — the same count
+     * the figure is of, however deep a statement goes — so a walk past the parts stops at the
+     * choice that takes it past and makes no more. Counted once for all of them: a statement and
+     * its denial are in many choices, and are counted the first time and known after.
      */
     Written written(CompositionBudget choicesFigure, CompositionBudget partsFigure) {
         long mostChoices = choicesFigure.maximum();
         long mostParts = partsFigure.maximum();
+        // One counting for every choice: the statements are the same in each, and each, and each
+        // denial of one, is counted once and then known.
+        Conclusion counting = Conclusion.countingTo(partsFigure);
         List<Proposition> ways = new ArrayList<>();
-        long[] atLeast = {0};
+        long[] parts = {1};
         boolean[] pastTheChoices = {false};
         boolean whole = walk(chosen -> {
-            atLeast[0] += 1 + chosen.partsHeld().size();
-            ways.add(chosen);
-            if (ways.size() > mostChoices) {
+            if (ways.size() == mostChoices) {
                 pastTheChoices[0] = true;
                 return false;
             }
-            return atLeast[0] <= mostParts;
+            parts[0] += counting.partsWrittenOut(chosen);
+            if (parts[0] > mostParts) {
+                return false;
+            }
+            ways.add(chosen);
+            return true;
         });
         if (pastTheChoices[0]) {
-            return new Written(null, choicesFigure, null, 0);
+            return new Written(null, choicesFigure, 0);
         }
-        if (!whole) {
-            return new Written(null, partsFigure, null, 0);
-        }
-        Proposition written = Proposition.any(ways);
-        long parts = Conclusion.partsWrittenOut(written, partsFigure);
-        return parts <= partsFigure.maximum() ? new Written(written, null, null, parts)
-                : new Written(null, partsFigure, written, 0);
+        Proposition written = whole ? Proposition.any(ways) : null;
+        long counted = written == null ? 0 : counting.partsWrittenOut(written);
+        return written != null && counted <= mostParts ? new Written(written, null, counted)
+                : new Written(null, partsFigure, 0);
     }
 
     /**

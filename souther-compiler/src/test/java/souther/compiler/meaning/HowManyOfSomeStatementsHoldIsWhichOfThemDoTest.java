@@ -12,6 +12,7 @@ import souther.compiler.partition.CompositionBudget;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -163,6 +164,24 @@ class HowManyOfSomeStatementsHoldIsWhichOfThemDoTest {
     }
 
     /**
+     * A count past the figure is not mistaken for something else by the readers of what is said of
+     * an answer. Remade over the answer, it says which figure it was past; asked only what it is
+     * about, it is what its statements are about, which needs no choices; and what a row is held
+     * to is the statement as it stands, for whoever asks the row to say the figure.
+     */
+    @Test
+    void aCountPastTheFigureIsSaidSoByWhatIsSaidOfAnAnswer() {
+        Proposition half = howMany(distinct(18), Rel.EQ, 9);
+
+        assertEquals(new AnswerAsAnInput.Remade.PastAFigure(
+                        CompositionBudget.READINGS_OF_ONE_CONDITION),
+                AnswerAsAnInput.of(half, "$answer", null, null, Map.of()));
+        assertEquals(Set.of(), AnswerAsAnInput.inputNumbersIn(half),
+                "about the input's truths, and so about none of its numbers");
+        assertEquals(half, AnswerAsAnInput.ofTheRow(half, Map.of()));
+    }
+
+    /**
      * Exactly one of a thousand is past the parts a reader is handed, found by the walk making the
      * choices and not after: each choice names every statement, so the parts pass the figure a few
      * dozen choices in, and the walk stops there — not one thousand choices of a thousand
@@ -174,6 +193,34 @@ class HowManyOfSomeStatementsHoldIsWhichOfThemDoTest {
         assertEquals(new CountsWrittenOut.PastAFigure(
                         CompositionBudget.PARTS_THE_CHOICES_OF_A_COUNT_COME_TO),
                 CountsWrittenOut.of(howMany(distinct("t", 1000), Rel.EQ, 1)));
+    }
+
+    /**
+     * The parts the choices of a count are held to are the parts a step is counted in, however
+     * deep a statement goes: a statement of thirty parts is thirty parts in every choice that names
+     * it, and the parts said of what is handed are those. So a few such statements are written out
+     * at what they come to, and a hundred of them are past the figure.
+     */
+    @Test
+    void theChoicesOfStatementsOfManyPartsAreHeldToEveryPartOfThem() {
+        Proposition.SoManyHold few = assertInstanceOf(Proposition.SoManyHold.class,
+                howMany(ofThirtyParts(12), Rel.EQ, 1));
+        WhichOfThemHold.Written written = few.writtenForAReader();
+        assertEquals(Conclusion.countingTo(CompositionBudget.PARTS_THE_CHOICES_OF_A_COUNT_COME_TO)
+                .partsWrittenOut(written.choices()), written.parts());
+
+        assertEquals(new CountsWrittenOut.PastAFigure(
+                        CompositionBudget.PARTS_THE_CHOICES_OF_A_COUNT_COME_TO),
+                CountsWrittenOut.of(howMany(ofThirtyParts(100), Rel.EQ, 1)));
+    }
+
+    /** {@code count} statements of their own, each every one of thirty truths of its own. */
+    private static List<Proposition> ofThirtyParts(int count) {
+        List<Proposition> out = new ArrayList<>();
+        for (int i = 0; i < count; i++) {
+            out.add(Proposition.all(distinct("s" + i + "_", 30)));
+        }
+        return out;
     }
 
     /**

@@ -175,6 +175,14 @@ public final class AnAnswerComposed {
             }
             AnswerAsAnInput.Remade remade = AnswerAsAnInput.of(statement.statement(), at,
                     subject.rules().inners(), subject.symbols(), pinned);
+            // A count of statements in it whose choices are past a figure: nothing was composed
+            // against it before that figure, which looking further would cure.
+            if (remade instanceof AnswerAsAnInput.Remade.PastAFigure(CompositionBudget figure)) {
+                unaccounted.add(new DemandGap.Uncomposed(each,
+                        DemandGap.WhyNotComposed.NoWayComposedBeforeAFigureEnded.by(
+                                List.of(figure))));
+                continue;
+            }
             Proposition over = remade instanceof AnswerAsAnInput.Remade.Stated(Proposition stated)
                     ? stated : null;
             List<DemandReading.Read> reads = over == null ? null : statements.asked(over);

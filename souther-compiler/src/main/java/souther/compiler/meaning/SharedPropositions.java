@@ -79,15 +79,6 @@ final class SharedPropositions {
         }
         return made;
     }
-
-    /** {@code written}, kept as what {@code counted} is written out as for a reader, where nothing
-     *  is kept for it yet: whoever wrote the choices out on the way to holding the count. */
-    static void choicesWritten(Proposition.SoManyHold counted, WhichOfThemHold.Written written) {
-        synchronized (CHOICES) {
-            CHOICES.putIfAbsent(counted, written);
-        }
-    }
-
     /**
      * What holds exactly where {@code stated} does not: the one made the first time it was asked
      * while both are held, or {@code denying}'s, kept from now on.

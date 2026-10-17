@@ -145,17 +145,18 @@ public final class Conclusion {
         return out;
     }
 
-    /** Whether {@code stated} comes to no more parts written out than {@code figure}, counted as
-     *  a step is ({@link #partsIn}). */
-    static boolean withinTheParts(Proposition stated, CompositionBudget figure) {
-        return partsWrittenOut(stated, figure) <= figure.maximum();
+    /**
+     * A counting of parts written out, counted as a step is ({@link #partsIn}) and no further than
+     * one past {@code figure} — for one that counts many statements sharing parts, each part
+     * counted once and then known.
+     */
+    static Conclusion countingTo(CompositionBudget figure) {
+        return new Conclusion(new Shared(Optional.empty(), false, figure), Map.of());
     }
 
-    /** How many parts {@code stated} comes to written out, counted as a step is, and no further
-     *  than one past {@code figure}. */
-    static long partsWrittenOut(Proposition stated, CompositionBudget figure) {
-        return new Conclusion(new Shared(Optional.empty(), false, figure), Map.of())
-                .partsIn(stated);
+    /** How many parts {@code stated} comes to written out, as {@link #countingTo} counts. */
+    long partsWrittenOut(Proposition stated) {
+        return partsIn(stated);
     }
 
     /**

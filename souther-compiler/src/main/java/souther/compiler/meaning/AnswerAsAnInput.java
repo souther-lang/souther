@@ -7,6 +7,7 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
+import souther.compiler.partition.CompositionBudget;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -14,6 +15,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.function.Function;
 
@@ -62,23 +64,17 @@ public final class AnswerAsAnInput {
                             Symbols symbols, Map<NumericTerm, ExactRatio> pinned) {
         AnswerAsAnInput reading = new AnswerAsAnInput(head, inners, symbols,
                 new LinkedHashMap<>(pinned), false);
-        Proposition remade = reading.remade(stated);
-        return remade == null ? new Remade.NotAboutTheAnswer() : new Remade.Stated(remade);
-    }
-
-    /**
-     * {@link #proposition} of {@code stated} with every count in it written out as the choices of
-     * which statements hold, all of them held to one figure ({@link CountsWrittenOut}) — or null
-     * past it, as for a part no value composed here can meet.
-     *
-     * <p>Remade choice by choice and not count by count: a part about the input alone is left out
-     * of one of several things and held of all of them, which comes to something else of a count
-     * made of the same statements.
-     */
-    private Proposition remade(Proposition stated) {
+        // Remade choice by choice and not count by count: a part about the input alone is left
+        // out of one of several things and held of all of them, which comes to something else of
+        // a count made of the same statements. So every count is written out first, all of them
+        // held to one figure.
         return switch (CountsWrittenOut.of(stated)) {
-            case CountsWrittenOut.Written(Proposition written) -> proposition(written);
-            case CountsWrittenOut.PastAFigure _ -> null;
+            case CountsWrittenOut.PastAFigure(CompositionBudget figure) ->
+                    new Remade.PastAFigure(figure);
+            case CountsWrittenOut.Written(Proposition written) -> {
+                Proposition remade = reading.proposition(written);
+                yield remade == null ? new Remade.NotAboutTheAnswer() : new Remade.Stated(remade);
+            }
         };
     }
 
@@ -98,11 +94,12 @@ public final class AnswerAsAnInput {
      */
     public static Proposition ofTheRow(Proposition stated, Map<NumericTerm, ExactRatio> pinned) {
         // A count of statements is the choices of which of them hold, every count in the
-        // statement written out together and held to one figure; past it, no row is composed
-        // toward the statement.
+        // statement written out together and held to one figure. Past it the row is held to the
+        // statement as it stands, and whoever asks the row for it says which figure that was
+        // ({@link CountsWrittenOut}).
         return switch (CountsWrittenOut.of(stated)) {
             case CountsWrittenOut.Written(Proposition written) -> ofTheRow(written, pinned, true);
-            case CountsWrittenOut.PastAFigure _ -> null;
+            case CountsWrittenOut.PastAFigure _ -> stated;
         };
     }
 
@@ -235,6 +232,18 @@ public final class AnswerAsAnInput {
         /** A part of it is about something other than the answer and the numbers put at
          *  values. */
         record NotAboutTheAnswer() implements Remade {}
+
+        /**
+         * It holds counts of statements whose choices, written out to remade it choice by choice,
+         * are past {@code figure} ({@link CountsWrittenOut}); what the rest of it is about was not
+         * looked at past it.
+         */
+        record PastAFigure(CompositionBudget figure) implements Remade {
+
+            public PastAFigure {
+                Objects.requireNonNull(figure, "a statement not remade stopped at some figure");
+            }
+        }
     }
 
     /**
@@ -296,13 +305,13 @@ public final class AnswerAsAnInput {
                                                            NewtypeInners inners,
                                                            Symbols symbols) {
         AnswerAsAnInput reading = new AnswerAsAnInput(head, inners, symbols, Map.of(), true);
-        return reading.remade(stated) == null ? null : List.copyOf(reading.comparisons);
+        return reading.proposition(stated) == null ? null : List.copyOf(reading.comparisons);
     }
 
     private static AnswerAsAnInput asking(Proposition stated) {
         AnswerAsAnInput reading =
                 new AnswerAsAnInput("$answer", null, null, Map.of(), true);
-        return reading.remade(stated) == null ? null : reading;
+        return reading.proposition(stated) == null ? null : reading;
     }
 
     private Proposition proposition(Proposition stated) {
@@ -377,9 +386,16 @@ public final class AnswerAsAnInput {
                 List<Proposition> each = propositions(applications.each());
                 yield each == null ? null : Proposition.onAnApplication(each);
             }
-            case Proposition.SoManyHold _ -> throw new IllegalArgumentException(
-                    "a count reaches what is said of an answer written out as its choices: "
-                            + stated);
+            // What a count is about is what its statements are, which its choices name and no
+            // more: asked only that, nothing writes them out. Remade, it reaches here written out
+            // ({@link #of}).
+            case Proposition.SoManyHold counted -> {
+                if (!askingWhatItIsAbout) {
+                    throw new IllegalArgumentException("a count reaches what is said of an answer"
+                            + " written out as its choices: " + stated);
+                }
+                yield propositions(counted.statements()) == null ? null : counted;
+            }
             // Over a container of the input, the element's numbers are put at values with every
             // other number of the input, so what is asked of the answer is what the element asks
             // of it at those values. Whether the row holds such an element is the row's.
