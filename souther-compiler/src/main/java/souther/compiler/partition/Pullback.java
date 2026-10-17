@@ -1622,8 +1622,8 @@ final class Pullback {
 
     /** Whether {@code number} is {@code carried} or a sum of it over some elements. */
     private static boolean mentions(Quantity number, Quantity carried) {
-        return number.equals(carried) || number instanceof Quantity.SumOver(var _, Quantity each)
-                && mentions(each, carried);
+        return number.equals(carried) || (number instanceof Quantity.SumOver(var _, Quantity each)
+                && mentions(each, carried));
     }
 
     /** How many {@code walk}'s step holds, with what it carried holding {@code soFar}. */
