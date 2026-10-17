@@ -345,6 +345,32 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
         }
     }
 
+    /**
+     * This way with each condition of several ways {@code chosen} names taken as the alternative
+     * it names, where it stands, and every other left as it is.
+     *
+     * <p>By the condition and not by where it stands, so that what was chosen along one way is
+     * chosen along another that takes the same condition in: a guard below another takes the
+     * other's condition in, and a row held past the first along one of its ways is past it along
+     * that way wherever it goes next.
+     */
+    public WayToTheBorder choosing(Map<OnTheWay, Integer> chosen) {
+        return chosen.isEmpty() ? this : new WayToTheBorder(choosing(onTheWay, chosen));
+    }
+
+    private static List<OnTheWay> choosing(List<OnTheWay> entries, Map<OnTheWay, Integer> chosen) {
+        List<OnTheWay> out = new ArrayList<>();
+        for (OnTheWay each : entries) {
+            Integer taken = each.ofSeveralWays() ? chosen.get(each) : null;
+            if (taken == null) {
+                out.add(each);
+            } else {
+                out.addAll(choosing(each.alternatives().get(taken), chosen));
+            }
+        }
+        return out;
+    }
+
     /** The conditions on this way a row is past one of several ways of
      *  ({@link OnTheWay#alternatives}), in the order the walk met them. */
     public List<OnTheWay> severalWays() {

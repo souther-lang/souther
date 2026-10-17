@@ -4,6 +4,7 @@ import souther.compiler.inputs.TermPath;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Deque;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
@@ -91,11 +92,19 @@ final class OneOfEach {
      */
     sealed interface Way<E> {
 
-        /** Every choice on it chosen. */
-        record Chosen<E>(List<E> entries) implements Way<E> {
+        /**
+         * Every choice on it chosen.
+         *
+         * @param entries what the way asks, each choice replaced by its alternative's entries
+         * @param choices which alternative each choice was taken as, by the choice: the way's
+         *                identity among the ways of the same entries, which {@code entries} no
+         *                longer says once two alternatives ask alike
+         */
+        record Chosen<E>(List<E> entries, Map<E, Integer> choices) implements Way<E> {
 
             public Chosen {
                 entries = List.copyOf(entries);
+                choices = Collections.unmodifiableMap(new LinkedHashMap<>(choices));
             }
         }
 
@@ -206,7 +215,7 @@ final class OneOfEach {
             }
         }
         if (choices.isEmpty()) {
-            return new Walked.Open<>(List.of(new Way.Chosen<>(entries)), null);
+            return new Walked.Open<>(List.of(new Way.Chosen<>(entries, Map.of())), null);
         }
         int[] left = {looking.maximum()};
         CompositionBudget stoppedBy = null;
@@ -245,7 +254,7 @@ final class OneOfEach {
             }
             List<E> unchosen = new ArrayList<>();
             List<E> taken = rebuilt(entries, vocabulary, chosen, unchosen);
-            ways.add(unchosen.isEmpty() ? new Way.Chosen<>(taken)
+            ways.add(unchosen.isEmpty() ? new Way.Chosen<>(taken, chosen)
                     : new Way.LeftUnchosen<>(taken, unchosen));
         }
         return new Walked.Open<>(ways, stoppedBy);

@@ -570,6 +570,38 @@ class AFillerThatStopsTheBodyIsExchangedForOneThatGoesOnTest {
         assertEquals("none, [Count(1)], 0", rowsOf(source).get("n=x <= 0"));
     }
 
+    /**
+     * A guard on which case a value is, ahead of a guard on {@code n}.
+     *
+     * <p>Which case a value is has no order and no border, so what holds a row to it is what the
+     * comparison states: a case of the value, which a row is written with. Beside a demand on a
+     * container in one condition, the two are one way and the row is held to both.
+     */
+    private static final String CASED = """
+            module example.settle
+
+            data No
+            data Plain
+            data Express
+            data Kind = Plain | Express
+
+            behavior settle : (kind: Kind, xs: List<Int>, n: Int) -> Bool | No
+
+            let settle (kind, xs, n) = {
+                guard CONDITION else No
+                guard n > 0 else No
+                true
+            }
+            """;
+
+    @Test
+    void aRowGoesOnPastAGuardOnWhichCaseAValueIs() {
+        assertEquals("Express, [], 0",
+                rowsOf(CASED.replace("CONDITION", "kind == Express")).get("n=x <= 0"));
+        assertEquals("Express, [1], 0", rowsOf(CASED.replace("CONDITION",
+                "kind == Express && List.any(x -> x > 0, xs)")).get("n=x <= 0"));
+    }
+
     /** What each way past the guard came to, in a word apiece. */
     private static List<String> waysOf(RepairShortfall stop) {
         assertTrue(stop != null && stop.came() instanceof RepairShortfall.AtTheGuard.NoWayPast,

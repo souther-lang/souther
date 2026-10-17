@@ -155,26 +155,12 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
         // Each copy a way of its own, in the order the walk met them, and two copies met alike
         // one way: told apart here, where one condition is asked, and not where every condition
         // is filed.
-        List<HeldOutcome> ways = new ArrayList<>();
-        Optional<CompositionBudget> cutShort = Optional.empty();
+        List<HeldOutcome.Bringing> each = new ArrayList<>();
         for (ConditionOnTheWay copy : copies.size() == 1 ? copies
                 : List.copyOf(new LinkedHashSet<>(copies))) {
-            switch (held(copy, held, declarations)) {
-                case HeldOutcome.Bringing.Found(var found, var left) -> {
-                    ways.addAll(found);
-                    cutShort = cutShort.or(() -> left);
-                }
-                case HeldOutcome.Bringing.LeftUnlooked(var figure) ->
-                        cutShort = cutShort.or(() -> Optional.of(figure));
-                case HeldOutcome.Bringing.NothingFound _,
-                     HeldOutcome.Bringing.NoValueCanStandThere _ -> { }
-            }
+            each.add(held(copy, held, declarations));
         }
-        if (!ways.isEmpty()) {
-            return new HeldOutcome.Bringing.Found(ways, cutShort);
-        }
-        return cutShort.<HeldOutcome.Bringing>map(HeldOutcome.Bringing.LeftUnlooked::new)
-                .orElseGet(HeldOutcome.Bringing.NothingFound::new);
+        return HeldOutcome.Bringing.oneOf(each);
     }
 
     /**
@@ -209,9 +195,12 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
      * the ways it splits into are each more of what was asked, looked along where the whole came
      * to nothing.
      *
-     * <p>An alternative asking something this reading could not state is no way to hold a row to,
-     * and neither is one asking nothing; the others still are. And where the figure stopped the
-     * walk before it found an alternative to hold a row to, that is said, with the figure.
+     * <p>Each alternative's answer is its own, and they are put together by the one law for it
+     * ({@link HeldOutcome.Bringing#oneOf}): an alternative asking something this reading could not
+     * state, or nothing, is this compiler's to have fallen short on; one no row takes is the
+     * model's; and a figure that stopped the walk is said with the figure. What is asked is
+     * walked to the end or the figure is said: a walk that closed proves no row has the condition
+     * come out so.
      */
     private static HeldOutcome.Bringing held(ConditionOnTheWay met, boolean held,
                                              SearchRegion declarations) {
@@ -219,70 +208,98 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
             return new HeldOutcome.Bringing.NothingFound();
         }
         List<OnTheWay> asked = held ? met.holding() : met.failing();
-        List<OneOfEach.Way<OnTheWay>> alternatives;
-        CompositionBudget cutShort;
+        List<OnTheWay> onTheWay = new ArrayList<>(met.assumed());
+        onTheWay.addAll(asked);
+        WayToTheBorder whole = new WayToTheBorder(onTheWay);
+        List<HeldOutcome.Bringing> each = new ArrayList<>();
         switch (new WayToTheBorder(asked).along()) {
-            case OneOfEach.Walked.Open<OnTheWay, Reachability>(var open, var stoppedBy) -> {
-                alternatives = open;
-                cutShort = stoppedBy;
+            case OneOfEach.Walked.Closed<OnTheWay, Reachability> _ -> {
+                return new HeldOutcome.Bringing.NoValueCanStandThere();
             }
             case OneOfEach.Walked.Stopped<OnTheWay, Reachability>(var figure) -> {
                 return new HeldOutcome.Bringing.LeftUnlooked(figure);
             }
-            case OneOfEach.Walked.Closed<OnTheWay, Reachability> _ -> {
-                return new HeldOutcome.Bringing.NothingFound();
+            case OneOfEach.Walked.Open<OnTheWay, Reachability>(var alternatives, var stoppedBy) -> {
+                if (stoppedBy != null) {
+                    each.add(new HeldOutcome.Bringing.LeftUnlooked(stoppedBy));
+                }
+                for (OneOfEach.Way<OnTheWay> alternative : alternatives) {
+                    // An alternative whose choices the figure left is not what the condition
+                    // asks, and the figure is said above.
+                    if (alternative instanceof OneOfEach.Way.Chosen<OnTheWay>(var entries,
+                            var choices)) {
+                        each.add(alongEach(whole, entries, choices, declarations));
+                    }
+                }
             }
         }
-        List<HeldOutcome> ways = new ArrayList<>();
-        for (OneOfEach.Way<OnTheWay> alternative : alternatives) {
-            // An alternative whose choices the figure left is not what the condition asks, and the
-            // figure is already said.
-            if (!(alternative instanceof OneOfEach.Way.Chosen<OnTheWay>(var entries))) {
-                continue;
-            }
-            List<RowDemand> demands = demandsOf(entries);
-            if (demands.isEmpty()) {
-                continue;
-            }
-            List<OnTheWay> way = new ArrayList<>(met.assumed());
-            way.addAll(entries);
-            if (!(Reachability.of(new WayToTheBorder(way), declarations)
-                    instanceof Reachability.Reaching reaching)) {
-                continue;
-            }
-            ways.add(new HeldOutcome(demands, reaching));
-            for (Reachability.Reaching along : reaching.along()) {
-                ways.add(new HeldOutcome(demands, along));
-            }
-            if (cutShort == null && reaching.ways() instanceof Reachability.Ways.Whole whole) {
-                cutShort = whole.figure();
-            }
-        }
-        if (!ways.isEmpty()) {
-            return new HeldOutcome.Bringing.Found(ways, Optional.ofNullable(cutShort));
-        }
-        return cutShort == null ? new HeldOutcome.Bringing.NothingFound()
-                : new HeldOutcome.Bringing.LeftUnlooked(cutShort);
+        return HeldOutcome.Bringing.oneOf(each);
     }
 
     /**
-     * What one alternative of what a condition asks demands of a row, every choice in it chosen:
-     * each demand it takes in, or none where it asks something this reading could not state.
+     * One alternative of what a condition asks, {@code asks}, the choices {@code choices} names
+     * taken on the way {@code whole}: held along the way whole first, and along every way the way
+     * to it splits into after it.
+     *
+     * <p>What the alternative asks in each vocabulary it asks in: the demands a composer composes
+     * toward, and the cases a value is, which a composer meets as the way's requirements and
+     * which holding a row to them writes. Only a condition this reading could not state leaves it
+     * nothing to hold a row to.
+     *
+     * <p>The way whole first because a row composed along it is composed against less, and found
+     * there is a row past the condition all the same; each way it splits into is more of what was
+     * asked, looked along where the whole came to nothing. Each split way is named by the choices
+     * it takes, so that a guard below takes them the same way.
      */
-    private static List<RowDemand> demandsOf(List<OnTheWay> chosen) {
+    private static HeldOutcome.Bringing alongEach(WayToTheBorder whole, List<OnTheWay> asks,
+                                                  Map<OnTheWay, Integer> choices,
+                                                  SearchRegion declarations) {
         List<RowDemand> demands = new ArrayList<>();
-        for (OnTheWay each : chosen) {
+        List<OnTheWay.Narrowed> cases = new ArrayList<>();
+        for (OnTheWay each : asks) {
             switch (each) {
                 case OnTheWay.TakenIn in -> demands.add(in.demand());
+                case OnTheWay.Narrowed narrowed -> cases.add(narrowed);
                 case OnTheWay.Settled _ -> { }
-                case OnTheWay.Declined _, OnTheWay.Narrowed _ -> {
-                    return List.of();
+                case OnTheWay.Declined _ -> {
+                    return new HeldOutcome.Bringing.NothingFound();
                 }
                 case OnTheWay.OneOf _ -> throw new IllegalStateException(
                         "an alternative with every choice chosen asks no choice: " + each);
             }
         }
-        return demands;
+        if (demands.isEmpty() && cases.isEmpty()) {
+            return new HeldOutcome.Bringing.NothingFound();
+        }
+        WayToTheBorder taken = whole.choosing(choices);
+        if (!(Reachability.of(taken, declarations) instanceof Reachability.Reaching reaching)) {
+            return new HeldOutcome.Bringing.NoValueCanStandThere();
+        }
+        List<HeldOutcome> ways = new ArrayList<>();
+        ways.add(new HeldOutcome(demands, cases, whole, choices, reaching));
+        CompositionBudget figure = null;
+        switch (taken.along()) {
+            case OneOfEach.Walked.Open<OnTheWay, Reachability>(var split, var stoppedBy) -> {
+                figure = stoppedBy;
+                for (OneOfEach.Way<OnTheWay> one : split) {
+                    if (!(one instanceof OneOfEach.Way.Chosen<OnTheWay>(var _, var more))
+                            || more.isEmpty()) {
+                        continue;
+                    }
+                    Map<OnTheWay, Integer> both = new LinkedHashMap<>(choices);
+                    both.putAll(more);
+                    if (Reachability.of(whole.choosing(both), declarations)
+                            instanceof Reachability.Reaching along) {
+                        ways.add(new HeldOutcome(demands, cases, whole, both, along));
+                    }
+                }
+            }
+            case OneOfEach.Walked.Stopped<OnTheWay, Reachability>(var stoppedBy) ->
+                    figure = stoppedBy;
+            case OneOfEach.Walked.Closed<OnTheWay, Reachability> _ -> throw new IllegalStateException(
+                    "a way the reading found open is one its walk finds open: " + taken);
+        }
+        return new HeldOutcome.Bringing.Found(ways, Optional.ofNullable(figure));
     }
 
     /**

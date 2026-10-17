@@ -18,12 +18,13 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A row held past an earlier guard along one of its ways is held past a later one along the same
- * way ({@link Generator#wayToTheLast}).
+ * way ({@link HeldOutcome#along}).
  *
  * <p>The earlier guard holds where some element of {@code xs} or some element of {@code ys} is
  * above nought, and a row is held to one of the two. The way to the later guard takes the earlier
@@ -49,9 +50,54 @@ class AWayPastALaterGuardIsTakenAlongTheWayAnEarlierOneWasHeldAlongTest {
             }
             """;
 
+    /**
+     * The earlier guard leaves the value two cases, and a row is held to one of them: two ways
+     * that ask the same of every container and tell apart only in which case the value is.
+     */
+    private static final String CASED = """
+            module example.settle
+
+            data No
+            data Plain
+            data Express
+            data Other
+            data Kind = Plain | Express | Other
+
+            behavior settle : (kind: Kind, n: Int) -> Bool | No
+
+            let settle (kind, n) = {
+                guard Bool.not(kind == Other) else No
+                guard n > 0 else No
+                true
+            }
+            """;
+
+    @Test
+    void theCaseAnEarlierGuardWasHeldToIsTheCaseOnTheWayToTheLater() {
+        Read read = read(CASED);
+        HeldOutcome.Bringing.Found earlier =
+                assertInstanceOf(HeldOutcome.Bringing.Found.class, read.holding(0));
+        HeldOutcome.Bringing.Found later =
+                assertInstanceOf(HeldOutcome.Bringing.Found.class, read.holding(1));
+        HeldOutcome whole = later.ways().getFirst();
+        List<HeldOutcome> eachCase = earlier.ways().stream()
+                .filter(one -> !one.chosen().isEmpty()).toList();
+        assertEquals(2, eachCase.size(), () -> "the earlier guard is held to either case: "
+                + earlier.ways());
+        assertNotEquals(eachCase.get(0).reaching().requirements(),
+                eachCase.get(1).reaching().requirements(),
+                "the two ways ask for two cases");
+        for (HeldOutcome each : eachCase) {
+            Reachability.Reaching taken = HeldOutcome.along(List.of(each, whole),
+                    read.declarations()).orElseThrow();
+            assertEquals(each.reaching().requirements(), taken.requirements(),
+                    () -> "the way to the later guard asks for the case the earlier was held to");
+        }
+    }
+
     @Test
     void theWayToTheLaterGuardIsTheOneAlongTheWayTheEarlierWasHeldAlong() {
-        Read read = read();
+        Read read = read(MODEL);
         HeldOutcome.Bringing.Found earlier =
                 assertInstanceOf(HeldOutcome.Bringing.Found.class, read.holding(0));
         HeldOutcome.Bringing.Found later =
@@ -70,7 +116,8 @@ class AWayPastALaterGuardIsTakenAlongTheWayAnEarlierOneWasHeldAlongTest {
         assertEquals(2, alongOne.size(), () -> "the earlier guard is held along either list: "
                 + earlier.ways());
         for (HeldOutcome each : alongOne) {
-            Reachability.Reaching taken = Generator.wayToTheLast(List.of(each, whole));
+            Reachability.Reaching taken = HeldOutcome.along(List.of(each, whole),
+                    read.declarations()).orElseThrow();
             assertTrue(taken.boundedOnTheWay().containsAll(each.reaching().boundedOnTheWay()),
                     () -> "the way to the later guard asks what the earlier was held to: "
                             + each.reaching().boundedOnTheWay() + " along " + taken);
@@ -81,16 +128,24 @@ class AWayPastALaterGuardIsTakenAlongTheWayAnEarlierOneWasHeldAlongTest {
     private record Read(List<Core.If> guards, ReachingCuts cuts, SearchRegion declarations) {
 
         HeldOutcome.Bringing holding(int guard) {
-            Core condition = Core.withoutStanding(guards.get(guard).cond());
             ModelOccurrence at = ModelOccurrence.statedAt(
-                    ((Core.Binary) condition).occurrence()).orElseThrow();
+                    switch (Core.withoutStanding(guards.get(guard).cond())) {
+                        case Core.Binary comparison -> comparison.occurrence();
+                        case Core.PreservedCall applied -> applied.occurrence();
+                        case Core other -> throw new IllegalArgumentException(
+                                "a guard on a comparison or an application: " + other);
+                    }).orElseThrow();
             return cuts.heldAt(at, true, declarations);
         }
     }
 
-    private static Read read() {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
+    private static Read read(String source) {
+        Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
+        assertTrue(compilation.errors().isEmpty(),
+                () -> "the model under test compiles: " + compilation.errors().stream()
+                        .map(each -> each.diagnostic().code() + " " + each.diagnostic().said())
+                        .toList());
         String module = compilation.modules().get(0);
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();

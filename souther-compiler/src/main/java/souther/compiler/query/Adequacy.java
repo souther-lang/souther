@@ -6392,10 +6392,13 @@ public final class Adequacy {
                 if (edge.border().noValueStandsWhereItComesOut(outcome.held())) {
                     return new HeldOutcome.Bringing.NoValueCanStandThere();
                 }
-                if (!(souther.compiler.partition.Reachability.of(reaching.wayTo(comparison),
+                // No row takes the way to it, which is the model's as much as no value standing on
+                // the side is: a proof, and not something this compiler fell short on.
+                WayToTheBorder way = reaching.wayTo(comparison);
+                if (!(souther.compiler.partition.Reachability.of(way,
                         subject.quantities().region())
                         instanceof souther.compiler.partition.Reachability.Reaching able)) {
-                    return new HeldOutcome.Bringing.NothingFound();   // nothing takes the way to it
+                    return new HeldOutcome.Bringing.NoValueCanStandThere();
                 }
                 List<PointRole> onThatSide = outcome.held()
                         ? List.of(PointRole.ON, PointRole.IN)
@@ -6413,7 +6416,7 @@ public final class Adequacy {
                             return new HeldOutcome.Bringing.Found(List.of(new HeldOutcome(
                                     List.of(new RowDemand.AtAPoint(at.fixing(),
                                             quantity.asksOfEachTerm(owed.criterion()))),
-                                    able)), Optional.empty());
+                                    List.of(), way, Map.of(), able)), Optional.empty());
                         }
                     }
                 }

@@ -249,7 +249,7 @@ public final class AnAnswerComposed {
         Attempt first = null;
         for (OneOfEach.Way<Asked> way : ways) {
             Attempt here = switch (way) {
-                case OneOfEach.Way.Chosen<Asked>(var entries) -> composing.apply(entries);
+                case OneOfEach.Way.Chosen<Asked>(var entries, var _) -> composing.apply(entries);
                 case OneOfEach.Way.LeftUnchosen<Asked>(var chosen, var unchosen) ->
                         leavingWhatWasNotChosen(composing.apply(chosen), unchosen, jointly);
             };
