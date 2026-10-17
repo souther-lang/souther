@@ -87,6 +87,7 @@ final class TermReading {
             case NumericTerm.TakenOf taken ->
                     taken(taken.takenAs(), taken.arguments(), taken.transformation(), at, on);
             case NumericTerm.CodePointClassCount count -> codePointsOfAClass(count.counted(), at);
+            case NumericTerm.CodePointValueSum _ -> whatTheCodePointsComeTo(at);
         };
     }
 
@@ -362,6 +363,19 @@ final class TermReading {
         return at instanceof ObservedValue.Text text
                 ? new Reading.Number(Count.of(text.value().codePoints()
                         .filter(counted::contains).count()))
+                : new Reading.NotNumber();
+    }
+
+    /**
+     * What the code points a string holds come to, each added as the number it is.
+     *
+     * <p>Of the string as the row wrote it, in scalar values, which is the list
+     * {@code String.codePoints} answers of it at run time. Added as a long: a code point is at most
+     * {@code 0x10FFFF}, so a long holds what any string a row can hold comes to.
+     */
+    private static Reading whatTheCodePointsComeTo(ObservedValue at) {
+        return at instanceof ObservedValue.Text text
+                ? new Reading.Number(Count.of(text.value().codePoints().asLongStream().sum()))
                 : new Reading.NotNumber();
     }
 

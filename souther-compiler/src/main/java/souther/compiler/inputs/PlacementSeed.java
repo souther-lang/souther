@@ -92,6 +92,8 @@ public record PlacementSeed(RuleAddress address, Placed placed, RuleCitation cit
                             taken.arguments(), taken.transformation());
             case NumericTerm.CodePointClassCount count ->
                     new NumberAt.OfWhatNumber.OfHowManyCodePointsAreIn(count.counted());
+            case NumericTerm.CodePointValueSum _ ->
+                    new NumberAt.OfWhatNumber.OfWhatItsCodePointsComeTo();
             case NumericTerm.Multiplicity _ -> new NumberAt.OfWhatNumber.OfItsMultiplicity();
             case NumericTerm.ExtremeOfItsKey extreme ->
                     new NumberAt.OfWhatNumber.OfTheExtremeOfItsKey(extreme.extreme(),

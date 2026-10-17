@@ -40,6 +40,7 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.BitSet;
 import java.util.Collection;
 import java.util.Collections;
@@ -341,9 +342,9 @@ final class TermRealizations {
         // is composed out of rather than read for.
         RealizationTarget.OfANumber manyItHolds = null;
         RealizationTarget.OfANumber whatItComesTo = null;
-        // How many of a string's code points are in a class, which are numbers of one string to be
-        // written together with how long it is.
-        List<RealizationTarget.OfANumber> classCounts = new ArrayList<>();
+        // How many of a string's code points are in a class and what they come to, which are
+        // numbers of one string to be written together with how long it is.
+        List<RealizationTarget.OfANumber> ofItsCodePoints = new ArrayList<>();
         // Every target read before any of them is answered, because what the group is turns on all
         // of them. Decided as they come, a value asked for beside a length would be the group the
         // length is in or the group the value is in depending on which of them was read first.
@@ -359,9 +360,11 @@ final class TermRealizations {
                     return nothingSolvesAGroup();
                 }
                 case NumericTerm.ValueOf _ -> itself = target;
-                case NumericTerm.CodePointClassCount _ -> {
+                // Numbers of a string, which a string is chosen for and no container is built to
+                // have: what its code points come to is no total of elements composed one by one.
+                case NumericTerm.CodePointClassCount _, NumericTerm.CodePointValueSum _ -> {
                     takenOfIt.add(target);
-                    classCounts.add(target);
+                    ofItsCodePoints.add(target);
                 }
                 // A number taken over the values a walk came to is a number of a run, and a value
                 // standing at one place is not a run — so there is nothing here to read it off.
@@ -424,14 +427,16 @@ final class TermRealizations {
             return wholly(targets, owned,
                     () -> new JointBuilder.ItsOwnValueAndWhatIsTakenOfIt(stands, takenOfIt));
         }
-        // Counts of a string's code points, beside how long it is where that is asked: one string
+        // Numbers of a string's code points, beside how long it is where that is asked: one string
         // written for all of them. Beside anything else of the place there is nothing here that
         // writes one, which is a capability this compiler lacks and not a string no numbers have.
-        if (!classCounts.isEmpty()) {
+        // Asked before a length meets a total, since a length beside what code points come to is
+        // a string's two numbers and not a container's.
+        if (!ofItsCodePoints.isEmpty()) {
             RealizationTarget.OfANumber length = manyItHolds;
-            return wholly(targets, length == null ? classCounts
-                            : Stream.concat(classCounts.stream(), Stream.of(length)).toList(),
-                    () -> new JointBuilder.StringsHoldingTheirCounts(classCounts, length));
+            return wholly(targets, length == null ? ofItsCodePoints
+                            : Stream.concat(ofItsCodePoints.stream(), Stream.of(length)).toList(),
+                    () -> new JointBuilder.StringsHoldingTheirNumbers(ofItsCodePoints, length));
         }
         // How many a container holds beside what it comes to, which is one container to compose:
         // the sizes it may be are the ones the first number leaves, and filling one of those to
@@ -695,24 +700,25 @@ final class TermRealizations {
         }
 
         /**
-         * One string holding the numbers of code points asked of it in each class, and that many
-         * in all where the length is asked too.
+         * One string holding the numbers asked of its code points — how many of each class, what
+         * they come to — and that many in all where the length is asked too.
          *
-         * <p><b>One string and not one for each number.</b> The counts of one string are tied: two
-         * classes that share code points count those in both, and none counts more than the
-         * string is long. A string written for each number alone and put side by side would answer
-         * none of them, so the numbers are chosen together and the string is written out of them.
+         * <p><b>One string and not one for each number.</b> The numbers of one string are tied: two
+         * classes that share code points count those in both, none counts more than the string is
+         * long, and what the code points come to turns on which they are. A string written for
+         * each number alone and put side by side would answer none of them, so the numbers are
+         * chosen together and the string is written out of them.
          */
-        record StringsHoldingTheirCounts(List<RealizationTarget.OfANumber> classes,
-                                         RealizationTarget.OfANumber length)
+        record StringsHoldingTheirNumbers(List<RealizationTarget.OfANumber> ofItsCodePoints,
+                                          RealizationTarget.OfANumber length)
                 implements JointBuilder {
 
-            public StringsHoldingTheirCounts {
-                if (classes.isEmpty()) {
+            public StringsHoldingTheirNumbers {
+                if (ofItsCodePoints.isEmpty()) {
                     throw new IllegalArgumentException(
-                            "a string holding counts of code points says which classes");
+                            "a string holding numbers of its code points says which numbers");
                 }
-                classes = List.copyOf(classes);
+                ofItsCodePoints = List.copyOf(ofItsCodePoints);
             }
 
             @Override
@@ -722,13 +728,13 @@ final class TermRealizations {
                                     RuleReadingContext reading, DemandsInside inside) {
                 nothingInside(inside);
                 Map<RealizationTarget.OfANumber, Carrier> answeredOn = new LinkedHashMap<>();
-                for (RealizationTarget.OfANumber each : classes) {
+                for (RealizationTarget.OfANumber each : ofItsCodePoints) {
                     answeredOn.put(each, measuring.ordersOf(each.term()).answered());
                 }
                 if (length != null) {
                     answeredOn.put(length, measuring.ordersOf(length.term()).answered());
                 }
-                return stringsHoldingTheirCounts(answeredOn, sourceType, demands, within, reading);
+                return stringsHoldingTheirNumbers(answeredOn, sourceType, demands, within, reading);
             }
         }
 
@@ -1287,14 +1293,17 @@ final class TermRealizations {
                         over.takenAs() instanceof TakenAs.TheSumOfWhatItHolds;
                 case NumericTerm.TakenOf taken ->
                         taken.takenAs() instanceof TakenAs.TheSumOfWhatItHolds;
+                // A string is chosen whole, and what its code points come to is read off it: no
+                // element of it is composed.
                 case NumericTerm.ValueOf _, NumericTerm.CodePointClassCount _,
-                     NumericTerm.Multiplicity _, NumericTerm.ExtremeOfItsKey _ -> false;
+                     NumericTerm.CodePointValueSum _, NumericTerm.Multiplicity _,
+                     NumericTerm.ExtremeOfItsKey _ -> false;
             };
             // Each element is chosen for what it answers of the statements, out of values of the
             // element's own number; nothing else inside it is planned.
             case JointBuilder.SoManyMeetingEach _, JointBuilder.ElementsAlikeAsOftenAsAsked _ ->
                     false;
-            case JointBuilder.StringsHoldingTheirCounts _,
+            case JointBuilder.StringsHoldingTheirNumbers _,
                  JointBuilder.AtThoseTimeParts _, JointBuilder.OnThoseDateParts _,
                  JointBuilder.SolvingForTheirQuotients _,
                  JointBuilder.SolvingForTheirRemainders _,
@@ -1497,6 +1506,16 @@ final class TermRealizations {
                 nothingInside(inside);
                 yield holdingThatManyOfAClass(counted.counted(), sourceType, asked, orders,
                         reading);
+            }
+            // A string written for its code points alone, which is the search that writes one for
+            // several numbers of a string, asked one.
+            case NumericTerm.CodePointValueSum _ -> {
+                nothingInside(inside);
+                SequencedMap<RealizationTarget, AskedAt> demands = new LinkedHashMap<>();
+                demands.put(target, asked);
+                Map<RealizationTarget.OfANumber, Carrier> answeredOn = new LinkedHashMap<>();
+                answeredOn.put(target, orders.answered());
+                yield stringsHoldingTheirNumbers(answeredOn, sourceType, demands, within, reading);
             }
             case NumericTerm.TakenOver over -> overARun(over.takenAs(), sourceType, keptApart,
                     orders, asked, within, reading, inside);
@@ -2646,7 +2665,18 @@ final class TermRealizations {
      * One kind of code point a string is written with: the code points standing in exactly the
      * same classes, and the ones of them it is written with, the first preferred.
      */
-    private record KindOfCodePoint(CodePoints held, List<Integer> writtenWith) {}
+    private record KindOfCodePoint(CodePoints held, List<Integer> writtenWith) {
+
+        /** The least code point of the kind, which is the least a code point of it adds. */
+        long least() {
+            return held.least();
+        }
+
+        /** The greatest code point of the kind, which is the most a code point of it adds. */
+        long most() {
+            return held.ranges().getLast().to();
+        }
+    }
 
     /**
      * The kinds of code point a string holding the numbers {@code wanted} asks of it is written
@@ -2659,8 +2689,9 @@ final class TermRealizations {
         List<CodePoints> by = new ArrayList<>();
         by.add(new CodePointClass.NotWhitespace().held());
         for (OfAString each : wanted) {
-            if (each.counted() != null && !by.contains(each.counted().held())) {
-                by.add(each.counted().held());
+            if (each.number() instanceof NumberOfAString.InAClass(CodePointClass counted)
+                    && !by.contains(counted.held())) {
+                by.add(counted.held());
             }
         }
         List<CodePoints> ordered = new ArrayList<>(CodePointClass.toldApart(by));
@@ -2715,26 +2746,90 @@ final class TermRealizations {
     }
 
     /** One number of a string asked for, with where it may be: what the demand admits and what the
-     *  rules leave of it on the way. */
-    private record OfAString(CodePointClass counted, Predicate<Place> holds, Tried tried) {}
+     *  rules leave of it on the way, and the ends of both together. */
+    private record OfAString(NumberOfAString number, NumericDomain.Bounds lies,
+                             Predicate<Place> holds, Tried tried) {}
 
     /**
-     * A string holding the numbers asked of it of each class's code points, and as many in all as
-     * the length asks.
+     * Which number of a string is asked for: how long it is, how many of its code points are in a
+     * class, or what they come to.
+     *
+     * <p>Told apart because they are not searched alike. The first two are counts: a string holds
+     * as many as it is written with, and to them the code points the same classes hold are one
+     * kind. What the code points come to is no count. Two code points of one kind come to two
+     * numbers, so it is reached by which code points of each kind are written and not by how many.
+     */
+    private sealed interface NumberOfAString {
+
+        record Length() implements NumberOfAString {}
+
+        record InAClass(CodePointClass counted) implements NumberOfAString {}
+
+        record CodePointSum() implements NumberOfAString {}
+
+        /** This number of {@code text}, as the language holds it. */
+        default long of(String text) {
+            return switch (this) {
+                case Length _ -> text.codePointCount(0, text.length());
+                case InAClass in -> countIn(in.counted(), text);
+                case CodePointSum _ -> text.codePoints().asLongStream().sum();
+            };
+        }
+
+        /** Whether this counts the code points of {@code kind}, which every length does and no
+         *  sum. */
+        default boolean counts(KindOfCodePoint kind) {
+            return switch (this) {
+                case Length _ -> true;
+                case InAClass in -> in.counted().contains(kind.held().least());
+                case CodePointSum _ -> false;
+            };
+        }
+
+        /** The number of a string {@code term} is, which a group of a string's numbers holds and
+         *  nothing else does. */
+        static NumberOfAString of(NumericTerm term) {
+            return switch (term) {
+                case NumericTerm.TakenOf taken
+                        when taken.takenAs() instanceof TakenAs.HowManyItHolds -> new Length();
+                case NumericTerm.CodePointClassCount count -> new InAClass(count.counted());
+                case NumericTerm.CodePointValueSum _ -> new CodePointSum();
+                case NumericTerm.TakenOf _, NumericTerm.ValueOf _, NumericTerm.Multiplicity _,
+                     NumericTerm.ExtremeOfItsKey _, NumericTerm.TakenOver _ ->
+                        throw new IllegalStateException(
+                        term + " is no number a string is written for");
+            };
+        }
+    }
+
+    /**
+     * A string holding the numbers asked of its code points — how many of each class's, what they
+     * come to — and as many in all as the length asks.
      *
      * <p>Written out of how many there are of each kind of code point: the code points standing in
-     * the same classes, with whitespace a kind apart ({@link #kindsOfCodePoint}). Every number asked
-     * for is a sum of those, so a string is chosen by choosing them, and what is offered is read
-     * back through the one reader before it is — a string that does not answer every demand is not
-     * offered however the sums said it would.
+     * the same classes, with whitespace a kind apart ({@link #kindsOfCodePoint}). Every count asked
+     * for is a sum of those, so a string is chosen by choosing them; what the code points come to is
+     * then reached by moving code points inside their kind, which leaves every count where it was.
+     * What is offered is read back through the one reader before it is — a string that does not
+     * answer every demand is not offered however the counts said it would.
      *
      * <p><b>None where the demands cannot all be met, and not-walked where this did not look.</b>
      * Every number a demand admits is tried when the sets are small and every kind of code point
-     * is tried up to the largest of them, which is the whole of the question, so a search that
-     * found nothing there is a group no string answers. Where a set is larger than that the search
-     * is over some numbers, and what it did not find is a string this compiler did not write.
+     * is tried up to the largest of them, which is the whole of the question for counts, so a
+     * search that found nothing there is a group no string answers. Where a set is larger than
+     * that the search is over some numbers, and what it did not find is a string this compiler
+     * did not write.
+     *
+     * <p>What the code points come to is held to its demand by the counts of each kind, and not by
+     * numbers tried: so many code points of a kind come to no less than as many of its least and
+     * no more than as many of its greatest ({@link StringSearch#reaches}). Counts whose run misses
+     * every sum the demand admits are refused as a count is, and a search that refused every way
+     * of writing a string so is a proof — where the length is asked, since without it a string
+     * longer than any looked at could still reach the sum. Counts whose run holds a sum the moving
+     * did not reach are a string this compiler did not write, since the code points are moved a
+     * few of the ways there are.
      */
-    static Realization stringsHoldingTheirCounts(
+    static Realization stringsHoldingTheirNumbers(
             Map<RealizationTarget.OfANumber, Carrier> answeredOn, Type sourceType,
             SequencedMap<RealizationTarget, AskedAt> demands, SearchRegion within,
             RuleReadingContext reading) {
@@ -2758,25 +2853,62 @@ final class TermRealizations {
                 case null -> { }
             }
             NumericSet set = demand.walking();
-            NumericDomain.Bounds leaves = held;
-            Predicate<Place> holds = at -> set.holds(at, on) && leaves.admits(at);
-            Tried tried = wholeNumbers(set.extent(), holds, BigInteger.ZERO,
-                    BigInteger.valueOf(Integer.MAX_VALUE),
-                    CompositionBudget.NUMBERS_OF_A_SET_TRIED.maximum());
-            wanted.add(new OfAString(each.term() instanceof NumericTerm.CodePointClassCount count
-                    ? count.counted() : null, holds, tried));
+            // The ends the walk steps between are what the demand and the rules leave together,
+            // so numbers the rules leave out are never stepped through on the way to theirs.
+            NumericDomain.Bounds lies = set.extent().meet(held);
+            Predicate<Place> holds = at -> set.holds(at, on) && lies.admits(at);
+            NumberOfAString number = NumberOfAString.of(each.term());
+            // What code points come to runs as far as a whole number does, and a count no further
+            // than a string is long.
+            long upTo = number instanceof NumberOfAString.CodePointSum ? Long.MAX_VALUE
+                    : Integer.MAX_VALUE;
+            Tried tried = wholeNumbers(lies, holds, BigInteger.ZERO,
+                    BigInteger.valueOf(upTo), CompositionBudget.NUMBERS_OF_A_SET_TRIED.maximum());
+            wanted.add(new OfAString(number, lies, holds, tried));
         }
         boolean wholeQuestion = walkIsOfTheWholeQuestion(demands.values());
+        // The code points told apart by what each class counts: how many of each kind a string
+        // holds.
+        List<KindOfCodePoint> written = kindsOfCodePoint(wanted);
+        long greatest = written.stream().mapToLong(KindOfCodePoint::most).max()
+                .orElse(Character.MAX_CODE_POINT);
         boolean everyNumberTried = true;
+        // The counts a string is written to have, and what its code points are moved to come to.
         List<Integer> numbers = new ArrayList<>();
+        List<Long> sums = new ArrayList<>();
+        boolean sumPastWhatIsWritten = false;
         for (OfAString each : wanted) {
-            everyNumberTried &= each.tried().rest() instanceof Remainder.Exhausted;
+            // A sum is held to its demand at every way of writing a string, by what the counts can
+            // come to, so the sums tried are where the moving aims and not the whole question.
+            everyNumberTried &= each.number() instanceof NumberOfAString.CodePointSum
+                    || each.tried().rest() instanceof Remainder.Exhausted;
             if (each.tried().numbers().isEmpty() && each.tried().rest()
                     instanceof Remainder.Exhausted) {
                 return new Realization.None(
                         Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
             }
             for (Place each2 : each.tried().numbers()) {
+                if (each.number() instanceof NumberOfAString.CodePointSum) {
+                    // A whole number from nought up to the most a long holds, which is the window
+                    // the sums were walked in; anything else is no sum a string is written for.
+                    if (!(each2 instanceof Count count) || !count.whole() || count.signum() < 0
+                            || count.at().compareTo(BigDecimal.valueOf(Long.MAX_VALUE)) > 0) {
+                        continue;
+                    }
+                    long sum = count.at().longValue();
+                    // A string coming to it holds at least this many code points, none more than
+                    // the greatest any kind holds, which is a count it is written with. One longer
+                    // than a string is searched for is a number this does not write.
+                    long fewest = Math.ceilDiv(sum, greatest);
+                    if (fewest > CompositionBudget.CODE_POINTS_A_STRING_IS_SEARCHED_IN_FULL
+                            .maximum()) {
+                        sumPastWhatIsWritten = true;
+                        continue;
+                    }
+                    sums.add(sum);
+                    numbers.add((int) fewest);
+                    continue;
+                }
                 int count = CountDomain.asCount(each2);
                 if (count >= 0) {
                     numbers.add(count);
@@ -2788,9 +2920,6 @@ final class TermRealizations {
                 largest > CompositionBudget.CODE_POINTS_A_STRING_IS_SEARCHED_IN_FULL.maximum();
         boolean inFull = everyNumberTried && wholeQuestion && !pastWhatIsSearchedInFull;
 
-        // The code points told apart by what each class counts: how many of each kind a string
-        // holds.
-        List<KindOfCodePoint> written = kindsOfCodePoint(wanted);
         int kindsOfCodePoint = written.size();
         int steps = CompositionBudget.STEPS_A_SEARCH_MAY_TAKE.maximum();
         List<Integer> kinds = codePointsOfEachKind(numbers, inFull ? largest : -1,
@@ -2803,7 +2932,7 @@ final class TermRealizations {
                     Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
                     ((WornNames.Unwritable) wears).why());
         }
-        StringSearch search = new StringSearch(written, wanted,
+        StringSearch search = new StringSearch(written, wanted, sums,
                 CompositionBudget.NUMBERS_OF_A_SET_TRIED.maximum(), steps);
         // The strings the type admits come first and are the only ones offered where any of them
         // answers every demand. Written ones stand in only where the type admits none that
@@ -2830,9 +2959,17 @@ final class TermRealizations {
         }
         // A search that looked at every way of writing a string there is, for every number the
         // demands admit, found no string: the one answer here that is about the demands and not
-        // about this compiler.
-        boolean everyWayLookedAt = inFull && kinds.size() == largest + 1
-                && search.looked() < steps && !search.leftUnwritten();
+        // about this compiler. Every count from nought to the largest is looked at where the counts
+        // tried run that far, which they do from nought without a gap, and a run starting longer
+        // than the largest is still one covering it. Where what the code points come to is asked,
+        // only with the length asked as well: the length bounds every kind, and a longer string is
+        // one no count looked at could rule out.
+        boolean everyWayLookedAt = inFull && kinds.size() > largest
+                && search.looked() < steps && !search.leftUnwritten()
+                && (wanted.stream().noneMatch(
+                        each -> each.number() instanceof NumberOfAString.CodePointSum)
+                    || wanted.stream().anyMatch(
+                        each -> each.number() instanceof NumberOfAString.Length));
         if (everyWayLookedAt) {
             return new Realization.None(
                     Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
@@ -2844,11 +2981,11 @@ final class TermRealizations {
         for (OfAString each : wanted) {
             met = met.and(shortfallOf(each.tried().rest()));
         }
-        if (pastWhatIsSearchedInFull) {
+        if (pastWhatIsSearchedInFull || sumPastWhatIsWritten) {
             met = met.and(CompositionShortfall.of(
                     Set.of(CompositionBudget.CODE_POINTS_A_STRING_IS_SEARCHED_IN_FULL)));
         }
-        if (search.looked() >= steps || (inFull && kinds.size() < largest + 1)) {
+        if (search.looked() >= steps || (inFull && kinds.size() <= largest)) {
             met = met.and(CompositionShortfall.of(
                     Set.of(CompositionBudget.STEPS_A_SEARCH_MAY_TAKE)));
         }
@@ -2907,8 +3044,21 @@ final class TermRealizations {
 
         private final List<KindOfCodePoint> written;
         private final List<OfAString> wanted;
+        /** What the code points are moved to come to, where that is asked; none where it is not. */
+        private final List<Long> sums;
+        /** Whether what the code points come to is asked, which is the demands' to say and not
+         *  whether any sum was tried. */
+        private final boolean asksASum;
         /** Whether each number wanted counts each kind of code point, asked once. */
         private final boolean[][] countedBy;
+        /** The least and the greatest sum each number wanted that is a sum admits, asked once;
+         *  nothing at the others. */
+        private final long[] sumFrom;
+        private final long[] sumTo;
+        /** The readable code points of each kind, and every code point of it: what a code point
+         *  is moved among to come to a sum, asked once. */
+        private final CodePoints[] readableOfEachKind;
+        private final CodePoints[] heldOfEachKind;
         /** How many ways of writing a kind the kind with the most of them has. */
         private final int ways;
         private final int most;
@@ -2917,17 +3067,37 @@ final class TermRealizations {
         private int looked;
         private boolean leftUnwritten;
 
-        StringSearch(List<KindOfCodePoint> written, List<OfAString> wanted, int most,
-                     int steps) {
+        StringSearch(List<KindOfCodePoint> written, List<OfAString> wanted, List<Long> sums,
+                     int most, int steps) {
             this.written = written;
             this.wanted = wanted;
+            this.sums = List.copyOf(sums);
             this.countedBy = new boolean[wanted.size()][written.size()];
             for (int number = 0; number < wanted.size(); number++) {
-                CodePointClass counted = wanted.get(number).counted();
                 for (int kind = 0; kind < written.size(); kind++) {
-                    countedBy[number][kind] = counted == null
-                            || counted.contains(written.get(kind).held().least());
+                    countedBy[number][kind] =
+                            wanted.get(number).number().counts(written.get(kind));
                 }
+            }
+            this.asksASum = wanted.stream()
+                    .anyMatch(each -> each.number() instanceof NumberOfAString.CodePointSum);
+            this.sumFrom = new long[wanted.size()];
+            this.sumTo = new long[wanted.size()];
+            for (int number = 0; number < wanted.size(); number++) {
+                // Clamped to the window the sums were walked in, which a demand reaching past it
+                // shares the part of.
+                BigInteger window = BigInteger.valueOf(Long.MAX_VALUE);
+                NumericDomain.Bounds lies = wanted.get(number).lies();
+                sumFrom[number] = startOf(lies.min(), BigInteger.ZERO).max(BigInteger.ZERO)
+                        .min(window).longValue();
+                sumTo[number] = endOf(lies.max(), window).max(BigInteger.valueOf(-1))
+                        .min(window).longValue();
+            }
+            this.readableOfEachKind = new CodePoints[written.size()];
+            this.heldOfEachKind = new CodePoints[written.size()];
+            for (int kind = 0; kind < written.size() && asksASum; kind++) {
+                heldOfEachKind[kind] = written.get(kind).held();
+                readableOfEachKind[kind] = heldOfEachKind[kind].and(READABLE);
             }
             this.ways = written.stream().mapToInt(each -> each.writtenWith().size()).max()
                     .orElse(0);
@@ -2973,7 +3143,9 @@ final class TermRealizations {
          * numbers are sums of the counts chosen, so most assignments are refused without a string
          * being written; one that is not is written with each code point of a kind in turn, since
          * which of them the others stand beside decides whether the text keeps the code points it
-         * was written with, and is read back as the language holds it.
+         * was written with, and is read back as the language holds it. Where what the code points
+         * come to is asked, each string written is moved to come to each number asked of it
+         * ({@link #comingTo}) before it is read back.
          */
         void over(int kind, int[] counts, List<Integer> kinds) {
             if (looked >= steps || found.size() >= most) {
@@ -2981,10 +3153,23 @@ final class TermRealizations {
             }
             if (kind == counts.length) {
                 looked++;
-                if (sumsAreAdmitted(counts)) {
+                if (countsAreAdmitted(counts)) {
                     boolean adopted = false;
                     for (int way = 0; way < ways && !adopted; way++) {
-                        adopted = adopt(writtenWith(counts, written, way));
+                        Laid laid = laidWith(counts, written, way);
+                        if (!asksASum) {
+                            adopted = adopt(laid.text());
+                        }
+                        for (long sum : sumsFor(laid)) {
+                            if (found.size() >= most) {
+                                break;
+                            }
+                            String moved = comingTo(laid, sum, readableOfEachKind);
+                            if (moved == null) {
+                                moved = comingTo(laid, sum, heldOfEachKind);
+                            }
+                            adopted |= moved != null && adopt(moved);
+                        }
                     }
                     leftUnwritten |= !adopted;
                 }
@@ -2997,11 +3182,44 @@ final class TermRealizations {
         }
 
         /**
-         * Whether every demand admits the number the counts chosen come to: the length is all of
-         * them, and a class holds the kinds of code point it counts.
+         * What the code points of {@code laid} are moved to come to: first the number each demand
+         * admits nearest what they come to as laid, which moves them least, and then the numbers
+         * tried of the demands. None where nothing asks it.
          */
-        private boolean sumsAreAdmitted(int[] counts) {
+        private Set<Long> sumsFor(Laid laid) {
+            Set<Long> out = new LinkedHashSet<>();
+            if (!asksASum) {
+                return out;
+            }
+            long asLaid = Arrays.stream(laid.codePoints()).asLongStream().sum();
             for (int number = 0; number < wanted.size(); number++) {
+                OfAString each = wanted.get(number);
+                if (each.number() instanceof NumberOfAString.CodePointSum
+                        && sumFrom[number] <= sumTo[number]) {
+                    long nearest = Math.clamp(asLaid, sumFrom[number], sumTo[number]);
+                    if (each.holds().test(Count.of(nearest))) {
+                        out.add(nearest);
+                    }
+                }
+            }
+            out.addAll(sums);
+            return out;
+        }
+
+        /**
+         * Whether every number asked admits what the counts chosen come to: the length is all of
+         * them, a class holds the kinds of code point it counts, and what the code points come to
+         * is some sum between as many of each kind's least and as many of its greatest
+         * ({@link #reaches}). Which of those sums is asked of the string once it is written.
+         */
+        private boolean countsAreAdmitted(int[] counts) {
+            for (int number = 0; number < wanted.size(); number++) {
+                if (wanted.get(number).number() instanceof NumberOfAString.CodePointSum) {
+                    if (!reaches(counts, number)) {
+                        return false;
+                    }
+                    continue;
+                }
                 long sum = 0;
                 for (int kind = 0; kind < counts.length; kind++) {
                     if (countedBy[number][kind]) {
@@ -3014,26 +3232,133 @@ final class TermRealizations {
             }
             return true;
         }
+
+        /**
+         * Whether a string of {@code counts} of each kind can come to some sum the {@code number}-th
+         * demand admits: its code points come to no less than as many of each kind's least, and no
+         * more than as many of its greatest. A string whose run misses the demand's has no code
+         * points that come to it, however they are chosen, so refusing it is a proof; one whose
+         * run meets it may still miss every sum, where the kinds have gaps.
+         */
+        private boolean reaches(int[] counts, int number) {
+            long least = 0;
+            long greatest = 0;
+            for (int kind = 0; kind < counts.length; kind++) {
+                least += counts[kind] * written.get(kind).least();
+                greatest += counts[kind] * written.get(kind).most();
+            }
+            return least <= sumTo[number] && greatest >= sumFrom[number];
+        }
     }
 
-    /** The string with {@code counts[i]} code points of each kind in turn, each written with the
-     *  {@code way}-th code point of its kind, or its last where it has fewer. */
-    private static String writtenWith(int[] counts, List<KindOfCodePoint> written, int way) {
-        StringBuilder out = new StringBuilder();
-        for (int at = 0; at < written.size(); at++) {
-            List<Integer> with = written.get(at).writtenWith();
-            int codePoint = with.get(Math.min(way, with.size() - 1));
-            out.append(new String(Character.toChars(codePoint)).repeat(counts[at]));
+    /**
+     * The code points of a string as they are laid, before the language holds the text, with the
+     * kind each was written as.
+     */
+    private record Laid(int[] codePoints, int[] kinds) {
+
+        String text() {
+            return new String(codePoints, 0, codePoints.length);
         }
-        return out.toString();
+    }
+
+    /** {@code counts[i]} code points of each kind in turn, each written with the {@code way}-th
+     *  code point of its kind, or its last where it has fewer. */
+    private static Laid laidWith(int[] counts, List<KindOfCodePoint> written, int way) {
+        int length = Arrays.stream(counts).sum();
+        int[] codePoints = new int[length];
+        int[] kinds = new int[length];
+        int at = 0;
+        for (int kind = 0; kind < written.size(); kind++) {
+            List<Integer> with = written.get(kind).writtenWith();
+            int codePoint = with.get(Math.min(way, with.size() - 1));
+            for (int each = 0; each < counts[kind]; each++, at++) {
+                codePoints[at] = codePoint;
+                kinds[at] = kind;
+            }
+        }
+        return new Laid(codePoints, kinds);
+    }
+
+    /**
+     * {@code laid} with one or two of its code points moved, each to another of its own kind that
+     * {@code heldOfEachKind} holds, so that together they come to {@code sum} — or null where
+     * moving that few does not.
+     *
+     * <p>Inside the kind, so every count the string was laid for stays what it was: a kind is the
+     * code points every class counted holds alike. One moved first, as far as what is short; then
+     * each in turn as near as its kind lets to what is still short, until nothing is, so a sum
+     * past what one code point holds is reached by as many as it takes. Which is a few of the
+     * strings that come to the sum and claimed to be no more, which is why a search asking for one
+     * never concludes there is none.
+     *
+     * <p>A kind is laid as one code point side by side ({@link #laidWith}), so moving one alone
+     * the first of a kind answers for every other of it.
+     */
+    private static String comingTo(Laid laid, long sum, CodePoints[] heldOfEachKind) {
+        int[] codePoints = laid.codePoints();
+        int[] kinds = laid.kinds();
+        long owed = sum - Arrays.stream(codePoints).asLongStream().sum();
+        if (owed == 0) {
+            return laid.text();
+        }
+        List<Integer> firsts = new ArrayList<>();
+        for (int at = 0; at < codePoints.length; at++) {
+            if (at == 0 || kinds[at] != kinds[at - 1]) {
+                firsts.add(at);
+            }
+        }
+        for (int one : firsts) {
+            long to = codePoints[one] + owed;
+            if (writable(heldOfEachKind[kinds[one]], to)) {
+                int[] moved = codePoints.clone();
+                moved[one] = (int) to;
+                return new String(moved, 0, moved.length);
+            }
+        }
+        int[] moved = codePoints.clone();
+        long still = owed;
+        for (int at = 0; at < moved.length && still != 0; at++) {
+            CodePoints held = heldOfEachKind[kinds[at]];
+            long to = moved[at] + still;
+            int near = writable(held, to) ? (int) to : nearestIn(held, to);
+            if (near >= 0) {
+                still -= near - moved[at];
+                moved[at] = near;
+            }
+        }
+        return still == 0 ? new String(moved, 0, moved.length) : null;
+    }
+
+    /** The code points a person reading a row reads as what they are, which a string coming to a
+     *  sum is moved among first: the printable ones of ASCII, the space, and the ideographs of
+     *  the block that has no gaps. */
+    private static final CodePoints READABLE = CodePoints.between(' ', '~')
+            .or(CodePoints.between(FIRST_IDEOGRAPH, LAST_IDEOGRAPH));
+
+    /** Whether {@code held} has {@code codePoint}. A set of code points holds no surrogate, so
+     *  what it has is a code point a string holds. */
+    private static boolean writable(CodePoints held, long codePoint) {
+        return codePoint >= 0 && codePoint <= Character.MAX_CODE_POINT
+                && held.has((int) codePoint);
+    }
+
+    /** The code point of {@code held} nearest {@code wanted}, or -1 where it has none. */
+    private static int nearestIn(CodePoints held, long wanted) {
+        long best = -1;
+        for (CodePoints.Range range : held.ranges()) {
+            long at = Math.clamp(wanted, range.from(), range.to());
+            if (best < 0 || Math.abs(at - wanted) < Math.abs(best - wanted)) {
+                best = at;
+            }
+        }
+        return (int) best;
     }
 
     /** Whether the string reads back as a number every demand admits. */
     private static boolean answersEvery(String written, List<OfAString> wanted) {
         for (OfAString each : wanted) {
-            long read = each.counted() == null ? written.codePointCount(0, written.length())
-                    : countIn(each.counted(), written);
-            if (!each.holds().test(Count.of(read))) {
+            if (!each.holds().test(Count.of(each.number().of(written)))) {
                 return false;
             }
         }

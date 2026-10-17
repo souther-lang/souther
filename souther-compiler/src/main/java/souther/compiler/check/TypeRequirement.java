@@ -44,6 +44,16 @@ enum TypeRequirement {
     /** A string, whose code points a rule can count. */
     TEXT("a string"),
 
+    /** A list of strings: what a fact counting pieces in order, each one a string, names. A set
+     *  would keep two equal pieces as one, so the constructor is the whole of the condition, as
+     *  it is of {@link #CLOSURE}. */
+    LIST_OF_TEXT("a list of strings"),
+
+    /** A list of whole numbers: what a fact naming each code point of a string, in order and as
+     *  often as it stands, names. The constructor is the whole of the condition, as it is of
+     *  {@link #LIST_OF_TEXT}. */
+    LIST_OF_INTS("a list of whole numbers"),
+
     /** A value holding some number of things, which a bound on how many it holds is about: a
      *  container, or a string and its characters. */
     SIZED("something holding a number of things"),
@@ -83,6 +93,8 @@ enum TypeRequirement {
             case COUNTED -> Carrier.countsToANumber(type);
             case CONTAINER -> Type.elementOfAContainer(type) != null;
             case TEXT -> Type.STRING.equals(type);
+            case LIST_OF_TEXT -> new Type.ListOf(Type.STRING).equals(type);
+            case LIST_OF_INTS -> new Type.ListOf(Type.INT).equals(type);
             case SIZED -> Type.STRING.equals(type) || Type.elementOfAContainer(type) != null;
             case KEYED -> Type.keyOf(type) != null;
             case CLOSURE -> type instanceof Type.FnOf;

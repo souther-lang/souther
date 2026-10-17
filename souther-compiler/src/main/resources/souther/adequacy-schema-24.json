@@ -1185,6 +1185,21 @@
               "type": "string"
             }
           }
+        },
+        {
+          "description": "What the code points of the string a position holds come to, each added as the number it is.",
+          "required": [
+            "position"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "code_point_sum"
+            },
+            "position": {
+              "type": "string"
+            }
+          }
         }
       ]
     },
