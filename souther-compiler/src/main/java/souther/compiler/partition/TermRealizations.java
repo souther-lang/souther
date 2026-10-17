@@ -39,6 +39,7 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.BitSet;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
@@ -53,6 +54,7 @@ import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeSet;
 import java.util.function.Function;
+import java.util.function.IntPredicate;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.stream.Stream;
@@ -273,7 +275,7 @@ final class TermRealizations {
      * are that rule rather than a list of shapes.</b> A number that is a place in the spelling of
      * what stands there is written at: the parts of a time and the parts of a date are places, so
      * a value can be built with all of them asked for at once — and whatever the parts do to each
-     * other is the calendar's, which {@link #dateOn} answers. A number whose values come of a run
+     * other is the calendar's, which {@link #dateAnsweringMovedParts} answers. A number whose values come of a run
      * of the place's own is solved for out of the demands, which is what a quotient by a written
      * number is. A number read off a value the group already asks for is read off the values that
      * demand admits, which is what any number taken of a place is once the place's own value is
@@ -451,24 +453,13 @@ final class TermRealizations {
             return wholly(targets, quotients.keySet(),
                     () -> new JointBuilder.SolvingForTheirQuotients(quotients));
         }
-        // A date moved before a part of it is taken is not a value spelled in parts: two years of
-        // one date are two numbers, and what writes a date answering them is a search over the
-        // days. Every part asked of the date, moved or not, is a condition on the days it comes
-        // from, so the group is one search. What bounds it is a year asked of it; a number of a
-        // moved date is only ever a year ({@link NumericTerm.TakenOf#of}), so a group holding one
-        // has that.
-        if (moved.values().stream().anyMatch(each -> !each.isNone())) {
-            return times.isEmpty() && dates.size() == numbers.size()
-                    && dates.containsValue(TakenAs.DatePart.YEAR)
-                    ? wholly(targets, dates.keySet(),
-                            () -> new JointBuilder.OnThoseMovedDateParts(dates, moved))
-                    : nothingSolvesAGroup();
-        }
-        // A value spelled in parts is written at the parts it is spelled in. Two asks at one part
-        // are two asks for one number and are the same target, so a group holding a part twice is a
-        // group somebody built by hand — not a population this compiler writes none of.
+        // Two asks at one part of a time, or at one part of a date moved by one translation, are
+        // two asks for one number and are the same target, so a group holding one twice is a group
+        // somebody built by hand — not a population this compiler writes none of. A part of a date
+        // moved two ways is two numbers: the year of a date and the year of the day before it.
         assert Set.copyOf(times.values()).size() == times.size()
-                && Set.copyOf(dates.values()).size() == dates.size()
+                && dates.keySet().stream().map(each -> List.of(dates.get(each), moved.get(each)))
+                        .distinct().count() == dates.size()
                 : "one part of one root is one number and one target";
         // The parts of a time beside the parts of a date are a value spelled two ways, and what
         // writes one is a builder for that spelling. Said as a group nobody wrote the solving for,
@@ -480,8 +471,11 @@ final class TermRealizations {
         if (times.isEmpty() && dates.isEmpty()) {
             return nothingSolvesAGroup();
         }
+        // The parts of a date, each after the date was moved as its own number says, where a date
+        // that is not moved is one moved by nothing: every part asked is a condition on the days
+        // the date comes from, so the group is one search over the days.
         return wholly(targets, times.isEmpty() ? dates.keySet() : times.keySet(),
-                () -> times.isEmpty() ? new JointBuilder.OnThoseDateParts(dates)
+                () -> times.isEmpty() ? new JointBuilder.OnThoseDateParts(dates, moved)
                         : new JointBuilder.AtThoseTimeParts(times));
     }
 
@@ -760,53 +754,25 @@ final class TermRealizations {
             }
         }
 
-        /** The parts of a date, solved over the calendar. */
-        record OnThoseDateParts(SequencedMap<RealizationTarget.OfANumber, TakenAs.DatePart> parts)
-                implements JointBuilder {
-
-            public OnThoseDateParts {
-                if (parts.isEmpty()) {
-                    throw new IllegalArgumentException(
-                            "a way of writing a value for some parts says which parts");
-                }
-                parts = Collections.unmodifiableSequencedMap(new LinkedHashMap<>(parts));
-            }
-
-            @Override
-            public Realization from(Type sourceType, List<List<String>> keptApart,
-                                    SequencedMap<RealizationTarget, AskedAt> demands,
-                                    Quantities measuring, SearchRegion within,
-                                    RuleReadingContext reading, DemandsInside inside) {
-                nothingInside(inside);
-                Map<TakenAs.DatePart, NumericSet> asked = new LinkedHashMap<>();
-                for (Map.Entry<RealizationTarget.OfANumber, TakenAs.DatePart> each
-                        : parts.entrySet()) {
-                    asked.put(each.getValue(), demands.get(each.getKey()).walking());
-                }
-                return onThoseParts(asked, sourceType, rootOf(parts.keySet(), measuring),
-                        reading.source());
-            }
-        }
-
         /**
-         * The parts of one date, each taken after the date was moved as its own number says.
+         * The parts of one date, each taken after the date was moved as its own number says, and
+         * a date that is not moved being one moved by nothing.
          *
          * <p>The year of {@code b} and the year of {@code b} a day on are two numbers of one date,
          * and a value spelled in parts has one year to write. So a date answering them is looked
          * for among the days, where every number asked is a condition on the date itself
-         * ({@link #onMovedDates}) — which holds for the parts of a date that is not moved as well,
-         * so the two kinds are asked together and neither leaves the group unsolved.
+         * ({@link #onMovedDates}). That holds of the parts of a date nobody moved as well, so they
+         * are looked for the same way and there is one search for a date and not two.
          */
-        record OnThoseMovedDateParts(
+        record OnThoseDateParts(
                 SequencedMap<RealizationTarget.OfANumber, TakenAs.DatePart> parts,
                 SequencedMap<RealizationTarget.OfANumber, DateTranslation> moved)
                 implements JointBuilder {
 
-            public OnThoseMovedDateParts {
-                if (parts.isEmpty() || !parts.keySet().equals(moved.keySet())
-                        || !parts.containsValue(TakenAs.DatePart.YEAR)) {
+            public OnThoseDateParts {
+                if (parts.isEmpty() || !parts.keySet().equals(moved.keySet())) {
                     throw new IllegalArgumentException("a way of writing a moved date says how"
-                            + " each part was moved, and is walked by the year asked of it");
+                            + " each part was moved");
                 }
                 parts = Collections.unmodifiableSequencedMap(new LinkedHashMap<>(parts));
                 moved = Collections.unmodifiableSequencedMap(new LinkedHashMap<>(moved));
@@ -1324,7 +1290,7 @@ final class TermRealizations {
                     false;
             case JointBuilder.StringsHoldingTheirCounts _,
                  JointBuilder.AtThoseTimeParts _, JointBuilder.OnThoseDateParts _,
-                 JointBuilder.OnThoseMovedDateParts _, JointBuilder.SolvingForTheirQuotients _,
+                 JointBuilder.SolvingForTheirQuotients _,
                  JointBuilder.SolvingForTheirRemainders _,
                  JointBuilder.ItsOwnValueAndWhatIsTakenOfIt _ -> false;
         };
@@ -1611,11 +1577,11 @@ final class TermRealizations {
             // travels this far and the arm takes the end (#1027).
             case TakenAs.PartOfTime taken -> atThoseParts(Map.of(taken.part(), wanted), sourceType,
                     orders.observed(), ruleSource);
-            case TakenAs.PartOfDate taken -> from instanceof ValueTransformation.DateShift moved
-                    ? onMovedDates(List.of(new DatePartAsk(taken.part(), moved.translation(),
-                            wanted)), sourceType, orders.observed(), ruleSource)
-                    : onThoseParts(Map.of(taken.part(), wanted), sourceType, orders.observed(),
-                            ruleSource);
+            // And this one looks among the days, where the date as it stands is the date moved by
+            // nothing.
+            case TakenAs.PartOfDate taken -> onMovedDates(
+                    List.of(new DatePartAsk(taken.part(), from.translation(), wanted)),
+                    sourceType, orders.observed(), ruleSource);
             // And this one multiplies back. What a quotient is taken of is a whole number and what
             // it answers is one, so both ends are the order the value is written on.
             case TakenAs.TheTruncatingQuotient taken ->
@@ -3050,7 +3016,7 @@ final class TermRealizations {
      * Every hour goes with every minute, so a number admitted for one part is admitted whatever the
      * other parts came to — which is why this needs no search across them and why a part with
      * nothing admitted is a time nothing answers rather than a combination this did not find. The
-     * parts of a date are not like this, and {@link #onThoseParts} is where that is answered.
+     * parts of a date are not like this, and {@link #onMovedDates} is where that is answered.
      *
      * <p>At least one part, which both callers hold to: a group of them says which parts it is for
      * ({@link JointBuilder.AtThoseTimeParts}) and a single number is the part it is of.
@@ -3096,130 +3062,12 @@ final class TermRealizations {
                 : Realization.Built.whole(List.of(standing));
     }
 
-    /**
-     * A date whose given part stands at that number, with the parts beside it at the first they run
-     * from.
-     *
-     * <p>One of the many, as the time above offers one of the many. Every date in the year answers
-     * the same year, and what this owes is that what it offers reads back — not that it enumerates
-     * the dates that would. The first of January is the plain choice, and it is a choice about which
-     * value to write down rather than anything the model said.
-     *
-     * <p>A day of the month is offered in the longest month there is, so every day a date can fall
-     * on is a day of the one this writes. Offered in a short month, the last days of the long ones
-     * would be days no date has, and a rule about the thirty-first would have no witness for a
-     * reason that is about this choice rather than about the calendar.
-     *
-     * <p>At least one part, as the time above has: a group says which parts it is for
-     * ({@link JointBuilder.OnThoseDateParts}) and a single number is the part it is of.
-     *
-     * <p>Whether a date can have the part at all is asked of the calendar and not of the bound the
-     * operation declares. A bound is what the model may assume of an answer; what dates there are is
-     * what a witness can be built from, and reading the second off the first would make a bound
-     * loosened by hand into dates that cannot be written.
-     */
-    private static Realization onThoseParts(Map<TakenAs.DatePart, NumericSet> parts,
-                                            Type sourceType, Carrier observed,
-                                            RuleReadingSource ruleSource) {
-        if (observed == null) {
-            return new Realization.None(
-                    Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
-        }
-        Search found = dateOn(parts, observed);
-        if (found.on() == null) {
-            // No date has parts the rules all admit. Which is a statement about the calendar where
-            // every combination was looked at, and a statement about this compiler where it was
-            // not — and the two are not the same thing to tell an author.
-            return found.everyOne()
-                    ? new Realization.None(
-                            Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE)
-                    : new Realization.Stopped(CompositionShortfall.of(
-                            Set.of(CompositionBudget.NUMBERS_OF_A_SET_TRIED)));
-        }
-        FixtureTemplate standing = WornNames.under(
-                TypeView.of(sourceType, ruleSource.inners(), ruleSource.symbols(),
-                        ruleSource.kinds(), ruleSource.sums()).wrappers(),
-                FixtureTemplate.on(observed, Dates.dayOf(found.on()),
-                        ruleSource.symbols().scope()::reach),
-                ruleSource);
-        return standing == null
-                ? new Realization.None(
-                        Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE)
-                : Realization.Built.whole(List.of(standing));
-    }
-
-    /**
-     * The date this offers for those parts standing at those numbers, or null where no date has
-     * them.
-     *
-     * <p>Asked of the calendar rather than tried and caught. What a year, a month and a day run
-     * between is something {@code java.time} answers, and building a date to find out whether one
-     * could be built is asking a question by reading the exception from the answer.
-     *
-     * <p><b>A part nobody asked for stands at the value that rules out the fewest of the parts that
-     * were asked for.</b> The parts of a date are not independent the way the parts of a time are:
-     * how far the days run depends on the month, and February's length depends on the year. So a
-     * value chosen here for a part nobody asked for is not merely a value that part can take — a
-     * date exists for every one of those — it is the one that leaves every combination the calendar
-     * admits still writable. The longest month, and a year whose February is a day longer.
-     *
-     * <p>Chosen for a part alone, each of them would be right and the pair would not: a month and a
-     * day asked for together would be offered in whichever year the month-alone case happened to
-     * name, and the twenty-ninth of February would be a day the calendar has that nothing here
-     * writes.
-     *
-     * <p>How far the days run is asked of the month the date is actually built in, and not of how
-     * far a day of any month can run. Where no month was asked for that is the longest there is, so
-     * every day a date can fall on is a day of the one this writes; where one was, the days are
-     * that month's and a rule about the thirty-first of a short one has no witness because the
-     * calendar has none.
-     *
-     * <p><b>Solved over the sets and not at one number of each.</b> The parts constrain each other,
-     * so a combination the calendar refuses says nothing about the combinations beside it: the
-     * second of February is a date nothing writes and the thirtieth of March is one that is
-     * written, and both stand at a month at or after February and a day at or after the thirtieth.
-     * Read at one number apiece, the first of those would be the answer for the pair of sets, and
-     * a report would say the model asks for a date that does not exist.
-     *
-     * <p>The months and the days are walked to their ends, which is what makes an answer of nothing
-     * a statement about the calendar. The years are not — there are more of them than anything here
-     * will try — so a search that walked some of them says so, and the caller carries that out as a
-     * figure rather than as an answer about the model.
-     */
-    private static Search dateOn(Map<TakenAs.DatePart, NumericSet> parts, Carrier observed) {
-        // The years are more than anything here walks, so what comes back says whether it was all
-        // of them; the months and the days are as many as the calendar has, so walking their window
-        // is walking them.
-        Tried years = parts.containsKey(TakenAs.DatePart.YEAR)
-                ? wholeNumbers(parts.get(TakenAs.DatePart.YEAR), observed,
-                        java.time.LocalDate.MIN.getYear(), java.time.LocalDate.MAX.getYear(),
-                        CompositionBudget.NUMBERS_OF_A_SET_TRIED.maximum())
-                : Tried.allOf(List.of(Count.of(BigDecimal.valueOf(A_LEAP_YEAR))));
-        List<Place> months = numbersOf(parts, TakenAs.DatePart.MONTH, observed,
-                MONTHS_A_YEAR_HAS, A_LONGEST_MONTH);
-        List<Place> days = numbersOf(parts, TakenAs.DatePart.DAY, observed,
-                DAYS_THE_LONGEST_MONTH_HAS, FIRST_OF_THE_MONTH);
-        boolean everyOne = years.rest() instanceof Remainder.Exhausted;
-        for (Place year : years.numbers()) {
-            for (Place month : months) {
-                java.time.YearMonth in = java.time.YearMonth.of(
-                        whole(year), whole(month));
-                for (Place day : days) {
-                    if (whole(day) <= in.lengthOfMonth()) {
-                        return new Search(in.atDay(whole(day)), everyOne);
-                    }
-                }
-            }
-        }
-        return new Search(null, everyOne);
-    }
-
     /** A date this composed for those parts, or the reason there is none to report with.
      *
-     *  @param on       the date, or null where the walk below found none
+     *  @param on       the date, or null where the walk found none
      *  @param everyOne whether the walk went over every combination the parts admit, which is what
      *                  tells a calendar that has no such date from a search that stopped short */
-    record Search(java.time.LocalDate on, boolean everyOne) {}
+    record Search(LocalDate on, boolean everyOne) {}
 
     /**
      * One part of a date asked of it, after the date was moved.
@@ -3230,25 +3078,75 @@ final class TermRealizations {
      */
     record DatePartAsk(TakenAs.DatePart part, DateTranslation moved, NumericSet wanted) {
 
-        /** Whether the date {@code day} counts to is one this admits: one the move is defined at,
-         *  whose moved date has a part the rules leave. */
-        boolean admits(long day, Carrier observed) {
-            return moved.definedAt(day)
-                    && wanted.holds(Count.of(partOf(part, day + moved.offsetDays())), observed);
+        /** This ask, ready to be put to the days. */
+        PutToTheDays putToTheDays(Carrier observed) {
+            return switch (part) {
+                case YEAR -> new PutToTheDays(this,
+                        year -> wanted.holds(Count.of(year), observed), false);
+                case MONTH -> tabled(MONTHS_A_YEAR_HAS, observed);
+                case DAY -> tabled(DAYS_THE_LONGEST_MONTH_HAS, observed);
+            };
         }
 
-        /** The days, among those after {@code from} up to {@code to}, at which this ask is
-         *  answered otherwise than on the day before: where the move stops being defined, and where
-         *  the part of the moved date starts a new run. */
+        private PutToTheDays tabled(int most, Carrier observed) {
+            BitSet left = new BitSet(most + 1);
+            for (int value = 1; value <= most; value++) {
+                left.set(value, wanted.holds(Count.of(value), observed));
+            }
+            return new PutToTheDays(this, left::get, left.isEmpty());
+        }
+    }
+
+    /**
+     * One ask, ready to be put to the days: which values of its part the set leaves, answered at
+     * once.
+     *
+     * <p>A month or a day of the month takes so few values that the set is asked of each of them
+     * once and each day reads the answer off the table; a walk over a cycle of the calendar would
+     * otherwise ask the set again at every day of four hundred years. A year runs further than a
+     * table holds and is asked of the set as it is reached, which is once a year.
+     *
+     * @param ask           what is asked
+     * @param leaves        whether the set leaves a value of the part
+     * @param leavesNothing whether it leaves no value at all, which only a table can say before a
+     *                      walk
+     */
+    record PutToTheDays(DatePartAsk ask, IntPredicate leaves, boolean leavesNothing) {
+
+        /** Whether the date {@code day} counts to is one this admits: one the move is defined at,
+         *  whose moved date has a part the rules leave. */
+        boolean admits(long day) {
+            DateTranslation moved = ask.moved();
+            return moved.definedAt(day) && leaves.test(partOf(ask.part(), day + moved.offsetDays()));
+        }
+
+        /**
+         * The days, among those after {@code from} up to {@code to}, at which this ask is answered
+         * otherwise than on the day before: where the move starts or stops being defined, and where
+         * the part of the moved date starts a new run at a value the set answers otherwise than the
+         * value before it.
+         *
+         * <p>Every part starts a new run where its value moves, a day of the month every day. The
+         * answer turns only where the set's answer for the new value differs from its answer for
+         * the old one, and those are the days cut at, so a set that leaves one day of the month
+         * cuts a month in at most three and not in thirty-one.
+         */
         void cutsInto(SortedSet<Long> cuts, long from, long to) {
+            DateTranslation moved = ask.moved();
             for (long edge : new long[] {moved.first(), moved.last() + 1}) {
                 addIfBetween(cuts, edge, from, to);
             }
+            long low = clamped(from + moved.offsetDays());
             long high = clamped(to + moved.offsetDays());
-            for (OptionalLong start = nextStartAfter(part, clamped(from + moved.offsetDays()));
+            boolean before = leaves.test(partOf(ask.part(), low));
+            for (OptionalLong start = nextStartAfter(ask.part(), low);
                     start.isPresent() && start.getAsLong() <= high;
-                    start = nextStartAfter(part, start.getAsLong())) {
-                addIfBetween(cuts, start.getAsLong() - moved.offsetDays(), from, to);
+                    start = nextStartAfter(ask.part(), start.getAsLong())) {
+                boolean now = leaves.test(partOf(ask.part(), start.getAsLong()));
+                if (now != before) {
+                    addIfBetween(cuts, start.getAsLong() - moved.offsetDays(), from, to);
+                }
+                before = now;
             }
         }
 
@@ -3276,14 +3174,19 @@ final class TermRealizations {
         if (day >= LocalDate.MAX.toEpochDay()) {
             return OptionalLong.empty();
         }
-        LocalDate date = LocalDate.ofEpochDay(day);
         return switch (part) {
-            case YEAR -> date.getYear() == LocalDate.MAX.getYear() ? OptionalLong.empty()
-                    : OptionalLong.of(LocalDate.of(date.getYear() + 1, 1, 1).toEpochDay());
-            case MONTH -> date.getYear() == LocalDate.MAX.getYear() && date.getMonthValue() == 12
-                    ? OptionalLong.empty()
-                    : OptionalLong.of(date.withDayOfMonth(1).plusMonths(1).toEpochDay());
-            // Every day starts a new day of its month.
+            case YEAR -> {
+                int year = LocalDate.ofEpochDay(day).getYear();
+                yield year == LocalDate.MAX.getYear() ? OptionalLong.empty()
+                        : OptionalLong.of(LocalDate.of(year + 1, 1, 1).toEpochDay());
+            }
+            case MONTH -> {
+                LocalDate date = LocalDate.ofEpochDay(day);
+                yield date.getYear() == LocalDate.MAX.getYear() && date.getMonthValue() == 12
+                        ? OptionalLong.empty()
+                        : OptionalLong.of(date.withDayOfMonth(1).plusMonths(1).toEpochDay());
+            }
+            // Every day starts a new day of its month, and which day that is needs no date made.
             case DAY -> OptionalLong.of(day + 1);
         };
     }
@@ -3307,13 +3210,21 @@ final class TermRealizations {
      * <p>Solved over the days and not over the parts. Every ask is a condition on the date the
      * program was given: the move is defined there, and the part of the moved date is one the rules
      * leave. What a group asks of one date is the meeting of those conditions, so a year after one
-     * move, a year after another and a month with no move are one question and not three.
+     * move, a year after another and a month with no move are one question and not three. A date
+     * nobody moved is a date moved by nothing, and its parts are asked the same way.
      *
-     * <p>The years of the first year asked for are walked, and the days of the run each of them is
-     * are cut where any ask is answered otherwise than on the day before: between two cuts nothing
-     * the group asks changes, so the first day of each is every day of it. What this walks is
-     * therefore every combination there is, and an answer of nothing is a statement about the
-     * calendar, as it is for the parts of a date.
+     * <p>The parts constrain each other — how far the days run depends on the month, and
+     * February's length on the year — and walking the days is what keeps that the calendar's:
+     * every date walked is one there is, so no combination is offered that no date has, and none
+     * the calendar has is missed for want of a part nobody asked for standing where it allows it.
+     * Whether a date can have a part is asked of the calendar and not of the bound the operation
+     * declares, which is what the model may assume of an answer and not what a witness is built of.
+     *
+     * <p>The years of the first year asked for are walked, or one cycle of the calendar where no
+     * year is asked for ({@link #dateAnsweringMovedParts}), and the days walked are cut where any
+     * ask is answered otherwise than on the day before: between two cuts nothing the group asks
+     * changes, so the first day of each is every day of it. What this walks is therefore every
+     * combination there is, and an answer of nothing is a statement about the calendar.
      */
     private static Realization onMovedDates(List<DatePartAsk> asks, Type sourceType,
                                             Carrier observed, RuleReadingSource ruleSource) {
@@ -3342,22 +3253,34 @@ final class TermRealizations {
     }
 
     /**
-     * The first date every one of {@code asks} admits, walking the years of the first year asked
-     * for.
+     * The first date every one of {@code asks} admits.
      *
-     * <p>At least one of the asks is for a year, since that is what bounds the walk: the dates of
-     * a year are a run, and the parts of a date are not.
+     * <p>Where a year is asked for, the years the first such ask leaves are walked, and the dates
+     * whose moved date is in one of them are a run of days.
+     *
+     * <p>Where none is, one cycle of the calendar is walked. The Gregorian calendar repeats every
+     * four hundred years, and those are a whole number of days, so a month or a day of a date moved
+     * by a count of days is the same at every date a cycle away. Every combination the asks can
+     * meet at is therefore met within one cycle of days they are all defined at, or within all of
+     * those days where there are fewer than a cycle of them, and the walk is over every one there
+     * is.
      */
     static Search dateAnsweringMovedParts(List<DatePartAsk> asks, Carrier observed) {
+        List<PutToTheDays> put = asks.stream().map(each -> each.putToTheDays(observed)).toList();
+        if (put.stream().anyMatch(PutToTheDays::leavesNothing)) {
+            return new Search(null, true);
+        }
         DatePartAsk lead = asks.stream().filter(each -> each.part() == TakenAs.DatePart.YEAR)
-                .findFirst().orElseThrow(() -> new IllegalArgumentException(
-                        "a date answering moved parts is walked by the years asked of it"));
+                .findFirst().orElse(null);
+        if (lead == null) {
+            return new Search(dateInOneCycle(put), true);
+        }
         Tried years = wholeNumbers(lead.wanted(), observed,
                 LocalDate.MIN.getYear(), LocalDate.MAX.getYear(),
                 CompositionBudget.NUMBERS_OF_A_SET_TRIED.maximum());
         boolean everyOne = years.rest() instanceof Remainder.Exhausted;
         for (Place year : years.numbers()) {
-            LocalDate on = dateInTheRunOf(lead, whole(year), asks, observed);
+            LocalDate on = dateInTheRunOf(lead, whole(year), put);
             if (on != null) {
                 return new Search(on, everyOne);
             }
@@ -3369,46 +3292,74 @@ final class TermRealizations {
      * The first date the lead ask's moved date is in {@code year} at, and every other ask admits,
      * or null where there is none.
      */
-    private static LocalDate dateInTheRunOf(DatePartAsk lead, int year, List<DatePartAsk> asks,
-                                            Carrier observed) {
+    private static LocalDate dateInTheRunOf(DatePartAsk lead, int year, List<PutToTheDays> asks) {
         DateTranslation moved = lead.moved();
         long from = Math.max(moved.first(),
                 LocalDate.of(year, 1, 1).toEpochDay() - moved.offsetDays());
         long to = Math.min(moved.last(),
                 LocalDate.of(year, 12, 31).toEpochDay() - moved.offsetDays());
-        if (from > to) {
+        return from > to ? null : firstAdmittedIn(from, to, asks);
+    }
+
+    /**
+     * The first date of a cycle of the calendar that every one of {@code asks} admits, or null where
+     * there is none.
+     *
+     * <p>The cycle is the one from {@link #A_CYCLE_STARTS} where every ask is defined there, and
+     * otherwise the nearest one that is. It is walked a year of the date at a time, so that a date
+     * found early is found without cutting the rest of the cycle.
+     */
+    private static LocalDate dateInOneCycle(List<PutToTheDays> asks) {
+        long first = asks.stream().mapToLong(each -> each.ask().moved().first()).max()
+                .orElseThrow();
+        long last = asks.stream().mapToLong(each -> each.ask().moved().last()).min()
+                .orElseThrow();
+        if (first > last) {
             return null;
         }
-        // The run is at most a year of days, and each ask is answered the same way between two of
-        // the days it changes at, so the first day of each stretch is every day of it.
+        long from = Math.max(first, Math.min(A_CYCLE_STARTS.toEpochDay(),
+                last - DAYS_OF_A_CYCLE + 1));
+        long to = Math.min(last, from + DAYS_OF_A_CYCLE - 1);
+        for (long start = from; start <= to; ) {
+            long end = Math.min(to,
+                    LocalDate.of(LocalDate.ofEpochDay(start).getYear(), 12, 31).toEpochDay());
+            LocalDate found = firstAdmittedIn(start, end, asks);
+            if (found != null) {
+                return found;
+            }
+            start = end + 1;
+        }
+        return null;
+    }
+
+    /** The first date from {@code from} to {@code to} that every one of {@code asks} admits, or
+     *  null where there is none. The days are a year of them or fewer, which is what keeps the cuts
+     *  of a day of the month few. */
+    private static LocalDate firstAdmittedIn(long from, long to, List<PutToTheDays> asks) {
+        assert to - from < 366 : "a run of days walked at once is a year or less: " + from
+                + " to " + to;
+        // Each ask is answered the same way between two of the days it changes at, so the first
+        // day of each stretch is every day of it.
         TreeSet<Long> cuts = new TreeSet<>();
         cuts.add(from);
-        for (DatePartAsk each : asks) {
+        for (PutToTheDays each : asks) {
             each.cutsInto(cuts, from, to);
         }
         for (long day : cuts) {
-            if (asks.stream().allMatch(each -> each.admits(day, observed))) {
+            if (admitsEvery(asks, day)) {
                 return LocalDate.ofEpochDay(day);
             }
         }
         return null;
     }
 
-    /**
-     * The numbers a part may stand at, in the order they are to be tried.
-     *
-     * <p>What the part runs between is the calendar's and is handed in; which of those the rules
-     * admit is the set's. A part nobody asked for stands at the one value that rules out the fewest
-     * of the parts that were asked for, which is a choice about the date to write and is why the
-     * fallback is a number rather than the whole range.
-     */
-    private static List<Place> numbersOf(Map<TakenAs.DatePart, NumericSet> parts,
-                                         TakenAs.DatePart part, Carrier observed,
-                                         int asFarAs, int whenUnasked) {
-        NumericSet wanted = parts.get(part);
-        return wanted == null
-                ? List.of(Count.of(BigDecimal.valueOf(whenUnasked)))
-                : wholeNumbers(wanted, observed, 1, asFarAs, asFarAs).numbers();
+    private static boolean admitsEvery(List<PutToTheDays> asks, long day) {
+        for (PutToTheDays each : asks) {
+            if (!each.admits(day)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /** {@code at} as a whole number, which every {@link #wholeNumbers} search this is asked of hands
@@ -3424,29 +3375,22 @@ final class TermRealizations {
         }
     }
 
-    /**
-     * The year a month or a day is offered in.
-     *
-     * <p>Which year it is says nothing about a month on its own, and says one thing about a month
-     * and a day together: February is a day longer in a leap year, so this is one. Offered in a
-     * year that is not, the twenty-ninth of February would be a day the calendar has and no witness
-     * could be written for.
-     */
-    private static final int A_LEAP_YEAR = 2000;
-
-    /** January, which has as many days as any month has, so every day-of-month a date can fall on is
-     *  a day of this one. */
-    private static final int A_LONGEST_MONTH = 1;
-
-    /** The day a year or a month is offered on. */
-    private static final int FIRST_OF_THE_MONTH = 1;
-
     /** How far the months run, which is what a month may stand at whatever the rules leave it. */
     private static final int MONTHS_A_YEAR_HAS = 12;
 
     /** How far the days run in the longest month there is, which is as far as a day of any date
-     *  runs. How far they run in the month a date is actually built in is asked of that month. */
+     *  runs. Which of them a date has is the date's, read off it where it is walked to. */
     private static final int DAYS_THE_LONGEST_MONTH_HAS = 31;
+
+    /** How many days the Gregorian calendar takes to repeat: four hundred years, of which ninety-seven
+     *  are leap years. */
+    private static final long DAYS_OF_A_CYCLE = 400L * 365 + 97;
+
+    /** Where the cycle walked for a month or a day of a moved date starts, where every ask is
+     *  defined there. Any day starts a cycle; this one is the first of a leap year, so the dates
+     *  offered are near the ones a reader writes, and a month and a day asked of a date as it
+     *  stands are met in the first year walked, the twenty-ninth of February among them. */
+    private static final LocalDate A_CYCLE_STARTS = LocalDate.of(2000, 1, 1);
 
     /**
      * One value, wearing every name the position declares, or the reason there is none.

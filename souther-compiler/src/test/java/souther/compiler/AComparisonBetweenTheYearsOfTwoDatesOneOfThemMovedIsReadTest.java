@@ -334,15 +334,6 @@ class AComparisonBetweenTheYearsOfTwoDatesOneOfThemMovedIsReadTest {
         assertTrue(chained.contains("+30 days"), chained);
     }
 
-    /** A month repeats every year, so a shifted one is no number the line is drawn on. */
-    @Test
-    void aMonthOfAMovedDateIsStillNotRead() {
-        String report = about("Date.month(Date.addDays(1, birthday)) >= 3");
-
-        assertTrue(report.contains("not read"), report);
-        assertFalse(report.contains("measurement: complete"), report);
-    }
-
     /**
      * A count another input supplies is no shift of one position: it is a number of two, and the
      * comparison relates them. A count at either end of {@code Int} moves every date past the ones
