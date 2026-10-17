@@ -1071,13 +1071,16 @@ public final class LevelRealizer {
                     return new PairsMultiplyingTo(out, false);
                 }
                 tried++;
-                if (magnitude.mod(divisor).signum() == 0) {
-                    for (BigInteger first : List.of(divisor, divisor.negate(),
-                            magnitude.divide(divisor), magnitude.divide(divisor).negate())) {
-                        Map<Integer, BigInteger> pair = Map.of(0, first, 1, product.divide(first));
-                        if (!out.contains(pair)) {
-                            out.add(pair);
-                        }
+                BigInteger[] quotientAndRemainder = magnitude.divideAndRemainder(divisor);
+                if (quotientAndRemainder[1].signum() == 0) {
+                    BigInteger over = quotientAndRemainder[0];
+                    // The divisor and the level over it are one number only at a square root,
+                    // where its two pairs would be the other two again.
+                    List<BigInteger> firsts = over.equals(divisor)
+                            ? List.of(divisor, divisor.negate())
+                            : List.of(divisor, divisor.negate(), over, over.negate());
+                    for (BigInteger first : firsts) {
+                        out.add(Map.of(0, first, 1, product.divide(first)));
                     }
                 }
                 divisor = divisor.add(BigInteger.ONE);

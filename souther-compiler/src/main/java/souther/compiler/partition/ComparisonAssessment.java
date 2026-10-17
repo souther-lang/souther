@@ -34,6 +34,7 @@ import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.SequencedMap;
@@ -132,22 +133,21 @@ sealed interface ComparisonAssessment {
      * the rest by lines on it, and the term is divided there by the relation.
      *
      * @param relation  what the line states, as a relation of its terms
-     * @param undivided the coordinates {@code relation} is shown to leave undivided
+     * @param left      what {@code relation} is shown to leave its places
      * @param settling  the lines on single positions that part the values settling the relation
      *                  from the rest, each no line of the author's
      * @param authored  how the line stands to the line of its author's it is a place of
      */
     record AcrossPositions(Cutting cutting, Citation at, Places places,
-                           UndividedByARelation relation, Set<FilingCoordinate> undivided,
+                           UndividedByARelation relation, UndividedByARelation.WhatItLeaves left,
                            List<AtAPosition> settling, AuthoredPointMapping authored)
             implements ComparisonAssessment {
 
         public AcrossPositions {
             if (cutting == null || at == null || places == null || relation == null
-                    || undivided == null || settling == null || authored == null) {
+                    || left == null || settling == null || authored == null) {
                 throw new IllegalArgumentException("a line over a form names the form");
             }
-            undivided = Set.copyOf(undivided);
             settling = List.copyOf(settling);
         }
 
@@ -156,23 +156,34 @@ sealed interface ComparisonAssessment {
                                        UndividedByARelation relation,
                                        UndividedByARelation.WhatItLeaves left,
                                        AuthoredPointMapping authored, InputReading reading) {
-            return new AcrossPositions(cutting, at, places, relation, left.undivided(),
+            return new AcrossPositions(cutting, at, places, relation, left,
                     settlingLines(cutting, at, left, authored, reading), authored);
         }
 
+        /** The coordinates {@code relation} is shown to leave undivided. */
+        Set<FilingCoordinate> undivided() {
+            return left.undivided();
+        }
+
         /** The same, with what it leaves its places over the rows that arrive along
-         *  {@code ways}. */
+         *  {@code ways}. The lines parting the settling values are drawn again only where the
+         *  values settling it are not the ones already drawn. */
         AcrossPositions whereRowsArrive(InputReading reading,
                                         List<Reachability.Reaching> ways) {
-            return leaving(cutting, at, places, relation,
-                    relation.leftWhereRowsArrive(reading, ways), authored, reading);
+            UndividedByARelation.WhatItLeaves arriving =
+                    relation.leftWhereRowsArrive(reading, ways);
+            return arriving.settled().equals(left.settled())
+                    ? new AcrossPositions(cutting, at, places, relation, arriving, settling,
+                            authored)
+                    : leaving(cutting, at, places, relation, arriving, authored, reading);
         }
 
         /** The same, where every row arriving comes out on one side of it: it divides none of the
          *  positions it is filed at. */
         AcrossPositions decided() {
             return new AcrossPositions(cutting, at, places, relation,
-                    Set.copyOf(cutting.of().filedAt()), List.of(), authored);
+                    new UndividedByARelation.WhatItLeaves(Set.copyOf(cutting.of().filedAt()),
+                            Map.of()), List.of(), authored);
         }
 
         /** The places a line on one of them parts the values that settle the relation at. */
@@ -1161,12 +1172,15 @@ sealed interface ComparisonAssessment {
             // terms, since a form of one term is either.
             // A place the values settling it are parted at by a line is divided, and is left
             // nothing here.
-            case AcrossPositions across -> across.cutting().of().whyItDividesNoPosition()
-                    instanceof BlockReason.ComparisonRelatingTwoValues
-                    ? relatingAt(filedAt().stream()
-                            .filter(place -> !across.dividedBySettling().contains(place))
-                            .toList(), across.undivided())
-                    : sameAtEachPlace(across.cutting().of().whyItDividesNoPosition());
+            case AcrossPositions across -> {
+                if (!(across.cutting().of().whyItDividesNoPosition()
+                        instanceof BlockReason.ComparisonRelatingTwoValues)) {
+                    yield sameAtEachPlace(across.cutting().of().whyItDividesNoPosition());
+                }
+                Set<FilingCoordinate> divided = across.dividedBySettling();
+                yield relatingAt(filedAt().stream()
+                        .filter(place -> !divided.contains(place)).toList(), across.undivided());
+            }
             // Another value is no position, and what the rule says is the same thing it says
             // against one: where the value here stands against it.
             case AgainstAnotherValue against ->

@@ -496,18 +496,26 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
             return new WhatItLeaves(out, settled);
         }
-        out.addAll(WhatARelationLeavesUndivided.of(terms, constant, relation,
-                UndividedByARelation::overlap, independent));
+        // Each side asked once: whether another reaches it, and where it does not, which of its
+        // values settle the relation.
+        List<WhatARelationLeavesUndivided.Leaves> leaves = new ArrayList<>();
+        for (int at = 0; at < sides.size(); at++) {
+            WhatARelationLeavesUndivided.Leaves each = WhatARelationLeavesUndivided.leavesOf(
+                    terms, at, constant, relation, UndividedByARelation::overlap, independent,
+                    carriers.get(at) instanceof Carrier.Whole);
+            leaves.add(each);
+            if (each instanceof WhatARelationLeavesUndivided.Leaves.Undivided) {
+                out.addAll(sides.get(at).madeOf());
+            }
+        }
         if (!out.containsAll(places())) {
             out.addAll(undividedByTheDifference(sources, carriers, stating, heldWhole));
         }
         for (int at = 0; at < sides.size(); at++) {
-            if (out.containsAll(sides.get(at).madeOf())
-                    || !(carriers.get(at) instanceof Carrier.Whole)) {
-                continue;
+            if (leaves.get(at) instanceof WhatARelationLeavesUndivided.Leaves.Settled
+                    && !out.containsAll(sides.get(at).madeOf())) {
+                putDown(at, leaves.get(at), out, settled);
             }
-            putDown(at, WhatARelationLeavesUndivided.leavesOf(terms, at, constant, relation,
-                    UndividedByARelation::overlap, independent, true), out, settled);
         }
         return new WhatItLeaves(out, settled);
     }
