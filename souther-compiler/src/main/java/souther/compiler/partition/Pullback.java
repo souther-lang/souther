@@ -4308,8 +4308,10 @@ final class Pullback {
             case KeyedAccumulation.Filed.Counted counted -> counted(held, place, counted);
             case KeyedAccumulation.Filed.Kept kept -> {
                 TermPath value = placeOf(whole, kept.value());
-                yield value == null ? null : atomOf(
-                        NumericTerm.ExtremeOfItsKey.of(held, place, value, kept.extreme()));
+                NumericTerm.ExtremeOfItsKey extreme = value == null ? null
+                        : NumericTerm.ExtremeOfItsKey.of(held, place, value, kept.extreme());
+                yield readOnAnOrder(extreme)
+                        ? LinearForm.atom(new DecisionAtom.OfTheInput(extreme)) : null;
             }
         };
     }
@@ -4331,7 +4333,7 @@ final class Pullback {
     private LinearForm<Quantity> counted(TermPath held, TermPath place,
                                          KeyedAccumulation.Filed.Counted filed) {
         NumericTerm.Multiplicity occurrences = NumericTerm.Multiplicity.of(held, place);
-        if (atomOf(occurrences) == null) {
+        if (!readOnAnOrder(occurrences)) {
             return null;
         }
         if (filed.step().signum() == 0) {
@@ -4345,24 +4347,21 @@ final class Pullback {
     }
 
     /**
-     * {@code term} as an atom, where it is a number of the elements read on an order — or null
-     * where it is none.
+     * Whether {@code term} is a number of the elements read on an order, and so one a statement
+     * about an entry can be read as.
      *
      * <p>Which elements are of one key is the order the key stands on, so a key on none is a key
      * nothing here can tell apart: it is left unread rather than read as a number nothing reads.
      * The same for values on no order, one end of which is no number.
      */
-    private LinearForm<Quantity> atomOf(NumericTerm term) {
+    private boolean readOnAnOrder(NumericTerm term) {
         if (term == null) {
-            return null;
+            return false;
         }
         TermOrders orders = read.quantities().ordersOf(term);
-        if (orders == null || orders.observed() == null
-                || (term instanceof NumericTerm.ExtremeOfItsKey extreme
-                && orders.fieldCarrier(extreme.keyField()) == null)) {
-            return null;
-        }
-        return LinearForm.atom(new DecisionAtom.OfTheInput(term));
+        return orders != null && orders.observed() != null
+                && !(term instanceof NumericTerm.ExtremeOfItsKey extreme
+                && orders.fieldCarrier(extreme.keyField()) == null);
     }
 
     /**

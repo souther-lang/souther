@@ -1,6 +1,5 @@
 package souther.compiler.check;
 
-import souther.compiler.inputs.ElementProjection;
 import souther.compiler.numeric.ValueTransformation;
 import souther.compiler.semantics.CodePointClass;
 import souther.compiler.semantics.TakenArguments;
@@ -99,7 +98,7 @@ public record NumberAt<P>(P position, NumberAt.OfWhatNumber of) {
      *  hold there, among those holding at {@code key} what the element under consideration holds
      *  there. */
     public static <P> NumberAt<P> extremeOf(P position, Extreme extreme,
-                                            ElementProjection key) {
+                                            RuleKey key) {
         return new NumberAt<>(position, new OfWhatNumber.OfTheExtremeOfItsKey(extreme, key));
     }
 
@@ -182,19 +181,19 @@ public record NumberAt<P>(P position, NumberAt.OfWhatNumber of) {
 
         /**
          * The least or the greatest of what the elements of the container the place stands inside
-         * hold there, among the elements holding at {@code key} — the steps from an element to it
-         * — what the element under consideration holds there.
+         * hold there, among the elements holding at {@code key} — what the rules of an element
+         * call the field the key is — what the element under consideration holds there.
          *
          * <p>A number of an element read off the elements beside it, as how often is. The key is
          * part of which number it is: the least of one place by one key and by another are two
          * numbers at one place.
          */
-        record OfTheExtremeOfItsKey(Extreme extreme, ElementProjection key)
+        record OfTheExtremeOfItsKey(Extreme extreme, RuleKey key)
                 implements OfWhatNumber {
 
             public OfTheExtremeOfItsKey {
                 Objects.requireNonNull(extreme, "this one names the end taken");
-                Objects.requireNonNull(key, "and where the key stands in an element");
+                Objects.requireNonNull(key, "and the field of an element the key is");
             }
 
             /** This number of what stands at the place spelled {@code position}, in the words a

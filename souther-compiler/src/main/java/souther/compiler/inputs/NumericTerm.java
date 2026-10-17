@@ -7,6 +7,7 @@ import souther.compiler.check.Extreme;
 import souther.compiler.check.NumberAt;
 import souther.compiler.check.NumericAnswers;
 import souther.compiler.check.NumericMeasures;
+import souther.compiler.check.RuleKey;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.numeric.Count;
@@ -447,13 +448,14 @@ public sealed interface NumericTerm
 
         /**
          * The number of times the value at {@code place} occurs among the elements of
-         * {@code container}, or null where {@code place} is not inside an element of it.
+         * {@code container}, or null where {@code place} is not reached from an element of it by
+         * fields alone, where an element may hold many values there or none.
          *
          * @param container the container whose elements are counted
          * @param place     where, inside an element of {@code container}, the value compared stands
          */
         public static Multiplicity of(TermPath container, TermPath place) {
-            return container != null && place != null && place.isAtOrUnder(container.element())
+            return container != null && place != null && fieldsBelowAnElement(container, place)
                     ? new Multiplicity(container, place) : null;
         }
 
@@ -467,6 +469,11 @@ public sealed interface NumericTerm
             return place;
         }
 
+        /** The way from an element of the container to {@link #place()}. */
+        public ElementProjection placeField() {
+            return fieldsTo(container, place);
+        }
+
         /** Where the value compared stands, which is where a reader is sent and no place the
          *  number stands at. */
         @Override
@@ -474,9 +481,11 @@ public sealed interface NumericTerm
             return place;
         }
 
+        /** The same number of where {@code moved} puts its places, or null where the place moved is
+         *  no longer one value of each element of the container moved. */
         @Override
         public Multiplicity movedTo(UnaryOperator<TermPath> moved) {
-            return new Multiplicity(moved.apply(container), moved.apply(place));
+            return of(moved.apply(container), moved.apply(place));
         }
 
         @Override
@@ -535,53 +544,40 @@ public sealed interface NumericTerm
         public static ExtremeOfItsKey of(TermPath container, TermPath key, TermPath value,
                                          Extreme extreme) {
             return container != null && key != null && value != null && extreme != null
-                    && inOneElementOf(container, key) && inOneElementOf(container, value)
+                    && fieldsBelowAnElement(container, key)
+                    && fieldsBelowAnElement(container, value)
                     ? new ExtremeOfItsKey(container, key, value, extreme) : null;
         }
 
         /**
-         * The same, with the key named by the way from the element the value at {@code value}
-         * stands in — or null where the value stands in no container.
+         * The same, with the key named as the rules of the element the value at {@code value}
+         * stands in call it — or null where the value stands in no container.
          */
-        public static ExtremeOfItsKey ofTheValueAt(TermPath value, ElementProjection key,
+        public static ExtremeOfItsKey ofTheValueAt(TermPath value, RuleKey key,
                                                    Extreme extreme) {
             List<TermPath> holding = value.containersHoldingIt();
             if (holding.isEmpty()) {
                 return null;
             }
             TermPath container = holding.getLast();
-            return of(container, key.from(container.element()), value, extreme);
-        }
-
-        /** Whether {@code place} is reached from an element of {@code container} by fields alone,
-         *  and so is one value of each element. */
-        private static boolean inOneElementOf(TermPath container, TermPath place) {
-            if (!place.isAtOrUnder(container.element())) {
-                return false;
-            }
-            List<TermPath.Step> steps = place.steps();
-            return steps.subList(container.element().steps().size(), steps.size()).stream()
-                    .allMatch(TermPath.Step.Field.class::isInstance);
+            return of(container, new ElementProjection(key.steps()).from(container.element()),
+                    value, extreme);
         }
 
         /** The way from an element of the container to {@link #key()}. */
         public ElementProjection keyField() {
-            return fieldsTo(key);
+            return fieldsTo(container, key);
+        }
+
+        /** What the rules of an element call {@link #key()}, which is what a question about this
+         *  number names the key by. */
+        public RuleKey keyNamed() {
+            return new RuleKey(keyField().steps());
         }
 
         /** The way from an element of the container to {@link #value()}. */
         public ElementProjection valueField() {
-            return fieldsTo(value);
-        }
-
-        private ElementProjection fieldsTo(TermPath place) {
-            List<String> names = new ArrayList<>();
-            List<TermPath.Step> steps = place.steps();
-            for (TermPath.Step step : steps.subList(container.element().steps().size(),
-                    steps.size())) {
-                names.add(((TermPath.Step.Field) step).name());
-            }
-            return new ElementProjection(names);
+            return fieldsTo(container, value);
         }
 
         /** The container whose elements are looked at. */
@@ -611,10 +607,11 @@ public sealed interface NumericTerm
             return value;
         }
 
+        /** The same number of where {@code moved} puts its places, or null where the places moved
+         *  are no longer one value of each element of the container moved. */
         @Override
         public ExtremeOfItsKey movedTo(UnaryOperator<TermPath> moved) {
-            return new ExtremeOfItsKey(moved.apply(container), moved.apply(key),
-                    moved.apply(value), extreme);
+            return of(moved.apply(container), moved.apply(key), moved.apply(value), extreme);
         }
 
         @Override
@@ -631,7 +628,7 @@ public sealed interface NumericTerm
 
         @Override
         public String toString() {
-            return new NumberAt.OfWhatNumber.OfTheExtremeOfItsKey(extreme, keyField())
+            return new NumberAt.OfWhatNumber.OfTheExtremeOfItsKey(extreme, keyNamed())
                     .spelledAt(value.toString());
         }
     }
@@ -912,6 +909,28 @@ public sealed interface NumericTerm
                     DefaultBoundOperationFacts.get().boundsOnTheResult(over.operation()),
                     ConstantArguments.none());
         };
+    }
+
+    /** Whether {@code place} is reached from an element of {@code container} by fields alone, and
+     *  so is one value of each element. */
+    private static boolean fieldsBelowAnElement(TermPath container, TermPath place) {
+        if (!place.isAtOrUnder(container.element())) {
+            return false;
+        }
+        List<TermPath.Step> steps = place.steps();
+        return steps.subList(container.element().steps().size(), steps.size()).stream()
+                .allMatch(TermPath.Step.Field.class::isInstance);
+    }
+
+    /** The way from an element of {@code container} to {@code place}, which
+     *  {@link #fieldsBelowAnElement} has said is fields alone. */
+    private static ElementProjection fieldsTo(TermPath container, TermPath place) {
+        List<String> names = new ArrayList<>();
+        List<TermPath.Step> steps = place.steps();
+        for (TermPath.Step step : steps.subList(container.element().steps().size(), steps.size())) {
+            names.add(((TermPath.Step.Field) step).name());
+        }
+        return new ElementProjection(names);
     }
 
     /**

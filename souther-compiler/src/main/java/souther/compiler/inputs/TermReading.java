@@ -21,8 +21,11 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Deque;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Function;
@@ -131,8 +134,12 @@ final class TermReading {
      * <p>Alike as the key's order has them, as {@link #among} counts them, and the values put on the
      * value's own order, which is the order the number is measured on. {@code each} holds
      * {@code own} among them, so some element is of its key and the number is one of the values.
-     * An element holding nothing at either place is a row that wrote nothing there, which the
-     * caller has said already; a value the order puts nowhere is no number read.
+     *
+     * <p>An element's value is read only where its key is the one asked about: what an element of
+     * another key holds, or failed to hold, is no part of this key's end. An element whose key is
+     * not read may be of any key, so no end is read beside it. Holding nothing at a place is a row
+     * that wrote nothing there, which the caller has said already; a value the order puts nowhere
+     * is no number read.
      *
      * @param own  the element under consideration, as what it holds at each way into it
      * @param each every element of the container, the same way
@@ -140,45 +147,134 @@ final class TermReading {
     static Reading extremeOfItsKey(TermOrders on, Function<ElementProjection, ObservedValue> own,
                                    List<Function<ElementProjection, ObservedValue>> each) {
         NumericTerm.ExtremeOfItsKey term = (NumericTerm.ExtremeOfItsKey) on.term();
-        ElementProjection key = term.keyField();
-        ElementProjection value = term.valueField();
-        Carrier keyedOn = on.fieldCarrier(key);
-        ObservedValue ownKey = own.apply(key);
-        if (ownKey == null) {
-            return new Reading.NotNumber();
-        }
-        Where ownWhere = whereTheOrderPuts(keyedOn, ownKey);
+        Carrier keyedOn = on.fieldCarrier(term.keyField());
+        Where ownWhere = keyOf(term, keyedOn, own);
         if (!(ownWhere instanceof Where.At(Place ownPlace))) {
             return ((Where.Nowhere) ownWhere).why();
         }
         Place kept = null;
         for (Function<ElementProjection, ObservedValue> element : each) {
-            ObservedValue itsKey = element.apply(key);
-            ObservedValue itsValue = element.apply(value);
-            if (itsKey == null || itsValue == null) {
-                return new Reading.NotNumber();
+            Where itsKey = keyOf(term, keyedOn, element);
+            if (!(itsKey instanceof Where.At(Place place))) {
+                return ((Where.Nowhere) itsKey).why();
             }
-            switch (whereTheOrderPuts(keyedOn, itsKey)) {
+            if (!place.sameAs(ownPlace)) {
+                continue;
+            }
+            Where itsValue = valueOf(term, on.observed(), element);
+            if (!(itsValue instanceof Where.At(Place held))) {
+                return ((Where.Nowhere) itsValue).why();
+            }
+            kept = kept == null ? held : endOf(term.extreme(), kept, held);
+        }
+        return kept == null ? new Reading.NotNumber() : new Reading.Number(kept);
+    }
+
+    /** Where the key's order puts what {@code element} holds at the term's key, or why it puts it
+     *  nowhere: nothing held there is no number of it. */
+    private static Where keyOf(NumericTerm.ExtremeOfItsKey term, Carrier keyedOn,
+                               Function<ElementProjection, ObservedValue> element) {
+        ObservedValue held = element.apply(term.keyField());
+        return held == null ? new Where.Nowhere(new Reading.NotNumber())
+                : whereTheOrderPuts(keyedOn, held);
+    }
+
+    /** The same at the term's value, on the order the values stand on. */
+    private static Where valueOf(NumericTerm.ExtremeOfItsKey term, Carrier observed,
+                                 Function<ElementProjection, ObservedValue> element) {
+        ObservedValue held = element.apply(term.valueField());
+        return held == null ? new Where.Nowhere(new Reading.NotNumber())
+                : whereTheOrderPuts(observed, held);
+    }
+
+    /**
+     * {@link #among} read for every one of {@code every} at once: what each of them counts, in the
+     * order they are given, from one pass that counts each value once.
+     *
+     * <p>A value the order puts nowhere is a reading none of them can be made without, as it is
+     * for each one alone, so it is what every one of them reads.
+     */
+    static List<Reading> amongEach(TermOrders on, List<ObservedValue> every) {
+        List<Place> places = new ArrayList<>(every.size());
+        Map<Place, Long> counted = new HashMap<>();
+        for (ObservedValue each : every) {
+            Objects.requireNonNull(each, "every value the walk came to is a value");
+            switch (whereTheOrderPuts(on.observed(), each)) {
                 case Where.At(Place place) -> {
-                    if (!place.sameAs(ownPlace)) {
-                        continue;
-                    }
+                    places.add(place.canonical());
+                    counted.merge(place.canonical(), 1L, Long::sum);
                 }
                 case Where.Nowhere nowhere -> {
-                    return nowhere.why();
-                }
-            }
-            switch (whereTheOrderPuts(on.observed(), itsValue)) {
-                case Where.At(Place place) -> kept = kept == null ? place : switch (term.extreme()) {
-                    case Extreme.Least _ -> place.compareTo(kept) < 0 ? place : kept;
-                    case Extreme.Greatest _ -> place.compareTo(kept) > 0 ? place : kept;
-                };
-                case Where.Nowhere nowhere -> {
-                    return nowhere.why();
+                    return Collections.nCopies(every.size(), nowhere.why());
                 }
             }
         }
-        return kept == null ? new Reading.NotNumber() : new Reading.Number(kept);
+        List<Reading> out = new ArrayList<>(places.size());
+        for (Place each : places) {
+            out.add(new Reading.Number(Count.of(counted.get(each))));
+        }
+        return out;
+    }
+
+    /**
+     * {@link #extremeOfItsKey} read for every one of {@code each} at once: the end of its key's
+     * values for each element, in the order they are given, from one pass that keeps one end per
+     * key.
+     *
+     * <p>What stops a reading stops it as it stops each one alone, at the first element in order
+     * that stops it: an element whose key is not read stops every key's, and a value not read
+     * stops its own key's only.
+     */
+    static List<Reading> extremeOfEachKey(TermOrders on,
+                                          List<Function<ElementProjection, ObservedValue>> each) {
+        NumericTerm.ExtremeOfItsKey term = (NumericTerm.ExtremeOfItsKey) on.term();
+        Carrier keyedOn = on.fieldCarrier(term.keyField());
+        List<Where> keys = new ArrayList<>(each.size());
+        Reading anyKeyStopped = null;
+        Map<Place, Place> kept = new HashMap<>();
+        Map<Place, Reading> stopped = new HashMap<>();
+        for (Function<ElementProjection, ObservedValue> element : each) {
+            Where itsKey = keyOf(term, keyedOn, element);
+            keys.add(itsKey);
+            if (!(itsKey instanceof Where.At(Place place))) {
+                anyKeyStopped = anyKeyStopped != null ? anyKeyStopped
+                        : ((Where.Nowhere) itsKey).why();
+                continue;
+            }
+            // Past a key not read, every key's reading has stopped already, and stopping again at
+            // a value is no reading of its own.
+            Place key = place.canonical();
+            if (anyKeyStopped != null || stopped.containsKey(key)) {
+                continue;
+            }
+            switch (valueOf(term, on.observed(), element)) {
+                case Where.At(Place held) -> kept.merge(key, held,
+                        (one, other) -> endOf(term.extreme(), one, other));
+                case Where.Nowhere nowhere -> stopped.put(key, nowhere.why());
+            }
+        }
+        List<Reading> out = new ArrayList<>(keys.size());
+        for (Where itsKey : keys) {
+            if (!(itsKey instanceof Where.At(Place place))) {
+                out.add(((Where.Nowhere) itsKey).why());
+            } else if (stopped.containsKey(place.canonical())) {
+                out.add(stopped.get(place.canonical()));
+            } else if (anyKeyStopped != null) {
+                out.add(anyKeyStopped);
+            } else {
+                out.add(new Reading.Number(kept.get(place.canonical())));
+            }
+        }
+        return out;
+    }
+
+    /** The one of {@code kept} and {@code other} at {@code extreme}, the first where they are
+     *  level. */
+    private static Place endOf(Extreme extreme, Place kept, Place other) {
+        return switch (extreme) {
+            case Extreme.Least _ -> other.compareTo(kept) < 0 ? other : kept;
+            case Extreme.Greatest _ -> other.compareTo(kept) > 0 ? other : kept;
+        };
     }
 
     /** Where an order puts a value, or why it puts it nowhere. */

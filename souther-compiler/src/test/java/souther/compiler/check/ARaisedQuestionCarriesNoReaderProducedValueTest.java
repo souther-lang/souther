@@ -111,10 +111,11 @@ class ARaisedQuestionCarriesNoReaderProducedValueTest {
      * elements beside it, which carries nothing: the place says which value, and the container it
      * stands inside says which elements are counted.
      *
-     * <p>{@code OfTheExtremeOfItsKey}, {@code Extreme} and {@code ElementProjection} belong to the
-     * least or greatest of the values the elements of a key hold: which end and which field of the
-     * element the key is are what make it one number of the place, and both are what the author's
-     * fold wrote — the end its closure keeps, and the field it files under.
+     * <p>{@code OfTheExtremeOfItsKey} and {@code Extreme} belong to the least or greatest of the
+     * values the elements of a key hold: which end and which field of the element the key is are
+     * what make it one number of the place, and both are what the author's fold wrote — the end
+     * its closure keeps, and the field it files under, which is named as the element's rules name
+     * a field ({@link RuleKey}).
      */
     private static final Set<String> THE_QUESTIONS_OWN_VOCABULARY = Set.of(
             "souther/compiler/check/Owed",
@@ -130,7 +131,6 @@ class ARaisedQuestionCarriesNoReaderProducedValueTest {
             "souther/compiler/check/Extreme",
             "souther/compiler/check/Extreme$Least",
             "souther/compiler/check/Extreme$Greatest",
-            "souther/compiler/inputs/ElementProjection",
             "souther/compiler/check/RuleKey",
             "souther/compiler/inputs/InputQuestion",
             "souther/compiler/inputs/InputQuestion$AboutAPosition",

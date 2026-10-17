@@ -7649,10 +7649,15 @@ public final class Generator {
         List<souther.compiler.observe.ObservedValue> row = new ArrayList<>(
                 java.util.Collections.nCopies(subject.parameters().size(), null));
         row.set(parameter, observed);
-        // The end of the values of a key is read off whole elements, each pairing its key with its
-        // value; the values alone say nothing of which of them are of one key.
-        TermPath readAt = target.term() instanceof NumericTerm.ExtremeOfItsKey extreme
-                ? extreme.container().element() : target.term().subjectPath();
+        // A number of an element read off the elements beside it is read off each container whole:
+        // the values at the place gathered across containers would count, or take an end of, the
+        // elements of one container among those of another.
+        TermPath readAt = switch (target.term()) {
+            case NumericTerm.Multiplicity among -> among.container();
+            case NumericTerm.ExtremeOfItsKey extreme -> extreme.container();
+            case NumericTerm.FromOnePosition _, NumericTerm.TakenOver _ ->
+                    target.term().subjectPath();
+        };
         // Over the arms, so a walk that comes to answer a third way is one this is taught about
         // rather than one read as the walk and the type disagreeing.
         return switch (subject.inputs().valuesAt(row, readAt)) {
@@ -7672,14 +7677,18 @@ public final class Generator {
      * from, and the term's own reader says what that comes to ({@link TermOrders#readOver}). Asked
      * of the term's kind with no {@code default}, so a kind of term added is one this has to say
      * something of.
+     *
+     * <p>For a number of an element read off the elements beside it the values are the containers
+     * the elements stand in, each read on its own; no element in any of them is no value there.
      */
     static RealizationReadback readBack(TermOrders on,
                                         List<souther.compiler.observe.ObservedValue> values,
                                         Place at) {
         NumericTerm term = on.term();
         boolean nothingToRead = switch (term) {
-            case NumericTerm.Multiplicity _, NumericTerm.ExtremeOfItsKey _,
-                 NumericTerm.FromOnePosition _ -> values.isEmpty();
+            case NumericTerm.Multiplicity _, NumericTerm.ExtremeOfItsKey _ ->
+                    elementsOfEach(values).stream().allMatch(List::isEmpty);
+            case NumericTerm.FromOnePosition _ -> values.isEmpty();
             case NumericTerm.TakenOver _ -> false;
         };
         if (nothingToRead) {
@@ -7699,13 +7708,17 @@ public final class Generator {
             // The end of the values of a key, among the elements standing there: a row stands at
             // a point where some element's key comes to it.
             case NumericTerm.ExtremeOfItsKey _ -> {
-                List<Function<ElementProjection, ObservedValue>> each = new ArrayList<>();
-                for (ObservedValue element : values) {
-                    each.add(field -> field.in(element));
+                List<NumericTerm.Reading> readings = new ArrayList<>();
+                for (List<ObservedValue> held : elementsOfEach(values)) {
+                    List<Function<ElementProjection, ObservedValue>> each = new ArrayList<>();
+                    for (ObservedValue element : held) {
+                        each.add(field -> field.in(element));
+                    }
+                    readings.addAll(on.readEachAtItsKey(each));
                 }
                 boolean any = false;
-                for (Function<ElementProjection, ObservedValue> own : each) {
-                    switch (on.readAtItsKey(own, each)) {
+                for (NumericTerm.Reading read : readings) {
+                    switch (read) {
                         case NumericTerm.Reading.Number number ->
                                 any |= number.value().compareTo(at) == 0;
                         case NumericTerm.Reading.Missing missing -> unread.add(missing.code());
@@ -7718,10 +7731,22 @@ public final class Generator {
             }
             // How often a value occurs among the values standing there: a row stands at a point
             // where some element's value is that frequent.
-            case NumericTerm.Multiplicity _ -> {
+            case NumericTerm.Multiplicity among -> {
+                List<NumericTerm.Reading> readings = new ArrayList<>();
+                for (List<ObservedValue> held : elementsOfEach(values)) {
+                    // An element holding nothing at the place leaves its container no count of
+                    // which values are alike.
+                    List<ObservedValue> placed = new ArrayList<>();
+                    for (ObservedValue element : held) {
+                        placed.add(among.placeField().in(element));
+                    }
+                    if (!placed.contains(null)) {
+                        readings.addAll(on.readEachAmong(placed));
+                    }
+                }
                 boolean any = false;
-                for (ObservedValue value : values) {
-                    switch (on.readAmong(value, values)) {
+                for (NumericTerm.Reading read : readings) {
+                    switch (read) {
                         case NumericTerm.Reading.Number number ->
                                 any |= number.value().compareTo(at) == 0;
                         case NumericTerm.Reading.Missing missing -> unread.add(missing.code());
@@ -7774,6 +7799,16 @@ public final class Generator {
         }
         return new RealizationReadback.Elsewhere("it was composed to put " + term + " at " + at
                 + " and does not stand there");
+    }
+
+    /** The elements each of {@code containers} holds, one list per container; a value that holds
+     *  no elements in order holds none here. */
+    private static List<List<ObservedValue>> elementsOfEach(List<ObservedValue> containers) {
+        List<List<ObservedValue>> out = new ArrayList<>(containers.size());
+        for (ObservedValue each : containers) {
+            out.add(each instanceof ObservedValue.Sequence held ? held.elements() : List.of());
+        }
+        return out;
     }
 
     /**
