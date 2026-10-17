@@ -3,6 +3,7 @@ package souther.compiler.check;
 import souther.compiler.values.AdmissibleValues;
 
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.Map;
@@ -53,6 +54,13 @@ final class ReadingEvidence {
     private final Map<RuleRef.Invariant, Set<FactSubject>> left = new LinkedHashMap<>();
 
     /**
+     * Which conjuncts some reading took in, and at which positions: what the reading of values was
+     * stopped by in one of these is no account of the rule ({@link #stoppedBy(RuleRef.Invariant,
+     * Collection)}).
+     */
+    private final Set<PartAt> partsTaken = new HashSet<>();
+
+    /**
      * What stopped the reading of values at each position of each rule.
      *
      * <p>Under the rule, which is what makes it an account of a rule rather than of a place. Two
@@ -74,7 +82,18 @@ final class ReadingEvidence {
      * <p>A set, because nothing here is in an order anybody may read. Which of two an author wrote
      * first is the source's to say and is asked where a document is written.
      */
-    private final Map<RuleRef.Invariant, Set<RuleShortfall>> stopped = new LinkedHashMap<>();
+    private final Map<RuleRef.Invariant, Map<RuleShortfall, Set<PartId<RuleRef.Invariant>>>>
+            stopped = new LinkedHashMap<>();
+
+    /**
+     * Where the arithmetic stopped on a part of each rule that nothing took in.
+     *
+     * <p>Beside what stopped the reading of values and not inside it. That reading says what it
+     * could not take apart in its own vocabulary, and the arithmetic says where it stopped in the
+     * vocabulary a line nobody drew is told in; a part nothing took in was given up on by both, and
+     * either is a thing that would have to change.
+     */
+    private final Map<RuleRef.Invariant, Set<FormShortfall>> formStopped = new LinkedHashMap<>();
 
     /** A reading took {@code rule} in at {@code position}. */
     void record(RuleRef.Invariant rule, FactSubject position) {
@@ -97,6 +116,14 @@ final class ReadingEvidence {
     void leftStanding(RuleRef.Invariant rule, Set<FactSubject> positions) {
         left.computeIfAbsent(rule, _ -> new LinkedHashSet<>()).addAll(positions);
     }
+
+    /** Some reading took {@code part} in at {@code position}. */
+    void tookInPart(PartId<RuleRef.Invariant> part, FactSubject position) {
+        partsTaken.add(new PartAt(part, position));
+    }
+
+    /** A conjunct of a rule, at one position. */
+    private record PartAt(PartId<RuleRef.Invariant> part, FactSubject position) {}
 
     /**
      * What the reading of values made of {@code rule}, as that reading recorded it.
@@ -121,24 +148,60 @@ final class ReadingEvidence {
      * admits is a fact about the answer, and the same rules in another order would have been built.
      * Nothing is asked here because nothing of the wrong kind can be made: what arrives is refused
      * where it would be built, which is one fact away from where a caller could have written it.
+     *
+     * @param in the conjunct it was decided in, held beside the fact and not in it: one choice a
+     *           helper wrote, copied into two conjuncts, is one fact decided in both
      */
-    void stoppedBy(RuleRef.Invariant rule, Set<RuleShortfall> read) {
-        stopped.computeIfAbsent(rule, _ -> new LinkedHashSet<>()).addAll(read);
+    void stoppedBy(RuleRef.Invariant rule, RuleShortfall read, PartId<RuleRef.Invariant> in) {
+        stopped.computeIfAbsent(rule, _ -> new LinkedHashMap<>())
+                .computeIfAbsent(read, _ -> new LinkedHashSet<>()).add(in);
     }
 
     /**
-     * Everything the reading of values was stopped by, of {@code rule} at any of {@code positions}.
+     * Everything the reading of values was stopped by, of {@code rule} at any of {@code positions},
+     * in a conjunct no other reading took in.
      *
      * <p>Every name the position answers to, as {@link #tookIn} asks: a clause reaching it is filed
      * under whichever the reading recognised. Empty where this reading recorded nothing of the
      * rule there, which a caller has to answer for rather than fill in from the position.
+     *
+     * <p>A conjunct some other reading took in was given up on by this reading all the same, and
+     * that is no account of a question the conjunct beside it left standing: {@code value >= 0 &&
+     * Int.floorMod(value, 1000) == 0} is left standing by the remainder, and the ordering beside it
+     * was taken in by the reading of ends. One fact decided in several conjuncts — a choice a
+     * helper wrote, copied into each — is kept where any of them was taken in by nothing.
      */
     Set<RuleShortfall> stoppedBy(RuleRef.Invariant rule, Collection<FactSubject> positions) {
-        Set<RuleShortfall> here = stopped.get(rule);
+        Map<RuleShortfall, Set<PartId<RuleRef.Invariant>>> here = stopped.get(rule);
         if (here == null) {
             return Set.of();
         }
         Set<RuleShortfall> out = new LinkedHashSet<>();
+        here.forEach((each, in) -> {
+            if (positions.contains(each.position()) && in.stream()
+                    .anyMatch(part -> !partsTaken.contains(new PartAt(part, each.position())))) {
+                out.add(each);
+            }
+        });
+        return out;
+    }
+
+    /** The arithmetic stopped on a part of {@code rule} that nothing took in. */
+    void stoppedOnTheForm(RuleRef.Invariant rule, FormShortfall stoppedOn) {
+        formStopped.computeIfAbsent(rule, _ -> new LinkedHashSet<>()).add(stoppedOn);
+    }
+
+    /**
+     * Where the arithmetic stopped on a part of {@code rule} nothing took in, at any of
+     * {@code positions} — every name the position answers to, as {@link #stoppedBy} asks.
+     */
+    Set<FormShortfall> stoppedOnTheForm(RuleRef.Invariant rule,
+                                        Collection<FactSubject> positions) {
+        Set<FormShortfall> here = formStopped.get(rule);
+        if (here == null) {
+            return Set.of();
+        }
+        Set<FormShortfall> out = new LinkedHashSet<>();
         here.forEach(each -> {
             if (positions.contains(each.position())) {
                 out.add(each);
