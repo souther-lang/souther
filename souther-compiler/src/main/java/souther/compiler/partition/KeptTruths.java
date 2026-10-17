@@ -6,11 +6,11 @@ import souther.compiler.meaning.Proposition;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 
 /**
- * Which occurrences of a container written out are there on some row: each truth an occurrence was
- * kept by, read as any truth is ({@link Pullback#ofATruth}) where it was decided.
+ * Which occurrences of a container written out are there on some row: each thing an occurrence was
+ * kept by — a truth, or an arm a run takes — read where it was decided
+ * ({@link Pullback#ofWhatKeeps}).
  *
  * <p>The one decision every reader of an occurrence takes. A truth that holds on no row drops the
  * occurrence for every reader alike — no run hands it to a closure, nothing stated of it is part of
@@ -36,9 +36,7 @@ final class KeptTruths {
         }
         List<ReadMeaning.Occurrence.Kept> out = new ArrayList<>();
         for (ReadMeaning.Occurrence.Kept kept : keptWhere) {
-            Proposition stated = Pullback.ofATruth(kept.truth().value(), kept.truth().at(), read,
-                    Optional.empty()).proposition();
-            switch (kept.holds() ? stated : stated.denied()) {
+            switch (Pullback.ofWhatKeeps(kept, read).proposition()) {
                 case Proposition.Always(boolean holds) when !holds -> {
                     return null;
                 }

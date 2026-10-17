@@ -768,11 +768,19 @@ public final class InputReads {
                 at.dependencies, at.applied.as(applied.readings(), taken)));
     }
 
-    /** The same, of an occurrence: its value and each truth it was kept by. */
+    /** The same, of an occurrence: its value and each thing it was kept by. */
     private ReadMeaning.Occurrence carryingWhatIsTaken(ReadMeaning.Occurrence occurrence) {
         return new ReadMeaning.Occurrence(carryingWhatIsTaken(occurrence.value()),
-                occurrence.keptWhere().stream().map(kept -> new ReadMeaning.Occurrence.Kept(
-                        carryingWhatIsTaken(kept.truth()), kept.holds())).toList());
+                occurrence.keptWhere().stream().map(this::carryingWhatIsTaken).toList());
+    }
+
+    private ReadMeaning.Occurrence.Kept carryingWhatIsTaken(ReadMeaning.Occurrence.Kept kept) {
+        return switch (kept) {
+            case ReadMeaning.Occurrence.Kept.ATruth(Denotation truth, boolean holds) ->
+                    new ReadMeaning.Occurrence.Kept.ATruth(carryingWhatIsTaken(truth), holds);
+            case ReadMeaning.Occurrence.Kept.AnArm(Denotation fork, int part) ->
+                    new ReadMeaning.Occurrence.Kept.AnArm(carryingWhatIsTaken(fork), part);
+        };
     }
 
     /**
@@ -1362,6 +1370,11 @@ public final class InputReads {
         public InputReads handing(InputReads at, BindingId element,
                                   ElementsWrittenOut.Stood<InputReads> value) {
             return at.handing(element, new Denotation(value.value(), value.at()), newtypes);
+        }
+
+        @Override
+        public InputReads choosing(InputReads at, Choice.Decides decidedBy) {
+            return at.choosing(decidedBy, symbols, newtypes);
         }
 
         @Override

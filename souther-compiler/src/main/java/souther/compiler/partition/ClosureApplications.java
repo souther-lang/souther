@@ -312,17 +312,14 @@ sealed interface ClosureApplications {
     }
 
     /**
-     * What each truth an element was kept by states, read where it was decided, and denied where it
-     * was kept by the truth failing. A truth this cannot read is said as one it did not read, and
-     * not as one that holds: an application it decides is one a run may not make.
+     * What each thing an element was kept by states, read where it was decided
+     * ({@link Pullback#ofWhatKeeps}). One this cannot read is said as one it did not read, and not
+     * as one that holds: an application it decides is one a run may not make.
      */
     private static List<Proposition> keptBy(List<ReadMeaning.Occurrence.Kept> keptWhere,
                                             InputReading read) {
-        return keptWhere.stream().map(kept -> {
-            Proposition stated = Pullback.ofATruth(kept.truth().value(), kept.truth().at(), read,
-                    Optional.empty()).proposition();
-            return kept.holds() ? stated : stated.denied();
-        }).toList();
+        return keptWhere.stream()
+                .map(kept -> Pullback.ofWhatKeeps(kept, read).proposition()).toList();
     }
 
     /**
