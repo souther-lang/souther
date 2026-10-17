@@ -1467,10 +1467,6 @@ final class Pullback {
         if (walked != null) {
             return walked;
         }
-        Sized gathered = differentOverAWalk(Core.withoutStanding(made.value()), made.at());
-        if (gathered != null) {
-            return gathered;
-        }
         if (!(AnOperationApplied.of(Core.withoutStanding(made.value()))
                 instanceof AnOperationApplied applied
                 && applied.operation() instanceof ValueName.Stdlib operation)) {
@@ -1540,6 +1536,12 @@ final class Pullback {
         if (!(sizeOf(walk.seed(), reads) instanceof Sized.AsAForm(LinearForm<Quantity> seed))) {
             return null;
         }
+        // A set holds what it gathers once each, so what a step puts in it adds no number of
+        // its own; how many it ends with is how many different values were gathered.
+        if (e.type() instanceof Type.SetOf) {
+            return seed.equals(LinearForm.constant(ExactRatio.ZERO))
+                    ? differentOverAWalk(walk, held, reads) : null;
+        }
         BindingId accumulator = walk.accumulator().binding();
         if (!(stepSized(accumulator, ExactRatio.ZERO, walk, reads)
                 instanceof Sized.AsAForm(LinearForm<Quantity> adds))
@@ -1567,22 +1569,17 @@ final class Pullback {
     }
 
     /**
-     * How many what a walk from an empty set ends with holds, where each step gathers into what
-     * it carried a value standing at a place of the element, or every element of a set standing
-     * there ({@link BoundOperationFacts#gathersIn}): how many different values stand where those
-     * are over the elements — or null where {@code e} is no such walk.
+     * How many what {@code walk}, from an empty set over the elements of {@code held}, ends with
+     * holds, where each step gathers into what it carried a value standing at a place of the
+     * element, or every element of a set standing there ({@link BoundOperationFacts#gathersIn}):
+     * how many different values stand where those are over the elements — or null where its step
+     * is no such step.
      *
      * <p>By induction over the walk, which hands every element to the step once: what it ends
      * with is exactly the values gathered, each once, which is how many differ among them.
      */
-    private Sized differentOverAWalk(Core e, InputReads reads) {
-        SeededWalk walk = SeededWalk.of(e, blocksAt(new Denotation(e, reads)));
-        if (walk == null || !(subjectOf(walk.container(), reads)
-                instanceof DecisionSubject.AnInput held)
-                || !(sizeOf(walk.seed(), reads) instanceof Sized.AsAForm(LinearForm<Quantity> seed))
-                || !seed.equals(LinearForm.constant(ExactRatio.ZERO))) {
-            return null;
-        }
+    private Sized differentOverAWalk(SeededWalk walk, DecisionSubject.AnInput held,
+                                     InputReads reads) {
         Denotation step = reads.standing(walk.step().body(), read.rules().symbols(),
                 read.rules().newtypes());
         if (!(AnOperationApplied.of(Core.withoutStanding(step.value()))
