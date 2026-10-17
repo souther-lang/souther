@@ -86,6 +86,18 @@ class ANumberOverTheElementsIsReadAsTheNumberItIsTest {
             let variedWorkedOut (items) =
                 List.length(List.distinct(List.map(i -> i.code + 1, items))) >= 2
 
+            behavior keptOfEach : (items: List<Item>) -> Bool
+            let keptOfEach (items) = List.length(List.fold(
+                (acc, i) -> acc ++ List.filter(b -> b > 0, i.bins), [], items)) >= 3
+
+            behavior keptPastWhatWasCarried : (items: List<Item>) -> Bool
+            let keptPastWhatWasCarried (items) = List.length(List.fold(
+                (acc, i) -> acc ++ List.filter(b -> b > List.length(acc), i.bins), [], items)) >= 3
+
+            behavior keptPastWhatWasCarriedWrittenOut : (s: Shelf) -> Bool
+            let keptPastWhatWasCarriedWrittenOut (s) = List.length(List.fold(
+                (acc, c) -> acc ++ List.filter(b -> b > List.length(acc), [c]), [], s.codes)) >= 2
+
             """;
 
     private static final TermPath CODES = TermPath.of("s").then("codes");
@@ -196,6 +208,19 @@ class ANumberOverTheElementsIsReadAsTheNumberItIsTest {
     void aNumberOfSomeOfTheElementsOrOfAValueWorkedOutOfThemIsNoNumberOfTheContainer() {
         assertEquals(List.of(), numbersAsked("variedOfSome"));
         assertEquals(List.of(), numbersAsked("variedWorkedOut"));
+    }
+
+    /**
+     * A walk's step that keeps some of each element's values is read with what it carried standing
+     * for any number, and adds how many it kept of each. One keeping them by how many it carried
+     * adds a number of no one size — one at every step, as many as were carried then — so it is
+     * no number of each element, wherever in what it adds that number is read.
+     */
+    @Test
+    void aStepAddingANumberOfWhatItCarriedIsNoNumberOfEachElement() {
+        assertFalse(numbersAsked("keptOfEach").isEmpty(), "the control is read");
+        assertEquals(List.of(), numbersAsked("keptPastWhatWasCarried"));
+        assertEquals(List.of(), numbersAsked("keptPastWhatWasCarriedWrittenOut"));
     }
 
     /** Every number the conditions {@code behavior} writes are compared over, as the run is asked

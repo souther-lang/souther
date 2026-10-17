@@ -44,15 +44,50 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
      * being read, or what a call of a search answers one node down.
      *
      * <p>Made only while the step or the body is read for how many it answers, which a reading does
-     * to show it is that many and a number of the element or the node, for every number there is.
-     * Read as a number standing for any number, a form over it says so of each by its weight; read
-     * as nought and one, it says it of those two. What the reading concludes has none of these in
-     * it, so no reader of what a condition states is handed one.
+     * to show it is that many and a number of the element or the node, for every number there is:
+     * a form over a number standing for any says so of each by its weight. What the reading
+     * concludes has none of these in it, so no reader of what a condition states is handed one.
      */
     record HowManyCarried(ACarriedValue value) implements Quantity {
 
         public HowManyCarried {
             Objects.requireNonNull(value, "what is carried is some walk's");
+        }
+
+        /** Whether {@code form} reads this anywhere, in a number it is over or in one inside it. */
+        public boolean isIn(LinearForm<Quantity> form) {
+            return form.coefs().keySet().stream().anyMatch(this::isIn);
+        }
+
+        /** Whether {@code number} is this, or is made of a number or a statement that reads it. */
+        public boolean isIn(Quantity number) {
+            return switch (number) {
+                case HowManyCarried other -> equals(other);
+                case DecisionAtom.OfTheInput _, DecisionAtom.TakenOfAnAnswer _,
+                     DecisionAtom.OfAnAnswer _, OfABinding _, CodePointsOfAPiece _,
+                     RemainderOfADividend _, HowManyDifferent _ -> false;
+                case WhatAnOperationAnswers answers -> answers.of().stream().anyMatch(this::isIn);
+                case SumOver sum -> isIn(sum.ofTheElement());
+                case HowManyHold held -> held.each().stream().anyMatch(this::isIn);
+                case HowManyMeet count -> isIn(count.ofTheElement());
+            };
+        }
+
+        /** Whether {@code stated} compares a number that reads this, or holds a statement that
+         *  does. */
+        public boolean isIn(Proposition stated) {
+            return switch (stated) {
+                case Proposition.Compared compared -> switch (compared.relation()) {
+                    case Relation.Affine affine -> isIn(affine.form());
+                    case Relation.Ordered ordered -> isIn(ordered.term());
+                };
+                case Proposition.Always _, Proposition.Truth _, Proposition.InCases _,
+                     Proposition.Present _, Proposition.SameValue _, Proposition.LastToHold _,
+                     Proposition.Carried _, Proposition.Unread _ -> false;
+                case Proposition.All _, Proposition.Any _, Proposition.OnAnApplication _,
+                     Proposition.SoManyHold _, Proposition.Some _, Proposition.SomeReachable _ ->
+                        stated.partsHeld().stream().anyMatch(this::isIn);
+            };
         }
 
         /** What a reader handed one of these is told: it is no number of anything it reads. */
@@ -278,7 +313,8 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
         public static boolean oneOfEach(DecisionSubject container, DecisionSubject ofTheElement) {
             return (ofTheElement.isAtOrUnder(container.element())
                     || ofTheElement.isAtOrUnder(container.key()))
-                    && ofTheElement.containersHoldingIt() == container.containersHoldingIt() + 1;
+                    && ofTheElement.howManyContainersHoldIt()
+                            == container.howManyContainersHoldIt() + 1;
         }
 
         @Override

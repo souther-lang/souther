@@ -57,7 +57,7 @@ public sealed interface DecisionSubject {
     boolean isAtOrUnder(DecisionSubject other);
 
     /** How many containers this stands inside, the input's or an answer's. */
-    int containersHoldingIt();
+    int howManyContainersHoldIt();
 
     /**
      * A position of the behavior's input, where a row writes a value.
@@ -85,7 +85,7 @@ public sealed interface DecisionSubject {
         }
 
         @Override
-        public int containersHoldingIt() {
+        public int howManyContainersHoldIt() {
             return TermPath.containersAlong(at.steps());
         }
 
@@ -148,7 +148,7 @@ public sealed interface DecisionSubject {
         }
 
         @Override
-        public int containersHoldingIt() {
+        public int howManyContainersHoldIt() {
             return TermPath.containersAlong(steps);
         }
 

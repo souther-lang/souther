@@ -1549,30 +1549,71 @@ final class Pullback {
             return seed.equals(LinearForm.constant(ExactRatio.ZERO))
                     ? differentOverAWalk(walk, held, step, applied, gathers) : null;
         }
-        Quantity soFar = new Quantity.HowManyCarried(ACarriedValue.made());
-        if (!(stepSized(walk.accumulator().binding(), soFar, walk, reads)
-                instanceof Sized.AsAForm(LinearForm<Quantity> stepped))) {
-            return null;
+        Quantity.HowManyCarried soFar = new Quantity.HowManyCarried(ACarriedValue.made());
+        return tentatively(soFar, () -> {
+            if (!(stepSized(walk.accumulator().binding(), soFar, walk, reads)
+                    instanceof Sized.AsAForm(LinearForm<Quantity> stepped))) {
+                return null;
+            }
+            LinearForm<Quantity> adds = addedBesideOnce(stepped, soFar);
+            if (adds == null) {
+                return null;
+            }
+            if (!quantifying.add(held)) {
+                return new Sized.NotSized(new WhyUnread.TwoElementsOfOneContainer());
+            }
+            Sized total;
+            try {
+                total = addedUpOver(held, adds);
+            } finally {
+                quantifying.remove(held);
+            }
+            if (!(total instanceof Sized.AsAForm(LinearForm<Quantity> over))) {
+                return total;
+            }
+            LinearForm<Quantity> all = seed.plus(over).orNull();
+            return all == null ? new Sized.NotSized(new WhyUnread.NoMeasureOfItsSize())
+                    : new Sized.AsAForm(all);
+        });
+    }
+
+    /**
+     * {@code reading}, which reads with {@code carried} standing for any number, where it
+     * concludes a form over numbers none of which reads it — or what it concluded otherwise, or
+     * null, with what it met for the comparison being read put back.
+     *
+     * <p>What a reading meets for the comparison — the counts it names, the counts every element
+     * settles alike, the name standing for each element — is met by a reading that may not be the
+     * one taken, and one not taken leaves none of it. A count it met that reads {@code carried} is
+     * a number of no one size, which no reading taken names, so a reading that met one is not
+     * taken either.
+     *
+     * @throws IllegalStateException where the form it concludes reads {@code carried}, which no
+     *         reading of how many a recursion answers does
+     */
+    private Sized tentatively(Quantity.HowManyCarried carried, Supplier<Sized> reading) {
+        Set<Quantity.HowManyMeet> countedBefore = counting == null ? null
+                : Set.copyOf(counting.keySet());
+        int alikeBefore = alike == null ? 0 : alike.size();
+        ElementsMet metBefore = elementsMet.copied();
+        Sized read = reading.get();
+        if (read instanceof Sized.AsAForm(LinearForm<Quantity> form)) {
+            if (carried.isIn(form)) {
+                throw carried.reachedAReader();
+            }
+            if (counting == null || counting.keySet().stream().noneMatch(carried::isIn)) {
+                return read;
+            }
+            read = null;
         }
-        LinearForm<Quantity> adds = addedBesideOnce(stepped, soFar);
-        if (adds == null) {
-            return null;
+        if (counting != null) {
+            counting.keySet().retainAll(countedBefore);
         }
-        if (!quantifying.add(held)) {
-            return new Sized.NotSized(new WhyUnread.TwoElementsOfOneContainer());
+        if (alike != null) {
+            alike.subList(alikeBefore, alike.size()).clear();
         }
-        Sized total;
-        try {
-            total = addedUpOver(held, adds);
-        } finally {
-            quantifying.remove(held);
-        }
-        if (!(total instanceof Sized.AsAForm(LinearForm<Quantity> over))) {
-            return total;
-        }
-        LinearForm<Quantity> all = seed.plus(over).orNull();
-        return all == null ? new Sized.NotSized(new WhyUnread.NoMeasureOfItsSize())
-                : new Sized.AsAForm(all);
+        elementsMet = metBefore;
+        return read;
     }
 
     /**
@@ -1606,24 +1647,14 @@ final class Pullback {
      * at all, or added up over some elements.
      */
     private static LinearForm<Quantity> addedBesideOnce(LinearForm<Quantity> form,
-                                                        Quantity carried) {
+                                                        Quantity.HowManyCarried carried) {
         if (!ExactRatio.ONE.equals(form.coefs().get(carried))) {
             return null;
         }
         Map<Quantity, ExactRatio> rest = new LinkedHashMap<>(form.coefs());
         rest.remove(carried);
-        for (Quantity each : rest.keySet()) {
-            if (mentions(each, carried)) {
-                return null;
-            }
-        }
-        return new LinearForm<>(form.constant(), rest);
-    }
-
-    /** Whether {@code number} is {@code carried} or a sum of it over some elements. */
-    private static boolean mentions(Quantity number, Quantity carried) {
-        return number.equals(carried) || (number instanceof Quantity.SumOver(var _, Quantity each)
-                && mentions(each, carried));
+        LinearForm<Quantity> beside = new LinearForm<>(form.constant(), rest);
+        return carried.isIn(beside) ? null : beside;
     }
 
     /** How many {@code walk}'s step holds, with what it carried holding {@code soFar}. */
@@ -5401,32 +5432,32 @@ final class Pullback {
         if (inside == null) {
             return null;
         }
-        Quantity below = new Quantity.HowManyCarried(ACarriedValue.made());
-        Set<String> went = new TreeSet<>();
-        if (!(sizedBelowWith(search, node, went, LinearForm.atom(below),
-                () -> sizeOf(body.body(), inside)) instanceof Sized.AsAForm(
-                        LinearForm<Quantity> stepped)) || went.isEmpty()) {
-            return null;
-        }
-        // Each field it went down, the nodes there added up once each.
-        Map<Quantity, ExactRatio> own = new LinkedHashMap<>(stepped.coefs());
-        for (String field : went) {
-            if (!ExactRatio.ONE.equals(own.remove(new Quantity.SumOver(
-                    new DecisionSubject.AnInput(node.then(field)), below)))) {
+        Quantity.HowManyCarried below = new Quantity.HowManyCarried(ACarriedValue.made());
+        return tentatively(below, () -> {
+            Set<String> went = new TreeSet<>();
+            if (!(sizedBelowWith(search, node, went, LinearForm.atom(below),
+                    () -> sizeOf(body.body(), inside)) instanceof Sized.AsAForm(
+                            LinearForm<Quantity> stepped)) || went.isEmpty()) {
                 return null;
             }
-        }
-        for (Quantity each : own.keySet()) {
-            if (mentions(each, below)) {
+            // Each field it went down, the nodes there added up once each.
+            Map<Quantity, ExactRatio> own = new LinkedHashMap<>(stepped.coefs());
+            for (String field : went) {
+                if (!ExactRatio.ONE.equals(own.remove(new Quantity.SumOver(
+                        new DecisionSubject.AnInput(node.then(field)), below)))) {
+                    return null;
+                }
+            }
+            LinearForm<Quantity> ofItsOwn = new LinearForm<>(stepped.constant(), own);
+            if (below.isIn(ofItsOwn)) {
                 return null;
             }
-        }
-        List<String> through = List.copyOf(went);
-        Map<List<String>, ExactRatio> weights = addedByEachNode(
-                new LinearForm<>(stepped.constant(), own), node, through);
-        LinearForm<Quantity> fromHere = weights == null ? null
-                : heldFromANodeDown(node, through, weights, args.get(search.node()).type());
-        return fromHere == null ? null : new Sized.AsAForm(fromHere);
+            List<String> through = List.copyOf(went);
+            Map<List<String>, ExactRatio> weights = addedByEachNode(ofItsOwn, node, through);
+            LinearForm<Quantity> fromHere = weights == null ? null
+                    : heldFromANodeDown(node, through, weights, args.get(search.node()).type());
+            return fromHere == null ? null : new Sized.AsAForm(fromHere);
+        });
     }
 
     /** {@code reading}, with each call of {@code search} on a node one step below the node at
