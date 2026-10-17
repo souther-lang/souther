@@ -698,7 +698,7 @@ public sealed interface Proposition {
 
     /**
      * How many of {@code statements} hold, each weighed as many times as it was written, being one
-     * of the counts {@code admitted}. Made through {@link #compared(Relation, boolean, long)}, and
+     * of the counts {@code admitted}. Made through {@link #compared(Relation, boolean)}, and
      * only where the choices of which of them hold are more than a reading writes out, or come to
      * more parts than a step is concluded with.
      *

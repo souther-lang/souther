@@ -143,13 +143,6 @@ final class WhichOfThemHold {
         return SharedPropositions.shared(new Proposition.SoManyHold(kept, weighed, counts));
     }
 
-    /** How many choices this is written as, counted no further than one past {@code most}. */
-    long choices(long most) {
-        long[] made = {0};
-        walk(chosen -> ++made[0] <= most);
-        return made[0];
-    }
-
     /** Some one of the choices holding, or null where they are more than {@code most}. */
     Proposition written(long most) {
         List<Proposition> ways = new ArrayList<>();
