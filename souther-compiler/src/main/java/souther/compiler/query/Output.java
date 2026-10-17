@@ -3,6 +3,7 @@ package souther.compiler.query;
 import souther.compiler.check.StandingSignature;
 import souther.compiler.cst.CstLexer;
 import souther.compiler.execute.ExampleExecution;
+import souther.compiler.observe.Expectation;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.observe.RowOutcome;
 import souther.compiler.observe.RowStatement;
@@ -1103,14 +1104,22 @@ public final class Output {
              * @param standInDefinitions what computes each value the row states a dependency
              *     answers, by the dependency; empty where the row states no stand-in, and where the
              *     source's declarations were not read
+             * @param expectedDefinition what computes the value the row states of the answer;
+             *     nothing where it states a case and nothing under it, owes the answer, or the
+             *     source's declarations were not read
              */
             record Ran(souther.compiler.observe.RowOutcome outcome, List<String> inputDefinitions,
-                       Map<ValueName.Behavior, StandInDefinitions> standInDefinitions)
+                       Map<ValueName.Behavior, StandInDefinitions> standInDefinitions,
+                       ExpectedDefinition expectedDefinition)
                     implements ReadRow {
 
                 public Ran {
                     if (outcome == null) {
                         throw new IllegalArgumentException("a row that ran came to something");
+                    }
+                    if (expectedDefinition == null) {
+                        throw new IllegalArgumentException("what the row states of the answer is"
+                                + " computed by something, or by nothing");
                     }
                     inputDefinitions = inputDefinitions == null ? List.of()
                             : List.copyOf(inputDefinitions);
@@ -1212,6 +1221,31 @@ public final class Output {
                 /** The stand-in states no answer for the rest, so nothing computes one. */
                 record NothingStated() implements Otherwise {}
             }
+        }
+
+        /**
+         * What computes the value a row states of the answer, by the name it was emitted under.
+         *
+         * <p>Which of the two a row is, is what its evaluation read it as stating — a value, or a
+         * case and nothing under it — and is read off that rather than off the written row again,
+         * so a row is never handed a computation for a grain it was not compared at.
+         */
+        public sealed interface ExpectedDefinition {
+
+            /** The row states a value, computed by the definition emitted under this name. */
+            record Computed(String definition) implements ExpectedDefinition {
+
+                public Computed {
+                    if (definition == null) {
+                        throw new IllegalArgumentException("a stated value is computed by"
+                                + " something");
+                    }
+                }
+            }
+
+            /** Nothing computes what the row states of the answer: it states a case and nothing
+             *  under it, or states no answer. */
+            record NothingComputed() implements ExpectedDefinition {}
         }
 
         @Override
@@ -1323,7 +1357,8 @@ public final class Output {
                 if (observed != null) {
                     for (souther.compiler.observe.RowOutcome row : observed.rows()) {
                         into.computeIfAbsent(row.target(), _ -> new ArrayList<>())
-                                .add(new ReadRow.Ran(row, List.of(), Map.of()));
+                                .add(new ReadRow.Ran(row, List.of(), Map.of(),
+                                        new ExpectedDefinition.NothingComputed()));
                         named.add(row.target());
                     }
                 }
@@ -1340,7 +1375,8 @@ public final class Output {
                             : among(observed.rows(), written.target(), row);
                     if (came != null) {
                         mine.add(new ReadRow.Ran(came, inputDefinitions(prepared, row),
-                                standInDefinitions(prepared, row, came)));
+                                standInDefinitions(prepared, row, came),
+                                expectedDefinition(prepared, row, came)));
                         continue;
                     }
                     mine.add(new ReadRow.NotRun(row.identity(), row.pos(),
@@ -1373,6 +1409,29 @@ public final class Output {
                 names.add(emittedFor(prepared, input, "an input of the row at " + row.pos()));
             }
             return names;
+        }
+
+        /**
+         * What computes the value {@code row} states of the answer: the operand it writes there,
+         * where its evaluation read it as stating a value.
+         *
+         * <p>Grain from the evaluation, operand from the written row. A row read as stating a case
+         * and nothing under it emitted nothing for its operand, and one owing its answer wrote
+         * none; a row read as stating a value whose operand the preparation emitted nothing for is
+         * the two having come apart.
+         */
+        private static ExpectedDefinition expectedDefinition(Prepared prepared, Hir.ExampleRow row,
+                                                             RowOutcome came) {
+            if (!(came.statement() instanceof RowStatement.Stated stated)
+                    || !(stated.expects() instanceof Expectation.TheValue)) {
+                return new ExpectedDefinition.NothingComputed();
+            }
+            if (!(row.expected() instanceof Hir.Expected.Asserted(Hir.Expr answer))) {
+                throw new IllegalStateException("the row at " + row.pos() + " is read as stating a"
+                        + " value of the answer, and writes none");
+            }
+            return new ExpectedDefinition.Computed(emittedFor(prepared, answer,
+                    "the value the row at " + row.pos() + " states of the answer"));
         }
 
         /**

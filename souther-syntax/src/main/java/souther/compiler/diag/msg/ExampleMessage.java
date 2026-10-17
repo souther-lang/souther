@@ -54,6 +54,11 @@ public sealed interface ExampleMessage extends Message {
     record TheTwoAreOfDifferentTypes(String at, String expected, String actual)
             implements ExampleMessage, Supporting {}
 
+    /** The row states a value nothing the behavior answers with can be, where no answer was there
+     *  to compare it with. */
+    record NoAnswerIsWhatTheRowStates(String stated, String answers)
+            implements ExampleMessage, Supporting {}
+
     /** What the row said and what came back. */
     record WhatTheRowSaid(String said) implements ExampleMessage, Supporting {}
 

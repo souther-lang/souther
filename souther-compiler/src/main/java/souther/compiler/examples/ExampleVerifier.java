@@ -1882,6 +1882,9 @@ public final class ExampleVerifier {
         // and nothing for a declaration to be decided from until the behavior has answered.
         Expectation stated;
         Evidence evidence;
+        // The value the row states, as its expectation computed it; null where the row names a case
+        // and nothing under it, or owes the answer.
+        FixtureReader.ExpectedValue statedValue = null;
         switch (row.expected()) {
             case Hir.Expected.Asserted(Hir.Expr answer) -> {
                 // validate the expected arm/value against the output cases before running. Which case
@@ -1921,6 +1924,7 @@ public final class ExampleVerifier {
                     stated = only != null ? new Expectation.TheCase(only)
                             : new Expectation.TheValue(expected.asserted());
                     evidence = evidenceOf(fixtures, stated, expected, answer, sig);
+                    statedValue = expected;
                 } catch (FixtureException fe) {
                     out.add(Diagnostic.at(row.pos())
                             .say(new ExampleMessage.TheExpectedValueCouldNotBeBuilt(target.name(),
@@ -1980,6 +1984,22 @@ public final class ExampleVerifier {
                 // cases. What is left needs something to apply the behavior, and this run has nothing.
                 // A fake is not it — a fake stands in for a dependency while some *other* behavior's
                 // row runs, and this row is about this behavior.
+                //
+                // Except where what the row states is not something the behavior can answer with: no
+                // implementation holds that row, which is what a run of one compares its way to.
+                // Waiting would hand it to whatever runs the implementation later, outside this
+                // compile, to find out there. A row that is applied finds it out by the comparison,
+                // which says where the two part and what was answered there.
+                if (stated instanceof Expectation.Asserts asserts
+                        && !answerable(fixtures, asserts, statedValue, sig.outputType())) {
+                    out.add(Diagnostic.at(row.expected().pos())
+                            .say(new ExampleMessage.TheRowDoesNotHold())
+                            .hint(new ExampleMessage.NoAnswerIsWhatTheRowStates(
+                                    fixtures.typeShown(asserts), Type.show(sig.outputType())))
+                            .build());
+                    state.failed(FailurePhase.EXPECTED_FIXTURE);
+                    return;
+                }
                 state.disposition = Disposition.PENDING;
                 state.failurePhase = FailurePhase.NONE;
                 return;
@@ -2110,11 +2130,30 @@ public final class ExampleVerifier {
     }
 
     /**
+     * Whether some answer at {@code answers} can keep what the row states: the value it states is a
+     * value of that type, or the case it states is one a value of that type can be.
+     *
+     * <p>Both grains, because a row is compared at the grain it states and either can name what no
+     * answer is. A case is asked of the cases the answer's type is made of rather than of the cases
+     * it is said to answer with as a result, which a type that is not a union of declared cases has
+     * none of — and a case named there is still none a value of it can be.
+     */
+    private boolean answerable(FixtureReader fixtures, Expectation.Asserts stated,
+                               FixtureReader.ExpectedValue statedValue, Type answers) {
+        return switch (stated) {
+            case Expectation.TheValue _ ->
+                    fixtures.isAValueOf(projected(statedValue.live(), answers), answers);
+            case Expectation.TheCase(TypeSymbol name) -> fixtures.isACaseOf(name, answers);
+        };
+    }
+
+    /**
      * The Souther value behind a behavior's answer. A member this module declared is the answer
      * itself; a primitive or an imported type reached the union through a bridge case (spec §jvm-anonymous-union),
      * and a row writes the value, not the bridge case — which is a name this source does not have.
      * The same projection a Souther caller does, done on the loaded classes.
      */
+
     private Object projected(Object result, Type out) {
         return projected(result, out, module.name(), kinds, sums);
     }

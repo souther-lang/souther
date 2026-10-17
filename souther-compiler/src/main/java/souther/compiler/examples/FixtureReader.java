@@ -316,6 +316,28 @@ public final class FixtureReader {
         };
     }
 
+    /**
+     * Whether {@code value} is a value of {@code type}, read by {@link #holds} — the one reading a
+     * built value is put through.
+     *
+     * <p>For an expected value that no answer is compared against. Being a value of the answer's
+     * type is what every answer is, so a stated value that is not one is not what any answer is:
+     * what an expected value states of itself — which collection it is, which case, which scalar —
+     * is what it is compared by, at every depth the value has. A collection holding nothing has no
+     * depth below it, which is why this is asked of the value and not of the type it was built at.
+     */
+    boolean isAValueOf(Object value, Type type) {
+        return holds(value, type);
+    }
+
+    /**
+     * Whether a value of {@code type} can be of the case {@code name}: whether it is among the cases
+     * {@code type} is made of, which are the cases {@link #caseOfValue} finds a built value among.
+     */
+    boolean isACaseOf(TypeSymbol name, Type type) {
+        return AtomSpace.subjectAtoms(type, kinds, sums).contains(name);
+    }
+
     private boolean each(java.util.Collection<?> values, Type element) {
         for (Object value : values) {
             if (!holds(value, element)) {
@@ -498,110 +520,6 @@ public final class FixtureReader {
     private boolean constructsANewtype(Hir.Apply c) {
         TypeSymbol built = constructs(c);
         return built != null && neutral.isNewtype(built);
-    }
-
-    /**
-     * Whether what a row wrote is a value of {@code type}, read off what the row wrote and nothing
-     * else.
-     *
-     * <p>The twin of {@link #holds}, which asks it of a value that exists. This asks it of a written
-     * one, so it is what a construction holds its own parts to before any of them is built into
-     * anything. Shallow at a name, because what stands under that name is that value's own question
-     * and not this one's — a {@code DecisionN(Approved { id = 1 })} whose {@code id} is written as a
-     * number is a disagreement about the {@code id}, not a {@code DecisionN} that cannot be built.
-     */
-    private boolean states(Asserted a, Type type) {
-        return switch (type) {
-            // An optional holds a value or holds none, and a value written at one is written at what
-            // it holds. Left out of this walk, everything under a `?` was admitted unasked.
-            case Type.OptionOf o -> absent(a) || states(a, o.element());
-            case Type.Prim p -> a instanceof Asserted.Value(ObservedValue v)
-                    && spells(v, TypeSymbol.primitive(p));
-            case Type.Ref r when r.name().isPrimitive() -> a instanceof Asserted.Value(ObservedValue v)
-                    && spells(v, r.name());
-            case Type.Ref _, Type.Union _ -> {
-                TypeSymbol name = named(a);
-                yield name != null && AtomSpace.subjectAtoms(type, kinds, sums).contains(name)
-                        && parts(a, name);
-            }
-            case Type.ListOf l -> a instanceof Asserted.Elements(Asserted.Container stated,
-                    List<Asserted> elements)
-                    && stated != Asserted.Container.SET && each(elements, l.element());
-            case Type.SetOf s -> a instanceof Asserted.Elements(Asserted.Container stated,
-                    List<Asserted> elements)
-                    && stated != Asserted.Container.LIST && each(elements, s.element());
-            case Type.MapOf m -> {
-                if (!(a instanceof Asserted.Entries entries)) {
-                    yield false;
-                }
-                for (Asserted.Entry e : entries.entries()) {
-                    if (!states(e.key(), m.key()) || !states(e.value(), m.value())) {
-                        yield false;
-                    }
-                }
-                yield true;
-            }
-            // Nothing a fixture writes stands at one of these: a tuple is how a map's entries are
-            // written rather than a type of its own, and a function is not a value a row states.
-            case Type.TupleOf _, Type.FnOf _ -> false;
-            // A position that says nothing says nothing about what may stand at it. A variable is
-            // decided by each call, and the rest stand where a type could not be worked out at all —
-            // holding a row to any of them would be holding it to something nothing wrote.
-            case Type.Var _, Type.MetaVar _, Type.Nothing _, Type.Never _, Type.Erroneous _ -> true;
-        };
-    }
-
-    private static boolean absent(Asserted a) {
-        return a instanceof Asserted.Value(ObservedValue v) && v instanceof ObservedValue.Absent;
-    }
-
-    /**
-     * The parts of a written construction, held to what that construction declares them to be.
-     *
-     * <p>Asked because this is what a construction takes, and what a construction takes is a value.
-     * A row may write {@code Receipt { total = 1 }} as an expectation of its own — nothing is built
-     * from it there, and the number it wrote at a named field is the disagreement it reports. Handed
-     * to something that constructs, it is an argument, and there is no value of {@code Receipt} for
-     * it to be.
-     */
-    private boolean parts(Asserted a, TypeSymbol name) {
-        if (!(a instanceof Asserted.Built built)) {
-            return true;   // a unit case carries nothing to hold
-        }
-        // A newtype's `value` is among these, since that is the field it is written with.
-        for (Map.Entry<String, Type> f : neutral.fieldTypes(name).entrySet()) {
-            Asserted field = built.fields().get(f.getKey());
-            if (field != null && !states(field, f.getValue())) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    /** The name a written value wears, or null where it wears none. */
-    private static TypeSymbol named(Asserted a) {
-        return switch (a) {
-            case Asserted.Built built -> built.type();
-            case Asserted.Value(ObservedValue v) when v instanceof ObservedValue.Unit unit ->
-                    unit.type();
-            default -> null;
-        };
-    }
-
-    /** Whether a written value with no parts is of {@code name}. Asked of what the row wrote, which
-     *  is why it is not asked of a decoder: one reads a whole number where a `Decimal` stands, and a
-     *  row writing `1` there wrote an `Int`. */
-    private static boolean spells(ObservedValue v, TypeSymbol name) {
-        return name.primitiveKind() != null && name.primitiveKind() == v.primitive();
-    }
-
-    private boolean each(List<Asserted> elements, Type element) {
-        for (Asserted e : elements) {
-            if (!states(e, element)) {
-                return false;
-            }
-        }
-        return true;
     }
 
     /**

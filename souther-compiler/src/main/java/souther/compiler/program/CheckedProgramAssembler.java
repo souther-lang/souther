@@ -679,10 +679,12 @@ final class CheckedProgramAssembler {
                                 suppliesOf(ran, stated, targets, rowValues), types);
                 case RowStatement.Stated stated -> stated.standIns().isEmpty()
                         ? new CheckedRow.SelfContained(stated,
-                                suppliesOf(ran, stated, targets, rowValues), types,
+                                suppliesOf(ran, stated, targets, rowValues),
+                                assertionOf(ran, stated, rowValues), types,
                                 Position.at(signature.answers()))
                         : new CheckedRow.WithStandIns(stated,
-                                suppliesOf(ran, stated, targets, rowValues), types,
+                                suppliesOf(ran, stated, targets, rowValues),
+                                assertionOf(ran, stated, rowValues), types,
                                 Position.at(signature.answers()));
                 case RowStatement.NotStated why -> new CheckedRow.NotReproducible(why);
                 // What acceptance guarantees, asserted where the guarantee is relied on. A row an
@@ -714,6 +716,46 @@ final class CheckedProgramAssembler {
                                                   Map<String, CheckedHelper> rowValues) {
         return new CheckedRow.Supplies(computing(ran, stated, rowValues),
                 whereArgumentsStand(stated, targets), computingStandIns(ran, stated, rowValues));
+    }
+
+    /**
+     * What {@code ran}'s row states of the answer, as an output holds an answer to it: the definition
+     * computing the value it states, looked up as {@link #computing} looks up the inputs, or the case
+     * it states.
+     *
+     * <p>Over both sums, so a row stating a value that its reading named nothing to compute, and one
+     * stating a case that its reading named a computation for, are each refused by name rather than
+     * handed over with a grain the row was not compared at.
+     */
+    private static CheckedAssertion assertionOf(Output.RowsRead.ReadRow.Ran ran,
+                                                RowStatement.Stated stated,
+                                                Map<String, CheckedHelper> rowValues) {
+        RowOutcome outcome = ran.outcome();
+        Output.RowsRead.ExpectedDefinition named = ran.expectedDefinition();
+        return switch (stated.expects()) {
+            case Expectation.TheValue _ -> switch (named) {
+                case Output.RowsRead.ExpectedDefinition.Computed(String method) ->
+                        new CheckedAssertion.Value(definitionNamed(method, rowValues,
+                                "the value the row states of the answer", outcome));
+                case Output.RowsRead.ExpectedDefinition.NothingComputed _ ->
+                        throw new IllegalStateException("a program the language accepted holds a"
+                                + " row stating a value of the answer whose reading names nothing"
+                                + " as computing it: " + outcome.target() + " "
+                                + outcome.identity().shown() + " at " + outcome.at());
+            };
+            case Expectation.TheCase(TypeSymbol name) -> switch (named) {
+                case Output.RowsRead.ExpectedDefinition.NothingComputed _ ->
+                        new CheckedAssertion.Case(name);
+                case Output.RowsRead.ExpectedDefinition.Computed(String method) ->
+                        throw new IllegalStateException("a program the language accepted holds a"
+                                + " row stating the case `" + name + "` whose reading names `"
+                                + method + "` as computing a value: " + outcome.target() + " "
+                                + outcome.identity().shown() + " at " + outcome.at());
+            };
+            case Expectation.Owed _ -> throw new IllegalStateException("a row whose answer is owed"
+                    + " states nothing an answer is held to: " + outcome.target() + " "
+                    + outcome.identity().shown() + " at " + outcome.at());
+        };
     }
 
     /**
