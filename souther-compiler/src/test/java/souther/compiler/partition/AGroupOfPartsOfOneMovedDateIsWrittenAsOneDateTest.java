@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.DefaultStdlib;
+import souther.compiler.check.ScopedDeclarations;
 import souther.compiler.check.Symbols;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.ObservationSource;
@@ -17,6 +18,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Which way of writing one date answers a group of numbers of it turns on what is asked of the
@@ -32,7 +34,7 @@ class AGroupOfPartsOfOneMovedDateIsWrittenAsOneDateTest {
         NumericTerm.TakenOf made = NumericTerm.TakenOf.of(
                 ValueName.Stdlib.operation("Date", operation), new ObservationSource(AT, from),
                 TakenArguments.NONE, Type.Prim.DATE,
-                souther.compiler.check.ScopedDeclarations.wrapsOf(SYMBOLS), SYMBOLS);
+                ScopedDeclarations.wrapsOf(SYMBOLS), SYMBOLS);
         assertNotNull(made, operation);
         return RealizationTarget.of(made);
     }
@@ -50,27 +52,40 @@ class AGroupOfPartsOfOneMovedDateIsWrittenAsOneDateTest {
 
     @Test
     void aMovedYearBesideAMonthOfTheDateItselfIsOneDate() {
-        assertInstanceOf(TermRealizations.JointBuilder.OnThoseMovedDateParts.class,
+        assertInstanceOf(TermRealizations.JointBuilder.OnThoseDateParts.class,
                 builderOf(part("year", aDayBack()), part("month", ValueTransformation.NONE)));
     }
 
     @Test
     void aMovedYearBesideAMonthAndADayOfTheDateItselfIsOneDate() {
-        assertInstanceOf(TermRealizations.JointBuilder.OnThoseMovedDateParts.class,
+        assertInstanceOf(TermRealizations.JointBuilder.OnThoseDateParts.class,
                 builderOf(part("year", aDayBack()), part("month", ValueTransformation.NONE),
                         part("day", ValueTransformation.NONE)));
     }
 
     @Test
     void aMovedYearBesideTheYearOfTheDateItselfIsOneDate() {
-        assertInstanceOf(TermRealizations.JointBuilder.OnThoseMovedDateParts.class,
+        assertInstanceOf(TermRealizations.JointBuilder.OnThoseDateParts.class,
                 builderOf(part("year", aDayBack()), part("year", ValueTransformation.NONE)));
     }
 
+    /** A moved month and day with no year beside them are one date, looked for over a cycle. */
     @Test
-    void thePartsOfADateThatIsNotMovedAreStillSpelledInParts() {
+    void aMovedMonthAndDayWithNoYearAreOneDate() {
         assertInstanceOf(TermRealizations.JointBuilder.OnThoseDateParts.class,
+                builderOf(part("month", aDayBack()), part("day", aDayBack())));
+    }
+
+    /** The parts of a date nobody moved are the parts of a date moved by nothing, and are looked
+     *  for the same way: there is one way of writing a date for its parts and not two. */
+    @Test
+    void thePartsOfADateNobodyMovedAreLookedForTheSameWay() {
+        TermRealizations.JointBuilder.OnThoseDateParts builder = assertInstanceOf(
+                TermRealizations.JointBuilder.OnThoseDateParts.class,
                 builderOf(part("year", ValueTransformation.NONE),
                         part("month", ValueTransformation.NONE)));
+
+        assertTrue(builder.moved().values().stream().allMatch(DateTranslation::isNone),
+                builder.moved().toString());
     }
 }

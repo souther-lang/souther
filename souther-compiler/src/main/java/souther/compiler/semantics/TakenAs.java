@@ -378,33 +378,56 @@ public sealed interface TakenAs {
         }
 
         /**
-         * The parts of the dates a chain of shifts is defined at, moved by it, where those are a
-         * run of numbers: from the part of the first date it can answer to the part of the last.
+         * The least and the most this part comes to over the dates a chain of shifts is defined
+         * at, moved by it.
          *
-         * <p>The dates are one run of days, so the years they fall in are one run as well. Their
-         * months are one where the dates fall in one year, and their days of the month one where
-         * the dates fall in one month. Otherwise the months or the days come round and are no run,
-         * and every one the calendar has is left to what the operation declares.
+         * <p>The dates are one run of days, from the first the chain can answer to the last. The
+         * years they fall in are a run between the year of the first and of the last. A month or a
+         * day of the month comes round, so what it runs between is read off each month the dates
+         * fall in: the dates from the twenty-seventh of February to the second of March in a
+         * common year fall on days from the first to the twenty-eighth. A year of days or more
+         * holds every month and every day of one, and is left to what the operation declares.
          */
         @Override
         public NumericDomain.Bounds reachedFrom(ValueTransformation from) {
             return switch (from) {
                 case ValueTransformation.Identity _ -> NumericDomain.Bounds.OPEN;
-                case ValueTransformation.DateShift shift -> {
-                    LocalDate first = shift.translation().firstMoved();
-                    LocalDate last = shift.translation().lastMoved();
-                    yield switch (part) {
-                        case YEAR -> run(first.getYear(), last.getYear());
-                        case MONTH -> first.getYear() == last.getYear()
-                                ? run(first.getMonthValue(), last.getMonthValue())
-                                : NumericDomain.Bounds.OPEN;
-                        case DAY -> YearMonth.from(first).equals(YearMonth.from(last))
-                                ? run(first.getDayOfMonth(), last.getDayOfMonth())
-                                : NumericDomain.Bounds.OPEN;
-                    };
-                }
+                case ValueTransformation.DateShift shift -> over(
+                        shift.translation().firstMoved(), shift.translation().lastMoved());
             };
         }
+
+        /** What this part runs between over the dates from {@code first} to {@code last}. */
+        private NumericDomain.Bounds over(LocalDate first, LocalDate last) {
+            if (part == DatePart.YEAR) {
+                return run(first.getYear(), last.getYear());
+            }
+            if (last.toEpochDay() - first.toEpochDay() >= DAYS_A_YEAR_HOLDS_AT_LEAST) {
+                return NumericDomain.Bounds.OPEN;
+            }
+            int least = Integer.MAX_VALUE;
+            int most = Integer.MIN_VALUE;
+            // A month at a time, which is at most thirteen of them, and within one month the
+            // month stands still and the day of it runs up.
+            for (LocalDate at = first; ; ) {
+                LocalDate end = YearMonth.from(at).atEndOfMonth();
+                if (end.isAfter(last)) {
+                    end = last;
+                }
+                least = Math.min(least, part == DatePart.MONTH ? at.getMonthValue()
+                        : at.getDayOfMonth());
+                most = Math.max(most, part == DatePart.MONTH ? end.getMonthValue()
+                        : end.getDayOfMonth());
+                if (end.equals(last)) {
+                    return run(least, most);
+                }
+                at = end.plusDays(1);
+            }
+        }
+
+        /** How few days a year has, which every run of them that long holds every month of and
+         *  every day of a month of. */
+        private static final int DAYS_A_YEAR_HOLDS_AT_LEAST = 365;
 
         private static NumericDomain.Bounds run(int least, int most) {
             return new NumericDomain.Bounds(Endpoint.inclusive(Count.of(least)),

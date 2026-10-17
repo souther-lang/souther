@@ -128,6 +128,21 @@ class TheYearOfAMovedDateRunsOnlyAsFarAsTheMoveReachesTest {
         assertEquals(between(22, 31), partOf("day", toTheLastDays(10)).intrinsicBounds());
     }
 
+    /**
+     * Moved onto the twenty-seventh of February to the second of March of a common year, a date
+     * falls on the first to the twenty-eighth: the days come round, and the month they come round
+     * in is February, whose last day is the twenty-eighth.
+     */
+    @Test
+    void theDaysOfDatesAcrossTheEndOfAShortMonthRunAsFarAsItsLastDay() {
+        ValueTransformation across = ValueTransformation.of(new DateTranslation(1,
+                LocalDate.of(2001, 2, 26).toEpochDay(), LocalDate.of(2001, 3, 1).toEpochDay()));
+
+        assertEquals(between(1, 28), partOf("day", across).intrinsicBounds());
+        assertEquals(between(2, 3), partOf("month", across).intrinsicBounds());
+        assertEquals(between(2001, 2001), partOf("year", across).intrinsicBounds());
+    }
+
     /** Moved a day, a date falls in every month and on every day the calendar has. */
     @Test
     void theMonthsAndDaysOfDatesOverYearsAreEveryOne() {

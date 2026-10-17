@@ -616,10 +616,6 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + " writing a string is looked at, and how many steps the search may"
                             + " take: each is handed over as what stopped it where nothing was"
                             + " found"),
-            Map.entry("souther.compiler.partition.TermRealizations#dateOn("
-                            + "Ljava/util/Map;Lsouther/compiler/check/Carrier;)"
-                            + "Lsouther/compiler/partition/TermRealizations$Search;",
-                    "how many years a date is looked for in, and whether they were all of them"),
             Map.entry("souther.compiler.partition.TermRealizations#dateAnsweringMovedParts("
                             + "Ljava/util/List;Lsouther/compiler/check/Carrier;)"
                             + "Lsouther/compiler/partition/TermRealizations$Search;",
@@ -659,12 +655,6 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/partition/TermRealizations$Tried;",
                     "how many numbers of the run the demands leave are tried, and whether they"
                             + " were all of it"),
-            Map.entry("souther.compiler.partition.TermRealizations#onThoseParts("
-                            + "Ljava/util/Map;Lsouther/compiler/types/Type;"
-                            + "Lsouther/compiler/check/Carrier;"
-                            + "Lsouther/compiler/check/RuleReadingSource;)"
-                            + "Lsouther/compiler/partition/TermRealizations$Realization;",
-                    "names the figure where no date was found and the years were not all walked"),
             Map.entry("souther.compiler.partition.TermRealizations#onMovedDates("
                             + "Ljava/util/List;Lsouther/compiler/types/Type;"
                             + "Lsouther/compiler/check/Carrier;"

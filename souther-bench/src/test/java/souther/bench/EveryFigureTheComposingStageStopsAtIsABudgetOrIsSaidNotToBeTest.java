@@ -46,15 +46,6 @@ class EveryFigureTheComposingStageStopsAtIsABudgetOrIsSaidNotToBeTest {
      * beside the code that stops.
      */
     private static final Map<String, String> NOT_A_BUDGET = new LinkedHashMap<>(Map.ofEntries(
-            // Numbers a value is written at, which are what a date or a time looks like and not how
-            // far this looks for one.
-            Map.entry("souther.compiler.partition.TermRealizations.A_LEAP_YEAR",
-                    "the year a date is written in where no rule asked for one"),
-            Map.entry("souther.compiler.partition.TermRealizations.A_LONGEST_MONTH",
-                    "the month a day of the month is offered in"),
-            Map.entry("souther.compiler.partition.TermRealizations.FIRST_OF_THE_MONTH",
-                    "the day a date's other parts are offered at"),
-
             // How far a part of a date runs, which is the calendar's and not this compiler's. A
             // walk over every one of them is what makes an answer of nothing a statement about
             // dates, so raising either would be writing down a month no year has.
