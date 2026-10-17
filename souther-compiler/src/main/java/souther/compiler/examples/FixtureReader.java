@@ -298,8 +298,14 @@ public final class FixtureReader {
      * <p>A position that says none of those holds anything. There is nothing here to refuse it with:
      * a type variable is decided by each call and a position with no declared type says nothing, and
      * both are answered where a fixture's shape is read.
+     *
+     * <p>Asked of an expected value no answer is compared against, too. Every answer is a value of
+     * the answer's type, so a stated value that is not one is what no answer is: what it states of
+     * itself — which collection, which case, which scalar — is what it is compared by, at every depth
+     * it has. A collection holding nothing has no depth below it, which is why this is asked of the
+     * value and not of the type it was built at.
      */
-    private boolean holds(Object value, Type position) {
+    boolean holds(Object value, Type position) {
         return switch (position) {
             // Absence is what an optional makes room for; a value under one is held to what it holds,
             // and a `?` position takes the value itself as well as a `Some` around it.
@@ -312,6 +318,27 @@ public final class FixtureReader {
             case Type.SetOf s -> value instanceof Set<?> els && each(els, s.element());
             case Type.MapOf m -> value instanceof Map<?, ?> entries
                     && each(entries.keySet(), m.key()) && each(entries.values(), m.value());
+            case null, default -> true;
+        };
+    }
+
+    /**
+     * Whether some value {@code position} holds is of the case {@code name}, read the way
+     * {@link #holds} reads a value there: a scalar is its own case, a name is any of the leaves it
+     * holds, an optional is what it holds, a collection is no case, and a position that says none of
+     * those may hold anything.
+     *
+     * <p>The same reading as the value's, arm for arm, so that a row stating a case and a row stating
+     * a value are held to one account of what stands at a position.
+     */
+    boolean holdsACaseOf(TypeSymbol name, Type position) {
+        return switch (position) {
+            case Type.OptionOf o -> holdsACaseOf(name, o.element());
+            case Type.Prim p -> name.equals(TypeSymbol.primitive(p));
+            case Type.Ref r when r.name().isPrimitive() -> name.equals(r.name());
+            case Type.Ref _, Type.Union _ ->
+                    AtomSpace.subjectAtoms(position, kinds, sums).contains(name);
+            case Type.ListOf _, Type.SetOf _, Type.MapOf _ -> false;
             case null, default -> true;
         };
     }
@@ -498,110 +525,6 @@ public final class FixtureReader {
     private boolean constructsANewtype(Hir.Apply c) {
         TypeSymbol built = constructs(c);
         return built != null && neutral.isNewtype(built);
-    }
-
-    /**
-     * Whether what a row wrote is a value of {@code type}, read off what the row wrote and nothing
-     * else.
-     *
-     * <p>The twin of {@link #holds}, which asks it of a value that exists. This asks it of a written
-     * one, so it is what a construction holds its own parts to before any of them is built into
-     * anything. Shallow at a name, because what stands under that name is that value's own question
-     * and not this one's — a {@code DecisionN(Approved { id = 1 })} whose {@code id} is written as a
-     * number is a disagreement about the {@code id}, not a {@code DecisionN} that cannot be built.
-     */
-    private boolean states(Asserted a, Type type) {
-        return switch (type) {
-            // An optional holds a value or holds none, and a value written at one is written at what
-            // it holds. Left out of this walk, everything under a `?` was admitted unasked.
-            case Type.OptionOf o -> absent(a) || states(a, o.element());
-            case Type.Prim p -> a instanceof Asserted.Value(ObservedValue v)
-                    && spells(v, TypeSymbol.primitive(p));
-            case Type.Ref r when r.name().isPrimitive() -> a instanceof Asserted.Value(ObservedValue v)
-                    && spells(v, r.name());
-            case Type.Ref _, Type.Union _ -> {
-                TypeSymbol name = named(a);
-                yield name != null && AtomSpace.subjectAtoms(type, kinds, sums).contains(name)
-                        && parts(a, name);
-            }
-            case Type.ListOf l -> a instanceof Asserted.Elements(Asserted.Container stated,
-                    List<Asserted> elements)
-                    && stated != Asserted.Container.SET && each(elements, l.element());
-            case Type.SetOf s -> a instanceof Asserted.Elements(Asserted.Container stated,
-                    List<Asserted> elements)
-                    && stated != Asserted.Container.LIST && each(elements, s.element());
-            case Type.MapOf m -> {
-                if (!(a instanceof Asserted.Entries entries)) {
-                    yield false;
-                }
-                for (Asserted.Entry e : entries.entries()) {
-                    if (!states(e.key(), m.key()) || !states(e.value(), m.value())) {
-                        yield false;
-                    }
-                }
-                yield true;
-            }
-            // Nothing a fixture writes stands at one of these: a tuple is how a map's entries are
-            // written rather than a type of its own, and a function is not a value a row states.
-            case Type.TupleOf _, Type.FnOf _ -> false;
-            // A position that says nothing says nothing about what may stand at it. A variable is
-            // decided by each call, and the rest stand where a type could not be worked out at all —
-            // holding a row to any of them would be holding it to something nothing wrote.
-            case Type.Var _, Type.MetaVar _, Type.Nothing _, Type.Never _, Type.Erroneous _ -> true;
-        };
-    }
-
-    private static boolean absent(Asserted a) {
-        return a instanceof Asserted.Value(ObservedValue v) && v instanceof ObservedValue.Absent;
-    }
-
-    /**
-     * The parts of a written construction, held to what that construction declares them to be.
-     *
-     * <p>Asked because this is what a construction takes, and what a construction takes is a value.
-     * A row may write {@code Receipt { total = 1 }} as an expectation of its own — nothing is built
-     * from it there, and the number it wrote at a named field is the disagreement it reports. Handed
-     * to something that constructs, it is an argument, and there is no value of {@code Receipt} for
-     * it to be.
-     */
-    private boolean parts(Asserted a, TypeSymbol name) {
-        if (!(a instanceof Asserted.Built built)) {
-            return true;   // a unit case carries nothing to hold
-        }
-        // A newtype's `value` is among these, since that is the field it is written with.
-        for (Map.Entry<String, Type> f : neutral.fieldTypes(name).entrySet()) {
-            Asserted field = built.fields().get(f.getKey());
-            if (field != null && !states(field, f.getValue())) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    /** The name a written value wears, or null where it wears none. */
-    private static TypeSymbol named(Asserted a) {
-        return switch (a) {
-            case Asserted.Built built -> built.type();
-            case Asserted.Value(ObservedValue v) when v instanceof ObservedValue.Unit unit ->
-                    unit.type();
-            default -> null;
-        };
-    }
-
-    /** Whether a written value with no parts is of {@code name}. Asked of what the row wrote, which
-     *  is why it is not asked of a decoder: one reads a whole number where a `Decimal` stands, and a
-     *  row writing `1` there wrote an `Int`. */
-    private static boolean spells(ObservedValue v, TypeSymbol name) {
-        return name.primitiveKind() != null && name.primitiveKind() == v.primitive();
-    }
-
-    private boolean each(List<Asserted> elements, Type element) {
-        for (Asserted e : elements) {
-            if (!states(e, element)) {
-                return false;
-            }
-        }
-        return true;
     }
 
     /**

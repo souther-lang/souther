@@ -17,7 +17,6 @@ import souther.compiler.check.BoundaryInput;
 import souther.compiler.check.BoundaryOutput;
 import souther.compiler.check.SumCases;
 import souther.compiler.check.Symbols;
-import souther.compiler.check.TypeOps;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.ExampleMessage;
 import souther.compiler.diag.Region;
@@ -29,7 +28,6 @@ import souther.runtime.Values;
 import souther.compiler.observe.FailurePhase;
 import souther.compiler.observe.FieldTypes;
 import souther.compiler.observe.RowStatements;
-import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
@@ -279,10 +277,6 @@ public final class ExampleStatements {
         return () -> new FixtureReader(elsewhere.forExamples(), elsewhere.symbols(),
                 elsewhere.sums(), elsewhere.kinds(), elsewhere.fields(), elsewhere.values(),
                 loader);
-    }
-
-    private Set<TypeSymbol> outCases(Type out) {
-        return TypeOps.outputCases(out, kinds, sums);
     }
 
     // --- two statements about one behavior -----------------------------------------------------
@@ -728,7 +722,6 @@ public final class ExampleStatements {
         // reading's loader, so the two values a comparison is about are of one execution and the
         // equality that decides it is the language's own.
         java.util.function.Supplier<FixtureReader> readers = readersFor(behavior.module());
-        Set<TypeSymbol> cases = outCases(sig.outputType());
         for (Hir.ExampleRow row : ex.rows()) {
             if (row.inputs().size() != sig.inputTypes().size()) {
                 continue;
@@ -745,7 +738,7 @@ public final class ExampleStatements {
                 if (arguments == null) {
                     return null;
                 }
-                Answered answer = readExpected(reader, asserted, sig.out(), cases);
+                Answered answer = readExpected(reader, asserted, sig.out());
                 return answer instanceof Answered.Unreadable ? null
                         : new RecordedRow(asserted, arguments, answer);
             }, new Deadline.Work.Fixtures(ex.target(), row.pos(), row.identity()));
@@ -888,8 +881,7 @@ public final class ExampleStatements {
                 // where the example is checked, installing this same value. What did not finish here
                 // did not finish there, and there is where it is said (E1910).
                 Answered constant = within(
-                        reader -> readStandIn(reader, w.value(), depSig.out(),
-                                outCases(depSig.outputType())),
+                        reader -> readStandIn(reader, w.value(), depSig.out()),
                         new Deadline.Work.With(wrote(w), w.value().pos())).orNull();
                 if (constant == null || constant instanceof Answered.Unreadable) {
                     continue;
@@ -1330,8 +1322,8 @@ public final class ExampleStatements {
      * which is where it stands in for nothing at all — that is reported where the fake is resolved.
      */
     private static Answered readStandIn(FixtureReader fixtures, Hir.Expr written,
-                                        BoundaryOutput outType, Set<TypeSymbol> cases) {
-        if (written == null || refusedCase(fixtures, written, cases)) {
+                                        BoundaryOutput outType) {
+        if (written == null || refusedCase(fixtures, written, outType)) {
             return new Answered.Unreadable();
         }
         try {
@@ -1350,8 +1342,8 @@ public final class ExampleStatements {
      * the form a fixture is written in and decoded again (issue #214).
      */
     private static Answered readExpected(FixtureReader fixtures, Hir.Expr written,
-                                         BoundaryOutput outType, Set<TypeSymbol> cases) {
-        if (written == null || refusedCase(fixtures, written, cases)) {
+                                         BoundaryOutput outType) {
+        if (written == null || refusedCase(fixtures, written, outType)) {
             return new Answered.Unreadable();
         }
         if (fixtures.caseOnly(written) != null) {
@@ -1365,11 +1357,12 @@ public final class ExampleStatements {
     }
 
     /** Whether {@code written} names a case the position cannot hold — <em>E1904</em> where the row
-     * is evaluated, and nothing about the behavior it was written for. */
+     * is evaluated, asked the one way the row is asked there, and nothing about the behavior it was
+     * written for. */
     private static boolean refusedCase(FixtureReader fixtures, Hir.Expr written,
-                                       Set<TypeSymbol> cases) {
+                                       BoundaryOutput outType) {
         TypeSymbol named = fixtures.constructedCase(written);
-        return named != null && !cases.isEmpty() && !cases.contains(named);
+        return named != null && !fixtures.holdsACaseOf(named, outType.type());
     }
 
     /**

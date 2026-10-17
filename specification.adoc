@@ -3544,7 +3544,7 @@ A run whose answers are the ones the compile generated has nothing to establish.
 
 An injected behavior (<<injected-behavior>>) has no `+let+` to apply, so a row naming one is *recorded* rather than evaluated. It is not refused. A model that a system is being migrated onto is injected everywhere at the start, and the rows harvested from the system it replaces are the record of what each behavior will owe; refusing them would mean keeping that record somewhere the compiler cannot read, which is where it stops being checked.
 
-What a row can be held to without a body, it is held to. Its arity, each input built against its parameter type — compiled as this module's code and run, so an input that breaks an invariant is <<e1903>> the day it is written — the expected arm against the output's cases (<<e1904>>), and the expected value built (<<e1903>>). What is left needs something to run.
+What a row can be held to without a body, it is held to. Its arity, each input built against its parameter type — compiled as this module's code and run, so an input that breaks an invariant is <<e1903>> the day it is written — the expected arm against the output's cases (<<e1904>>), and the expected value built (<<e1903>>). [[a-recorded-row-states-a-value-an-answer-can-be]]The value it states MUST be a value of what the behavior answers with, at every depth the value has, or the row is <<e1905>> without waiting: whatever implements the behavior answers with a value of that type, so no implementation holds such a row, and a run of one would only find that out somewhere this compile cannot report it. `+Set.fromList([ 1 ])+` stated where a `+List<Int>+` is answered is refused; a list holding nothing is a list whatever its elements would have been, and is not. What is left needs something to run.
 
 Evaluation begins by itself. The row is unchanged when the `+let+` arrives; from that compile on it is applied and compared like any other, and a row that stated the wrong answer is <<e1905>> then rather than never.
 
@@ -6807,7 +6807,7 @@ Emitted when a fixture of the row itself did not produce a value when it ran: a 
 Hint: Expected one of: Submitted, AwaitingPreApproval
 ----
 
-Emitted when a row's expected arm is not one of the target behavior's output cases (<<example-expected>>). An expectation whose case is not written — a helper's answer — has no arm to hold against them and is compared as the value it is; a row expecting the wrong case is then <<e1905>>.
+Emitted when a row's expected arm is not one of the target behavior's output cases (<<example-expected>>), whether or not anything answers the behavior. A number or a list is made of no case, so any case a row names where one is answered is not one of them. An expectation whose case is not written — a helper's answer — has no arm to hold against them and is compared as the value it is; a row expecting the wrong case is then <<e1905>>.
 
 [#e1905]
 === Example does not hold
@@ -6819,7 +6819,7 @@ found:    Submitted { submittedAt = "2026-07-20T09:00" }
 expected: AwaitingPreApproval { submittedAt = "2026-07-20T09:00" }
 ----
 
-Emitted when a row's evaluated result does not match the expected arm or value. Every failing row of a build is reported. Both sides are shown as values, encoded through the data's derived Encoder (<<encoder>>) — the arm name alone does not say what went wrong when a row fails inside one arm. A row that asserts only the arm (a bare case name, <<example-expected>>) shows just that name.
+Emitted when a row's evaluated result does not match the expected arm or value, and for a recorded row whose stated value is no value of what the behavior answers with (<<a-recorded-row-states-a-value-an-answer-can-be>>), which is told so in place of a result. Every failing row of a build is reported. Both sides are shown as values, encoded through the data's derived Encoder (<<encoder>>) — the arm name alone does not say what went wrong when a row fails inside one arm. A row that asserts only the arm (a bare case name, <<example-expected>>) shows just that name.
 
 [#e1906]
 === An examples file contains non-example declarations
