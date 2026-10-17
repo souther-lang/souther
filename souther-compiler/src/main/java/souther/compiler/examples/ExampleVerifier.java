@@ -1983,7 +1983,7 @@ public final class ExampleVerifier {
                 // which says where the two part and what was answered there. A case no answer can be
                 // was refused for every row above, where the arm the row names is read.
                 if (statedValue != null && !fixtures.holds(
-                        projected(statedValue.live(), sig.outputType()), sig.outputType())) {
+                        statedValue.live(), sig.outputType())) {
                     out.add(Diagnostic.at(row.expected().pos())
                             .say(new ExampleMessage.TheRowDoesNotHold())
                             .hint(new ExampleMessage.NoAnswerIsWhatTheRowStates(
@@ -2176,6 +2176,9 @@ public final class ExampleVerifier {
                                 FixtureReader.ExpectedValue expected, Hir.Expr answer, Sig sig) {
         return switch (stated) {
             case Expectation.TheValue _ -> new Evidence.Answer(expected.live());
+            // A unit case is built as the value it is, through the builder a stand-in's whole value
+            // goes through, which admits only what the answer can be. A unit the answer cannot be
+            // never gets here: its arm was refused (E1904) before the expectation was read.
             case Expectation.TheCase(TypeSymbol only) ->
                     symbols.declaredNode(only) instanceof Hir.UnitData
                             ? new Evidence.Answer(
