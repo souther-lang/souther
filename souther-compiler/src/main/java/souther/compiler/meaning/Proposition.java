@@ -11,6 +11,7 @@ import souther.compiler.types.ModelOccurrence;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.SortedMap;
@@ -482,28 +483,44 @@ public sealed interface Proposition {
             return new Some(container, ofTheElement, !holds);
         }
 
-        /**
-         * Whether {@code other} holds wherever this does: both held, over one container, and every
-         * part {@code other} asks of its element one this asks of its own. An element meeting this
-         * meets {@code other}, so the container holds one.
-         *
-         * <p>Read off the parts as they are written and nothing more: a part {@code other} asks
-         * that this asks only in other words is no part this was seen to ask, and the answer is
-         * no.
-         */
-        public boolean holdsOnlyWhere(Some other) {
-            return holds && other.holds && container.equals(other.container)
-                    && partsOf(ofTheElement).containsAll(partsOf(other.ofTheElement));
+        /** This quantifier with the parts it asks of its element, spelled once. */
+        public ElementAsked elementAsked() {
+            return new ElementAsked(this, switch (ofTheElement) {
+                case All all -> all.parts().stream().map(Proposition::key)
+                        .collect(Collectors.toUnmodifiableSet());
+                case Always(boolean always) when always -> Set.of();
+                default -> Set.of(ofTheElement.key());
+            });
         }
 
-        /** The spellings of what {@code element} asks of the element, each part of it once. */
-        private static Set<String> partsOf(Proposition element) {
-            return switch (element) {
-                case All all -> all.parts().stream().map(Proposition::key)
-                        .collect(Collectors.toSet());
-                case Always(boolean holds) when holds -> Set.of();
-                default -> Set.of(element.key());
-            };
+        /**
+         * A quantifier and the spellings of the parts it asks of its element, each once.
+         *
+         * @param quantifier the quantifier
+         * @param parts      what it asks of its element, part by part; none where it asks nothing
+         */
+        public record ElementAsked(Some quantifier, Set<String> parts) {
+
+            public ElementAsked {
+                Objects.requireNonNull(quantifier, "the parts are some quantifier's");
+                parts = Set.copyOf(parts);
+            }
+
+            /**
+             * Whether {@code other} holds wherever this does, and is not the same statement: both
+             * held, over one container, and every part {@code other} asks of its element one this
+             * asks of its own, with more besides. An element meeting this meets {@code other}, so
+             * the container holds one.
+             *
+             * <p>Read off the parts as they are written and nothing more: a part {@code other}
+             * asks that this asks only in other words is no part this was seen to ask, and the
+             * answer is no. And never both ways round, since each asks more than the other.
+             */
+            public boolean holdsOnlyWhere(ElementAsked other) {
+                return quantifier.holds && other.quantifier.holds
+                        && quantifier.container.equals(other.quantifier.container)
+                        && parts.size() > other.parts.size() && parts.containsAll(other.parts);
+            }
         }
     }
 

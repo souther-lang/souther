@@ -624,25 +624,42 @@ public final class WhereEachLineDecides {
          * names is a case as well: every way holding none of them is possible.
          *
          * <p>Two quantifiers over one container are not free of each other either, where one asks
-         * of its element everything the other asks ({@link Proposition.Some#holdsOnlyWhere}): no
-         * row holds an element meeting the first and none meeting the second.
-         * {@code Map.get(k, m)} read with a default is some entry under {@code k} whose value
-         * meets the comparison, or no entry under {@code k} and the default meeting it. Kept in,
-         * the way with the first held and the second failing is one where the default's
-         * comparison turns whether the entry's value is read, and the entry's line is said in two
-         * cases told apart by a comparison of the default.
+         * of its element everything the other asks and more
+         * ({@link Proposition.Some.ElementAsked#holdsOnlyWhere}): no row holds an element meeting
+         * the first and none meeting the second. {@code Map.get(k, m)} read with a default is
+         * some entry under {@code k} whose value meets the comparison, or no entry under {@code k}
+         * and the default meeting it. Kept in, the way with the first held and the second failing
+         * is one where the default's comparison turns whether the entry's value is read, and the
+         * entry's line is said in two cases told apart by a comparison of the default.
+         *
+         * <p>The way that leaves out has the stronger held, so every quantifier failing is a
+         * possible way; and no quantifier holds only where another does with the other holding
+         * only where it does, so in any possible way with some held, a held one that no other
+         * held one holds only where it does can fail and leave a possible way. Every possible
+         * way of the quantifiers is reached from all of them failing one at a time, which is what
+         * lets a line's cases be told apart one part at a time ({@link #split}).
+         *
+         * <p>Two relations over one number are not taken in here, though {@code x > 5} holding
+         * and {@code x > 0} failing is no row: whether rows on both sides of a line can be in a
+         * case is asked of the rows, and said here it would be a part of every case the line is
+         * read in.
          */
         private int possible(List<AskedTwice> twice, WhatAStatementComesTo.Asking asking) {
             int out = WhatAStatementComesTo.ALWAYS;
-            for (int stronger = 0; stronger < named.size(); stronger++) {
-                if (!(named.get(stronger) instanceof Proposition.Some some)) {
-                    continue;
+            Map<Integer, Proposition.Some.ElementAsked> quantifiers = new LinkedHashMap<>();
+            for (int i = 0; i < named.size(); i++) {
+                if (named.get(i) instanceof Proposition.Some some) {
+                    quantifiers.put(i, some.elementAsked());
                 }
-                for (int weaker = 0; weaker < named.size(); weaker++) {
-                    if (weaker != stronger && named.get(weaker) instanceof Proposition.Some other
-                            && some.holdsOnlyWhere(other)) {
-                        out = asking.both(out, asking.either(asking.part(stronger, false),
-                                asking.part(weaker, true)));
+            }
+            for (Map.Entry<Integer, Proposition.Some.ElementAsked> stronger
+                    : quantifiers.entrySet()) {
+                for (Map.Entry<Integer, Proposition.Some.ElementAsked> weaker
+                        : quantifiers.entrySet()) {
+                    if (stronger.getValue().holdsOnlyWhere(weaker.getValue())) {
+                        out = asking.both(out, asking.either(
+                                asking.part(stronger.getKey(), false),
+                                asking.part(weaker.getKey(), true)));
                     }
                 }
             }
@@ -723,12 +740,10 @@ public final class WhereEachLineDecides {
                         case TakenApart.RanOut _ -> CompositionBudget.STEPS_A_STATEMENT_IS_READ_IN;
                         // No one part tells the cases apart only where some ways are left out of
                         // what is possible, and only a value in twice leaves them out so: the
-                        // statement is read under each case of the first of those. A quantifier
-                        // holding only where another does leaves out only the way with the one
-                        // held and the other failing, so any two possible ways are joined by ways
-                        // each one part apart from the last, every one of them possible, and
-                        // where the line decides at one end and not at the other some part tells
-                        // the two apart.
+                        // statement is read under each case of the first of those. What else
+                        // possible() leaves out joins any two possible ways by ways each one part
+                        // apart from the last, every one of them possible, so where the line
+                        // decides at one end and not at the other some part tells the two apart.
                         case TakenApart.ByNoOnePart _, TakenApart.Taken _ ->
                                 throw new IllegalStateException("where " + part + " decides in "
                                         + stated + " was told apart by no one part, and the"
