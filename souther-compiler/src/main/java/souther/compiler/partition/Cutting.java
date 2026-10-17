@@ -818,9 +818,12 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             // numbers: what an application stating it is ({@link #ofAnApplication}).
             case Proposition.All _, Proposition.Any _, Proposition.SoManyHold _,
                  Proposition.Some _, Proposition.InCases _, Proposition.Truth _,
-                 Proposition.Present _
+                 Proposition.Present _, Proposition.WhereItAnswers _
                     when statesNoRelation(stated.proposition()) -> new Read.StatesNoRelation();
-            case Proposition.All _, Proposition.Any _, Proposition.SoManyHold _
+            // A statement read where an operation in it answers is the lines of what it states,
+            // each deciding only where the operation answers ({@link WhereEachLineDecides}).
+            case Proposition.All _, Proposition.Any _, Proposition.SoManyHold _,
+                 Proposition.WhereItAnswers _
                     when !Proposition.leavesSomethingUnread(stated.proposition()) ->
                     asLines(behavior, comparison, stated.proposition(), read, reads, answering,
                             lines.get());
@@ -1059,7 +1062,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                  Proposition.InCases _, Proposition.Present _, Proposition.SameValue _,
                  Proposition.LastToHold _, Proposition.All _, Proposition.Any _,
                  Proposition.SoManyHold _, Proposition.Some _, Proposition.OnAnApplication _,
-                 Proposition.SomeReachable _ ->
+                 Proposition.SomeReachable _, Proposition.WhereItAnswers _ ->
                     BlockReason.WhatItStatesIsNoLine.Why.NO_RELATION_OF_NUMBERS;
             case Proposition.Carried carried -> throw carried.handedToAReader();
         });
@@ -1208,6 +1211,10 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             case Proposition.Any any -> any.parts().forEach(each -> sameValuesIn(each, out));
             case Proposition.SoManyHold counted ->
                     counted.statements().forEach(each -> sameValuesIn(each, out));
+            case Proposition.WhereItAnswers where -> {
+                sameValuesIn(where.answers(), out);
+                sameValuesIn(where.states(), out);
+            }
             default -> { }
         }
     }
@@ -1228,6 +1235,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             case Proposition.Any any -> any.parts().stream().allMatch(Cutting::statesNoRelation);
             case Proposition.SoManyHold counted ->
                     counted.statements().stream().allMatch(Cutting::statesNoRelation);
+            case Proposition.WhereItAnswers where ->
+                    statesNoRelation(where.answers()) && statesNoRelation(where.states());
             // Settled, a relation, two values being one, or something nobody read: each is read
             // as what it is ({@link #readOnce}).
             case Proposition.Always _, Proposition.Compared _, Proposition.SameValue _,
@@ -1269,6 +1278,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             case Proposition.Any any -> any.parts().stream().allMatch(each -> relates(each, out));
             case Proposition.SoManyHold counted ->
                     counted.statements().stream().allMatch(each -> relates(each, out));
+            case Proposition.WhereItAnswers where ->
+                    relates(where.answers(), out) && relates(where.states(), out);
             default -> false;
         };
     }
@@ -1419,6 +1430,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             case Proposition.SoManyHold counted ->
                     counted.statements().stream().anyMatch(Cutting::holdsARelation);
             case Proposition.Some some -> some.holds() && holdsARelation(some.ofTheElement());
+            // Where it answers is no line of it.
+            case Proposition.WhereItAnswers where -> holdsARelation(where.states());
             default -> false;
         };
     }
@@ -1430,6 +1443,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             case Proposition.Any any -> any.parts().stream().allMatch(Cutting::onlyRelations);
             case Proposition.SoManyHold counted ->
                     counted.statements().stream().allMatch(Cutting::onlyRelations);
+            case Proposition.WhereItAnswers where ->
+                    onlyRelations(where.answers()) && onlyRelations(where.states());
             case Proposition.Compared _ -> true;
             default -> false;
         };

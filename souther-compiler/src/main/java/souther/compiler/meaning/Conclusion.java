@@ -186,7 +186,8 @@ public final class Conclusion {
                  Proposition.Some _, Proposition.SomeReachable _, Proposition.Always _,
                  Proposition.Truth _, Proposition.InCases _, Proposition.Present _,
                  Proposition.SameValue _, Proposition.LastToHold _, Proposition.Unread _,
-                 Proposition.Carried _, Proposition.SoManyHold _ -> 0;
+                 Proposition.Carried _, Proposition.SoManyHold _,
+                 Proposition.WhereItAnswers _ -> 0;
         };
         long kept = Math.min(out, shared.mostParts + 1L);
         shared.parts.put(stated, kept);

@@ -109,6 +109,9 @@ class EveryStatementReadToTheEndIsDrawnOrSaidAsTheModelsTest {
         missing.removeAll(met);
         missing.remove(Proposition.OnAnApplication.class);
         missing.remove(Proposition.Carried.class);
+        // A comparison where the operation answers is read only where the comparison is itself
+        // what is read; a truth reads its comparison as a part met there, and leaves it unread.
+        missing.remove(Proposition.WhereItAnswers.class);
         assertEquals(Set.of(), missing, "a kind of statement no condition here states");
     }
 
@@ -148,6 +151,10 @@ class EveryStatementReadToTheEndIsDrawnOrSaidAsTheModelsTest {
             case Proposition.OnAnApplication each -> each.each().forEach(one -> kindsIn(one, into));
             case Proposition.SoManyHold counted ->
                     counted.statements().forEach(one -> kindsIn(one, into));
+            case Proposition.WhereItAnswers where -> {
+                kindsIn(where.answers(), into);
+                kindsIn(where.states(), into);
+            }
             case Proposition.Carried _, Proposition.Always _, Proposition.Compared _,
                  Proposition.Truth _,
                  Proposition.InCases _, Proposition.Present _, Proposition.SameValue _,

@@ -167,7 +167,7 @@ public final class WhereAnApplicationIsMade {
                          Proposition.LastToHold _, Proposition.All _, Proposition.Any _,
                          Proposition.Some _, Proposition.Carried _, Proposition.SomeReachable _,
                          Proposition.Unread _, Proposition.OnAnApplication _,
-                         Proposition.SoManyHold _ -> kept.add(met);
+                         Proposition.SoManyHold _, Proposition.WhereItAnswers _ -> kept.add(met);
                 }
             }
         }

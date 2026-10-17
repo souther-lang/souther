@@ -101,6 +101,20 @@ class ANarrowedQuotientByAValueLiesBetweenItsCornersTest {
                     Share(Rational.toInt(DOWN, q))"""));
     }
 
+    /** A quotient whose dividend is a name bound inside the value the quotient was given is the
+     * quotient of what that name was given. */
+    @Test
+    void aQuotientIsReadWhereItsOperandsWereNamed() {
+        assertEquals(List.of(), reported("value >= 0", """
+                guard amount >= 0 else Share(1)
+                    guard among >= 1 else Share(1)
+                    let q = {
+                        let held = amount * 2
+                        held / among
+                    }
+                    Share(Rational.toInt(DOWN, q))"""));
+    }
+
     /**
      * The control. A divisor that may be on either side of nought is no divisor the rule reads, and
      * the share is not taken to be at or above nought for want of a sign.

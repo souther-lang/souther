@@ -20,6 +20,7 @@ import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -204,11 +205,72 @@ class AComparisonOfAQuotientByAValueIsReadOnEachSignOfTheDivisorTest {
         }
     }
 
-    /** With nothing settling the divisor's sign the comparison is read all the same, on each. */
+    /**
+     * Where the divisor is nought the division aborts, and the comparison comes out no way: no
+     * input takes the comparison holding past a divisor held at nought, nor failing, and neither is
+     * a way a row is owed at.
+     *
+     * <p>Said of the ways and not of a line. Read as one side of the divisor's sign instead, a
+     * divisor of nought would be a row the comparison holds or fails at, and a row composed for it
+     * stops before it says either.
+     */
+    @Test
+    void aDivisorHeldAtNoughtComesOutNoWay() {
+        String report = human("""
+                module demo
+
+                data Ok
+                data No
+
+                behavior f : (n: Int, d: Int) -> Ok | No
+
+                let f (n, d) = {
+                    guard d == 0 else No
+                    guard n / d >= 100 else No
+                    Ok
+                }
+                """);
+        assertTrue(report.contains("measurement: complete"), report);
+        assertTrue(report.contains("no input takes 2 ways through this body"), report);
+        assertFalse(report.contains("nothing could show"), report);
+    }
+
+    /**
+     * With nothing settling the divisor's sign the comparison is read all the same, on each; and
+     * where the division answers is no line of it, so the divisor carries the one line its sign
+     * turns at and not a second at the nought no run divides by.
+     */
     @Test
     void aDivisorOfEitherSignIsReadOnEach() {
         String report = human(MODEL.formatted("", "a.pay / b.days >= 100"));
         assertFalse(report.contains("a quotient by a value that is not a constant"), report);
+        List<String> onTheDivisor = borders("", "a.pay / b.days >= 100").stream()
+                .filter(line -> line.contains("term=b.days")).toList();
+        assertEquals(1, onTheDivisor.size(), onTheDivisor.toString());
+    }
+
+    /**
+     * A quotient inside what a closure states of each element is left unread where the closure is
+     * read as a statement about the container: an element whose divisor is nought stops the whole
+     * walk wherever the walk reaches it, which no statement of that element says.
+     */
+    @Test
+    void aQuotientAsksNothingOfTheElementsAQuantifierIsOver() {
+        String report = human("""
+                module demo
+
+                data Month = { pay: Int, days: Int }
+                data Ok
+                data No
+
+                behavior f : (ms: List<Month>) -> Ok | No
+
+                let f (ms) = {
+                    guard List.any(m -> m.pay / m.days >= 100, ms) else No
+                    Ok
+                }
+                """);
+        assertTrue(report.contains("a quotient by a value that is not a constant"), report);
     }
 
     /**
@@ -224,8 +286,13 @@ class AComparisonOfAQuotientByAValueIsReadOnEachSignOfTheDivisorTest {
         assertTrue(product.contains("not read: comparison"), product);
     }
 
-    /** Whether {@code pay / days rel 100} holds, as the run time's exact quotient does. */
+    /**
+     * Whether {@code pay / days rel 100} holds, as the run time's exact quotient does — of a row
+     * that reached the comparison, whose divisor is never nought: there the division aborts and the
+     * row is no witness of either outcome.
+     */
     private static boolean holds(String rel, BigInteger pay, BigInteger days) {
+        assertNotEquals(0, days.signum(), "a row certified past the division divides by nought");
         // pay / days against 100, compared without dividing: the sign of days turns the order.
         int order = pay.multiply(BigInteger.valueOf(days.signum()))
                 .compareTo(BigInteger.valueOf(100).multiply(days.abs()));
@@ -241,10 +308,16 @@ class AComparisonOfAQuotientByAValueIsReadOnEachSignOfTheDivisorTest {
 
     private static final Pattern MONTH = Pattern.compile("pay = (-?\\d+), days = (-?\\d+)");
 
-    /** Every certified row's {@code a.pay} and {@code b.days}. */
+    /**
+     * Every certified row's {@code a.pay} and {@code b.days}, at a line of the quotient's — one over
+     * {@code a.pay}, which no guard on the divisor alone draws.
+     */
     private static List<BigInteger[]> rows(List<BorderAssessment> lines) {
         List<BigInteger[]> out = new ArrayList<>();
         for (BorderAssessment border : lines) {
+            if (!border.border().cut().toString().contains("a.pay")) {
+                continue;
+            }
             for (ItemAssessment item : border.items().values()) {
                 if (!(item instanceof ItemAssessment.Owed owed)) {
                     continue;

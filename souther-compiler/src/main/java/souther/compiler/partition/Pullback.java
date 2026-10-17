@@ -220,6 +220,10 @@ final class Pullback {
                 case Proposition.SoManyHold counted ->
                         counted.statements().forEach(each -> partsOf(each, into));
                 case Proposition.Some some -> partsOf(some.ofTheElement(), into);
+                case Proposition.WhereItAnswers where -> {
+                    partsOf(where.answers(), into);
+                    partsOf(where.states(), into);
+                }
                 case Proposition.Unread _, Proposition.Compared _, Proposition.Truth _,
                      Proposition.InCases _, Proposition.Present _, Proposition.SameValue _,
                      Proposition.LastToHold _, Proposition.Carried _,
@@ -5770,25 +5774,36 @@ final class Pullback {
      * comparison of the dividend with the number times the divisor ({@link QuotientByAValue}) — or
      * null where it is no such comparison.
      *
-     * <p>{@code n / d >= 100} is {@code d > 0 && n >= 100 * d} or {@code !(d > 0) && n <= 100 * d}.
-     * Each is read as any comparison is, so a dividend or divisor no form says is left unread for
-     * that, and a sign the path or the declarations rule out is a side no row reaches. The divisor's
-     * sign is read once and denied for the other side, which is the one atom both sides turn on.
+     * <p>{@code n / d >= 100} is, where {@code d /= 0}, {@code d > 0 && n >= 100 * d} or
+     * {@code !(d > 0) && n <= 100 * d}; where {@code d == 0} the division aborts, and the
+     * comparison comes out no way ({@link Derivation.WhereItAnswers}). Each part is read as any
+     * comparison is, so a dividend or divisor no form says is left unread for that, and a sign the
+     * path or the declarations rule out is a side no row reaches. The divisor's sign is read once
+     * and denied for the other side, which is the one atom both sides turn on.
+     *
+     * <p>Only a comparison read for itself, which a closure's own comparison is on each application.
+     * One read as a part of a larger condition — what a closure states of the elements a quantifier
+     * is over, a part of a joined truth, the condition of a choice a value makes — is evaluated
+     * where a division that stops stops the whole of what it stands in, which no statement of the
+     * part says; it is left unread.
      */
     private Derivation ofAQuotientByAValue(StatedComparison stated, Denotation at, boolean fixed,
                                            InputReads reads) {
-        QuotientByAValue.Read<InputReads> quotient =
-                QuotientByAValue.read(stated, reads, sides(), read.rules().symbols());
+        QuotientByAValue.Read<InputReads> quotient = at != null ? null
+                : QuotientByAValue.read(stated, reads, sides(), read.rules().symbols());
         if (quotient == null) {
             return null;
         }
+        Derivation answers = restated(quotient.answers(), at, fixed, quotient.at());
         Derivation signed = restated(quotient.signed(), at, fixed, quotient.at());
-        return joined(ConditionJoin.EITHER,
+        Derivation states = joined(ConditionJoin.EITHER,
                 joined(ConditionJoin.BOTH, signed,
                         restated(quotient.above(), at, fixed, quotient.at())),
                 joined(ConditionJoin.BOTH,
                         signed == null ? null : new Derivation.UnderADenial(signed, true),
                         restated(quotient.below(), at, fixed, quotient.at())));
+        return answers == null || states == null ? null
+                : new Derivation.WhereItAnswers(answers, states);
     }
 
     /**

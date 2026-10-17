@@ -142,6 +142,14 @@ public final class AnswerAsAnInput {
             }
             case Proposition.Any any -> oneOf(any.parts(), pinned, positive,
                     Proposition::any);
+            // Either way it comes out, it answered: the row meets where it does, and what it
+            // states the way it is asked.
+            case Proposition.WhereItAnswers where -> {
+                List<Proposition> parts = new ArrayList<>();
+                parts.add(ofTheRow(where.answers(), pinned, true));
+                parts.add(ofTheRow(where.states(), pinned, positive));
+                yield parts.contains(null) ? null : Proposition.all(parts);
+            }
             case Proposition.OnAnApplication applications -> oneOf(applications.each(), pinned,
                     positive, Proposition::onAnApplication);
             case Proposition.SoManyHold _ -> throw new IllegalArgumentException(
@@ -374,6 +382,12 @@ public final class AnswerAsAnInput {
                 List<Proposition> parts = propositions(all.parts());
                 yield parts == null ? null : Proposition.all(parts);
             }
+            case Proposition.WhereItAnswers where -> {
+                Proposition answers = proposition(where.answers());
+                Proposition states = proposition(where.states());
+                yield answers == null || states == null ? null
+                        : Proposition.whereItAnswers(answers, states);
+            }
             // A part about the input alone is no way for the answer to meet the whole: which way
             // the row went is the row's, so the answer is held to the parts that are about it
             // ({@link #ofTheRow} holds the row to the values those were composed for).
@@ -435,7 +449,8 @@ public final class AnswerAsAnInput {
             case Proposition.Compared _, Proposition.Truth _, Proposition.InCases _,
                  Proposition.Present _, Proposition.SameValue _, Proposition.LastToHold _,
                  Proposition.SomeReachable _, Proposition.All _, Proposition.Any _,
-                 Proposition.OnAnApplication _, Proposition.SoManyHold _, Proposition.Some _ ->
+                 Proposition.OnAnApplication _, Proposition.SoManyHold _, Proposition.Some _,
+                 Proposition.WhereItAnswers _ ->
                     !Proposition.aboutAnAnswer(stated)
                             && !Proposition.leavesSomethingUnread(stated);
         };

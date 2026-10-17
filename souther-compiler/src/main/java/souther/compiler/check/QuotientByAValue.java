@@ -20,11 +20,13 @@ import java.util.Objects;
  * nought the relation turns. The quotient is exact, so nothing is dropped between the two
  * statements.
  *
- * <p><b>The two sides are the divisor above nought and its denial.</b> At nought the division
- * aborts, so no row that reaches the comparison has the divisor there, and the side that takes
- * nought in asks nothing of a row that does. Read as one atom and its denial, the two sides are
- * ones a case of either knows the other excludes; read as two atoms, above and below nought, a case
- * where one side's line decides could ask a row to stand on the other side's line as well.
+ * <p><b>The comparison states something only where the divisor is not nought.</b> At nought the
+ * division aborts and the run stops before the comparison comes out either way, so the statement is
+ * read only where the division answers ({@link Read#answers}) and a row at nought is a row of neither
+ * outcome. There, the two sides are the divisor above
+ * nought and its denial: read as one atom and its denial, a case of either knows the other
+ * excludes; read as two atoms, above and below nought, a case where one side's line decides could
+ * ask a row to stand on the other side's line as well.
  *
  * <p><b>Both signs are read, and which a run is on is not this reader's.</b> Where a guard on the
  * way keeps the divisor above nought, or its type is declared so, the side below has no row, as any
@@ -44,18 +46,20 @@ public final class QuotientByAValue {
     /**
      * What a comparison of a quotient by a value states, on each sign of the divisor.
      *
-     * @param <E>    the environment the dividend and the divisor are read in
-     * @param at     where the quotient was written, which is where its operands are read
-     * @param signed the divisor above nought, whose denial is the other side
-     * @param above  the dividend against the number times the divisor, which holds exactly where
-     *               the comparison of the quotient does where the divisor is above nought
-     * @param below  the same, turned, where it is not
+     * @param <E>     the environment the dividend and the divisor are read in
+     * @param at      where the quotient was written, which is where its operands are read
+     * @param answers the divisor away from nought, which is where the division answers
+     * @param signed  the divisor above nought, whose denial is the other side there
+     * @param above   the dividend against the number times the divisor, which holds exactly where
+     *                the comparison of the quotient does where the divisor is above nought
+     * @param below   the same, turned, where it is below
      */
-    public record Read<E>(E at, StatedComparison signed, StatedComparison above,
-                          StatedComparison below) {
+    public record Read<E>(E at, StatedComparison answers, StatedComparison signed,
+                          StatedComparison above, StatedComparison below) {
 
         public Read {
             Objects.requireNonNull(at, "read somewhere");
+            Objects.requireNonNull(answers, "a division answers somewhere");
             Objects.requireNonNull(signed, "the divisor stands on a side of nought");
             Objects.requireNonNull(above, "the comparison is stated above nought");
             Objects.requireNonNull(below, "and below it");
@@ -92,11 +96,14 @@ public final class QuotientByAValue {
                     .statedRelation();
             Core dividend = quotient.left();
             Core divisor = quotient.right();
+            StatedComparison answers =
+                    ConstantComparison.stated(Rel.NE, divisor, ExactRatio.ZERO);
             StatedComparison signed = ConstantComparison.stated(Rel.GT, divisor, ExactRatio.ZERO);
             Core times = timesTheDivisor(against, divisor, symbols);
             Core.BinaryReading reading = times == null ? null
                     : ConstantComparison.comparedAs(dividend.type(), times.type());
-            return signed == null || reading == null ? null : new Read<>(side.at(), signed,
+            return answers == null || signed == null || reading == null ? null
+                    : new Read<>(side.at(), answers, signed,
                     new StatedComparison(ComparisonClaim.stating(written), dividend, times,
                             reading),
                     new StatedComparison(ComparisonClaim.stating(written.turned()), dividend,

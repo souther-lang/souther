@@ -313,6 +313,28 @@ public sealed interface Derivation {
         }
     }
 
+    /**
+     * A comparison read through an operation that answers nothing on some rows, and what it states
+     * where the operation answers ({@link Proposition.WhereItAnswers}): a quotient's comparison
+     * states something only where the divisor is not nought, since a run divides by nought
+     * nowhere and stops there.
+     *
+     * @param answers where the operation answers
+     * @param read    what the comparison states there
+     */
+    record WhereItAnswers(Derivation answers, Derivation read) implements Derivation {
+
+        public WhereItAnswers {
+            Objects.requireNonNull(answers, "an operation answers somewhere");
+            Objects.requireNonNull(read, "and the comparison states something there");
+        }
+
+        @Override
+        public Proposition conclusion(Conclusion numbering) {
+            return Proposition.whereItAnswers(numbering.of(answers), numbering.of(read));
+        }
+    }
+
     /** An {@code if}: its arm under its condition, and its other arm under the denial of it — or
      *  what both state, where they state one thing. */
     record IfThenElse(Derivation condition, Derivation then, Derivation otherwise)
@@ -1594,7 +1616,8 @@ public sealed interface Derivation {
                      Proposition.InCases _, Proposition.Present _, Proposition.SameValue _,
                      Proposition.LastToHold _, Proposition.Some _, Proposition.Carried _,
                      Proposition.SomeReachable _, Proposition.Unread _,
-                     Proposition.OnAnApplication _, Proposition.SoManyHold _ -> List.of(element);
+                     Proposition.OnAnApplication _, Proposition.SoManyHold _,
+                     Proposition.WhereItAnswers _ -> List.of(element);
             };
             List<Proposition> decided = parts.stream()
                     .filter(part -> !part.mayTurnOnAnElementOf(container)).toList();
@@ -2171,7 +2194,8 @@ public sealed interface Derivation {
                 case Proposition.Compared _, Proposition.Truth _, Proposition.InCases _,
                      Proposition.Present _, Proposition.SameValue _, Proposition.LastToHold _,
                      Proposition.Some _, Proposition.Carried _, Proposition.SomeReachable _,
-                     Proposition.Unread _, Proposition.OnAnApplication _ -> false;
+                     Proposition.Unread _, Proposition.OnAnApplication _,
+                     Proposition.WhereItAnswers _ -> false;
             };
         }
 
@@ -2212,7 +2236,8 @@ public sealed interface Derivation {
                 case Proposition.Compared _, Proposition.Truth _, Proposition.InCases _,
                      Proposition.Present _, Proposition.SameValue _, Proposition.LastToHold _,
                      Proposition.Some _, Proposition.Carried _, Proposition.SomeReachable _,
-                     Proposition.Unread _, Proposition.OnAnApplication _ ->
+                     Proposition.Unread _, Proposition.OnAnApplication _,
+                     Proposition.WhereItAnswers _ ->
                         throw new IllegalStateException(element
                                 + " is not made of the counts of one character");
             };

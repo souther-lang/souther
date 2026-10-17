@@ -35,6 +35,7 @@ import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.Set;
@@ -931,6 +932,25 @@ final class Terms {
     record Given(Core value, Denotations at) {}
 
     /**
+     * Which arithmetic a value is, and the environment its operands are read in — which travel
+     * together for the reason an expression and its environment do ({@link Given}): the operands
+     * are expressions, and a meaning found through a name holds the ones that name was given, whose
+     * own names mean something where they were written and not where the meaning is asked.
+     */
+    record Computed(NumericMeaning meaning, Denotations at) {
+
+        Computed {
+            Objects.requireNonNull(meaning, "some arithmetic");
+            Objects.requireNonNull(at, "read somewhere");
+        }
+
+        /** {@code meaning} read in {@code at}, or null where there is no arithmetic to read. */
+        static Computed in(NumericMeaning meaning, Denotations at) {
+            return meaning == null ? null : new Computed(meaning, at);
+        }
+    }
+
+    /**
      * The expression {@code e}'s value is written at, and where it is read.
      *
      * <p>A name is not a way of building a value, and neither is a binding. {@code xs} given
@@ -1127,10 +1147,12 @@ final class Terms {
         // way round, a value the table states arithmetic for reached the walk reader because the
         // reading had kept its call standing — so which of the two answered turned on how the tree
         // was written, which is what a meaning read once exists to stop deciding.
-        NumericMeaning meaning = numericMeaningOf(e, answered, at);
+        // Its operands read where they were written, which is not here where the value came
+        // through a name.
+        Computed computed = numericMeaningOf(e, answered, at);
         Derivation made;
-        if (meaning != null) {
-            made = recipeFor(meaning, at);
+        if (computed != null) {
+            made = recipeFor(computed.meaning(), computed.at());
         } else if (asOperator(e) instanceof Core.PreservedCall call
                 && Reductions.reducing(call, at) instanceof Reductions.Reducing walk) {
             recordingWalk(atom, walk, e, at);
@@ -1441,7 +1463,7 @@ final class Terms {
      * {@link #computesAsWhatItWasGiven}) are the readers of a binding that is <em>not</em> one.
      * A term written here would be a second account of what names a binding, and the one nobody
      * reads. */
-    private record Opens(Core value, FactSubject subject, NumericMeaning numeric) {}
+    private record Opens(Core value, FactSubject subject, Computed numeric) {}
 
     /**
      * What the arm's binding opens, or null where nothing here says.
@@ -1591,30 +1613,32 @@ final class Terms {
      * program, and a binding between the two is a name for the call rather than a step away from it.
      */
     private Opens arithmetic(Type carried, Core scrutinee, Denotations at) {
-        Core called = originating(scrutinee, at, new HashSet<>());
+        Given called = originating(scrutinee, at, new HashSet<>());
         NumericResult<DeclaredArgument> result = called == null ? null
-                : DischargeRules.numericResult(operationOf(called));
+                : DischargeRules.numericResult(operationOf(called.value()));
         if (result == null || !(result.at() instanceof NumericResult.Answered.InTheCaseCarrying(
                 Type answersIn)) || !answersIn.equals(carried)) {
             return new Opens(scrutinee, subjectOf(scrutinee, at), null);
         }
-        NumericMeaning meaning = computedBy(result, argsOf(called), carried);
-        FactSubject subject = subjectOpenedAs(meaning, carried, called, at);
+        NumericMeaning meaning = computedBy(result, argsOf(called.value()), carried);
+        FactSubject subject = subjectOpenedAs(meaning, carried, called.value(), called.at());
         // A call the term grammar cannot name leaves the number it answers named by nothing this can
         // relate to anything else, and a binding standing for the value it opened is what an arm has
         // always given. Nothing is lost by declining here; what is lost by naming it anyway is the
         // one thing an atom asserts, which is that two writings of it are one value.
         return subject == null ? new Opens(scrutinee, subjectOf(scrutinee, at), null)
-                : new Opens(scrutinee, subject, meaning);
+                : new Opens(scrutinee, subject, Computed.in(meaning, called.at()));
     }
 
-    /** The call {@code value} came from, through however many names it was given, or null where it
-     * came from something else. What an operation computes is a question about the operation, not
-     * about which tree is being read, so a call in either representation is one. */
-    Core originating(Core standing, Denotations at, Set<BindingId> seen) {
+    /** The call {@code value} came from, through however many names it was given, and where it is
+     * read — or null where it came from something else. What an operation computes is a question
+     * about the operation, not about which tree is being read, so a call in either representation
+     * is one; and its arguments mean something where it was written, which is not where the last
+     * name was read. */
+    Given originating(Core standing, Denotations at, Set<BindingId> seen) {
         Core value = Core.withoutStanding(standing);
         if (operationOf(value) != null) {
-            return value;
+            return new Given(value, at);
         }
         if (value instanceof Core.Read read && seen.add(read.binding())) {
             ValueStanding.ReadThrough<Denotations> given = at.givenTo(read.binding());
@@ -2177,7 +2201,7 @@ final class Terms {
      * (ADR-0106): the arm decided which case it opened and wrote what that case carries down, and
      * this reads it rather than working the match out again from here.
      */
-    NumericMeaning numericMeaningOf(Core e, Denotations at) {
+    Computed numericMeaningOf(Core e, Denotations at) {
         return numericMeaningOf(e, e.type(), at);
     }
 
@@ -2191,7 +2215,7 @@ final class Terms {
      * is right for what an arm binds and wrong for a reader standing where the call is — the same
      * arithmetic, asked before there is an arm.
      */
-    NumericMeaning numericMeaningOf(Core standing, Type answered, Denotations at) {
+    Computed numericMeaningOf(Core standing, Type answered, Denotations at) {
         Core e = Core.withoutStanding(standing);
         if (e instanceof Core.Read read) {
             return at.numericOf(read.binding());
@@ -2203,9 +2227,9 @@ final class Terms {
         // names the value; what it computes is answered here.
         NumericResult<DeclaredArgument> result = DischargeRules.numericResult(operationOf(e));
         if (result != null && answersIn(result, answered)) {
-            return computedBy(result, argsOf(e), answered);
+            return Computed.in(computedBy(result, argsOf(e), answered), at);
         }
-        NumericMeaning whole = aWholeNumberOfAQuotient(e, at);
+        Computed whole = aWholeNumberOfAQuotient(e, at);
         if (whole != null) {
             return whole;
         }
@@ -2215,7 +2239,7 @@ final class Terms {
         // carrier, which is what every other reader here asks, rather than of the operator: the rule
         // is about what the operation answers with and not about which sign was written.
         if (e instanceof Core.Binary b && b.op().answersANumber() && carriesANumber(b.type())) {
-            return new NumericMeaning.Operator(b.op(), b.left(), b.right());
+            return new Computed(new NumericMeaning.Operator(b.op(), b.left(), b.right()), at);
         }
         return null;
     }
@@ -2229,29 +2253,22 @@ final class Terms {
      * of rounding lands it on one of the two whole numbers the exact quotient lies between, which is
      * what a quotient rounded to a scale is at the scale nought.
      *
-     * <p>The quotient is read through the names it was given where the value is read where the
-     * rounding is. A meaning is read where it is asked, so a quotient handed in from a value written
-     * elsewhere would have its dividend and divisor read among names that are not theirs; it is
-     * left with no meaning instead.
+     * <p>The quotient is read through the names it was given ({@link #given}), and its dividend and
+     * divisor where it was written.
      */
-    private NumericMeaning aWholeNumberOfAQuotient(Core e, Denotations at) {
+    private Computed aWholeNumberOfAQuotient(Core e, Denotations at) {
         AnOperationApplied applied = AnOperationApplied.of(e);
         BoundOperationFact.RoundsToAWholeNumber rounds = applied == null ? null
                 : DefaultBoundOperationFacts.get().roundsToAWholeNumber(applied.operation());
         Core value = rounds == null ? null : applied.argument(rounds.value());
-        while (value != null && Core.withoutStanding(value) instanceof Core.Read name
-                && readThrough(name, at) instanceof ValueStanding.ReadThrough<Denotations> given) {
-            if (given.at() != at) {
-                return null;
-            }
-            value = given.value();
-        }
-        if (value == null || !(Core.withoutStanding(value) instanceof Core.Binary quotient)
+        Given rounded = value == null ? null : given(value, at);
+        if (rounded == null
+                || !(Core.withoutStanding(rounded.value()) instanceof Core.Binary quotient)
                 || quotient.op() != BinOp.DIV) {
             return null;
         }
-        return new NumericMeaning.RoundedQuotient(quotient.left(), quotient.right(),
-                new Core.Int(0, Type.INT, e.pos()), applied.argument(rounds.mode()));
+        return new Computed(new NumericMeaning.RoundedQuotient(quotient.left(), quotient.right(),
+                new Core.Int(0, Type.INT, e.pos()), applied.argument(rounds.mode())), rounded.at());
     }
 
     /** Whether {@code result} says the operation answers a value of {@code answered}: its own, or
