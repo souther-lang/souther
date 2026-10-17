@@ -1804,19 +1804,20 @@ final class Terms {
      */
     private NumericDomain.Bounds extentOf(Type type) {
         Carrier carrier = Carrier.ofValue(type, declarations());
-        if (carrier == null) {
-            return null;
-        }
+        return carrier == null ? null : extentOf(carrier);
+    }
+
+    private static NumericDomain.Bounds extentOf(Carrier carrier) {
         OrderedInterval extent = carrier.extent();
         return new NumericDomain.Bounds(extent.low(), extent.high());
     }
 
     /** Every value a divisor of {@code type} can take, and how they are spaced, or null where
-     * nothing orders its values. Both are the carrier's ({@link #extentOf(Type)}). */
+     * nothing orders its values. Both are read off one carrier ({@link #extentOf(Type)}). */
     private Derivation.DivisorExtent divisorExtentOf(Type type) {
         Carrier carrier = Carrier.ofValue(type, declarations());
         return carrier == null ? null
-                : new Derivation.DivisorExtent(extentOf(type), carrier.spacing());
+                : new Derivation.DivisorExtent(extentOf(carrier), carrier.spacing());
     }
 
     /**
@@ -1833,7 +1834,7 @@ final class Terms {
      * it states of the arm it stands beside — so a recipe added later answers for its own shape
      * rather than being compared by a case somebody remembered to write.
      */
-    private static boolean sameDerivation(Derivation a, Derivation b) {
+    static boolean sameDerivation(Derivation a, Derivation b) {
         return a.sameAs(b, SAME_NUMBERS);
     }
 
