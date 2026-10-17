@@ -5414,10 +5414,10 @@ final class Pullback {
         ARecursion recursion =
                 read.rules().declarations().answers().recursionOf(helper).orElse(null);
         RecursionOverATree search = recursion == null ? null : recursion.search().orElse(null);
-        // A tree whose root stands inside a container is one of many, read under a statement
-        // about each of them, and the nodes below every occurrence of that root are every tree's.
+        // Asked before the body is read: no run is over the nodes below a root that is one tree of
+        // many.
         if (search == null || !(reads.pathOf(args.get(search.node()), read.rules().newtypes())
-                instanceof PathResolution.At(TermPath node)) || node.insideAContainer()) {
+                instanceof PathResolution.At(TermPath node)) || !RunSource.oneTreeStandsAt(node)) {
             return null;
         }
         for (int at = 0; at < args.size(); at++) {
@@ -5525,9 +5525,9 @@ final class Pullback {
                                                    Type nodeType) {
         Map<Quantity, ExactRatio> coefs = new LinkedHashMap<>();
         for (Map.Entry<List<String>, ExactRatio> weight : weights.entrySet()) {
-            NumericTerm.TakenOver count = InputNumber.howManyHeld(
-                    new RunSource.ReachableNodes(at, through, weight.getKey()), nodeType,
-                    read.rules());
+            RunSource nodes = RunSource.overTheNodesBelow(at, through, weight.getKey());
+            NumericTerm.TakenOver count = nodes == null ? null
+                    : InputNumber.howManyHeld(nodes, nodeType, read.rules());
             if (count == null) {
                 return null;
             }

@@ -57,10 +57,36 @@ public sealed interface RunSource {
                     ? new FlattenedOccurrences(at) : null;
             case ComputedOccurrences computed ->
                     computedOverTheElementsAt(at, computed.computation(), computed.each());
-            // The nodes below a node are the same fields of it wherever it stands.
-            case ReachableNodes nodes -> at == null ? null
-                    : new ReachableNodes(at, nodes.through(), nodes.container());
+            // The nodes below a node are the same fields of it wherever it stands, and moved
+            // inside a container it is one tree of many.
+            case ReachableNodes nodes ->
+                    overTheNodesBelow(at, nodes.through(), nodes.container());
         };
+    }
+
+    /**
+     * Every node a tree holds from the node at {@code root} down through {@code through}, or the
+     * elements of the container at {@code container} in each — or null where no one tree stands
+     * there ({@link #oneTreeStandsAt}).
+     */
+    static RunSource overTheNodesBelow(TermPath root, List<String> through,
+                                       List<String> container) {
+        return root != null && oneTreeStandsAt(root)
+                ? new ReachableNodes(root, through, container) : null;
+    }
+
+    /**
+     * Whether the node at {@code root} is the root of one tree, which is what
+     * {@link ReachableNodes} says of the path it holds.
+     *
+     * <p>Not where it stands inside a container. {@code trees[*]} says a tree of every element and
+     * not which one: the nodes below every occurrence of it are every tree's, and a search down one
+     * of them, read under a statement about each element, is over some of them. As
+     * {@link #namesOneRun} is for the elements of one container, the path is the whole of what a
+     * {@link ReachableNodes} holds, so it cannot tell those two apart.
+     */
+    static boolean oneTreeStandsAt(TermPath root) {
+        return !root.insideAContainer();
     }
 
     /**
@@ -229,6 +255,10 @@ public sealed interface RunSource {
             container = List.copyOf(container);
             if (through.isEmpty()) {
                 throw new IllegalArgumentException("a tree goes below a node through something");
+            }
+            if (!oneTreeStandsAt(root)) {
+                throw new IllegalArgumentException("`" + root + "` stands inside a container, and"
+                        + " which of its trees a search went down is not said by it");
             }
         }
 

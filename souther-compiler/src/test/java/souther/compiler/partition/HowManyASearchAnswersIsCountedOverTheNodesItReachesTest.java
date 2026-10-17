@@ -29,6 +29,8 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -134,6 +136,23 @@ class HowManyASearchAnswersIsCountedOverTheNodesItReachesTest {
                 "List.length(List.flatMap(e -> e.tags, o.items))")) {
             assertNoRunOverAllOfThem(stated("", "List.all(o -> " + counted + " <= 5, i.orders)"));
         }
+    }
+
+    /**
+     * And a run of the nodes below one root is that run wherever the root is moved to, but none
+     * where it is moved inside a container: the nodes below every element's tree are no one
+     * tree's, which no such run is made over however it is reached.
+     */
+    @Test
+    void theNodesOfOneTreeMovedInsideAContainerAreNoRun() {
+        RunSource.ReachableNodes nodes = nodes(List.of());
+        TermPath other = TermPath.of("j").then("t");
+        TermPath everyTree = TermPath.of("i").then("ts").element();
+        assertEquals(new RunSource.ReachableNodes(other, List.of("below"), List.of()),
+                nodes.movedTo(_ -> other));
+        assertNull(nodes.movedTo(_ -> everyTree));
+        assertThrows(IllegalArgumentException.class,
+                () -> new RunSource.ReachableNodes(everyTree, List.of("below"), List.of()));
     }
 
     /** That {@code stated} counts no run over every node below every tree, or every tag of every
