@@ -411,8 +411,8 @@ final class PathEngine {
             return call;
         }
         if (value instanceof Core.Read read && seen.add(read.binding())) {
-            Core given = at.valueOf(read.binding());
-            return given == null ? null : originatingCall(given, at, seen);
+            ValueStanding.ReadThrough<Denotations> given = at.givenTo(read.binding());
+            return given == null ? null : originatingCall(given.value(), given.at(), seen);
         }
         return null;
     }

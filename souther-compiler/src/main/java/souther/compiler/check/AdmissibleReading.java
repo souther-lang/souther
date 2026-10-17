@@ -550,7 +550,7 @@ final class AdmissibleReading {
         if (Core.withoutStanding(written != null ? written : e) instanceof Core.UnitValue unit) {
             return Value.of(unit.data());
         }
-        Object folded = Terms.folded(e, symbols, at);
+        Object folded = terms.folded(e, at);
         if (folded instanceof String text) {
             return Value.text(text);
         }

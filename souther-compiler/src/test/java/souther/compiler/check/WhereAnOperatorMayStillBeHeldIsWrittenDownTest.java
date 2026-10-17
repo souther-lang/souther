@@ -344,9 +344,10 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                     "hands the operator of a written binary to the algebra that folds it — twice,"
                             + " once to ask whether the left operand settles it and once for what"
                             + " the two come to. Nothing here asks what the operator means"),
-            new Held("souther.compiler.check.CoreConstantEval.binary",
-                    "the same, on the tree the rules are discharged over: the operator is carried"
-                            + " to the one algebra that folds it, and this reads nothing of it"),
+            new Held("souther.compiler.check.FoldedValue.binary",
+                    "the same, on the tree the rules are discharged over and the one an input is"
+                            + " read on: the operator is carried to the one algebra that folds it,"
+                            + " and this reads nothing of it"),
             new Held("souther.compiler.check.ConstantAlgebra.settledByTheLeft",
                     "which operators answer from their left operand alone, which is what says"
                             + " whether the one beside it is read at all"),

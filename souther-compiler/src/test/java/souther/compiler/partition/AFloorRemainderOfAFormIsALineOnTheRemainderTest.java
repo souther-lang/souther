@@ -344,6 +344,27 @@ class AFloorRemainderOfAFormIsALineOnTheRemainderTest {
         assertFalse(reasonsOf("e: Int, p: Int", "Int.floorMod(e, p) == 0").isEmpty());
     }
 
+    /**
+     * A divisor given a name is the number it was given, to the partition as to the border: the
+     * remainder is a line at the same place, and nothing about it is left unread that the written
+     * divisor does not leave.
+     */
+    @Test
+    void aDivisorGivenANameIsTheNumberItWasGiven() {
+        for (String dividend : List.of("a", "a - d")) {
+            String written = "Int.floorMod(" + dividend + ", 7) >= 1";
+            String named = "Int.floorMod(" + dividend + ", seven) >= 1";
+            assertEquals(List.of("1"),
+                    linesOf("let seven = 7", "a: Int, d: Int", named).stream()
+                            .map(BorderAssessment::value).toList(), named);
+            assertEquals(measured("", "a: Int, d: Int", written).notRead().stream()
+                            .map(PartitionEvidence.NotRead::reason).distinct().toList(),
+                    measured("let seven = 7", "a: Int, d: Int", named).notRead().stream()
+                            .map(PartitionEvidence.NotRead::reason).distinct().toList(),
+                    named + " leaves the partition what " + written + " leaves it");
+        }
+    }
+
     /** One row of a measurement: what each input was written as and what each point is for. */
     private record Row(List<String> inputs, List<String> labels) {}
 
@@ -375,6 +396,11 @@ class AFloorRemainderOfAFormIsALineOnTheRemainderTest {
         return linesOf(compiled(parameters, condition));
     }
 
+    private static List<BorderAssessment> linesOf(String prelude, String parameters,
+                                                  String condition) {
+        return linesOf(compiled(prelude, parameters, condition));
+    }
+
     private static List<BorderAssessment> linesOf(Compilation compilation) {
         Map<String, List<BorderAssessment>> read = Adequacy.readingsOf(compilation.db(), "demo");
         assertNotNull(read, "the model under test compiles");
@@ -384,7 +410,12 @@ class AFloorRemainderOfAFormIsALineOnTheRemainderTest {
     }
 
     private static PartitionEvidence measured(String parameters, String condition) {
-        Compilation compilation = compiled(parameters, condition);
+        return measured("", parameters, condition);
+    }
+
+    private static PartitionEvidence measured(String prelude, String parameters,
+                                              String condition) {
+        Compilation compilation = compiled(prelude, parameters, condition);
         Map<String, PartitionEvidence> coverage =
                 compilation.db().ask(new Adequacy.Coverage("demo")).value();
         assertNotNull(coverage, "the model under test compiles");
@@ -394,23 +425,35 @@ class AFloorRemainderOfAFormIsALineOnTheRemainderTest {
     }
 
     private static Compilation compiled(String parameters, String condition) {
-        return compiled(parameters, List.of("guard " + condition + " else No", "Ok"), "");
+        return compiled("", parameters, condition);
+    }
+
+    private static Compilation compiled(String prelude, String parameters, String condition) {
+        return compiled(prelude, parameters, List.of("guard " + condition + " else No", "Ok"), "");
     }
 
     /** {@code f} over {@code parameters}, its body the lines given, with the examples after it. */
     private static Compilation compiled(String parameters, List<String> body, String examples) {
+        return compiled("", parameters, body, examples);
+    }
+
+    /** The same, after the declarations {@code prelude} writes. */
+    private static Compilation compiled(String prelude, String parameters, List<String> body,
+                                        String examples) {
         String model = """
                 module demo
 
                 data Ok
                 data No
 
+                %s
+
                 behavior f : (%s) -> Ok | No
                 let f (%s) = {
                     %s
                 }
                 %s
-                """.formatted(parameters,
+                """.formatted(prelude, parameters,
                 parameters.replaceAll(":\\s*[A-Za-z<>]+", ""), String.join("\n    ", body),
                 examples);
         Compilation compilation = Compilation.ofSource(model, "Main");

@@ -4,6 +4,7 @@ import souther.compiler.core.Core;
 import souther.compiler.numeric.Rel;
 
 import java.util.Optional;
+import java.util.function.Function;
 import java.util.function.Predicate;
 
 /**
@@ -50,16 +51,9 @@ public final class BooleanMeaning {
         };
     }
 
-    /**
-     * The truth {@code e} comes to at compile time, or empty where it is not one this compiler
-     * folds.
-     *
-     * <p>The checker's folding ({@link CoreConstantEval}) and not a second one, under no binding
-     * the reading was told of: a name is followed only where the tree still binds it.
-     */
-    public static Optional<Boolean> folded(Core e, Symbols symbols) {
-        return CoreConstantEval.against(symbols, Denotations.none()).eval(e)
-                .filter(Boolean.class::isInstance).map(Boolean.class::cast);
+    /** The truth a fold came to, or empty where it came to none ({@link FoldedValue}). */
+    public static Optional<Boolean> truthOf(Optional<Object> folded) {
+        return folded.filter(Boolean.class::isInstance).map(Boolean.class::cast);
     }
 
     /**
@@ -80,10 +74,12 @@ public final class BooleanMeaning {
      * one reader, what a dependency answered to another. The relation and the folding are this
      * reading's, so the two read one spelling one way.
      *
+     * @param folded  what a side comes to, folded where the asker reads it
      * @param subject whether a side is one the asker reads a truth of. The left side is asked first
      */
     public static Optional<AgainstATruth> againstATruth(StatedComparison comparison,
-                                                         boolean holding, Symbols symbols,
+                                                         boolean holding,
+                                                         Function<Core, Optional<Object>> folded,
                                                          Predicate<Core> subject) {
         Rel states = comparison.claim().statedRelation();
         Rel met = holding ? states : states.denied();
@@ -101,7 +97,8 @@ public final class BooleanMeaning {
         }
         boolean equal = met == Rel.EQ;
         Core of = side;
-        return folded(other, symbols).map(written -> new AgainstATruth(of, written == equal));
+        return truthOf(folded.apply(other))
+                .map(written -> new AgainstATruth(of, written == equal));
     }
 
     /**

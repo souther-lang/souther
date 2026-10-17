@@ -1,5 +1,7 @@
 package souther.compiler.inputs;
 
+import souther.compiler.check.ElementsWrittenOut;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -233,7 +235,7 @@ public sealed interface ReadMeaning {
 
     /**
      * An element of a container that could be written out, holding more than this reading writes
-     * out ({@link WrittenOutElements#MOST_WALKED}).
+     * out ({@link ElementsWrittenOut#MOST_WALKED}).
      *
      * <p>Beside {@link Element} and not folded into it. That one says this reading cannot name the
      * values; this one says it could and stopped at a figure, which is a limit a reader reports as

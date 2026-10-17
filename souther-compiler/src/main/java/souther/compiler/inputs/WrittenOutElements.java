@@ -1,33 +1,28 @@
 package souther.compiler.inputs;
 
 import souther.compiler.check.DeclarationNewtypes;
-import souther.compiler.check.ElementBindings;
+import souther.compiler.check.ElementsWrittenOut;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.types.BindingId;
 
-import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.OptionalLong;
 import java.util.Set;
 
 /**
- * Every element a container holds, written out, in the order a walk of it meets them and each with
- * what it was kept by — where the container is a list written in the source, or a list an
- * operation put together of a piece of each element of one
- * ({@link ElementBindings#piecesOfEachElement}).
+ * Every element a container holds, written out ({@link ElementsWrittenOut}), each read in this
+ * reading of names.
  *
- * <p>One walk for every reader that writes a container out. What a name an operation handed an
- * element on stands for ({@link InputReads#meaningOf}) and what a statement about some element of a
- * container is read element by element over are the same elements, and two walks over the
- * operations that built them would be two answers the first time one of them learned an operation
- * the other did not.
- *
- * <p>What each piece is, is what the operation is proved to make of an element, and nothing read
- * off its name. A map's piece is the step's answer on the element, read where the step is handed
- * it; a filter's is the element itself, kept where the step's answer on it holds; a flatMap's is
- * every element of the step's answer on it, written out by this same walk. What an occurrence was
- * kept by is carried down every level, each truth read where it was decided.
+ * <p>The walk is {@link ElementsWrittenOut}'s, which the discharge of a rule walks as well; this
+ * hands it how names are followed here and how an application of a step hands its parameter an
+ * element ({@link InputReads#handing}), and takes what it wrote out as {@link ReadMeaning}'s
+ * occurrences. What a name an operation handed an element on stands for
+ * ({@link InputReads#meaningOf}) and what a statement about some element of a container is read
+ * element by element over are the same elements.
  *
  * <p>An occurrence a filter dropped is written out as well, kept where its truth holds. Whether it
  * holds is a question about the values, and the answer is a reader's: one that only states what
@@ -35,18 +30,6 @@ import java.util.Set;
  * not.
  */
 public final class WrittenOutElements {
-
-    /**
-     * How many occurrences a walk writes out, at every level it passes, before it stops.
-     *
-     * <p>A bound on the work and not on what a reader takes: an occurrence a filter drops and one at
-     * a level a flatMap goes through are written out as much as one in the answer. Past it the
-     * container is one this reading could write out and does not
-     * ({@link ReadMeaning.MoreThanAreWrittenOut}). No reader of a condition takes more applications
-     * of a closure than the readings it reads one condition in, so this is held above that figure
-     * and leaves room for the levels on the way to it.
-     */
-    public static final int MOST_WALKED = 1024;
 
     private WrittenOutElements() {
     }
@@ -78,7 +61,7 @@ public final class WrittenOutElements {
             }
         }
 
-        /** More than {@link #MOST_WALKED} on the way. */
+        /** More than {@link ElementsWrittenOut#MOST_WALKED} on the way. */
         record PastTheFigure() implements Walked {}
 
         /** Not a container this walk writes out. */
@@ -93,70 +76,65 @@ public final class WrittenOutElements {
     /** The same, inside a walk that has already met the names {@code met}. */
     static Walked of(Denotation container, Symbols symbols, DeclarationNewtypes newtypes,
                      Set<BindingId> met) {
-        int[] walked = {0};
-        return of(container, symbols, newtypes, met, walked);
+        return switch (ElementsWrittenOut.of(new ElementsWrittenOut.Stood<>(container.value(),
+                container.at()), new Names(symbols, newtypes, met))) {
+            case ElementsWrittenOut.Walked.Each<InputReads>(var each) ->
+                    new Walked.Each(each.stream().map(WrittenOutElements::occurrence).toList());
+            case ElementsWrittenOut.Walked.PastTheFigure<InputReads> _ ->
+                    new Walked.PastTheFigure();
+            case ElementsWrittenOut.Walked.NotWrittenOut<InputReads> _ ->
+                    new Walked.NotWrittenOut();
+        };
     }
 
-    private static Walked of(Denotation container, Symbols symbols, DeclarationNewtypes newtypes,
-                             Set<BindingId> met, int[] walked) {
-        InputReads at = container.at();
-        Core value = Core.withoutStanding(container.value());
-        if (value instanceof Core.ListLit written) {
-            List<ReadMeaning.Occurrence> out = new ArrayList<>();
-            for (Core each : written.elements()) {
-                if (++walked[0] > MOST_WALKED) {
-                    return new Walked.PastTheFigure();
-                }
-                // Which value each member is does not turn on the type it stands as in the list.
-                out.add(ReadMeaning.Occurrence.always(
-                        new Denotation(Core.withoutStanding(each), at)));
-            }
-            return new Walked.Each(out);
+    /** How many elements {@code container}, standing where it is followed to, holds where it is
+     *  written out with each of them there on every run ({@link ElementsWrittenOut#sizeOf}). */
+    public static OptionalLong sizeOf(Denotation container, Symbols symbols,
+                                      DeclarationNewtypes newtypes) {
+        return ElementsWrittenOut.sizeOf(new ElementsWrittenOut.Stood<>(container.value(),
+                container.at()), new Names(symbols, newtypes, Set.of()));
+    }
+
+    private static ReadMeaning.Occurrence occurrence(ElementsWrittenOut.Occurrence<InputReads> one) {
+        return new ReadMeaning.Occurrence(denotation(one.value()), one.keptWhere().stream()
+                .map(kept -> new ReadMeaning.Occurrence.Kept(denotation(kept.truth()),
+                        kept.holds()))
+                .toList());
+    }
+
+    private static Denotation denotation(ElementsWrittenOut.Stood<InputReads> stood) {
+        return new Denotation(stood.value(), stood.at());
+    }
+
+    /**
+     * How the walk reads names here: followed by this reading ({@link InputReads#standing}), stopping
+     * at the names {@code met} already, and handed to a step's parameter as an application hands one.
+     */
+    private record Names(Symbols symbols, DeclarationNewtypes newtypes, Set<BindingId> met)
+            implements ElementsWrittenOut.Reading<InputReads> {
+
+        Names {
+            Objects.requireNonNull(symbols, "names are followed against some library");
+            Objects.requireNonNull(newtypes, "and some declarations' newtypes");
+            Objects.requireNonNull(met, "having met some names, or none");
         }
-        ElementBindings.PiecesOfEachElement pieces = ElementBindings.piecesOfEachElement(value,
-                closure -> Core.withoutStanding(InputReads.standing(new Denotation(closure, at),
-                        symbols, newtypes, new HashSet<>(met)).value())
-                        instanceof Core.Block block ? block : null);
-        if (pieces == null || pieces.element() == null || pieces.element().binding() == null) {
-            return new Walked.NotWrittenOut();
+
+        @Override
+        public ElementsWrittenOut.Stood<InputReads> standing(Core e, InputReads at) {
+            Denotation stood = InputReads.standing(new Denotation(e, at), symbols, newtypes,
+                    new HashSet<>(met));
+            return new ElementsWrittenOut.Stood<>(stood.value(), stood.at());
         }
-        Walked from = of(InputReads.standing(new Denotation(pieces.walked(), at), symbols,
-                newtypes, new HashSet<>(met)), symbols, newtypes, met, walked);
-        if (!(from instanceof Walked.Each walkedEach)) {
-            return from;
+
+        @Override
+        public InputReads handing(InputReads at, BindingId element,
+                                  ElementsWrittenOut.Stood<InputReads> value) {
+            return at.handing(element, denotation(value), newtypes);
         }
-        List<ReadMeaning.Occurrence> elements = walkedEach.asWritten();
-        BindingId element = pieces.element().binding();
-        List<ReadMeaning.Occurrence> out = new ArrayList<>();
-        for (ReadMeaning.Occurrence each : elements) {
-            // The step's body read on the application handing it this element.
-            Denotation answered = new Denotation(pieces.step().body(),
-                    at.handing(element, each.value(), newtypes));
-            switch (pieces.piece()) {
-                case THE_CLOSURES_ANSWER -> {
-                    if (++walked[0] > MOST_WALKED) {
-                        return new Walked.PastTheFigure();
-                    }
-                    out.add(new ReadMeaning.Occurrence(answered, each.keptWhere()));
-                }
-                case THE_ELEMENT_WHERE_IT_HOLDS -> {
-                    if (++walked[0] > MOST_WALKED) {
-                        return new Walked.PastTheFigure();
-                    }
-                    List<ReadMeaning.Occurrence.Kept> kept = new ArrayList<>(each.keptWhere());
-                    kept.add(new ReadMeaning.Occurrence.Kept(answered, true));
-                    out.add(new ReadMeaning.Occurrence(each.value(), kept));
-                }
-                case WHAT_THE_CLOSURE_ANSWERS -> {
-                    Walked inside = of(InputReads.standing(answered, symbols, newtypes,
-                            new HashSet<>(met)), symbols, newtypes, met, walked);
-                    if (!(inside instanceof Walked.Each made)) {
-                        return inside;
-                    }
-                    made.asWritten().forEach(one -> out.add(one.keptAlsoWhere(each.keptWhere())));
-                }
-            }
+
+        @Override
+        public Optional<Object> folded(ElementsWrittenOut.Stood<InputReads> value) {
+            return value.at().folded(value.value(), symbols, newtypes);
         }
-        return new Walked.Each(out);
     }
 }

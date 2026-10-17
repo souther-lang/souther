@@ -59,7 +59,7 @@ class ATermThatReadsAnotherHoldsItsNameAndNotItsShapeTest {
         along.add(term);
         for (int i = 0; i < links; i++) {
             BindingId id = new BindingId(OWNER, i);
-            at = at.binding(id, value, FactSubject.of(term), null, term, null);
+            at = at.binding(id, value, null, FactSubject.of(term), null, term, null);
             Core read = new Core.Read("v" + i, id, Type.INT, NOWHERE);
             value = new Core.Binary(BinOp.ADD, read, read, Core.BinaryReading.AS_THEY_STAND,
                     ConstructOccurrence.unwritten(), Type.INT, NOWHERE);
