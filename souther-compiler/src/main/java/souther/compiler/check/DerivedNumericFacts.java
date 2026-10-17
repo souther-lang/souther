@@ -895,9 +895,10 @@ final class DerivedNumericFacts {
      * range of numbers the operand never is. Where the two share nothing, this operator has no
      * divisor here, and that is not a claim about the quotients. Where they share values and zero is
      * among them, a divide by zero answers no number, and the divides that answer are by the
-     * divisor's other values: a whole number other than nought is at least one away from it, so the
+     * divisor's other values. Over the whole numbers those are at least one away from nought, so the
      * divisor is read as the range below nought and the range above it, and the quotient lies in the
-     * span of what each answers ({@link Divisor}).
+     * span of what each answers ({@link Divisor}). Over a dense order they are not: a divisor nearer
+     * and nearer to nought divides to numbers further and further out, and this rule says nothing.
      *
      * <p><b>Nothing derived, and not an empty range.</b> That a rule has no operands to fire on is
      * not a proof that the path has no execution: read as an empty range it would be taken into the
@@ -1160,6 +1161,11 @@ final class DerivedNumericFacts {
             if (sides.isEmpty()) {
                 throw new IllegalArgumentException("a divisor was read as no range at all");
             }
+            for (Bounds side : sides) {
+                if (side.admits(Count.ZERO)) {
+                    throw new IllegalArgumentException("a side of a divisor holds nought: " + side);
+                }
+            }
         }
 
         /** Every value the divisor is read as taking. */
@@ -1186,7 +1192,8 @@ final class DerivedNumericFacts {
     private static final Bounds ABOVE_NOUGHT_AS_A_WHOLE_NUMBER =
             new Bounds(Endpoint.inclusive(Count.of(1)), null);
 
-    /** What the operator divided by, or null where this rule has no divisor to fire on — see
+    /** What the operator divided by: the sides of nought it is read on, that it divides by nought
+     * alone and answers no number, or that this rule has no divisor to fire on — see
      * {@link #quotient}. */
     private static Operand<Divisor> divisorOf(LinearForm<FactSubject> form,
                                               Derivation.DivisorExtent extent,

@@ -147,6 +147,33 @@ class ANarrowedQuotientByAValueLiesBetweenItsCornersTest {
                     Share(Rational.toInt(DOWN, amount / among))"""));
     }
 
+    /**
+     * The control beside the whole divisors: a decimal divisor that may be nought is read on
+     * neither side, since a decimal other than nought can be nearer nought than any number named.
+     * Under {@code y > 0}, a divisor of {@code y - 1} is minus a half at a half, and one shared that
+     * way is minus two, which the claim fails.
+     */
+    @Test
+    void aDecimalDivisorThatMayBeNoughtStatesNothing() {
+        String model = """
+                module demo
+
+                data Share = Int
+                    invariant value >= 0
+
+                behavior apportion : (amount: Decimal, y: Decimal) -> Share
+                    constructs Share
+
+                let apportion (amount, y) = {
+                    guard amount >= 0m && amount <= 100m else Share(1)
+                    guard y > 0m else Share(1)
+                    Share(Rational.toInt(DOWN, amount / (y - 1m)))
+                }
+                """;
+        assertEquals(List.of("E2011"), Compiler.compileWithWarnings(model).warnings().stream()
+                .map(Diagnostic::code).toList());
+    }
+
     /** A dividend of either sign by a divisor of either sign: the span is the dividend's furthest
      * end either way, which a divide by one or by minus one reaches. */
     @Test
