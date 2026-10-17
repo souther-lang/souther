@@ -15,7 +15,6 @@ import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.ValueTransformation;
 import souther.compiler.revision.RevisionKnowledge;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.values.AdmissibleSet;
 import souther.compiler.values.StringFacts;
@@ -305,7 +304,7 @@ public final class FieldDomains {
         this.stringMachines = stringMachines;
         // What is kept of the world this was read in: the rules and the budget, to read again
         // under. Not the lender — a counterfactual of this reading borrows what this reading made
-        // ({@link #borrowingMachines}) — and nothing where no reading was made.
+        // (borrowing) — and nothing where no reading was made.
         this.source = readIn == null ? null : readIn.source();
         this.policy = readIn == null ? null : readIn.policy();
         this.revision = revision;
@@ -450,13 +449,6 @@ public final class FieldDomains {
     static FieldDomains of(DeclarationReading read, RuleReadingContext reading,
                            InvariantChecker.Reach reach) {
         return read.fields(seeded -> leftBy(seeded, read.owner(), reading, Map.of(), reach));
-    }
-
-    /** The same, with nothing settled and reading only as far as {@code reach} says: what the rest
-     *  of the rules leave once some of them are left out. */
-    static FieldDomains of(TypeSymbol.AtModule named, RuleReadingContext reading,
-                           InvariantChecker.Reach reach) {
-        return of(named, reading, Map.of(), reach);
     }
 
     /** The same, reading only as far as {@code reach} says — see {@link #narrowedBy}. */
@@ -908,7 +900,7 @@ public final class FieldDomains {
      *
      * <p>The one place a counterfactual of this reading is stood up, so that what one is — the
      * declaration, its source, what it may spend, what it leaves out, and what it is handed rather
-     * than builds ({@link #borrowingMachines}) — is settled once. The
+     * than builds ({@link DeclarationReadings#borrowing}) — is settled once. The
      * questions that leave the same rules out get the reading that was made: both ends of a
      * coordinate leave the same rules out, a declaration reaching several of a record's names
      * leaves them out again at each of them, and the questions {@link EndNarrowing} puts ask for
@@ -916,45 +908,25 @@ public final class FieldDomains {
      * there is one candidate are the same reading.
      */
     private FieldDomains counterfactual(LeftOut omitted) {
-        return counterfactuals.computeIfAbsent(omitted,
-                left -> of(named, RuleReadingContext.of(source, policy, borrowingMachines()),
-                        settled, left.reach()));
+        return counterfactuals.computeIfAbsent(omitted, left -> of(named,
+                RuleReadingContext.of(source, policy,
+                        DeclarationReadings.borrowing(named.key(), stringMachines, revision)),
+                settled, left.reach()));
     }
 
     /**
-     * What a counterfactual of this reading borrows: this declaration's machines as this reading
-     * came to them, and nothing else.
+     * {@code named} read again without {@code parts}, for the reading of it under way: what the
+     * rest of the rules leave once those conjuncts are taken away.
      *
-     * <p>This declaration's, because they are what is here. Another declaration's are a store's
-     * answer about it, and asking for one takes a store, which a reading standing inside a
-     * comparison has no way to reach — so a reading of one of those borrows nothing and keeps what
-     * it builds, which is what {@link StringMachineAnswers#unborrowed} is.
-     *
-     * <p>What the revision has worked out goes with it either way, whole. A counterfactual meets
-     * the sets its reading met wherever what it leaves out is about something else, and where a set
-     * stops is settled by the set — so a walk here is one the revision has already made, and so is
-     * every other piece of work the revision holds.
-     *
-     * <p>Nothing of the reading itself is lent. What a counterfactual is depends on what it leaves
-     * out, so no counterfactual is the declaration's canonical reading and none is kept as one —
-     * which is what {@link InvariantChecker#seedFields} settles by looking at the reach it was
-     * handed.
+     * <p>Asked from inside the declaration's own reading, before there is a value of this type to
+     * ask it of, so what is borrowed is the machines that reading has come to so far
+     * ({@code machines}) — and the reading made here keeps what it builds to itself, as every
+     * counterfactual does ({@link DeclarationReadings#borrowing}).
      */
-    private DeclarationReadings borrowingMachines() {
-        return new DeclarationReadings() {
-
-            @Override
-            public StringMachineAnswers of(TypeKey declaration) {
-                return declaration.equals(named.key())
-                        ? StringMachineAnswers.borrowing(stringMachines, revision)
-                        : StringMachineAnswers.unborrowed(revision);
-            }
-
-            @Override
-            public RevisionKnowledge revision() {
-                return revision;
-            }
-        };
+    static FieldDomains withoutParts(TypeSymbol.AtModule named, RuleReadingContext reading,
+                                     Set<PartId<RuleRef.Invariant>> parts, StringFacts machines) {
+        return of(named, reading.forACounterfactual(named.key(), machines), Map.of(),
+                new LeftOut.Conjuncts(parts).reach());
     }
 
     /**

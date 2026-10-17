@@ -453,6 +453,20 @@ public sealed interface Carrier extends ValueOrder {
     }
 
     /**
+     * Whether a run the arithmetic leaves a value related to others is every value it takes on
+     * this order: the order has no end a model holds ({@link #asARelationReadsIt}).
+     *
+     * <p>The arithmetic holds no such end, so a run it leaves is cut at the end only afterwards,
+     * and what the rules and the end leave together is narrower: held above another case, a case
+     * is never the first, though the run says nothing of it. A value nothing relates is a run its
+     * own ends cut, and the two readings agree there; one a rule relates to others is read off the
+     * run only where there is no end to cut it.
+     */
+    default boolean leavesARelatedRunWhole() {
+        return asARelationReadsIt().saysNothing();
+    }
+
+    /**
      * Whether a value counted on {@code one} and a value counted on {@code other} stand on one
      * order, so that where one stands can be compared with where the other does: two numbers,
      * whatever each counts, two strings, and two cases of one enumeration. Two enumerations each

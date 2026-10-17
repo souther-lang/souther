@@ -834,11 +834,20 @@ public final class InvariantChecker {
         InvariantChecker c = new InvariantChecker(world);
         c.answers = answers;
         if (settled.isEmpty() && reach.everything()) {
-            // Each read again once, the first time a relation in it asks.
+            // Each read again once, the first time a relation in it asks, and each place asked of
+            // once: a clause is read at every place the walk opens a value at, and asks again
+            // each time.
             Map<PartId<RuleRef.Invariant>, FieldDomains> without = new HashMap<>();
-            c.withoutAPart = (part, place) -> without.computeIfAbsent(part, each ->
-                    FieldDomains.of(named, world, Reach.withoutParts(Set.of(each))))
-                    .wholeRunAt(place);
+            Map<PartId<RuleRef.Invariant>, Map<RuleKey, Optional<NumericDomain.Bounds>>> runs =
+                    new HashMap<>();
+            // What it borrows is the machines this reading has come to when it is asked, and what
+            // it builds stays with it rather than in what this reading comes to.
+            c.withoutAPart = (part, place) -> runs.computeIfAbsent(part, _ -> new HashMap<>())
+                    .computeIfAbsent(place, at -> Optional.ofNullable(without.computeIfAbsent(part,
+                            each -> FieldDomains.withoutParts(named, world, Set.of(each),
+                                    c.answers.facts()))
+                            .wholeRunAt(at)))
+                    .orElse(null);
         }
         // A newtype's value is the same location as the newtype, so it is at no name of its own and
         // its fields are the first step there is. Read from the world rather than off a node handed
@@ -3269,8 +3278,11 @@ public final class InvariantChecker {
                     : at.carrier().asARelationReadsIt();
             // What the rest leave a place another part names, taken only where every other place
             // is alone: the rest tie it to nothing here then, and otherwise it may be tied to one.
+            // And only on an order with no end a model holds, which would cut the run afterwards
+            // (Carrier#leavesARelatedRunWhole).
             NumericDomain.Bounds left = null;
-            if (!every && itsPlace && othersAreAlone(alone, i)) {
+            if (!every && itsPlace && othersAreAlone(alone, i) && at.carrier() != null
+                    && at.carrier().leavesARelatedRunWhole()) {
                 NumericDomain.Bounds run = leftWithoutIt.apply(at.path());
                 left = run == null ? null : run.meet(values);
             }

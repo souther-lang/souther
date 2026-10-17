@@ -12,6 +12,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -640,6 +642,30 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                         + " && String.length(b) <= 3", "w.a == s", 20));
     }
 
+    private static final String STAGES = """
+            data Lead
+            data Won
+            data Lost
+            data Stage = Lead | Won | Lost""";
+
+    /**
+     * Held above another stage, a stage is never the first one, though the relation places no
+     * end on it: the first stage is equal to no stage held there, and settles the comparison.
+     */
+    @Test
+    void aStrictRelationKeepsAnOrderedValueOffTheEndOfItsOrder() {
+        assertEquals(NOT_SHOWN, leftAt("q: Q, x: Stage", STAGES
+                        + "\ndata Q = { a: Stage, b: Stage } invariant a > b", "q.a == x", 20)
+                .get("x"));
+    }
+
+    /** Twice another field, a field holds even numbers alone, and an odd number is none of them. */
+    @Test
+    void aRelationLeavingAFieldEveryOtherNumberLeavesItNoRun() {
+        assertEquals(NOT_SHOWN, leftAt("q: Q, t: Int",
+                "data Q = { e: Int, i: Int } invariant e == 2 * i", "t == q.e", 18).get("t"));
+    }
+
     /**
      * A name the cases of a sum share takes every value where every case leaves it every value,
      * one of them by a rule relating it to a field of its own it leaves free.
@@ -670,13 +696,14 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         String report = AdequacyReport.of(compilation)
                 .human(SourceRendering.namedByIdentity(compilation.texts()));
         Map<String, Set<String>> out = new LinkedHashMap<>();
+        Pattern about = Pattern.compile("about `([^`]+)`$");
         for (String line : report.lines().map(String::strip).toList()) {
-            if (!line.contains("invariant " + name + " #" + rule + " ") || !line.contains("about `")
+            Matcher place = about.matcher(line);
+            if (!line.contains("invariant " + name + " #" + rule + " ") || !place.find()
                     || !(line.startsWith("· no line") || line.startsWith("· not read"))) {
                 continue;
             }
-            String place = line.substring(line.lastIndexOf("about `") + 7, line.length() - 1);
-            out.computeIfAbsent(place, _ -> new TreeSet<>()).add(
+            out.computeIfAbsent(place.group(1), _ -> new TreeSet<>()).add(
                     line.contains("rather than dividing the values here") ? RELATES
                             : line.contains("not shown to reach every value here") ? NOT_SHOWN
                             : line);

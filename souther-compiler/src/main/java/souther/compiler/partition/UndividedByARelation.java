@@ -700,10 +700,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     ? takesUnderEvery(standings, read) : null;
         }
         // A rule naming the place relates it to the places beside it, which leaves it whatever its
-        // bounds say only where they are shown to be the whole of what the rules leave it.
+        // bounds say only where they are shown to be the whole of what the rules leave it, and
+        // where no end of its order cuts them.
         Named named = namedByTheDeclarations(value.position(), read);
-        if (named == Named.UNSEEN
-                || (named == Named.BY_A_RULE && !at.projection().isCertified())) {
+        if (named == Named.UNSEEN || (named == Named.BY_A_RULE
+                && (!at.projection().isCertified() || !wholeOnItsOrder(value, read)))) {
             return null;
         }
         boolean byARule = named == Named.BY_A_RULE;
@@ -719,8 +720,15 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                                 && at.bounds().stream()
                                         .allMatch(each -> endsOf(each, true) == null)));
         Takes takes = every ? new Takes.Every(at.type())
-                : new Takes.Some(at.type(), admitted, ends);
-        return new Source(takes, !every && onlyItsEnds(at, value, byARule), byARule);
+                : new Takes.Some(at.type(), admitted, ends);        return new Source(takes, !every && onlyItsEnds(at, value, byARule), byARule);
+    }
+
+    /** Whether the order {@code value} is counted on leaves a run the arithmetic gives it whole
+     *  ({@link Carrier#leavesARelatedRunWhole}) — not where it is counted on none. */
+    private static boolean wholeOnItsOrder(NumericTerm.ValueOf value, InputReading read) {
+        TermOrders orders = read.quantities().ordersOf(value);
+        return orders != null && orders.answered() != null
+                && orders.answered().leavesARelatedRunWhole();
     }
 
     /**
