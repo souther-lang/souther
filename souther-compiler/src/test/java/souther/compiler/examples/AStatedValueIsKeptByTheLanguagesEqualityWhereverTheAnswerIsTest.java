@@ -136,7 +136,18 @@ class AStatedValueIsKeptByTheLanguagesEqualityWhereverTheAnswerIsTest {
     /** What each pair comes to on the two sides, and which pairs they part on. */
     private record Decided(List<String> equal, List<String> differ, List<String> parted) {}
 
-    private static Decided decided() {
+    private static Decided decided;
+
+    /** Decided once for the class: both laws read the same pairs, and deciding them compiles the
+     *  module twice. */
+    private static synchronized Decided decided() {
+        if (decided == null) {
+            decided = decide();
+        }
+        return decided;
+    }
+
+    private static Decided decide() {
         String source = module();
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
