@@ -41,8 +41,6 @@ public sealed interface WhyNotTaken {
                     Optional.of(CompositionBudget.READINGS_OF_ONE_CONDITION.figure());
             case MoreAlternativesThanAreTried _ ->
                     Optional.of(CompositionBudget.ALTERNATIVES_A_PATH_TRIES.figure());
-            case MoreValuesThanAreHeld _ ->
-                    Optional.of(CompositionBudget.VALUES_A_PATH_HOLDS_OF_ONE_NUMBER.figure());
             case OutsideDomain _ -> Optional.empty();
         };
     }
@@ -103,16 +101,6 @@ public sealed interface WhyNotTaken {
      * so its limit is not said of it.
      */
     record MoreAlternativesThanAreTried() implements WhyNotTaken {}
-
-    /**
-     * What the condition means was read and a path has words for it, and taking it into them
-     * stopped at a figure of this compiler's work: one of several comparisons of one whole number
-     * leaves it values a path holds as the set of them, and that set — or the set it leaves out —
-     * is larger than a path holds. Its parts were taken alone and more than one was left. Raising
-     * the figure lifts it; the domain of what a path knows has the words, so its limit is not said
-     * of it.
-     */
-    record MoreValuesThanAreHeld() implements WhyNotTaken {}
 
     /**
      * Where a reader's domain has no words for what a condition means.

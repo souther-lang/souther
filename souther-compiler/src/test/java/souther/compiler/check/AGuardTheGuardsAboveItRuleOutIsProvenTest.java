@@ -3,7 +3,6 @@ package souther.compiler.check;
 import souther.compiler.diag.SourceRendering;
 import org.junit.jupiter.api.Test;
 import souther.compiler.coverage.ControlPlace;
-import souther.compiler.meaning.WhyNotTaken;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.reach.PathDecision;
@@ -586,40 +585,32 @@ class AGuardTheGuardsAboveItRuleOutIsProvenTest {
     }
 
     /**
-     * A remainder by a divisor so large that the values a guard leaves it, and the values it leaves
-     * out, are each more than a path holds: nothing is proven, and the figure is named.
+     * A remainder by a divisor so large that what a guard leaves it, and what it leaves out, are
+     * each hundreds of millions of numbers: what a path holds is the runs, so the same departures
+     * are ruled out as by seven.
      */
     @Test
-    void valuesPastWhatAPathHoldsProveNothingAndNameTheFigure() {
-        String source = charging("""
-                let x = Int.floorMod(a.value + 1, 1000003)
-                guard x < 500 else Free
-                guard x < 600 else Free
-                """);
-
-        assertEquals(List.of(), provenIn(source, "charge"));
-        assertTrue(armsOf(source, "charge").stream()
-                        .filter(Reachability.Unsettled.class::isInstance)
-                        .flatMap(each -> WhatAnAnswerSays.whyAConditionWasNotTakenIn(
-                                ((Reachability.Unsettled) each).why()).stream())
-                        .anyMatch(new WhyNotTaken.MoreValuesThanAreHeld()::equals),
-                "the figure that stopped it is said");
-    }
-
-    /**
-     * By the same divisor, a guard that leaves the remainder all but a few values is held as the
-     * values it leaves out, and those are what the next guard's departure needs.
-     */
-    @Test
-    void theFewValuesAGuardLeavesOutAreHeldWhereTheyAreFewer() {
-        String source = charging("""
-                let x = Int.floorMod(a.value + 1, 1000003)
-                guard x < 1000000 else Free
-                guard x < 1000001 else Free
-                """);
-
-        assertEquals(1, provenIn(source, "charge").size(),
-                "nothing under a million is a million and one or more");
+    void aRemainderByALargeDivisorRulesOutWhatItRulesOutBySeven() {
+        for (String guards : List.of("""
+                let x = Int.floorMod(a.value + 1, 1000000007)
+                guard x < 500000000 else Free
+                guard x < 600000000 else Free
+                """, """
+                let x = Int.floorMod(a.value + 1, 1000000007)
+                guard x < 1000000005 else Free
+                guard x < 1000000006 else Free
+                """, """
+                guard Int.floorMod(a.value, 1000000007) == 1000000006 else Free
+                guard Int.floorMod(a.value + 1, 1000000007) /= 0 else Free
+                """)) {
+            assertEquals(1, provenIn(charging(guards), "charge").size(),
+                    () -> "what the first leaves is what the second refuses:\n" + guards);
+        }
+        assertEquals(List.of(), provenIn(charging("""
+                let x = Int.floorMod(a.value + 1, 1000000007)
+                guard x < 600000000 else Free
+                guard x < 500000000 else Free
+                """), "charge"), "under six hundred million is not all under five hundred million");
     }
 
     /** A behavior charging an amount past {@code guards}, which may name {@code a}. */

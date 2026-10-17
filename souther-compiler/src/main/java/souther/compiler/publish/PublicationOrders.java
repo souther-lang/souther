@@ -343,7 +343,6 @@ public final class PublicationOrders {
                     CompositionBudget.TOTAL_READINGS_OF_ONE_CONDITION,
                     CompositionBudget.PARTS_A_DERIVATION_CONCLUDES,
                     CompositionBudget.ALTERNATIVES_A_PATH_TRIES,
-                    CompositionBudget.VALUES_A_PATH_HOLDS_OF_ONE_NUMBER,
                     // After the reading of a condition, as the reading of where one line of a
                     // statement it made decides: the statement read, the cases taken apart, then
                     // each of them asked.

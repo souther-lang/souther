@@ -370,22 +370,6 @@ public enum CompositionBudget {
     ALTERNATIVES_A_PATH_TRIES(1024),
 
     /**
-     * How many values of one whole number a path holds, where a choice between comparisons of that
-     * number leaves it more than one run of them: the values it leaves, or the values it leaves out
-     * where those are fewer.
-     *
-     * <p>Counted for the one choice, out of the runs it leaves, before a value is written down.
-     *
-     * <p><b>Reaching it takes the choice as the parts it is made of, and says so where that takes
-     * nothing.</b> The parts are taken alone as any choice's are; where more than one of them is
-     * left, the choice is carried out as one a path did not take in, naming this as why
-     * ({@link souther.compiler.meaning.WhyNotTaken.MoreValuesThanAreHeld}). None of the values is
-     * held where not all of them are: a path holding some of them would be a path refusing values
-     * the condition lets through.
-     */
-    VALUES_A_PATH_HOLDS_OF_ONE_NUMBER(256),
-
-    /**
      * How many steps a statement of several relations is read in, to say where each of its lines
      * decides.
      *
@@ -626,9 +610,6 @@ public enum CompositionBudget {
             case ALTERNATIVES_A_PATH_TRIES ->
                     "how many parts of one of several things a path takes alone, to know which of"
                             + " them it leaves";
-            case VALUES_A_PATH_HOLDS_OF_ONE_NUMBER ->
-                    "how many values of one number a path holds, where a condition leaves it"
-                            + " several runs of them";
             case STEPS_A_STATEMENT_IS_READ_IN ->
                     "how many steps a statement is read in, to say where each of its lines"
                             + " decides";
@@ -695,8 +676,7 @@ public enum CompositionBudget {
                  PATHS_OF_A_DECISION_READ, CONDITIONS_A_DECISION_TAKES_IN_TO_PROVE,
                  READINGS_OF_ONE_CONDITION,
                  TOTAL_READINGS_OF_ONE_CONDITION, PARTS_A_DERIVATION_CONCLUDES,
-                 ALTERNATIVES_A_PATH_TRIES, VALUES_A_PATH_HOLDS_OF_ONE_NUMBER,
-                 STEPS_A_STATEMENT_IS_READ_IN,
+                 ALTERNATIVES_A_PATH_TRIES, STEPS_A_STATEMENT_IS_READ_IN,
                  CASES_A_LINE_IS_TAKEN_APART_INTO, CASES_A_LINE_IS_ASKED_IN,
                  WAYS_A_WAY_IS_LOOKED_ALONG,
                  DEPTH_A_CONSTRUCTION_PLAN_DESCENDS, NUMBERS_OF_A_SET_TRIED,

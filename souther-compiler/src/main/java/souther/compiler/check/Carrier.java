@@ -18,6 +18,7 @@ import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.Times;
 import souther.compiler.numeric.Towards;
 import souther.compiler.numeric.ValueOrder;
+import souther.compiler.numeric.WholeNumberRuns;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.regex.Language;
 import net.unit8.notation199x.pattern.Meter;
@@ -30,6 +31,8 @@ import souther.compiler.values.TextExtents;
 import souther.compiler.values.Value;
 import souther.compiler.values.ValueSet;
 
+import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -1162,7 +1165,34 @@ public sealed interface Carrier extends ValueOrder {
             // no order but the strings holds one.
             case ValueSet.Matching it ->
                     this instanceof Text ? writableIn(it, held, apart, meter) : null;
+            // Each run met with the run of the order in turn, and walked from its first number as
+            // a run of the order is. Whole numbers, so only an order counted in ones holds them as
+            // a run.
+            case ValueSet.WholeRuns it -> {
+                if (!(this instanceof Whole)) {
+                    yield null;
+                }
+                for (WholeNumberRuns.Run run : wholeNumbersOf(it, held).runs()) {
+                    OrderedInterval inside = new OrderedInterval(endAt(run.from()), endAt(run.to()))
+                            .meet(held);
+                    Place at = firstHeldIn(inside, anchorIn(inside), Set.of(), apart);
+                    if (at != null) {
+                        yield at;
+                    }
+                }
+                yield null;
+            }
         };
+    }
+
+    /** The whole numbers of {@code set} inside {@code range}, read off the ends of both. */
+    private static WholeNumberRuns wholeNumbersOf(ValueSet.WholeRuns set, OrderedInterval range) {
+        return set.numbers().and(WholeNumberRuns.between(range.low(), range.high()));
+    }
+
+    /** An end held at {@code number}, or none where there is no number. */
+    private static Endpoint endAt(BigInteger number) {
+        return number == null ? null : Endpoint.inclusive(new Count(new BigDecimal(number)));
     }
 
     /**
@@ -1435,6 +1465,11 @@ public sealed interface Carrier extends ValueOrder {
             case ValueSet.Cofinite it -> it.excluded().isEmpty()
                     ? souther.compiler.values.Emptiness.NONEMPTY : somethingNotExcluded(it.excluded(), range);
             case ValueSet.Matching _ -> souther.compiler.values.Emptiness.UNDECIDED;
+            // Whether a run reaches into the range, which the ends of both say.
+            case ValueSet.WholeRuns it -> !(this instanceof Whole)
+                    ? souther.compiler.values.Emptiness.UNDECIDED
+                    : wholeNumbersOf(it, range).isNone() ? souther.compiler.values.Emptiness.EMPTY
+                    : souther.compiler.values.Emptiness.NONEMPTY;
         };
     }
 
@@ -1469,6 +1504,26 @@ public sealed interface Carrier extends ValueOrder {
             // building one to relate two positions would spend a position's allowance on a question
             // about a pair.
             case ValueSet.Matching _ -> new Admits.NotKnown();
+            // Counted off the ends of the runs inside the range, and written down only where they
+            // are few enough to be.
+            case ValueSet.WholeRuns it -> {
+                if (!(this instanceof Whole)) {
+                    yield new Admits.NotKnown();
+                }
+                WholeNumberRuns inside = wholeNumbersOf(it, held);
+                BigInteger many = inside.count();
+                if (many == null || many.compareTo(BigInteger.valueOf(atMost)) > 0) {
+                    yield new Admits.MoreThanCounted();
+                }
+                Set<Value> out = new LinkedHashSet<>();
+                for (WholeNumberRuns.Run run : inside.runs()) {
+                    for (BigInteger n = run.from(); n.compareTo(run.to()) <= 0;
+                         n = n.add(BigInteger.ONE)) {
+                        out.add(new Value.Number(new BigDecimal(n)));
+                    }
+                }
+                yield Admits.of(out, atMost);
+            }
         };
     }
 

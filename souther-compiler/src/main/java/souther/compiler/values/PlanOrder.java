@@ -361,6 +361,12 @@ final class PlanOrder {
                 it.language().writtenInto(out);
                 out.append(';');
             }
+            // The ends of its runs, in order, which are the whole of what it holds.
+            case ValueSet.WholeRuns it -> {
+                out.append("3;").append(it.numbers().runs().size()).append(';');
+                it.numbers().runs().forEach(run -> out.append(run.from() == null ? "" : run.from())
+                        .append("..").append(run.to() == null ? "" : run.to()).append(';'));
+            }
         }
     }
 

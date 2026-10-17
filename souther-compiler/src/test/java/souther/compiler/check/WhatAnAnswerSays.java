@@ -271,32 +271,6 @@ final class WhatAnAnswerSays {
         });
     }
 
-    /** Why the reading could not take the condition in, or nothing where that is not why. */
-    static List<WhyNotTaken> whyAConditionWasNotTakenIn(WhyUnsettled why) {
-        return why.said(new WhyUnsettled.Words<List<WhyNotTaken>>() {
-
-            @Override
-            public List<WhyNotTaken> noWitness() {
-                return List.of();
-            }
-
-            @Override
-            public List<WhyNotTaken> aConditionWasNotRead(SourcePos at, List<WhyNotTaken> why) {
-                return why;
-            }
-
-            @Override
-            public List<WhyNotTaken> thePositionDidNotSettleIt(Unsettlement position) {
-                return List.of();
-            }
-
-            @Override
-            public List<WhyNotTaken> theWalkDidNotReachIt() {
-                return List.of();
-            }
-        });
-    }
-
     /** Whether the reading could not take the condition in. */
     static boolean isAConditionNotRead(WhyUnsettled why) {
         return why.said(new WhyUnsettled.Words<Boolean>() {

@@ -1,9 +1,13 @@
 package souther.compiler.values;
 
+import souther.compiler.numeric.WholeNumberRuns;
 import souther.compiler.regex.Language;
 import net.unit8.notation199x.pattern.Meter;
 
+import java.math.BigInteger;
+import java.util.ArrayList;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -79,12 +83,19 @@ public final class Sets {
                 // comes out is a subset of what was already written down, so no machine is made.
                 case ValueSet.Matching there -> new ValueSet.Finite(
                         kept(here.values(), there::has));
+                // The same, of runs: which of them a run holds is its ends against the value.
+                case ValueSet.WholeRuns there -> new ValueSet.Finite(
+                        kept(here.values(), there::has));
             };
             case ValueSet.Cofinite here -> switch (other) {
                 case ValueSet.Finite _ -> metUnder(other, one, meter);
                 case ValueSet.Cofinite there ->
                         new ValueSet.Cofinite(both(here.excluded(), there.excluded()));
                 case ValueSet.Matching _ -> metUnder(other, one, meter);
+                // The runs with each whole number left out cut out of them, which is runs: a
+                // number left out is one more end on each side of it.
+                case ValueSet.WholeRuns there -> ValueSet.wholeNumbers(
+                        there.numbers().and(wholeNumbersIn(here.excluded()).others()));
             };
             case ValueSet.Matching here -> switch (other) {
                 case ValueSet.Finite there -> new ValueSet.Finite(
@@ -95,6 +106,15 @@ public final class Sets {
                         matching(here.language().without(textsIn(there.excluded()), meter));
                 case ValueSet.Matching there ->
                         matching(here.language().and(there.language(), meter));
+                // Strings and whole numbers share no value.
+                case ValueSet.WholeRuns _ -> ValueSet.NONE;
+            };
+            case ValueSet.WholeRuns here -> switch (other) {
+                case ValueSet.Finite _, ValueSet.Cofinite _, ValueSet.Matching _ ->
+                        metUnder(other, one, meter);
+                // What both hold is read off the ends of both, however many numbers they hold.
+                case ValueSet.WholeRuns there ->
+                        ValueSet.wholeNumbers(here.numbers().and(there.numbers()));
             };
         };
     }
@@ -110,13 +130,13 @@ public final class Sets {
                 // excluded from the two of them together.
                 case ValueSet.Cofinite there -> new ValueSet.Cofinite(
                         kept(there.excluded(), each -> !here.values().contains(each)));
-                case ValueSet.Matching _ -> joinedUnder(other, one, meter);
+                case ValueSet.Matching _, ValueSet.WholeRuns _ -> joinedUnder(other, one, meter);
             };
             case ValueSet.Cofinite here -> switch (other) {
                 case ValueSet.Finite _ -> joinedUnder(other, one, meter);
                 case ValueSet.Cofinite there -> new ValueSet.Cofinite(
                         kept(here.excluded(), there.excluded()::contains));
-                case ValueSet.Matching _ -> joinedUnder(other, one, meter);
+                case ValueSet.Matching _, ValueSet.WholeRuns _ -> joinedUnder(other, one, meter);
             };
             case ValueSet.Matching here -> switch (other) {
                 // The language and the values written beside it, which is a language: what a set of
@@ -131,8 +151,35 @@ public final class Sets {
                         kept(there.excluded(), each -> !here.has(each)));
                 case ValueSet.Matching there ->
                         matching(here.language().or(there.language(), meter));
+                // The language: whole numbers are no strings for it to take, as the numbers among
+                // values written beside it are not.
+                case ValueSet.WholeRuns _ -> here;
+            };
+            case ValueSet.WholeRuns here -> switch (other) {
+                // The runs with the whole numbers written beside them, each a run of its own.
+                case ValueSet.Finite there -> ValueSet.wholeNumbers(
+                        here.numbers().or(wholeNumbersIn(there.values())));
+                // Everything but what is excluded there and in none of the runs.
+                case ValueSet.Cofinite there -> new ValueSet.Cofinite(
+                        kept(there.excluded(), each -> !here.has(each)));
+                case ValueSet.Matching _ -> joinedUnder(other, one, meter);
+                case ValueSet.WholeRuns there ->
+                        ValueSet.wholeNumbers(here.numbers().or(there.numbers()));
             };
         };
+    }
+
+    /** The whole numbers among {@code values}, each a run of its own; a value that is no whole
+     *  number is in no run. */
+    private static WholeNumberRuns wholeNumbersIn(Set<Value> values) {
+        List<BigInteger> out = new ArrayList<>();
+        values.forEach(each -> {
+            BigInteger whole = ValueSet.wholeNumberOf(each);
+            if (whole != null) {
+                out.add(whole);
+            }
+        });
+        return WholeNumberRuns.of(out);
     }
 
     /** The set a language came to, or null where it was not built. */

@@ -533,13 +533,6 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
             Map.entry("souther.compiler.check.MeaningAssumptions$Tries#<init>()V",
                     "how many parts of a disjunction one reading of a condition takes alone,"
                             + " past which the disjunction is declined for that figure"),
-            // And the values of one number a choice between comparisons of it leaves. Past the
-            // figure the parts are taken alone, and two left is declined naming it.
-            Map.entry("souther.compiler.check.MeaningAssumptions#holdingTheValues("
-                            + "Lsouther/compiler/check/FactSubject;"
-                            + "Lsouther/compiler/check/WholeNumbersLeft;)Z",
-                    "how many values of one number a path holds, past which the choice is taken"
-                            + " part by part and declined for that figure where two are left"),
             Map.entry("souther.compiler.partition.Pullback$ALawRead#ofEachWrittenOut("
                             + "Lsouther/compiler/check/DeclaredArgument;"
                             + "Ljava/util/List;"

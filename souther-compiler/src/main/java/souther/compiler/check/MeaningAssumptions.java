@@ -25,6 +25,7 @@ import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.OrderedIntervals;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Rel;
+import souther.compiler.numeric.WholeNumberRuns;
 import souther.compiler.partition.CompositionBudget;
 import souther.compiler.semantics.Arithmetic;
 import souther.compiler.semantics.ConstantArguments;
@@ -37,7 +38,6 @@ import souther.compiler.types.ValueName;
 import souther.compiler.values.AdmittedPlan;
 import souther.compiler.values.Allowance;
 import souther.compiler.values.PlannedValues;
-import souther.compiler.values.Value;
 import souther.compiler.values.ValueSet;
 
 import java.math.BigDecimal;
@@ -608,19 +608,15 @@ final class MeaningAssumptions {
      * leave nothing, and which of them holds may be no choice at all.
      *
      * <p>Except a choice between comparisons of one whole number, which is no choice for a path to
-     * make: it is the values of the number it leaves ({@link #holdingTheValues}), and those are a
-     * fact a path holds. Where there are more of them than a path holds, the parts are taken alone
-     * as above, and two left is declined for that figure.
+     * make: it is the runs of the number it leaves ({@link #holdingTheValues}), and those are a
+     * fact a path holds however many numbers are in them.
      */
     private void takingOneOf(Proposition.Any any) {
         Set<FactSubject> numbers = new LinkedHashSet<>();
-        WholeNumbersLeft values = leftOf(any, numbers);
-        boolean pastTheFigure = false;
+        WholeNumberRuns values = leftOf(any, numbers);
         if (values != null && numbers.size() == 1) {
-            if (holdingTheValues(numbers.iterator().next(), values)) {
-                return;
-            }
-            pastTheFigure = true;
+            holdingTheValues(numbers.iterator().next(), values);
+            return;
         }
         List<MeaningAssumptions> left = new ArrayList<>();
         for (Proposition part : any.parts()) {
@@ -653,7 +649,6 @@ final class MeaningAssumptions {
                 boolean cutShort = left.stream().anyMatch(each -> each.notTaken.contains(
                         new WhyNotTaken.MoreAlternativesThanAreTried()));
                 WhyNotTaken.declinedWhole(cutShort ? new WhyNotTaken.MoreAlternativesThanAreTried()
-                        : pastTheFigure ? new WhyNotTaken.MoreValuesThanAreHeld()
                         : new WhyNotTaken.OutsideDomain(
                                 WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_ALTERNATIVES), any)
                         .forEach(this::notTaken);
@@ -671,14 +666,14 @@ final class MeaningAssumptions {
      * refusing them. Which numbers the parts compare is gathered rather than checked here; the
      * caller holds the answer only where they are one.
      */
-    private WholeNumbersLeft leftOf(Proposition stated, Set<FactSubject> numbers) {
+    private WholeNumberRuns leftOf(Proposition stated, Set<FactSubject> numbers) {
         return switch (stated) {
             case Proposition.Always(boolean holds) ->
-                    holds ? WholeNumbersLeft.EVERY : WholeNumbersLeft.NONE;
+                    holds ? WholeNumberRuns.EVERY : WholeNumberRuns.NONE;
             case Proposition.All all -> {
-                WholeNumbersLeft out = WholeNumbersLeft.EVERY;
+                WholeNumberRuns out = WholeNumberRuns.EVERY;
                 for (Proposition part : all.parts()) {
-                    WholeNumbersLeft each = leftOf(part, numbers);
+                    WholeNumberRuns each = leftOf(part, numbers);
                     if (each == null) {
                         yield null;
                     }
@@ -687,9 +682,9 @@ final class MeaningAssumptions {
                 yield out;
             }
             case Proposition.Any any -> {
-                WholeNumbersLeft out = WholeNumbersLeft.NONE;
+                WholeNumberRuns out = WholeNumberRuns.NONE;
                 for (Proposition part : any.parts()) {
-                    WholeNumbersLeft each = leftOf(part, numbers);
+                    WholeNumberRuns each = leftOf(part, numbers);
                     if (each == null) {
                         yield null;
                     }
@@ -706,7 +701,7 @@ final class MeaningAssumptions {
 
     /** The whole numbers {@code form rel 0} leaves the one number it is over, as
      *  {@link #leftOf} says. */
-    private WholeNumbersLeft leftBy(LinearForm<Quantity> form, Rel rel, Set<FactSubject> numbers) {
+    private WholeNumberRuns leftBy(LinearForm<Quantity> form, Rel rel, Set<FactSubject> numbers) {
         if (form.coefs().size() != 1 || !isAWholeNumber(form.coefs().keySet().iterator().next())
                 || !(formAt(form) instanceof FormAt.Named(LinearForm<FactSubject> over))
                 || over.coefs().size() != 1) {
@@ -721,7 +716,7 @@ final class MeaningAssumptions {
         }
         numbers.add(only.getKey());
         // Weighed below nought, the number stands the other way round to where the form does.
-        return WholeNumbersLeft.standing(only.getValue().signum() < 0 ? rel.turned() : rel,
+        return WholeNumberRuns.standing(only.getValue().signum() < 0 ? rel.turned() : rel,
                 threshold);
     }
 
@@ -747,26 +742,28 @@ final class MeaningAssumptions {
     }
 
     /**
-     * Whether {@code values} of {@code number}, met with what is known of it here, was taken in: as
+     * {@code values} of {@code number}, met with where what is known here leaves it, taken in: as
      * nothing reached where none are left, as the range they are where they are one run, and as
-     * the set of them — or of the values they leave out, where those are fewer — where they are
-     * several. Not taken where both sets are larger than a path holds
-     * ({@link CompositionBudget#VALUES_A_PATH_HOLDS_OF_ONE_NUMBER}).
+     * the runs of them where they are several ({@link ValueSet#wholeNumbers}).
+     *
+     * <p>The range on its own where it is one, because the numbers relate the number to others and
+     * a set relates it to nothing. Several runs are what the numbers have no word for, and the
+     * values beside them are met with where the numbers leave the number, which is where a
+     * contradiction between the two is found ({@link ConstraintState#isBottom}).
      *
      * <p>On the path only: a condition says it, and it is no fact of the value wherever the value
      * is named ({@link Known#holdingOnThePath}).
      */
-    private boolean holdingTheValues(FactSubject number, WholeNumbersLeft values) {
-        WholeNumbersLeft range = rangeOf(number);
-        WholeNumbersLeft held = values.and(range);
-        if (held.runs().isEmpty()) {
+    private void holdingTheValues(FactSubject number, WholeNumberRuns values) {
+        WholeNumberRuns held = values.and(rangeOf(number));
+        taken = true;
+        if (held.isNone()) {
             known = known.reachingNothing();
-            taken = true;
-            return true;
+            return;
         }
-        Map<FactSubject, Granularity> kinds = terms.kindsOf(LinearForm.atom(number));
         if (held.runs().size() == 1) {
-            WholeNumbersLeft.Run run = held.runs().getFirst();
+            Map<FactSubject, Granularity> kinds = terms.kindsOf(LinearForm.atom(number));
+            WholeNumberRuns.Run run = held.runs().getFirst();
             if (run.from() != null) {
                 known = known.taking(LinearForm.atomMinusConstant(number, ExactRatio.of(run.from())),
                         Rel.GE, Known.Held.ON_THE_PATH, kinds);
@@ -775,73 +772,23 @@ final class MeaningAssumptions {
                 known = known.taking(LinearForm.atomMinusConstant(number, ExactRatio.of(run.to())),
                         Rel.LE, Known.Held.ON_THE_PATH, kinds);
             }
-            taken = true;
-            return true;
-        }
-        BigInteger most = BigInteger.valueOf(
-                CompositionBudget.VALUES_A_PATH_HOLDS_OF_ONE_NUMBER.maximum());
-        BigInteger many = held.count();
-        WholeNumbersLeft out = held.others().and(range);
-        BigInteger excluded = out.count();
-        ValueSet set;
-        if (many != null && many.compareTo(most) <= 0) {
-            set = new ValueSet.Finite(numbersOf(held));
-        } else if (excluded != null && excluded.compareTo(most) <= 0) {
-            set = new ValueSet.Cofinite(numbersOf(out));
-        } else {
-            return false;
+            return;
         }
         Allowance<FactSubject> sets = terms.policy().allowanceForAdmittedValues();
         Confinement.Planned<FactSubject> said = new Confinement.Planned<>(
-                PlannedValues.at(number, AdmittedPlan.of(set)), OrderedIntervals.top(),
-                Map.of(number, Carrier.WHOLE));
+                PlannedValues.at(number, AdmittedPlan.of(ValueSet.wholeNumbers(held))),
+                OrderedIntervals.top(), Map.of(number, Carrier.WHOLE));
         known = known.holdingOnThePath(said.resolve(sets), sets);
-        taken = true;
-        return true;
     }
 
     /** What is known here of where {@code number} lies, as the whole numbers between its ends. */
-    private WholeNumbersLeft rangeOf(FactSubject number) {
+    private WholeNumberRuns rangeOf(FactSubject number) {
         return switch (known.numbers().projectionOf(number)) {
-            case NumericDomain.Projection.NotSpokenOf _ -> WholeNumbersLeft.EVERY;
-            case NumericDomain.Projection.NothingIsLeft _ -> WholeNumbersLeft.NONE;
+            case NumericDomain.Projection.NotSpokenOf _ -> WholeNumberRuns.EVERY;
+            case NumericDomain.Projection.NothingIsLeft _ -> WholeNumberRuns.NONE;
             case NumericDomain.Projection.Within(NumericDomain.Bounds bounds) ->
-                    WholeNumbersLeft.one(lowestAt(bounds.min()), highestAt(bounds.max()));
+                    WholeNumberRuns.between(bounds.min(), bounds.max());
         };
-    }
-
-    /** The least whole number at or past {@code end}, or null where there is none to name: no
-     *  end, or one on no count. Null is no end, which holds every value the end would have left. */
-    private static BigInteger lowestAt(Endpoint end) {
-        if (end == null || !(end.at() instanceof Count count)) {
-            return null;
-        }
-        if (end.inclusive()) {
-            return count.exactly().ceiling() instanceof ExactAnswer.Held<BigInteger>(var up)
-                    ? up : null;
-        }
-        return count.exactly().floor() instanceof ExactAnswer.Held<BigInteger>(var down)
-                ? down.add(BigInteger.ONE) : null;
-    }
-
-    /** The greatest whole number at or before {@code end}, the same way round. */
-    private static BigInteger highestAt(Endpoint end) {
-        if (end == null || !(end.at() instanceof Count count)) {
-            return null;
-        }
-        if (end.inclusive()) {
-            return count.exactly().floor() instanceof ExactAnswer.Held<BigInteger>(var down)
-                    ? down : null;
-        }
-        return count.exactly().ceiling() instanceof ExactAnswer.Held<BigInteger>(var up)
-                ? up.subtract(BigInteger.ONE) : null;
-    }
-
-    /** Each number of {@code values}, as the values a set holds. */
-    private static Set<Value> numbersOf(WholeNumbersLeft values) {
-        Set<Value> out = new LinkedHashSet<>();
-        values.each().forEach(each -> out.add(new Value.Number(new BigDecimal(each))));
-        return out;
     }
 
     /**

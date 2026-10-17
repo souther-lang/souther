@@ -1,5 +1,11 @@
 package souther.compiler.values;
 
+import souther.compiler.numeric.ExactAnswer;
+import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.WholeNumberRuns;
+
+import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.Set;
@@ -82,6 +88,39 @@ public sealed interface ValueSet {
     }
 
     /**
+     * The whole numbers in some runs, which comparisons of one number leave it.
+     *
+     * <p>A fourth shape because a choice between comparisons is a fourth kind of answer.
+     * {@code r < 4 || r == 6} over a remainder by a thousand million leaves it a run of four numbers
+     * and one more, and leaves out the run between, of nearly a thousand million: written as
+     * {@link Finite} or {@link Cofinite} it is every one of them, and written as neither a reading
+     * would have to answer that the comparisons admit everything. Held by the ends of its runs, what
+     * it costs is how many comparisons made it ({@link WholeNumberRuns}).
+     *
+     * <p><b>Never empty, never everything, and never what the other two hold as they are.</b> Runs
+     * of one number each are a {@link Finite} of those numbers, and runs leaving out one number at a
+     * time are a {@link Cofinite} of the numbers left out; {@link #wholeNumbers} is where that is
+     * settled, and it is the only way to one of these. What is not settled is a finite set of whole
+     * numbers some of which are neighbours, which is a {@link Finite} where a rule named its values
+     * one by one and one of these where comparisons left it, since counting the runs out into values
+     * is the cost this shape is for. The two say the same of every value ({@link #has}), and what
+     * either is met or joined with comes out the same set.
+     *
+     * <p>Over the whole numbers, as every set here is over one carrier: a value that is no whole
+     * number is in none of these.
+     */
+    record WholeRuns(WholeNumberRuns numbers) implements ValueSet {
+
+        public WholeRuns {
+            if (numbers == null || numbers.isNone() || numbers.isEvery()
+                    || numbers.isNumbersApart() || numbers.others().isNumbersApart()) {
+                throw new IllegalArgumentException(
+                        "runs of whole numbers are no shape the others already hold: " + numbers);
+            }
+        }
+    }
+
+    /**
      * A set kept as it was given, and unable to be changed after.
      *
      * <p>The order is the order the model writes the values in, and it is kept because something
@@ -139,6 +178,51 @@ public sealed interface ValueSet {
     }
 
     /**
+     * The whole numbers {@code numbers} holds.
+     *
+     * <p>The one way to a {@link WholeRuns}, and where runs that are one of the other shapes become
+     * that shape: none and every number are {@link #NONE} and {@link #ANY}, numbers apart are the
+     * {@link Finite} of them and every number but some apart is the {@link Cofinite} of those. Each
+     * of the last two lists as many values as there are runs.
+     */
+    static ValueSet wholeNumbers(WholeNumberRuns numbers) {
+        if (numbers.isNone()) {
+            return NONE;
+        }
+        if (numbers.isEvery()) {
+            return ANY;
+        }
+        if (numbers.isNumbersApart()) {
+            return new Finite(numbersOf(numbers));
+        }
+        WholeNumberRuns left = numbers.others();
+        if (left.isNumbersApart()) {
+            return new Cofinite(numbersOf(left));
+        }
+        return new WholeRuns(numbers);
+    }
+
+    /** The one number of each run of {@code apart}, as values. */
+    private static Set<Value> numbersOf(WholeNumberRuns apart) {
+        Set<Value> out = new LinkedHashSet<>();
+        apart.runs().forEach(run -> out.add(new Value.Number(new BigDecimal(run.from()))));
+        return out;
+    }
+
+    /**
+     * The whole number {@code value} is, or null where it is none: a number with nothing after the
+     * point, which is what a run of whole numbers holds.
+     */
+    static BigInteger wholeNumberOf(Value value) {
+        if (!(value instanceof Value.Number(BigDecimal number))) {
+            return null;
+        }
+        ExactRatio exactly = ExactRatio.of(number);
+        return exactly.isWhole() && exactly.floor() instanceof ExactAnswer.Held<BigInteger>(var whole)
+                ? whole : null;
+    }
+
+    /**
      * Whether {@code value} is one of these.
      *
      * <p>Here, so that a reader wanting it does not answer it by asking which shape a set is. Every
@@ -152,6 +236,8 @@ public sealed interface ValueSet {
             case Cofinite it -> !it.excluded().contains(value);
             // A language is a set of strings, so nothing that is not one is in it.
             case Matching it -> value instanceof Value.Text text && it.language().has(text.value());
+            case WholeRuns it -> wholeNumberOf(value) instanceof BigInteger whole
+                    && it.numbers().holds(whole);
         };
     }
 
@@ -175,6 +261,10 @@ public sealed interface ValueSet {
         }
         if (other instanceof Finite) {
             return other.sharesAnythingWith(this);
+        }
+        // Runs against runs is the runs both hold, which is ends and not values.
+        if (this instanceof WholeRuns mine && other instanceof WholeRuns theirs) {
+            return !mine.numbers().and(theirs.numbers()).isNone();
         }
         // Neither is finite, so each admits values without end and no finite thing either of them
         // holds out can be the whole of what the other has.

@@ -101,11 +101,6 @@ class EveryPropositionAPathIsHandedIsKnownOrMeetsTheEdgeOfWhatItKnowsTest {
                         case WhyNotTaken.MoreAlternativesThanAreTried _ -> fail(() -> name
                                 + " coming out " + positive + " met a figure its parts do not"
                                 + " reach: " + why);
-                        // The same, of the values one number is left: no sample compares a
-                        // number to as many of them as a path holds.
-                        case WhyNotTaken.MoreValuesThanAreHeld _ -> fail(() -> name
-                                + " coming out " + positive + " met a figure its values do not"
-                                + " reach: " + why);
                     }
                 }
             }
