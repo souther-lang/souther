@@ -67,6 +67,7 @@ public sealed interface RealizationTarget {
     static OfANumber of(NumericTerm term) {
         return switch (term) {
             case NumericTerm.Multiplicity among -> new AmongTheElements(among);
+            case NumericTerm.ExtremeOfItsKey extreme -> new AtItsKey(extreme);
             case NumericTerm.FromOnePosition one -> new AtOnePosition(one);
             case NumericTerm.TakenOver over -> new OverARun(over);
         };
@@ -189,6 +190,29 @@ public sealed interface RealizationTarget {
         @Override
         public TermPath writeRoot() {
             return term.container().element().outermostContainer();
+        }
+
+        @Override
+        public String toString() {
+            return term.toString();
+        }
+    }
+
+    /**
+     * The least or greatest of the values the elements of one key hold, realized by writing the
+     * value at the place it is taken of.
+     *
+     * <p>An element alone under its key reads its own value, so a value written there is the
+     * number wherever no other element of that key holds a value past it. Whether one does is what
+     * the row holds beside it, which the candidate is read back against as a whole
+     * ({@code Generator.readBack}), so a value written here and moved by a neighbour is refused
+     * rather than taken for the number.
+     */
+    record AtItsKey(NumericTerm.ExtremeOfItsKey term) implements OfANumber {
+
+        @Override
+        public TermPath writeRoot() {
+            return term.value();
         }
 
         @Override

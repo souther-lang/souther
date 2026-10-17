@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.DocumentShape;
 import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
@@ -141,6 +142,13 @@ class AFoldThatFilesACounterUnderEachKeyAnswersHowOftenTheKeyOccursTest {
                             top(row.filed(fold.first(), fold.add())) > row.atLeast()),
                     () -> "a row past it for " + fold + ": " + rows);
         }
+    }
+
+    /** The line is written in a document the schema shipped beside this accepts. */
+    @Test
+    void theDocumentNamingHowOftenAKeyOccursIsOneTheSchemaAccepts() {
+        DocumentShape.assertShapedLikeTheSchema(JSON.readTree(json(measured(
+                modelOf(COUNTING, "count >= atLeast", "")))));
     }
 
     /** A key with no element has no entry, so no row is offered with a counter at none. */

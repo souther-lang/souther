@@ -50,7 +50,8 @@ final class TermOrdering {
         // the order its value is read on, which is that order twice rather than a second way of
         // making a pair — and a second way is a second place a pair can come from.
         Carrier answered = switch (term) {
-            case NumericTerm.ValueOf _ -> observed;
+            // The end of a key's values is one of the values, so it is measured where they are.
+            case NumericTerm.ValueOf _, NumericTerm.ExtremeOfItsKey _ -> observed;
             case NumericTerm.TakenOf _, NumericTerm.CodePointClassCount _,
                  NumericTerm.Multiplicity _, NumericTerm.TakenOver _ ->
                     answeredOn(term, positionType, symbols, declarations);
@@ -83,7 +84,7 @@ final class TermOrdering {
                                       DeclarationAccess declarations) {
         NewtypeInners inners = declarations.inners();
         return switch (term) {
-            case NumericTerm.ValueOf _ -> positionType == null ? null
+            case NumericTerm.ValueOf _, NumericTerm.ExtremeOfItsKey _ -> positionType == null ? null
                     : Carrier.ofValue(positionType, declarations);
             case NumericTerm.TakenOf taken -> {
                 Type answers =

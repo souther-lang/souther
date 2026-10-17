@@ -143,6 +143,7 @@ sealed interface InputAtom {
                 case NumberAt.OfWhatNumber.OfHowManyCodePointsAreIn count ->
                         "#(" + count.counted() + ")(" + at + ")";
                 case NumberAt.OfWhatNumber.OfItsMultiplicity _ -> "multiplicity(" + at + ")";
+                case NumberAt.OfWhatNumber.OfTheExtremeOfItsKey extreme -> extreme.spelledAt(at);
             };
         }
     }

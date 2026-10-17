@@ -1799,6 +1799,10 @@ public final class InputDomain {
             case NumberAt.OfWhatNumber.OfItsMultiplicity _ -> throw new IllegalStateException(
                     "a clause of a declaration was read as a rule about how often the value at "
                             + path + " occurs");
+            // Nor what the elements of a key come to.
+            case NumberAt.OfWhatNumber.OfTheExtremeOfItsKey extreme ->
+                    throw new IllegalStateException("a clause of a declaration was read as a rule"
+                            + " about " + extreme.spelledAt(path.toString()));
         };
         if (term == null) {
             throw new IllegalStateException(
@@ -1868,6 +1872,8 @@ public final class InputDomain {
             case NumberAt.OfWhatNumber.OfWhatAnOperationAnswers _,
                  NumberAt.OfWhatNumber.OfHowManyCodePointsAreIn _,
                  NumberAt.OfWhatNumber.OfItsMultiplicity _ -> Carrier.WHOLE;
+            // One of the values standing there, so on their order.
+            case NumberAt.OfWhatNumber.OfTheExtremeOfItsKey _ -> carried;
         };
     }
 
@@ -1962,6 +1968,15 @@ public final class InputDomain {
                             + " for, and nothing holds it as an element");
                 }
                 yield multiplicity;
+            }
+            case NumberAt.OfWhatNumber.OfTheExtremeOfItsKey extremeOf -> {
+                NumericTerm.ExtremeOfItsKey extreme = NumericTerm.ExtremeOfItsKey.ofTheValueAt(
+                        path, extremeOf.key(), extremeOf.extreme());
+                if (extreme == null) {
+                    throw new IllegalStateException(extremeOf.spelledAt(path.toString())
+                            + " was asked for, and nothing holds `" + path + "` as an element");
+                }
+                yield extreme;
             }
         };
     }
