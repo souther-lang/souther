@@ -115,7 +115,8 @@ record DecisionSubjects(InputDomain inputs, Symbols symbols, DeclarationAccess d
         if (!at.mayHoldAnAnswer()) {
             return null;
         }
-        NumericMeasures.Measured measured = NumericMeasures.takenIn(e, symbols);
+        NumericMeasures.Measured measured = NumericMeasures.takenIn(e, symbols,
+                each -> at.folded(each, symbols, newtypes));
         if (measured == null || !(anAnswer(measured.of(), at) instanceof DecisionSubject.AnAnswer
                 answer)) {
             return null;

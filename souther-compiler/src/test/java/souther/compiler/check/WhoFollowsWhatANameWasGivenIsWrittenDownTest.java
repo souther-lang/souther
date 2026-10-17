@@ -36,12 +36,13 @@ class WhoFollowsWhatANameWasGivenIsWrittenDownTest {
     /**
      * Every class that asks an environment what a name was given, and how each is bounded.
      *
-     * <p>{@code CoreConstantEval} and {@code Terms} answer with something and hold it. {@code
-     * Predicates} fills a map and holds the bindings it followed. {@code PathEngine} steps from
-     * name to name without descending.
+     * <p>{@code CoreConstantEval}'s names and {@code Terms} answer with something and hold it: the
+     * first through {@link FoldedValue}, which holds what each name read in each environment came
+     * to. {@code Predicates} fills a map and holds the bindings it followed. {@code PathEngine}
+     * steps from name to name without descending.
      */
     private static final List<String> FOLLOWERS = List.of(
-            "souther.compiler.check.CoreConstantEval",
+            "souther.compiler.check.CoreConstantEval$Told",
             "souther.compiler.check.PathEngine",
             "souther.compiler.check.Predicates",
             "souther.compiler.check.Terms");
@@ -50,7 +51,7 @@ class WhoFollowsWhatANameWasGivenIsWrittenDownTest {
     void everyReaderThatFollowsANameIsWrittenDown() {
         assertEquals(FOLLOWERS,
                 new ArrayList<>(new TreeSet<>(
-                        WhatWasCompiled.callersOf(Denotations.class, "valueOf"))),
+                        WhatWasCompiled.callersOf(Denotations.class, "givenTo"))),
                 "a reader added here follows a name to what it was given: say what stops it"
                         + " following one twice, and add the row");
     }

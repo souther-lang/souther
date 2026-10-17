@@ -273,8 +273,13 @@ public record UndividedPosition(TermPath at, Why why) {
          * <p>{@code List.allDistinctBy(k -> k, value)} is about pairs of elements and not about any
          * one value the position holds. It was recognised — a container composed here keeps it —
          * so it is not {@link #UNSUPPORTED_SYNTAX}, and a reader told so would rewrite a rule that
-         * is not the difficulty. Nor is it a rule read to the end: the containers it refuses are
-         * still among what the position is taken to hold.
+         * is not the difficulty.
+         *
+         * <p>Said only where nothing took the rule in. Stated on its own it is read whole — the
+         * containers it admits are the ones composed with their elements apart — and raises nothing
+         * to say this about. Offered as one alternative of a choice it is not: no builder keeps
+         * either of two rules, and the containers it refuses are still among what the position is
+         * taken to hold.
          */
         RULE_RELATING_ELEMENTS,
         /**

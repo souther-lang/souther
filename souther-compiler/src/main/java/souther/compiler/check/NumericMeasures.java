@@ -10,7 +10,9 @@ import java.math.BigDecimal;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
+import java.util.function.Function;
 
 /**
  * The standard-library operations that count what a location holds, and the reading that finds a
@@ -85,7 +87,8 @@ public final class NumericMeasures {
      * A measure of several values is not one of these, and what it would be counted at is not a
      * place.
      */
-    public static Measured takenIn(Core standing, Symbols symbols) {
+    public static Measured takenIn(Core standing, Symbols symbols,
+                                   Function<Core, Optional<Object>> folded) {
         // What a value measures does not turn on the type it stands as.
         Core e = Core.withoutStanding(standing);
         ValueName operation = Terms.operationOf(e);
@@ -109,7 +112,7 @@ public final class NumericMeasures {
         // is everything this could read of them; which of those name the number is the account's
         // (spec §boundary-coordinates), and a call given something for another reason is a call
         // taking the same number as one that was not.
-        TakenArguments gave = besideTheValue(args, symbols);
+        TakenArguments gave = besideTheValue(args, folded);
         TakenAs how = DefaultBoundOperationFacts.get().takenAs(named, gave);
         return how == null ? null : new Measured(named, args.getFirst(), how.naming(gave));
     }
@@ -155,14 +158,18 @@ public final class NumericMeasures {
      * a divisor it does not have leaves it no number to name, and an argument it never reads was
      * never going to be part of one — so what is handed over is what this managed to read, and the
      * account is asked afterwards.
+     *
+     * <p>Each folded where the asker reads it ({@code folded}), so a divisor given a name is the
+     * number it was given, as it is to every other reader of the same call.
      */
-    private static TakenArguments besideTheValue(List<Core> args, Symbols symbols) {
+    private static TakenArguments besideTheValue(List<Core> args,
+                                                 Function<Core, Optional<Object>> folded) {
         if (args.size() == 1) {
             return TakenArguments.NONE;
         }
         Map<Integer, BigDecimal> read = new LinkedHashMap<>();
         for (int position = 1; position < args.size(); position++) {
-            BigDecimal constant = Terms.constantNumber(args.get(position), symbols);
+            BigDecimal constant = FoldedValue.number(folded.apply(args.get(position)));
             if (constant != null) {
                 read.put(position, constant);
             }

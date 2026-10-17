@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Timeout;
 
 import souther.compiler.ast.Hir;
 import souther.compiler.diag.SourceRendering;
+import souther.compiler.diag.msg.ExampleMessage;
 import souther.compiler.partition.CameToNothing;
 import souther.compiler.partition.FixtureTemplate;
 import souther.compiler.partition.GenerationOutcome;
@@ -625,24 +626,66 @@ class AListWhoseRulesKeepItsElementsApartIsComposedApartTest {
     }
 
     /**
-     * The rule is said to be one about how the elements stand to each other, and not one written in
-     * a form this compiler does not read — and still as a rule the position's values were not
-     * worked out under, since a list saying one element twice is among what the position is taken
-     * to hold. A closure this does not read is a form it does not read, which is the control.
+     * The rule is accounted for where its closure is read: the containers it admits are the ones
+     * composed with their elements apart, and each element still takes every value. A list saying
+     * one element twice is still among what the position's set of values holds, which is that
+     * reading's answer and not this one's. A closure this does not read is a form it does not
+     * read, which is the control.
      */
     @Test
-    void theRuleIsSaidToRelateTheElementsWhereItsClosureIsRead() {
+    void theRuleIsAccountedForWhereItsClosureIsRead() {
         String unread = "not accounted for: invariant Keys (apart) — which values may stand at ks:";
         COMPOSED.keySet().stream().filter(model -> model.contains("Keys")).forEach(model -> {
             String report = report(measured(model));
-            assertTrue(report.contains(unread + " it says how the elements here stand to each"
-                    + " other, and which containers it leaves is not worked out"), report);
-            assertFalse(report.contains("written in a form this compiler does not read"), report);
+            assertFalse(report.contains(unread), report);
         });
         String report = report(measured(SOME.replace("List.allDistinctBy(k -> k, value)",
                 "List.allDistinctBy(k -> String.length(k), value)")));
         assertTrue(report.contains(unread + " written in a form this compiler does not read"),
                 report);
+    }
+
+    /** A list of records apart at a field and under no other rule, read by a body that divides
+     *  nothing either. */
+    private static final String APART_AND_NOTHING_ELSE = """
+            module p
+            data Item = { id: Int }
+            data Book = List<Item>
+                invariant List.allDistinctBy(.id, value)
+            behavior count : (book: Book) -> Int
+            let count (Book(rows)) = List.length(rows)
+            example count
+                | "empty" : (Book([])) -> 0
+                | "two" : (Book([Item { id = 1 }, Item { id = 2 }])) -> 2
+            """;
+
+    /**
+     * What the rule leaves is said in full, so the measurement is: the rule divides nothing a row
+     * could be written at — a list saying one id twice is no input — and each element still takes
+     * every value.
+     */
+    @Test
+    void aRuleKeepingTheElementsApartLeavesTheMeasurementComplete() {
+        Compilation measured = measured(APART_AND_NOTHING_ELSE);
+        String report = report(measured);
+
+        assertEquals(List.of(), errors(measured));
+        assertTrue(report.contains("measurement: complete"), report);
+        assertTrue(report.contains("partition   not applicable"), report);
+    }
+
+    /** And a row saying one id twice is still refused, by the rule and at that row alone. */
+    @Test
+    void aRowSayingOneKeyTwiceIsStillRefused() {
+        Compilation measured = measured(APART_AND_NOTHING_ELSE.replace(
+                "Item { id = 1 }, Item { id = 2 }", "Item { id = 1 }, Item { id = 1 }"));
+
+        assertEquals(1, measured.errors().size(), () -> errors(measured).toString());
+        ExampleMessage.AnInputCouldNotBeBuilt refused = assertInstanceOf(
+                ExampleMessage.AnInputCouldNotBeBuilt.class,
+                measured.errors().get(0).diagnostic().said());
+        assertEquals("1", refused.at(), "the second row, which writes the id twice");
+        assertTrue(refused.why().endsWith("invariant violated on p.Book"), refused::why);
     }
 
     /**

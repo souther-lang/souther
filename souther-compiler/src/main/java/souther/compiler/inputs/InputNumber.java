@@ -70,7 +70,8 @@ public final class InputNumber {
     public static NumericTerm ofAlone(Core e, InputDomain inputs, InputReads reads,
                                       RuleReadingSource source) {
         Symbols symbols = source.symbols();
-        NumericMeasures.Measured measured = NumericMeasures.takenIn(e, symbols);
+        NumericMeasures.Measured measured = NumericMeasures.takenIn(e, symbols,
+                each -> reads.folded(each, symbols, source.newtypes()));
         if (measured != null) {
             // A taking is of a location, or of what a location's value was moved into, so an
             // argument that is neither is one there is no location to take it of.
@@ -117,6 +118,13 @@ public final class InputNumber {
         };
     }
 
+    /** {@code met} as a shift of a date by a count written out, read where it stands
+     *  ({@link DateShifts#stepOf}), or null where it is none. */
+    private static DateShifts.Step shiftOf(Denotation met, RuleReadingSource source) {
+        return DateShifts.stepOf(met.value(),
+                each -> met.at().folded(each, source.symbols(), source.newtypes()));
+    }
+
     /**
      * The location a chain of shifts of a date starts from and what the chain comes to, or null
      * where {@code of} is no shift of a date or what it shifts is no location.
@@ -134,8 +142,8 @@ public final class InputNumber {
         Symbols symbols = source.symbols();
         List<Long> days = new ArrayList<>();
         Denotation met = reads.denotes(of, symbols, source.newtypes());
-        for (DateShifts.Step step = DateShifts.stepOf(met.value(), symbols); step != null;
-                step = DateShifts.stepOf(met.value(), symbols)) {
+        for (DateShifts.Step step = shiftOf(met, source); step != null;
+                step = shiftOf(met, source)) {
             days.add(step.days());
             met = met.at().denotes(step.date(), symbols, source.newtypes());
         }
