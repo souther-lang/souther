@@ -211,8 +211,10 @@ class RulesNamingNoPositionInCommonCloseApartTest {
             ClosedStates kept = ClosedStates.kept();
             ClosedStates.Parted<String> before = kept.of(first,
                     RulesNamingNoPositionInCommonCloseApartTest::spacing, order, null);
+            long askedBefore = kept.questionsAsked();
             ClosedStates.Parted<String> after = kept.of(both,
                     RulesNamingNoPositionInCommonCloseApartTest::spacing, order, before);
+            long asked = kept.questionsAsked() - askedBefore;
             Outcome inOneRun = outcome(ClosedState.closedTogether(both,
                     RulesNamingNoPositionInCommonCloseApartTest::spacing, order));
 
@@ -226,6 +228,9 @@ class RulesNamingNoPositionInCommonCloseApartTest {
                         () -> "where " + position + " is under " + written);
             }
 
+            // Where each later rule goes, taken in the order they were said, so that a later rule
+            // meets the parts the ones before it made. Only the parts they reach are asked about,
+            // unless one of them joins two, and then every part of all the rules is.
             Map<String, Integer> partOf = new LinkedHashMap<>();
             List<List<AffineConstraint<String>>> parts = ClosureQuestion.independentRules(first);
             for (int at = 0; at < parts.size(); at++) {
@@ -235,6 +240,9 @@ class RulesNamingNoPositionInCommonCloseApartTest {
                     }
                 }
             }
+            int made = parts.size();
+            Set<Integer> reachedAtAll = new LinkedHashSet<>();
+            boolean joined = false;
             for (AffineConstraint<String> later : both.subList(cut, both.size())) {
                 Set<Integer> reached = new LinkedHashSet<>();
                 later.form().coefs().keySet().forEach(position -> {
@@ -242,12 +250,28 @@ class RulesNamingNoPositionInCommonCloseApartTest {
                         reached.add(partOf.get(position));
                     }
                 });
-                switch (reached.size()) {
-                    case 0 -> stoodApart++;
-                    case 1 -> joinedOne++;
-                    default -> joinedTwo++;
+                if (reached.size() > 1) {
+                    joinedTwo++;
+                    joined = true;
+                    break;
+                }
+                int part;
+                if (reached.isEmpty()) {
+                    stoodApart++;
+                    part = made++;
+                } else {
+                    joinedOne++;
+                    part = reached.iterator().next();
+                }
+                reachedAtAll.add(part);
+                for (String position : later.form().coefs().keySet()) {
+                    partOf.put(position, part);
                 }
             }
+            long expected = joined ? ClosureQuestion.independentRules(both).size()
+                    : reachedAtAll.size();
+            assertEquals(expected, asked, () -> "the questions put once " + first
+                    + " was lent to " + both);
         }
         int ones = joinedOne;
         int aparts = stoodApart;

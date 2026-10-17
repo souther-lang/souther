@@ -354,7 +354,8 @@ public final class NumericDomain<A> {
         }
         return new NumericDomain<>(stated.and(other.stated), both,
                 readARuleNothingSatisfies || other.readARuleNothingSatisfies, order, closedStates,
-                lent());
+                // The rules said first are this one's, unless it has none and they are the other's.
+                stated.isNothing() ? other.lent() : lent());
     }
 
     // --- what the rules leave, worked out once ----------------------------------------------------

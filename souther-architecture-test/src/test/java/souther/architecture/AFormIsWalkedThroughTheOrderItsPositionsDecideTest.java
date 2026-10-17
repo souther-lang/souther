@@ -73,12 +73,7 @@ class AFormIsWalkedThroughTheOrderItsPositionsDecideTest {
                     + "(Lsouther/compiler/numeric/AffineConstraint$Disequality;"
                     + "Lsouther/compiler/numeric/FormReach;)Ljava/util/List;",
             "what it hands back holds at most one half-space, and which one is settled by which"
-                    + " side of the value the sum is proved to lie rather than by any walk",
-            "souther/compiler/numeric/ClosedStates$Parted#partsWeighedBy"
-                    + "(Lsouther/compiler/numeric/AffineConstraint;Ljava/util/Map;)Ljava/util/Set;",
-            "what it hands back is a hash set of the parts the positions are in, which is equal to"
-                    + " the same parts gathered in any order, and its caller asks how many there"
-                    + " are before it takes one");
+                    + " side of the value the sum is proved to lie rather than by any walk");
 
     private static final CompiledOutputs COMPILED = CompiledOutputs.ofWhatThisRepositoryPublishes();
 

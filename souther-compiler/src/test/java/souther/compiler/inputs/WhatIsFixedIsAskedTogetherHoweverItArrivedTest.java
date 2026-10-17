@@ -21,6 +21,7 @@ import souther.compiler.types.ValueName;
 
 import java.math.BigDecimal;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -144,14 +145,18 @@ class WhatIsFixedIsAskedTogetherHoweverItArrivedTest {
             assertTrue(first.emptiness().isEmpty(), "x at " + x + " leaves y somewhere");
             for (int y = 0; y <= 5; y++) {
                 Quantities apart = first.given(Y, count(y));
+                // And with x said again where it already was, which is one term more all the same.
+                Quantities again = first.given(fixing(X, x, Y, y));
                 Quantities together = read.given(fixing(X, x, Y, y));
                 String where = "x at " + x + " and y at " + y;
 
                 assertEquals(x + y > 5, together.emptiness().isPresent(), where);
-                assertEquals(together.emptiness(), apart.emptiness(), where);
-                assertEquals(together.runsBetween(sum()), apart.runsBetween(sum()), where);
-                assertEquals(together.runsBetween(X), apart.runsBetween(X), where);
-                assertEquals(together.runsBetween(Y), apart.runsBetween(Y), where);
+                for (Quantities oneMore : List.of(apart, again)) {
+                    assertEquals(together.emptiness(), oneMore.emptiness(), where);
+                    assertEquals(together.runsBetween(sum()), oneMore.runsBetween(sum()), where);
+                    assertEquals(together.runsBetween(X), oneMore.runsBetween(X), where);
+                    assertEquals(together.runsBetween(Y), oneMore.runsBetween(Y), where);
+                }
             }
         }
     }

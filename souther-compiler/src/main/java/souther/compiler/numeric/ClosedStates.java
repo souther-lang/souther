@@ -1,8 +1,8 @@
 package souther.compiler.numeric;
 
 import java.util.ArrayList;
+import java.util.BitSet;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -80,6 +80,8 @@ public final class ClosedStates {
 
     private final AtomicLong workedOut = new AtomicLong();
 
+    private final AtomicLong asked = new AtomicLong();
+
     /** Whether the rules are closed in one run, which is {@link #IN_ONE_RUN} and nothing else. */
     private final boolean inOneRun;
 
@@ -121,9 +123,10 @@ public final class ClosedStates {
         if (answers == null) {
             return Parted.whole(ClosedState.of(rules, spacing, order));
         }
-        Parted<A> lent = before == null ? null : before.followedBy(rules, order, this);
+        Parted<A> lent = before == null ? null : before.followedBy(rules, spacing, order, this);
         if (lent == null) {
-            lent = Parted.unread(ClosureQuestion.independentRules(rules), rules, order, this);
+            lent = Parted.unread(ClosureQuestion.independentRules(rules), rules, spacing, order,
+                    this);
         } else if (lent.state != null) {
             return lent;
         }
@@ -135,7 +138,7 @@ public final class ClosedStates {
             closed.add(had != null ? had : of(ClosureQuestion.of(lent.parts.get(at), spacing,
                     weighed -> placed(weighed, order))));
         }
-        return new Parted<>(this, order, rules, lent.parts, closed, lent.partOf,
+        return new Parted<>(this, order, rules, lent.parts, closed, lent.partOf, lent.spaced,
                 ClosedState.product(closed));
     }
 
@@ -162,39 +165,47 @@ public final class ClosedStates {
 
         /** Which part weighs each position. */
         private final Map<A, Integer> partOf;
+
+        /** How each position a rule weighs was spaced, which is part of every question a part
+         *  puts ({@link ClosureQuestion}). */
+        private final Map<A, Granularity> spaced;
         private final ClosedState<A> state;
 
         private Parted(ClosedStates owner, CanonicalOrder<A> order,
                        List<AffineConstraint<A>> rules, List<List<AffineConstraint<A>>> parts,
                        List<ClosedState<A>> closed, Map<A, Integer> partOf,
-                       ClosedState<A> state) {
+                       Map<A, Granularity> spaced, ClosedState<A> state) {
             this.owner = owner;
             this.order = order;
             this.rules = rules;
             this.parts = parts;
             this.closed = closed;
             this.partOf = partOf;
+            this.spaced = spaced;
             this.state = state;
         }
 
         /** A closure worked out in one piece, with no parts to lend. */
         private static <A> Parted<A> whole(ClosedState<A> state) {
-            return new Parted<>(null, null, List.of(), List.of(), List.of(), Map.of(), state);
+            return new Parted<>(null, null, List.of(), List.of(), List.of(), Map.of(), Map.of(),
+                    state);
         }
 
         /** {@code parts} of {@code rules}, none of them worked out yet. */
         private static <A> Parted<A> unread(List<List<AffineConstraint<A>>> parts,
                                             List<AffineConstraint<A>> rules,
+                                            Function<A, Granularity> spacing,
                                             CanonicalOrder<A> order, ClosedStates owner) {
             Map<A, Integer> partOf = new HashMap<>();
+            Map<A, Granularity> spaced = new HashMap<>();
             List<ClosedState<A>> closed = new ArrayList<>(parts.size());
             for (int at = 0; at < parts.size(); at++) {
                 for (AffineConstraint<A> rule : parts.get(at)) {
-                    putting(rule, at, partOf);
+                    putting(rule, at, partOf, spacing, spaced);
                 }
                 closed.add(null);
             }
-            return new Parted<>(owner, order, rules, parts, closed, partOf, null);
+            return new Parted<>(owner, order, rules, parts, closed, partOf, spaced, null);
         }
 
         /** What the rules leave. */
@@ -215,10 +226,11 @@ public final class ClosedStates {
          * from the rules.
          *
          * <p>Null as well where {@code more} does not start with these rules, the very ones in the
-         * same order, or is walked in another order or kept by another owner — then nothing here is
-         * a part of it.
+         * same order, or is spaced another way at a position they weigh, or walked in another order,
+         * or kept by another owner — then nothing here is a part of it.
          */
-        private Parted<A> followedBy(List<AffineConstraint<A>> more, CanonicalOrder<A> walked,
+        private Parted<A> followedBy(List<AffineConstraint<A>> more,
+                                     Function<A, Granularity> spacing, CanonicalOrder<A> walked,
                                      ClosedStates asking) {
             if (owner != asking || order != walked || more.size() < rules.size()) {
                 return null;
@@ -228,57 +240,77 @@ public final class ClosedStates {
                     return null;
                 }
             }
+            for (Map.Entry<A, Granularity> each : spaced.entrySet()) {
+                if (spacing.apply(each.getKey()) != each.getValue()) {
+                    return null;
+                }
+            }
             if (more.size() == rules.size()) {
                 return this;
             }
             Map<A, Integer> into = new HashMap<>(partOf);
+            Map<A, Granularity> spacedHere = new HashMap<>(spaced);
             List<List<AffineConstraint<A>>> grown = new ArrayList<>(parts);
             List<ClosedState<A>> kept = new ArrayList<>(closed);
+            // Which parts hold a list of their own here, to be added to; the rest are this one's.
+            BitSet ownList = new BitSet();
             for (int at = rules.size(); at < more.size(); at++) {
                 AffineConstraint<A> rule = more.get(at);
-                Set<Integer> reached = partsWeighedBy(rule, into);
-                if (reached.size() > 1) {
+                int part = partWeighedBy(rule, into);
+                if (part == SEVERAL) {
                     return null;
                 }
-                int part;
-                if (reached.isEmpty()) {
+                if (part == NONE) {
                     part = grown.size();
                     grown.add(new ArrayList<>());
                     kept.add(null);
-                } else {
-                    part = reached.iterator().next();
-                    if (kept.get(part) != null) {
-                        grown.set(part, new ArrayList<>(grown.get(part)));
-                        kept.set(part, null);
-                    }
+                } else if (!ownList.get(part)) {
+                    grown.set(part, new ArrayList<>(grown.get(part)));
+                    kept.set(part, null);
                 }
+                ownList.set(part);
                 grown.get(part).add(rule);
-                putting(rule, part, into);
+                putting(rule, part, into, spacing, spacedHere);
             }
             List<List<AffineConstraint<A>>> parted = new ArrayList<>(grown.size());
             grown.forEach(each -> parted.add(List.copyOf(each)));
-            return new Parted<>(owner, order, more, parted, kept, into, null);
+            return new Parted<>(owner, order, more, parted, kept, into, spacedHere, null);
         }
 
-        /** The parts {@code partOf} has any position {@code rule} weighs in. A set, since which of
-         *  its positions was taken first decides nothing about which parts there are. */
-        private static <A> Set<Integer> partsWeighedBy(AffineConstraint<A> rule,
-                                                       Map<A, Integer> partOf) {
-            Set<Integer> out = new HashSet<>();
+        /** What {@link #partWeighedBy} answers for a rule weighing no position of any part. */
+        private static final int NONE = -1;
+
+        /** What {@link #partWeighedBy} answers for a rule weighing positions of two parts. */
+        private static final int SEVERAL = -2;
+
+        /**
+         * The one part {@code partOf} has the positions {@code rule} weighs in, {@link #NONE} where
+         * it has none of them and {@link #SEVERAL} where they are in more than one — which of its
+         * positions is taken first decides none of the three.
+         */
+        private static <A> int partWeighedBy(AffineConstraint<A> rule, Map<A, Integer> partOf) {
+            int found = NONE;
             for (A position : rule.form().coefs().keySet()) {
                 Integer its = partOf.get(position);
-                if (its != null) {
-                    out.add(its);
+                if (its == null) {
+                    continue;
                 }
+                if (found != NONE && found != its) {
+                    return SEVERAL;
+                }
+                found = its;
             }
-            return out;
+            return found;
         }
 
-        /** {@code partOf} with every position {@code rule} weighs in {@code part}. */
+        /** {@code partOf} with every position {@code rule} weighs in {@code part}, and
+         *  {@code spaced} with how {@code spacing} spaces each of them. */
         private static <A> void putting(AffineConstraint<A> rule, int part,
-                                        Map<A, Integer> partOf) {
+                                        Map<A, Integer> partOf, Function<A, Granularity> spacing,
+                                        Map<A, Granularity> spaced) {
             for (A position : rule.form().coefs().keySet()) {
                 partOf.put(position, part);
+                spaced.put(position, spacing.apply(position));
             }
         }
     }
@@ -287,6 +319,7 @@ public final class ClosedStates {
     private <A> ClosedState<A> of(ClosureQuestion<A> question) {
         // The cast holds because an entry is only ever put under the question it answers, and a
         // question over positions of type A is answered by a closure over the same positions.
+        asked.incrementAndGet();
         @SuppressWarnings("unchecked")
         ClosedState<A> had = (ClosedState<A>) answers.get(question);
         if (had != null) {
@@ -326,5 +359,14 @@ public final class ClosedStates {
      */
     public long workedOut() {
         return workedOut.get();
+    }
+
+    /**
+     * How many questions have been put to this, worked out or lent, for a test holding a closure
+     * lent part by part to asking only for the parts the rules said since reach. Nought for
+     * {@link #NONE}, which is asked nothing.
+     */
+    long questionsAsked() {
+        return asked.get();
     }
 }

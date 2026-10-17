@@ -66,6 +66,26 @@ class OneClosureStandsForEveryQuestionEqualToItTest {
         assertEquals(2, kept.workedOut());
     }
 
+    /**
+     * And a closure is lent to rules said after it only where they are spaced as it was: the same
+     * rules spaced another way are another question, whoever is lending.
+     */
+    @Test
+    void aClosureIsNotLentToTheSameRulesSpacedAnotherWay() {
+        ClosedStates kept = ClosedStates.kept();
+        List<AffineConstraint<String>> rules = List.of(
+                rule("a", 1, "b", -1, -2), rule("a", 1, "a", 0, -3));
+
+        ClosedStates.Parted<String> whole = kept.of(rules, atom -> Granularity.DISCRETE,
+                CanonicalOrder.asTheyAreSpelled(), null);
+        ClosedStates.Parted<String> dense = kept.of(rules,
+                atom -> atom.equals("a") ? Granularity.DENSE : Granularity.DISCRETE,
+                CanonicalOrder.asTheyAreSpelled(), whole);
+
+        assertNotSame(whole.state(), dense.state());
+        assertEquals(2, kept.workedOut());
+    }
+
     /** What is spaced at a position no rule weighs is nothing the closure reads. */
     @Test
     void theSpacingOfAPositionNoRuleWeighsIsNoPartOfTheQuestion() {

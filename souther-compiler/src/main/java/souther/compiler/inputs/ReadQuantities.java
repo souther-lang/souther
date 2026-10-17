@@ -1568,14 +1568,30 @@ final class ReadQuantities implements Quantities {
         if (both.equals(fixed)) {
             return this;
         }
-        // One term that was not fixed before goes at the end of the fixings, which is the shape the
-        // rules with the fixings in them can be carried on from.
-        OneMoreFixed oneMore = more.size() == 1 && both.size() == fixed.size() + 1
-                ? new OneMoreFixed(held(more.keySet().iterator().next()), withTheFixings,
-                        whereEachTermRuns)
-                : null;
         return new ReadQuantities(byRoot, roots, byPath, cases, typeAt, both, ruleReading,
-                assumed, heldAgainst, contexts, oneMore);
+                assumed, heldAgainst, contexts, oneMoreThan(both));
+    }
+
+    /**
+     * {@code both} as these fixings with one term more, where it is that: every term fixed here
+     * fixed there where it is here, and one other — which a map that keeps the order its entries
+     * arrived in has at the end, the shape the rules with the fixings in them can be carried on
+     * from. Null where it is anything else.
+     */
+    private OneMoreFixed oneMoreThan(Map<NumericTerm, Fixed> both) {
+        if (both.size() != fixed.size() + 1) {
+            return null;
+        }
+        NumericTerm added = null;
+        for (Map.Entry<NumericTerm, Fixed> each : both.entrySet()) {
+            Fixed had = fixed.get(each.getKey());
+            if (had == null) {
+                added = each.getKey();
+            } else if (!had.equals(each.getValue())) {
+                return null;
+            }
+        }
+        return new OneMoreFixed(added, withTheFixings, whereEachTermRuns);
     }
 
     /**
