@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.numeric.Towards;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
@@ -17,6 +18,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -162,6 +164,46 @@ class AFloorRemainderOfAFormIsALineOnTheRemainderTest {
             List<BorderAssessment> lines = linesOf("a: Int, d: Int", body);
             assertEquals(List.of("1"), bordersOf(lines), body.toString());
             assertEquals(labelsOf(inline), labelsOf(lines), body.toString());
+        }
+    }
+
+    /**
+     * A remainder weighed by two against five is the remainder against the whole number below
+     * half of it: the remainder is whole, so the rows owed are the rows the whole level owes.
+     */
+    @Test
+    void aWeighedRemainderOwesTheRowsOfTheWholeLevelItComesTo() {
+        List<BorderAssessment> whole = linesOf("a: Int, d: Int",
+                List.of("guard Int.floorMod(a - d, 7) <= 2 else No", "Ok"));
+        List<BorderAssessment> weighed = linesOf("a: Int, d: Int", List.of(
+                "let w = Int.floorMod(a - d, 7)", "guard 2 * w <= 5 else No", "Ok"));
+        assertFalse(labelsOf(whole).isEmpty(), "the line is owed rows");
+        assertEquals(labelsOf(whole), labelsOf(weighed));
+    }
+
+    /**
+     * Behind a name, a remainder the divisor cannot leave is a line no row is owed at or past: the
+     * remainder runs to one below the divisor whatever is written of it.
+     */
+    @Test
+    void aNamedRemainderPastTheDivisorIsOwedNoRowAtOrPastIt() {
+        List<BorderAssessment> lines = linesOf("a: Int, d: Int",
+                List.of("let w = Int.floorMod(a - d, 7)", "guard w >= 7 else No", "Ok"));
+        for (BorderAssessment border : lines) {
+            border.items().forEach((point, assessed) -> {
+                boolean atOrPast = point instanceof DomainPoint.AtTheLine
+                        || point instanceof DomainPoint.BesideTheLine(var side)
+                                && side == Towards.ABOVE
+                        || point instanceof DomainPoint.InTheRegion(var side)
+                                && side == Towards.ABOVE;
+                if (atOrPast) {
+                    assertInstanceOf(ItemAssessment.NotOwed.class, assessed,
+                            () -> point + " is past what the remainder runs to");
+                }
+            });
+        }
+        for (String label : labelsOf(lines)) {
+            assertFalse(label.contains("= 7"), label);
         }
     }
 

@@ -71,12 +71,11 @@ public final class RemainderOfAShiftedValue {
             if (found == null) {
                 continue;
             }
-            Moved moved = Moved.of(found.call().args().getFirst(), found.at(), sides);
+            Moved moved = Moved.of(found.division().dividend(), found.at(), sides);
             if (moved == null) {
                 continue;
             }
-            if (found.divisor() == null || found.against() == null
-                    || found.divisor().signum() <= 0) {
+            if (found.against() == null) {
                 return null;
             }
             ConstantComparison statement =
@@ -128,13 +127,12 @@ public final class RemainderOfAShiftedValue {
             if (found == null) {
                 continue;
             }
-            if (found.divisor() == null || found.against() == null
-                    || found.divisor().signum() <= 0) {
+            if (found.against() == null) {
                 return null;
             }
             ConstantComparison statement = ConstantComparison.of(found.written(), found.against(),
                     BigInteger.ZERO, found.divisor().subtract(BigInteger.ONE));
-            return statement == null ? null : new OfAForm<>(found.call().args().getFirst(),
+            return statement == null ? null : new OfAForm<>(found.division().dividend(),
                     found.at(), found.divisor(), statement);
         }
         return null;
@@ -184,14 +182,24 @@ public final class RemainderOfAShiftedValue {
      */
     public static <E> OfADivision<E> ofADivision(Core value, E at,
                                                  TheSignOfAnOrder.Sides<E> sides) {
-        Called<E> called = called(value, at, sides);
-        return called == null || called.divisor() == null || called.divisor().signum() <= 0
-                ? null : new OfADivision<>(called.call(), called.at(), called.divisor());
+        ValueStanding.ReadThrough<E> side = sides.standing(value, at);
+        if (!(Core.withoutStanding(side.value()) instanceof Core.PreservedCall call)) {
+            return null;
+        }
+        OptionalInt divides = DefaultBoundOperationFacts.get()
+                .divisorOfAFloorRemainder(call.operation());
+        if (divides.isEmpty() || call.args().size() <= divides.getAsInt()) {
+            return null;
+        }
+        BigInteger divisor =
+                wholeNumberOf(sides.constant(call.args().get(divides.getAsInt()), side.at()));
+        return divisor == null || divisor.signum() <= 0
+                ? null : new OfADivision<>(call, side.at(), divisor);
     }
 
     /**
-     * The call of a floor remainder that one side of {@code comparison} is, and what the other side
-     * and the divisor are as whole numbers — or null where this side is no such call.
+     * The floor remainder that one side of {@code comparison} is, and what the other side is as a
+     * whole number — or null where this side is no such remainder ({@link #ofADivision}).
      */
     private static <E> Located<E> locate(StatedComparison comparison, E at,
                                          TheSignOfAnOrder.Sides<E> sides,
@@ -203,41 +211,35 @@ public final class RemainderOfAShiftedValue {
         if (Core.withoutStanding(spelled) instanceof Core.Read) {
             return null;
         }
-        Called<E> called = called(spelled, at, sides);
-        if (called == null) {
+        OfADivision<E> division = ofADivision(spelled, at, sides);
+        if (division == null) {
             return null;
         }
         BigInteger against = wholeNumberOf(
                 sides.constant(remainderFirst ? comparison.right() : comparison.left(), at));
         Rel written = (remainderFirst ? comparison.claim() : comparison.claim().turned())
                 .statedRelation();
-        return new Located<>(called.call(), called.at(), called.divisor(), against, written);
+        return new Located<>(division, against, written);
     }
 
     /**
-     * The call of a floor remainder {@code value} stands for, and its divisor as a whole number
-     * where it is one — or null where it is no such call.
+     * A floor remainder one side of a comparison is, with the number it is read against where that
+     * is a whole one.
      */
-    private static <E> Called<E> called(Core value, E at, TheSignOfAnOrder.Sides<E> sides) {
-        ValueStanding.ReadThrough<E> side = sides.standing(value, at);
-        if (!(Core.withoutStanding(side.value()) instanceof Core.PreservedCall call)) {
-            return null;
+    private record Located<E>(OfADivision<E> division, BigInteger against, Rel written) {
+
+        Core.PreservedCall call() {
+            return division.call();
         }
-        OptionalInt divides = DefaultBoundOperationFacts.get()
-                .divisorOfAFloorRemainder(call.operation());
-        if (divides.isEmpty() || call.args().size() <= divides.getAsInt()) {
-            return null;
+
+        E at() {
+            return division.at();
         }
-        return new Called<>(call, side.at(),
-                wholeNumberOf(sides.constant(call.args().get(divides.getAsInt()), side.at())));
+
+        BigInteger divisor() {
+            return division.divisor();
+        }
     }
-
-    /** A call of a floor remainder, with its divisor where that is a whole number. */
-    private record Called<E>(Core.PreservedCall call, E at, BigInteger divisor) {}
-
-    /** A floor remainder one side of a comparison is, with the numbers it is read against. */
-    private record Located<E>(Core.PreservedCall call, E at, BigInteger divisor,
-                              BigInteger against, Rel written) {}
 
     /**
      * What holds of the remainder {@code r} of the place, by {@code divisor}, where the remainder of
