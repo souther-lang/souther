@@ -9,6 +9,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -613,8 +614,8 @@ class AFillerThatStopsTheBodyIsExchangedForOneThatGoesOnTest {
                 case RepairShortfall.WayPast.Searched(List<CameToNothing> came) ->
                         "searched: " + reasons(came);
                 case RepairShortfall.WayPast.CutShort(List<CameToNothing> came,
-                        CompositionBudget figure) ->
-                        "cut short at " + figure + ": " + reasons(came);
+                        Set<CompositionBudget> figures) ->
+                        "cut short at " + figures + ": " + reasons(came);
                 case RepairShortfall.WayPast.NotSearchable(RepairShortfall.Barrier why) ->
                         "not searchable: " + why;
             });

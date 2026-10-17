@@ -217,11 +217,11 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
                 return new HeldOutcome.Bringing.NoValueCanStandThere();
             }
             case OneOfEach.Walked.Stopped<OnTheWay, Reachability>(var figure) -> {
-                return new HeldOutcome.Bringing.LeftUnlooked(figure);
+                return new HeldOutcome.Bringing.LeftUnlooked(Set.of(figure));
             }
             case OneOfEach.Walked.Open<OnTheWay, Reachability>(var alternatives, var stoppedBy) -> {
                 if (stoppedBy != null) {
-                    each.add(new HeldOutcome.Bringing.LeftUnlooked(stoppedBy));
+                    each.add(new HeldOutcome.Bringing.LeftUnlooked(Set.of(stoppedBy)));
                 }
                 for (OneOfEach.Way<OnTheWay> alternative : alternatives) {
                     // An alternative whose choices the figure left is not what the condition
@@ -299,7 +299,8 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
             case OneOfEach.Walked.Closed<OnTheWay, Reachability> _ -> throw new IllegalStateException(
                     "a way the reading found open is one its walk finds open: " + taken);
         }
-        return new HeldOutcome.Bringing.Found(ways, Optional.ofNullable(figure));
+        return new HeldOutcome.Bringing.Found(ways,
+                figure == null ? Set.of() : Set.of(figure));
     }
 
     /**

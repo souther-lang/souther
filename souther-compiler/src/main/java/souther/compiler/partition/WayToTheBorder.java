@@ -371,6 +371,15 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
         return out;
     }
 
+    /**
+     * The positions what {@code entry} asks of a row turns on: the one account of them, which the
+     * walk of a way groups its choices by and a reader asking what holding a row to it writes asks
+     * as well.
+     */
+    static Set<TermPath> positionsOf(OnTheWay entry) {
+        return ASKED_OF_A_ROW.positions(entry);
+    }
+
     /** The conditions on this way a row is past one of several ways of
      *  ({@link OnTheWay#alternatives}), in the order the walk met them. */
     public List<OnTheWay> severalWays() {

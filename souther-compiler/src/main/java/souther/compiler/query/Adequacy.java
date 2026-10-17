@@ -6416,7 +6416,7 @@ public final class Adequacy {
                             return new HeldOutcome.Bringing.Found(List.of(new HeldOutcome(
                                     List.of(new RowDemand.AtAPoint(at.fixing(),
                                             quantity.asksOfEachTerm(owed.criterion()))),
-                                    List.of(), way, Map.of(), able)), Optional.empty());
+                                    List.of(), way, Map.of(), able)), Set.of());
                         }
                     }
                 }

@@ -11,7 +11,7 @@ import souther.compiler.query.Compilation;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -33,7 +33,7 @@ class WaysOfHoldingARowAreAnsweredTogetherByOneLawTest {
     private static final HeldOutcome.Bringing SHORT = new HeldOutcome.Bringing.NothingFound();
 
     private static final HeldOutcome.Bringing STOPPED = new HeldOutcome.Bringing.LeftUnlooked(
-            CompositionBudget.CHOICES_ON_A_WAY_LOOKED_AT);
+            Set.of(CompositionBudget.CHOICES_ON_A_WAY_LOOKED_AT));
 
     @Test
     void noRowTakesItOnlyWhereNoRowTakesAnyOfThem() {
@@ -50,25 +50,35 @@ class WaysOfHoldingARowAreAnsweredTogetherByOneLawTest {
         assertEquals(STOPPED, HeldOutcome.Bringing.oneOf(List.of(NO_ROW, STOPPED, SHORT)));
     }
 
+    /** Two figures that stopped two lookings are both said: each is a number to raise. */
+    @Test
+    void theFiguresThatStoppedSeveralLookingsAddUp() {
+        assertEquals(new HeldOutcome.Bringing.LeftUnlooked(Set.of(
+                        CompositionBudget.CHOICES_ON_A_WAY_LOOKED_AT,
+                        CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG)),
+                HeldOutcome.Bringing.oneOf(List.of(STOPPED, new HeldOutcome.Bringing.LeftUnlooked(
+                        Set.of(CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG)))));
+    }
+
     @Test
     void aWayFoundIsTheAnswerWithTheFigureThatLeftOthersOut() {
         HeldOutcome way = aWay();
         assertEquals(new HeldOutcome.Bringing.Found(List.of(way),
-                        Optional.of(CompositionBudget.CHOICES_ON_A_WAY_LOOKED_AT)),
+                        Set.of(CompositionBudget.CHOICES_ON_A_WAY_LOOKED_AT)),
                 HeldOutcome.Bringing.oneOf(List.of(SHORT,
-                        new HeldOutcome.Bringing.Found(List.of(way), Optional.empty()), STOPPED)));
+                        new HeldOutcome.Bringing.Found(List.of(way), Set.of()), STOPPED)));
     }
 
     @Test
     void noneKeptOfWaysAFigureLeftSomeOfIsNotNoneKept() {
         HeldOutcome way = aWay();
         assertEquals(new HeldOutcome.Bringing.Kept.NoneLookedAtWas(
-                        CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG),
+                        Set.of(CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG)),
                 new HeldOutcome.Bringing.Found(List.of(way),
-                        Optional.of(CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG))
+                        Set.of(CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG))
                         .keeping(_ -> false));
         assertInstanceOf(HeldOutcome.Bringing.Kept.None.class,
-                new HeldOutcome.Bringing.Found(List.of(way), Optional.empty())
+                new HeldOutcome.Bringing.Found(List.of(way), Set.of())
                         .keeping(_ -> false));
     }
 

@@ -1270,8 +1270,8 @@ public final class GeneratedRows {
             // The figure first, the way every search this compiler stopped is said: what the
             // searches had come to is the answer of looking that did not finish.
             case RepairShortfall.WayPast.CutShort(List<CameToNothing> came,
-                                                  CompositionBudget figure) ->
-                    Reasons.met(CompositionShortfall.of(Set.of(figure))) + (came.isEmpty()
+                                                  Set<CompositionBudget> figures) ->
+                    Reasons.met(CompositionShortfall.of(figures)) + (came.isEmpty()
                             ? "nothing was looked for, which does not make it a way no row goes"
                             : saidOf(came, rendering, places));
             case RepairShortfall.WayPast.NotSearchable(RepairShortfall.Barrier why) -> why(why);

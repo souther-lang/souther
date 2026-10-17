@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import souther.compiler.coverage.CoverageSites;
 
 import java.util.List;
+import java.util.Set;
 
 /**
  * What looking for a row that goes further found out, where it took a row no further than a guard.
@@ -126,15 +127,18 @@ public record RepairShortfall(List<Generator.Purpose> soughtFor, CoverageSites.A
          * again, so a search made with no runs left can still answer from rows run before, and one
          * that did is {@link Searched} or a row that goes on — never this.
          *
-         * @param came   what the searches made had come to, each word once, and none where the
-         *               figure stopped the looking before any search was made
-         * @param figure what ran out
+         * @param came    what the searches made had come to, each word once, and none where a
+         *                figure stopped the looking before any search was made
+         * @param figures what ran out, every one of them: each is a number somebody would have to
+         *                raise, and told one of two, a reader who raises it meets the other
          */
-        record CutShort(List<CameToNothing> came, CompositionBudget figure) implements WayPast {
+        record CutShort(List<CameToNothing> came, Set<CompositionBudget> figures)
+                implements WayPast {
 
             public CutShort {
                 came = List.copyOf(came);
-                if (figure == null) {
+                figures = Set.copyOf(figures);
+                if (figures.isEmpty()) {
                     throw new IllegalArgumentException("a way cut short was cut by some figure");
                 }
             }

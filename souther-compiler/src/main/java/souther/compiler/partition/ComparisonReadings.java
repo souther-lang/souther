@@ -154,14 +154,10 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      * @param context   where it stands: what a construct answering it is in the model is the copy
      *                  the call a helper's body was read at makes of it
      */
-    record OutcomeMet(Condition condition, List<OnTheWay> assumed, List<OnTheWay> holding,
-                      List<OnTheWay> failing, CallContext context) {
+    record OutcomeMet(Condition.OfOneConstruct condition, List<OnTheWay> assumed,
+                      List<OnTheWay> holding, List<OnTheWay> failing, CallContext context) {
 
         OutcomeMet {
-            if (condition instanceof Condition.Joined) {
-                throw new IllegalArgumentException(
-                        "a condition a run is seen coming out of is one construct: " + condition);
-            }
             assumed = List.copyOf(assumed);
             holding = List.copyOf(holding);
             failing = List.copyOf(failing);
@@ -1022,8 +1018,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                                    WhatConditionsState conditions, CallContext context,
                                    ConditionNumbering numbering) {
         switch (condition) {
-            case Condition.Truth _, Condition.Compares _ -> out.add(new OutcomeMet(condition,
-                    assumed,
+            case Condition.OfOneConstruct one -> out.add(new OutcomeMet(one, assumed,
                     holding != null ? holding
                             : ReachingCuts.stating(condition, read, true, conditions).entries(),
                     failing != null ? failing

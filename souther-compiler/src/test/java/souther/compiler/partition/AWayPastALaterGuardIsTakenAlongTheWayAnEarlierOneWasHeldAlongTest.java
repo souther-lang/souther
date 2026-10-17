@@ -88,10 +88,33 @@ class AWayPastALaterGuardIsTakenAlongTheWayAnEarlierOneWasHeldAlongTest {
                 eachCase.get(1).reaching().requirements(),
                 "the two ways ask for two cases");
         for (HeldOutcome each : eachCase) {
-            Reachability.Reaching taken = HeldOutcome.along(List.of(each, whole),
-                    read.declarations()).orElseThrow();
+            Reachability.Reaching taken = assertInstanceOf(Reachability.Reaching.class,
+                    HeldOutcome.along(List.of(each, whole), read.declarations()));
             assertEquals(each.reaching().requirements(), taken.requirements(),
                     () -> "the way to the later guard asks for the case the earlier was held to");
+        }
+    }
+
+    /**
+     * A later way that does not take the earlier guard's condition in — a way read through copies,
+     * which holds only what every copy's way holds — still asks of the row what the earlier guard
+     * was held along: the row has to be that wherever it goes next.
+     */
+    @Test
+    void aChoiceOfAConditionTheLaterWayDoesNotTakeInIsAskedBesideIt() {
+        Read read = read(CASED);
+        HeldOutcome.Bringing.Found earlier =
+                assertInstanceOf(HeldOutcome.Bringing.Found.class, read.holding(0));
+        HeldOutcome.Bringing.Found later =
+                assertInstanceOf(HeldOutcome.Bringing.Found.class, read.holding(1));
+        HeldOutcome laterAlone = new HeldOutcome(later.ways().getFirst().demands(), List.of(),
+                WayToTheBorder.UNTOUCHED, Map.of(), Reachability.untouched(read.declarations()));
+        for (HeldOutcome each : earlier.ways().stream()
+                .filter(one -> !one.chosen().isEmpty()).toList()) {
+            Reachability.Reaching taken = assertInstanceOf(Reachability.Reaching.class,
+                    HeldOutcome.along(List.of(each, laterAlone), read.declarations()));
+            assertEquals(each.reaching().requirements(), taken.requirements(),
+                    () -> "the case the earlier guard was held to is asked beside the later way");
         }
     }
 
@@ -116,8 +139,8 @@ class AWayPastALaterGuardIsTakenAlongTheWayAnEarlierOneWasHeldAlongTest {
         assertEquals(2, alongOne.size(), () -> "the earlier guard is held along either list: "
                 + earlier.ways());
         for (HeldOutcome each : alongOne) {
-            Reachability.Reaching taken = HeldOutcome.along(List.of(each, whole),
-                    read.declarations()).orElseThrow();
+            Reachability.Reaching taken = assertInstanceOf(Reachability.Reaching.class,
+                    HeldOutcome.along(List.of(each, whole), read.declarations()));
             assertTrue(taken.boundedOnTheWay().containsAll(each.reaching().boundedOnTheWay()),
                     () -> "the way to the later guard asks what the earlier was held to: "
                             + each.reaching().boundedOnTheWay() + " along " + taken);

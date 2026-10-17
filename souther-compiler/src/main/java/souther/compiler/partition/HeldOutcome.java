@@ -5,11 +5,12 @@ import souther.compiler.inputs.SearchRegion;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
+import java.util.Set;
 import java.util.function.Predicate;
 
 /**
@@ -66,9 +67,31 @@ public record HeldOutcome(List<RowDemand> demands, List<OnTheWay.Narrowed> cases
     }
 
     /**
+     * Whether {@code held} take every condition any two of them chose a way of the same way, so
+     * that one row can be held to all of them at once.
+     */
+    static boolean agree(List<HeldOutcome> held) {
+        return chosenAlong(held) != null;
+    }
+
+    /** Every choice any of {@code held} made, or null where two of them chose one condition two
+     *  ways. */
+    private static Map<OnTheWay, Integer> chosenAlong(List<HeldOutcome> held) {
+        Map<OnTheWay, Integer> chosen = new LinkedHashMap<>();
+        for (HeldOutcome each : held) {
+            for (Map.Entry<OnTheWay, Integer> one : each.chosen().entrySet()) {
+                Integer before = chosen.putIfAbsent(one.getKey(), one.getValue());
+                if (before != null && !before.equals(one.getValue())) {
+                    return null;
+                }
+            }
+        }
+        return chosen;
+    }
+
+    /**
      * The way to the last of {@code held}, along the ways the ones before it were held along: the
-     * last one's way taken along every choice any of them made — or empty where two of them took
-     * one condition two ways, or the way taken so is one no row takes.
+     * last one's way taken along every choice any of them made — or why no row takes it so.
      *
      * <p>The way to a later guard takes the earlier ones in, so each choice made past an earlier
      * one is a choice of a condition on the later one's way, and it is taken there as it was. Asked
@@ -76,30 +99,35 @@ public record HeldOutcome(List<RowDemand> demands, List<OnTheWay.Narrowed> cases
      * — the same element of the same container, under two cases of one value — are two ways all
      * the same.
      *
+     * <p>And a choice of a condition the last way does not take in is still a choice the row is
+     * held to: a way to a comparison read through several copies holds what every copy's way
+     * holds, and a condition one copy is reached without is not on it. What the alternative chosen
+     * asks is then asked beside the way, since a row held past the guard above along it has to be
+     * all of that wherever it goes next.
+     *
+     * @param held         ways that agree ({@link #agree}); asked of ones that do not, there is
+     *                     no row held to all of them to say a way of
      * @param declarations what the declarations leave, which the way narrows
      */
-    static Optional<Reachability.Reaching> along(List<HeldOutcome> held,
-                                                 SearchRegion declarations) {
+    static Reachability along(List<HeldOutcome> held, SearchRegion declarations) {
+        Map<OnTheWay, Integer> chosen = chosenAlong(held);
+        if (chosen == null) {
+            throw new IllegalArgumentException("ways that take one condition two ways are held"
+                    + " to by no one row: " + held);
+        }
         HeldOutcome last = held.getLast();
-        Map<OnTheWay, Integer> chosen = new LinkedHashMap<>();
-        for (HeldOutcome each : held) {
-            for (Map.Entry<OnTheWay, Integer> one : each.chosen().entrySet()) {
-                Integer before = chosen.putIfAbsent(one.getKey(), one.getValue());
-                if (before != null && !before.equals(one.getValue())) {
-                    return Optional.empty();
-                }
+        if (chosen.equals(last.chosen())) {
+            return last.reaching();
+        }
+        List<OnTheWay> onIt = last.way().stated();
+        List<OnTheWay> entries = new ArrayList<>(last.way().choosing(chosen).onTheWay());
+        for (Map.Entry<OnTheWay, Integer> each : chosen.entrySet()) {
+            if (!onIt.contains(each.getKey())) {
+                entries.addAll(new WayToTheBorder(each.getKey().alternatives()
+                        .get(each.getValue())).choosing(chosen).onTheWay());
             }
         }
-        // Only the choices of conditions the last way takes in. A way to a comparison read
-        // through several copies holds what every copy's way holds, and a condition one copy is
-        // reached without is no condition of it to take a way of.
-        List<OnTheWay> onIt = last.way().stated();
-        chosen.keySet().retainAll(onIt);
-        if (chosen.equals(last.chosen())) {
-            return Optional.of(last.reaching());
-        }
-        return Reachability.of(last.way().choosing(chosen), declarations)
-                instanceof Reachability.Reaching taken ? Optional.of(taken) : Optional.empty();
+        return Reachability.of(new WayToTheBorder(entries), declarations);
     }
 
     /**
@@ -151,11 +179,12 @@ public record HeldOutcome(List<RowDemand> demands, List<OnTheWay.Narrowed> cases
          * conjunction the condition never stated.
          *
          * @param ways     one or more, in the order they are best looked for in
-         * @param cutShort the figure that left some way out, where one did: then a row past none of
-         *                 these may still be past the condition, and saying no way goes past would
-         *                 be saying more than was looked at
+         * @param cutShort the figures that left some way out, none where every way is here: where
+         *                 any did, a row past none of these may still be past the condition, and
+         *                 saying no way goes past would be saying more than was looked at. Every
+         *                 one of them, since each is a number somebody would have to raise
          */
-        record Found(List<HeldOutcome> ways, Optional<CompositionBudget> cutShort)
+        record Found(List<HeldOutcome> ways, Set<CompositionBudget> cutShort)
                 implements Bringing {
 
             public Found {
@@ -163,7 +192,7 @@ public record HeldOutcome(List<RowDemand> demands, List<OnTheWay.Narrowed> cases
                 if (ways.isEmpty()) {
                     throw new IllegalArgumentException("what brings a run somewhere is some way");
                 }
-                Objects.requireNonNull(cutShort, "the figure that left a way out, or none");
+                cutShort = Set.copyOf(cutShort);
             }
 
             /**
@@ -176,7 +205,7 @@ public record HeldOutcome(List<RowDemand> demands, List<OnTheWay.Narrowed> cases
                 if (!left.isEmpty()) {
                     return new Kept.Some(new Found(left, cutShort));
                 }
-                return cutShort.<Kept>map(Kept.NoneLookedAtWas::new).orElseGet(Kept.None::new);
+                return cutShort.isEmpty() ? new Kept.None() : new Kept.NoneLookedAtWas(cutShort);
             }
         }
 
@@ -186,22 +215,34 @@ public record HeldOutcome(List<RowDemand> demands, List<OnTheWay.Narrowed> cases
             /** These are kept. */
             record Some(Found kept) implements Kept {}
 
-            /** None of the ways looked at is kept, and {@code figure} left some unlooked at. */
-            record NoneLookedAtWas(CompositionBudget figure) implements Kept {}
+            /** None of the ways looked at is kept, and {@code figures} left some unlooked at. */
+            record NoneLookedAtWas(Set<CompositionBudget> figures) implements Kept {
+
+                public NoneLookedAtWas {
+                    figures = Set.copyOf(figures);
+                    if (figures.isEmpty()) {
+                        throw new IllegalArgumentException("ways left unlooked at were left by"
+                                + " some figure");
+                    }
+                }
+            }
 
             /** Every way was looked at, and none is kept. */
             record None() implements Kept {}
         }
 
         /**
-         * The ways a row could be held to it were more than {@code figure} lets be looked at, and
-         * none was found before it stopped the looking. This compiler's, as nothing found is, and
-         * with the figure, which is a number somebody can raise.
+         * The ways a row could be held to it were more than {@code figures} let be looked at, and
+         * none was found before they stopped the looking. This compiler's, as nothing found is,
+         * and with the figures, which are numbers somebody can raise.
          */
-        record LeftUnlooked(CompositionBudget figure) implements Bringing {
+        record LeftUnlooked(Set<CompositionBudget> figures) implements Bringing {
 
             public LeftUnlooked {
-                Objects.requireNonNull(figure, "the figure that stopped the looking");
+                figures = Set.copyOf(figures);
+                if (figures.isEmpty()) {
+                    throw new IllegalArgumentException("the looking was stopped by some figure");
+                }
             }
         }
 
@@ -216,8 +257,8 @@ public record HeldOutcome(List<RowDemand> demands, List<OnTheWay.Narrowed> cases
 
         /**
          * What several ways of bringing a run to one place come to together, where a run past
-         * any one of them is there: every way any of them found, with the first figure any of them
-         * met; where none found one, the figure, if one stopped some looking; otherwise nothing
+         * any one of them is there: every way any of them found, with every figure any of them
+         * met; where none found one, the figures, if any stopped some looking; otherwise nothing
          * found, if this compiler worked any of them out short; and only where every one of them
          * is one no row takes, that.
          *
@@ -227,24 +268,24 @@ public record HeldOutcome(List<RowDemand> demands, List<OnTheWay.Narrowed> cases
          */
         static Bringing oneOf(List<Bringing> each) {
             List<HeldOutcome> ways = new ArrayList<>();
-            Optional<CompositionBudget> figure = Optional.empty();
+            Set<CompositionBudget> figures = EnumSet.noneOf(CompositionBudget.class);
             boolean workedOutShort = each.isEmpty();
             for (Bringing one : each) {
                 switch (one) {
                     case Found(var found, var cutShort) -> {
                         ways.addAll(found);
-                        figure = figure.or(() -> cutShort);
+                        figures.addAll(cutShort);
                     }
-                    case LeftUnlooked(var stopped) -> figure = figure.or(() -> Optional.of(stopped));
+                    case LeftUnlooked(var stopped) -> figures.addAll(stopped);
                     case NothingFound _ -> workedOutShort = true;
                     case NoValueCanStandThere _ -> { }
                 }
             }
             if (!ways.isEmpty()) {
-                return new Found(ways, figure);
+                return new Found(ways, figures);
             }
-            if (figure.isPresent()) {
-                return new LeftUnlooked(figure.get());
+            if (!figures.isEmpty()) {
+                return new LeftUnlooked(figures);
             }
             return workedOutShort ? new NothingFound() : new NoValueCanStandThere();
         }
