@@ -1701,13 +1701,14 @@ final class ReadQuantities implements Quantities {
 
     /** {@link #emptiness}, worked out. */
     private Optional<EmptyInput> whyNothingIsLeft() {
-        for (Map.Entry<NumericTerm, Fixed> each : inOrder()) {
+        List<Map.Entry<NumericTerm, Fixed>> inOrder = inOrder();
+        for (Map.Entry<NumericTerm, Fixed> each : inOrder) {
             if (!each.getValue().isOne()) {
                 return Optional.of(new EmptyInput.TwoValuesAtOnePosition(each.getKey(),
                         each.getValue().least(), each.getValue().most()));
             }
         }
-        for (Map.Entry<NumericTerm, Fixed> each : inOrder()) {
+        for (Map.Entry<NumericTerm, Fixed> each : inOrder) {
             NumericDomain.Bounds own = each.getKey().intrinsicBounds();
             if (!own.admits(each.getValue().least())) {
                 return Optional.of(new EmptyInput.OutsideWhereThePositionRuns(each.getKey(),
@@ -1718,7 +1719,7 @@ final class ReadQuantities implements Quantities {
         // their reason: what contradicts is the value against what was taken in about it, and the
         // declarations were never asked. A hole is no part of the arithmetic, so nothing further
         // down would find this.
-        for (Map.Entry<NumericTerm, Fixed> each : inOrder()) {
+        for (Map.Entry<NumericTerm, Fixed> each : inOrder) {
             if (each.getValue().isOne()
                     && apartAt(each.getKey()).has(each.getValue().least())) {
                 return Optional.of(new EmptyInput.WhereARuleHoldsThePositionApart(each.getKey(),
@@ -1931,9 +1932,7 @@ final class ReadQuantities implements Quantities {
      * fixings arrived in, which is the caller's business and not the model's.
      */
     private List<Map.Entry<NumericTerm, Fixed>> inOrder() {
-        List<Map.Entry<NumericTerm, Fixed>> out = new ArrayList<>(fixed.entrySet());
-        out.sort(java.util.Comparator.comparing(each -> each.getKey().toString()));
-        return out;
+        return NumericTerms.entriesInOrder(fixed);
     }
 
     /**
