@@ -116,6 +116,9 @@ final class RunReach {
                     ofTheValuesWalked(run.subjectPath(), typeAt, reading);
             case RunSource.ComputedOccurrences run ->
                     ofWhatWasComputed(run.computation(), run.elements(), orders, typeAt, reading);
+            // The nodes of a tree stand at no path a type is declared at, and what is taken over
+            // them is how many there are, which no step of a walk adds up.
+            case RunSource.ReachableNodes _ -> null;
         };
         Granularity answeredOn = spacingOf(orders.answered());
         Granularity observedOn = spacingOf(orders.observed());

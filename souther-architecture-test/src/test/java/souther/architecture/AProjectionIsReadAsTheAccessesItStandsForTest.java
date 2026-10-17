@@ -281,7 +281,8 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
         row(out, c + "abort/AbortSites", "walkGuarded", "(L" + CORE + "$Construct;L" + c
                 + "core/KernelContracts;Ljava/util/Map;Ljava/util/IdentityHashMap;)V",
                 Reading.STRUCTURE, EVALUATION);
-        row(out, c + "check/AdmissibleReading", "gather", "(" + core + "Ljava/util/Set;" + at + ")V",
+        row(out, c + "check/AdmissibleReading", "gather",
+                "(" + core + "Ljava/util/Set;" + at + "Ljava/util/Set;)V",
                 Reading.FIRST_HELD, FINDS_THE_FIRST_HELD);
         row(out, c + "check/AffineForms", "composed", "(" + core + "Ljava/lang/Object;L" + c
                 + "check/AffineForms$Reading;L" + c + "check/AffineForms$Walk;L" + c

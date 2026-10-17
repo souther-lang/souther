@@ -478,7 +478,8 @@ class AnExpressionIsAskedWhatItIsWithWhatItStandsAsSetAsideTest {
                 "files each node's own answer and walks on through Core.forEachChild; a Widen"
                         + " answers nothing of its own, and what it holds is filed one step down");
         row(out, c + "check/AdmissibleReading", "gather",
-                "(" + core + "Ljava/util/Set;L" + c + "check/Denotations;)V", 1, GOES_ON_INTO_IT);
+                "(" + core + "Ljava/util/Set;L" + c + "check/Denotations;Ljava/util/Set;)V", 1,
+                GOES_ON_INTO_IT);
         row(out, c + "check/AffineForms", "projected", "(L" + CORE + "$FieldProjection;"
                         + "Ljava/lang/Object;L" + c + "check/AffineForms$Reading;L" + c
                         + "check/AffineForms$Walk;L" + c + "check/AffineForms$Stop;)L" + c

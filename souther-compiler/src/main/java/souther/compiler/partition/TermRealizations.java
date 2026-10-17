@@ -11,6 +11,7 @@ import souther.compiler.evaluate.BoundUnderEvaluation;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.ReadingsOfEachValue;
+import souther.compiler.inputs.RunSource;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermPath;
@@ -1676,6 +1677,81 @@ final class TermRealizations {
                         Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
     }
 
+    /**
+     * Containers inside the elements of a container, holding as many occurrences of the run's path
+     * in all as one of those numbers, from none upward as every count is offered.
+     *
+     * <p>Only of a run no one container holds: a count of the elements of one container is a
+     * taking of that container's place, and no term over a run is made for it
+     * ({@code NumericTerm.TakenOver.of}).
+     */
+    private static Realization counting(AskedAt asked, Type sourceType,
+                                        List<List<String>> keptApart, TermOrders orders,
+                                        SearchRegion within, RuleReadingContext reading,
+                                        DemandsInside inside) {
+        if (!(orders.term() instanceof NumericTerm.TakenOver over)) {
+            throw new IllegalStateException(orders.term() + " is no count of a run");
+        }
+        return switch (over.source()) {
+            case RunSource.FlattenedOccurrences flat -> {
+                NestedContainersAddingUp nested = new NestedContainersAddingUp(flat.subjectPath());
+                yield firstThatBuilds(asked.walkIsOfTheWholeQuestion(),
+                        wholeNumbers(asked.walking(), orders.answered(), 0, Integer.MAX_VALUE,
+                                CompositionBudget.NUMBERS_OF_A_SET_TRIED.maximum()),
+                        count -> nested.holding(count, sourceType, keptApart, orders, within,
+                                reading, inside));
+            }
+            case RunSource.ReachableNodes nodes -> {
+                nothingInside(inside);
+                yield nodes.container().isEmpty()
+                        ? firstThatBuilds(asked.walkIsOfTheWholeQuestion(),
+                                wholeNumbers(asked.walking(), orders.answered(), 0,
+                                        Integer.MAX_VALUE,
+                                        CompositionBudget.NUMBERS_OF_A_SET_TRIED.maximum()),
+                                count -> nodesBelowARoot(count, sourceType, keptApart, reading))
+                        : treesNotWritten("nothing here writes a tree for how many values its"
+                                + " nodes hold in `" + String.join(".", nodes.container())
+                                + "`");
+            }
+            case RunSource.ProjectedOccurrences _, RunSource.ComputedOccurrences _ ->
+                    throw new IllegalStateException(orders.term() + " is a count of a run one"
+                            + " container holds, which is a taking of that container's place");
+        };
+    }
+
+    /**
+     * A tree of as many nodes as {@code answer}: the container below the root holding one fewer,
+     * each a node holding nothing below it, the root being the one more. None at nought, which no
+     * tree is. Where the rules hold what a node holds below it to fewer, a tree of that many is
+     * deeper than this writes, which is said as a tree this writes none of and never as a count no
+     * tree comes to.
+     */
+    private static Realization nodesBelowARoot(Place answer, Type sourceType,
+                                               List<List<String>> keptApart,
+                                               RuleReadingContext reading) {
+        int many = CountDomain.asCount(answer);
+        if (many == 0) {
+            return new Realization.None(
+                    Generator.UnresolvedCombination.Reason.NO_VALUE_CAN_STAND_THERE);
+        }
+        if (many < 0) {
+            return new Realization.None(
+                    Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+        }
+        Realization below = holdingExactly(sourceType, keptApart,
+                Count.of(BigDecimal.valueOf(many - 1)), reading);
+        return below instanceof Realization.None
+                ? treesNotWritten("a tree of " + many + " nodes is deeper than a root and the"
+                        + " nodes below it")
+                : below;
+    }
+
+    /** What a tree this writes none of is said as: a population written in part. */
+    private static Realization treesNotWritten(String why) {
+        return new Realization.Unexhausted(CompositionShortfall.writing(
+                Set.of(CompositionRepertoire.TREES_WRITTEN_FOR_A_COUNT)), why);
+    }
+
     /** A container whose elements come to one of those numbers, which is what a row has to hold for
      *  this number to be there, held by a value whose rules keep its elements apart at
      *  {@code keptApart}. */
@@ -2368,10 +2444,8 @@ final class TermRealizations {
         return switch (how) {
             case TakenAs.TheSumOfWhatItHolds _ -> addingUp(asked, sourceType, keptApart, orders,
                     within, reading, inside);
-            // How many a run holds is the size the walk's law says, which no term over a run is
-            // made for ({@code NumericTerm.TakenOver.of}).
-            case TakenAs.HowManyItHolds _ -> throw new IllegalStateException(
-                    "a count of a run is sized by the law of what made it, not taken over it");
+            case TakenAs.HowManyItHolds _ -> counting(asked, sourceType, keptApart, orders, within,
+                    reading, inside);
             case TakenAs.PartOfTime _, TakenAs.PartOfDate _,
                     TakenAs.TheTruncatingQuotient _, TakenAs.TheFloorRemainder _ -> {
                 nothingInside(inside);

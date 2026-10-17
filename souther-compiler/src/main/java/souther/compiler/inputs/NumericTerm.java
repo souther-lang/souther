@@ -546,14 +546,35 @@ public sealed interface NumericTerm
                     : new Type.ListOf(souther.compiler.check.TypeOps.base(each, inners));
             Type answers = over == null ? null
                     : NumericAnswers.typeOf(operation, over, inners, symbols);
-            // How many values a run holds is how many the walk that made it answered, which the
-            // law of the walk's operation says, and no account over the values themselves.
-            if (how == null || how instanceof TakenAs.HowManyItHolds || answers == null
-                    || source == null) {
+            // How many values a run over one container holds is how many that container does, a
+            // taking of the container's place and no number of its own. A run no one container
+            // holds — every occurrence of a place inside several — has its count as a number of
+            // the run.
+            if (how == null || answers == null || source == null
+                    || (how instanceof TakenAs.HowManyItHolds && source.isInOneContainer())) {
                 return null;
             }
             return how.takenOf(over, answers) ? new TakenOver(operation, source) : null;
         }
+
+        /**
+         * How many values {@code source} holds, a run no one container holds — or null where it
+         * is one container's, whose count is a taking of that container's place.
+         *
+         * <p>One operation for every count of a run, whatever the containers the occurrences stand
+         * in are: what is counted is the occurrences, which the run holds as a list, so a count
+         * written with {@code Set.size} of each set and one written with {@code List.length} of
+         * each list are one number and one term.
+         *
+         * @param each what stands at the place the run's values are read from
+         */
+        public static TakenOver howManyOf(RunSource source, Type each, NewtypeInners inners,
+                                          Symbols symbols) {
+            return of(LENGTH, source, each, inners, symbols);
+        }
+
+        private static final ValueName.Stdlib.Operation LENGTH =
+                ValueName.Stdlib.operation("List", "length");
 
         public ValueName.Stdlib operation() {
             return operation;
