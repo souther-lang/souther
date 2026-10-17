@@ -491,25 +491,50 @@ public sealed interface Proposition {
          * Whether {@code stated} quantifies {@code container} somewhere in it: what a reader that
          * would put {@code stated} inside a quantifier over {@code container} asks first, since
          * the two elements would be one subject there.
+         *
+         * <p>The container as {@code stated} names it where it stands, and not its spelling: what a
+         * search asks of each node it reaches names the places under the node it was written of,
+         * and those are the places under the node reached ({@link SomeReachable}). A quantifier
+         * there over a container under that node is over another container, whatever it is
+         * spelled; one over any other container is over the container it names.
          */
         public static boolean quantifiesOver(DecisionSubject container, Proposition stated) {
+            return quantifiesOver(container, stated, List.of());
+        }
+
+        /** {@link #quantifiesOver}, inside searches written of each of {@code rebound}. */
+        private static boolean quantifiesOver(DecisionSubject container, Proposition stated,
+                                              List<TermPath> rebound) {
             return switch (stated) {
                 case Some some -> some.container.equals(container)
-                        || quantifiesOver(container, some.ofTheElement);
+                        && !reboundBy(some.container, rebound)
+                        || quantifiesOver(container, some.ofTheElement, rebound);
                 case All all -> all.parts().stream()
-                        .anyMatch(part -> quantifiesOver(container, part));
+                        .anyMatch(part -> quantifiesOver(container, part, rebound));
                 case Any any -> any.parts().stream()
-                        .anyMatch(part -> quantifiesOver(container, part));
-                case SomeReachable reached -> quantifiesOver(container, reached.atANode())
-                        || reached.noneBelow().filter(each -> quantifiesOver(container, each))
-                                .isPresent();
+                        .anyMatch(part -> quantifiesOver(container, part, rebound));
+                case SomeReachable reached -> {
+                    List<TermPath> inside = new ArrayList<>(rebound);
+                    inside.add(reached.writtenAt());
+                    yield quantifiesOver(container, reached.atANode(), inside)
+                            || reached.noneBelow()
+                                    .filter(each -> quantifiesOver(container, each, inside))
+                                    .isPresent();
+                }
                 case OnAnApplication applied -> applied.each().stream()
-                        .anyMatch(each -> quantifiesOver(container, each));
+                        .anyMatch(each -> quantifiesOver(container, each, rebound));
                 case SoManyHold counted -> counted.statements().stream()
-                        .anyMatch(each -> quantifiesOver(container, each));
+                        .anyMatch(each -> quantifiesOver(container, each, rebound));
                 case Always _, Compared _, Truth _, InCases _, Present _, SameValue _,
                      LastToHold _, Carried _, Unread _ -> false;
             };
+        }
+
+        /** Whether {@code container} is a place under the node a search around it was written
+         *  of, which names the place under each node the search reaches. */
+        private static boolean reboundBy(DecisionSubject container, List<TermPath> rebound) {
+            return container instanceof DecisionSubject.AnInput(TermPath at)
+                    && rebound.stream().anyMatch(at::isAtOrUnder);
         }
 
         @Override

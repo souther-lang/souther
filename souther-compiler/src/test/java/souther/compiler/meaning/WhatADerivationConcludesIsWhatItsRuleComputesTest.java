@@ -38,6 +38,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -774,6 +775,33 @@ class WhatADerivationConcludesIsWhatItsRuleComputesTest {
         Proposition inner = new Proposition.Some(xs, truth(XS.element()), true);
         assertThrows(IllegalArgumentException.class, () -> new Proposition.Some(xs,
                 Proposition.all(List.of(truth(A), inner)), true));
+    }
+
+    /**
+     * What a search asks of each node it reaches names the places under the node it was written
+     * of, and those are the places under the node reached. A quantifier there over the nodes below
+     * is over the nodes below another node, so a quantifier over the nodes below holds that
+     * search, and the search unfolds one step down; a quantifier there over a container outside
+     * the node is over that container, and is refused as any other.
+     */
+    @Test
+    void aSearchNamesThePlacesUnderTheNodeItReachesAndNoOther() {
+        TermPath node = TermPath.of("n");
+        DecisionSubject below = new DecisionSubject.AnInput(node.then("below"));
+        Proposition belowAsked = new Proposition.Some(below,
+                truth(node.then("below").element().then("v")), true);
+        Proposition.SomeReachable reached = new Proposition.SomeReachable(
+                node.then("below").element(), node, List.of("below"), belowAsked,
+                Optional.empty(), true);
+        assertDoesNotThrow(() -> new Proposition.Some(below, reached, true));
+        assertDoesNotThrow(() -> Derivation.ATreeSearched.unfoldsOnce(reached, belowAsked, node,
+                List.of("below"), ConditionJoin.EITHER));
+
+        DecisionSubject xs = new DecisionSubject.AnInput(XS);
+        Proposition.SomeReachable outside = new Proposition.SomeReachable(
+                node.then("below").element(), node, List.of("below"),
+                new Proposition.Some(xs, truth(XS.element()), true), Optional.empty(), true);
+        assertThrows(IllegalArgumentException.class, () -> new Proposition.Some(xs, outside, true));
     }
 
     /** A conclusion that has the container's holding anything as a part cannot be made without it. */
