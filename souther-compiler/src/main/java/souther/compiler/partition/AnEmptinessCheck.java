@@ -10,7 +10,6 @@ import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.Rel;
 import souther.compiler.semantics.ConstantArguments;
 import souther.compiler.semantics.ResultRange;
-import souther.compiler.types.BinOp;
 import souther.compiler.types.ValueName;
 
 /**
@@ -63,43 +62,6 @@ final class AnEmptinessCheck {
         return noughtAlone || partsNoughtFromEverySizeAbove(relation, against.value(),
                         size.number().operation())
                 ? new Checked(size.number().args().getFirst(), atNought) : null;
-    }
-
-    /**
-     * Whether {@code stated} holds sizes against numbers and nothing else, past the one size against
-     * one number {@link #checked} reads: each side whole numbers and sizes, added, taken away and
-     * multiplied.
-     *
-     * <p>Such a comparison can be whether any of the containers holds anything —
-     * {@code List.length(a) + List.length(b) >= 1} is one of them doing so, as a sum of counts is
-     * above nought exactly where one of them is, and {@code List.length(a) + 0 >= 1} is the check
-     * written longer. Whether it is, is what it states, read; this asks only that the shape leaves
-     * room for it.
-     */
-    static boolean sizesAddedUp(StatedComparison stated) {
-        int left = sizesIn(stated.left());
-        int right = sizesIn(stated.right());
-        return left >= 0 && right >= 0 && left + right > 0
-                && (left + right > 1
-                        || Core.withoutStanding(stated.left()) instanceof Core.Binary
-                        || Core.withoutStanding(stated.right()) instanceof Core.Binary);
-    }
-
-    /** How many sizes {@code e} adds up, or -1 where it is anything but sizes and numbers. */
-    private static int sizesIn(Core e) {
-        if (aSize(e) != null) {
-            return 1;
-        }
-        return switch (Core.withoutStanding(e)) {
-            case Core.Int _ -> 0;
-            case Core.Binary bin when bin.op() == BinOp.ADD || bin.op() == BinOp.SUB
-                    || bin.op() == BinOp.MUL -> {
-                int left = sizesIn(bin.left());
-                int right = sizesIn(bin.right());
-                yield left < 0 || right < 0 ? -1 : left + right;
-            }
-            default -> -1;
-        };
     }
 
     /**

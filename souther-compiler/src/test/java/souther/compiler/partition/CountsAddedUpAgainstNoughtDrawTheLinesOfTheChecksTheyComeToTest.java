@@ -30,7 +30,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * the checks written one by one draw, and the comparison draws none of its own beside them.
  *
  * <p>A sum held past that says how many, and is still the comparison's own rule; so is a sum of
- * sizes of the input, which nothing inside the comparison states.
+ * sizes of the input, which no other comparison states.
  */
 class CountsAddedUpAgainstNoughtDrawTheLinesOfTheChecksTheyComeToTest {
 
@@ -68,11 +68,36 @@ class CountsAddedUpAgainstNoughtDrawTheLinesOfTheChecksTheyComeToTest {
         }
     }
 
-    /** Read as the check only once the numbers of the input are taken away, the comparison is
-     *  read as the check where it is read itself. */
+    /** However the counts reach the comparison, what it states is the checks: named before it, or
+     *  with numbers of the input that take each other away. */
     @Test
-    void aCountThatComesToTheCheckOnceReadIsReadAsIt() {
-        assertTrue(notReadAt(reportOf(X + " + n - n >= 1")).isEmpty());
+    void countsReachingTheComparisonAnyWayAreTheChecksTheyComeTo() {
+        assertSameLines(X + " >= 1", X + " + n - n >= 1");
+        assertSameLinesOf(guarding(X + " >= 1"), guarding("c >= 1", "c = " + X));
+        assertSameLinesOf(guarding(X + " >= 1 || " + Y + " >= 1"),
+                guarding("c + d >= 1", "c = " + X, "d = " + Y));
+    }
+
+    /**
+     * Counting what is no comparison alone — a truth of the input beside one — the comparison is
+     * read for what it states itself, and is still the check it comes to.
+     */
+    @Test
+    void aCountOfMoreThanAComparisonIsReadAsTheCheckItComesTo() {
+        String counted = "List.length(List.filter(x -> x > 0 && f, xs))";
+        assertSameLinesOf(withATruth(counted + " >= 1"), withATruth(counted + " + 0 >= 1"));
+    }
+
+    private static String withATruth(String condition) {
+        return """
+                module probe
+                data No
+                behavior some : (xs: List<Int>, ys: List<Int>, f: Bool) -> Bool | No
+                let some (xs, ys, f) = {
+                    guard %s else No
+                    true
+                }
+                """.formatted(condition);
     }
 
     /** The rows composed for the sum take the guard both ways. */
@@ -109,8 +134,12 @@ class CountsAddedUpAgainstNoughtDrawTheLinesOfTheChecksTheyComeToTest {
 
     /** The lines both draw, the same apart from which comparison of each is which. */
     private static void assertSameLines(String written, String added) {
-        JsonNode one = reportOf(written);
-        JsonNode other = reportOf(added);
+        assertSameLinesOf(guarding(written), guarding(added));
+    }
+
+    private static void assertSameLinesOf(String written, String added) {
+        JsonNode one = reportOfSource(written);
+        JsonNode other = reportOfSource(added);
         assertTrue(notReadAt(other).isEmpty(), () -> added + " is read: " + other);
         List<JsonNode> expected = boundaries(one);
         assertFalse(expected.isEmpty(), () -> written + " draws lines");
@@ -167,31 +196,40 @@ class CountsAddedUpAgainstNoughtDrawTheLinesOfTheChecksTheyComeToTest {
                 .filter(each -> Integer.parseInt(each.group()) > 0).count();
     }
 
-    private static String source(String condition) {
+    /** A guard on {@code condition} with each of {@code bound} given its name before it, as
+     *  {@code "c = ..."}. */
+    private static String guarding(String condition, String... bound) {
+        StringBuilder body = new StringBuilder();
+        for (String each : bound) {
+            body.append("    let ").append(each).append('\n');
+        }
         return """
                 module probe
                 data No
                 behavior some : (xs: List<Int>, ys: List<Int>, n: Int) -> Bool | No
                 let some (xs, ys, n) = {
-                    guard %s else No
+                %s    guard %s else No
                     true
                 }
-                """.formatted(condition);
+                """.formatted(body, condition);
     }
 
     private static JsonNode reportOf(String condition) {
-        Compilation compilation = compiled(condition);
-        return JSON.readTree(AdequacyReport.of(compilation)
+        return reportOfSource(guarding(condition));
+    }
+
+    private static JsonNode reportOfSource(String source) {
+        return JSON.readTree(AdequacyReport.of(compiled(source))
                 .json(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
     }
 
     private static String rowsOf(String condition) {
-        return GeneratedRows.of(compiled(condition), "probe", null,
+        return GeneratedRows.of(compiled(guarding(condition)), "probe", null,
                 SourceRendering.namedByIdentity(SourceLayouts.NONE)).text();
     }
 
-    private static Compilation compiled(String condition) {
-        Compilation compilation = Compilation.ofSource(source(condition), "Main");
+    private static Compilation compiled(String source) {
+        Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         return compilation;

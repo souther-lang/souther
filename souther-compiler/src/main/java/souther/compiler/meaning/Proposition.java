@@ -915,6 +915,15 @@ public sealed interface Proposition {
         };
     }
 
+    /**
+     * Whether {@code relation} is counts held against nought, which is written as whether some
+     * element of one of them meets what it counts, or the same whatever is counted ({@link
+     * #ofCounts}) — so that no relation of its own is left.
+     */
+    public static boolean comesToWhetherAnyMeets(Relation relation) {
+        return ofCounts(relation) != null;
+    }
+
     /** Some element of one of the containers {@code counts} counts meeting what it counts. */
     private static Proposition someMeets(LinearForm<Quantity> counts) {
         List<Proposition> meeting = new ArrayList<>(counts.coefs().size());

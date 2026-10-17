@@ -1153,11 +1153,9 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
          */
         boolean carriesPast(Core e, StatedComparison statement,
                             Supplier<WhatNamesStandFor> names) {
-            return Pullback.carriesPast(statement, e, () -> {
-                WhatNamesStandFor standing = names.get();
-                return WhatConditionsState.of(standing.read()).comparison(statement,
-                        standing.reads(), standing.read()).stated();
-            });
+            WhatNamesStandFor standing = names.get();
+            return Pullback.carriesPast(e, WhatConditionsState.of(standing.read())
+                    .comparison(statement, standing.reads(), standing.read()).stated());
         }
 
         /**
