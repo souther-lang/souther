@@ -4040,7 +4040,8 @@ final class Pullback {
 
     /**
      * What this reading calls an atom of a number: a number of the input where the expression is
-     * one, a number a dependency answered where the call is written, and otherwise a number of a
+     * one, what a division by a written number leaves of a form of them, a number a dependency
+     * answered where the call is written, and otherwise a number of a
      * value the body bound, named by its binding and the fields read off it — an answer given a name
      * among them.
      *
@@ -4096,6 +4097,13 @@ final class Pullback {
                         && measured.args().size() == 1) {
                     return sizeOf(measured.args().getFirst(), at)
                             instanceof Sized.AsAForm(LinearForm<Quantity> form) ? form : null;
+                }
+                // What a division by a written number leaves of a form of the input's numbers,
+                // which is the same number however the comparison it is met in is written: in it,
+                // behind a name, or with arithmetic round it.
+                Quantity.RemainderOfADividend remainder = remainderAt(node, at);
+                if (remainder != null) {
+                    return LinearForm.atom(remainder);
                 }
                 List<TermPath.Step> steps = new ArrayList<>();
                 Core under = Core.withoutStanding(node);
@@ -5199,18 +5207,14 @@ final class Pullback {
         if (over == null) {
             return null;
         }
-        LinearForm<NumericTerm> dividend = AffineReading.formOf(over.dividend(), over.at(), read);
-        if (dividend == null || dividend.coefs().isEmpty() || !isWhole(dividend)) {
+        Quantity.RemainderOfADividend remainder =
+                remainderOf(over.dividend(), over.at(), over.divisor());
+        if (remainder == null) {
             return null;
         }
         return switch (over.statement()) {
             case ConstantComparison.Settled(boolean holds) -> new Derivation.WrittenOut(holds);
             case ConstantComparison.Against(Rel rel, BigInteger against) -> {
-                // The constant by the divisor's own remainder, so a dividend moved by a whole turn
-                // is the dividend it was before the moving.
-                LinearForm<NumericTerm> moved = new LinearForm<>(
-                        ExactRatio.of(constantOf(dividend).mod(over.divisor())), dividend.coefs());
-                Quantity remainder = new Quantity.RemainderOfADividend(moved, over.divisor());
                 LinearForm<Quantity> relation = LinearForm.<Quantity>atom(remainder)
                         .minus(LinearForm.<Quantity>constant(ExactRatio.of(against))).orNull();
                 yield relation == null ? null
@@ -5220,6 +5224,41 @@ final class Pullback {
             // What the range of a remainder leaves a comparison is one line or a settled answer.
             case ConstantComparison.Both _, ConstantComparison.Either _ -> null;
         };
+    }
+
+    /**
+     * What a division by {@code divisor} leaves of {@code dividend}, read in {@code at}, as the
+     * number of its own it is — or null where the dividend is no form of the input's numbers, or
+     * weighs one or is moved by a fraction.
+     *
+     * <p>The constant is taken by the divisor's own remainder, so a dividend moved by a whole turn
+     * is the dividend it was before the moving.
+     */
+    private Quantity.RemainderOfADividend remainderOf(Core dividend, InputReads at,
+                                                      BigInteger divisor) {
+        LinearForm<NumericTerm> form = AffineReading.formOf(dividend, at, read);
+        if (form == null || form.coefs().isEmpty() || !isWhole(form)) {
+            return null;
+        }
+        return new Quantity.RemainderOfADividend(new LinearForm<>(
+                ExactRatio.of(constantOf(form).mod(divisor)), form.coefs()), divisor);
+    }
+
+    /**
+     * The remainder {@code node} is, as a number of its own — or null where it is no remainder by a
+     * written number of a form of the input's numbers.
+     *
+     * <p>A dividend that is a place moved by a number is left to the reading that moves it back
+     * ({@link #ofAShiftedRemainder}): its remainder is the place's own round the divisor, which is
+     * a comparison of the place's remainder over one stretch or the other and no number of its own.
+     */
+    private Quantity.RemainderOfADividend remainderAt(Core node, InputReads at) {
+        RemainderOfAShiftedValue.OfADivision<InputReads> division =
+                RemainderOfAShiftedValue.ofADivision(node, at, sides());
+        if (division == null || division.movesAPlace(sides())) {
+            return null;
+        }
+        return remainderOf(division.dividend(), division.at(), division.divisor());
     }
 
     /** Whether every number of {@code form}, its constant included, is a whole one. */

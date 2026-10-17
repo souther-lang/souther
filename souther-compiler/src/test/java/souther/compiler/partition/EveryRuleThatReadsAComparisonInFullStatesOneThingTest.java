@@ -14,6 +14,7 @@ import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.meaning.Derivation;
 import souther.compiler.meaning.Proposition;
+import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.Relation;
 import souther.compiler.meaning.WhyUnread;
 import souther.compiler.numeric.ExactRatio;
@@ -25,8 +26,11 @@ import souther.compiler.semantics.OperationLaw;
 import souther.compiler.semantics.Unsayable;
 import souther.compiler.types.ValueName;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.function.IntPredicate;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -53,7 +57,7 @@ class EveryRuleThatReadsAComparisonInFullStatesOneThingTest {
             data Grade = Low | Mid | High
             data Level = Grade
             data Box = { xs: List<Int>, tags: Set<String>, m: Map<String, Int>, s: String,
-                         g: Grade, l: Level }
+                         g: Grade, l: Level, x: Int, y: Int }
             """;
 
     /**
@@ -106,6 +110,70 @@ class EveryRuleThatReadsAComparisonInFullStatesOneThingTest {
                 }
             }
         }
+    }
+
+    /**
+     * What a division leaves of a form of two numbers is read by the rule that reads a comparison
+     * of it and by the arithmetic that reads it as a number among others, and the two state one
+     * thing at every remainder — the remainder the divisor never leaves included.
+     *
+     * <p>A comparison with arithmetic round the remainder is the arithmetic's alone, and is held to
+     * the remainders it holds at.
+     */
+    @Test
+    void everyRuleThatReadsARemainderOfAFormInFullStatesOneThing() {
+        Map<String, IntPredicate> writtenInTheComparison = new LinkedHashMap<>();
+        writtenInTheComparison.put("Int.floorMod(b.x - b.y, 7) >= 1", r -> r >= 1);
+        writtenInTheComparison.put("Int.floorMod(b.x - b.y, 7) == 3", r -> r == 3);
+        writtenInTheComparison.put("Int.floorMod(b.x - b.y, 7) >= 7", r -> r >= 7);
+        writtenInTheComparison.put("5 > Int.floorMod(b.x - b.y, 7)", r -> 5 > r);
+        Map<String, IntPredicate> withArithmeticRoundIt = new LinkedHashMap<>();
+        withArithmeticRoundIt.put("Int.floorMod(b.x - b.y, 7) + 1 >= 2", r -> r + 1 >= 2);
+        withArithmeticRoundIt.put("2 * Int.floorMod(b.x - b.y, 7) <= 5", r -> 2 * r <= 5);
+        withArithmeticRoundIt.put("Int.floorMod(b.x - b.y, 7) - 7 >= 0", r -> r - 7 >= 0);
+        writtenInTheComparison.forEach((condition, holds) ->
+                assertEveryRuleHoldsAtTheRemainders(condition, holds, 2));
+        withArithmeticRoundIt.forEach((condition, holds) ->
+                assertEveryRuleHoldsAtTheRemainders(condition, holds, 1));
+    }
+
+    private static void assertEveryRuleHoldsAtTheRemainders(String condition, IntPredicate holds,
+                                                            int rules) {
+        Reading reading = reading(condition);
+        List<Proposition> inFull = Pullback.byEachRule(reading.comparison(), reading.reads(),
+                reading.read()).stream()
+                .filter(stated -> !(stated instanceof Proposition.Unread))
+                .toList();
+        assertTrue(inFull.size() >= rules, () -> condition + " is read in full by " + rules
+                + " rules or more: " + inFull);
+        for (int remainder = 0; remainder < 7; remainder++) {
+            int at = remainder;
+            for (Proposition each : inFull) {
+                assertEquals(holds.test(at), holdsAtTheRemainder(each, at),
+                        () -> condition + " at the remainder " + at + ": " + inFull);
+            }
+        }
+    }
+
+    /**
+     * Whether {@code stated}, a relation over one remainder or an answer settled for every one,
+     * holds where that remainder is {@code remainder}.
+     */
+    private static boolean holdsAtTheRemainder(Proposition stated, int remainder) {
+        if (stated instanceof Proposition.Always(boolean holds)) {
+            return holds;
+        }
+        Proposition.Compared compared = assertInstanceOf(Proposition.Compared.class, stated,
+                "a remainder compared with a number is a relation over the remainder");
+        Relation.Affine affine = assertInstanceOf(Relation.Affine.class, compared.relation());
+        LinearForm<?> form = affine.form();
+        assertEquals(1, form.coefs().size(), () -> "a relation over the one remainder: " + form);
+        assertInstanceOf(Quantity.RemainderOfADividend.class, form.coefs().keySet().iterator()
+                .next(), () -> "over the remainder as a number of its own: " + form);
+        ExactRatio value = form.coefs().values().iterator().next()
+                .times(ExactRatio.of(remainder)).flatMap(form.constant()::plus).orNull();
+        assertNotNull(value, "a small remainder is held");
+        return affine.proposition().holds(value.signum()) == compared.holds();
     }
 
     /**

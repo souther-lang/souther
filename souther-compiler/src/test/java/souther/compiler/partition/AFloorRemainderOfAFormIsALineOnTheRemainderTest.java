@@ -7,6 +7,7 @@ import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ItemAssessment;
 import souther.compiler.query.PartitionEvidence;
+import souther.compiler.report.AdequacyReport;
 
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
@@ -144,6 +145,57 @@ class AFloorRemainderOfAFormIsALineOnTheRemainderTest {
         assertTrue(met, "the line itself is owed a row");
     }
 
+    /**
+     * The remainder is one number however the comparison that meets it is written — in it, behind
+     * a name, or with arithmetic round it — so it is one line, owed the same rows.
+     */
+    @Test
+    void theRemainderIsOneLineHoweverTheComparisonMeetingItIsWritten() {
+        List<String> inline = List.of("guard Int.floorMod(a - d, 7) >= 1 else No", "Ok");
+        assertEquals(List.of("1"), bordersOf("a: Int, d: Int", inline));
+        List<String> labels = labelsOf("a: Int, d: Int", inline);
+        assertFalse(labels.isEmpty(), "the line is owed rows");
+        for (List<String> body : List.of(
+                List.of("let w = Int.floorMod(a - d, 7)", "guard w >= 1 else No", "Ok"),
+                List.of("guard Int.floorMod(a - d, 7) + 1 >= 2 else No", "Ok"),
+                List.of("let w = Int.floorMod(a - d, 7)", "guard 2 * w - 2 >= 0 else No", "Ok"))) {
+            assertEquals(List.of("1"), bordersOf("a: Int, d: Int", body), body.toString());
+            assertEquals(labels, labelsOf("a: Int, d: Int", body), body.toString());
+        }
+    }
+
+    /** And so is a remainder of a number that is no place of the input, given a name. */
+    @Test
+    void aRemainderOfASumGivenANameIsTheLineItIsWrittenInline() {
+        List<String> inline = List.of("guard Int.floorMod(List.sum(xs), 11) <= 1 else No", "Ok");
+        List<String> named = List.of("let r = Int.floorMod(List.sum(xs), 11)",
+                "guard r <= 1 else No", "Ok");
+        assertEquals(List.of("1"), bordersOf("xs: List<Int>", inline));
+        assertEquals(List.of("1"), bordersOf("xs: List<Int>", named));
+        assertEquals(labelsOf("xs: List<Int>", inline), labelsOf("xs: List<Int>", named));
+    }
+
+    /**
+     * The day a difference falls on, worked out once and given a name, is measured by the rows
+     * that reach each of its three stretches and the two lines between them.
+     */
+    @Test
+    void aWeekdayOfADifferenceGivenANameIsMeasuredByItsRows() {
+        Compilation compilation = compiled("a: Int, b: Int", List.of(
+                        "let w = Int.floorMod(b - a, 7)",
+                        "if w >= 1 && w <= 5 then Ok else No"), """
+                example f
+                    | (0, 1) -> Ok
+                    | (0, 5) -> Ok
+                    | (0, 6) -> No
+                    | (0, 7) -> No
+                """);
+        assertEquals(List.of("1", "5"), linesOf(compilation).stream()
+                .map(BorderAssessment::value).toList());
+        assertEquals(AdequacyReport.AdequacyStatus.SATISFIED,
+                AdequacyReport.of(compilation).adequacy());
+    }
+
     /** A date written as a fixture is {@code Date("2026-01-01")}; this is what is inside. */
     private static String dateOf(String written) {
         return written.replaceAll(".*(\\d{4}-\\d{2}-\\d{2}).*", "$1");
@@ -192,8 +244,12 @@ class AFloorRemainderOfAFormIsALineOnTheRemainderTest {
     private record Row(List<String> inputs, List<String> labels) {}
 
     private static List<Row> certifiedRows(String parameters, String condition) {
+        return certifiedRows(linesOf(parameters, condition));
+    }
+
+    private static List<Row> certifiedRows(List<BorderAssessment> lines) {
         List<Row> rows = new ArrayList<>();
-        for (BorderAssessment border : linesOf(parameters, condition)) {
+        for (BorderAssessment border : lines) {
             for (ItemAssessment item : border.items().values()) {
                 if (!(item instanceof ItemAssessment.Owed owed)) {
                     continue;
@@ -212,7 +268,10 @@ class AFloorRemainderOfAFormIsALineOnTheRemainderTest {
     }
 
     private static List<BorderAssessment> linesOf(String parameters, String condition) {
-        Compilation compilation = compiled(parameters, condition);
+        return linesOf(compiled(parameters, condition));
+    }
+
+    private static List<BorderAssessment> linesOf(Compilation compilation) {
         Map<String, List<BorderAssessment>> read = Adequacy.readingsOf(compilation.db(), "demo");
         assertNotNull(read, "the model under test compiles");
         List<BorderAssessment> lines = read.get("f");
@@ -231,6 +290,11 @@ class AFloorRemainderOfAFormIsALineOnTheRemainderTest {
     }
 
     private static Compilation compiled(String parameters, String condition) {
+        return compiled(parameters, List.of("guard " + condition + " else No", "Ok"), "");
+    }
+
+    /** {@code f} over {@code parameters}, its body the lines given, with the examples after it. */
+    private static Compilation compiled(String parameters, List<String> body, String examples) {
         String model = """
                 module demo
 
@@ -239,11 +303,12 @@ class AFloorRemainderOfAFormIsALineOnTheRemainderTest {
 
                 behavior f : (%s) -> Ok | No
                 let f (%s) = {
-                    guard %s else No
-                    Ok
+                    %s
                 }
+                %s
                 """.formatted(parameters,
-                parameters.replaceAll(":\\s*[A-Za-z<>]+", ""), condition);
+                parameters.replaceAll(":\\s*[A-Za-z<>]+", ""), String.join("\n    ", body),
+                examples);
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
@@ -252,6 +317,20 @@ class AFloorRemainderOfAFormIsALineOnTheRemainderTest {
 
     private static List<String> bordersOf(String parameters, String condition) {
         return linesOf(parameters, condition).stream().map(BorderAssessment::value).toList();
+    }
+
+    private static List<String> bordersOf(String parameters, List<String> body) {
+        return linesOf(compiled(parameters, body, "")).stream().map(BorderAssessment::value)
+                .toList();
+    }
+
+    /** What each certified row of {@code body}'s lines is labelled with, in order. */
+    private static List<String> labelsOf(String parameters, List<String> body) {
+        List<String> labels = new ArrayList<>();
+        for (Row row : certifiedRows(linesOf(compiled(parameters, body, "")))) {
+            labels.addAll(row.labels());
+        }
+        return labels.stream().sorted().toList();
     }
 
     private static List<UndividedPosition.Reason> reasonsOf(String parameters, String condition) {
