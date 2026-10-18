@@ -5565,13 +5565,9 @@ public final class Generator {
                 case WhatTheAlternativesCameTo.Came.Said(ParameterCameToNothing said) ->
                         failed = said;
                 case WhatTheAlternativesCameTo.Came.Untried(SearchShortfall found) -> {
-                    if (!found.met().figures().isEmpty()) {
-                        return BoundaryAttempt.Stopped.at(label, found.met().figures(),
-                                where.unrepresented());
-                    }
-                    return new BoundaryAttempt.Unresolved(UnresolvedCombination.atAPoint(label,
-                            found.wordFor(UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE),
-                            A_CASE_WAS_NOT_READ), where.unrepresented());
+                    return leftUntried(label, found,
+                            UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
+                            A_CASE_WAS_NOT_READ, where.unrepresented());
                 }
                 case WhatTheAlternativesCameTo.Came.NothingToSayItIn<ParameterCameToNothing> _ -> {
                     return new BoundaryAttempt.Unresolved(UnresolvedCombination.atAPoint(label,
@@ -5837,12 +5833,33 @@ public final class Generator {
      */
     static BoundaryAttempt noRowAnswered(String label, SearchShortfall found, boolean aRunRanOut,
                                          CompositionAccount unrepresented) {
-        if (!found.met().figures().isEmpty()) {
-            return BoundaryAttempt.Stopped.at(label, found.met().figures(), unrepresented);
+        return leftUntried(label, found, UnresolvedCombination.Reason.NO_CERTIFIED_WITNESS,
+                aRunRanOut ? NO_ROW_ANSWERED_A_RUN_RAN_OUT : NO_ROW_ANSWERED, unrepresented);
+    }
+
+    /**
+     * What a point comes to where the search found something out that it did not have everything
+     * for, with all of it: the figures it stopped at, the populations it could not enumerate and the
+     * values it could not write, and which rule an offer was short of.
+     *
+     * <p>The shape is the one the search left, and nothing is dropped for the sake of the word. A
+     * reader told only of the figure raises it, and the population is what had to be widened.
+     * {@code otherwise} is the word where none of that was found out and the sentence is all there
+     * is to say.
+     */
+    private static BoundaryAttempt leftUntried(String label, SearchShortfall found,
+                                               UnresolvedCombination.Reason otherwise, String said,
+                                               CompositionAccount unrepresented) {
+        CompositionShortfall met = found.met();
+        if (!met.figures().isEmpty()) {
+            return BoundaryAttempt.Stopped.at(label, said, found.offered(), met, unrepresented);
+        }
+        if (!met.nothing()) {
+            return BoundaryAttempt.Unexhausted.at(label, said, found.offered(), met,
+                    unrepresented);
         }
         return new BoundaryAttempt.Unresolved(UnresolvedCombination.atAPoint(label,
-                found.wordFor(UnresolvedCombination.Reason.NO_CERTIFIED_WITNESS),
-                aRunRanOut ? NO_ROW_ANSWERED_A_RUN_RAN_OUT : NO_ROW_ANSWERED), unrepresented);
+                found.wordFor(otherwise), said, found.offered()), unrepresented);
     }
 
     /** What is said of a row no case of which holds every container and value it is asked of. */

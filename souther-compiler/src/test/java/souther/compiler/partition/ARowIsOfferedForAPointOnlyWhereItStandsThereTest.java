@@ -7,6 +7,7 @@ import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Prepared;
 import souther.compiler.inputs.InputDomain;
+import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
 import souther.compiler.observe.AnswerObservation;
 import souther.compiler.observe.ObservedValue;
@@ -15,8 +16,10 @@ import souther.compiler.query.ReadAs;
 import souther.compiler.query.Shapes;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.SequencedMap;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -247,6 +250,41 @@ class ARowIsOfferedForAPointOnlyWhereItStandsThereTest {
 
         assertEquals(Set.of(CompositionBudget.ROWS_A_WALK_HANDS_THE_CHOICE_OF_A_ROW),
                 stopped.met().figures());
+    }
+
+    /** What the search could not enumerate is not dropped for the figure, or for the word. */
+    @Test
+    void aPopulationTheSearchCouldNotEnumerateIsKeptBesideTheRows() {
+        CompositionShortfall both = CompositionShortfall.of(
+                List.of(CompositionBudget.ROWS_A_WALK_HANDS_THE_CHOICE_OF_A_ROW),
+                List.of(CompositionRepertoire.PLACES_IN_A_RUN_THAT_ARE_NAMED), List.of());
+
+        Generator.BoundaryAttempt.Stopped stopped = assertInstanceOf(
+                Generator.BoundaryAttempt.Stopped.class, Generator.noRowAnswered("p",
+                        SearchShortfall.of(both), false, CompositionAccount.NOTHING));
+        Generator.BoundaryAttempt.Unexhausted unexhausted = assertInstanceOf(
+                Generator.BoundaryAttempt.Unexhausted.class, Generator.noRowAnswered("p",
+                        SearchShortfall.of(CompositionShortfall.writing(
+                                List.of(CompositionRepertoire.PLACES_IN_A_RUN_THAT_ARE_NAMED))),
+                        false, CompositionAccount.NOTHING));
+
+        assertEquals(both, stopped.met());
+        assertEquals(Set.of(CompositionRepertoire.PLACES_IN_A_RUN_THAT_ARE_NAMED),
+                unexhausted.met().populations());
+    }
+
+    /** And so is the rule an offer was short of. */
+    @Test
+    void theRuleAnOfferWasShortOfIsKeptBesideTheRows() {
+        SequencedMap<TermPath, StringOfferShortfall> offered = new LinkedHashMap<>();
+        offered.put(TermPath.of("r"), StringOfferShortfall.NONE);
+
+        Generator.BoundaryAttempt.Unresolved no = assertInstanceOf(
+                Generator.BoundaryAttempt.Unresolved.class, Generator.noRowAnswered("p",
+                        SearchShortfall.of(CompositionShortfall.NONE, offered),
+                        false, CompositionAccount.NOTHING));
+
+        assertEquals(offered, no.why().alsoShort());
     }
 
     /** A row whose run aborts is passed over for the next one composed, which answers. */
