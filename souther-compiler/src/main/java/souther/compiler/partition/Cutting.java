@@ -53,6 +53,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.SequencedMap;
 import java.util.Set;
+import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 /**
@@ -1865,14 +1866,21 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * of nought whatever the case says. So what the case leaves this line's own quantity
      * ({@link #leftBy}) is asked beside the region, and a line no row crosses inside it turns
      * nothing there.
+     *
+     * <p>Read off the case once, and asked of every region the case is put to: what the case
+     * leaves the quantity is the same whatever arrives.
      */
-    boolean crossedIn(SearchRegion region, Proposition where, InputReading read) {
+    Predicate<SearchRegion> crossedIn(Proposition where, InputReading read) {
+        LevelRegion onIt = leftBy(where, read);
+        return onIt == null ? this::crossedIn : region -> crossedIn(region, onIt);
+    }
+
+    private boolean crossedIn(SearchRegion region, LevelRegion onIt) {
         Border.Values values = valuesIn(region);
         if (values == null) {
             return false;
         }
-        LevelRegion onIt = leftBy(where, read);
-        return crossedBy(onIt == null ? values : new Border.Values() {
+        return crossedBy(new Border.Values() {
             @Override
             public boolean extendTo(Level level) {
                 return values.extendTo(level) && onIt.parts().stream().anyMatch(part ->
@@ -1931,6 +1939,9 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * had.
      */
     private LevelRegion leftBy(Proposition where, InputReading read) {
+        if (of instanceof LinearQuantity) {
+            return null;
+        }
         return switch (where) {
             case Proposition.All all -> joined(all.parts(), read, true);
             case Proposition.Any any -> joined(any.parts(), read, false);
