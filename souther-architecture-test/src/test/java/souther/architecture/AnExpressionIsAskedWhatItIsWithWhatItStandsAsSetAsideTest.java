@@ -537,8 +537,13 @@ class AnExpressionIsAskedWhatItIsWithWhatItStandsAsSetAsideTest {
         row(out, c + "check/InvariantChecker", "without",
                 "(" + core + "Ljava/util/Set;" + core + ")" + core, 3, REWRITES_UNDER_IT);
         row(out, c + "check/PathCompletion", "of",
-                "(" + core + "L" + c + "check/Known;L" + c + "check/Denotations;)L" + c
-                        + "check/Completion;", 1, PAST_IT_ALREADY);
+                "(" + core + "L" + c + "check/Known;ZL" + c
+                        + "check/Denotations;)L" + c + "check/Completion;", 1, PAST_IT_ALREADY);
+        row(out, c + "check/PathCompletion", "readsWhereItAnswers",
+                "(L" + c + "check/PathCompletion$Operated;L" + c + "check/Known;L" + c
+                        + "check/Denotations;)Z", 1, PAST_IT_ALREADY);
+        row(out, c + "check/PathCompletion", "whatStops",
+                "(" + core + ")L" + c + "reach/WhatMayStopARun;", 1, PAST_IT_ALREADY);
         row(out, c + "check/PathCompletion", "operationAt", "(" + core + ")" + core, 1,
                 PAST_IT_ALREADY);
         row(out, c + "check/PathEngine", "answeredHere",
@@ -550,11 +555,16 @@ class AnExpressionIsAskedWhatItIsWithWhatItStandsAsSetAsideTest {
                 "(" + core + "L" + c + "coverage/CoverageSites$Plan;Ljava/util/Map;Ljava/util/Map;)"
                         + "Ljava/util/Optional;", 1, GOES_ON_INTO_IT);
         row(out, c + "check/PathReachability", "unreached",
-                "(" + core + "L" + c + "check/Known;L" + c + "check/Denotations;L" + c
-                        + "inputs/InputReads;Ljava/util/List;)V", 1, GOES_ON_INTO_IT);
+                "(" + core + "L" + c + "check/PathReachability$Walked;L" + c
+                        + "check/Denotations;L" + c + "inputs/InputReads;)V", 1, GOES_ON_INTO_IT);
         row(out, c + "check/PathReachability", "walk",
-                "(" + core + "L" + c + "check/Known;L" + c + "check/Denotations;L" + c
-                        + "inputs/InputReads;Ljava/util/List;Z)V", 2, GOES_ON_INTO_IT);
+                "(" + core + "L" + c + "check/PathReachability$Walked;L" + c
+                        + "check/Denotations;L" + c + "inputs/InputReads;)L" + c
+                        + "check/PathReachability$Walked;", 2, GOES_ON_INTO_IT);
+        row(out, c + "check/PathReachability", "mayStopBefore",
+                "(" + core + "L" + c + "check/PathReachability$Walked;)V", 1,
+                "asked of the node PathReachability.walk stands at once its parts are walked, which"
+                        + " goes on into what a Widen holds and files each node as itself");
         row(out, c + "check/Predicates", "names",
                 "(" + core + "L" + c + "check/Term$Chains;L" + c + "check/Denotations;)Z", 1,
                 GOES_ON_INTO_IT);
@@ -643,6 +653,10 @@ class AnExpressionIsAskedWhatItIsWithWhatItStandsAsSetAsideTest {
                 GOES_ON_INTO_IT);
         row(out, c + "coverage/Methods", "callsIn", "(" + core + "L" + c
                 + "types/ValueName$Helper;Ljava/util/List;)V", 1, COUNTS_THROUGH_IT);
+        row(out, c + "partition/Pullback", "whereEachOperatorAnswers",
+                "(L" + c + "partition/Pullback$Operators;)Ljava/util/List;", 1,
+                "asked of the operators AffineForms told of, each of which it took past a Widen"
+                        + " before it composed it");
         row(out, c + "partition/ComparisonReadings", "wayTo", "(" + core + core + "L" + c
                 + "inputs/InputReads;L" + c + "partition/ComparisonReadings$Body;)L" + c
                 + "partition/ComparisonReadings$Way;", 2, GOES_ON_INTO_IT);

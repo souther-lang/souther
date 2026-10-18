@@ -40,19 +40,43 @@ public final class FoldedValue<E, N extends ValueStanding.Names<E, N>> {
     private final N names;
     private final Symbols symbols;
 
-    /** What each name read in each environment came to, the environment told apart by identity. */
-    private final Map<E, Map<BindingId, Optional<Object>>> folded = new IdentityHashMap<>();
+    /** What each name came to, by what it stands for where it is read ({@link
+     *  ValueStanding.Names#standingOf}), told apart by identity. */
+    private final Map<Object, Map<BindingId, Optional<Object>>> folded;
 
-    private FoldedValue(N names, Symbols symbols) {
+    private FoldedValue(N names, Symbols symbols,
+                        Map<Object, Map<BindingId, Optional<Object>>> folded) {
         this.names = names;
         this.symbols = symbols;
+        this.folded = folded;
     }
 
     /** What {@code e}, read in {@code at} with {@code names}, folds to — or empty where it is not a
      *  compile-time constant. */
     public static <E, N extends ValueStanding.Names<E, N>> Optional<Object> of(
             Core e, E at, N names, Symbols symbols) {
-        return new FoldedValue<>(names, symbols).eval(e, at);
+        return new FoldedValue<>(names, symbols, new IdentityHashMap<>()).eval(e, at);
+    }
+
+    /**
+     * The same, with what each name came to held in {@code kept} from one fold to the next.
+     *
+     * <p>For a reader that folds many expressions over one set of environments with the same
+     * {@code names} — a walk asking what each operator it passes is worked out of — so a name read
+     * by each of them is folded once rather than once for each.
+     */
+    public static <E, N extends ValueStanding.Names<E, N>> Optional<Object> of(
+            Core e, E at, N names, Symbols symbols, Kept kept) {
+        return new FoldedValue<>(names, symbols, kept.folded).eval(e, at);
+    }
+
+    /**
+     * What each name came to, held for as long as whoever holds it folds with one reading of the
+     * names, and handed to no other: what a name comes to is that reading's answer.
+     */
+    public static final class Kept {
+        private final Map<Object, Map<BindingId, Optional<Object>>> folded =
+                new IdentityHashMap<>();
     }
 
     /** The number a fold came to, as a decimal — or null where it came to none, or to a number
@@ -94,7 +118,8 @@ public final class FoldedValue<E, N extends ValueStanding.Names<E, N>> {
      * folded where that was written — or empty where it denotes nothing one value is.
      */
     private Optional<Object> given(Core.Read read, E at) {
-        Map<BindingId, Optional<Object>> here = folded.computeIfAbsent(at, _ -> new HashMap<>());
+        Map<BindingId, Optional<Object>> here = folded.computeIfAbsent(
+                names.standingOf(read, at), _ -> new HashMap<>());
         Optional<Object> already = here.get(read.binding());
         if (already != null) {
             return already;

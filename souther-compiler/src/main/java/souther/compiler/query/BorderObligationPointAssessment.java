@@ -5,11 +5,13 @@ import souther.compiler.partition.BorderObligationPoint;
 import souther.compiler.partition.BorderQuantity;
 import souther.compiler.partition.Demand;
 import souther.compiler.partition.DomainPoint;
+import souther.compiler.partition.LineOrigin;
 import souther.compiler.partition.PointRole;
 import souther.compiler.partition.ReadingSeat;
 import souther.compiler.partition.WhereNothingIsAnswered;
 import souther.compiler.check.RuleCitations;
 import souther.compiler.check.RuleReportAnchor;
+import souther.compiler.reach.WhatMayStopARun;
 import souther.compiler.publish.PublicationOrders;
 import souther.compiler.publish.PublishedRuleHandle;
 import souther.compiler.publish.PublishedSentence;
@@ -348,6 +350,25 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
     }
 
     /**
+     * What may stop a run getting to the point on the way for what nothing here says, over every
+     * reading of it, or nothing where some reading has a run that gets there with everything on the
+     * way read — the same rule {@link #premisesAt} keeps, for the same reason. Each reading's own is
+     * its line's ({@link LineOrigin#stopsBefore}), which a line takes
+     * from every place it is watched at that a run arrives at.
+     */
+    private static List<WhatMayStopARun> stopsAt(List<BorderAssessment> readings) {
+        Set<WhatMayStopARun> out = new LinkedHashSet<>();
+        for (BorderAssessment reading : readings) {
+            List<WhatMayStopARun> here = reading.border().origin().stopsBefore().written();
+            if (here.isEmpty()) {
+                return List.of();
+            }
+            out.addAll(here);
+        }
+        return List.copyOf(out);
+    }
+
+    /**
      * The parts of the bodies every row at the point would reach, over every reading of it, or
      * nothing where some reading has a row that answers.
      *
@@ -592,7 +613,10 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
         }
         return new ObligationAssessment(asked.map(Demand::criterion),
                 ObligationCoverage.acrossTheReadings(coverage), projection, searched,
-                ObligationDisposition.openOn(premisesAt(readings, premisesOf)));
+                // A row seen run to the comparison shows a run gets there, whatever may stop
+                // others on the way; only where none was is the way there what stays open.
+                ObligationDisposition.openOn(premisesAt(readings, premisesOf),
+                        searched.ranThere() ? List.of() : stopsAt(readings)));
     }
 
     /** The measured half, which a point owed a row always has. */

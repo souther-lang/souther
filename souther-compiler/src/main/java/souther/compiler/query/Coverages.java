@@ -2147,9 +2147,10 @@ final class Coverages {
             // hands on, and this is the only place they are turned into what a search came to.
             case souther.compiler.partition.Generator.BoundaryAttempt.Built built ->
                     switch (standing.get()) {
-                        case StandingAtAPoint.Met.AtPoint _ ->
+                        case StandingAtAPoint.Met.AtPoint at ->
                                 new ItemAssessment.Attempt.Certified(built.row(), within,
-                                        built.unrepresented());
+                                        built.unrepresented(),
+                                        at instanceof StandingAtAPoint.Met.Reached);
                         // Composed and not seen where it was composed for. Which says the way to
                         // the border was not composed against in full and never that the point is
                         // unwritable, and it carries what the composer could not act on because

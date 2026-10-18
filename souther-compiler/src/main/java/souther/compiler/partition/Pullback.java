@@ -40,6 +40,7 @@ import souther.compiler.check.TheSignOfAnOrder;
 import souther.compiler.check.WholeUnitsBetween;
 import souther.compiler.core.ACopyOfAnApplication;
 import souther.compiler.core.Core;
+import souther.compiler.core.Evaluated;
 import souther.compiler.core.WhatABodyReads;
 import souther.compiler.check.AnIndexedMap;
 import souther.compiler.inputs.CaseCompared;
@@ -99,6 +100,7 @@ import souther.compiler.semantics.SideAnswered;
 import souther.compiler.semantics.TakenArguments;
 import souther.compiler.semantics.TakenAs;
 import souther.compiler.semantics.Unsayable;
+import souther.compiler.semantics.WhereAnOperatorAnswers;
 import souther.compiler.types.BinOp;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.ConstructOccurrence;
@@ -293,6 +295,13 @@ final class Pullback {
      * null where what is read is no comparison of numbers, and such a count is not read there.
      */
     private List<Derivation> answering;
+    /**
+     * Each operator the sides of the comparison being read were worked out through, with the form
+     * it came to, as they are read ({@link AffineForms.Reading#composed}) — or null where what is
+     * read is no comparison of numbers. Where each answers is where the comparison is read
+     * ({@link #whereEachOperatorAnswers}).
+     */
+    private Operators operated;
     /**
      * The elements of the containers the comparison being read is read of, which name stands for
      * each — held to one name for each container ({@link ElementsMet}). Nothing where what is read
@@ -824,6 +833,58 @@ final class Pullback {
                                 InputReads reads) {
         Derivation read = comparison(stated, at, fixed, reads);
         return read == null ? null : new Derivation.Restated(read);
+    }
+
+    /**
+     * Where each operator {@code body} works out whenever it is worked out answers
+     * ({@link WhereAnOperatorAnswers}), with its names as {@code reads} has them — or null where
+     * nothing here says it answers only somewhere.
+     *
+     * <p>For the applications of a closure one after another ({@link WhereAnApplicationIsMade}): a
+     * run makes the next application only where this one got past every operator it works out, so
+     * {@code x -> x + 1 > 0} applied to {@code a} lets a run on to the next element only where
+     * {@code a + 1} is a number an {@code Int} holds.
+     *
+     * <p>The operators a run works out whatever it decides: the parts {@link Evaluated} says every
+     * run evaluates, a binding's value and then its body. An operator under an arm or the right of
+     * an operator that stops early is worked out on some runs only, and is left where nothing is
+     * said of it, as is one under a part the arithmetic composes nothing out of — which says less
+     * than what has to hold, and never more.
+     */
+    static Proposition whereItsOperatorsAnswer(Core body, InputReads reads, InputReading read) {
+        Pullback reading = new Pullback(read, Optional.empty());
+        List<Derivation> answers = reading.inAComparisonsScope(true, () -> {
+            reading.operatorsIn(body, reads);
+            return whereEachOperatorAnswers(reading.operated);
+        });
+        Derivation answered = null;
+        for (Derivation one : answers) {
+            answered = answered == null ? one
+                    : new Derivation.Joined(ConditionJoin.BOTH, answered, one);
+        }
+        return answered == null ? null : reading.pulled(answered).proposition();
+    }
+
+    /** Every operator {@code e} works out on every run that works {@code e} out, told to
+     *  {@link #operated} as the arithmetic composes it. */
+    private void operatorsIn(Core standing, InputReads reads) {
+        Core e = Core.withoutStanding(standing);
+        switch (e) {
+            case Core.Binary binary when binary.op() == BinOp.ADD || binary.op() == BinOp.SUB
+                    || binary.op() == BinOp.MUL -> AffineForms.outcome(e, reads, quantities());
+            case Core.Neg _ -> AffineForms.outcome(e, reads, quantities());
+            case Core.LetIn li -> {
+                operatorsIn(li.value(), reads);
+                operatorsIn(li.body(), quantities().inside(li, reads));
+            }
+            default -> {
+                for (Evaluated.Step step : Evaluated.inOrder(e)) {
+                    if (step instanceof Evaluated.Step.Always(Core part)) {
+                        operatorsIn(part, reads);
+                    }
+                }
+            }
+        }
     }
 
     /** The rules that take a comparison the source wrote, in the order they are tried. */
@@ -4185,25 +4246,100 @@ final class Pullback {
      * was read.
      */
     private Derivation overQuantities(ASide left, ASide right, Rel states) {
+        return inAComparisonsScope(false, () ->
+                whereItsCountsAnswer(overQuantitiesCounting(left, right, states)));
+    }
+
+    /**
+     * What {@code reading} answers, read as one comparison over the quantities is: with nothing
+     * that reading a comparison collects — the counts, what answers, the operators, the elements met
+     * — carried in from around it or out to it. The operators are told of only where
+     * {@code tellingOfOperators} asks for them, and nobody else keeps a table of them.
+     */
+    private <T> T inAComparisonsScope(boolean tellingOfOperators, Supplier<T> reading) {
         Map<Quantity.HowManyMeet, Derivation.AComparisonRead.Counted> outer = counting;
         List<Derivation.AComparisonRead.Counted> outerAlike = alike;
         List<Derivation> outerAnswering = answering;
+        Operators outerOperated = operated;
         ElementsMet outerElements = elementsMet;
         Core outerSide = sideAsWritten;
         counting = new LinkedHashMap<>();
         alike = null;
         answering = new ArrayList<>();
+        operated = tellingOfOperators ? new Operators() : null;
         elementsMet = new ElementsMet();
         sideAsWritten = null;
         try {
-            return whereItsCountsAnswer(overQuantitiesCounting(left, right, states));
+            return reading.get();
         } finally {
             counting = outer;
             alike = outerAlike;
             answering = outerAnswering;
+            operated = outerOperated;
             elementsMet = outerElements;
             sideAsWritten = outerSide;
         }
+    }
+
+    /**
+     * The operators a reading was told of, in the order it was told, each node once.
+     *
+     * <p>Told apart by which node each is and not by the form it came to. An {@code Int} sum and a
+     * {@code Decimal} sum over the same numbers come to one form and answer in different places,
+     * and the form alone would keep whichever came first.
+     */
+    private static final class Operators {
+        private final List<Operated> told = new ArrayList<>();
+        private final Set<Core> nodes = Collections.newSetFromMap(new IdentityHashMap<>());
+
+        void tell(Core operation, LinearForm<Quantity> form) {
+            if (nodes.add(operation)) {
+                told.add(new Operated(operation, form));
+            }
+        }
+    }
+
+    /** One operator a reading was told of, with the form it came to there. */
+    private record Operated(Core operation, LinearForm<Quantity> form) {}
+
+    /**
+     * Where each of {@code operated} answers, as the language says it does
+     * ({@link WhereAnOperatorAnswers}): an {@code Int} sum where the number it comes to is one an
+     * {@code Int} holds. A run working a side out stops at the first that does not, and the
+     * comparison comes out no way there.
+     *
+     * <p>Only what is said over these numbers. A form with no number of the input in it answers
+     * wherever it answers at all, and an operator whose region is not said is left where nothing
+     * here says it.
+     */
+    private static List<Derivation> whereEachOperatorAnswers(Operators operated) {
+        List<Derivation> out = new ArrayList<>();
+        for (Operated each : operated.told) {
+            LinearForm<Quantity> form = each.form();
+            Core operation = each.operation();
+            WhereAnOperatorAnswers where = switch (operation) {
+                case Core.Binary binary -> WhereAnOperatorAnswers.ofAnOperator(binary.op(),
+                        binary.type(), List.of(binary.left().type(), binary.right().type()));
+                case Core.Neg neg -> WhereAnOperatorAnswers.ofANegation(neg.type());
+                default -> throw new IllegalStateException(
+                        "the walk tells of an operator and nothing else: " + operation);
+            };
+            if (form.coefs().isEmpty() || !(where instanceof
+                    WhereAnOperatorAnswers.WhereItsExactValueIsHeld(var least, var greatest))) {
+                continue;
+            }
+            if (form.minus(LinearForm.constant(ExactRatio.of(greatest)))
+                    instanceof ExactAnswer.Held<LinearForm<Quantity>>(var above)
+                    && form.minus(LinearForm.constant(ExactRatio.of(least)))
+                    instanceof ExactAnswer.Held<LinearForm<Quantity>>(var below)) {
+                out.add(new Derivation.Joined(ConditionJoin.BOTH,
+                        aRelation(Derivation.ComparisonReading.OVER_BOUND_VALUES, above, Rel.LE,
+                                Derivation.AComparisonRead.Facing.NOTHING_WRITTEN),
+                        aRelation(Derivation.ComparisonReading.OVER_BOUND_VALUES, below, Rel.GE,
+                                Derivation.AComparisonRead.Facing.NOTHING_WRITTEN)));
+            }
+        }
+        return out;
     }
 
     /**
@@ -4842,6 +4978,13 @@ final class Pullback {
                         instanceof PathResolution.NotAPosition);
                 return !stands && !Location.isStep(fa.target().type(), fa.field(),
                         read.rules().newtypes());
+            }
+
+            @Override
+            public void composed(Core operation, LinearForm<Quantity> form) {
+                if (operated != null) {
+                    operated.tell(operation, form);
+                }
             }
         };
     }

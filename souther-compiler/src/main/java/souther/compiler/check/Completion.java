@@ -57,6 +57,13 @@ sealed interface Completion {
         record NoValue(Core operation, FactSubject answer) implements NoCompletionProof {}
 
         /**
+         * What {@code operation} computes, worked out exactly, is a number its type holds for no
+         * operand this reading admits — an {@code Int} sum past the greatest {@code Int} — and so
+         * it answers nothing ({@link souther.compiler.semantics.WhereAnOperatorAnswers}).
+         */
+        record NotHeld(Core operation) implements NoCompletionProof {}
+
+        /**
          * The model wrote that nothing arrives here.
          *
          * <p>Structural, and the one reason that is: it holds of every run and needs no path to say

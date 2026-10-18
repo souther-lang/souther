@@ -98,6 +98,9 @@ public final class PointResolver {
         }
         SequencedMap<Reading, SearchCoverage.ReadingSearch> walked = new LinkedHashMap<>();
         PointResolution.Generated offered = null;
+        boolean mayStopOnTheWay = owed.open().written().stream().anyMatch(open ->
+                open instanceof ObligationDisposition.Uncertainty.WhetherARowCanBeWritten
+                        .TheWayThereMayStop);
         for (Reading reading : readings) {
             switch (held.apply(reading)) {
                 case ReadingEvidence.OutOfScope _ ->
@@ -114,8 +117,18 @@ public final class PointResolver {
                         // A row read back where it was built for. Which reading composed it is
                         // where the row goes, and what a reader asking about one coordinate
                         // compares against — so the position is carried and not the behavior alone.
-                        case ItemAssessment.Attempt.Certified made ->
-                                { return new PointResolution.Generated(reading, made.row()); }
+                        case ItemAssessment.Attempt.Certified made when made.ranThere()
+                                || !mayStopOnTheWay -> {
+                            return new PointResolution.Generated(reading, made.row());
+                        }
+                        // Read back at the point, where something on the way may stop a run and
+                        // nothing saw this one get there: a row an author may still want, and not
+                        // one this settles the point with — as one nothing could place.
+                        case ItemAssessment.Attempt.Certified made -> {
+                            if (offered == null) {
+                                offered = new PointResolution.Generated(reading, made.row());
+                            }
+                        }
                         // And one nothing could place, which is a row an author may still want and
                         // is not one this settles the point with. Kept in case no reading of the
                         // line has better, and answered only after every one of them has been
