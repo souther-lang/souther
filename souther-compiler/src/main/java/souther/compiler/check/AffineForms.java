@@ -22,6 +22,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.function.BiFunction;
+import java.util.function.Predicate;
 
 /**
  * Reading an expression as {@code const + Σ coef·atom}, over whatever a caller counts as an atom.
@@ -467,6 +468,92 @@ public final class AffineForms {
         };
         following.leave(r.binding());
         return read;
+    }
+
+    /**
+     * A call read as a number of its own, where it was applied.
+     *
+     * @param call what was called, its standing set aside
+     * @param at   the environment it was applied in, where its arguments are read
+     * @param <E>  the environment
+     */
+    public record ACall<E>(Core call, E at) {
+
+        public ACall {
+            Objects.requireNonNull(call, "a call");
+            Objects.requireNonNull(at, "applied somewhere");
+        }
+    }
+
+    /**
+     * {@code reading} with each call {@code taken} names read as a number of its own
+     * ({@link ACall}), and every other leaf as nothing: the arithmetic over those calls and the
+     * numbers the same on every run, read by this one walk however it was written.
+     *
+     * <p>Every other leaf is nothing, and not what {@code reading} makes of it, because what is
+     * asked is whether a side is a call moved and scaled by numbers: a leaf of the reading's own is
+     * no such number, and working one out — a size counted over what a list holds — can cost more
+     * than the comparison it stands in.
+     */
+    public static <A, E> Reading<ACall<E>, E> overTheCalls(Reading<A, E> reading,
+                                                           Predicate<Core> taken) {
+        return new OverTheCalls<>(reading, taken);
+    }
+
+    /** {@link #overTheCalls}. */
+    private record OverTheCalls<A, E>(Reading<A, E> of, Predicate<Core> taken)
+            implements Reading<ACall<E>, E> {
+
+        @Override
+        public Reading<ACall<E>, E> oneAtATime() {
+            return new OverTheCalls<>(of.oneAtATime(), taken);
+        }
+
+        @Override
+        public Symbols symbols() {
+            return of.symbols();
+        }
+
+        @Override
+        public DeclarationAccess declarations() {
+            return of.declarations();
+        }
+
+        @Override
+        public LinearForm<ACall<E>> leafOf(Core e, E at) {
+            Core called = Core.withoutStanding(e);
+            return taken.test(called) ? LinearForm.atom(new ACall<>(called, at)) : null;
+        }
+
+        @Override
+        public E inside(Core.LetIn li, E at) {
+            return of.inside(li, at);
+        }
+
+        @Override
+        public ValueStanding.ReadThrough<E> readThrough(Core.Read read, E at) {
+            return of.readThrough(read, at);
+        }
+
+        @Override
+        public List<ValueStanding.ReadThrough<E>> alternativesOf(Core.Read read, E at) {
+            return of.alternativesOf(read, at);
+        }
+
+        @Override
+        public ValueStanding.ReadThrough<E> taken(Core node, E at) {
+            return of.taken(node, at);
+        }
+
+        @Override
+        public LinearForm<Core> takenAsAForm(Core node, E at) {
+            return of.takenAsAForm(node, at);
+        }
+
+        @Override
+        public boolean readsThrough(Core.FieldAccess fa, E at) {
+            return of.readsThrough(fa, at);
+        }
     }
 
     /** {@code of} with no plurality in it, which is what the members of one are read with. */

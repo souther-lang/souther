@@ -21,7 +21,9 @@ import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.check.DeclaredArgument;
 import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.ElementBindings;
+import souther.compiler.check.ElementsWrittenOut;
 import souther.compiler.check.KeyedAccumulation;
+import souther.compiler.check.LawAtACall;
 import souther.compiler.check.Location;
 import souther.compiler.check.NonAffineOperation;
 import souther.compiler.check.NumericMeasures;
@@ -129,6 +131,7 @@ import java.util.Set;
 import java.util.TreeSet;
 import java.util.function.BiFunction;
 import java.util.function.Function;
+import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.function.UnaryOperator;
 
@@ -1142,11 +1145,11 @@ final class Pullback {
             } else if (subject != null) {
                 out.add(new Derivation.CasesOfASubject(subject,
                         CasesLeft.selectedBy(arm.pattern())));
-            } else if (presenceSelected(arm) != null) {
+            } else if (LawAtACall.presentWhereTaken(arm) instanceof Boolean present) {
                 // An optional is of its present case exactly where it holds a value, which is the
                 // observation the reading has a rule for whatever made the optional.
                 out.add(new Derivation.UnderADenial(observe(match.scrutinee(),
-                        AnswerAspect.PRESENCE, reads), !presenceSelected(arm)));
+                        AnswerAspect.PRESENCE, reads), !present));
             } else {
                 if (scrutinee == null) {
                     scrutinee = answered(new Denotation(match.scrutinee(), reads),
@@ -1156,17 +1159,6 @@ final class Pullback {
             }
         }
         return out;
-    }
-
-    /**
-     * Whether {@code arm} selects an optional where it holds a value — true for its present case
-     * alone, false for its absent case alone — or null where it selects by something else, or by
-     * both.
-     */
-    private static Boolean presenceSelected(Core.Case arm) {
-        boolean some = arm.pattern().takes(TypeSymbol.SOME);
-        boolean none = arm.pattern().takes(TypeSymbol.NONE);
-        return some == none ? null : some;
     }
 
     /** What a row controls that {@code value} is, where it is one: a position of the input, or what
@@ -1998,7 +1990,7 @@ final class Pullback {
      * arithmetic reads, some element is the quantifier over the container's element. So a law says
      * only what the operation does, and every part of what it comes to is read where it stands.
      */
-    private final class ALawRead {
+    private final class ALawRead implements LawAtACall.Reading<InputReads, Derivation, Sized> {
 
         private final AnOperationApplied applied;
         private final Core e;
@@ -2009,16 +2001,26 @@ final class Pullback {
         /** Where the closure's body is read, where one application of it is: a container written
          *  out hands it one value at a time. */
         private InputReads application;
+        /** How a walk of a container's elements reads names in this reading, one for a law's
+         *  reading however far it is carried on. */
+        private final ElementsWrittenOut.Reading<InputReads> walking;
 
         ALawRead(AnOperationApplied applied, Core e, InputReads reads) {
+            this(applied, e, reads,
+                    WrittenOutElements.reading(read.rules().symbols(), read.rules().newtypes()));
+        }
+
+        private ALawRead(AnOperationApplied applied, Core e, InputReads reads,
+                         ElementsWrittenOut.Reading<InputReads> walking) {
             this.applied = applied;
             this.e = e;
             this.reads = reads;
+            this.walking = walking;
         }
 
         /** {@code read}, part way through, carried on in {@code reads}. */
         private ALawRead(ALawRead read, InputReads reads) {
-            this(read.applied, read.e, reads);
+            this(read.applied, read.e, reads, read.walking);
             this.elements.putAll(read.elements);
             this.application = read.application;
         }
@@ -2026,47 +2028,88 @@ final class Pullback {
         /**
          * {@code law} read at the call: each part of it as the step that reads that part, with
          * what the arguments are read as — and what each part comes to is that step's to work
-         * out ({@link Derivation.ALawPart}).
+         * out ({@link Derivation.ALawPart}). Taken apart as the discharge of a rule takes it
+         * ({@link LawAtACall}), which settles what elements written out come to on every run.
          */
         Derivation of(LawProposition<DeclaredArgument> law) {
-            return switch (law) {
-                case LawProposition.Always<DeclaredArgument> always ->
-                        new Derivation.ALawSettles(always);
-                case LawProposition.All<DeclaredArgument> all ->
-                        new Derivation.ALawJoins(all, all.parts().stream().map(this::of).toList());
-                case LawProposition.Any<DeclaredArgument> any -> {
-                    List<Disjunct.ImpliesAnother> implies = new ArrayList<>();
-                    for (LawProposition<DeclaredArgument> part : any.parts()) {
-                        implies.add(anotherItImplies(any, part));
-                    }
-                    if (implies.stream().allMatch(Objects::isNull)) {
-                        yield new Derivation.ALawJoins(any,
-                                any.parts().stream().map(this::of).toList());
-                    }
-                    List<Disjunct> each = new ArrayList<>();
-                    for (int i = 0; i < implies.size(); i++) {
-                        each.add(implies.get(i) != null ? implies.get(i)
-                                : new Disjunct.Read(of(any.parts().get(i))));
-                    }
-                    yield new Derivation.ALawJoinsWithoutWhatImpliesAnother(any, each);
-                }
-                case LawProposition.Observed<DeclaredArgument> observed ->
-                        new Derivation.OnTheSideALawNames(observed,
-                                observed(observed.of(), observed.side().aspect()));
-                case LawProposition.Compared<DeclaredArgument> compared -> compared(compared);
-                case LawProposition.SomeElement<DeclaredArgument> some ->
-                        new Derivation.ALawQuantifies(some, observe(
-                                applied.argument(some.container()),
-                                new Asked.SomeElement(this, some), reads));
-                case LawProposition.Same<DeclaredArgument> same -> {
-                    DecisionSubject one = subject(same.one());
-                    DecisionSubject other = subject(same.other());
-                    yield one == null || other == null
-                            ? unread(e, reads,
-                                    new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.VALUE))
-                            : leaf(new Derivation.TheSameValue(same, one, other), e, reads);
-                }
-            };
+            return LawAtACall.of(law, this);
+        }
+
+        @Override
+        public ElementsWrittenOut.Reading<InputReads> elements() {
+            return walking;
+        }
+
+        @Override
+        public ElementsWrittenOut.Stood<InputReads> argument(DeclaredArgument argument) {
+            Core given = applied.argument(argument);
+            return given == null ? null : new ElementsWrittenOut.Stood<>(given, reads);
+        }
+
+        @Override
+        public Derivation settles(LawProposition.Always<DeclaredArgument> always) {
+            return new Derivation.ALawSettles(always);
+        }
+
+        @Override
+        public Derivation joins(LawProposition.All<DeclaredArgument> all, List<Derivation> each) {
+            return new Derivation.ALawJoins(all, each);
+        }
+
+        @Override
+        public Derivation eitherOf(LawProposition.Any<DeclaredArgument> any,
+                                   Function<LawProposition<DeclaredArgument>, Derivation> part) {
+            List<Disjunct.ImpliesAnother> implies = new ArrayList<>();
+            for (LawProposition<DeclaredArgument> one : any.parts()) {
+                implies.add(anotherItImplies(any, one));
+            }
+            if (implies.stream().allMatch(Objects::isNull)) {
+                return new Derivation.ALawJoins(any, any.parts().stream().map(part).toList());
+            }
+            List<Disjunct> each = new ArrayList<>();
+            for (int i = 0; i < implies.size(); i++) {
+                each.add(implies.get(i) != null ? implies.get(i)
+                        : new Disjunct.Read(part.apply(any.parts().get(i))));
+            }
+            return new Derivation.ALawJoinsWithoutWhatImpliesAnother(any, each);
+        }
+
+        @Override
+        public Derivation observed(LawProposition.Observed<DeclaredArgument> observed) {
+            return new Derivation.OnTheSideALawNames(observed,
+                    observed(observed.of(), observed.side().aspect()));
+        }
+
+        @Override
+        public Derivation someElement(LawProposition.SomeElement<DeclaredArgument> some) {
+            return new Derivation.ALawQuantifies(some, observe(applied.argument(some.container()),
+                    new Asked.SomeElement(this, some), reads));
+        }
+
+        @Override
+        public Derivation writtenOut(LawProposition.SomeElement<DeclaredArgument> some,
+                                     boolean someMeets) {
+            return new Derivation.ALawQuantifies(some, new Derivation.WrittenOut(someMeets));
+        }
+
+        @Override
+        public Derivation same(LawProposition.Same<DeclaredArgument> same) {
+            DecisionSubject one = subject(same.one());
+            DecisionSubject other = subject(same.other());
+            return one == null || other == null
+                    ? unread(e, reads,
+                            new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.VALUE))
+                    : leaf(new Derivation.TheSameValue(same, one, other), e, reads);
+        }
+
+        @Override
+        public Sized counted(LawNumber<DeclaredArgument> number) {
+            return atom(number);
+        }
+
+        @Override
+        public Sized writtenOut(LawNumber.HowManyMeet<DeclaredArgument> number, long many) {
+            return new Sized.AsAForm(LinearForm.constant(ExactRatio.of(many)));
         }
 
         /**
@@ -3127,7 +3170,8 @@ final class Pullback {
          * ({@link #answering}), whichever way it is read: a count a case of a size is read at
          * among them.
          */
-        private Derivation compared(LawProposition.Compared<DeclaredArgument> compared) {
+        @Override
+        public Derivation compared(LawProposition.Compared<DeclaredArgument> compared) {
             List<Derivation> outerAnswering = answering;
             answering = new ArrayList<>();
             try {
@@ -3369,7 +3413,7 @@ final class Pullback {
                     .thenComparingInt(ALawRead::whatOfIt));
             Map<LawNumber<?>, LinearForm<Quantity>> out = new LinkedHashMap<>();
             for (LawNumber<DeclaredArgument> number : inOrder) {
-                switch (atom(number)) {
+                switch (LawAtACall.number(number, this)) {
                     case Sized.AsAForm(LinearForm<Quantity> each) -> out.put(number, each);
                     case Sized.NotSized(WhyUnread why) -> {
                         return new Numbers.NotRead(why);
@@ -6253,6 +6297,11 @@ final class Pullback {
      * {@code p * q * 2}, {@code p * q - 5} and {@code -(p * q)} for products the reading would hold
      * against the level. A square and a product of three are not read here either, and for each of
      * these the stop stands.
+     *
+     * <p>And only of two whole numbers, which are the numbers a product of two is worked out of at a
+     * row ({@link OrderedAffineBoundary#productAt}) and a line drawn on: a product of decimals is
+     * answered at a scale the run settles, and its stop stands too. Said here, where the product is
+     * made, so that everything reading one reads a product of two whole numbers.
      */
     private LinearForm<Quantity> productAt(Core node, InputReads at,
                                            AffineForms.Outcome.StoppedAt<Quantity, InputReads>
@@ -6268,10 +6317,17 @@ final class Pullback {
         }
         NumericTerm.FromOnePosition left = aFactor(written.left(), at);
         NumericTerm.FromOnePosition right = aFactor(written.right(), at);
-        if (left == null || right == null || left.position().equals(right.position())) {
+        if (left == null || right == null || left.position().equals(right.position())
+                || !countsWhole(left) || !countsWhole(right)) {
             return null;
         }
         return LinearForm.atom(new Quantity.ProductOfTwo(left, right));
+    }
+
+    /** Whether the reading counts {@code term} in whole numbers. */
+    private boolean countsWhole(NumericTerm term) {
+        TermOrders orders = read.quantities().ordersOf(term);
+        return orders != null && orders.answered() instanceof Carrier.Whole;
     }
 
     /**
@@ -6875,6 +6931,12 @@ final class Pullback {
                         instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(
                                 LinearForm<Quantity> number)
                         && number.coefs().isEmpty() ? number.constant() : null;
+            }
+
+            @Override
+            public LinearForm<AffineForms.ACall<InputReads>> overTheCalls(
+                    Core e, InputReads at, Predicate<Core> taken) {
+                return AffineForms.of(e, at, AffineForms.overTheCalls(quantities(), taken));
             }
 
             @Override

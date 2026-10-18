@@ -1089,6 +1089,33 @@ public final class NumericDomain<A> {
             }
             return (low ? Endpoint.lower(mine, wider) : Endpoint.upper(mine, wider)).equals(mine);
         }
+
+        /**
+         * Whether the values this holds stand {@code rel} to {@code against}: true where every one
+         * of them does, false where none does, and null where some do and some do not.
+         *
+         * <p>The one answer to it for a range. Each relation is asked on its own terms rather than
+         * through the range where its denial holds, because the values other than one are no one
+         * range: asked that way, a range of just {@code against} could never be shown equal to it.
+         */
+        public Boolean stands(Rel rel, Count against) {
+            if (everyValueStands(rel, against)) {
+                return true;
+            }
+            return everyValueStands(rel.denied(), against) ? false : null;
+        }
+
+        private boolean everyValueStands(Rel rel, Count against) {
+            return switch (rel) {
+                case GE -> liesWithin(new Bounds(Endpoint.inclusive(against), null));
+                case GT -> liesWithin(new Bounds(Endpoint.exclusive(against), null));
+                case LE -> liesWithin(new Bounds(null, Endpoint.inclusive(against)));
+                case LT -> liesWithin(new Bounds(null, Endpoint.exclusive(against)));
+                case EQ -> liesWithin(new Bounds(Endpoint.inclusive(against),
+                        Endpoint.inclusive(against)));
+                case NE -> !admits(against);
+            };
+        }
     }
 
     /**

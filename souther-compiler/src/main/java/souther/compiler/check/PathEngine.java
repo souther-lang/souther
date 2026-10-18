@@ -4,6 +4,7 @@ import souther.compiler.numeric.ClosedStates;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.OrderedIntervals;
 import souther.compiler.numeric.Rel;
+import souther.compiler.semantics.AnswerAspect;
 import souther.compiler.semantics.NumericResult;
 import souther.compiler.core.Contract;
 import souther.compiler.core.Contract.Guard;
@@ -283,7 +284,40 @@ final class PathEngine {
         Entered taken = whatTakingThisCaseSays(arm, scrutinee,
                 assuming(answeredBy(scrutinee, in.at()), answered(arm, scrutinee),
                         guard -> impliedBy(guard, arm.pattern()), in));
-        return new Entered(takingItsCases(arm, scrutinee, taken.known(), at), taken.at());
+        Known lawful = whatItsLawSaysOfTheArm(arm, scrutinee, taken.known(), at);
+        return new Entered(takingItsCases(arm, scrutinee, lawful, at), taken.at());
+    }
+
+    /**
+     * {@code k} with what the law of the operation that answered the optional {@code scrutinee}
+     * says of its arguments, where {@code arm} is taken where it holds a value or where it holds
+     * none: {@code List.max(xs)} holds one exactly where {@code xs} holds something, so its absent
+     * arm is taken only where {@code xs} is empty.
+     *
+     * <p>The law as {@link LawOverAtoms} names it, which is the law the reading of an input takes
+     * an arm by ({@link LawAtACall}); and of it only what is certain on the arm. Read where the
+     * scrutinee was written, which is where the call's arguments mean something.
+     */
+    private Known whatItsLawSaysOfTheArm(Core.Case arm, Core scrutinee, Known k, Denotations at) {
+        Boolean present = LawAtACall.presentWhereTaken(arm);
+        Terms.Given called = present == null ? null
+                : terms.originating(scrutinee, at, new HashSet<>());
+        Derivation.HoldsSomethingWhere.Holding law = called == null ? null
+                : LawOverAtoms.whereItHolds(AnOperationApplied.of(called.value()),
+                        AnswerAspect.PRESENCE, called.at(), terms);
+        if (law == null) {
+            return k;
+        }
+        List<NumericConstraint> certain = LawOverAtoms.certain(law, present);
+        if (certain == null) {
+            return k.reachingNothing();
+        }
+        Known out = k;
+        for (NumericConstraint each : certain) {
+            out = out.taking(each.form(), each.rel(), Known.Held.ON_THE_PATH,
+                    terms.kindsOf(each.form()));
+        }
+        return out;
     }
 
     /**

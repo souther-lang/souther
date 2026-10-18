@@ -2,8 +2,11 @@ package souther.compiler.check;
 
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.numeric.Count;
+import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Rel;
 import souther.compiler.types.Type;
 
@@ -62,18 +65,14 @@ public sealed interface ConstantComparison {
      * The number standing {@code rel} to {@code against}, for a number that is between {@code least}
      * and {@code most}.
      *
-     * <p>Settled where every number between the ends compares one way and no other.
+     * <p>Settled where every number between the ends compares one way and no other, as a range
+     * answers it ({@link NumericDomain.Bounds#stands}).
      */
     static ConstantComparison of(Rel rel, BigInteger against, BigInteger least, BigInteger most) {
-        boolean atLeast = rel.holds(least.compareTo(against));
-        boolean atMost = rel.holds(most.compareTo(against));
-        boolean inside = against.compareTo(least) >= 0 && against.compareTo(most) <= 0;
-        boolean decided = switch (rel) {
-            case GE, GT, LE, LT -> atLeast == atMost;
-            case EQ -> !inside || least.equals(most);
-            case NE -> !inside || least.equals(most);
-        };
-        return decided ? new Settled(atLeast) : new Against(rel, ExactRatio.of(against));
+        Boolean holds = new NumericDomain.Bounds(Endpoint.inclusive(Count.of(new BigDecimal(least))),
+                Endpoint.inclusive(Count.of(new BigDecimal(most))))
+                .stands(rel, Count.of(new BigDecimal(against)));
+        return holds != null ? new Settled(holds) : new Against(rel, ExactRatio.of(against));
     }
 
     /**

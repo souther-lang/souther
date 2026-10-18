@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import souther.compiler.check.DeclarationReadings;
 import souther.compiler.check.FieldDomains;
+import souther.compiler.check.HeldClass;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Symbols;
@@ -129,8 +130,16 @@ public final class MeasuredInput {
      */
     private final Map<TermPath, List<List<String>>> keptApart = new ConcurrentHashMap<>();
 
-    /** A position as what it is offered turns on. */
-    private record Offered(Type type, NumericDomain.Bounds within, FieldDomains.Held held) {}
+    /** A position as what it is offered turns on: where the value stops, how much it holds, the
+     *  class it is held to and the values its rules name — and not the rest of what the rules
+     *  admit, which nothing offered here reads. */
+    private record Offered(Type type, NumericDomain.Bounds values, FieldDomains.Held held,
+                           HeldClass heldTo, FieldDomains.ConstructionLimits.ValuesNamed named) {
+
+        Offered(Type type, FieldDomains.ConstructionLimits limits) {
+            this(type, limits.values(), limits.held(), limits.heldTo(), limits.valuesNamed());
+        }
+    }
 
     private MeasuredInput(String behavior, BehaviorInputs written, Quantities quantities,
                           Partitions.Partitioning divided, DeclarationReadings machines,
@@ -328,21 +337,20 @@ public final class MeasuredInput {
     }
 
     /**
-     * The values that stand for {@code type} at a position the rules leave {@code within} and
-     * {@code held} — {@link Partitions#representativesHolding}, read once for this input.
+     * The values that stand for {@code type} at a position the rules leave {@code limits} —
+     * {@link Partitions#representativesHolding}, read once for this input.
      *
      * <p>Looked up and then filled rather than filled where it is missing: what is offered for one
      * type reads the types inside it, and a map filled while it is being filled is not one a
      * reading may count on.
      */
-    Proposals representativesHolding(Type type, NumericDomain.Bounds within,
-                                     FieldDomains.Held held) {
-        Offered at = new Offered(type, within, held);
+    Proposals representativesHolding(Type type, FieldDomains.ConstructionLimits limits) {
+        Offered at = new Offered(type, limits);
         Proposals already = offered.get(at);
         if (already != null) {
             return already;
         }
-        Proposals made = Partitions.representativesHolding(type, ruleReading(), within, held);
+        Proposals made = Partitions.representativesHolding(type, ruleReading(), limits);
         Proposals raced = offered.putIfAbsent(at, made);
         return raced != null ? raced : made;
     }

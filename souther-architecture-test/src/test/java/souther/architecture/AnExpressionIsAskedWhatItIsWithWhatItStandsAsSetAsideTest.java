@@ -560,9 +560,6 @@ class AnExpressionIsAskedWhatItIsWithWhatItStandsAsSetAsideTest {
                 "(" + core + "L" + c + "check/PathReachability$Walked;)V", 1,
                 "asked of the node PathReachability.walk stands at once its parts are walked, which"
                         + " goes on into what a Widen holds and files each node as itself");
-        row(out, c + "check/Predicates", "chosenCalls",
-                "(" + core + "L" + c + "check/Denotations;Ljava/util/Map;Ljava/util/Set;)V", 2,
-                GOES_ON_INTO_IT);
         row(out, c + "check/Predicates", "names",
                 "(" + core + "L" + c + "check/Term$Chains;L" + c + "check/Denotations;)Z", 1,
                 GOES_ON_INTO_IT);

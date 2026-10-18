@@ -1,6 +1,8 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.Carrier;
+import souther.compiler.check.ClassMembers;
+import souther.compiler.check.HeldClass;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.NumericTerms;
 import souther.compiler.inputs.ReadingsOfEachValue;
@@ -352,8 +354,8 @@ public final class LevelRealizer {
                               SearchRegion within,
                               Map<NumericTerm, NumericDomain.Bounds> runs,
                               WitnessSearch looking, ValuesTried tried) {
-        Congruences members = one.term() instanceof NumericTerm.ValueOf value
-                ? within.valueClassAt(value) : null;
+        HeldClass members = one.term() instanceof NumericTerm.ValueOf value
+                ? within.classAt(value) : HeldClass.NONE;
         Set<CompositionBudget> stoppedBy = EnumSet.noneOf(CompositionBudget.class);
         // A place the rules refuse once it stands with the rest of the row is not offered again
         // here: the places a point is offered are the ones before it that were not refused, and a
@@ -488,7 +490,7 @@ public final class LevelRealizer {
                 Place at = here == null ? null
                         : placeMeeting(here, reading.settles(), two.of(), settled,
                                 reading.settles() instanceof NumericTerm.ValueOf value
-                                        ? within.valueClassAt(value) : null,
+                                        ? within.classAt(value) : HeldClass.NONE,
                                 looking, within, tried,
                                 Map.of(RealizationTarget.of(reading.anchors()), common),
                                 List.of(), stoppedBy);
@@ -1403,7 +1405,8 @@ public final class LevelRealizer {
             // rest cannot complete, and a value the rest can complete that is not of it, are one
             // refusal, and a walk that kept them apart tries what neither leaves.
             Congruences classOf = terms.get(i).getKey().term() instanceof NumericTerm.ValueOf value
-                    ? here.valueClassAt(value) : null;
+                    && here.classAt(value) instanceof HeldClass.OfResidues(Congruences residues)
+                    ? residues : null;
             CandidateDomain may = CandidateDomain.of(
                     classOf == null ? reaches : reaches.heldTo(classOf), left);
             return switch (may) {
@@ -1987,7 +1990,7 @@ public final class LevelRealizer {
      */
     private static Place placeMeeting(Criterion where, NumericTerm.FromOnePosition term,
                                       Carrier carrier, NumericDomain.Bounds bounds,
-                                      Congruences members, WitnessSearch looking,
+                                      HeldClass members, WitnessSearch looking,
                                       SearchRegion region, ValuesTried tried,
                                       Map<RealizationTarget, Place> given,
                                       List<Place> refused, Set<CompositionBudget> stoppedBy) {
@@ -2054,14 +2057,14 @@ public final class LevelRealizer {
      */
     private static Place someValueIn(Criterion.Within within, Carrier carrier,
                                      NumericDomain.Bounds bounds, ValueSet admits,
-                                     Congruences members, PlacesApart apart,
+                                     HeldClass members, PlacesApart apart,
                                      Supplier<Meter> allowance, Set<CompositionBudget> stoppedBy) {
         LevelSpace space = LevelSpace.onACarrier(carrier);
         List<LevelInterval> runs = within.runsInside(carrier, bounds.min(), bounds.max());
         // A value held to a class is a value of the class, so the places are drawn from it. What
         // walks the run does not know the class, and a place it names that is outside it is one the
         // rules refuse: the second walk below is no way to a member the first did not reach.
-        if (members != null) {
+        if (!(members instanceof HeldClass.None)) {
             return someMemberIn(within, runs, carrier, admits, members, apart, stoppedBy);
         }
         for (LevelInterval look : runs) {
@@ -2098,7 +2101,7 @@ public final class LevelRealizer {
      * search that left members untried found no proof that there is none.
      */
     private static Place someMemberIn(Criterion.Within within, List<LevelInterval> runs,
-                                      Carrier carrier, ValueSet admits, Congruences members,
+                                      Carrier carrier, ValueSet admits, HeldClass members,
                                       PlacesApart apart, Set<CompositionBudget> stoppedBy) {
         boolean leftSome = false;
         for (LevelInterval look : runs) {
@@ -2106,7 +2109,7 @@ public final class LevelRealizer {
             if (run == null) {
                 continue;
             }
-            ClassMembers inside = ClassMembers.within(members,
+            ClassMembers inside = members.within(
                     new NumericDomain.Bounds(run.low(), run.high()), within.away(),
                     VALUES_A_PROGRESSION_WITHOUT_AN_END_IS_TRIED_AT);
             for (Place each : inside.notApart(apart)) {
