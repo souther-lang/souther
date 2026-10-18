@@ -1,11 +1,18 @@
 package souther.compiler;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -174,6 +181,165 @@ class AnOptionConsumedByAHelperIsReadAsTheChoiceItIsTest {
                 """);
 
         assertTrue(report.contains("decision    rules 2"), report);
+    }
+
+    /**
+     * An operation answering an option; what the statement turns on to say whether it finds
+     * something; a list it finds nothing in; one it finds something in; and what it finds there.
+     *
+     * <p>What the operation finds is no position of the input, so nothing is said of where it falls:
+     * the first element meeting the predicate, the element at the index and the greatest are three
+     * different elements, and a row that names {@code xs} names none of them.
+     */
+    static Stream<Arguments> operationsAnsweringAnOption() {
+        return Stream.of(
+                Arguments.of("List.find(x -> x > 10, xs)", "xs[*]", "[5]", "[12]", 12),
+                Arguments.of("List.get(2, xs)", "List.length(xs)", "[1]", "[1, 2, 3]", 3),
+                Arguments.of("List.max(xs)", "List.length(xs)", "[]", "[5]", 5));
+    }
+
+    private static String reportOf(String operation, String body, String rows) {
+        Compilation compilation = Compilation.ofSource("""
+                module p
+
+                behavior f : (xs: List<Int>, q: Int) -> Bool
+                let f (xs, q) = %s
+
+                %s
+                """.formatted(body.formatted(operation), rows), "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        assertEquals(0, compilation.errors().size(), operation);
+        return AdequacyReport.of(compilation)
+                .human(SourceRendering.namedByIdentity(compilation.texts()));
+    }
+
+    private static final String CALLED = "Option.withDefault(0, %s) >= q";
+
+    private static final String WRITTEN = """
+            match %s with
+                    | Some v -> v >= q
+                    | None -> 0 >= q""";
+
+    /** The points a line on {@code at} is drawn at, as the report reads them, in order. */
+    private static List<String> pointsOn(String report, String at) {
+        return report.lines().map(String::strip)
+                .filter(line -> line.startsWith("· read as f/" + at + ":"))
+                .sorted()
+                .toList();
+    }
+
+    /** Every line the report says about {@code at}, with which comparison said it left out. */
+    private static List<String> saidAbout(String report, String at) {
+        return report.lines().map(String::strip)
+                .filter(line -> line.endsWith("about `" + at + "`"))
+                .map(line -> line.replaceFirst("comparison@\\d+:\\d+", "comparison"))
+                .toList();
+    }
+
+    /**
+     * The line the default draws is drawn where the operation finds nothing, and the value it finds
+     * is related to {@code q} as the {@code match} written out relates it.
+     */
+    @ParameterizedTest
+    @MethodSource("operationsAnsweringAnOption")
+    void theLineTheDefaultDrawsIsTheOneTheMatchDraws(String operation) {
+        String called = reportOf(operation, CALLED, "");
+        String written = reportOf(operation, WRITTEN, "");
+
+        assertFalse(pointsOn(called, "q").isEmpty(), called);
+        assertEquals(pointsOn(written, "q"), pointsOn(called, "q"), called);
+        assertEquals(saidAbout(written, "q"), saidAbout(called, "q"), called);
+    }
+
+    /**
+     * Where the operation finds something, the default is not what is compared, so a row there at
+     * a point of the default's line is at no point of it.
+     */
+    @ParameterizedTest
+    @MethodSource("operationsAnsweringAnOption")
+    void theDefaultsLineDecidesOnlyWhereTheOperationFindsNothing(String operation,
+                                                                 String presence, String nothing,
+                                                                 String something, int found) {
+        // A row at each point of the default's line, and one with the other list beside them.
+        String rows = """
+                example f
+                    | "on" : (%1$s, 0) -> %3$s
+                    | "off" : (%1$s, 1) -> %4$s
+                    | "in" : (%1$s, -3) -> true
+                    | "out" : (%1$s, 4) -> %5$s
+                    | "beside" : (%2$s, 3) -> %6$s
+                """;
+        String absent = reportOf(operation, CALLED,
+                rows.formatted(nothing, something, true, false, false, found >= 3));
+        String present = reportOf(operation, CALLED,
+                rows.formatted(something, nothing, found >= 0, found >= 1, found >= 4, false));
+
+        assertEquals(List.of(), unmetPointsOn(absent, "q"), absent);
+        // The row beside them finds nothing and is past the line, so the far side is met.
+        assertEquals(List.of("· read as f/q: = 0", "· read as f/q: = 1",
+                "· read as f/q: in q < 0"), unmetPointsOn(present, "q"), present);
+    }
+
+    /** The points on {@code at} no row is at, sorted. */
+    private static List<String> unmetPointsOn(String report, String at) {
+        List<String> lines = report.lines().map(String::strip).toList();
+        List<String> out = new ArrayList<>();
+        for (int i = 0; i + 1 < lines.size(); i++) {
+            if (lines.get(i).startsWith("! no row is at")
+                    && lines.get(i + 1).startsWith("· read as f/" + at + ":")) {
+                out.add(lines.get(i + 1));
+            }
+        }
+        return out.stream().sorted().toList();
+    }
+
+    /**
+     * The statement turns on whether the operation finds something where the default and the value
+     * found compare differently with {@code q}, which no row's own values say: that line is said
+     * not drawn here, and is drawn where the comparison that states it is written.
+     */
+    @ParameterizedTest
+    @MethodSource("operationsAnsweringAnOption")
+    void whetherItFindsSomethingIsNoLineOfTheDefault(String operation, String presence) {
+        String called = reportOf(operation, CALLED, "");
+
+        assertEquals(List.of("· not read: comparison — what it states was read, and it is several"
+                        + " lines held together, which this compiler does not divide the input by"
+                        + " here, about `" + presence + "`"),
+                saidAbout(called, presence), called);
+        assertEquals(List.of(), saidAbout(called, "xs"), called);
+    }
+
+    /**
+     * A clause has nowhere to hold where a line decides, so the line on the default is said not
+     * drawn; what the value found is related to stays that.
+     */
+    @Test
+    void aClauseKeepsTheValueFoundRelatedBesideTheLinesItCannotHold() {
+        Compilation compilation = Compilation.ofSource("""
+                module p
+
+                data Ok = { v: Int }
+
+                behavior f : (xs: List<Int>, q: Int) -> Ok
+                    constructs Ok
+                    ensures found = Option.withDefault(0, List.get(2, xs)) >= q
+                let f (xs, q) = Ok { v = q }
+                """, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        String report = AdequacyReport.of(compilation)
+                .human(SourceRendering.namedByIdentity(compilation.texts()));
+
+        assertEquals(List.of(
+                "· not read: ensures f (found) — what it states was read, and it is several lines"
+                        + " held together, which this compiler does not divide the input by here,"
+                        + " about `q`",
+                "· not read: ensures f (found) — what it states was read, and it relates the value"
+                        + " here to another value not shown to reach every value here, so which"
+                        + " values here settle it on their own is not worked out, about `q`"),
+                saidAbout(report, "q"), report);
     }
 
     private static String measurement(String report) {

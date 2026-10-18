@@ -265,24 +265,39 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             }
 
             /**
-             * One line of the statement.
+             * One relation of the statement.
              *
              * @param id    which of the author's lines it is a place of, and which place
-             * @param line  the line it draws, or the refusal to place it; never a reading that
-             *              stopped, since the statement was read to the end
+             * @param line  the line it draws, or the refusal to place it; or, where the relation is
+             *              no line, what it relates the input's numbers to
+             *              ({@link AgainstAnotherValue}); or, where it is a line and a row cannot
+             *              be asked whether it is somewhere the line decides, the line not drawn
+             *              ({@link Stopped}, at the line's places)
              * @param cases where the statement turns on it, as cases any one of which is enough;
-             *              empty where it turns on it nowhere
+             *              empty where it turns on it nowhere, and for what is no line drawn or
+             *              refused
              */
             record Part(PlaceOfALine id, Read line, List<DecidingCase> cases) {
 
                 public Part {
                     Objects.requireNonNull(id, "a line of a statement is one of its lines");
                     cases = DecidingCase.eachByItsOwnCondition(cases);
-                    if (!(line instanceof Cuts || line instanceof NoOrderToCountOn
-                            || line instanceof NumberNoRatioHolds)) {
-                        throw new IllegalArgumentException(
-                                "a line of a statement read to the end is drawn or refused: " + line);
+                    if (!isALine(line) && !(line instanceof AgainstAnotherValue
+                            || line instanceof Stopped)) {
+                        throw new IllegalArgumentException("a relation of a statement read to the"
+                                + " end is a line, drawn or refused, or relates another value: "
+                                + line);
                     }
+                    if (!isALine(line) && !cases.isEmpty()) {
+                        throw new IllegalArgumentException(
+                                "what is no line is read in no case: " + line);
+                    }
+                }
+
+                /** Whether {@code line} is a line, drawn or refused. */
+                static boolean isALine(Read line) {
+                    return line instanceof Cuts || line instanceof NoOrderToCountOn
+                            || line instanceof NumberNoRatioHolds;
                 }
             }
         }
@@ -550,8 +565,10 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             return new Read.CutsNothing(settled);
         }
         List<Read.Several.Part> parts = new ArrayList<>();
+        // A relation of a statement that is no line is read in no case on any application.
         lines.forEach((line, readings) -> parts.add(new Read.Several.Part(line.id(), line.read(),
-                WhereAnApplicationIsMade.decidesOn(readings))));
+                Read.Several.Part.isALine(line.read())
+                        ? WhereAnApplicationIsMade.decidesOn(readings) : List.of())));
         if (parts.size() == 1 && WhereAnApplicationIsMade.everywhere(parts.getFirst().cases())) {
             return parts.getFirst().line();
         }
@@ -1353,7 +1370,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
 
     /**
      * The lines a statement of several relations draws, each with where it decides — or null where
-     * one of the relations is no line on the input, or there is none.
+     * one of the relations is something this reading has no word for, where none of them is drawn
+     * beside a relation that is no line, or where there is none.
      *
      * <p>One rule, read as many lines as it holds relations, each named by this reading and nothing
      * else: as each line of its author's it is a place of ({@link PartOfAComparison}). Where each
@@ -1365,14 +1383,20 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * the statement turns on it and a row takes the arms that line is under: a row there meets
      * both, and each is owed its own row.
      *
-     * <p>Every relation of the statement is a line or none of them is drawn. A relation over
-     * something no row writes — what a dependency answered — has no line on the input to be; the
-     * lines of the others would be drawn as though the statement were only them. A part a row
-     * answers of its own values and that is no relation — whether a position is true, whether it
-     * holds a value — is no line, and is where the lines decide. And where a line decides is said
-     * over the statement's other parts, so with every part one a row answers, a row's own values
-     * say whether it is somewhere the line decides — how many elements meet something among them,
-     * which a row's elements say.
+     * <p>Where each line decides is read off the whole statement, every relation in it, so a line
+     * drawn beside a relation that is no line is drawn where the statement turns on it and not as
+     * though the statement were only the lines. {@code Option.withDefault(0, List.find(p, xs)) >=
+     * q} holds where some element meets {@code p} and the value found is at least {@code q}, or
+     * where none does and {@code q} is at most nought: the line on {@code q} decides where no
+     * element meets {@code p}, which a row says, and the value found is no position's, so the
+     * relation on it is {@code q} related to another value ({@link Read.AgainstAnotherValue}). The
+     * line on the elements decides where the two arms differ, which turns on the value found, and
+     * no row can be asked that of its own values; it is said not drawn, at its own places.
+     *
+     * <p>A relation over what a dependency answered is the decision table's, and a relation over
+     * anything else this has no word for leaves the statement undrawn. A part a row answers of its
+     * own values and that is no relation — whether a position is true, whether it holds a value — is
+     * no line, and is where the lines decide; any other part leaves it undrawn too.
      *
      * @param written the construct the rule is written as, asked only which position it names
      *                first, which is the way each line is faced
@@ -1383,7 +1407,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
     private static Read several(String behavior, Core written,
                                 Proposition stated, InputReading read, InputReads reads,
                                 Optional<AuthorsLines> authors) {
-        if (!onlyRelations(stated) && !drawsLines(stated)) {
+        if (!onlyRelations(stated)
+                && !(holdsARelation(stated) && askableBesideItsRelations(stated))) {
             return null;
         }
         List<WhereEachLineDecides.Decides> lines = WhereEachLineDecides.in(stated);
@@ -1391,14 +1416,39 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             return null;
         }
         List<Read.Several.Part> parts = new ArrayList<>();
+        boolean drawn = false;
+        boolean departed = false;
         for (WhereEachLineDecides.Decides each : lines) {
             Read line = lineOf(behavior, each.line(), written, read, reads);
+            PlaceOfALine alone = new PlaceOfALine(THE_COMPARISON, each.line().key());
             if (line == null) {
-                return null;
+                // A relation of the input's numbers to a value no position holds is that, beside
+                // the lines, read as one comparison stating it alone is. One over what a dependency
+                // answered is the decision table's, and anything else is no part this reading has
+                // a word for: nothing is drawn.
+                List<FilingCoordinate> against = Proposition.aboutAnAnswer(each.line()) ? null
+                        : heldAgainstAnotherValue(each.line());
+                if (against == null) {
+                    return null;
+                }
+                departed = true;
+                parts.add(new Read.Several.Part(alone, against(against, each.line()), List.of()));
+                continue;
             }
+            // The line is the input's, and where it decides turns on a relation to a value no
+            // position holds, which a row cannot be asked of its own values. Rows at it could not
+            // be held to where it decides, so it is said not to be drawn, at its own places.
+            if (line instanceof Read.Cuts cuts && !each.cases().stream()
+                    .allMatch(one -> AStatementAtARow.askable(one.condition()))) {
+                departed = true;
+                parts.add(new Read.Several.Part(alone, new Read.Stopped(ComparisonAssessment
+                        .atEachOf(cuts.cutting().over(), new BlockReason.SeveralLinesInOneRule())),
+                        List.of()));
+                continue;
+            }
+            drawn |= line instanceof Read.Cuts;
             if (authors.isEmpty()) {
-                parts.add(new Read.Several.Part(new PlaceOfALine(THE_COMPARISON,
-                        each.line().key()), line, each.cases()));
+                parts.add(new Read.Several.Part(alone, line, each.cases()));
                 continue;
             }
             authorsLines(authors.get(), each.line(), WrittenLines.claimOf(each.line()))
@@ -1408,7 +1458,9 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                             WhereEachLineDecides.takenWhere(each.cases(),
                                     authors.get().takenWhere(mapping.line())))));
         }
-        return new Read.Several(parts);
+        // A statement only some of whose relations are lines, and none of those drawn, is several
+        // lines not drawn, as it is said where nothing is taken apart.
+        return drawn || !departed ? new Read.Several(parts) : null;
     }
 
     /**
@@ -1487,6 +1539,31 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      */
     static boolean drawsLines(Proposition stated) {
         return AStatementAtARow.askable(stated) && holdsARelation(stated);
+    }
+
+    /**
+     * Whether every part of {@code stated} that is no relation is one a row answers of its own
+     * values. Its relations are asked one at a time, for a line or for what else they relate
+     * ({@link #several}).
+     */
+    private static boolean askableBesideItsRelations(Proposition stated) {
+        return switch (stated) {
+            case Proposition.Compared _ -> true;
+            case Proposition.All all ->
+                    all.parts().stream().allMatch(Cutting::askableBesideItsRelations);
+            case Proposition.Any any ->
+                    any.parts().stream().allMatch(Cutting::askableBesideItsRelations);
+            case Proposition.SoManyHold counted ->
+                    counted.statements().stream().allMatch(Cutting::askableBesideItsRelations);
+            case Proposition.WhereItAnswers where -> askableBesideItsRelations(where.answers())
+                    && askableBesideItsRelations(where.states());
+            case Proposition.Some some -> askableBesideItsRelations(some.ofTheElement());
+            case Proposition.Always _, Proposition.Truth _, Proposition.Present _,
+                 Proposition.InCases _, Proposition.SameValue _, Proposition.LastToHold _,
+                 Proposition.Unread _, Proposition.OnAnApplication _,
+                 Proposition.SomeReachable _ -> AStatementAtARow.askable(stated);
+            case Proposition.Carried carried -> throw carried.handedToAReader();
+        };
     }
 
     private static boolean holdsARelation(Proposition stated) {

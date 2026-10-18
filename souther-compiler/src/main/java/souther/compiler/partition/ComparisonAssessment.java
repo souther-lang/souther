@@ -482,20 +482,35 @@ sealed interface ComparisonAssessment {
          *
          * <p>Every line it drew is said not to be drawn, and why: a reader composing rows against a
          * line with nothing that holds them where the line decides would be owed rows the statement
-         * answers alike on both sides. A line that was refused keeps its own reason.
+         * answers alike on both sides. A line that was refused keeps its own reason, and a
+         * relation that was no line stays what it was beside them.
          */
         ComparisonAssessment withNoWayForItsParts() {
             SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped> why =
                     new LinkedHashMap<>();
+            List<Part> noLines = new ArrayList<>();
             for (Part part : parts) {
-                if (part.line() instanceof Unread unread) {
-                    unread.why().forEach(why::putIfAbsent);
-                } else {
-                    cuttingOf(part.line()).over().forEach(at ->
-                            why.putIfAbsent(at, new BlockReason.SeveralLinesInOneRule()));
+                switch (part.line()) {
+                    case Unread unread -> unread.why().forEach(why::putIfAbsent);
+                    case AtAPosition _, AcrossPositions _, OutsideTheDomain _,
+                         NothingArrivesAtItsLine _, TurnsNothing _, NoFeasibleInput _ ->
+                            cuttingOf(part.line()).over().forEach(at ->
+                                    why.putIfAbsent(at, new BlockReason.SeveralLinesInOneRule()));
+                    case AgainstAnotherValue _, AnswerDependent _, OnADependencysAnswer _,
+                         StatesNoRelation _, NoInput _, CutsNothing _ -> noLines.add(part);
+                    case Several _ -> throw new IllegalStateException(
+                            "a line of a statement is what one line comes to: " + part);
                 }
             }
-            return new Unread(why);
+            if (noLines.isEmpty()) {
+                return new Unread(why);
+            }
+            List<Part> out = new ArrayList<>();
+            if (!why.isEmpty()) {
+                out.add(new Part(parts.getFirst().id(), new Unread(why), List.of()));
+            }
+            out.addAll(noLines);
+            return new Several(out);
         }
     }
 
@@ -660,13 +675,24 @@ sealed interface ComparisonAssessment {
         };
     }
 
-    /** The same, for each line of a statement of several, carrying where each decides. */
+    /**
+     * The same, for each line of a statement of several, carrying where each decides — and each of
+     * its relations that is no line as what it is: one relating the input to another value, or a
+     * line no row could be held to where it decides, said not to be drawn.
+     */
     private static ComparisonAssessment eachLineOf(Cutting.Read.Several lines, Citation at,
                                                    InputReading read, boolean drawnByAnInvariant,
                                                    Supplier<ComparisonAssessment> aboutNoPosition) {
         return new Several(lines.parts().stream()
-                .map(part -> Several.Part.ofCases(part.id(), aLine(part.line(), at, read,
-                        drawnByAnInvariant, aboutNoPosition), part.cases()))
+                .map(part -> Several.Part.ofCases(part.id(), switch (part.line()) {
+                    case Cutting.Read.AgainstAnotherValue against ->
+                            AgainstAnotherValue.of(against, read);
+                    case Cutting.Read.Stopped stopped -> new Unread(stopped.why());
+                    case Cutting.Read.Cuts _, Cutting.Read.NoOrderToCountOn _,
+                         Cutting.Read.NumberNoRatioHolds _, Cutting.Read.CutsNothing _,
+                         Cutting.Read.Several _, Cutting.Read.StatesNoRelation _ ->
+                            aLine(part.line(), at, read, drawnByAnInvariant, aboutNoPosition);
+                }, part.cases()))
                 .toList());
     }
 
