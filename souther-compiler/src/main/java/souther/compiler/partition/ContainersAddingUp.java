@@ -532,7 +532,7 @@ final class ContainersAddingUp {
                     }
                     yield null;
                 }
-                case ElementValue.Choose _ -> null;
+                case ElementValue.Choose _, ElementValue.SumOfChoices _ -> null;
             };
         }
 

@@ -101,23 +101,25 @@ public sealed interface ElementValue {
     ElementProjection asAPlace();
 
     /**
-     * What {@code one} and {@code other} come to added, for each element; or null where the exact
-     * arithmetic cannot hold a number of it.
+     * What {@code one} and the form {@code other} come to added, for each element; or null where
+     * the exact arithmetic cannot hold a number of it.
      *
-     * <p>Arithmetic over a choice is the choice of the arithmetic: what is added to a choice is
-     * added to each of its answers, {@code 1 + case(A ↦ a, B ↦ b) = case(A ↦ 1 + a, B ↦ 1 + b)}, and
-     * an element takes the same arm either way. So a sum of forms is a form, and a sum with a
-     * choice is that choice with the sum pushed into every answer — which is the only way a choice
-     * stands inside arithmetic here, since a form holds no choice.
+     * <p>A form added to a choice is added to each of its answers,
+     * {@code 1 + case(A ↦ a, B ↦ b) = case(A ↦ 1 + a, B ↦ 1 + b)}, and an element takes the same arm
+     * either way. That is as large as the choice is, once over, so a choice with a form beside it
+     * is that choice and is solved for, bounded and read through its arms like any other.
+     *
+     * <p>A form and never a second choice. Two choices pushed into each other are every pair of
+     * their answers, and choices independent of one another, added up, would come to as many
+     * answers as the product of theirs — a sum written in a line held as a tree doubling at each
+     * term. Choices are added by being held side by side ({@link SumOfChoices}), and the type of
+     * {@code other} is what keeps a product of them from being made anywhere.
      */
-    static ElementValue plus(ElementValue one, ElementValue other) {
+    static ElementValue plus(ElementValue one, Affine other) {
         return switch (one) {
-            case Affine form -> switch (other) {
-                case Affine more -> form.form().plus(more.form())
-                        instanceof ExactAnswer.Held<LinearForm<ElementProjection>>(var summed)
-                        ? new Affine(summed) : null;
-                case Choose _, OfItsCase _ -> plus(other, one);
-            };
+            case Affine form -> form.form().plus(other.form())
+                    instanceof ExactAnswer.Held<LinearForm<ElementProjection>>(var summed)
+                    ? new Affine(summed) : null;
             case Choose choice -> {
                 ElementValue yes = plus(choice.whenSet(), other);
                 ElementValue no = yes == null ? null : plus(choice.otherwise(), other);
@@ -136,6 +138,8 @@ public sealed interface ElementValue {
                 yield choice.rest() != null && rest == null ? null
                         : choosingByCase(choice.subject(), arms, rest);
             }
+            case SumOfChoices sum -> plus(sum.besides(), other) instanceof Affine besides
+                    ? new SumOfChoices(besides, sum.chosen()) : null;
         };
     }
 
@@ -164,7 +168,181 @@ public sealed interface ElementValue {
                 yield choice.rest() != null && rest == null ? null
                         : choosingByCase(choice.subject(), arms, rest);
             }
+            case SumOfChoices sum -> {
+                if (weight.isZero()) {
+                    yield new Affine(LinearForm.constant(ExactRatio.ZERO));
+                }
+                if (!(times(sum.besides(), weight) instanceof Affine besides)) {
+                    yield null;
+                }
+                List<SumOfChoices.Weighed> chosen = new ArrayList<>();
+                for (SumOfChoices.Weighed each : sum.chosen()) {
+                    if (!(each.weight().times(weight)
+                            instanceof ExactAnswer.Held<ExactRatio>(var weighed))) {
+                        yield null;
+                    }
+                    chosen.add(new SumOfChoices.Weighed(each.choice(), weighed));
+                }
+                yield new SumOfChoices(besides, chosen);
+            }
         };
+    }
+
+    /**
+     * Choices of the element held side by side and added up, each at its weight, and a form beside
+     * them: {@code besides + Σ weight·choice}.
+     *
+     * <p>Each choice is made for the element on its own, so the sum is as large as its choices
+     * together and not as the number of ways they can fall out together. Two or more, and each a
+     * choice ({@link Choose}, {@link OfItsCase}): one choice takes the form into its answers
+     * ({@link #plus}), and a form is no choice.
+     *
+     * <p>Equal however its terms were written: the choices are put in one order made of them
+     * alone where one of these is made, once, and every reader takes them in that order — what an
+     * element comes to, where a row first has nothing, and how the sum is spelled.
+     *
+     * @param chosen each choice once, at its weight
+     */
+    record SumOfChoices(Affine besides, List<Weighed> chosen) implements ElementValue {
+
+        /** A choice and the weight it is added at. */
+        public record Weighed(ElementValue choice, ExactRatio weight) {
+
+            public Weighed {
+                if (!(choice instanceof Choose || choice instanceof OfItsCase) || weight == null
+                        || weight.isZero()) {
+                    throw new IllegalArgumentException("what a sum of choices adds is a choice,"
+                            + " weighed by something, and this is " + choice + " at " + weight);
+                }
+            }
+        }
+
+        public SumOfChoices {
+            if (besides == null || chosen == null || chosen.size() < 2) {
+                throw new IllegalArgumentException("a sum of choices holds a form and choices to"
+                        + " add to it");
+            }
+            if (chosen.stream().map(Weighed::choice).distinct().count() != chosen.size()) {
+                throw new IllegalArgumentException("a sum of choices holds each choice once, at"
+                        + " the weight it is added at: " + chosen);
+            }
+            List<Weighed> inOrder = new ArrayList<>(chosen);
+            inOrder.sort(Comparator.comparing(each -> each.choice().toString()));
+            chosen = List.copyOf(inOrder);
+        }
+
+        @Override
+        public Set<ElementProjection> reads() {
+            Set<ElementProjection> all = new LinkedHashSet<>(besides.reads());
+            chosen.forEach(each -> all.addAll(each.choice().reads()));
+            return Set.copyOf(all);
+        }
+
+        /** Every choice is made for the element, and each asks only for what its own answer
+         *  needs. */
+        @Override
+        public ExactAnswer<ExactRatio> at(OneElement element) {
+            ExactAnswer<ExactRatio> total = besides.at(element);
+            for (Weighed each : chosen) {
+                if (total == null) {
+                    return null;
+                }
+                ExactAnswer<ExactRatio> one = each.choice().at(element);
+                if (one == null) {
+                    return null;
+                }
+                total = total.flatMap(sofar -> one.flatMap(made ->
+                        made.times(each.weight()).flatMap(sofar::plus)));
+            }
+            return total;
+        }
+
+        /** A sum is made of the element and is not a field of it. */
+        @Override
+        public ElementProjection asAPlace() {
+            return null;
+        }
+
+        @Override
+        public String toString() {
+            List<String> terms = new ArrayList<>();
+            for (Weighed each : chosen) {
+                terms.add(each.weight() + "·(" + each.choice() + ")");
+            }
+            terms.add(besides.toString());
+            return String.join(" + ", terms);
+        }
+    }
+
+    /**
+     * {@code constant + Σ weight·place + Σ weight·choice}; or null where the exact arithmetic
+     * cannot hold it.
+     *
+     * <p>Without a choice it is a form; with one, that choice with the form in its answers; with
+     * more, the choices held side by side ({@link SumOfChoices}). What came back as a choice and is
+     * none — two answers that are one — is a form and is added to the form, and a sum of choices met
+     * among them is added term by term, so one number has one spelling however it was written.
+     */
+    static ElementValue summed(ExactRatio constant, Map<ElementProjection, ExactRatio> places,
+                               Map<ElementValue, ExactRatio> chosen) {
+        Affine besides = new Affine(new LinearForm<>(constant, places));
+        Map<ElementValue, ExactRatio> choices = new LinkedHashMap<>();
+        for (Map.Entry<ElementValue, ExactRatio> each : chosen.entrySet()) {
+            switch (each.getKey()) {
+                case Affine form -> {
+                    if (!(times(form, each.getValue()) instanceof Affine weighed)
+                            || !(plus(besides, weighed) instanceof Affine more)) {
+                        return null;
+                    }
+                    besides = more;
+                }
+                case Choose _, OfItsCase _ -> {
+                    if (!addTo(choices, each.getKey(), each.getValue())) {
+                        return null;
+                    }
+                }
+                case SumOfChoices sum -> {
+                    if (!(times(sum, each.getValue()) instanceof SumOfChoices weighed)
+                            || !(plus(besides, weighed.besides()) instanceof Affine more)) {
+                        return null;
+                    }
+                    besides = more;
+                    for (SumOfChoices.Weighed part : weighed.chosen()) {
+                        if (!addTo(choices, part.choice(), part.weight())) {
+                            return null;
+                        }
+                    }
+                }
+            }
+        }
+        choices.values().removeIf(ExactRatio::isZero);
+        if (choices.isEmpty()) {
+            return besides;
+        }
+        if (choices.size() == 1) {
+            Map.Entry<ElementValue, ExactRatio> only = choices.entrySet().iterator().next();
+            ElementValue weighed = times(only.getKey(), only.getValue());
+            return weighed == null ? null : plus(weighed, besides);
+        }
+        List<SumOfChoices.Weighed> weighed = new ArrayList<>();
+        choices.forEach((choice, weight) -> weighed.add(new SumOfChoices.Weighed(choice, weight)));
+        return new SumOfChoices(besides, weighed);
+    }
+
+    /** {@code weight} more of {@code choice} in {@code choices}; false where the exact arithmetic
+     *  cannot hold the weight. */
+    private static boolean addTo(Map<ElementValue, ExactRatio> choices, ElementValue choice,
+                                 ExactRatio weight) {
+        ExactRatio had = choices.get(choice);
+        if (had == null) {
+            choices.put(choice, weight);
+            return true;
+        }
+        if (!(had.plus(weight) instanceof ExactAnswer.Held<ExactRatio>(var more))) {
+            return false;
+        }
+        choices.put(choice, more);
+        return true;
     }
 
     /**
@@ -448,7 +626,7 @@ public sealed interface ElementValue {
 
         /**
          * What {@code answer} comes to of the element: a form of its places and of the choices in
-         * it, with each choice taking the rest of the form into its answers ({@link #plus}).
+         * it, put together as {@link #summed} puts them.
          *
          * <p>One walk, the arithmetic's own. A choice is no arithmetic, so the walk stops at one and
          * asks what it is as it asks of any place it cannot compose ({@link #atoms}); a name given
@@ -468,31 +646,7 @@ public sealed interface ElementValue {
                     case Atom.Chosen(ElementValue choice) -> chosen.put(choice, weight);
                 }
             });
-            return pushedIn(form.constant(), places, chosen);
-        }
-
-        /**
-         * {@code constant + Σ weight·place + Σ weight·choice}, with the choices taking the rest
-         * into their answers; or null where the exact arithmetic cannot hold it.
-         *
-         * <p>The choices in one order made of them alone. They arrive in the order a hash left
-         * them, and the first one pushed into holds the rest inside its answers, so two orders
-         * would be two spellings of one number.
-         */
-        private static ElementValue pushedIn(ExactRatio constant,
-                                             Map<ElementProjection, ExactRatio> places,
-                                             Map<ElementValue, ExactRatio> chosen) {
-            List<Map.Entry<ElementValue, ExactRatio>> inOrder = new ArrayList<>(chosen.entrySet());
-            inOrder.sort(Comparator.comparing(each -> each.getKey().toString()));
-            ElementValue made = new Affine(new LinearForm<>(constant, places));
-            for (Map.Entry<ElementValue, ExactRatio> each : inOrder) {
-                ElementValue weighed = ElementValue.times(each.getKey(), each.getValue());
-                made = weighed == null ? null : ElementValue.plus(made, weighed);
-                if (made == null) {
-                    return null;
-                }
-            }
-            return made;
+            return ElementValue.summed(form.constant(), places, chosen);
         }
 
         /** What an atom of what a closure computed is: a place of the element, or a choice made
@@ -649,7 +803,7 @@ public sealed interface ElementValue {
                     case TheStep.TheAnswerSoFar _ -> { }
                 }
             });
-            ElementValue adds = pushedIn(form.constant(), places, chosen);
+            ElementValue adds = ElementValue.summed(form.constant(), places, chosen);
             return adds == null ? null : new Added(adds, counted);
         }
 

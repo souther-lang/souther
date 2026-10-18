@@ -753,10 +753,17 @@ public sealed interface NumericTerm
 
         private final ValueName.Stdlib operation;
         private final RunSource source;
+        /**
+         * The hash of the two, worked out once. A run computed of each element holds the whole
+         * computation, which a term keyed into a set or a map would otherwise walk again each time
+         * it is asked — and a term is asked many times over, by every reading that files it.
+         */
+        private final int hash;
 
         private TakenOver(ValueName.Stdlib operation, RunSource source) {
             this.operation = operation;
             this.source = source;
+            this.hash = Objects.hash(operation, source);
         }
 
         /**
@@ -844,7 +851,7 @@ public sealed interface NumericTerm
 
         @Override
         public int hashCode() {
-            return java.util.Objects.hash(operation, source);
+            return hash;
         }
 
         @Override

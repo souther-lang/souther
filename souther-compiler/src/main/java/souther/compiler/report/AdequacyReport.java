@@ -6476,6 +6476,16 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     elementComputation(into.putObject("otherwise"), it.rest());
                 }
             }
+            case ElementValue.SumOfChoices it -> {
+                into.put("kind", "sum");
+                elementComputation(into.putObject("besides"), it.besides());
+                ArrayNode parts = into.putArray("choices");
+                for (ElementValue.SumOfChoices.Weighed each : it.chosen()) {
+                    ObjectNode part = parts.addObject();
+                    part.put("weight", each.weight().spelled());
+                    elementComputation(part.putObject("value"), each.choice());
+                }
+            }
         }
     }
 

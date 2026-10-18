@@ -1204,7 +1204,7 @@
       ]
     },
     "elementComputation": {
-      "description": "What one element's number is made of: a sum of its fields each weighed by a number, the choice between two such by a flag the element holds, or the choice among them by which case a value of the element is. A field is named by its steps from the element, joined by dots, with a narrowing to a case written `@` and the case, and by the empty string where the element is itself the number. Terms are listed in the order the fields' names sort.",
+      "description": "What one element's number is made of: a sum of its fields each weighed by a number, the choice between two such by a flag the element holds, the choice among them by which case a value of the element is, or several such choices added up. A field is named by its steps from the element, joined by dots, with a narrowing to a case written `@` and the case, and by the empty string where the element is itself the number. Terms are listed in the order the fields' names sort.",
       "oneOf": [
         {
           "type": "object",
@@ -1306,6 +1306,45 @@
             },
             "otherwise": {
               "$ref": "#/$defs/elementComputation"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "description": "Choices of the element added up, each at its weight, with a form beside them. Each choice is made for the element on its own. The choices are listed in one order made of them alone.",
+          "required": [
+            "kind",
+            "besides",
+            "choices"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "sum"
+            },
+            "besides": {
+              "$ref": "#/$defs/elementComputation"
+            },
+            "choices": {
+              "type": "array",
+              "minItems": 2,
+              "items": {
+                "type": "object",
+                "required": [
+                  "weight",
+                  "value"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "weight": {
+                    "type": "string",
+                    "description": "An exact number, written one way for one value."
+                  },
+                  "value": {
+                    "$ref": "#/$defs/elementComputation"
+                  }
+                }
+              }
             }
           }
         }
