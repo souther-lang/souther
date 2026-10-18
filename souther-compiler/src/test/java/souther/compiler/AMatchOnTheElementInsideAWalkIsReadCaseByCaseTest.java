@@ -368,10 +368,10 @@ class AMatchOnTheElementInsideAWalkIsReadCaseByCaseTest {
         String rows = rowsOf(compiled);
         assertTrue(rows.contains("""
                 // fills OFF point of comparison@0:null
-                    | ([Line { cap = 0 }])"""), rows);
+                    | "lines[*].cap=Some" : ([Line { cap = 0 }])"""), rows);
         assertTrue(rows.contains("""
                 // fills OUT point of comparison@0:null
-                    | ([Line { cap = None }])"""), rows);
+                    | "lines[*].cap=None" : ([Line { cap = None }])"""), rows);
     }
 
     private static final String FEES = """
