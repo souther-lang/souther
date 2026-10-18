@@ -8,6 +8,10 @@ import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Prepared;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.numeric.Count;
+import souther.compiler.coverage.Runs;
+import souther.compiler.coverage.SiteNumbering;
+import souther.compiler.observe.AnswerObservation;
+import souther.compiler.query.Bodies;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
@@ -19,6 +23,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
@@ -174,6 +179,13 @@ class ARowIsOfferedForAPointOnlyWhereItStandsThereTest {
     private static Generator.BoundaryAttempt attemptOver(String source, String behavior,
                                                          souther.compiler.numeric.Place at,
                                                          Generator.CandidateCheck check) {
+        return attemptOver(source, behavior, at, check, Generator.Trial.NOTHING_RUNS);
+    }
+
+    private static Generator.BoundaryAttempt attemptOver(String source, String behavior,
+                                                         souther.compiler.numeric.Place at,
+                                                         Generator.CandidateCheck check,
+                                                         Generator.Trial trial) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);
@@ -198,6 +210,59 @@ class ARowIsOfferedForAPointOnlyWhereItStandsThereTest {
                 Map.of(new RealizationTarget.AtOnePosition(axis.term()), at),
                 NumbersAskedFor.of(LevelRegion.point(new Level.OnACarrier(
                         domain.quantities(rules).ordersOf(axis.term()).answered(), at))),
-                Reachability.untouched(domain.quantities(rules).region()), check);
+                Reachability.untouched(domain.quantities(rules).region()), check,
+                StandInAttempt.REQUIRING_NOTHING, trial);
+    }
+
+    /** A trial whose run of the {@code n}-th row it is handed (from 1) is {@code answered}. */
+    private static Generator.Trial running(java.util.function.IntPredicate answered,
+                                           List<List<String>> handed) {
+        Compilation compilation = Compilation.ofSource("""
+                module example.one
+                behavior one : (n: Int) -> Int
+                let one (n) = if n > 0 then n else 0
+                """, "Main");
+        compilation.answerEverything();
+        SiteNumbering numbering = compilation.db()
+                .ask(new Bodies.Checked(compilation.modules().getFirst())).value().plan()
+                .numbering();
+        return row -> {
+            handed.add(row.inputs().stream().map(FixtureTemplate::text).toList());
+            return new Generator.ObservedRun(new Generator.Watched.Ran(Runs.nowhere(numbering)),
+                    answered.test(handed.size())
+                            ? new AnswerObservation.Answered(new ObservedValue.Integer(0))
+                            : new AnswerObservation.NotAnswered());
+        };
+    }
+
+    /** A row whose run aborts is passed over for the next one composed, which answers. */
+    @Test
+    void aFirstRowThatAbortsIsPassedOverForTheNextThatAnswers() {
+        List<List<String>> handed = new ArrayList<>();
+        Generator.BoundaryAttempt attempt = attemptOver(TWO, "g", Count.of(100),
+                (parameter, candidate) -> new Generator.CandidateCheck.Built.Value(reqWith(100)),
+                running(n -> n > 1, handed));
+
+        Generator.BoundaryAttempt.Built built = assertInstanceOf(
+                Generator.BoundaryAttempt.Built.class, attempt,
+                "the second row composed answers, and stands at the point");
+        assertEquals(handed.get(1),
+                built.row().inputs().stream().map(FixtureTemplate::text).toList(),
+                "and it is the row offered, not the first");
+        assertNotEquals(handed.get(0), handed.get(1));
+    }
+
+    /** Where every row composed aborts, the point is one this compiler composed no answering row
+     *  for, and not one no row reaches. */
+    @Test
+    void aPointEveryRowOfWhichAbortsIsNoWitnessAndNotUnreachable() {
+        Generator.BoundaryAttempt attempt = attemptOver(TWO, "g", Count.of(100),
+                (parameter, candidate) -> new Generator.CandidateCheck.Built.Value(reqWith(100)),
+                running(_ -> false, new ArrayList<>()));
+
+        Generator.BoundaryAttempt.Unresolved no = assertInstanceOf(
+                Generator.BoundaryAttempt.Unresolved.class, attempt);
+        assertEquals(Generator.UnresolvedCombination.Reason.NO_CERTIFIED_WITNESS,
+                no.why().reason());
     }
 }

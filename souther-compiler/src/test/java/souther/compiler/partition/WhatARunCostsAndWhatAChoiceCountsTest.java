@@ -18,11 +18,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.TreeMap;
+import java.util.function.LongFunction;
 import java.util.function.LongUnaryOperator;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * What a search may spend is the runs nobody made before, and what the choice among rows counts is
@@ -147,6 +149,68 @@ class WhatARunCostsAndWhatAChoiceCountsTest {
         assertEquals("10", text(choosing.taken()));
     }
 
+    /** The first row that meets the requirement is no candidate where its run answers nothing. */
+    @Test
+    void aFirstRowWhoseRunAnswersNothingIsPassedOverForTheNext() {
+        Generator.TellingArmsApart choosing = new Generator.TellingArmsApart(
+                new Counting(numbering(), _ -> 0,
+                        value -> value == 0 ? new AnswerObservation.NotAnswered()
+                                : new AnswerObservation.Answered(new ObservedValue.Integer(0))),
+                List.of());
+        Generator.RowTaking taking = choosing.over(_ -> Generator.Acceptance.TAKEN);
+
+        assertEquals(Generator.Acceptance.PASSED, taking.take(List.of(FixtureTemplate.integer(0))));
+        assertNull(choosing.taken());
+        taking.take(List.of(FixtureTemplate.integer(1)));
+
+        assertEquals("1", text(choosing.taken()));
+    }
+
+    /** Rows that answer nothing use up none of the rows the choice may rank. */
+    @Test
+    void rowsWhoseRunsAnswerNothingAreNotCountedAgainstTheChoice() {
+        Generator.TellingArmsApart choosing = new Generator.TellingArmsApart(
+                new Counting(numbering(), _ -> 0,
+                        value -> value < 0 ? new AnswerObservation.NotAnswered()
+                                : new AnswerObservation.Answered(new ObservedValue.Integer(0))),
+                List.of());
+        Generator.RowTaking taking = choosing.over(_ -> Generator.Acceptance.TAKEN);
+
+        for (int i = 1; i <= Generator.MOST_ROWS_OFFERED_FOR_THE_ARMS; i++) {
+            assertEquals(Generator.Acceptance.PASSED,
+                    taking.take(List.of(FixtureTemplate.integer(-i))));
+        }
+
+        taking.take(List.of(FixtureTemplate.integer(5)));
+        assertEquals("5", text(choosing.taken()));
+    }
+
+    /** A run that went past what a run may spend is no answer either, and is said apart. */
+    @Test
+    void aRunThatRanOutIsPassedOverAndRemembered() {
+        Generator.TellingArmsApart choosing = new Generator.TellingArmsApart(
+                new Counting(numbering(), _ -> 0,
+                        _ -> new AnswerObservation.RanOut(Optional.empty())),
+                List.of());
+        Generator.RowTaking taking = choosing.over(_ -> Generator.Acceptance.TAKEN);
+
+        assertEquals(Generator.Acceptance.PASSED, taking.take(List.of(FixtureTemplate.integer(0))));
+
+        assertNull(choosing.taken());
+        assertTrue(choosing.aRunRanOut());
+    }
+
+    /** Where nothing runs rows, the first row is taken as it is composed. */
+    @Test
+    void theFirstRowIsTakenAsItIsWhereNothingRunsRows() {
+        Generator.TellingArmsApart choosing = new Generator.TellingArmsApart(
+                Generator.Trial.NOTHING_RUNS, List.of());
+        Generator.RowTaking taking = choosing.over(_ -> Generator.Acceptance.TAKEN);
+
+        assertEquals(Generator.Acceptance.TAKEN, taking.take(List.of(FixtureTemplate.integer(3))));
+        assertEquals("3", text(choosing.taken()));
+    }
+
     private static String text(List<FixtureTemplate> inputs) {
         return inputs.getFirst().text();
     }
@@ -179,16 +243,25 @@ class WhatARunCostsAndWhatAChoiceCountsTest {
         private final LongUnaryOperator answering;
         private final List<String> made = new ArrayList<>();
 
+        private final LongFunction<AnswerObservation> running;
+
         private Counting(SiteNumbering numbering, LongUnaryOperator answering) {
+            this(numbering, answering, _ -> new AnswerObservation.Answered(
+                    new ObservedValue.Integer(0)));
+        }
+
+        private Counting(SiteNumbering numbering, LongUnaryOperator answering,
+                         LongFunction<AnswerObservation> running) {
             this.numbering = numbering;
             this.answering = answering;
+            this.running = running;
         }
 
         @Override
         public Generator.ObservedRun run(RowToRun row) {
             made.add("run " + row.inputs().getFirst().text());
             return new Generator.ObservedRun(new Generator.Watched.Ran(Runs.nowhere(numbering)),
-                    new AnswerObservation.Answered(new ObservedValue.Integer(0)));
+                    running.apply(Long.parseLong(row.inputs().getFirst().text())));
         }
 
         @Override

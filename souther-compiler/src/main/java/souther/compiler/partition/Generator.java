@@ -5525,11 +5525,21 @@ public final class Generator {
                     List<FixtureTemplate> kept = preferring == null ? null : preferring.taken();
                     if (kept != null) {
                         kept.toArray(composed);
-                    } else if (!(came instanceof WalkedInOrder.RowTaken)) {
-                        throw new IllegalStateException("rows at a point were passed over and"
-                                + " none was kept");
+                        return true;
                     }
-                    return true;
+                    if (came instanceof WalkedInOrder.RowTaken) {
+                        return true;
+                    }
+                    // Rows were composed and none was run to an answer. That says of the rows
+                    // tried what they did, and nothing of whether a row reaches the point.
+                    cameToNothing.add(new ParameterCameToNothing(order.order().getLast(),
+                            new Outcome.Unresolved(UnresolvedCombination.Reason.NO_CERTIFIED_WITNESS,
+                                    preferring.aRunRanOut()
+                                            ? "no row composed here was run to an answer, and a run"
+                                            + " went past what a run may spend"
+                                            : "no row composed here was run to an answer"),
+                            SearchShortfall.NONE, Map.of()));
+                    return false;
                 }
             }
         });
@@ -8947,8 +8957,8 @@ public final class Generator {
      * before the figure, the one the most of them answered differently on, the earliest of those.
      *
      * <p>Over whatever says a row meets the requirement ({@link #over}), and never in place of it.
-     * The first row that check takes is kept whatever the runs say, so a requirement whose arms
-     * answer alike on every row is still one a row is handed out for. What the rewrites came to on
+     * The first row that check takes and whose run answers is kept whatever the rewrites say, so a
+     * requirement whose arms answer alike on every row is still one a row is handed out for. What the rewrites came to on
      * the row taken is not kept either: a row composed here is a question put to a person, and
      * whether its answer tells a rewrite apart is read off the answer they write
      * ({@link ReplacementOwed}).
@@ -8958,7 +8968,8 @@ public final class Generator {
      * choosing what those measures see as well. Which is also why a row composed for a combination
      * of arms, or for getting past a guard, stays one: the same arms lit, and the same conditions,
      * are the same combination and the same guard passed. A row whose run answered nothing is one
-     * the compiler refuses, and is never taken over the first.
+     * the compiler refuses, and is never taken, the first included; where nothing can run a row,
+     * the first is taken as it is composed.
      *
      * <p>Which rewrites are asked of a row is what its run went through, and not what the row was
      * composed for. A line and an arm are not one to one — a comparison may decide no fork, or
@@ -8982,6 +8993,10 @@ public final class Generator {
         /** The row taken so far, and how many rewrites were told apart on it. */
         private List<FixtureTemplate> best;
         private int bestTold = -1;
+        /** How many rows that met the requirement were run and came to an answer. */
+        private int answering;
+        /** Whether a row that met the requirement was run and went past what a run may spend. */
+        private boolean aRunRanOut;
         /** How many rows a walk has handed here, ranked or not. */
         private int handed;
 
@@ -9020,11 +9035,32 @@ public final class Generator {
             return best;
         }
 
+        /** Whether a run of a row that met the requirement went past what a run may spend. */
+        boolean aRunRanOut() {
+            return aRunRanOut;
+        }
+
         /** What is made of one row that meets the requirement, not ranked before. */
         private Acceptance rank(List<FixtureTemplate> inputs) {
             RowToRun row = new RowToRun(inputs, answers);
             ranked.add(RunOnce.writtenAs(row));
-            ObservedRun ran = trial.run(row);
+            ObservedRun ran = trial.runsRows() ? trial.run(row) : ObservedRun.nothingRan();
+            // Where nothing applied the row, or nothing was recording and it answered nothing,
+            // nothing says whether it answers; the first row is offered as it is composed.
+            if (ran.watched() instanceof Watched.NoAccount
+                    && ran.answer() instanceof AnswerObservation.NotAnswered) {
+                if (best == null) {
+                    best = List.copyOf(inputs);
+                }
+                return Acceptance.TAKEN;
+            }
+            // A row is a candidate only where its run answered: what it was composed to read back
+            // says what the run comes to where it answers, and nothing of whether it does.
+            if (!(ran.answer() instanceof AnswerObservation.Answered)) {
+                aRunRanOut |= ran.answer() instanceof AnswerObservation.RanOut;
+                return Acceptance.PASSED;
+            }
+            answering++;
             if (best == null) {
                 best = List.copyOf(inputs);
                 // The first row with nothing to say which arms it went through is a requirement
@@ -9035,10 +9071,9 @@ public final class Generator {
                 way = seen;
                 rewrites = trial.rewritesThrough(seen);
             } else if (!(ran.watched() instanceof Watched.Ran(AlignedObservation seen))
-                    || ran.answer() instanceof AnswerObservation.NotAnswered
                     || !seen.equals(way)) {
                 // Only a row that goes the way the first one did, through the same arms with every
-                // condition coming out the same, and comes to an answer.
+                // condition coming out the same.
                 return onward();
             }
             // One way is one set of arms, so every row offered here is asked the same rewrites, and
@@ -9062,7 +9097,7 @@ public final class Generator {
 
         /** The walk going on to the next row, or stopping where the figure is reached. */
         private Acceptance onward() {
-            return ranked.size() < MOST_ROWS_OFFERED_FOR_THE_ARMS ? Acceptance.PASSED
+            return answering < MOST_ROWS_OFFERED_FOR_THE_ARMS ? Acceptance.PASSED
                     : Acceptance.STOPPED;
         }
     }
