@@ -15,6 +15,7 @@ import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.WhereAnApplicationIsMade;
 import souther.compiler.semantics.HowAClosureIsApplied;
 import souther.compiler.types.BindingId;
+import souther.compiler.types.Type;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -189,7 +190,12 @@ sealed interface ClosureApplications {
                 case InputReads.Applications.NoneMade _ -> handed = true;
                 case InputReads.Applications.Each(var each, var how) -> {
                     handed = true;
-                    List<Proposition> answers = how == HowAClosureIsApplied.TO_EVERY_ELEMENT ? null
+                    // What each application states, where the body is a truth: where it answers is
+                    // the reading's to say, and a run gets past it only there. A body applied to
+                    // every value that is no truth states nothing read here, and an application of
+                    // it is past the ones before it wherever they are made.
+                    List<Proposition> answers = how == HowAClosureIsApplied.TO_EVERY_ELEMENT
+                            && !Type.BOOL.equals(block.body().type()) ? null
                             : each.stream().map(one -> WhatConditionsState.of(read)
                                     .truth(block.body(), one.reads(), read).proposition()).toList();
                     List<List<Proposition>> keptBy = each.stream()

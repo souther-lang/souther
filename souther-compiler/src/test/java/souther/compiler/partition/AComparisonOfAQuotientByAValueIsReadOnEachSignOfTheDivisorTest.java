@@ -338,37 +338,77 @@ class AComparisonOfAQuotientByAValueIsReadOnEachSignOfTheDivisorTest {
         assertEquals(1, onTheDivisor.size(), onTheDivisor.toString());
     }
 
+    /** A body over a list of numbers and three numbers, with {@code %s} its guards. */
+    private static final String OVER_A_LIST = """
+            module demo
+
+            data Ok
+            data No
+
+            behavior f : (xs: List<Int>, n: Int, a: Int, b: Int) -> Ok | No
+
+            let f (xs, n, a, b) = {
+                %s
+                Ok
+            }
+            """;
+
+    private static final String WHICH_FIRST = "which element a run reaches first";
+
     /**
-     * A quotient inside what a closure states of each element is left unread where the closure is
-     * read as a statement about the container: an element whose divisor is nought stops the whole
-     * walk wherever the walk reaches it, which no statement of that element says.
+     * Some element of a list the row writes meeting a comparison of a quotient by what the element
+     * holds: the comparison draws its line on each element, and what the operation answers is read
+     * where some element divides and meets it, or every element divides — the order is the row's,
+     * and nothing else here reads it.
      */
     @Test
-    void aQuotientAsksNothingOfTheElementsAQuantifierIsOver() {
-        String report = human("""
-                module demo
+    void aQuotientByWhatEachElementHoldsIsReadOnEachElement() {
+        for (String operation : List.of("List.any", "List.all")) {
+            String report = human("""
+                    module demo
 
-                data Month = { pay: Int, days: Int }
-                data Ok
-                data No
+                    data Month = { pay: Int, days: Int }
+                    data Ok
+                    data No
 
-                behavior f : (ms: List<Month>) -> Ok | No
+                    behavior f : (ms: List<Month>) -> Ok | No
 
-                let f (ms) = {
-                    guard List.any(m -> m.pay / m.days >= 100, ms) else No
-                    Ok
-                }
-                """);
-        assertTrue(report.contains("a quotient by a value that is not a constant"), report);
+                    let f (ms) = {
+                        guard %s(m -> m.pay / m.days >= 100, ms) else No
+                        Ok
+                    }
+                    """.formatted(operation));
+            assertTrue(report.contains("read as f/-100 * ms[*].days + ms[*].pay"),
+                    () -> operation + "\n" + report);
+            assertFalse(report.contains("a quotient by a value that is not a constant"),
+                    () -> operation + "\n" + report);
+            assertFalse(report.contains(WHICH_FIRST), () -> operation + "\n" + report);
+        }
     }
 
     /**
-     * A quotient by what each application of a closure is handed is left unread, though each
-     * application is read: a filter applies its closure to every value, and an application whose
-     * divisor was nought is a run that makes none after it, which no reading of a later one says.
+     * A quotient behind another part of what is stated of each element — worked out only where the
+     * part before it holds — is read the same way, whether the operation asks some element or
+     * counts how many: where the element answers is where the part before it fails, or holds and
+     * the divisor is not nought.
      */
     @Test
-    void aQuotientByWhatEachApplicationIsHandedIsLeftUnread() {
+    void aQuotientBehindAnotherPartOfTheElementsStatementIsReadToo() {
+        for (String condition : List.of("List.any(x -> x > 5 && 100 / x >= 1, xs)",
+                "List.length(List.filter(x -> x > 5 && 100 / x >= 1, xs)) >= 2")) {
+            String report = human(OVER_A_LIST.formatted("guard " + condition + " else No"));
+            assertTrue(report.contains("read as f/xs[*]"), () -> condition + "\n" + report);
+            assertFalse(report.contains("a quotient by a value that is not a constant"),
+                    () -> condition + "\n" + report);
+        }
+    }
+
+    /**
+     * A quotient by what each application of a closure is handed is read on each application: a
+     * filter applies its closure to every value, and each value draws its line.
+     */
+    @Test
+    void aQuotientByWhatEachApplicationIsHandedIsReadOnEach() {
         String report = human("""
                 module demo
 
@@ -376,18 +416,125 @@ class AComparisonOfAQuotientByAValueIsReadOnEachSignOfTheDivisorTest {
 
                 let f (n, a, b) = List.length(List.filter(x -> n / x >= 1, [a, b])) >= 1
                 """);
-        assertFalse(report.contains("read as f/n: = a"), report);
-        assertFalse(report.contains("read as f/n: = b"), report);
-        assertTrue(report.contains("a quotient by a value that is not a constant"), report);
+        assertTrue(report.contains("read as f/n: = a"), report);
+        assertTrue(report.contains("read as f/n: = b"), report);
+        assertFalse(report.contains("a quotient by a value that is not a constant"), report);
+    }
+
+    /**
+     * A value written out after one whose divisor is held at nought is handed to no run: the first
+     * stops every run there, so the second draws no line, and the operation comes out neither way.
+     * The same whether the operation applies its closure to every value or stops at the first that
+     * holds or fails — a run divides by the first before it asks anything of the second.
+     */
+    @Test
+    void aValueNoRunGetsToDrawsNoLine() {
+        for (String condition : List.of("List.any(x -> n / x >= 1, [a, b])",
+                "List.all(x -> n / x >= 1, [a, b])",
+                "List.length(List.filter(x -> n / x >= 1, [a, b])) >= 1",
+                "List.length(List.filter(x -> n / x >= 1, [a, b])) >= 2")) {
+            String model = OVER_A_LIST.formatted(
+                    "guard a == 0 else No\n    guard " + condition + " else No");
+            String report = human(model);
+            assertTrue(bordersOfModel(model).stream().noneMatch(line -> line.contains("term=b")),
+                    () -> condition + "\n" + report);
+            assertTrue(report.contains("no input takes 2 ways through this body"),
+                    () -> condition + "\n" + report);
+        }
+    }
+
+    /**
+     * A count of the elements a filter keeps is a number only where every element divided: a list
+     * holding nought anywhere stops every run, so a guard that it holds one leaves the count
+     * compared nowhere. Against one, the count is whether some element is kept; against more, a
+     * count.
+     */
+    @Test
+    void aCountOfWhatAFilterKeepsIsANumberOnlyWhereEveryElementDivided() {
+        for (int least : List.of(1, 2)) {
+            String report = human(OVER_A_LIST.formatted("""
+                    guard List.any(x -> x == 0, xs) else No
+                        guard List.length(List.filter(x -> 100 / x >= 1, xs)) >= %d else No"""
+                    .formatted(least)));
+            assertTrue(report.contains("no input takes 2 ways through this body"),
+                    () -> least + "\n" + report);
+            assertTrue(report.contains(
+                    "the conditions on the way ask for what no input is at once"),
+                    () -> least + "\n" + report);
+        }
+    }
+
+    /**
+     * A count compared in a case of how many an operation answers is a number only where every
+     * statement it counts answered, and the case is read as the law states it all the same: how
+     * many {@code List.take} answers is said in cases of how many it was handed, and here that is
+     * a count of what a filter keeps.
+     */
+    @Test
+    void aCountACaseOfASizeComparesIsReadAsTheCaseItIs() {
+        for (String guard : List.of(
+                "guard List.length(List.take(n, List.filter(x -> 100 / x >= 1, xs))) >= 2 else No",
+                "guard List.length(List.take(n, List.filter(x -> x >= 1, xs))) >= 2 else No")) {
+            String report = human(OVER_A_LIST.formatted(guard));
+            assertTrue(report.contains("partition"), () -> guard + "\n" + report);
+        }
+    }
+
+    /**
+     * Where the order is not the row's to choose, which element a run stops at is not read. Two
+     * operations each stopping at the first element meeting a quotient by what it holds may each
+     * need another element first: of {@code [0, 100]} and {@code [100, 0]}, the first stops the
+     * second guard and the second stops the first, and read in an order of the rows each would be
+     * met — whether the closures are written in place or named first, and whatever the other one
+     * ends a run for: a remainder by nought, or a sum with no place ({@code [0, MAX]} against
+     * {@code [MAX, 0]} for {@code x + 1 == 1}). A list sorted first holds its elements in the order
+     * of their values. And a list compared whole with another reads its order wherever the
+     * comparison is made: {@code List.contains(xs, [[0, 100]])} holds only of {@code [0, 100]},
+     * which stops every run, and the same elements the other way round are not that row.
+     */
+    @Test
+    void whereTheRowsDoNotChooseTheOrderWhichElementARunStopsAtIsNotRead() {
+        for (String guards : List.of("""
+                guard List.any(x -> -100 / (x - 100) >= 1, xs) else No
+                    guard List.any(x -> 100 / x >= 1, xs) else No""", """
+                let first = x -> -100 / (x - 100) >= 1
+                    let second = x -> 100 / x >= 1
+                    guard List.any(first, xs) else No
+                    guard List.any(second, xs) else No""", """
+                guard List.any(x -> Int.floorMod(100, x - 100) == 0, xs) else No
+                    guard List.any(x -> 100 / x >= 1, xs) else No""", """
+                guard List.any(x -> x + 1 == 1, xs) else No
+                    guard List.any(x -> 100 / x >= 1, xs) else No""",
+                "guard List.any(x -> 100 / x >= 1, List.sort(xs)) else No", """
+                guard List.contains(xs, [[0, 100]]) else No
+                    guard List.any(x -> 100 / x >= 1, xs) else No""")) {
+            String report = human(OVER_A_LIST.formatted(guards));
+            assertTrue(report.contains(WHICH_FIRST), () -> guards + "\n" + report);
+        }
+    }
+
+    /**
+     * The control: what the library's facts say is the same in whatever order a list holds its
+     * elements — how many it holds, whether it holds none, whether every element meets something
+     * that ends no run, whether it holds a number — leaves the order to the rows beside the one
+     * operation stopping at the first element meeting a quotient.
+     */
+    @Test
+    void whatTheLibrarySaysIsTheSameInAnyOrderLeavesTheOrderToTheRows() {
+        for (String first : List.of("List.length(xs) >= 2", "!List.isEmpty(xs)",
+                "List.all(x -> x != 7, xs)", "List.contains(n, xs)")) {
+            String guards = "guard " + first + " else No\n"
+                    + "    guard List.any(x -> 100 / x >= 1, xs) else No";
+            String report = human(OVER_A_LIST.formatted(guards));
+            assertFalse(report.contains(WHICH_FIRST), () -> guards + "\n" + report);
+        }
     }
 
     /**
      * The control: a divisor the same on every application stops the first application where it
-     * stops any, and the application read says so of itself, so the comparison draws its line on
-     * each element. By the element's own divisor it draws none.
-     *
-     * <p>What the quantifier states of the container is another reading, which leaves either
-     * quotient unread: which element a run reaches first is in no statement of one.
+     * stops any, so the operation answers where every element divides, whatever the order — read
+     * as such, and the comparison draws its line on each element. By the element's own divisor it
+     * draws one too, on the list the row writes.
      */
     @Test
     void aQuotientByAValueTheSameOnEveryApplicationIsReadOnEach() {
@@ -401,6 +548,7 @@ class AComparisonOfAQuotientByAValueIsReadOnEachSignOfTheDivisorTest {
                 let f (ms, d) = List.any(m -> m.pay / d >= 100, ms)
                 """);
         assertTrue(byOne.contains("read as f/-100 * d + ms[*].pay"), byOne);
+        assertFalse(byOne.contains(WHICH_FIRST), byOne);
         String byEach = human("""
                 module demo
 
@@ -410,8 +558,8 @@ class AComparisonOfAQuotientByAValueIsReadOnEachSignOfTheDivisorTest {
 
                 let f (ms, d) = List.any(m -> m.pay / m.days >= 100, ms)
                 """);
-        assertFalse(byEach.contains("read as f/-100 * ms[*].days"), byEach);
-        assertTrue(byEach.contains("a quotient by a value that is not a constant"), byEach);
+        assertTrue(byEach.contains("read as f/-100 * ms[*].days + ms[*].pay"), byEach);
+        assertFalse(byEach.contains("a quotient by a value that is not a constant"), byEach);
     }
 
     /**
