@@ -1650,7 +1650,7 @@ final class Pullback {
      */
     private Sized sizeOfAWalk(Core e, InputReads reads) {
         SeededWalk walk = SeededWalk.of(e, blocksAt(new Denotation(e, reads)));
-        if (walk == null || !(subjectOf(walk.container(), reads)
+        if (walk == null || !(walkedContainer(walk.container(), reads)
                 instanceof DecisionSubject.AnInput held)) {
             return null;
         }
@@ -5400,6 +5400,42 @@ final class Pullback {
                 ? new DecisionSubject.AnInput(at) : answerAt(e, reads);
     }
 
+    /**
+     * The subject whose elements a walk over {@code walked} quantifies: what {@link #subjectOf}
+     * says {@code walked} is, or else the container whose every element {@code walked} holds, each
+     * as often — which is where a reordering of a list's elements is quantified, though it is no
+     * place a row writes. Null where it is neither.
+     *
+     * <p>Only the container is named here. What the walk answers still depends on the order it
+     * takes, which its step is read for.
+     */
+    private DecisionSubject walkedContainer(Core walked, InputReads reads) {
+        DecisionSubject itself = subjectOf(walked, reads);
+        if (itself != null) {
+            return itself;
+        }
+        TermPath from = reorderedFrom(walked, reads);
+        return from == null ? null : new DecisionSubject.AnInput(from);
+    }
+
+    /**
+     * The list {@code walked} holds every element of, each as often, though it is no place a row
+     * writes — or null where it is no such thing.
+     *
+     * <p>Only a list that stands inside no other container. The elements of what a flattening made
+     * stand inside two, and some of them meeting a statement is some inner list holding one that
+     * does: no statement about the elements of one container says that.
+     */
+    private TermPath reorderedFrom(Core walked, InputReads reads) {
+        if (!(reads.everyElementOf(walked, read.rules().newtypes())
+                instanceof PathResolution.At(TermPath elements))
+                || !(elements.steps().getLast() instanceof TermPath.Step.Element)) {
+            return null;
+        }
+        List<TermPath> holding = elements.containersHoldingIt();
+        return holding.size() == 1 ? holding.getFirst() : null;
+    }
+
     /** What a dependency answered, or a place inside it, that {@code e} is — or null where it is
      *  no such thing. */
     private DecisionSubject.AnAnswer answerAt(Core e, InputReads reads) {
@@ -5854,7 +5890,8 @@ final class Pullback {
      */
     private Derivation acrossAWalk(Core e, AnswerAspect aspect, InputReads reads) {
         SeededWalk walk = SeededWalk.of(e, blocksAt(new Denotation(e, reads)));
-        DecisionSubject container = walk == null ? null : subjectOf(walk.container(), reads);
+        DecisionSubject container =
+                walk == null ? null : walkedContainer(walk.container(), reads);
         if (container == null || !quantifying.add(container)) {
             return null;
         }
@@ -5905,8 +5942,10 @@ final class Pullback {
             return recursion.search().map(search -> acrossATree(helper, body, search, args,
                     aspect, e, reads)).orElse(null);
         }
-        if (!(reads.pathOf(args.get(walk.walked()), read.rules().newtypes())
-                instanceof PathResolution.At(TermPath list))) {
+        Core walked = args.get(walk.walked());
+        TermPath list = reads.pathOf(walked, read.rules().newtypes())
+                instanceof PathResolution.At(TermPath at) ? at : reorderedFrom(walked, reads);
+        if (list == null) {
             return null;
         }
         InputReads step = reads.steppingThrough(body, args, walk.element().binding(),
