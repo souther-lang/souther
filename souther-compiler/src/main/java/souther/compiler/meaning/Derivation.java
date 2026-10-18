@@ -1952,10 +1952,16 @@ public sealed interface Derivation {
          */
         private static Proposition distributed(Proposition stated) {
             return switch (stated) {
-                case Proposition.All all -> Proposition.all(
-                        all.parts().stream().map(ATreeSearched::distributed).toList());
-                case Proposition.Any any -> Proposition.any(
-                        any.parts().stream().map(ATreeSearched::distributed).toList());
+                case Proposition.All all -> {
+                    List<Proposition> each = all.parts().stream()
+                            .map(ATreeSearched::distributed).toList();
+                    yield each.equals(all.parts()) ? stated : Proposition.all(each);
+                }
+                case Proposition.Any any -> {
+                    List<Proposition> each = any.parts().stream()
+                            .map(ATreeSearched::distributed).toList();
+                    yield each.equals(any.parts()) ? stated : Proposition.any(each);
+                }
                 case Proposition.Some some
                         when some.ofTheElement() instanceof Proposition.Any either -> {
                     List<Proposition> each = either.parts().stream()
