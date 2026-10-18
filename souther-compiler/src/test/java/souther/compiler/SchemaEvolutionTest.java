@@ -266,6 +266,47 @@ class SchemaEvolutionTest {
     }
 
     /**
+     * A branch added to an {@code anyOf} narrows nothing where what stands there accepting more is
+     * the whole accepting more: a document a shipped branch took is taken by it still. Under a
+     * {@code not} it is the whole refusing more, and a branch added to an {@code allOf} is one more
+     * thing every document is asked; both narrow.
+     */
+    @Test
+    void aBranchIsAddedToAnAnyOfWhereGrowingThereGrowsTheWhole() {
+        String twoWords = """
+                {
+                  "properties": { "kind": { "anyOf": [
+                    { "const": "a" },
+                    { "const": "b" }
+                  ] } }
+                }""";
+        assertEquals(List.of(), narrowings(twoWords, """
+                {
+                  "properties": { "kind": { "anyOf": [
+                    { "const": "a" },
+                    { "const": "b" },
+                    { "const": "c" }
+                  ] } }
+                }"""), "a document of kind a or b is taken by the branch that took it");
+        assertEquals(List.of("/not: changed where a part accepting more can make the whole accept"
+                        + " less"), narrowings("""
+                {
+                  "not": { "anyOf": [ { "required": ["a"] } ] }
+                }""", """
+                {
+                  "not": { "anyOf": [ { "required": ["a"] }, { "required": ["b"] } ] }
+                }"""), "a document holding b alone was taken and is refused now");
+        assertEquals(List.of("/allOf/1: added where another branch can take what it takes"),
+                narrowings("""
+                        {
+                          "allOf": [ { "required": ["a"] } ]
+                        }""", """
+                        {
+                          "allOf": [ { "required": ["a"] }, { "required": ["b"] } ]
+                        }"""), "a document holding a alone was taken and is refused now");
+    }
+
+    /**
      * A branch of a {@code oneOf} may grow where it takes objects alone and requires a key no other
      * branch lets an object hold — every other one admitting no keys but the ones it names, and not
      * that one, however deep its own branches are — and a definition it reaches grows with it. One

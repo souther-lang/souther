@@ -1,6 +1,7 @@
 package souther.compiler.meaning;
 
 import souther.compiler.check.DefaultBoundOperationFacts;
+import souther.compiler.check.Extreme;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.NumericTerms;
 import souther.compiler.inputs.TermPath;
@@ -569,6 +570,54 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
     String spelled();
 
     /**
+     * What a walk whose step keeps one end of what it carried and a value of the element
+     * ({@code SeededWalk.endKept}) carries into the step on an element: that end of its seed and
+     * of the value on every element before it.
+     *
+     * <p>So it lies between the seed and the furthest value an element may hold past it, and is
+     * the seed on the first element. It is no value of the element the step is applied to, which
+     * is why it is apart from that element's numbers where nothing ties the elements of the
+     * container to one another, nor the seed to them.
+     *
+     * @param extreme   which end the step keeps
+     * @param seed      what the walk starts from
+     * @param container the container the walk walks
+     * @param ofEach    the number of the element the step keeps an end of
+     * @param howMany   how many the container holds, or null where that is no number read
+     */
+    record KeptSoFar(Extreme extreme, Seed seed, TermPath container,
+                     NumericTerm.FromOnePosition ofEach, NumericTerm.FromOnePosition howMany) {
+
+        public KeptSoFar {
+            Objects.requireNonNull(extreme, "a walk keeps one end");
+            Objects.requireNonNull(seed, "a walk starts from something");
+            Objects.requireNonNull(container, "a walk walks some container");
+            Objects.requireNonNull(ofEach, "and keeps an end of some number of the element");
+            if (!ofEach.placesReadOff().stream()
+                    .allMatch(place -> place.isAtOrUnder(container.element()))) {
+                throw new IllegalArgumentException("what is kept is read off the elements: "
+                        + ofEach + " of " + container);
+            }
+            if (seed instanceof Seed.OfTheInput(var at) && at.placesReadOff().stream()
+                    .anyMatch(place -> place.isAtOrUnder(container))) {
+                throw new IllegalArgumentException("a seed is one value of the run, and no"
+                        + " element of what is walked: " + at + " of " + container);
+            }
+        }
+
+        /** What a walk keeping an end starts from: a number written out, or one number of the
+         *  input, which is one value on a run whatever the elements are. */
+        public sealed interface Seed {
+
+            /** A number written out. */
+            record Written(ExactRatio number) implements Seed {}
+
+            /** A number of the input outside what is walked. */
+            record OfTheInput(NumericTerm.FromOnePosition number) implements Seed {}
+        }
+    }
+
+    /**
      * The number at {@code steps} below the value bound at {@code binding}: one value, by the
      * binding that names it and nothing else.
      *
@@ -586,21 +635,31 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
      * could not read. Empty where nothing of the value was read to stop — an answer a dependency
      * gave, what an attempt built — since there is nothing it is made of to read.
      *
+     * <p>Where the value is what a walk keeping an end carried into its step, which end it is of
+     * what is carried beside it ({@link KeptSoFar}). That says where the value may lie and which of
+     * those values it is shown to take, and still nothing of which value it is on a run.
+     *
      * @param binding which binding names the value
      * @param steps   the steps read off it that go somewhere, outermost first
      * @param type    what stands there, which is how its numbers are spaced
      * @param madeOf  why what the value was made from is no number of the input, where the
      *                reading met it and stopped
+     * @param kept    the end a walk has kept by the element its step is applied to, where the
+     *                value is what the walk carried into the step
      */
     record OfABinding(BindingId binding, List<TermPath.Step> steps, Type type,
-                      Optional<WhyUnread> madeOf)
+                      Optional<WhyUnread> madeOf, Optional<KeptSoFar> kept)
             implements Quantity {
 
         public OfABinding {
-            if (binding == null || type == null || madeOf == null) {
+            if (binding == null || type == null || madeOf == null || kept == null) {
                 throw new IllegalArgumentException("a bound number is some binding's, of some type");
             }
             steps = List.copyOf(steps);
+            if (kept.isPresent() && (madeOf.isPresent() || !steps.isEmpty())) {
+                throw new IllegalArgumentException("what a walk carried is the value itself, and"
+                        + " nothing of it was read to stop: " + binding);
+            }
         }
 
         @Override

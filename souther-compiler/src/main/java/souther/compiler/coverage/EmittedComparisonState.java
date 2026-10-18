@@ -1,6 +1,7 @@
 package souther.compiler.coverage;
 
 import souther.compiler.reach.ComparisonArrival;
+import souther.compiler.reach.WhatMayStopARun;
 import souther.compiler.types.ConstructOccurrence;
 
 import java.util.List;
@@ -56,9 +57,14 @@ public sealed interface EmittedComparisonState {
      * <p>The occurrence beside the site because a walk of the paths is keyed by what the numbering
      * called the materialisation, and the site is where a run through it is written down. Two facts
      * about one place, kept together so that a reader asking either has the other.
+     *
+     * @param stopsBefore what, worked out on the way to this copy, may stop a run on operands
+     *                    nothing here says, as the walk of the paths filed it — beside
+     *                    what arrives, because what arrives is what has to hold for a run to be
+     *                    here and this is whether that is all getting here takes
      */
     record Observation(ConstructOccurrence occurrence, ConditionOutcomeSite site,
-                       ComparisonArrival arrival) {
+                       ComparisonArrival arrival, List<WhatMayStopARun> stopsBefore) {
 
         public Observation {
             if (occurrence == null || site == null || arrival == null) {
@@ -66,6 +72,7 @@ public sealed interface EmittedComparisonState {
                         "a place a comparison is watched at is one the numbering counted, with a"
                                 + " site and something arriving at it");
             }
+            stopsBefore = List.copyOf(stopsBefore);
         }
     }
 

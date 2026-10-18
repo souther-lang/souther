@@ -4,6 +4,7 @@ import souther.compiler.DefaultStdlib;
 import souther.compiler.core.Core;
 import souther.compiler.proof.TheWalkEnds;
 import souther.compiler.proof.WalksFromASeed;
+import souther.compiler.semantics.HowAClosureIsApplied;
 import souther.compiler.semantics.OperationLaw;
 import souther.compiler.types.ValueName;
 
@@ -30,7 +31,9 @@ import java.util.function.Function;
  * assume: the answer is the seed, or is {@code step} applied to an earlier accumulator and something
  * the container holds. Nothing about how many elements there are, nothing about the order they
  * arrive in, and nothing about the walk terminating. {@link InductiveBounds} is written against
- * exactly that and knows no operation's name.
+ * exactly that and knows no operation's name. That the step is applied to every element is a
+ * separate fact, proved of the operation's body by {@link Combinators} and handed on beside it
+ * ({@link Reducing#applied}).
  */
 final class Reductions {
 
@@ -40,14 +43,16 @@ final class Reductions {
     record Reduction(int seedArg, int accumulatorParam) {}
 
     /**
-     * What a call reduces: the value it starts from, the step it repeats, and the parameters the step
-     * is handed.
+     * What a call reduces: the value it starts from, the step it repeats, the parameters the step
+     * is handed, and how far the operation goes applying the step.
      *
-     * <p>The element and the container come from {@link Combinators}, so a caller reading this reads
-     * one answer about the call rather than two it has to line up itself.
+     * <p>The element, the container and how far come from {@link Combinators}, so a caller reading
+     * this reads one answer about the call rather than two it has to line up itself. How far is
+     * what the rule here does not say: a reader concluding something about every element of the
+     * container asks it.
      */
     record Reducing(Core seed, Core.Block step, Core.Binder accumulator, Core.Binder element,
-                    Core container) {}
+                    Core container, HowAClosureIsApplied applied) {}
 
     /** The reduction {@code operation} is, or null where it reduces nothing — including where it
      * applies no closure at all, and where the name applied is not a library operation. */
@@ -75,14 +80,17 @@ final class Reductions {
      */
     static Reducing reducing(Core.PreservedCall call, Function<Core, Core.Block> blockOf) {
         Reduction rule = of(call.operation());
+        if (rule == null) {
+            return null;
+        }
         Combinators.Handed handed = Combinators.handedTo(call, blockOf);
-        if (rule == null || handed == null
+        if (handed == null
                 || rule.accumulatorParam() >= handed.step().params().size()) {
             return null;
         }
         return new Reducing(call.args().get(rule.seedArg()), handed.step(),
                 handed.step().params().get(rule.accumulatorParam()), handed.element(),
-                handed.container());
+                handed.container(), handed.applied());
     }
 
     /** The operations there is a rule about. */

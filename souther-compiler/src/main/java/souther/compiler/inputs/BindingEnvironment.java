@@ -206,6 +206,16 @@ final class BindingEnvironment {
         return value == null ? new BindingRole.Unknown() : new BindingRole.Alias(value);
     }
 
+    /**
+     * What the body gave {@code binding}, where that is all it is: no parameter, nothing an
+     * application handed it, and no element of a container — or null where it is any of those or
+     * was given nothing.
+     */
+    Core given(BindingId binding) {
+        return !handed.containsKey(binding)
+                && roleOf(binding) instanceof BindingRole.Alias(Core value) ? value : null;
+    }
+
     /** What the operations applying the closure {@code binding} is a parameter of hand it, each
      *  container and how, whatever else the name has come to stand for on the way here. */
     List<HeldIn> handedFrom(BindingId binding) {

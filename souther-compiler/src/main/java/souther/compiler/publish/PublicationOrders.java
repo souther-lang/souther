@@ -16,6 +16,7 @@ import souther.compiler.query.EstablishmentGap;
 import souther.compiler.query.ItemAssessment;
 import souther.compiler.query.ObligationDisposition;
 import souther.compiler.query.ReplacementEvidence;
+import souther.compiler.reach.WhatMayStopARun;
 
 import tools.jackson.databind.node.ObjectNode;
 
@@ -404,6 +405,17 @@ public final class PublicationOrders {
                     EstablishmentGap.Composition.class));
 
     /**
+     * What may stop a run on the way to a point, in the order a reader looking up the body for it
+     * meets the kinds: an operator inside an expression, a call around one, a construction of a
+     * value out of them.
+     */
+    public static final CanonicalSelection.Order<WhatMayStopARun> WHAT_MAY_STOP_A_RUN =
+            CanonicalSelection.Order.overFamilies(List.<Class<? extends WhatMayStopARun>>of(
+                    WhatMayStopARun.AnOperator.class,
+                    WhatMayStopARun.ACall.class,
+                    WhatMayStopARun.AConstruction.class));
+
+    /**
      * What is open about an obligation nobody can decide.
      *
      * <p>What a reader does about the two differs — the first is answered by reading more of what
@@ -493,6 +505,7 @@ public final class PublicationOrders {
                     AdequacyOpeningWord.SHOWING_STOPPED,
                     AdequacyOpeningWord.NOTHING_WAS_COMPOSED,
                     AdequacyOpeningWord.NOTHING_SHOWED_IT,
+                    AdequacyOpeningWord.THE_WAY_THERE_MAY_STOP,
                     AdequacyOpeningWord.EVERY_ROW_REACHES_AN_UNREACHABLE));
 
     /**

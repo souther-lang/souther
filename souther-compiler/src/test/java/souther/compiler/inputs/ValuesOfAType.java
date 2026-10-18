@@ -38,10 +38,21 @@ import java.util.function.Function;
  * over: a value nobody can make is a component nothing would be asked about.
  *
  * <p>A record's constructor decides which combinations are values, and is asked rather than
- * restated. Each value of each component is put with the first values of the others that the
- * constructor accepts, so where a constructor ties two components together the value made is one it
- * would make. And then it is checked that each component did come out varied alone, because a
- * constructor can refuse every value a component was offered but one.
+ * restated. Each value of each component is put with values of the others the constructor accepts,
+ * so where a constructor ties two components together the value made is one it would make.
+ *
+ * <p><b>Two things are asked of that, and only one of them is held over every combination.</b> That
+ * each component comes out varied alone is what an order is held to, and it is asked over every
+ * combination of the others wherever the nearer ones leave it unanswered: a component is refused
+ * only where no combination varies it alone. That each value a component is offered comes out in
+ * some value is not what an order is held to — an order over a component is asked over that
+ * component's own values where its type is asked — so each is put beside the nearest values of the
+ * others, the first of each with one or two of them moved, and a value the constructor takes only
+ * beside more moved than that is not made. Asked over every combination, a value no combination takes —
+ * a null where a component is never absent — asked one record the same question the better part of
+ * a million times. What that leaves out is held against every combination, nightly
+ * ({@link #everyCombination}, {@code TheNearestValuesOfATypeAreTheValuesEveryCombinationMakesTest}),
+ * so a record that comes to take a value only far from the first ones is named there.
  *
  * <p>Null is offered for every component that is not a primitive, and the constructor says whether
  * it is a value. An absence a record means — the owner of a construct no source wrote — is one an
@@ -74,6 +85,72 @@ final class ValuesOfAType {
     private final Map<Type, List<Object>> made = new HashMap<>();
 
     private final Set<Type> making = new HashSet<>();
+
+    /** Whether each value of each component is put beside every combination of the others, and
+     *  not only the nearest ones. */
+    private final boolean everyCombination;
+
+    /** Values made with each value of a component beside the nearest values of the others. */
+    ValuesOfAType() {
+        this(false);
+    }
+
+    private ValuesOfAType(boolean everyCombination) {
+        this.everyCombination = everyCombination;
+    }
+
+    /**
+     * Values made with each value of each component beside every combination of the others: every
+     * value the constructor takes anywhere, at what that costs. What the nearest values are held
+     * against.
+     */
+    static ValuesOfAType everyCombination() {
+        return new ValuesOfAType(true);
+    }
+
+    /**
+     * Each value of a component of a record {@code every} has made that it made some value with and
+     * {@code nearest} made none with, named by the record and the component — empty where the
+     * nearest values leave out nothing every combination takes.
+     *
+     * <p>By the values of each component and not by the values made: the two put a value beside
+     * different values of the others, and what the nearest ones are held to is that each value is
+     * in some value made, not that it is beside the same ones.
+     *
+     * <p>Every record made, a generic one among them: what is a record is the type's question and
+     * not how it was asked for, and a record over type arguments is made as that type, with the
+     * values its arguments have.
+     */
+    static List<String> valuesLeftOut(ValuesOfAType nearest, ValuesOfAType every) {
+        List<String> out = new ArrayList<>();
+        for (Type type : List.copyOf(every.made.keySet())) {
+            Class<?> record = switch (type) {
+                case Class<?> c -> c;
+                case ParameterizedType p when p.getRawType() instanceof Class<?> c -> c;
+                default -> null;
+            };
+            if (record == null || !record.isRecord()) {
+                continue;
+            }
+            for (RecordComponent component : record.getRecordComponents()) {
+                Set<Optional<Object>> taken = valuesAt(every.of(type), component);
+                taken.removeAll(valuesAt(nearest.of(type), component));
+                if (!taken.isEmpty()) {
+                    out.add(type.getTypeName() + "." + component.getName() + ": " + taken);
+                }
+            }
+        }
+        out.sort(null);
+        return out;
+    }
+
+    private static Set<Optional<Object>> valuesAt(List<Object> values, RecordComponent component) {
+        Set<Optional<Object>> out = new LinkedHashSet<>();
+        for (Object value : values) {
+            out.add(Optional.ofNullable(component(value, component)));
+        }
+        return out;
+    }
 
     /** Values of {@code type}, every component of every record it reaches varied on its own. */
     List<Object> of(Type type) {
@@ -182,18 +259,27 @@ final class ValuesOfAType {
         Set<Object> out = new LinkedHashSet<>();
         for (int i = 0; i < components.length; i++) {
             for (Object value : offered.get(i)) {
-                firstMadeWith(canonical, offered, i, value).ifPresent(out::add);
+                (everyCombination ? anyMadeWith(canonical, offered, i, value)
+                        : nearestMadeWith(canonical, offered, i, value)).ifPresent(out::add);
             }
         }
-        List<Object> values = List.copyOf(out);
+        // A component the nearest values leave varied alone in no two of them is asked again over
+        // every combination of the others, and refused only if that finds none either: that the
+        // nearest ones held no such pair says where the asking stopped, not that there is none.
         for (int i = 0; i < components.length; i++) {
-            if (!variedAlone(values, components, i)) {
-                throw new AssertionError("no two values of " + record.getName() + " made here"
-                        + " differ in " + components[i].getName() + " alone, so nothing asked"
-                        + " over them says whether an order reads it");
+            if (variedAlone(List.copyOf(out), components, i)) {
+                continue;
+            }
+            for (Object value : offered.get(i)) {
+                anyMadeWith(canonical, offered, i, value).ifPresent(out::add);
+            }
+            if (!variedAlone(List.copyOf(out), components, i)) {
+                throw new AssertionError("no two values of " + record.getName() + " differ in "
+                        + components[i].getName() + " alone, whatever the other components are,"
+                        + " so nothing asked over them says whether an order reads it");
             }
         }
-        return values;
+        return List.copyOf(out);
     }
 
     private static Type resolved(Type type, Map<TypeVariable<?>, Type> bound) {
@@ -218,11 +304,58 @@ final class ValuesOfAType {
     }
 
     /**
-     * {@code value} at component {@code at}, beside the first values of the others the constructor
-     * accepts, counting through them the way an odometer does.
+     * {@code value} at component {@code at}, beside the nearest values of the others the
+     * constructor accepts: the first value of each, then each other component moved off its first
+     * value alone, then each two of them moved together — or nothing where none of those is
+     * accepted, which is where this stopped asking and not that no combination is.
+     *
+     * <p>Nearest first because what a constructor ties a value to is one or two other components —
+     * an origin no source wrote is one with no ordinal and no owner — and a value it refuses
+     * whatever stands beside it, a null where a component is never absent, is refused at every
+     * combination: counting through all of them for each such value asked one record of four
+     * components the same question the better part of a million times. Where the nearest values
+     * leave a component varied alone in no two of them, {@link #ofARecord} asks that component again
+     * over every combination ({@link #anyMadeWith}).
      */
-    private static Optional<Object> firstMadeWith(Constructor<?> canonical,
-                                                  List<List<Object>> offered, int at, Object value) {
+    private static Optional<Object> nearestMadeWith(Constructor<?> canonical,
+                                                    List<List<Object>> offered, int at,
+                                                    Object value) {
+        Object[] first = new Object[offered.size()];
+        for (int i = 0; i < first.length; i++) {
+            first[i] = i == at ? value : offered.get(i).get(0);
+        }
+        Optional<Object> made = made(canonical, first);
+        for (int one = 0; one < first.length && made.isEmpty(); one++) {
+            for (int a = 1; one != at && a < offered.get(one).size() && made.isEmpty(); a++) {
+                Object[] moved = first.clone();
+                moved[one] = offered.get(one).get(a);
+                made = made(canonical, moved);
+            }
+        }
+        for (int one = 0; one < first.length && made.isEmpty(); one++) {
+            for (int other = one + 1; one != at && other < first.length && made.isEmpty();
+                    other++) {
+                for (int a = 1; other != at && a < offered.get(one).size() && made.isEmpty();
+                        a++) {
+                    for (int b = 1; b < offered.get(other).size() && made.isEmpty(); b++) {
+                        Object[] moved = first.clone();
+                        moved[one] = offered.get(one).get(a);
+                        moved[other] = offered.get(other).get(b);
+                        made = made(canonical, moved);
+                    }
+                }
+            }
+        }
+        return made;
+    }
+
+    /**
+     * {@code value} at component {@code at}, beside the first values of the others the constructor
+     * accepts among every combination of them, counted through as an odometer does — or nothing
+     * where it accepts none.
+     */
+    private static Optional<Object> anyMadeWith(Constructor<?> canonical,
+                                                List<List<Object>> offered, int at, Object value) {
         int[] index = new int[offered.size()];
         while (true) {
             Object[] arguments = new Object[offered.size()];

@@ -16,12 +16,14 @@ import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.ConstantComparison;
 import souther.compiler.check.ClauseName;
 import souther.compiler.check.ClausesInOrder;
+import souther.compiler.check.ClosureUses;
 import souther.compiler.check.DeclarationAccess;
 import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.check.DeclaredArgument;
 import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.ElementsWrittenOut;
+import souther.compiler.check.Extreme;
 import souther.compiler.check.KeyedAccumulation;
 import souther.compiler.check.LawAtACall;
 import souther.compiler.check.Location;
@@ -40,6 +42,7 @@ import souther.compiler.check.TheSignOfAnOrder;
 import souther.compiler.check.WholeUnitsBetween;
 import souther.compiler.core.ACopyOfAnApplication;
 import souther.compiler.core.Core;
+import souther.compiler.core.Evaluated;
 import souther.compiler.core.WhatABodyReads;
 import souther.compiler.check.AnIndexedMap;
 import souther.compiler.inputs.CaseCompared;
@@ -99,6 +102,7 @@ import souther.compiler.semantics.SideAnswered;
 import souther.compiler.semantics.TakenArguments;
 import souther.compiler.semantics.TakenAs;
 import souther.compiler.semantics.Unsayable;
+import souther.compiler.semantics.WhereAnOperatorAnswers;
 import souther.compiler.types.BinOp;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.ConstructOccurrence;
@@ -293,6 +297,13 @@ final class Pullback {
      * null where what is read is no comparison of numbers, and such a count is not read there.
      */
     private List<Derivation> answering;
+    /**
+     * Each operator the sides of the comparison being read were worked out through, with the form
+     * it came to, as they are read ({@link AffineForms.Reading#composed}) — or null where what is
+     * read is no comparison of numbers. Where each answers is where the comparison is read
+     * ({@link #whereEachOperatorAnswers}).
+     */
+    private Operators operated;
     /**
      * The elements of the containers the comparison being read is read of, which name stands for
      * each — held to one name for each container ({@link ElementsMet}). Nothing where what is read
@@ -826,6 +837,58 @@ final class Pullback {
         return read == null ? null : new Derivation.Restated(read);
     }
 
+    /**
+     * Where each operator {@code body} works out whenever it is worked out answers
+     * ({@link WhereAnOperatorAnswers}), with its names as {@code reads} has them — or null where
+     * nothing here says it answers only somewhere.
+     *
+     * <p>For the applications of a closure one after another ({@link WhereAnApplicationIsMade}): a
+     * run makes the next application only where this one got past every operator it works out, so
+     * {@code x -> x + 1 > 0} applied to {@code a} lets a run on to the next element only where
+     * {@code a + 1} is a number an {@code Int} holds.
+     *
+     * <p>The operators a run works out whatever it decides: the parts {@link Evaluated} says every
+     * run evaluates, a binding's value and then its body. An operator under an arm or the right of
+     * an operator that stops early is worked out on some runs only, and is left where nothing is
+     * said of it, as is one under a part the arithmetic composes nothing out of — which says less
+     * than what has to hold, and never more.
+     */
+    static Proposition whereItsOperatorsAnswer(Core body, InputReads reads, InputReading read) {
+        Pullback reading = new Pullback(read, Optional.empty());
+        List<Derivation> answers = reading.inAComparisonsScope(true, () -> {
+            reading.operatorsIn(body, reads);
+            return whereEachOperatorAnswers(reading.operated);
+        });
+        Derivation answered = null;
+        for (Derivation one : answers) {
+            answered = answered == null ? one
+                    : new Derivation.Joined(ConditionJoin.BOTH, answered, one);
+        }
+        return answered == null ? null : reading.pulled(answered).proposition();
+    }
+
+    /** Every operator {@code e} works out on every run that works {@code e} out, told to
+     *  {@link #operated} as the arithmetic composes it. */
+    private void operatorsIn(Core standing, InputReads reads) {
+        Core e = Core.withoutStanding(standing);
+        switch (e) {
+            case Core.Binary binary when binary.op() == BinOp.ADD || binary.op() == BinOp.SUB
+                    || binary.op() == BinOp.MUL -> AffineForms.outcome(e, reads, quantities());
+            case Core.Neg _ -> AffineForms.outcome(e, reads, quantities());
+            case Core.LetIn li -> {
+                operatorsIn(li.value(), reads);
+                operatorsIn(li.body(), quantities().inside(li, reads));
+            }
+            default -> {
+                for (Evaluated.Step step : Evaluated.inOrder(e)) {
+                    if (step instanceof Evaluated.Step.Always(Core part)) {
+                        operatorsIn(part, reads);
+                    }
+                }
+            }
+        }
+    }
+
     /** The rules that take a comparison the source wrote, in the order they are tried. */
     private List<Supplier<Derivation>> rulesFor(StatedComparison stated, Denotation at,
                                                 boolean fixed, InputReads reads) {
@@ -868,6 +931,7 @@ final class Pullback {
                 () -> ofAQuotientByAValue(stated, at, fixed, reads),
                 () -> partOf(at, ofItsArguments(stated, fixed, reads)),
                 () -> ofASizeInCases(stated, at, reads),
+                () -> ofAWalkKeepingAnEnd(stated, at, reads),
                 () -> ofAChoice(stated, at, reads),
                 () -> throughWhatItStopsAt(stated, at, fixed, reads, wayIn.get()),
                 () -> partOf(at, ofBoundValues(stated, fixed, reads, wayIn.get())));
@@ -1015,8 +1079,8 @@ final class Pullback {
             return Optional.of(at);
         }
         Denotation whole = container.at().standing(container.value(), symbols, newtypes);
-        KeyedAccumulation filed = KeyedAccumulation.of(whole.value(),
-                blocksAt(whole, symbols, newtypes));
+        KeyedAccumulation filed = KeyedAccumulation.of(whole.value(), whole.at(),
+                new Pullback(read, Optional.empty()).sides(), blocksAt(whole, symbols, newtypes));
         return filed != null && whole.at().holdingSomethingWhere(filed.walked(), symbols, newtypes)
                 instanceof PathResolution.At(TermPath at) ? Optional.of(at) : Optional.empty();
     }
@@ -2900,7 +2964,8 @@ final class Pullback {
          */
         private Located entriesOf(Denotation container, List<Kept> pending, List<Kept> located,
                                  ElementAt outerEach, Denotation outerHanded) {
-            KeyedAccumulation filed = KeyedAccumulation.of(container.value(), blockIn(container));
+            KeyedAccumulation filed = KeyedAccumulation.of(container.value(), container.at(),
+                    sides(), blockIn(container));
             if (filed == null || !(container.at().holdingSomethingWhere(filed.walked(),
                     read.rules().symbols(), read.rules().newtypes())
                     instanceof PathResolution.At(TermPath held))) {
@@ -4185,25 +4250,100 @@ final class Pullback {
      * was read.
      */
     private Derivation overQuantities(ASide left, ASide right, Rel states) {
+        return inAComparisonsScope(false, () ->
+                whereItsCountsAnswer(overQuantitiesCounting(left, right, states)));
+    }
+
+    /**
+     * What {@code reading} answers, read as one comparison over the quantities is: with nothing
+     * that reading a comparison collects — the counts, what answers, the operators, the elements met
+     * — carried in from around it or out to it. The operators are told of only where
+     * {@code tellingOfOperators} asks for them, and nobody else keeps a table of them.
+     */
+    private <T> T inAComparisonsScope(boolean tellingOfOperators, Supplier<T> reading) {
         Map<Quantity.HowManyMeet, Derivation.AComparisonRead.Counted> outer = counting;
         List<Derivation.AComparisonRead.Counted> outerAlike = alike;
         List<Derivation> outerAnswering = answering;
+        Operators outerOperated = operated;
         ElementsMet outerElements = elementsMet;
         Core outerSide = sideAsWritten;
         counting = new LinkedHashMap<>();
         alike = null;
         answering = new ArrayList<>();
+        operated = tellingOfOperators ? new Operators() : null;
         elementsMet = new ElementsMet();
         sideAsWritten = null;
         try {
-            return whereItsCountsAnswer(overQuantitiesCounting(left, right, states));
+            return reading.get();
         } finally {
             counting = outer;
             alike = outerAlike;
             answering = outerAnswering;
+            operated = outerOperated;
             elementsMet = outerElements;
             sideAsWritten = outerSide;
         }
+    }
+
+    /**
+     * The operators a reading was told of, in the order it was told, each node once.
+     *
+     * <p>Told apart by which node each is and not by the form it came to. An {@code Int} sum and a
+     * {@code Decimal} sum over the same numbers come to one form and answer in different places,
+     * and the form alone would keep whichever came first.
+     */
+    private static final class Operators {
+        private final List<Operated> told = new ArrayList<>();
+        private final Set<Core> nodes = Collections.newSetFromMap(new IdentityHashMap<>());
+
+        void tell(Core operation, LinearForm<Quantity> form) {
+            if (nodes.add(operation)) {
+                told.add(new Operated(operation, form));
+            }
+        }
+    }
+
+    /** One operator a reading was told of, with the form it came to there. */
+    private record Operated(Core operation, LinearForm<Quantity> form) {}
+
+    /**
+     * Where each of {@code operated} answers, as the language says it does
+     * ({@link WhereAnOperatorAnswers}): an {@code Int} sum where the number it comes to is one an
+     * {@code Int} holds. A run working a side out stops at the first that does not, and the
+     * comparison comes out no way there.
+     *
+     * <p>Only what is said over these numbers. A form with no number of the input in it answers
+     * wherever it answers at all, and an operator whose region is not said is left where nothing
+     * here says it.
+     */
+    private static List<Derivation> whereEachOperatorAnswers(Operators operated) {
+        List<Derivation> out = new ArrayList<>();
+        for (Operated each : operated.told) {
+            LinearForm<Quantity> form = each.form();
+            Core operation = each.operation();
+            WhereAnOperatorAnswers where = switch (operation) {
+                case Core.Binary binary -> WhereAnOperatorAnswers.ofAnOperator(binary.op(),
+                        binary.type(), List.of(binary.left().type(), binary.right().type()));
+                case Core.Neg neg -> WhereAnOperatorAnswers.ofANegation(neg.type());
+                default -> throw new IllegalStateException(
+                        "the walk tells of an operator and nothing else: " + operation);
+            };
+            if (form.coefs().isEmpty() || !(where instanceof
+                    WhereAnOperatorAnswers.WhereItsExactValueIsHeld(var least, var greatest))) {
+                continue;
+            }
+            if (form.minus(LinearForm.constant(ExactRatio.of(greatest)))
+                    instanceof ExactAnswer.Held<LinearForm<Quantity>>(var above)
+                    && form.minus(LinearForm.constant(ExactRatio.of(least)))
+                    instanceof ExactAnswer.Held<LinearForm<Quantity>>(var below)) {
+                out.add(new Derivation.Joined(ConditionJoin.BOTH,
+                        aRelation(Derivation.ComparisonReading.OVER_BOUND_VALUES, above, Rel.LE,
+                                Derivation.AComparisonRead.Facing.NOTHING_WRITTEN),
+                        aRelation(Derivation.ComparisonReading.OVER_BOUND_VALUES, below, Rel.GE,
+                                Derivation.AComparisonRead.Facing.NOTHING_WRITTEN)));
+            }
+        }
+        return out;
     }
 
     /**
@@ -4576,7 +4716,8 @@ final class Pullback {
         Symbols symbols = read.rules().symbols();
         DeclarationNewtypes newtypes = read.rules().newtypes();
         Denotation whole = at.standing(container, symbols, newtypes);
-        KeyedAccumulation filed = KeyedAccumulation.of(whole.value(), blocksAt(whole));
+        KeyedAccumulation filed = KeyedAccumulation.of(whole.value(), whole.at(), sides(),
+                blocksAt(whole));
         if (filed == null) {
             return null;
         }
@@ -4664,6 +4805,66 @@ final class Pullback {
         added.added().coefs().forEach((term, by) -> coefs.put(new DecisionAtom.OfTheInput(term),
                 by));
         return new LinearForm<>(added.seed(), coefs);
+    }
+
+    /**
+     * The end a walk has kept by the element its step is applied to, where {@code name} is what the
+     * walk carries into the step and the step keeps an end of it and a number of the element
+     * ({@link SeededWalk#endKept}) — or empty where it is anything else.
+     *
+     * <p>Only one operation may apply the step, and the walk has to start from a number written
+     * out or one number of the input outside what it walks, and walk a container of the input
+     * whose elements the number is read off: what is kept is then that end of the seed and of the
+     * number on the elements before, which is what the range of the carried value is worked out
+     * from.
+     */
+    private Optional<Quantity.KeptSoFar> keptSoFar(Core.Read name, InputReads at) {
+        ClosureUses uses = at.usesOfTheClosureTaking(name.binding());
+        if (uses == null || uses.usedElsewhere() || uses.applications().size() != 1) {
+            return Optional.empty();
+        }
+        Denotation call = new Denotation(uses.applications().getFirst().call(), at);
+        SeededWalk walk = SeededWalk.of(call.value(), blocksAt(call));
+        if (walk == null || !name.binding().equals(walk.accumulator().binding())) {
+            return Optional.empty();
+        }
+        SeededWalk.AnEndKept<InputReads> kept = walk.endKept(at, sides());
+        Quantity.KeptSoFar.Seed seed = kept == null ? null : seedOf(walk.seed(), at);
+        if (seed == null || !(AffineForms.outcome(kept.value().value(), kept.value().at(),
+                quantities()) instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(
+                        LinearForm<Quantity> value))
+                || !(soleQuantity(value) instanceof DecisionAtom.OfTheInput(
+                        NumericTerm.FromOnePosition each))
+                || !(subjectOf(walk.container(), at) instanceof DecisionSubject.AnInput(
+                        TermPath container))
+                || !each.placesReadOff().stream()
+                        .allMatch(place -> place.isAtOrUnder(container.element()))
+                || (seed instanceof Quantity.KeptSoFar.Seed.OfTheInput(var from)
+                        && from.placesReadOff().stream()
+                                .anyMatch(place -> place.isAtOrUnder(container)))) {
+            return Optional.empty();
+        }
+        NumericTerm.FromOnePosition howMany = sizeOf(walk.container(), at)
+                instanceof Sized.AsAForm(LinearForm<Quantity> size)
+                && soleQuantity(size) instanceof DecisionAtom.OfTheInput(
+                        NumericTerm.FromOnePosition count) ? count : null;
+        return Optional.of(new Quantity.KeptSoFar(kept.extreme(), seed, container, each,
+                howMany));
+    }
+
+    /** What a walk starting from {@code seed} starts from: a number written out, or one number
+     *  of the input — or null where it is anything else. */
+    private Quantity.KeptSoFar.Seed seedOf(Core seed, InputReads at) {
+        ExactRatio written = sides().constant(seed, at);
+        if (written != null) {
+            return new Quantity.KeptSoFar.Seed.Written(written);
+        }
+        return AffineForms.outcome(seed, at, quantities())
+                instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(
+                        LinearForm<Quantity> form)
+                && soleQuantity(form) instanceof DecisionAtom.OfTheInput(
+                        NumericTerm.FromOnePosition number)
+                ? new Quantity.KeptSoFar.Seed.OfTheInput(number) : null;
     }
 
     /**
@@ -4797,9 +4998,13 @@ final class Pullback {
                     // of the input's goes with it.
                     case ReadMeaning.Through _ -> LinearForm.atom(new Quantity.OfABinding(
                             name.binding(), steps, node.type(),
-                            Optional.ofNullable(inside).map(Pullback.this::noFormOf)));
+                            Optional.ofNullable(inside).map(Pullback.this::noFormOf),
+                            Optional.empty()));
+                    // A name nothing is bound to here may still be what a walk carries into its
+                    // step, which says where its value lies.
                     case ReadMeaning.Unknown _ -> LinearForm.atom(new Quantity.OfABinding(
-                            name.binding(), steps, node.type(), Optional.empty()));
+                            name.binding(), steps, node.type(), Optional.empty(),
+                            steps.isEmpty() ? keptSoFar(name, at) : Optional.empty()));
                 };
             }
 
@@ -4842,6 +5047,13 @@ final class Pullback {
                         instanceof PathResolution.NotAPosition);
                 return !stands && !Location.isStep(fa.target().type(), fa.field(),
                         read.rules().newtypes());
+            }
+
+            @Override
+            public void composed(Core operation, LinearForm<Quantity> form) {
+                if (operated != null) {
+                    operated.tell(operation, form);
+                }
             }
         };
     }
@@ -5852,6 +6064,27 @@ final class Pullback {
         } else {
             return null;
         }
+        // Past the first element meeting the step's statement the step keeps what it carried
+        // without working the statement out, so the walk asks each element in turn until one meets
+        // it — in the walk's order, which a fold over a list reads.
+        return acrossTheElements(start, container, walked, meets, keeps, how,
+                HowTheElementsAreAsked.UNTIL_ONE_MEETS_IT, e, reads);
+    }
+
+    /**
+     * What a walk over {@code container} ends with, from {@code start}, where an element meeting
+     * {@code meets} decides it and the step keeps what it carried otherwise ({@code keeps}): the
+     * seed or some element meeting it, where {@code how} is either, and the seed and every element
+     * meeting it, where it is both.
+     *
+     * @param walked the expression the container is, whose size is read where some element meeting
+     *               the step has the container's holding anything as a part
+     * @param asked  how the step goes through the elements, where what an element meets may answer
+     *               nothing: which is the step's to say, and not the statement's
+     */
+    private Derivation acrossTheElements(Derivation start, DecisionSubject container, Core walked,
+                                         Derivation meets, Derivation keeps, ConditionJoin how,
+                                         HowTheElementsAreAsked asked, Core e, InputReads reads) {
         boolean holds = how == ConditionJoin.EITHER;
         Proposition element = holds ? trying.of(meets) : trying.of(meets).denied();
         Optional<Derivation> holdsSomething = Optional.empty();
@@ -5862,13 +6095,10 @@ final class Pullback {
                             askedAt != null ? askedAt : new Denotation(e, reads))
                     : unread(walked, reads, new WhyUnread.NoMeasureOfItsSize()));
         }
-        // Past the first element meeting the step's statement the step keeps what it carried
-        // without working the statement out, so the walk asks each element in turn until one meets
-        // it — in the walk's order, which a fold over a list reads.
-        HowTheElementsAreAsked asked = Proposition.mayAnswerNothing(element)
-                ? HowTheElementsAreAsked.UNTIL_ONE_MEETS_IT : HowTheElementsAreAsked.NOT_SAID;
         return new Derivation.AcrossAWalk(start,
-                new Derivation.SomeElementMeeting(container, meets, holds, holdsSomething, asked),
+                new Derivation.SomeElementMeeting(container, meets, holds, holdsSomething,
+                        Proposition.mayAnswerNothing(element) ? asked
+                                : HowTheElementsAreAsked.NOT_SAID),
                 keeps, how);
     }
 
@@ -6345,6 +6575,91 @@ final class Pullback {
     }
 
     /**
+     * A comparison one side of which is what a walk from a seed ends with, where the walk's step
+     * keeps one end of what it carried and a value of the element ({@link SeededWalk#endKept}):
+     * read by induction over the elements, as a walk's end is ({@link Derivation.AcrossAWalk}) — or
+     * null where neither side is such a walk, or what it walks stands at no subject.
+     *
+     * <p>The greatest of the seed and the values is at or below a number exactly where the seed is
+     * and the value on every element is, and at or above it where the seed is or the value on some
+     * element is; the least is the other way round. So the comparison is the same comparison of the
+     * seed, and of the value on every element or on some, each read as a comparison of a case is
+     * ({@link #comparedCase}): the seed and the value where the walk stands, and the other side
+     * where the comparison does. Equality is the end at or below and at or above, and a difference
+     * is the end below or above.
+     *
+     * <p>Each side, and what the step chooses, is read past its names and past the value a newtype
+     * wears ({@link Extreme#comparedAs}), which orders as what wears it: {@code worst.value <=
+     * 0.10m} over a walk keeping the greatest rate is the comparison of every rate.
+     */
+    private Derivation ofAWalkKeepingAnEnd(StatedComparison stated, Denotation at,
+                                           InputReads reads) {
+        StatedComparison.Numbered<AWalkKeepingAnEnd> numbered = stated.at(side -> {
+            ValueStanding.ReadThrough<InputReads> resolved =
+                    Extreme.comparedAs(side, reads, sides());
+            Denotation stands = new Denotation(resolved.value(), resolved.at());
+            SeededWalk walk = SeededWalk.of(stands.value(), blocksAt(stands));
+            SeededWalk.AnEndKept<InputReads> kept = walk == null ? null
+                    : walk.endKept(stands.at(), sides());
+            return kept == null ? null : new AWalkKeepingAnEnd(stands, walk, kept);
+        });
+        if (numbered == null) {
+            return null;
+        }
+        Denotation ends = numbered.number().ends();
+        SeededWalk walk = numbered.number().walk();
+        SeededWalk.AnEndKept<InputReads> kept = numbered.number().kept();
+        DecisionSubject container = subjectOf(walk.container(), ends.at());
+        if (container == null) {
+            return null;
+        }
+        Denotation other = new Denotation(numbered.other(), reads);
+        Denotation seed = new Denotation(walk.seed(), ends.at());
+        Denotation value = new Denotation(kept.value().value(), kept.value().at());
+        Rel states = numbered.claim().statedRelation();
+        // The seed and the value are each compared with the other side, once for each end an
+        // equality or a difference is read as.
+        long most = READINGS.maximum();
+        long readAs = states == Rel.EQ || states == Rel.NE ? 2 : 1;
+        WhyUnread past = splitInto(reads, readAs * (readingsOf(seed, most, true)
+                + readingsOf(value, most, true)) * readingsOf(other, most, true));
+        if (past != null) {
+            return partOf(at, new Derivation.Stopped(past, false));
+        }
+        Function<Rel, Derivation> endedSo = rel -> {
+            boolean every = (rel == Rel.LT || rel == Rel.LE)
+                    == (kept.extreme() instanceof Extreme.Greatest);
+            ConditionJoin how = every ? ConditionJoin.BOTH : ConditionJoin.EITHER;
+            // Past the elements that decide it, the step answers the side of what it carried. It
+            // still compares every element's value with what it carried, so every element is
+            // asked.
+            ACarriedValue carried = ACarriedValue.made();
+            return acrossTheElements(comparedCase(seed, other, rel, at),
+                    container, walk.container(), comparedCase(value, other, rel, at),
+                    new Derivation.Supposing(new Derivation.WhatAWalkCarried(carried), carried,
+                            !every),
+                    how, HowTheElementsAreAsked.EVERY_ONE, ends.value(), ends.at());
+        };
+        return switch (states) {
+            case LT, LE, GT, GE -> endedSo.apply(states);
+            case EQ -> new Derivation.Joined(ConditionJoin.BOTH, endedSo.apply(Rel.LE),
+                    endedSo.apply(Rel.GE));
+            case NE -> new Derivation.Joined(ConditionJoin.EITHER, endedSo.apply(Rel.LT),
+                    endedSo.apply(Rel.GT));
+        };
+    }
+
+    /**
+     * A side of a comparison that is what a walk keeping an end ends with.
+     *
+     * @param ends the walk's call, where it stands
+     * @param walk the walk the call is
+     * @param kept the end its step keeps, and the value of the element where it is read
+     */
+    private record AWalkKeepingAnEnd(Denotation ends, SeededWalk walk,
+                                     SeededWalk.AnEndKept<InputReads> kept) {}
+
+    /**
      * {@code left states right}, each side split into its cases where it is chosen by them, and
      * related as numbers where neither is.
      */
@@ -6796,10 +7111,20 @@ final class Pullback {
     private TheSignOfAnOrder.Sides<InputReads> sides() {
         return new TheSignOfAnOrder.Sides<>() {
 
+            // A name the body gave a value is that value however it is read, so one standing at a
+            // position is followed to what it was given as well: a step choosing between `d` and
+            // `w` under `let d = l.discount` chooses between `l.discount` and `w`.
             @Override
             public ValueStanding.ReadThrough<InputReads> standing(Core e, InputReads at) {
+                Set<BindingId> met = new HashSet<>();
                 Denotation stands = at.standing(e, read.rules().symbols(),
                         read.rules().newtypes());
+                while (Core.withoutStanding(stands.value()) instanceof Core.Read name
+                        && met.add(name.binding())
+                        && stands.at().givenTo(name) instanceof Denotation given) {
+                    stands = given.at().standing(given.value(), read.rules().symbols(),
+                            read.rules().newtypes());
+                }
                 return new ValueStanding.ReadThrough<>(stands.value(), stands.at());
             }
 

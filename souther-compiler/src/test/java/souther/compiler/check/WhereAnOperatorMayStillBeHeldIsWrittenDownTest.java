@@ -130,6 +130,24 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                             + " alone answers for + - * and needs the answered type for too for /"),
             new Held("souther.compiler.abort.AbortSites.arithmeticType",
                     "the same, for the answered type / dispatches on before it asks the operator"),
+            new Held("souther.compiler.semantics.WhereAnOperatorAnswers.ofAnOperator",
+                    "on which operands an operator answers a value, which the operator and the"
+                            + " types it answers and takes alone say"),
+            new Held("souther.compiler.check.PathCompletion.operated",
+                    "hands the operator to WhereAnOperatorAnswers, which says on which operands it"
+                            + " answers a value, once for every question asked of the evaluation"),
+            new Held("souther.compiler.check.PathCompletion.readsWhereItAnswers",
+                    "the same, to say whether what was taken in is all of where it answers, and"
+                            + " which operand of a product or a quotient that is asked of"),
+            new Held("souther.compiler.check.PathCompletion.operationAt",
+                    "whether the operator is one a recipe is recorded against, which a product and"
+                            + " a quotient are and a sum and a difference are not"),
+            new Held("souther.compiler.partition.Pullback.whereEachOperatorAnswers",
+                    "hands each operator a closure's body was worked out through to"
+                            + " WhereAnOperatorAnswers, for where an application of it answers"),
+            new Held("souther.compiler.partition.Pullback.operatorsIn",
+                    "which operators a body works out, which a sum, a difference and a product"
+                            + " are and a comparison is not"),
             new Held("souther.compiler.check.BinaryElaborator.operandBeside",
                     "what the operator asks of one operand, given the one beside it"),
             new Held("souther.compiler.check.HelperParams.BodyTyping.visitOperand",
@@ -502,7 +520,7 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.proof.WhatItAccumulates.combined",
                     "names the operator a body writes the step of an accumulation with, which is"
                             + " what the accumulation it is stated to be says the step is"),
-            new Held("souther.compiler.check.KeyedAccumulation.stepOf",
+            new Held("souther.compiler.check.KeyedAccumulation.AStep.stepOf",
                     "names the addition and the subtraction a step that moves a counter by a"
                             + " constant is written with, and the counter is no other step"),
             new Held("souther.compiler.partition.DecisionSubjects.what",

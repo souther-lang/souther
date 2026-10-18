@@ -535,11 +535,11 @@ public sealed interface ItemAssessment {
                 return account;
             }
 
-            /** A row composed where the whole way was stated and used. */
+            /** A row composed where the whole way was stated and used, and seen run there. */
             static Certified certified(Generator.GeneratedRow row,
                                        souther.compiler.partition.WayToTheBorder way) {
                 return new Certified(row, way,
-                        souther.compiler.partition.CompositionAccount.NOTHING);
+                        souther.compiler.partition.CompositionAccount.NOTHING, true);
             }
         }
 
@@ -589,10 +589,17 @@ public sealed interface ItemAssessment {
          * the opposite of standing there, so it cannot be one of these — held as one, the sentence
          * saying the point is settled and the proof saying no row reaches it would be the same
          * answer.
+         *
+         * @param ranThere whether a run of the row was seen getting to the comparison the line is
+         *                 drawn at, and not only the value read back at the point. Where nothing
+         *                 ran it, or nothing watched where it went, the value stands at the point
+         *                 and nothing shows a run gets there with it — which a point something on
+         *                 the way may stop a run before is open on
          */
         record Certified(Generator.GeneratedRow row,
                          souther.compiler.partition.WayToTheBorder way,
-                         souther.compiler.partition.CompositionAccount uncomposed)
+                         souther.compiler.partition.CompositionAccount uncomposed,
+                         boolean ranThere)
                 implements Attempt, Searched, Built {
 
             public Certified {

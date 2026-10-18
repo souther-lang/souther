@@ -4,7 +4,6 @@ import souther.compiler.diag.CompileException;
 import souther.compiler.Compiler;
 import souther.compiler.check.InvariantChecker.GaveUp;
 import souther.compiler.check.InvariantChecker.Said;
-import souther.compiler.check.InvariantChecker.Verdict;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.InvariantMessage;
 import souther.compiler.diag.Severity;
@@ -347,46 +346,45 @@ class AProductIsBoundedByWhatThePathBoundsItsFactorsToTest {
     }
 
     /**
-     * A divisor that is a number no {@code Int} holds is not one the rule reads, and the clause is
-     * owed as it is owed over any other value nothing is known of.
+     * A divisor worked out as a number no {@code Int} holds is a sum no run gets past, so the
+     * construction after it is not judged — and not judged discharged either.
      *
-     * <p>The arithmetic a form is composed of runs over numbers of any size, and the operator's
-     * divisor is a value of its own type — so what the reading proves of this one is a range with no
-     * {@code Int} anywhere in it. That is not a divisor this operator has, and a rule with no operand
-     * to fire on contributes nothing. It is <em>not</em> read as a range holding no value: taken into
-     * the domain that would be a contradiction, and a contradictory domain proves every clause there
-     * is, so the construction would come out discharged rather than owed.
+     * <p>The arithmetic a form is composed of runs over numbers of any size, and what the reading
+     * proves of this divisor is a range with no {@code Int} anywhere in it. Taken into the domain
+     * as a range holding no value, that would be a contradiction, and a contradictory domain proves
+     * every clause there is. What stops that is the sum itself: {@code +} over {@code Int} answers
+     * only where an {@code Int} holds what it comes to, and this one comes to a number none holds on
+     * every run, so no run carries a value on from it and nothing written after it is reached.
      *
      * <p>Asked of what the analysis did and not only of what it did not say. This check is fail-open
      * — a walk that falls over reports exactly what a walk that finished and found nothing reports
      * ({@link InvariantChecker#GAVE_UP}) — so a warning count alone would pass just as well on an
-     * analysis that stopped at this divisor, which is how the number no {@code Int} holds was
-     * declined before there was a rule about it.
+     * analysis that stopped at this divisor.
      */
     @Test
-    void aDivisorNoIntCanHoldIsNotOneTheRuleReads() {
+    void aDivisorNoIntCanHoldIsWorkedOutBySumNoRunGetsPast() {
         List<Said> said = new ArrayList<>();
         List<GaveUp> gaveUp = new ArrayList<>();
         InvariantChecker.WATCHING = said;
         InvariantChecker.GAVE_UP = gaveUp;
         try {
-            assertEquals(List.of("E2011"), warningsOf(TYPES + """
+            assertEquals(List.of("E1327"), warningsOf(TYPES + """
                     behavior part : (x: Int) -> NonNeg | Bad constructs NonNeg
                     let part (x) = {
                         guard x >= 0
                             else Bad
                         NonNeg(商(x, 9223372036854775807 + 1))
                     }
-                    """));
+                    """), "the match the divide stands in is one no run gets to, and that is all"
+                    + " that is said");
         } finally {
             InvariantChecker.WATCHING = null;
             InvariantChecker.GAVE_UP = null;
         }
 
         assertEquals(List.of(), gaveUp, "the analysis ran to the end");
-        assertEquals(List.of(Verdict.UNKNOWN),
-                said.stream().map(Said::verdict).toList(),
-                "the construction was reached and the clause came out unproven");
+        assertEquals(List.of(), said,
+                "the construction stands past a sum no run gets past, so no clause of it is judged");
     }
 
     /**
