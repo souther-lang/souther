@@ -94,6 +94,45 @@ class AStringIsTheTextItComesToWhereAGuardStatesARuleOfItTest {
     }
 
     @Test
+    void aFieldOfARecordBuiltWhereItIsRead() {
+        assertEquals(List.of(), codesOf(TYPES + """
+                behavior f : (s: String) -> Code
+                    constructs Code, Prefix
+                let f (s) = if String.startsWith(Prefix { p = "J" ++ "P" }.p, s)
+                    then Code(s) else Code("JP")
+                """));
+    }
+
+    /**
+     * Inside a closure, where a name is the place it is bound at and not a value of its own: the
+     * text the guard is written with is the same text either way, and so is the answer.
+     */
+    @Test
+    void insideAClosure() {
+        String applied = TYPES + """
+                behavior f : (ss: List<String>) -> List<Code>
+                    constructs Code
+                let f (ss) = List.map(s -> if String.startsWith(TEXT, s) then Code(s) else Code("JP"), ss)
+                """;
+        assertEquals(answerOf(applied.replace("TEXT", "\"JP\"")),
+                answerOf(applied.replace("TEXT", "\"J\" ++ \"P\"")));
+    }
+
+    /** In an arm, whose name is entered as what the value it opened holds. */
+    @Test
+    void insideAnArm() {
+        String opened = TYPES + """
+                behavior f : (s: String) -> Code
+                    constructs Code
+                let f (s) = match Some(TEXT) with
+                    | Some p -> if String.startsWith(p, s) then Code(s) else Code("JP")
+                    | None -> Code("JP")
+                """;
+        assertEquals(answerOf(opened.replace("TEXT", "\"JP\"")),
+                answerOf(opened.replace("TEXT", "\"J\" ++ \"P\"")));
+    }
+
+    @Test
     void aTextAnInputSupplies() {
         assertEquals(List.of("E2011"), codesOf(TYPES + """
                 behavior f : (p: String, s: String) -> Code
@@ -121,6 +160,15 @@ class AStringIsTheTextItComesToWhereAGuardStatesARuleOfItTest {
         String literal = refusalOf(falseUnder.replace("TEXT", "\"JP\""));
         assertEquals("E2010", literal);
         assertEquals(literal, refusalOf(falseUnder.replace("TEXT", "\"J\" ++ \"P\"")));
+    }
+
+    /** The warnings a module compiles with, or the refusal it is stopped by. */
+    private static List<String> answerOf(String module) {
+        try {
+            return codesOf(module);
+        } catch (CompileException refused) {
+            return List.of("refused " + refused.code());
+        }
     }
 
     private static String refusalOf(String module) {
