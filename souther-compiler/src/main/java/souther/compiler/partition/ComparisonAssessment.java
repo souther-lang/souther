@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.check.StatedComparison;
 import souther.compiler.check.UnreadComparison;
@@ -158,9 +159,8 @@ sealed interface ComparisonAssessment {
                                        UndividedByARelation.WhatItLeaves left,
                                        AuthoredPointMapping authored, InputReading reading) {
             return new AcrossPositions(cutting, at, places, relation, left,
-                    settlingLines(new DrawnBeside(cutting.of().behavior(), at,
-                            new AuthoredPointMapping.NotAnAuthoredBoundary(authored.line(),
-                                    authored.claims())), left.settled(), reading), authored);
+                    settlingLines(new DrawnBeside(cutting.of().behavior(), at, authored.line(),
+                            Optional.of(authored.claims())), left.settled(), reading), authored);
         }
 
         /** The coordinates {@code relation} is shown to leave undivided. */
@@ -201,12 +201,21 @@ sealed interface ComparisonAssessment {
      * What a line parting the values that settle a relation is drawn beside: the behavior it is a
      * line of, where the comparison stands, and the author's line it is no place of.
      */
-    record DrawnBeside(String behavior, Citation at, AuthoredPointMapping noPlaceOfIt) {
+    record DrawnBeside(String behavior, Citation at, WrittenLine line,
+                       Optional<ComparisonClaim> claim) {
 
         public DrawnBeside {
             Objects.requireNonNull(behavior, "a line is some behavior's");
             Objects.requireNonNull(at, "drawn beside a comparison standing somewhere");
-            Objects.requireNonNull(noPlaceOfIt, "and no place of some line of the author's");
+            Objects.requireNonNull(line, "and no place of some line of the author's");
+            Objects.requireNonNull(claim, "the comparison's claim, or the line's own");
+        }
+
+        /** The line {@code drawn} said to be no place of the author's line: it claims what the
+         *  comparison claimed, and where an application states the relation, what it claims
+         *  itself. */
+        AuthoredPointMapping noPlaceOfIt(Cutting drawn) {
+            return new AuthoredPointMapping.NotAnAuthoredBoundary(line, claim.orElse(drawn.claim()));
         }
     }
 
@@ -229,7 +238,7 @@ sealed interface ComparisonAssessment {
             for (WhatARelationLeavesUndivided.Line each : lines) {
                 Cutting drawn = Cutting.onOneTerm(beside.behavior(), term,
                         ExactRatio.of(each.at()), each.relation(), reading.quantities());
-                if (drawn == null || !(onTheQuantity(beside.at(), drawn, beside.noPlaceOfIt(),
+                if (drawn == null || !(onTheQuantity(beside.at(), drawn, beside.noPlaceOfIt(drawn),
                         reading, false) instanceof AtAPosition line)) {
                     here = null;
                     break;
@@ -252,9 +261,10 @@ sealed interface ComparisonAssessment {
      * of the number's own, as they are of a relation between positions ({@link AcrossPositions}):
      * {@code l.discount > w}, with {@code w} the greatest a walk from nought has kept, is false
      * wherever the discount is at or below nought. They are parted from the rest by lines on the
-     * number, drawn where the relation is a comparison the author wrote. Read as a part of a
-     * statement, or as what an application states, it is drawn nowhere and the number stays
-     * one the other value is not shown to reach.
+     * number. Read as a part of a statement of several they are read in the cases where the
+     * statement turns on the relation, and in no other; where no case is one a row can be asked
+     * to be in, or a line is not shown to turn the statement in one, the number stays one the
+     * other value is not shown to reach.
      *
      * @param filedAt   the coordinates of the input's numbers it relates
      * @param relations what it states, as the relations it is made of, for each reading of it
@@ -352,6 +362,11 @@ sealed interface ComparisonAssessment {
             Set<FilingCoordinate> out = new LinkedHashSet<>();
             settling.forEach(line -> out.addAll(line.cutting().over()));
             return out;
+        }
+
+        /** The same relation with only {@code lines} parting what settles it. */
+        AgainstAnotherValue partedBy(List<AtAPosition> lines) {
+            return new AgainstAnotherValue(filedAt, relations, undivided, lines, beside);
         }
     }
 
@@ -488,7 +503,9 @@ sealed interface ComparisonAssessment {
          *              case where it was read, and once the way to it is taken in, the cases a row
          *              arriving there can be in. None where {@code line} is no line on the input
          *              space ({@link #isALine}): a case is where a row at the line is asked to be,
-         *              and where there is no line there is no row to ask it of
+         *              and where there is no line there is no row to ask it of. A relation to
+         *              another value has them for the lines parting the values that settle it,
+         *              which are the lines on the input space it draws ({@link #isReadInCases})
          */
         public record Part(PlaceOfALine id, ComparisonAssessment line,
                            List<DecidingCase> cases) {
@@ -500,9 +517,15 @@ sealed interface ComparisonAssessment {
                     throw new IllegalArgumentException(
                             "a line of a statement is what one line comes to: " + line);
                 }
-                if (!isALine(line) && !cases.isEmpty()) {
+                if (!isReadInCases(line) && !cases.isEmpty()) {
                     throw new IllegalArgumentException("what is no line is read in no case: "
                             + line);
+                }
+                if (line instanceof AgainstAnotherValue against
+                        && against.settling().isEmpty() != cases.isEmpty()) {
+                    throw new IllegalArgumentException("a relation to another value is read in a"
+                            + " case where it parts what settles it, and in none where it does"
+                            + " not: " + line);
                 }
             }
 
@@ -512,7 +535,16 @@ sealed interface ComparisonAssessment {
              */
             static Part ofCases(PlaceOfALine id, ComparisonAssessment line,
                                 List<DecidingCase> cases) {
-                return new Part(id, line, isALine(line) ? cases : List.of());
+                return new Part(id, line, isReadInCases(line) ? cases : List.of());
+            }
+
+            /**
+             * Whether {@code line} is read in the cases where the statement turns on it: a line on
+             * the input space, or a relation to another value that parts what settles it by lines.
+             */
+            static boolean isReadInCases(ComparisonAssessment line) {
+                return isALine(line) || line instanceof AgainstAnotherValue against
+                        && !against.settling().isEmpty();
             }
 
             /**
@@ -565,7 +597,10 @@ sealed interface ComparisonAssessment {
                 Unread stopped = notDrawn(part.line());
                 if (stopped == null) {
                     allStopped = false;
-                    each.add(part);
+                    // The lines parting what a relation settles are read in cases, which this
+                    // reader has nowhere to carry.
+                    each.add(part.line() instanceof AgainstAnotherValue against
+                            ? new Part(part.id(), against.partedBy(List.of()), List.of()) : part);
                 } else {
                     stopped.why().forEach(why::putIfAbsent);
                     each.add(new Part(part.id(), stopped, List.of()));
@@ -687,7 +722,8 @@ sealed interface ComparisonAssessment {
                     () -> aboutNoPosition(comparison, reads, read.newtypes()));
             // One rule and a line for each relation it holds, each line read as a comparison of
             // one line is and carrying where it decides.
-            case Cutting.Read.Several several -> eachLineOf(several, at, read, drawnByAnInvariant,
+            case Cutting.Read.Several several -> eachLineOf(behavior,
+                    Optional.of(comparison.claim()), several, at, read, drawnByAnInvariant,
                     () -> aboutNoPosition(comparison, reads, read.newtypes()));
             // Read to the end and cutting nothing, which is a fact about the rule and not a limit
             // of this compiler: `a <= a` holds of every row. Where the comparison names no position
@@ -709,9 +745,8 @@ sealed interface ComparisonAssessment {
             // A relation of the input to another value, read to the end, which the rule is and
             // nothing short of it.
             case Cutting.Read.AgainstAnotherValue against -> AgainstAnotherValue.of(against, read,
-                    Optional.of(new DrawnBeside(behavior, at,
-                            new AuthoredPointMapping.NotAnAuthoredBoundary(
-                                    WrittenLine.THE_COMPARISON, comparison.claim()))));
+                    Optional.of(new DrawnBeside(behavior, at, WrittenLine.THE_COMPARISON,
+                            Optional.of(comparison.claim()))));
             // And where the reading stopped, its own answer for having stopped — decided where it
             // stopped rather than worked out again from the comparison afterwards — and where the
             // values a side holds came from, at each place it did not already answer. Here the walk
@@ -762,13 +797,20 @@ sealed interface ComparisonAssessment {
      * its relations that is no line as what it is: one relating the input to another value, or a
      * line no row could be held to where it decides, said not to be drawn.
      */
-    private static ComparisonAssessment eachLineOf(Cutting.Read.Several lines, Citation at,
+    private static ComparisonAssessment eachLineOf(String behavior,
+                                                   Optional<ComparisonClaim> claim,
+                                                   Cutting.Read.Several lines, Citation at,
                                                    InputReading read, boolean drawnByAnInvariant,
                                                    Supplier<ComparisonAssessment> aboutNoPosition) {
         return new Several(lines.parts().stream()
                 .map(part -> Several.Part.ofCases(part.id(), switch (part.line()) {
+                    // Parted from the rest by lines only where the statement turns on the relation
+                    // somewhere a row can be asked to be.
                     case Cutting.Read.AgainstAnotherValue against ->
-                            AgainstAnotherValue.of(against, read, Optional.empty());
+                            AgainstAnotherValue.of(against, read, part.cases().isEmpty()
+                                    ? Optional.empty()
+                                    : Optional.of(new DrawnBeside(behavior, at,
+                                            part.id().line().line(), claim)));
                     case Cutting.Read.Stopped stopped -> new Unread(stopped.why());
                     case Cutting.Read.Cuts _, Cutting.Read.NoOrderToCountOn _,
                          Cutting.Read.NumberNoRatioHolds _, Cutting.Read.CutsNothing _,
@@ -785,15 +827,19 @@ sealed interface ComparisonAssessment {
      * <p>Every line of it is over the input's numbers, so each is somewhere: a line on no position
      * is a comparison of constants, and an application's statement read to the end holds none.
      */
-    static ComparisonAssessment ofAnApplication(Cutting.Read answered, Citation at,
-                                                InputReading read) {
+    static ComparisonAssessment ofAnApplication(String behavior, Cutting.Read answered,
+                                                Citation at, InputReading read) {
         return switch (answered) {
-            case Cutting.Read.Several lines -> eachLineOf(lines, at, read, false, () -> {
-                throw new IllegalStateException(
-                        "a line an application states at " + at + " is over the input's numbers");
-            });
+            case Cutting.Read.Several lines -> eachLineOf(behavior, Optional.empty(), lines, at,
+                    read, false, () -> {
+                        throw new IllegalStateException("a line an application states at " + at
+                                + " is over the input's numbers");
+                    });
+            // The application states no claim of its own, so a line parting what settles the
+            // relation claims what it draws.
             case Cutting.Read.AgainstAnotherValue related ->
-                    AgainstAnotherValue.of(related, read, Optional.empty());
+                    AgainstAnotherValue.of(related, read, Optional.of(new DrawnBeside(behavior, at,
+                            WrittenLine.THE_COMPARISON, Optional.empty())));
             case Cutting.Read.Cuts _, Cutting.Read.CutsNothing _, Cutting.Read.Stopped _,
                  Cutting.Read.NoOrderToCountOn _, Cutting.Read.NumberNoRatioHolds _,
                  Cutting.Read.StatesNoRelation _ ->
@@ -1027,45 +1073,21 @@ sealed interface ComparisonAssessment {
                                                     InputReading reading) {
         ComparisonAssessment arrived = narrowedByWhatArrives(part.line(), way, wayToACase,
                 arrivals, drawnByAnInvariant, reading);
+        // A relation to another value has no line of its own, and the lines parting the values
+        // that settle it are read where the statement turns on it, as a line is.
+        if (arrived instanceof AgainstAnotherValue against) {
+            return aRelationPartNarrowed(part, against, wayToACase, arrivals, reading);
+        }
         // Only where it is a line at all: a line refused, outside what the declarations leave, or
         // one nothing arrives at, is that whatever the cases are, and is read in none of them.
         if (!Several.Part.isALine(arrived)) {
             return List.of(new Several.Part(part.id(), arrived, List.of()));
         }
-        // Each case where a row on each side of the line can stand in it. Rows on the two sides in
-        // one case differ in this line alone, so the statement turns between them; a case only one
-        // side has rows in is a case crossing the line leaves, and turns nothing there.
         Cutting cutting = cuttingOf(arrived);
-        List<DecidingCase> reached = new ArrayList<>();
-        // And what a relation leaves undivided is asked again in the cases where it decides, which
-        // is where its values are what the case leaves them.
-        List<Reachability.Reaching> deciding = new ArrayList<>();
-        // A case said for several is asked of the cases it stands for, one at a time: rows on the
-        // two sides of its condition may be in two of them, and the line turns nothing between
-        // those ({@link CasesOfALineAsked}). The line is then read in the ones that divide rows
-        // and in no other, so that a row in one it turns nothing in is not counted at its points.
-        // Counted for each such case on its own, so that what one case spent decides nothing about
-        // another.
-        Set<CompositionBudget> stoppedAt = EnumSet.noneOf(CompositionBudget.class);
-        for (DecidingCase each : part.cases()) {
-            if (each.saidAlone()) {
-                Reachability toIt = wayToACase.apply(each.condition());
-                if (crossedAtSomePlace(cutting, toIt, arrivals,
-                        cutting.keptTo(each.condition(), reading))) {
-                    reached.add(each);
-                    deciding.addAll(waysArrivedBy(toIt, arrivals));
-                }
-                continue;
-            }
-            CasesOfALineAsked.Found found = CasesOfALineAsked.casesOf(each, condition ->
-                    crossedAtSomePlace(cutting, wayToACase.apply(condition), arrivals,
-                            cutting.keptTo(condition, reading)));
-            for (DecidingCase one : found.decidesIn()) {
-                reached.add(one);
-                deciding.addAll(waysArrivedBy(wayToACase.apply(one.condition()), arrivals));
-            }
-            stoppedAt.addAll(found.notWorkedOut());
-        }
+        CasesReached found = casesTurnedOn(cutting, part.cases(), wayToACase, arrivals, reading);
+        List<DecidingCase> reached = found.reached();
+        List<Reachability.Reaching> deciding = found.deciding();
+        Set<CompositionBudget> stoppedAt = found.stoppedAt();
         // The cases nobody worked out are neither ones the line turns in, owed rows where it may
         // decide nothing, nor ones dropped for a proof nobody finished: they are the line not
         // worked out there, naming every figure any of them stopped at, beside whatever the other
@@ -1085,6 +1107,88 @@ sealed interface ComparisonAssessment {
         }
         if (out.isEmpty()) {
             out.add(new Several.Part(part.id(), new TurnsNothing(cutting), List.of()));
+        }
+        return List.copyOf(out);
+    }
+
+    /**
+     * The cases {@code line} turns the statement in, the ways rows reach it by there, and the
+     * figures the cases nobody worked out stopped at.
+     */
+    record CasesReached(List<DecidingCase> reached,
+                                List<Reachability.Reaching> deciding,
+                                Set<CompositionBudget> stoppedAt) {}
+
+    /**
+     * Each of {@code cases} where a row on each side of {@code cutting} can stand in it. Rows on
+     * the two sides in one case differ in this line alone, so the statement turns between them; a
+     * case only one side has rows in is a case crossing the line leaves, and turns nothing there.
+     *
+     * <p>What a relation leaves undivided is asked again over the ways returned, which is where
+     * its values are what the case leaves them. A case said for several is asked of the cases it
+     * stands for, one at a time: rows on the two sides of its condition may be in two of them, and
+     * the line turns nothing between those ({@link CasesOfALineAsked}). The line is then read in
+     * the ones that divide rows and in no other, so that a row in one it turns nothing in is not
+     * counted at its points. Counted for each such case on its own, so that what one case spent
+     * decides nothing about another.
+     */
+    private static CasesReached casesTurnedOn(Cutting cutting, List<DecidingCase> cases,
+                                              Function<Proposition, Reachability> wayToACase,
+                                              List<ComparisonArrival> arrivals,
+                                              InputReading reading) {
+        List<DecidingCase> reached = new ArrayList<>();
+        List<Reachability.Reaching> deciding = new ArrayList<>();
+        Set<CompositionBudget> stoppedAt = EnumSet.noneOf(CompositionBudget.class);
+        for (DecidingCase each : cases) {
+            if (each.saidAlone()) {
+                Reachability toIt = wayToACase.apply(each.condition());
+                if (crossedAtSomePlace(cutting, toIt, arrivals,
+                        cutting.keptTo(each.condition(), reading))) {
+                    reached.add(each);
+                    deciding.addAll(waysArrivedBy(toIt, arrivals));
+                }
+                continue;
+            }
+            CasesOfALineAsked.Found found = CasesOfALineAsked.casesOf(each, condition ->
+                    crossedAtSomePlace(cutting, wayToACase.apply(condition), arrivals,
+                            cutting.keptTo(condition, reading)));
+            for (DecidingCase one : found.decidesIn()) {
+                reached.add(one);
+                deciding.addAll(waysArrivedBy(wayToACase.apply(one.condition()), arrivals));
+            }
+            stoppedAt.addAll(found.notWorkedOut());
+        }
+        return new CasesReached(reached, deciding, stoppedAt);
+    }
+
+    /**
+     * A relation to another value as a part of a statement of several, on the way and then in each
+     * case where it decides: each line parting the values that settle it, read in the cases it
+     * turns the statement in.
+     *
+     * <p>The relation itself, with no line, stays beside them where any line was not shown to
+     * turn the statement in some case, or was not worked out there: a place is left without its
+     * reason only where a line was drawn for it in the cases that line turns in.
+     */
+    private static List<Several.Part> aRelationPartNarrowed(
+            Several.Part part, AgainstAnotherValue against,
+            Function<Proposition, Reachability> wayToACase, List<ComparisonArrival> arrivals,
+            InputReading reading) {
+        List<Several.Part> out = new ArrayList<>();
+        boolean someLineLeftUndrawn = against.settling().isEmpty();
+        for (AtAPosition line : against.settling()) {
+            CasesReached found = casesTurnedOn(line.cutting(), part.cases(), wayToACase,
+                    arrivals, reading);
+            if (found.reached().isEmpty() || !found.stoppedAt().isEmpty()) {
+                someLineLeftUndrawn = true;
+            }
+            if (!found.reached().isEmpty()) {
+                out.add(new Several.Part(part.id(), against.partedBy(List.of(line)),
+                        DecidingCase.saidInAsFewAsMay(found.reached())));
+            }
+        }
+        if (someLineLeftUndrawn) {
+            out.add(new Several.Part(part.id(), against.partedBy(List.of()), List.of()));
         }
         return List.copyOf(out);
     }
