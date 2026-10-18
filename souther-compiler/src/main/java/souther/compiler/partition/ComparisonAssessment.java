@@ -33,6 +33,7 @@ import souther.compiler.types.ExpansionLineage;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -1176,8 +1177,13 @@ sealed interface ComparisonAssessment {
             InputReading reading) {
         List<Several.Part> out = new ArrayList<>();
         boolean someLineLeftUndrawn = against.settling().isEmpty();
+        // The way to a case is the case's and not the line's, so it is worked out once for all
+        // the lines.
+        Map<Proposition, Reachability> ways = new HashMap<>();
+        Function<Proposition, Reachability> wayOnce =
+                condition -> ways.computeIfAbsent(condition, wayToACase);
         for (AtAPosition line : against.settling()) {
-            CasesReached found = casesTurnedOn(line.cutting(), part.cases(), wayToACase,
+            CasesReached found = casesTurnedOn(line.cutting(), part.cases(), wayOnce,
                     arrivals, reading);
             if (found.reached().isEmpty() || !found.stoppedAt().isEmpty()) {
                 someLineLeftUndrawn = true;
