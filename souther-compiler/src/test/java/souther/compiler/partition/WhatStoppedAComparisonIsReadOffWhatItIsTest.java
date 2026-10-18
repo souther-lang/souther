@@ -309,6 +309,62 @@ class WhatStoppedAComparisonIsReadOffWhatItIsTest {
     }
 
     /**
+     * A relation that drew no line for nothing that stopped is several lines read to the end, and
+     * a product beside it does not name the rule. How many elements meet something, held against a
+     * value found in the list, is no line and stopped at nothing; naming the product would say of
+     * that relation that it was not there, and an author who took the product away would still
+     * have no line.
+     */
+    @Test
+    void aRelationReadToTheEndIsNotNamedForTheProductBesideIt() {
+        String model = """
+                module demo
+
+                data Ok
+                data No
+
+                behavior f : (a: Int, b: Int, c: Int, xs: List<Int>) -> Ok | No
+                let f (a, b, c, xs) = {
+                    let m = List.length(List.filter(x -> x > 0, xs))
+                    let k = Option.withDefault(0, List.find(x -> x > a, xs))
+                    %s
+                    guard %s else No
+                    Ok
+                }
+                """;
+        PartitionEvidence alone = measured(model.formatted("", "Int.max(0, m - k) <= c"));
+        PartitionEvidence beside = measured(model.formatted("let p = a * b",
+                "Int.max(p, m - k) <= c"));
+
+        assertEquals(List.of(UndividedPosition.Reason.SEVERAL_LINES_IN_ONE_RULE),
+                whyAt(alone, "c"));
+        for (String position : List.of("a", "b", "c")) {
+            assertEquals(List.of(UndividedPosition.Reason.SEVERAL_LINES_IN_ONE_RULE),
+                    whyAt(beside, position).stream()
+                            .filter(why -> why != UndividedPosition.Reason.RULE_RELATING_TWO_VALUES)
+                            .toList(), position);
+        }
+    }
+
+    /**
+     * A relation of the input's values to another value is that among several relations as it is
+     * alone, and leaves the lines beside it to be drawn: the product beside it is what keeps them
+     * from being drawn, and is named. A count of the different values a list holds is about how
+     * its values stand to one another, and a value found in the list is no position's; each is
+     * such a relation, and the two say the same.
+     */
+    @Test
+    void aRelationToAnotherValueBesideAProductLeavesTheProductNamed() {
+        String parameters = "a: Int, b: Int, c: Int, xs: List<Int>";
+        for (String bound : List.of("let n = List.length(List.distinct(xs))",
+                "let n = Option.withDefault(0, List.find(x -> x > a, xs))")) {
+            assertEquals(List.of(UndividedPosition.Reason.NON_AFFINE_PRODUCT),
+                    whyAt(guard(parameters, "let p = a * b\n    " + bound,
+                            "Int.max(p, n) <= c"), "c"), bound);
+        }
+    }
+
+    /**
      * A bound value whose arithmetic did not stop is read through its name: a name over a sum
      * under {@code Int.max} is read as the sum written there is.
      */

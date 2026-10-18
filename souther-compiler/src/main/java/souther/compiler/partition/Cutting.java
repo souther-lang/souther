@@ -852,9 +852,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         Read line = stated.proposition() instanceof Proposition.Compared(
                 Relation.Affine affine, boolean holds, String _)
                 ? lineOn(behavior, affine, holds, comparison.left(), read, reads) : null;
-        // And numbers about how its values stand to one another, which no position holds.
         List<FilingCoordinate> related = line == null
-                ? heldOverValuesRelatedToOneAnother(stated.proposition()) : null;
+                ? relatedToAnotherValue(stated.proposition()) : null;
         return switch (stated.proposition()) {
             case Proposition.Always _ -> new Read.CutsNothing(
                     settledAt(stated, comparison, read, reads, answering));
@@ -913,8 +912,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * ({@link GuardThresholds#whatEachPlaceIsLeftWith}). Every other kind is the statement's, and
      * the same at each place.
      *
-     * <p>Except a relation read to the end against a value no position holds, which is no reading
-     * that stopped and is said at the input's numbers it relates ({@link #heldAgainstAnotherValue}).
+     * <p>A relation read to the end against another value is no reading that stopped, and is said
+     * before this is asked ({@link #relatedToAnotherValue}).
      *
      * @param stops         what stopped the readings under its parts: the parts nothing read, or,
      *                      of a statement of several relations, what stopped under those that drew
@@ -927,10 +926,6 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                                List<WhyUnread> stops, Set<NonAffineOperation> beyondTheForm,
                                Supplier<AffineReading.OfAComparison> arithmetic,
                                InputReading read, InputReads reads, Arrivals answering) {
-        List<FilingCoordinate> against = heldAgainstAnotherValue(stated);
-        if (against != null) {
-            return against(against, stated);
-        }
         // A part the arithmetic met a shape it has no term for in is a stop whose reason was
         // decided where it was met. Which positions it is filed at is still asked of the
         // comparison, and the reason is not asked again of where the values came from.
@@ -978,6 +973,20 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
     }
 
     /**
+     * Where {@code stated}, which draws no line, relates the input's values to another value, read
+     * to the end, the coordinates it is filed at — or null where it is no such relation.
+     *
+     * <p>Asked in one place for a comparison that states it alone and for each relation of
+     * several. Two kinds are such a relation: numbers about how the input's values stand to one
+     * another ({@link #heldOverValuesRelatedToOneAnother}), and numbers of the input against a value
+     * no position holds ({@link #heldAgainstAnotherValue}). No relation is both.
+     */
+    private static List<FilingCoordinate> relatedToAnotherValue(Proposition stated) {
+        List<FilingCoordinate> related = heldOverValuesRelatedToOneAnother(stated);
+        return related != null ? related : heldAgainstAnotherValue(stated);
+    }
+
+    /**
      * Where {@code stated} relates numbers of the input to a value no position holds, read to the
      * end, the coordinates of those numbers — or null where it is no such relation.
      *
@@ -1021,7 +1030,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
     /**
      * Why {@code relation}, which draws no line and relates the input to no other value, is none:
      * what stopped the reading under its terms, and what arithmetic in them no line is drawn
-     * through, each into its own list in the order its terms are kept.
+     * through, in the order its terms are kept — or read to the end, where neither is so.
      *
      * <p>A value bound in the body whose making a reading stopped at is no number of the input
      * because of that stop, as {@link #heldAgainstAnotherValue} reads it, and the stop is the
@@ -1030,11 +1039,12 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * no line is drawn through. Every other term stopped at nothing: it was read, and the relation
      * is no line for what it is.
      */
-    private static void whyNoLine(Proposition.Compared relation, List<WhyUnread> stops,
-                                  Set<NonAffineOperation> beyondTheForm) {
+    private static TheParts.NotDrawn whyNoLine(Proposition.Compared relation) {
         if (!(relation.relation() instanceof Relation.Affine affine)) {
-            return;
+            return TheParts.READ_TO_THE_END;
         }
+        List<WhyUnread> stops = new ArrayList<>();
+        Set<NonAffineOperation> beyondTheForm = EnumSet.noneOf(NonAffineOperation.class);
         for (Quantity each : affine.form().coefs().keySet()) {
             switch (each) {
                 case Quantity.OfABinding bound -> bound.madeOf().ifPresent(stops::add);
@@ -1048,6 +1058,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                 case Quantity.HowManyCarried carried -> throw carried.reachedAReader();
             }
         }
+        return new TheParts.NotDrawn(stops, beyondTheForm);
     }
 
     /**
@@ -1251,8 +1262,9 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * <p>None drawn is said with why the relations that drew no line are none. A relation over a
      * value bound in the body, whose making a reading stopped at, is no line because of that stop,
      * and a relation over what two numbers come to multiplied, held against anything but a number,
-     * because no line is drawn through a product. Where neither is so, each relation was read to
-     * the end and is several lines held together.
+     * because no line is drawn through a product. Where some relation that drew no line is neither,
+     * it was read to the end, and so is the statement: several lines held together, whatever the
+     * others stopped at, since naming their stop would say of that relation that it was not there.
      */
     private sealed interface TheParts {
 
@@ -1281,6 +1293,16 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
              *  is drawn through. */
             boolean readToTheEnd() {
                 return stops.isEmpty() && beyondTheForm.isEmpty();
+            }
+
+            /** This and {@code other} together, each kept in its order. */
+            NotDrawn and(NotDrawn other) {
+                List<WhyUnread> allStops = new ArrayList<>(stops);
+                allStops.addAll(other.stops);
+                Set<NonAffineOperation> allBeyond = EnumSet.noneOf(NonAffineOperation.class);
+                allBeyond.addAll(beyondTheForm);
+                allBeyond.addAll(other.beyondTheForm);
+                return new NotDrawn(allStops, allBeyond);
             }
         }
     }
@@ -1471,7 +1493,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * no line, and is where the lines decide; any other part leaves it undrawn too.
      *
      * <p>Undrawn, it carries why every relation that drew no line is none ({@link #whyNoLine}), so
-     * that none of them is said for the others.
+     * that none of them is said for the others; and where one of them is none for nothing that
+     * stopped, it is several lines read to the end, and the others' stops are not said for it.
      *
      * @param written the construct the rule is written as, asked only which position it names
      *                first, which is the way each line is faced
@@ -1492,31 +1515,33 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             return TheParts.READ_TO_THE_END;
         }
         List<Read.Several.Part> parts = new ArrayList<>();
-        boolean undrawn = false;
-        List<WhyUnread> stops = new ArrayList<>();
-        Set<NonAffineOperation> beyondTheForm = EnumSet.noneOf(NonAffineOperation.class);
+        // Why the relations that drew no line are none, from the first of them on.
+        TheParts.NotDrawn undrawn = null;
         for (WhereEachLineDecides.Decides each : lines) {
-            if (undrawn) {
-                whyPastAnUndrawnOne(behavior, each.line(), written, read, reads, stops,
-                        beyondTheForm);
-                continue;
-            }
             Read line = lineOf(behavior, each.line(), written, read, reads);
             PlaceOfALine alone = new PlaceOfALine(THE_COMPARISON, each.line().key());
             if (line == null) {
-                // A relation of the input's numbers to a value no position holds is that, beside
-                // the lines, read as one comparison stating it alone is. One over what a dependency
-                // answered is the decision table's, and anything else is no part this reading has
-                // a word for: nothing is drawn.
+                // A relation of the input's values to another value is that, beside the lines,
+                // read as one comparison stating it alone is. One over what a dependency answered
+                // is the decision table's, and anything else is no part this reading has a word
+                // for: nothing is drawn.
                 List<FilingCoordinate> against = Proposition.aboutAnAnswer(each.line()) ? null
-                        : heldAgainstAnotherValue(each.line());
+                        : relatedToAnotherValue(each.line());
                 if (against == null) {
-                    undrawn = true;
-                    whyNoLine(each.line(), stops, beyondTheForm);
-                } else {
+                    TheParts.NotDrawn why = whyNoLine(each.line());
+                    if (why.readToTheEnd()) {
+                        return TheParts.READ_TO_THE_END;
+                    }
+                    undrawn = undrawn == null ? why : undrawn.and(why);
+                } else if (undrawn == null) {
                     parts.add(new Read.Several.Part(alone, against(against, each.line()),
                             List.of()));
                 }
+                continue;
+            }
+            // Past a relation that leaves the statement undrawn, the rest are drawn only to see
+            // whether one of them is no line for nothing that stopped.
+            if (undrawn != null) {
                 continue;
             }
             // The line is the input's, and where it decides turns on a relation to a value no
@@ -1544,37 +1569,13 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         // is drawn beside what is no line. With no line drawn and some part no line, nothing of it
         // is on the input to be taken apart, and it is several lines not drawn at the places the
         // comparison is filed at.
-        if (undrawn) {
-            return new TheParts.NotDrawn(stops, beyondTheForm);
+        if (undrawn != null) {
+            return undrawn;
         }
         boolean drawn = parts.stream().anyMatch(part -> part.line() instanceof Read.Cuts);
         boolean allLines = parts.stream().allMatch(part -> Read.Several.Part.isALine(part.line()));
         return drawn || allLines ? new TheParts.Drawn(new Read.Several(parts))
                 : TheParts.READ_TO_THE_END;
-    }
-
-    /**
-     * Why {@code relation}, past one that has already left the statement undrawn, is no line, added
-     * to the rest only where it is none.
-     *
-     * <p>Its reasons are asked before it is drawn. A relation with none adds nothing whether or not
-     * it is a line, so only one with some is drawn, to see whether it is one. A relation with a
-     * reason relates the input to no other value ({@link #heldAgainstAnotherValue}), so drawing it
-     * is all there is to ask.
-     */
-    private static void whyPastAnUndrawnOne(String behavior, Proposition.Compared relation,
-                                            Core written, InputReading read, InputReads reads,
-                                            List<WhyUnread> stops,
-                                            Set<NonAffineOperation> beyondTheForm) {
-        List<WhyUnread> stopped = new ArrayList<>();
-        Set<NonAffineOperation> beyond = EnumSet.noneOf(NonAffineOperation.class);
-        whyNoLine(relation, stopped, beyond);
-        if ((stopped.isEmpty() && beyond.isEmpty())
-                || lineOf(behavior, relation, written, read, reads) != null) {
-            return;
-        }
-        stops.addAll(stopped);
-        beyondTheForm.addAll(beyond);
     }
 
     /**
