@@ -147,6 +147,7 @@ public final class LevelRealizer {
             case Standing.OfTwoOnOneCarrier two -> ofTwo(two, within, runs, looking, tried);
             case Standing.OfAForm over -> ofAForm(over, within, runs, tried);
             case Standing.OfARemainder remainder -> ofARemainder(remainder, within, runs, tried);
+            case Standing.OfAProduct product -> ofAProduct(product, within, runs, tried);
             case Standing.OfACount count -> ofACount(count, within, looking, tried);
             case Standing.OfACountAndAForm both ->
                     ofACountAndAForm(both, within, runs, looking, tried);
@@ -331,6 +332,7 @@ public final class LevelRealizer {
             case Standing.OfAForm over -> NumericTerms.inOrder(over.form().coefs().keySet());
             case Standing.OfARemainder over ->
                     NumericTerms.inOrder(over.dividend().coefs().keySet());
+            case Standing.OfAProduct over -> List.of(over.one(), over.other());
             case Standing.OfACount count -> count.numbers().stream()
                     .filter(term -> !term.subjectPath().insideAContainer()).toList();
             case Standing.OfACountAndAForm both -> {
@@ -967,6 +969,143 @@ public final class LevelRealizer {
         return Realization.Unknown.leftOpen(
                 Realization.Unknown.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED,
                 stoppedBy, Set.of(), unheld);
+    }
+
+    /**
+     * Two whole numbers whose product the item asks for, held at a pair that multiplies to it.
+     *
+     * <p>The levels the criterion offers are walked as any quantity's are, and each is reached by
+     * the pairs its divisors make: the first factor at a divisor of it or at the level over that
+     * divisor, either sign, and the second at the level over the first. Nought is reached wherever
+     * either factor is nought, whatever the other holds. A pair the declarations refuse is no row,
+     * and the first they do not refuse is the answer.
+     *
+     * <p>A point is out of reach only where every pair was asked and refused: every number up to
+     * the square root of the level was tried as a divisor within the figure, or, at nought, the
+     * declarations hold neither factor at nought. A side, as for any quantity, is never settled by
+     * looking.
+     *
+     * <p>A pair with a factor outside the run the region leaves it is refused by that run, and the
+     * rules are read again only for a pair inside both runs — once, since that reading is the
+     * whole of what {@link #found} asks of a pair fixing nothing but numbers.
+     *
+     * @param runs where the region leaves each factor
+     */
+    private Realization ofAProduct(Standing.OfAProduct over, SearchRegion within,
+                                   Map<NumericTerm, NumericDomain.Bounds> runs,
+                                   ValuesTried tried) {
+        List<NumericTerm> both = List.of(over.one(), over.other());
+        Realization named = amongTheValuesNamed(both,
+                values -> OrderedAffineBoundary.productAt(both, values),
+                over.where(), within, tried);
+        if (named != null) {
+            return named;
+        }
+        Set<CompositionBudget> stoppedBy = EnumSet.noneOf(CompositionBudget.class);
+        boolean bounded = true;
+        LevelCandidateSource.Offered offered =
+                LevelCandidateSource.forItem(over.where(), over.levels());
+        if (offered.stoppedShort()) {
+            stoppedBy.add(CompositionBudget.LEVELS_A_SIDE_IS_ASKED_AT);
+        }
+        for (Level level : offered.levels()) {
+            ExactRatio asked = level.asAnExactNumber();
+            if (asked == null || !asked.isWhole()
+                    || !(asked.floor() instanceof ExactAnswer.Held<BigInteger>(BigInteger product))) {
+                // A level no two whole numbers multiply to.
+                continue;
+            }
+            // A level past where the type stops is a product the run stops at, which no row has;
+            // that the point is the relation's own is not settled by it either way.
+            if (!Carrier.WHOLE.extent().admits(Count.of(new BigDecimal(product)))) {
+                bounded = false;
+                continue;
+            }
+            PairsMultiplyingTo pairs = PairsMultiplyingTo.of(product);
+            if (!pairs.everyOne()) {
+                stoppedBy.add(CompositionBudget.DIVISORS_OF_A_PRODUCT_TRIED);
+                bounded = false;
+            }
+            for (Map<Integer, BigInteger> pair : pairs.each()) {
+                Map<NumericTerm, Place> standing = new LinkedHashMap<>();
+                Map<RealizationTarget, Place> fixing = new LinkedHashMap<>();
+                pair.forEach((at, value) -> {
+                    Place place = Count.of(new BigDecimal(value));
+                    standing.put(both.get(at), place);
+                    fixing.put(RealizationTarget.of(both.get(at)), place);
+                });
+                // A pair outside where the region leaves a factor is refused by a proof, and says
+                // nothing of the others.
+                if (!standing.entrySet().stream().allMatch(
+                        each -> runs.get(each.getKey()).admits(each.getValue()))) {
+                    continue;
+                }
+                // A pair tried before proves nothing either way.
+                if (tried.holds(fixing)) {
+                    bounded = false;
+                    continue;
+                }
+                // Any other pair is the answer, or refused by the rules, which is a proof too.
+                Realization made = found(fixing, within, tried);
+                if (made instanceof Realization.Found) {
+                    return made;
+                }
+            }
+        }
+        if (bounded && over.where() instanceof Criterion.AtTheLevel) {
+            return new Realization.Impossible();
+        }
+        return Realization.Unknown.leftOpen(
+                Realization.Unknown.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED,
+                stoppedBy, Set.of(), Set.of());
+    }
+
+    /**
+     * The pairs of whole numbers whose product is one level, each as the factors it fixes by their
+     * place in the product, and whether they are every such pair.
+     *
+     * <p>Nought is each factor at nought alone, since the other may then be anything. Any other
+     * level is each divisor tried, from one up to the square root of the level, and for each that
+     * divides it the four pairs it makes: the divisor or the level over it first, with either sign,
+     * and the second whatever makes the product. Every pair is among those once every number up to
+     * the square root was tried, which the figure on divisors may stop short of.
+     *
+     * @param each     the pairs, those of the smaller divisors first
+     * @param everyOne whether every pair whose product is the level is among them
+     */
+    private record PairsMultiplyingTo(List<Map<Integer, BigInteger>> each, boolean everyOne) {
+
+        static PairsMultiplyingTo of(BigInteger product) {
+            List<Map<Integer, BigInteger>> out = new ArrayList<>();
+            if (product.signum() == 0) {
+                out.add(Map.of(0, BigInteger.ZERO));
+                out.add(Map.of(1, BigInteger.ZERO));
+                return new PairsMultiplyingTo(out, true);
+            }
+            BigInteger magnitude = product.abs();
+            int tried = 0;
+            BigInteger divisor = BigInteger.ONE;
+            while (divisor.multiply(divisor).compareTo(magnitude) <= 0) {
+                if (tried == CompositionBudget.DIVISORS_OF_A_PRODUCT_TRIED.maximum()) {
+                    return new PairsMultiplyingTo(out, false);
+                }
+                tried++;
+                BigInteger[] quotientAndRemainder = magnitude.divideAndRemainder(divisor);
+                if (quotientAndRemainder[1].signum() == 0) {
+                    BigInteger over = quotientAndRemainder[0];
+                    // The divisor and the level over it are one number only at a square root,
+                    // where its two pairs would be the other two again.
+                    List<BigInteger> firsts = over.equals(divisor)
+                            ? List.of(divisor, divisor.negate())
+                            : List.of(divisor, divisor.negate(), over, over.negate());
+                    for (BigInteger first : firsts) {
+                        out.add(Map.of(0, first, 1, product.divide(first)));
+                    }
+                }
+                divisor = divisor.add(BigInteger.ONE);
+            }
+            return new PairsMultiplyingTo(out, true);
+        }
     }
 
     /** The step a form's whole coefficients generate: the greatest number that divides them all. */

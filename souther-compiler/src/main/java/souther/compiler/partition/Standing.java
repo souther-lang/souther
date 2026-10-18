@@ -8,6 +8,7 @@ import souther.compiler.numeric.LinearForm;
 import java.math.BigInteger;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * What a row has to satisfy to stand at one coverage item, in the words a search can solve.
@@ -29,6 +30,34 @@ import java.util.Map;
  * beside what the model admits.
  */
 public sealed interface Standing {
+
+    /**
+     * What two whole numbers of a row come to multiplied, at a value of the product or in a run of
+     * them.
+     *
+     * <p>A row at a level is a pair whose product is the level, so one factor is fixed at a value
+     * that divides it and the other is held where the level over that value is: a form of one
+     * number, which is a constraint the search already answers. Which value of the first is fixed
+     * is the search's walk over what divides the level; the product is the item.
+     *
+     * @param one    the factor fixed first
+     * @param other  the factor the level is then a form of
+     * @param on     the order each factor stands on
+     * @param levels the values the product takes, which is what the criterion is about
+     */
+    record OfAProduct(NumericTerm.FromOnePosition one, NumericTerm.FromOnePosition other,
+                      Map<NumericTerm, Carrier> on, LevelSpace levels, Criterion where)
+            implements Standing {
+
+        public OfAProduct {
+            on = Map.copyOf(on);
+            if (one == null || other == null || one.equals(other)
+                    || !on.keySet().equals(Set.of(one, other))) {
+                throw new IllegalArgumentException("a product is of two numbers, each on one"
+                        + " order: " + one + " and " + other + " against " + on.keySet());
+            }
+        }
+    }
 
     /**
      * One position's own value, at a level of its carrier or anywhere in a side of it.

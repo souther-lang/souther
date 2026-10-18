@@ -143,6 +143,9 @@ public sealed interface Proposition {
             case Quantity.RemainderOfADividend(var _, var dividend, var _) ->
                     dividend.coefs().keySet().stream().anyMatch(term -> isAnElementOf(
                             new DecisionSubject.AnInput(term.subjectPath()), container));
+            case Quantity.ProductOfTwo product -> product.factors().stream()
+                    .anyMatch(term -> isAnElementOf(
+                            new DecisionSubject.AnInput(term.subjectPath()), container));
         };
     }
 
@@ -1164,7 +1167,8 @@ public sealed interface Proposition {
             case DecisionAtom.OfAnAnswer _, DecisionAtom.TakenOfAnAnswer _ -> true;
             case DecisionAtom.OfTheInput _, Quantity.OfABinding _,
                  Quantity.CodePointsOfAPiece _, Quantity.RemainderOfADividend _,
-                 Quantity.WhatAnOperationAnswers _, Quantity.HowManyCarried _ -> false;
+                 Quantity.ProductOfTwo _, Quantity.WhatAnOperationAnswers _,
+                 Quantity.HowManyCarried _ -> false;
             case Quantity.HowManyMeet count -> count.container() instanceof DecisionSubject.AnAnswer
                     || aboutAnAnswer(count.ofTheElement());
             case Quantity.HowManyHold held -> held.each().stream()
