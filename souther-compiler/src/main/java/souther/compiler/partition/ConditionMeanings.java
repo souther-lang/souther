@@ -6,8 +6,11 @@ import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.inputs.CasesLeft;
+import souther.compiler.inputs.DeclaredInput;
 import souther.compiler.inputs.InputDomain;
+import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
+import souther.compiler.inputs.TermPath;
 
 import souther.compiler.meaning.Proposition;
 
@@ -90,6 +93,12 @@ record ConditionMeanings(souther.compiler.inputs.InputReading read) {
      *  ({@link ReachingCuts#answersOf}). */
     Set<CasesLeft> answersOf(Core.Match match, InputReads reads) {
         return ReachingCuts.answersOf(match, inputs(), reads, rules());
+    }
+
+    /** What the declarations leave the value at {@code position} read as one of {@code cases}
+     *  ({@link ReachingCuts#taking(TermPath, CasesLeft, InputReading)}). */
+    DeclaredInput.Taking taking(TermPath position, CasesLeft cases) {
+        return ReachingCuts.taking(position, cases, read);
     }
 
     /** What taking arm {@code part} of {@code attempt}, written at {@code at}, says of the input. */

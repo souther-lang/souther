@@ -3,7 +3,9 @@ package souther.compiler.partition;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.inputs.CasesLeft;
+import souther.compiler.inputs.DeclaredInput;
 import souther.compiler.inputs.InputReads;
+import souther.compiler.inputs.PathResolution;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.DecisionSubject;
@@ -18,9 +20,11 @@ import souther.compiler.numeric.Rel;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.UnaryOperator;
 
 /**
@@ -312,7 +316,13 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects) {
     private Read asTheArm(Core.Match match, int part, InputReads reads,
                           ReachingCuts.Stating entered) {
         List<OnTheWay> onTheWay = entered.entries();
-        if (onTheWay.size() == 1 && onTheWay.getFirst() instanceof OnTheWay.Narrowed narrowed) {
+        // A narrowing of a fork on a position is an answer to the question that fork asks. One of a
+        // fork on a value the body computed is what the arm comes to for the input, which is no
+        // answer to the question about the computed value.
+        boolean onAPosition = reads.forkedOn(match.scrutinee(), states.newtypes())
+                instanceof PathResolution.At;
+        if (onAPosition && onTheWay.size() == 1
+                && onTheWay.getFirst() instanceof OnTheWay.Narrowed narrowed) {
             TermPath at = narrowed.position();
             // Where the value the fork is on stands: a name read on a value left several cases is
             // the name read at the sum, and not a name under the set of them.
@@ -333,10 +343,67 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects) {
                     new DecisionCondition.ACase(subject, states.answersOf(match, reads)),
                     narrowing), entered);
         }
+        Optional<DecidedCondition.Narrowed> ofTheInput = asACaseOfTheInput(match, part, reads);
+        if (ofTheInput.isPresent()) {
+            return new Read(ofTheInput.get(), entered);
+        }
         // Otherwise the column is what entering the arm states: which case a value the body
         // computed is of, under what.
         return new Read(columnOf(states.entered(match, part, reads), true, metAt(onTheWay),
                 states::denied), entered);
+    }
+
+    /**
+     * Arm {@code part} of a fork on a value the body computed, as the case of an input position
+     * the arms between them divide.
+     *
+     * <p>Each arm comes to a case of one position when every arm states exactly that: the same
+     * position, held, and the arms leave it nothing in common. The answers are what the
+     * declarations leave the position, as for a fork on the position itself, so the one question is
+     * asked whichever way the body reaches it. Empty where an arm states anything else, because
+     * nothing then says the arms divide the position and a table would admit a value that is two
+     * of them.
+     */
+    private Optional<DecidedCondition.Narrowed> asACaseOfTheInput(Core.Match match, int part,
+                                                                  InputReads reads) {
+        DecisionSubject.AnInput subject = null;
+        Set<CasesLeft> answers = new LinkedHashSet<>();
+        CasesLeft mine = null;
+        for (int arm = 0; arm < match.cases().size(); arm++) {
+            if (!(states.entered(match, arm, reads) instanceof Proposition.InCases(
+                    DecisionSubject.AnInput of, CasesLeft cases, boolean holds, _)) || !holds) {
+                return Optional.empty();
+            }
+            if (subject != null && !subject.equals(of)) {
+                return Optional.empty();
+            }
+            subject = of;
+            CasesLeft answer = switch (states.taking(of.at(), cases)) {
+                case DeclaredInput.Taking.Narrows(TermPath to) -> to.narrowing();
+                case DeclaredInput.Taking.Excluded _ -> cases;
+                case DeclaredInput.Taking.Implied _ -> null;
+            };
+            if (answer == null) {
+                if (arm == part) {
+                    return Optional.empty();
+                }
+                continue;
+            }
+            for (CasesLeft other : answers) {
+                if (other.meet(answer) != null) {
+                    return Optional.empty();
+                }
+            }
+            answers.add(answer);
+            if (arm == part) {
+                mine = answer;
+            }
+        }
+        if (mine == null) {
+            return Optional.empty();
+        }
+        return Optional.of(new DecidedCondition.Narrowed(
+                new DecisionCondition.ACase(subject, answers), mine));
     }
 
     /**
