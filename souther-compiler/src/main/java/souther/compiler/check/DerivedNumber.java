@@ -57,7 +57,7 @@ record DerivedNumber(RuleKey position, ValueName operation, TakenArguments argum
      * its remainder by a divisor that was written.
      *
      * <p>Those are the numbers the reading of a position's values holds a class for
-     * ({@link FieldDomains#datePartsAt}, {@link FieldDomains#valueClassAt}). Any other number an
+     * ({@link FieldDomains#classAt}). Any other number an
      * operation answers is one nothing turns back into values, and a line on it read as a line on the
      * position would be an account of a rule nobody carried out.
      */
