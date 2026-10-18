@@ -309,6 +309,8 @@ class AFoldThatFilesACounterUnderEachKeyAnswersHowOftenTheKeyOccursTest {
     @Test
     void keysAMapTookOutOfTheElementsAreCountedAtThePlaceItTookThemFrom() {
         record Taken(String step, String keys, String counted) { }
+        // The fold over the issues, one for each place counted.
+        Map<String, List<String>> directAxes = new LinkedHashMap<>();
         for (Taken taken : List.of(
                 new Taken(countedUnder("k"), "List.map(i -> i.label, issues)", "label"),
                 new Taken(countedUnder("k"), "List.reverse(List.map(i -> i.label, issues))",
@@ -323,10 +325,10 @@ class AFoldThatFilesACounterUnderEachKeyAnswersHowOftenTheKeyOccursTest {
                 new Taken(countedUnder("k"),
                         "List.map(d -> d, List.map(i -> { let d = i.detail\n d.label }, issues))",
                         "detail.label"))) {
-            Compilation direct = measured(modelOfIssues(countedUnder("k." + taken.counted()),
-                    "issues"));
+            List<String> direct = directAxes.computeIfAbsent(taken.counted(), counted ->
+                    axisOf(measured(modelOfIssues(countedUnder("k." + counted), "issues"))));
             Compilation compilation = measured(modelOfIssues(taken.step(), taken.keys()));
-            assertEquals(axisOf(direct), axisOf(compilation),
+            assertEquals(direct, axisOf(compilation),
                     () -> taken + ": " + report(compilation));
             assertTrue(json(compilation).contains(
                             "multiplicity(issues[*]." + taken.counted() + ")"),
