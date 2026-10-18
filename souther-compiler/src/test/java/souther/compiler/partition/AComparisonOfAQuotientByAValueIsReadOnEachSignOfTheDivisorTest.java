@@ -492,11 +492,17 @@ class AComparisonOfAQuotientByAValueIsReadOnEachSignOfTheDivisorTest {
         return described(linesOfModel(model));
     }
 
-    /** Each line, without the name of the behavior it was drawn in. */
+    /**
+     * Each line, without the name of the behavior it was drawn in, its points written in one order.
+     * A set of them written as it iterates is not one string: the order an immutable set iterates
+     * in turns on the hashes of its elements and on the order they were put in, so one set of
+     * points could be written two ways.
+     */
     private static List<String> described(List<BorderAssessment> lines) {
         assertNotNull(lines, "the behavior was measured");
         return lines.stream()
-                .map(line -> (line.border().cut() + " " + Set.copyOf(line.items().keySet()))
+                .map(line -> (line.border().cut() + " " + line.items().keySet().stream()
+                        .map(String::valueOf).sorted().toList())
                         .replaceAll("behavior=f\\d*", "behavior=f"))
                 .toList();
     }

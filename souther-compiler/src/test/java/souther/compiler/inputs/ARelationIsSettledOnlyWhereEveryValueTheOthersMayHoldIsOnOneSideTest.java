@@ -52,7 +52,7 @@ class ARelationIsSettledOnlyWhereEveryValueTheOthersMayHoldIsOnOneSideTest {
                                      boolean apart) {
         return WhatARelationLeavesUndivided.leavesOfAProduct(term("x", 1, it, it),
                 term("y", 1, other, reached), ExactRatio.of(level), relation, apart,
-                GREATEST_INT);
+                BigInteger.valueOf(Long.MIN_VALUE), GREATEST_INT);
     }
 
     private static SettledRun settled(Long from, Long to, boolean holds) {
@@ -87,6 +87,22 @@ class ARelationIsSettledOnlyWhereEveryValueTheOthersMayHoldIsOnOneSideTest {
                 term("n", 1, NumericDomain.Bounds.OPEN, NumericDomain.Bounds.OPEN),
                 term("len", -1, NumericDomain.Bounds.OPEN, NumericDomain.Bounds.OPEN)), 0, 0,
                 Rel.LE));
+    }
+
+    /**
+     * {@code x * y >= 1000} with {@code x} held at the least value of the type. With {@code y}
+     * held at minus one the run settling it is that one pair, whose product passes where the type
+     * stops, so it is no class. With {@code y} from minus one to one, the only row on the side the
+     * rule holds is that pair too, and what is left between is the least value alone, which a
+     * relation reads as though the order ran on past it: nothing is shown either way.
+     */
+    @Test
+    void aProductOnlyTheLeastValueMeetsIsShownNothingOf() {
+        long least = Long.MIN_VALUE;
+        assertNull(ofAProduct(run(least, least), run(-1L, -1L), run(-1L, -1L), 1000, Rel.GE,
+                true));
+        assertNull(ofAProduct(run(least, least), run(-1L, 1L), run(-1L, 1L), 1000, Rel.GE,
+                true));
     }
 
     /**

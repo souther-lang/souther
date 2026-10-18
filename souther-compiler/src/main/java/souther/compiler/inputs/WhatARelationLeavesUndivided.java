@@ -341,9 +341,16 @@ public final class WhatARelationLeavesUndivided {
      * value of the other the reaching needs lies within one of the level over the value, so its
      * product lies within the value of the level, and no further out than the value itself where
      * the value is further out than the level. So where twice the level is a value of the type,
-     * none of those products is past where it stops, but the one of the least value there is with a
-     * value below nought — which is the end of the type and not a value a relation divides, as for
-     * every other relation here. Where it is not, nothing is shown.
+     * none of those products is past where it stops, but the one of the least value there is with
+     * minus one. Where it is not, nothing is shown. That least value is where the representation
+     * stops and not a value a rule a model writes is about, and a relation reads an order as though
+     * it ran on past such an end; so a run of values left between is shown undivided over it beside
+     * the values past it, and not over it alone — where the least value is all that is left between,
+     * nothing is shown.
+     *
+     * <p>A run that settles the relation is a class only where some row of it has a value: its value
+     * nearest nought times the other's nearest nought, which is the least product there is, must be
+     * a value of the type, or nothing is shown.
      *
      * <p>Held equal or unequal, only against nought: a product is nought where either factor is,
      * and against any other level, which values of {@code it} leave the other a whole number to
@@ -351,11 +358,13 @@ public final class WhatARelationLeavesUndivided {
      *
      * @param apart    whether the other is apart from {@code it} and tied to it by nothing, which is
      *                 what it takes for what the other reaches to be asked
+     * @param least    the least value the type of the product holds, or null where it holds no
+     *                 least
      * @param greatest the greatest value the type of the product holds, or null where it holds no
      *                 greatest
      */
     public static <P> Leaves leavesOfAProduct(Term<P> it, Term<P> other, ExactRatio level,
-                                              Rel relation, boolean apart,
+                                              Rel relation, boolean apart, BigInteger least,
                                               BigInteger greatest) {
         if (greatest != null && !(level.abs().times(ExactRatio.of(2))
                 instanceof ExactAnswer.Held<ExactRatio>(ExactRatio twice)
@@ -399,9 +408,24 @@ public final class WhatARelationLeavesUndivided {
             if (between == null) {
                 return null;
             }
-            if (between.holdsAWholeNumber() && !(apart && other.realizes() != null
-                    && reachesOverAFactor(other.realizes(), between, sign, level, relation))) {
+            if (between.holdsAWholeNumber() && (onlyTheEnd(between, least)
+                    || !(apart && other.realizes() != null
+                            && reachesOverAFactor(other.realizes(), between, sign, level,
+                                    relation)))) {
                 return null;
+            }
+        }
+        if (greatest != null) {
+            ExactRatio nearOther = nearestNought(lies);
+            for (SettledRun each : runs) {
+                ExactRatio near = nearestNought(new Interval(
+                        each.from() == null ? null : ExactRatio.of(each.from()),
+                        each.to() == null ? null : ExactRatio.of(each.to())));
+                ExactRatio smallest = near == null || nearOther == null ? null
+                        : near.times(nearOther).orNull();
+                if (smallest == null || smallest.compareTo(ExactRatio.of(greatest)) > 0) {
+                    return null;
+                }
             }
         }
         return runs.isEmpty() ? new Leaves.Undivided()
@@ -528,6 +552,11 @@ public final class WhatARelationLeavesUndivided {
         if (at != null && at.holdsAWholeNumber()) {
             out.add(at);
         }
+    }
+
+    /** Whether {@code run} holds the least value of its type and nothing else. */
+    private static boolean onlyTheEnd(WholeRun run, BigInteger least) {
+        return least != null && least.equals(run.low) && least.equals(run.high);
     }
 
     /** How far from nought the value of {@code run} nearest it is, or null where the run is no
