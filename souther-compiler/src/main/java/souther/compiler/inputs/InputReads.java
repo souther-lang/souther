@@ -1981,14 +1981,76 @@ public final class InputReads {
     }
 
     /**
-     * Where in the element handed to {@code element} the value {@code answer} stands, through the
-     * names the body bound on the way, or null where it is no place of that element
-     * ({@link ElementProjection#read}).
+     * What {@code answer}, made of the element handed to {@code element}, is as far as which
+     * answers are equal goes, through the names the body bound on the way — or null where it is no
+     * place of that element and no newtype wearing one ({@link OnePerElement.Answered}).
      */
-    public ElementProjection projectionOf(Core answer, BindingId element,
-                                          DeclarationNewtypes newtypes) {
+    public OnePerElement.Answered answeredOf(Core answer, BindingId element,
+                                             DeclarationNewtypes newtypes) {
         return element == null ? null
-                : ElementProjection.read(answer, element, heldByTheBody(), newtypes);
+                : OnePerElement.Answered.of(answer, element, heldByTheBody(), newtypes);
+    }
+
+    /**
+     * The container of the input {@code list}, read here, holds one value for each element of,
+     * and where in the element that value stands — or null where it holds no such run of one
+     * ({@link ElementQuestion#ONE_PER_ELEMENT}).
+     */
+    public OnePerElement onePerElementOf(Core list, Symbols symbols,
+                                         DeclarationNewtypes newtypes) {
+        return beneathEachStep(list, ElementQuestion.ONE_PER_ELEMENT, symbols, newtypes);
+    }
+
+    /**
+     * The position of the container of the input {@code list}, read here, holds something exactly
+     * where it does, or no position where there is none ({@link ElementQuestion#SAME_EMPTINESS}).
+     */
+    public PathResolution holdingSomethingWhere(Core list, Symbols symbols,
+                                                DeclarationNewtypes newtypes) {
+        OnePerElement beneath =
+                beneathEachStep(list, ElementQuestion.SAME_EMPTINESS, symbols, newtypes);
+        return beneath == null ? new PathResolution.NotAPosition()
+                : new PathResolution.At(beneath.container());
+    }
+
+    /**
+     * {@code list} followed down the steps {@code question} crosses ({@link InputPath#oneStepBeneath})
+     * to a container of the input, with what each step answered of the elements beneath it — or
+     * null where a step is one the question does not cross.
+     *
+     * <p>Each step is taken where the list it is taken from stands: a name, or a parameter of a
+     * body this reading entered, is what this reading says it stands for, and what the step says
+     * of the operation is the question's. What a step answered is read only for the question that
+     * asks it, and for the other the way to the value is the element itself.
+     */
+    private OnePerElement beneathEachStep(Core list, ElementQuestion question, Symbols symbols,
+                                          DeclarationNewtypes newtypes) {
+        Denotation at = standing(list, symbols, newtypes);
+        ElementProjection projected = new ElementProjection(List.of());
+        boolean wrapped = false;
+        Set<Core> met = Collections.newSetFromMap(new IdentityHashMap<>());
+        while (true) {
+            if (at.at().pathOf(at.value(), newtypes) instanceof PathResolution.At(
+                    TermPath container)) {
+                return new OnePerElement(container, projected, wrapped);
+            }
+            if (!met.add(Core.withoutStanding(at.value()))) {
+                return null;
+            }
+            InputReads where = at.at();
+            InputPath.Beneath step = InputPath.oneStepBeneath(at.value(), question,
+                    where.names(), newtypes, closure -> Core.withoutStanding(
+                            where.standing(closure, symbols, newtypes).value())
+                            instanceof Core.Block block ? block : null);
+            if (step == null) {
+                return null;
+            }
+            if (step.answered() != null) {
+                projected = step.answered().at().then(projected);
+                wrapped |= step.answered().wrapped();
+            }
+            at = where.standing(step.from(), symbols, newtypes);
+        }
     }
 
     /** What the walk handing {@code binding} its element answered, as the closure, where a licence

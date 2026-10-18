@@ -2,6 +2,7 @@ package souther.compiler.inputs;
 
 import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.check.Location;
+import souther.compiler.core.ConstructionProjection;
 import souther.compiler.core.Core;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.BindingId;
@@ -47,8 +48,8 @@ public record ElementProjection(List<String> steps) {
      *
      * <p><b>Null wherever the answer is not read out of the element.</b> A branch chooses between
      * two of them and is neither; arithmetic over one is a value the element does not hold; a
-     * construction is something new, unless it is a newtype wearing one value of the element as
-     * its name. None of those is a place a row writes, so a rule about what a
+     * construction is something new, though a field read back out of one is the value it was
+     * given. None of those is a place a row writes, so a rule about what a
      * walk answered is not a rule about any position, and saying so is this reading's whole job on
      * that side.
      *
@@ -106,13 +107,25 @@ public record ElementProjection(List<String> steps) {
                 }
                 // The rule below a name at a time, along the names rather than down the stack.
                 case Core.FieldProjection p -> {
-                    List<String> base = steps(p.base(), element, trail);
-                    if (base == null) {
-                        yield null;
+                    List<Core.FieldProjection.Step> along = p.steps().inOrder();
+                    Core read = p.base();
+                    Type from = p.base().type();
+                    int next = 0;
+                    while (next < along.size()) {
+                        Core given = givenTo(read, along.get(next).field(), trail);
+                        if (given == null) {
+                            break;
+                        }
+                        read = given;
+                        from = along.get(next).type();
+                        next++;
+                    }
+                    List<String> base = steps(read, element, trail);
+                    if (base == null || next == along.size()) {
+                        yield base;
                     }
                     List<String> longer = new ArrayList<>(base);
-                    Type from = p.base().type();
-                    for (Core.FieldProjection.Step step : p.steps().inOrder()) {
+                    for (Core.FieldProjection.Step step : along.subList(next, along.size())) {
                         if (Location.isStep(from, step.field(), newtypes)) {
                             longer.add(step.field());
                         }
@@ -120,6 +133,10 @@ public record ElementProjection(List<String> steps) {
                     }
                     yield List.copyOf(longer);
                 }
+                // A field of a construction is the value the construction was given for it, which
+                // is where that value stands.
+                case Core.FieldAccess fa when givenTo(fa.target(), fa.field(), trail)
+                        instanceof Core given -> steps(given, element, trail);
                 case Core.FieldAccess fa -> {
                     List<String> base = steps(fa.target(), element, trail);
                     if (base == null) {
@@ -132,11 +149,39 @@ public record ElementProjection(List<String> steps) {
                     longer.add(fa.field());
                     yield List.copyOf(longer);
                 }
-                // A newtype made of one value is that value wearing a name, so it stands where the
-                // value does — the rule a position of the input is read by ({@link InputPath}).
-                case Core.Construct construct when newtypes.of(construct.typeName().key())
-                        && construct.values().size() == 1 ->
-                        steps(construct.values().getFirst().value(), element, trail);
+                case null, default -> null;
+            };
+        }
+
+        /**
+         * What the construction {@code e} stands for was given for {@code field}, or null where
+         * {@code e} stands for no construction this reaches — the same cancellation a position of
+         * the input is read by ({@link ConstructionProjection#given}).
+         */
+        private Core givenTo(Core e, String field, BindingTrail trail) {
+            return switch (Core.withoutStanding(e)) {
+                case Core.Construct made -> ConstructionProjection.given(made, field);
+                case Core.LetIn let -> givenTo(let.body(), field, trail);
+                case Core.Read read -> {
+                    Core through = held.get(read.binding());
+                    yield through == null ? null
+                            : trail.through(read.binding(), () -> givenTo(through, field, trail));
+                }
+                // A construction whose field was given another construction, a name at a time.
+                case Core.FieldAccess fa -> {
+                    Core inner = givenTo(fa.target(), fa.field(), trail);
+                    yield inner == null ? null : givenTo(inner, field, trail);
+                }
+                case Core.FieldProjection p -> {
+                    Core inner = p.base();
+                    for (Core.FieldProjection.Step step : p.steps().inOrder()) {
+                        inner = givenTo(inner, step.field(), trail);
+                        if (inner == null) {
+                            break;
+                        }
+                    }
+                    yield inner == null ? null : givenTo(inner, field, trail);
+                }
                 case null, default -> null;
             };
         }

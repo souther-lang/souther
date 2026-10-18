@@ -2,10 +2,13 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.diag.SourceLayouts;
+import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ItemAssessment;
+import souther.compiler.report.AdequacyReport;
 
 import java.util.List;
 import java.util.Map;
@@ -114,6 +117,26 @@ class AComparisonInAClosureThatIgnoresTheElementIsOwedARowOnlyWhereTheContainerH
     @Test
     void aRowComposedForAMapFiledUnderTheKeysOfAListHoldsSomethingInTheList() {
         assertEveryRowStandsAtItsPoint(COUNTS, "busy", row -> !isEmpty(row.get(1)));
+    }
+
+    /**
+     * Keys a map made of each element are no values of a place of it, so nothing is said of how
+     * often one occurs; the map holds one for each element all the same, so it holds something
+     * exactly where {@code xs} does, and the counter that never moves is compared only there.
+     */
+    @Test
+    void aRowComposedForAMapFiledUnderWhatAMapMadeOfEachElementHoldsSomethingInTheList() {
+        String source = COUNTS.replace("Map.empty, xs)",
+                "Map.empty, List.map(y -> String.append(y, \"!\"), xs))");
+        assertEveryRowStandsAtItsPoint(source, "busy", row -> !isEmpty(row.get(1)));
+        Compilation compilation = Compilation.ofSource(source.replace("n -> n,", "n -> n + 1,"),
+                "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        assertFalse(AdequacyReport.of(compilation)
+                        .json(SourceRendering.namedByIdentity(SourceLayouts.NONE))
+                        .contains("multiplicity("),
+                "a counter that moves over keys made of the elements is no count of a place");
     }
 
     @Test

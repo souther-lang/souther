@@ -44,13 +44,13 @@ import souther.compiler.inputs.CaseCompared;
 import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.ComparedNumber;
 import souther.compiler.inputs.Denotation;
-import souther.compiler.inputs.ElementProjection;
 import souther.compiler.inputs.ElementsMet;
 import souther.compiler.inputs.InputNumber;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.InputTruth;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.OnePerElement;
 import souther.compiler.inputs.PathResolution;
 import souther.compiler.inputs.ReadMeaning;
 import souther.compiler.inputs.RunSource;
@@ -1003,9 +1003,9 @@ final class Pullback {
      * <p>A container at a position of the input is that position. A map built by filing under the
      * key of each element of a list ({@link KeyedAccumulation}) has an entry for each element's
      * key, so it holds something exactly where the list does, and the list exactly where the
-     * container it holds a value for each element of does ({@link #onePerElementOf}). Any other
-     * container — a filter of one, say — may be empty with what it was made of not, and is not
-     * read back to it.
+     * container it was made from does ({@link InputReads#holdingSomethingWhere}), whatever values it
+     * made of that container's elements. Any other container — a filter of one, say — may be empty
+     * with what it was made of not, and is not read back to it.
      */
     static Optional<TermPath> positionHoldingWhatItHolds(Denotation container,
                                                          InputReading read) {
@@ -1018,9 +1018,8 @@ final class Pullback {
         Denotation whole = container.at().standing(container.value(), symbols, newtypes);
         KeyedAccumulation filed = KeyedAccumulation.of(whole.value(),
                 blocksAt(whole, symbols, newtypes));
-        OnePerElement walked = filed == null ? null
-                : onePerElementOf(whole.at().standing(filed.walked(), symbols, newtypes), read);
-        return walked == null ? Optional.empty() : Optional.of(walked.container());
+        return filed != null && whole.at().holdingSomethingWhere(filed.walked(), symbols, newtypes)
+                instanceof PathResolution.At(TermPath at) ? Optional.of(at) : Optional.empty();
     }
 
     /**
@@ -2800,19 +2799,17 @@ final class Pullback {
 
         /**
          * Where the entries of {@code container} stand, where it is a map filed under the key of
-         * each element of a list holding one value for each element of a container standing at a
-         * position ({@link #onePerElementOf}) — or null where it is not.
+         * each element of a list holding something exactly where a container standing at a
+         * position does ({@link InputReads#holdingSomethingWhere}) — or null where it is not.
          */
         private Located entriesOf(Denotation container, List<Kept> pending, List<Kept> located,
                                  ElementAt outerEach, Denotation outerHanded) {
             KeyedAccumulation filed = KeyedAccumulation.of(container.value(), blockIn(container));
-            OnePerElement walked = filed == null ? null
-                    : onePerElementOf(container.at().standing(filed.walked(),
-                            read.rules().symbols(), read.rules().newtypes()), read);
-            if (walked == null) {
+            if (filed == null || !(container.at().holdingSomethingWhere(filed.walked(),
+                    read.rules().symbols(), read.rules().newtypes())
+                    instanceof PathResolution.At(TermPath held))) {
                 return null;
             }
-            TermPath held = walked.container();
             ElementAt each = new ElementAt.AnEntry();
             settle(pending, each, null, located);
             DecisionSubject heldAt = new DecisionSubject.AnInput(held);
@@ -4362,49 +4359,53 @@ final class Pullback {
      * some element does.
      *
      * <p>The key and the value filed are read as places of the element the step is handed, and
-     * through what the list walked holds of each element of a container of the input
-     * ({@link #onePerElementOf}) as places of that container's element. A key read anywhere else —
-     * off another walk's element, say — is the same for every element, and how often it occurs
-     * is how many elements there are, not how many share a value.
+     * through the container of the input the list walked holds one value for each element of
+     * ({@link InputReads#onePerElementOf}) as places of that container's element. A key read
+     * anywhere else — off another walk's element, say — is the same for every element, and how
+     * often it occurs is how many elements there are, not how many share a value. A key may wear
+     * the value as a newtype, which keeps which keys are equal; the value an end is kept of may
+     * not, since nothing says the newtype keeps the order.
+     *
+     * <p>A counter that never moves holds what it starts at under every key, whichever keys they
+     * are, so it asks only that the map has an entry where the container has an element.
      */
     private LinearForm<Quantity> valueOfAnEntry(Core node, InputReads at) {
         Core container = at.containerOfTheElement(node);
         if (container == null) {
             return null;
         }
-        Denotation whole = at.standing(container, read.rules().symbols(), read.rules().newtypes());
+        Symbols symbols = read.rules().symbols();
+        DeclarationNewtypes newtypes = read.rules().newtypes();
+        Denotation whole = at.standing(container, symbols, newtypes);
         KeyedAccumulation filed = KeyedAccumulation.of(whole.value(), blocksAt(whole));
         if (filed == null) {
             return null;
         }
-        OnePerElement walked = onePerElementOf(whole.at().standing(filed.walked(),
-                read.rules().symbols(), read.rules().newtypes()), read);
-        TermPath place = walked == null ? null : placeOf(walked, whole, filed.key(), filed);
-        if (place == null) {
+        if (filed.filed() instanceof KeyedAccumulation.Filed.Counted counted
+                && counted.step().signum() == 0) {
+            return whole.at().holdingSomethingWhere(filed.walked(), symbols, newtypes)
+                    instanceof PathResolution.At ? LinearForm.constant(counted.first()) : null;
+        }
+        OnePerElement walked = whole.at().onePerElementOf(filed.walked(), symbols, newtypes);
+        OnePerElement.Answered key = walked == null ? null
+                : whole.at().answeredOf(filed.key(), filed.element().binding(), newtypes);
+        if (key == null) {
             return null;
         }
         TermPath held = walked.container();
+        TermPath place = walked.placeOf(key.at());
         return switch (filed.filed()) {
             case KeyedAccumulation.Filed.Counted counted -> counted(held, place, counted);
             case KeyedAccumulation.Filed.Kept kept -> {
-                TermPath value = placeOf(walked, whole, kept.value(), filed);
-                NumericTerm.ExtremeOfItsKey extreme = value == null ? null
-                        : NumericTerm.ExtremeOfItsKey.of(held, place, value, kept.extreme());
+                OnePerElement.Answered value = walked.wrapped() ? null
+                        : whole.at().answeredOf(kept.value(), filed.element().binding(), newtypes);
+                NumericTerm.ExtremeOfItsKey extreme = value == null || value.wrapped() ? null
+                        : NumericTerm.ExtremeOfItsKey.of(held, place, walked.placeOf(value.at()),
+                                kept.extreme());
                 yield readOnAnOrder(extreme)
                         ? LinearForm.atom(new DecisionAtom.OfTheInput(extreme)) : null;
             }
         };
-    }
-
-    /**
-     * The position {@code e}, a place of the element {@code filed}'s step is handed, stands at in
-     * the container {@code walked} is over — or null where it is no place of that element.
-     */
-    private TermPath placeOf(OnePerElement walked, Denotation whole, Core e,
-                             KeyedAccumulation filed) {
-        ElementProjection within = whole.at().projectionOf(e, filed.element().binding(),
-                read.rules().newtypes());
-        return within == null ? null : walked.placeOf(within);
     }
 
     /**
@@ -4418,9 +4419,6 @@ final class Pullback {
         NumericTerm.Multiplicity occurrences = NumericTerm.Multiplicity.of(held, place);
         if (!readOnAnOrder(occurrences)) {
             return null;
-        }
-        if (filed.step().signum() == 0) {
-            return LinearForm.constant(filed.first());
         }
         return filed.first().plus(filed.step().negated())
                 instanceof ExactAnswer.Held<ExactRatio>(ExactRatio constant)
@@ -4467,68 +4465,6 @@ final class Pullback {
         added.added().coefs().forEach((term, by) -> coefs.put(new DecisionAtom.OfTheInput(term),
                 by));
         return new LinearForm<>(added.seed(), coefs);
-    }
-
-    /**
-     * A container of the input, and where in each of its elements the value a list holds for that
-     * element stands: the list holds one value for each element of the container, and only that.
-     *
-     * @param container the position of the container
-     * @param each      the way from an element of it to the value the list holds for that element
-     */
-    record OnePerElement(TermPath container, ElementProjection each) {
-
-        /** The position of what stands at {@code within} in the value held for an element. */
-        TermPath placeOf(ElementProjection within) {
-            return each.then(within).from(container.element());
-        }
-    }
-
-    /**
-     * The container of the input {@code list} holds one value for each element of, and where in
-     * the element that value stands — or null where it holds no such run of one.
-     *
-     * <p>Beneath the operations that put the elements in another order, and those answering a
-     * value for each element that is a place of it: {@code List.map(i -> i.label, issues)} holds
-     * the label of each issue, once for each issue. Each element is answered once, so how often a
-     * value occurs among what the list holds is how often it occurs at that place among the
-     * container's elements. An operation that keeps some of the elements or answers several for
-     * one is not crossed, nor one whose answer is no place of the element: the answers of
-     * {@code i -> String.append(i.label, "!")} are not the values any position holds.
-     */
-    static OnePerElement onePerElementOf(Denotation list, InputReading read) {
-        Symbols symbols = read.rules().symbols();
-        DeclarationNewtypes newtypes = read.rules().newtypes();
-        Denotation at = list;
-        ElementProjection each = new ElementProjection(List.of());
-        while (true) {
-            if (at.at().pathOf(at.value(), newtypes) instanceof PathResolution.At(
-                    TermPath container)) {
-                return new OnePerElement(container, each);
-            }
-            if (!(Core.withoutStanding(at.value()) instanceof Core.PreservedCall call)) {
-                return null;
-            }
-            BuiltFrom<DeclaredArgument> built = DefaultBoundOperationFacts.get()
-                    .buildsItsResultFrom(call.declared().operation());
-            DeclaredArgument permuted = built == null ? null : built.permutesTheElementsOf();
-            Core from;
-            if (permuted != null) {
-                from = call.args().get(permuted.position());
-            } else {
-                ElementBindings.StepOnEachElement walk = ElementBindings.stepAnsweredOnEachElement(
-                        at.value(), blocksAt(at, symbols, newtypes));
-                ElementProjection answered = walk == null || walk.element() == null ? null
-                        : at.at().projectionOf(walk.step().body(), walk.element().binding(),
-                                newtypes);
-                if (answered == null) {
-                    return null;
-                }
-                from = walk.walked();
-                each = answered.then(each);
-            }
-            at = at.at().standing(from, symbols, newtypes);
-        }
     }
 
     /**

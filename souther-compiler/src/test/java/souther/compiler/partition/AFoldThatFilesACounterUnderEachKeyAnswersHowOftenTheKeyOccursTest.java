@@ -23,6 +23,7 @@ import java.util.regex.Pattern;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
 
 /**
  * A map a fold builds by filing a counter under the key of each element holds, under a key, what
@@ -441,6 +442,110 @@ class AFoldThatFilesACounterUnderEachKeyAnswersHowOftenTheKeyOccursTest {
     }
 
     /**
+     * A key read back out of a record the step built is the value the record was given: it occurs
+     * as often as that value, whether the field is read off the construction or off a name for it.
+     */
+    @Test
+    void aKeyReadBackOutOfARecordTheStepBuiltIsTheValueItWasGiven() {
+        for (String key : List.of("(Key { label = i.label }).label",
+                "{ let made = Key { label = i.label }\n made.label }")) {
+            Compilation compilation = measured("""
+                    module example.popular
+
+                    data Issue = { label: String }
+
+                    data Key = { label: String }
+
+                    let countsOf (issues: List<Issue>): Map<String, Int> =
+                        List.fold((acc, i) -> Map.updateOrInsert(%s, 1, n -> n + 1, acc),
+                            Map.empty, issues)
+
+                    behavior popular : (issues: List<Issue>, atLeast: Int) -> Map<String, Int>
+
+                    let popular (issues, atLeast) =
+                        Map.filterEntries((_, count) -> count >= atLeast, countsOf(issues))
+                    """.formatted(key));
+            assertTrue(json(compilation).contains("multiplicity(issues[*].label)"),
+                    () -> key + ": " + report(compilation));
+        }
+    }
+
+    /**
+     * Keys a map wrapped in a newtype, one for each element, are equal exactly where the values they
+     * wrap are, so they occur as often as those values do.
+     */
+    @Test
+    void keysAMapWrappedInANewtypeAreCountedAsTheValuesTheyWrap() {
+        for (String keys : List.of("List.map(i -> Label(i.label), issues)",
+                "List.reverse(List.map(l -> l, List.map(i -> Label(i.label), issues)))")) {
+            Compilation compilation = measured("""
+                    module example.popular
+
+                    data Label = String
+
+                    data Issue = { label: String }
+
+                    let countsOf (issues: List<Issue>): Map<Label, Int> =
+                        List.fold((acc, k) -> Map.updateOrInsert(k, 1, n -> n + 1, acc),
+                            Map.empty, %s)
+
+                    behavior popular : (issues: List<Issue>, atLeast: Int) -> Map<Label, Int>
+
+                    let popular (issues, atLeast) =
+                        Map.filterEntries((_, count) -> count >= atLeast, countsOf(issues))
+                    """.formatted(keys));
+            assertTrue(json(compilation).contains("multiplicity(issues[*].label)"),
+                    () -> keys + ": " + report(compilation));
+        }
+    }
+
+    /**
+     * The items of each order are counted in that order: an item each of two orders holds once
+     * occurs once in each, which stands one short of a threshold of two and not on it.
+     */
+    @Test
+    void aKeyInEachOfTwoOrdersIsCountedInEachOrderAlone() {
+        Compilation compilation = measured("""
+                module example.popular
+
+                data Order = { items: List<String> }
+
+                let countsOf (xs: List<String>): Map<String, Int> =
+                    List.fold((acc, i) -> Map.updateOrInsert(i, 1, n -> n + 1, acc),
+                        Map.empty, xs)
+
+                behavior popular : (orders: List<Order>, atLeast: Int) -> List<Map<String, Int>>
+
+                let popular (orders, atLeast) =
+                    List.map(o -> Map.filterEntries((_, count) -> count >= atLeast,
+                        countsOf(List.map(i -> i, o.items))), orders)
+
+                example popular
+                    | "apart" : ([Order { items = ["a"] }, Order { items = ["a"] }], 2) -> [[], []]
+                """);
+        assertTrue(json(compilation).contains("multiplicity(orders[*].items[*])"),
+                () -> report(compilation));
+        assertFalse(hitAt(compilation, "0"), () -> "once in each order is not two: "
+                + report(compilation));
+        assertTrue(hitAt(compilation, "1"), () -> "it is one short of two: "
+                + report(compilation));
+    }
+
+    /** Whether a row stands at the point of a line against {@code against}, there being one. */
+    private static boolean hitAt(Compilation compilation, String against) {
+        List<JsonNode> at = new ArrayList<>();
+        bordersOf(compilation).forEach(border -> border.path("items").forEach(item -> {
+            if ("=".equals(item.path("relation").asString())
+                    && against.equals(item.path("against").asString())) {
+                at.add(item);
+            }
+        }));
+        assertFalse(at.isEmpty(), () -> "a point against " + against + ": "
+                + bordersOf(compilation));
+        return at.stream().anyMatch(item -> item.path("hit").asBoolean());
+    }
+
+    /**
      * Keys a map took out of wrapped elements as the values they wrap are those elements: the
      * rows offered are the rows for counting the elements, and written they meet the line.
      */
@@ -470,27 +575,15 @@ class AFoldThatFilesACounterUnderEachKeyAnswersHowOftenTheKeyOccursTest {
         assertTrue(json(before).contains("multiplicity(xs[*])"), () -> report(before));
         assertEquals(2, unmetOf(before).size(),
                 () -> "the line's two sides are owed: " + report(before));
-        List<String> offered = offeredInputs(before);
-        Pattern row = Pattern.compile("^\\[(.*)\\], (-?\\d+)$");
+        List<Offered> offered = offered(before);
+        assertFalse(offered.isEmpty(), () -> "rows are offered: " + report(before));
         StringBuilder written = new StringBuilder(examples);
         int named = 0;
-        for (String each : offered) {
-            Matcher matched = row.matcher(each);
-            if (!matched.matches()) {
-                continue;
-            }
-            List<String> keys = new ArrayList<>();
-            Matcher key = Pattern.compile("Label\\(\"((?:[^\"\\\\]|\\\\.)*)\"\\)")
-                    .matcher(matched.group(1));
-            while (key.find()) {
-                keys.add(key.group(1));
-            }
-            Row counted = new Row(keys, Integer.parseInt(matched.group(2)));
+        for (Offered each : offered) {
             written.append("    | \"offered ").append(named++).append("\" : (")
-                    .append(each).append(") -> ").append(entries(counted.kept(1, 1)))
-                    .append("\n");
+                    .append(each.written()).append(") -> ")
+                    .append(entries(each.row().kept(1, 1))).append("\n");
         }
-        assertTrue(named > 0, () -> "rows are offered: " + offered + "\n" + report(before));
         Compilation after = measured(model.formatted(written));
         assertFalse(bordersOf(after).isEmpty(), () -> report(after));
         assertEquals(List.of(), unmetOf(after),
@@ -639,23 +732,35 @@ class AFoldThatFilesACounterUnderEachKeyAnswersHowOftenTheKeyOccursTest {
         node.forEach(child -> unmet(child, out));
     }
 
-    /** The rows the block offers, read back from how they are written. */
-    private static List<Row> offeredRows(Compilation compilation) {
-        List<Row> out = new ArrayList<>();
-        Pattern row = Pattern.compile("^\\[(.*)\\], (-?\\d+)$");
+    /** A row the block offers, as it is written and as it is read back. */
+    private record Offered(String written, Row row) { }
+
+    private static final Pattern ROW = Pattern.compile("^\\[(.*)\\], (-?\\d+)$");
+
+    private static final Pattern KEY = Pattern.compile("\"((?:[^\"\\\\]|\\\\.)*)\"");
+
+    /** Every row the block offers, each read back from how it is written; a row this cannot read
+     *  back fails, since a row left unread is one nothing checks. */
+    private static List<Offered> offered(Compilation compilation) {
+        List<Offered> out = new ArrayList<>();
         for (String each : offeredInputs(compilation)) {
-            Matcher matched = row.matcher(each);
+            Matcher matched = ROW.matcher(each);
             if (!matched.matches()) {
-                continue;
+                fail("an offered row is one this reads back: " + each);
             }
             List<String> keys = new ArrayList<>();
-            Matcher key = Pattern.compile("\"((?:[^\"\\\\]|\\\\.)*)\"").matcher(matched.group(1));
+            Matcher key = KEY.matcher(matched.group(1));
             while (key.find()) {
                 keys.add(key.group(1));
             }
-            out.add(new Row(keys, Integer.parseInt(matched.group(2))));
+            out.add(new Offered(each, new Row(keys, Integer.parseInt(matched.group(2)))));
         }
         return out;
+    }
+
+    /** The rows the block offers, read back from how they are written. */
+    private static List<Row> offeredRows(Compilation compilation) {
+        return offered(compilation).stream().map(Offered::row).toList();
     }
 
     private static List<String> offeredInputs(Compilation compilation) {

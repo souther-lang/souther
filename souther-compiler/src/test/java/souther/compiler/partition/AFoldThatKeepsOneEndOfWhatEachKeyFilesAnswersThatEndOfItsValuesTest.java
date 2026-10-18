@@ -24,6 +24,7 @@ import java.util.regex.Pattern;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
 
 /**
  * A map a fold builds by filing what each element holds under its key, keeping the lesser or the
@@ -247,10 +248,16 @@ class AFoldThatKeepsOneEndOfWhatEachKeyFilesAnswersThatEndOfItsValuesTest {
     /**
      * Touches a map took out of visits, one for each, keep the same ends under the same keys as the
      * visits do with the touch taken inside the step: the line is on the end of a place of the
-     * visits, and the rows offered are the rows a fold over the visits is offered.
+     * visits, the rows offered are the rows a fold over the visits is offered, and written they
+     * meet the line.
      */
     @Test
     void touchesAMapTookOutOfTheVisitsKeepTheEndsTheVisitsDo() {
+        String examples = """
+
+                example stale
+                    | "none" : ([], 2) -> []
+                """;
         String model = """
                 module example.stale
 
@@ -266,27 +273,29 @@ class AFoldThatKeepsOneEndOfWhatEachKeyFilesAnswersThatEndOfItsValuesTest {
                 let stale (visits, staleAfter) =
                     Map.filterEntries((_, days) -> days >= staleAfter, sinceOf(visits))
                 """;
+        String projectedFold = model.formatted(LEAST,
+                "List.reverse(List.map(v -> v.touch, visits))");
         Compilation direct = measured(model.formatted(
                 "Map.updateOrInsert(t.touch.account, t.touch.days,"
-                        + " seen -> Int.min(seen, t.touch.days), acc)", "visits"));
-        Compilation projected = measured(model.formatted(LEAST,
-                "List.reverse(List.map(v -> v.touch, visits))"));
+                        + " seen -> Int.min(seen, t.touch.days), acc)", "visits") + examples);
+        Compilation projected = measured(projectedFold + examples);
         assertTrue(json(projected).contains("least(visits[*].touch.days by touch.account)"),
                 () -> report(projected));
         assertEquals(axisOf(direct), axisOf(projected), () -> report(projected));
-        List<String> rows = Adequacy.offeredFor(projected.db(),
-                        OfferingRequest.overTheModule("example.stale"))
-                .rowsByBehavior().getOrDefault("stale", List.of()).stream()
-                .map(row -> String.join(", ",
-                        row.inputs().stream().map(FixtureTemplate::text).toList()))
-                .toList();
-        assertFalse(rows.isEmpty(), () -> report(projected));
-        assertEquals(Adequacy.offeredFor(direct.db(),
-                        OfferingRequest.overTheModule("example.stale"))
-                .rowsByBehavior().getOrDefault("stale", List.of()).stream()
-                .map(row -> String.join(", ",
-                        row.inputs().stream().map(FixtureTemplate::text).toList()))
-                .toList(), rows);
+        List<Offered> offered = offered(projected);
+        assertFalse(offered.isEmpty(), () -> report(projected));
+        assertEquals(offeredInputs(direct), offeredInputs(projected));
+
+        StringBuilder written = new StringBuilder(examples);
+        int named = 0;
+        for (Offered each : offered) {
+            written.append("    | \"offered ").append(named++).append("\" : (")
+                    .append(each.written()).append(") -> ")
+                    .append(entries(each.row().kept(Math::min))).append("\n");
+        }
+        Compilation after = measured(projectedFold + written);
+        assertEquals(List.of(), unmetOf(after),
+                () -> "the rows that were offered meet the line: " + report(after));
     }
 
     /** The line is written in a document the schema shipped beside this accepts. */
@@ -350,25 +359,37 @@ class AFoldThatKeepsOneEndOfWhatEachKeyFilesAnswersThatEndOfItsValuesTest {
         node.forEach(child -> unmet(child, out));
     }
 
-    /** The rows the block offers, read back from how they are written. */
-    private static List<Row> offeredRows(Compilation compilation) {
-        List<Row> out = new ArrayList<>();
-        Pattern row = Pattern.compile("^\\[(.*)\\], (-?\\d+)$");
-        Pattern touch = Pattern.compile(
-                "Touch \\{ account = \"((?:[^\"\\\\]|\\\\.)*)\", days = (-?\\d+) \\}");
+    /** A row the block offers, as it is written and as it is read back. */
+    private record Offered(String written, Row row) { }
+
+    private static final Pattern ROW = Pattern.compile("^\\[(.*)\\], (-?\\d+)$");
+
+    private static final Pattern TOUCH = Pattern.compile(
+            "Touch \\{ account = \"((?:[^\"\\\\]|\\\\.)*)\", days = (-?\\d+) \\}");
+
+    /** Every row the block offers, each read back from how it is written — the touches in it,
+     *  wherever they stand; a row this cannot read back fails, since a row left unread is one
+     *  nothing checks. */
+    private static List<Offered> offered(Compilation compilation) {
+        List<Offered> out = new ArrayList<>();
         for (String each : offeredInputs(compilation)) {
-            Matcher matched = row.matcher(each);
+            Matcher matched = ROW.matcher(each);
             if (!matched.matches()) {
-                continue;
+                fail("an offered row is one this reads back: " + each);
             }
             List<Touch> touches = new ArrayList<>();
-            Matcher one = touch.matcher(matched.group(1));
+            Matcher one = TOUCH.matcher(matched.group(1));
             while (one.find()) {
                 touches.add(new Touch(one.group(1), Integer.parseInt(one.group(2))));
             }
-            out.add(new Row(touches, Integer.parseInt(matched.group(2))));
+            out.add(new Offered(each, new Row(touches, Integer.parseInt(matched.group(2)))));
         }
         return out;
+    }
+
+    /** The rows the block offers, read back from how they are written. */
+    private static List<Row> offeredRows(Compilation compilation) {
+        return offered(compilation).stream().map(Offered::row).toList();
     }
 
     private static List<String> offeredInputs(Compilation compilation) {
