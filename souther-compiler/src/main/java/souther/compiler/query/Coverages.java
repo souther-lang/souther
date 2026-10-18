@@ -1565,11 +1565,21 @@ final class Coverages {
                         return whole;
                     }
                 }
+                SearchOutcomes alongEach = SearchOutcomes.none();
                 for (Reachability.Reaching along : able.along()) {
                     Looked one = lookedAlong(criterion, label, narrowing, along);
                     if (one.witness().isPresent()) {
                         return one;
                     }
+                    alongEach = alongEach.plus(one.outcomes());
+                }
+                // Split into every way a row takes, and along each of them the rules leave no
+                // value at the point: no row past the way stands there. The way whole spans the
+                // values between the ways and would offer one, and a row built there turns back
+                // before the point.
+                if (able.ways() instanceof Reachability.Ways.Each
+                        && alongEach.provesInfeasible()) {
+                    return new Looked(alongEach, null, Optional.empty());
                 }
                 return whole != null ? whole : lookedAlong(criterion, label, narrowing, able);
             }
