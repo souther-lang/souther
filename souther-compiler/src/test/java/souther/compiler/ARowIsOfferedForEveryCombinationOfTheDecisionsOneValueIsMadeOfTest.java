@@ -19,7 +19,6 @@ import souther.compiler.query.UnderABudget;
 import souther.compiler.report.AdequacyReport;
 import souther.compiler.report.GeneratedRows;
 
-import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.List;
@@ -191,30 +190,9 @@ class ARowIsOfferedForEveryCombinationOfTheDecisionsOneValueIsMadeOfTest {
         return (int) block.lines().filter(line -> line.startsWith("    | ")).count();
     }
 
-    /** {@code | "name" : (inputs)} as the block writes it, over lines the formatter may have wrapped. */
-    private static final Pattern OFFERED = Pattern.compile("\\|\\s*\"((?:[^\"\\\\]|\\\\.)*)\"\\s*\\n?\\s*:");
-
-    /** The names the block offers, in the order it writes them — one for every row written with
-     *  a name, or a failure, since a row whose name this does not read is a row nothing checks. */
+    /** The names the block's rows are written with, in its order. */
     private static List<String> names(String block) {
-        List<String> found = new ArrayList<>();
-        String rows = block.replace("//", "");
-        Matcher m = OFFERED.matcher(rows);
-        while (m.find()) {
-            found.add(m.group(1));
-        }
-        assertEquals(namedRowsIn(rows), found.size(),
-                () -> "a name is read for every row the block writes with one: " + block);
-        return found;
-    }
-
-    /** How many rows {@code rows} writes with a name, each of the others written with none. */
-    private static long namedRowsIn(String rows) {
-        List<String> written = rows.lines().map(String::trim)
-                .filter(line -> line.startsWith("|")).toList();
-        written.forEach(line -> assertTrue(line.startsWith("| \"") || line.startsWith("| ("),
-                () -> "a row is written with a name or with none: " + line));
-        return written.stream().filter(line -> line.startsWith("| \"")).count();
+        return RowsOfABlock.of(block).stream().flatMap(row -> row.name().stream()).toList();
     }
 
     /**
@@ -245,8 +223,10 @@ class ARowIsOfferedForEveryCombinationOfTheDecisionsOneValueIsMadeOfTest {
      */
     @Test
     void aGroupWithAFactorNothingCanSteerIsNotOffered() {
-        List<String> offered = names(block(MIXED));
+        String block = block(MIXED);
+        List<String> offered = names(block);
 
+        assertFalse(offered.isEmpty(), () -> "rows are offered under names: " + block);
         assertTrue(offered.stream().noneMatch(String::isEmpty),
                 "no row is offered under an empty name: " + offered);
     }
@@ -406,8 +386,13 @@ class ARowIsOfferedForEveryCombinationOfTheDecisionsOneValueIsMadeOfTest {
         }
 
         String block = blockOf(compilation);
+        List<RowsOfABlock.Row> forACombination = RowsOfABlock.of(block).stream()
+                .filter(row -> row.isFor("a combination of the decisions")).toList();
+        assertFalse(forACombination.isEmpty(), () -> "rows are offered for the meetings: " + block);
+        assertTrue(forACombination.stream().allMatch(row -> row.name().isEmpty()),
+                () -> "a row for a combination is named for none of its classes: " + block);
         assertEquals(List.of(), names(block).stream().filter(name -> name.contains(" x ")).toList(),
-                "every row is named for one class, none for a combination of them: " + block);
+                "and no row is named by joining classes: " + block);
         assertEquals(9, rows(block),
                 "one row for the choice's other class and one apiece for the eight combinations"
                         + " under this one, since none of them is made without a row: " + block);

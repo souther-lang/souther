@@ -4,6 +4,7 @@ import souther.compiler.partition.ObligationIdentity;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -42,6 +43,9 @@ public final class Offering {
     private final BorderAccount account;
     private final Set<ObligationIdentity> answered;
     private final Map<ObligationIdentity, Settlements.Shown> shownAt;
+    /** {@link #shownAt} read from each row's side, filed once so a block asking it a row at a time
+     *  does not walk every line for every row. */
+    private final Map<RowKey, List<ObligationIdentity>> shownOver;
 
     /**
      * @param request  what was asked for, which is what settles which rows are here
@@ -64,6 +68,15 @@ public final class Offering {
              Set<ObligationIdentity> answered,
              Map<ObligationIdentity, Settlements.Shown> shownAt) {
         this.shownAt = Collections.unmodifiableMap(new LinkedHashMap<>(shownAt));
+        Map<RowKey, List<ObligationIdentity>> over = new HashMap<>();
+        this.shownAt.forEach((item, shown) -> {
+            if (item instanceof ObligationIdentity.OfALine
+                    || item instanceof ObligationIdentity.OfAReplacement) {
+                over.computeIfAbsent(shown.rowKey(), _ -> new ArrayList<>()).add(item);
+            }
+        });
+        over.replaceAll((_, items) -> List.copyOf(items));
+        this.shownOver = Collections.unmodifiableMap(over);
         this.request = request;
         this.rowsByBehavior =
                 Collections.unmodifiableSequencedMap(new LinkedHashMap<>(rowsByBehavior));
@@ -125,14 +138,7 @@ public final class Offering {
      * a block says over a row which of these it is for, without naming it after one.
      */
     public List<ObligationIdentity> shownOver(RowKey row) {
-        List<ObligationIdentity> out = new ArrayList<>();
-        shownAt.forEach((item, shown) -> {
-            if (shown.rowKey().equals(row) && (item instanceof ObligationIdentity.OfALine
-                    || item instanceof ObligationIdentity.OfAReplacement)) {
-                out.add(item);
-            }
-        });
-        return List.copyOf(out);
+        return shownOver.getOrDefault(row, List.of());
     }
 
     /** How many pieces of work this offers, which is what a block says at the top of it. */
