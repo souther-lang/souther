@@ -163,8 +163,8 @@ record ACallAgainstANumber<E, F>(AnOperationApplied applied, Core answered, F fa
     /** Whether what {@code stands} for is arithmetic a call can be weighed in ({@link #weighed}). */
     private static <E> boolean isArithmetic(ValueStanding.ReadThrough<E> stands) {
         Core e = Core.withoutStanding(stands.value());
-        return e instanceof Core.Neg || e instanceof Core.Binary b
-                && (b.op() == BinOp.ADD || b.op() == BinOp.SUB || b.op() == BinOp.MUL);
+        return e instanceof Core.Neg || (e instanceof Core.Binary b
+                && (b.op() == BinOp.ADD || b.op() == BinOp.SUB || b.op() == BinOp.MUL));
     }
 
     /** {@code stands} as the call itself, weighed by nothing — or null where it is no call of an
