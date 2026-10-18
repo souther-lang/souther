@@ -544,8 +544,8 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                                                 Optional.of(stands.lineage()
                                                         .expansionProjection()));
                                 case Stated.AnApplication(var _, var answered) ->
-                                        ComparisonAssessment.ofAnApplication(answered, where,
-                                                in.read());
+                                        ComparisonAssessment.ofAnApplication(in.behavior(),
+                                                answered, where, in.read());
                             }));
             out.add(new Reading(stands, stated.statement(), where, reads, assumed, standing,
                     severalStated(e, standing, reads, in, numbering), applying.elementsMetOn(),

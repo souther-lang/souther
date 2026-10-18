@@ -207,6 +207,8 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
         // the line would make hold nothing that arrives, which is a fact about the model.
         table.put("ComparisonNothingArrivesAtItsLine",
                 "NOTHING_ARRIVES_AT_THE_RULES_LINE/-");
+        // The same fact of a relation, which has no line for the rows to miss.
+        table.put("ComparisonRelationNothingArrivesAt", "NOTHING_ARRIVES_AT_THE_RELATION/-");
         // And its own word beside that one: rows arrive at the line, and the rest of the statement
         // it is a line of decides the outcome wherever they do. Nothing is owed there either.
         table.put("ComparisonLineTurningNothing", "RULE_NEVER_TURNS_ON_THIS_LINE/-");
@@ -530,6 +532,7 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
                 new BlockReason.ComparisonCuttingNothing(),
                 new BlockReason.ComparisonCuttingOutsideDomain(),
                 new BlockReason.ComparisonNothingArrivesAtItsLine(),
+                new BlockReason.ComparisonRelationNothingArrivesAt(),
                 new BlockReason.ComparisonLineTurningNothing(),
                 new BlockReason.ComparisonRelatingTwoValues(),
                 new BlockReason.ComparisonOverARun(),

@@ -514,6 +514,23 @@ class EveryPublishedReasonIsWrittenBySomeCompilationTest {
                     Yes
                 }
                 """.formatted(ANSWER)));
+        // And a relation to another value that no row arriving at the comparison takes the way
+        // to, which has no line for them to miss.
+        out.put(UndividedPosition.Reason.NOTHING_ARRIVES_AT_THE_RELATION, of("""
+                module m
+                %s
+                data Item = { n: Int }
+                    invariant n >= 0 && n <= 100
+                data Order = { items: List<Item>, open: Bool, q: Int }
+                    invariant q >= 0
+
+                behavior f : (o: Order) -> Answer
+                let f (o) =
+                    if o.q < 0 then
+                        (if List.fold((w, i) -> if i.n > (if o.open then w else 5) then i.n else w,
+                                      0, o.items) <= 50 then Yes else No)
+                    else No
+                """.formatted(ANSWER)));
         return out;
     }
 

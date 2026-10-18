@@ -437,6 +437,16 @@ public record UndividedPosition(TermPath at, Why why) {
          */
         NOTHING_ARRIVES_AT_THE_RULES_LINE,
         /**
+         * A rule naming this position relates it to another value, and no row that arrives at the
+         * comparison takes the way to it: the conditions on the way there rule the rows out.
+         *
+         * <p>Its own word beside {@link #NOTHING_ARRIVES_AT_THE_RULES_LINE}, for a rule that has
+         * no line of its own for the rows to miss, and beside
+         * {@link #RELATION_NOT_SHOWN_TO_REACH_EVERY_VALUE}, which says the rule was not worked
+         * out, where this one says there is nothing to work out.
+         */
+        NOTHING_ARRIVES_AT_THE_RELATION,
+        /**
          * A rule naming this position states several relations held together, and one of its
          * lines is here — rows arrive at it, and wherever they do the rule comes out the same on
          * both sides of it.

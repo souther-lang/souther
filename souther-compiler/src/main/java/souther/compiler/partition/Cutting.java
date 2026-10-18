@@ -276,7 +276,9 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
              *              ({@link Stopped}, at the line's places)
              * @param cases where the statement turns on it, as cases any one of which is enough;
              *              empty where it turns on it nowhere, and for what is no line drawn or
-             *              refused
+             *              refused. A relation to another value draws no line of its own, and has
+             *              cases where the lines parting the values that settle it may be drawn
+             *              ({@link #isReadInCases}); empty, none is
              */
             record Part(PlaceOfALine id, Read line, List<DecidingCase> cases) {
 
@@ -289,7 +291,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                                 + " end is a line, drawn or refused, or relates another value: "
                                 + line);
                     }
-                    if (!isALine(line) && !cases.isEmpty()) {
+                    if (!isReadInCases(line) && !cases.isEmpty()) {
                         throw new IllegalArgumentException(
                                 "what is no line is read in no case: " + line);
                     }
@@ -299,6 +301,13 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                 static boolean isALine(Read line) {
                     return line instanceof Cuts || line instanceof NoOrderToCountOn
                             || line instanceof NumberNoRatioHolds;
+                }
+
+                /** Whether {@code line} is read in the cases where the statement turns on it: a
+                 *  line, or a relation to another value, whose settling values are parted by
+                 *  lines there. */
+                static boolean isReadInCases(Read line) {
+                    return isALine(line) || line instanceof AgainstAnotherValue;
                 }
             }
         }
@@ -569,9 +578,10 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             return new Read.CutsNothing(settled);
         }
         List<Read.Several.Part> parts = new ArrayList<>();
-        // A relation of a statement that is no line is read in no case on any application.
+        // A relation of a statement that is no line, and relates no other value, is read in no
+        // case on any application.
         lines.forEach((line, readings) -> parts.add(new Read.Several.Part(line.id(), line.read(),
-                Read.Several.Part.isALine(line.read())
+                Read.Several.Part.isReadInCases(line.read())
                         ? WhereAnApplicationIsMade.decidesOn(readings) : List.of())));
         if (parts.size() == 1 && WhereAnApplicationIsMade.everywhere(parts.getFirst().cases())) {
             return parts.getFirst().line();
@@ -1581,8 +1591,11 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                     }
                     undrawn = undrawn == null ? why : undrawn.and(why);
                 } else if (undrawn == null) {
+                    // Where it decides is carried only if a row can be asked to be there.
                     parts.add(new Read.Several.Part(alone, against(against, each.line()),
-                            List.of()));
+                            each.cases().stream().allMatch(
+                                    one -> AStatementAtARow.askable(one.condition()))
+                                    ? each.cases() : List.of()));
                 }
                 continue;
             }

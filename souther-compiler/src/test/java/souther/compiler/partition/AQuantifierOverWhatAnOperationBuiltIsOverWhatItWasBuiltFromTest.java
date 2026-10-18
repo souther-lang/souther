@@ -11,6 +11,7 @@ import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Relation;
+import souther.compiler.meaning.WhyUnread;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
@@ -19,6 +20,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -46,6 +48,60 @@ class AQuantifierOverWhatAnOperationBuiltIsOverWhatItWasBuiltFromTest {
             assertEquals(stated("List.length(List.filter(x -> x > 0, xs)) >= 2"),
                     stated("List.length(List.filter(x -> x > 0, " + order + ")) >= 2"), order);
         }
+    }
+
+    /**
+     * A fold walks the elements of the list it is handed, so another order of them is the same
+     * elements, each as often, whatever the step does with them: whether the map it files holds
+     * anything, and how many it adds one for each of, are said of the list it was reordered from.
+     */
+    @Test
+    void aFoldOverAnotherOrderOfTheElementsIsReadOverTheList() {
+        String filed = "Map.isEmpty(filed(%s))";
+        String grown = "List.length(List.fold((acc, x) -> List.append(acc, [x]), [], %s)) >= 2";
+        for (String fold : List.of(filed, grown)) {
+            Proposition direct = stated(fold.formatted("xs"));
+            assertFalse(unreadIn(direct), () -> fold + " was not read: " + direct);
+            for (String order : List.of("List.reverse(xs)", "List.sort(xs)",
+                    "List.reverse(List.sort(xs))")) {
+                assertEquals(direct, stated(fold.formatted(order)), fold + " over " + order);
+            }
+        }
+    }
+
+    /**
+     * Where a step stops at some elements the run turns on the order, and another order of the
+     * elements is read no further than the list is. What the elements a fold walks were kept by is
+     * not what the list holds.
+     */
+    @Test
+    void aFoldOverAnotherOrderIsReadNoFurtherThanTheListAndOverWhatWasKeptIsNotReadAsTheList() {
+        for (String order : List.of("List.fold((acc, x) -> acc || 10 / x > 1, false, %s)",
+                "List.fold((_, x) -> x, 0, %s) > 0")) {
+            assertEquals(stated(order.formatted("xs")), stated(order.formatted("List.reverse(xs)")),
+                    order);
+        }
+        // The one that stops at some elements is unread for the order it stops in, which is what
+        // there is to say of it over the list as over the reordered one.
+        Proposition.Unread stops = assertInstanceOf(Proposition.Unread.class,
+                stated("List.fold((acc, x) -> acc || 10 / x > 1, false, List.reverse(xs))"));
+        assertInstanceOf(WhyUnread.WhichElementARunStopsAt.class, stops.why());
+        String grown = "List.length(List.fold((acc, x) -> List.append(acc, [x]), [], %s)) >= 2";
+        assertNotEquals(stated(grown.formatted("xs")),
+                stated(grown.formatted("List.filter(x -> x > 0, xs)")));
+    }
+
+    /**
+     * The elements of what a flattening made are the elements of the lists of a list: some of them
+     * meeting a statement is some list holding one that does, which no one container's elements say.
+     */
+    @Test
+    void aFoldOverWhatAFlatteningMadeIsNotSomeElementOfOneContainer() {
+        Proposition stated = stated(
+                "List.fold((acc, x) -> acc || x > 0, false, List.flatMap(zs -> zs, xss))");
+        assertFalse(stated instanceof Proposition.Some some
+                        && some.container().toString().endsWith("xss[*]"),
+                () -> "read as " + stated);
     }
 
     /** What some element of a filter's answer meets is met by an element that was kept too. */
@@ -187,8 +243,13 @@ class AQuantifierOverWhatAnOperationBuiltIsOverWhatItWasBuiltFromTest {
         String source = """
                 module demo
 
-                behavior f : (xs: List<Int>, ys: Set<Int>, t: String, sep: String) -> Int
-                let f (xs, ys, t, sep) = if %s then 1 else 0
+                let filed (keys: List<Int>): Map<Int, Int> =
+                    List.fold((acc, x) -> Map.updateOrInsert(x, 1, n -> n + 1, acc),
+                        Map.empty, keys)
+
+                behavior f : (xs: List<Int>, ys: Set<Int>, t: String, sep: String,
+                              xss: List<List<Int>>) -> Int
+                let f (xs, ys, t, sep, xss) = if %s then 1 else 0
                 """.formatted(condition);
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
