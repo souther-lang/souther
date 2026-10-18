@@ -2,7 +2,9 @@ package souther.compiler.check;
 
 import souther.compiler.core.Core;
 import souther.compiler.semantics.Combinator;
+import souther.compiler.semantics.ElementShape;
 import souther.compiler.semantics.HowAClosureIsApplied;
+import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.BinOp;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
@@ -10,7 +12,6 @@ import souther.compiler.types.ValueName;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 /**
  * Whether a body reads the order its lists hold their elements in, and how many of its operations
@@ -26,10 +27,10 @@ import java.util.Set;
  * a different row from the same elements in another.
  *
  * <p>Read off what the body writes, and kept on the side of saying the order is read. An operation
- * the library defines in terms of how many elements meet something, or what each is mapped to, or
- * what they add up to, reads no order; every other one handed a list may, and so may anything a
- * helper, a behavior or a function value is handed beyond a single number or string — what it does
- * with it is not in this tree. Every way a run may end counts, a sum with no place among them:
+ * of the library reads no order of what it is handed at a place where its facts say its answer is
+ * the same in any order ({@link #takenInAnyOrder}); handed a value that may hold a list anywhere
+ * else, it may, and so may anything a helper, a behavior or a function value is handed beyond a
+ * single number or string — what it does with it is not in this tree. Every way a run may end counts, a sum with no place among them:
  * a run that ends answers nothing and is no row of anything, whatever the reason it ended for.
  * What a closure may end a run for is {@link WhatARunMayEndFor}'s, and a closure handed by a name
  * is the block the name was given.
@@ -47,28 +48,6 @@ public record OrderOfElements(boolean read, int stopping) {
 
     /** What is said of a body nothing was read of: that its order is read, whatever it is. */
     public static final OrderOfElements NOT_KNOWN = new OrderOfElements(true, 0);
-
-    /**
-     * The operations over a list whose answer, and whether they answer at all, are the same in
-     * whatever order it holds them: each works out every element, or answers by whether some
-     * element meets something — which is order-free where what each is asked of answers on every
-     * row, and otherwise {@code stopping}'s. Not a sum or a product, which ends a run where a sum
-     * part way through has no place, and which part sums there are is the order's.
-     */
-    private static final Set<ValueName> IN_ANY_ORDER = Set.of(
-            ValueName.Stdlib.operation("List", "any"),
-            ValueName.Stdlib.operation("List", "all"),
-            ValueName.Stdlib.operation("List", "length"),
-            ValueName.Stdlib.operation("List", "isEmpty"),
-            ValueName.Stdlib.operation("List", "contains"),
-            ValueName.Stdlib.operation("List", "max"),
-            ValueName.Stdlib.operation("List", "min"),
-            ValueName.Stdlib.operation("List", "sort"),
-            ValueName.Stdlib.operation("List", "filter"),
-            ValueName.Stdlib.operation("List", "map"),
-            ValueName.Stdlib.operation("List", "append"),
-            ValueName.Stdlib.operation("List", "allDistinctBy"),
-            ValueName.Stdlib.operation("Set", "fromList"));
 
     public OrderOfElements {
         if (stopping < 0) {
@@ -129,10 +108,10 @@ public record OrderOfElements(boolean read, int stopping) {
         AnOperationApplied applied = AnOperationApplied.of(node);
         if (applied != null) {
             boolean ofTheLibrary = applied.operation() instanceof ValueName.Stdlib;
-            for (Core argument : applied.args()) {
-                Type type = Core.withoutStanding(argument).type();
-                if (ofTheLibrary ? holdsAList(type) && !IN_ANY_ORDER.contains(applied.operation())
-                        : !aNumberOrAString(type)) {
+            for (int at = 0; at < applied.args().size(); at++) {
+                Type type = Core.withoutStanding(applied.args().get(at)).type();
+                if (ofTheLibrary ? holdsAList(type) && !takenInAnyOrder(applied.operation(), at,
+                        type) : !aNumberOrAString(type)) {
                     read[0] = true;
                     return;
                 }
@@ -157,22 +136,61 @@ public record OrderOfElements(boolean read, int stopping) {
         Core.forEachChild(node, child -> walk(child, held, read, stopping));
     }
 
-    /** Whether a value of {@code type} holds a list anywhere a reader can tell from the type. */
-    private static boolean holdsAList(Type type) {
-        if (type instanceof Type.ListOf) {
+    /**
+     * Whether the operation {@code operation} answers the same of what it is handed at {@code at},
+     * a value of {@code type}, in whatever order that holds its elements — as the library's facts
+     * about it say, each held to what the library computes.
+     *
+     * <p>A number taken of how many it holds, or whether it holds none, is the same in any order. So
+     * is a statement about its elements that survives their being put in another order
+     * ({@link ElementShape#PERMUTES}): where the operation hands each element to a closure, what the
+     * closure does with it is in this walk, and where it compares the elements with a value
+     * itself, they are read whole, so elements that may hold a list are read in their own order.
+     * Nothing else is: an operation building a list out of another hands on its order to whatever
+     * reads what it built, and which elements it keeps may be the order's.
+     */
+    private static boolean takenInAnyOrder(ValueName operation, int at, Type type) {
+        BoundOperationFacts facts = DefaultBoundOperationFacts.get();
+        if (facts.takenAs(operation) instanceof TakenAs.HowManyItHolds
+                || facts.meansTheSameAsASizeOfNought(operation) != null) {
             return true;
         }
-        if (type instanceof Type.OptionOf(Type element)) {
-            return holdsAList(element);
+        BoundOperationFact.ReadsItsContainer reads = facts.readsItsContainer(operation);
+        if (reads == null || reads.container().position() != at
+                || !reads.through().contains(ElementShape.PERMUTES)) {
+            return false;
         }
-        if (type instanceof Type.SetOf(Type element)) {
-            return holdsAList(element);
-        }
-        if (type instanceof Type.MapOf(Type key, Type value)) {
-            return holdsAList(key) || holdsAList(value);
-        }
-        return type instanceof Type.TupleOf(List<Type> elements)
-                && elements.stream().anyMatch(OrderOfElements::holdsAList);
+        Combinator rule = Combinators.of(operation);
+        return (rule != null && rule.containerArg() == at) || !elementsHoldAList(type);
+    }
+
+    /** Whether the elements of a container of {@code type} may hold a list. */
+    private static boolean elementsHoldAList(Type type) {
+        return switch (type) {
+            case Type.ListOf(Type element) -> holdsAList(element);
+            case Type.SetOf(Type element) -> holdsAList(element);
+            case Type.MapOf(Type key, Type value) -> holdsAList(key) || holdsAList(value);
+            default -> true;
+        };
+    }
+
+    /**
+     * Whether a value of {@code type} may hold a list: one the type says holds one, and one whose
+     * type says nothing of what it holds here — a declared data, a union.
+     *
+     * <p>Not a function value: an operation applies it and reads nothing of it, and what applying it
+     * reads is its body's, which this walk reads where the block is written.
+     */
+    private static boolean holdsAList(Type type) {
+        return switch (type) {
+            case Type.Prim _, Type.FnOf _ -> false;
+            case Type.OptionOf(Type element) -> holdsAList(element);
+            case Type.SetOf(Type element) -> holdsAList(element);
+            case Type.MapOf(Type key, Type value) -> holdsAList(key) || holdsAList(value);
+            case Type.TupleOf(List<Type> elements) ->
+                    elements.stream().anyMatch(OrderOfElements::holdsAList);
+            default -> true;
+        };
     }
 
     /** Whether a value of {@code type} is a number, a string, a truth or a time, and so holds no

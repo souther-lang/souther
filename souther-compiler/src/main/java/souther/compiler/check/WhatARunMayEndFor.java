@@ -1,7 +1,6 @@
 package souther.compiler.check;
 
 import souther.compiler.DefaultStdlib;
-import souther.compiler.abort.AbortKind;
 import souther.compiler.abort.AbortSet;
 import souther.compiler.abort.AbortSites;
 import souther.compiler.core.Core;
@@ -101,29 +100,44 @@ public final class WhatARunMayEndFor {
         return out[0];
     }
 
-    /** What {@code e} itself, and none of what it is made of, may end a run for. */
+    /**
+     * What {@code e} itself, and none of what it is made of, may end a run for.
+     *
+     * <p>Exhaustive over {@link Core}, as {@link AbortSites}' own reading of a site is, so a node
+     * kind added later stops the build here and not only there. Where a node's own answer is a site's
+     * wherever it stands, it is {@link AbortSites}' answer. Where it is not — a call whose callee's
+     * body is a root of its own, a function value, a construction whose invariant is its
+     * declaration's — what working it out ends a run for is not in this tree.
+     */
     private static Endings itself(Core e) {
-        Core node = Core.withoutStanding(e);
-        if (node instanceof Core.Binary binary) {
-            return new Endings.Known(AbortSites.ofAnOperator(binary));
-        }
-        if (node instanceof Core.Neg neg) {
-            return new Endings.Known(AbortSites.ofANegation(neg));
-        }
-        if (node instanceof Core.Unreachable) {
-            return new Endings.Known(AbortSet.of(AbortKind.UNREACHABLE_REACHED));
-        }
-        if (node instanceof Core.Call call && call.fn() instanceof Core.Reached.OfKernel kernel) {
-            return new Endings.Known(KernelContracts.abortsOf(kernel.kernel()));
-        }
-        if (node instanceof Core.Apply || node instanceof Core.Construct) {
-            return new Endings.NotKnown();
-        }
-        AnOperationApplied applied = AnOperationApplied.of(node);
-        if (applied == null) {
-            return node instanceof Core.Call ? new Endings.NotKnown() : NONE;
-        }
-        AbortSet ending = applied.operation() instanceof ValueName.Stdlib.Operation operation
+        return switch (Core.withoutStanding(e)) {
+            case Core.Unreachable unreachable ->
+                    new Endings.Known(AbortSites.ofAnUnreachable(unreachable));
+            case Core.Binary binary -> new Endings.Known(AbortSites.ofAnOperator(binary));
+            case Core.Neg neg -> new Endings.Known(AbortSites.ofANegation(neg));
+            case Core.Call call -> switch (call.fn()) {
+                case Core.Reached.OfKernel kernel ->
+                        new Endings.Known(KernelContracts.abortsOf(kernel.kernel()));
+                case Core.Emitted emitted -> new Endings.Known(AbortSites.ofAnEmittedCall(emitted));
+                case Core.Reached.OfDeclaration _, Core.Reached.OfValue _,
+                     Core.Reached.OfPublishedValue _ -> new Endings.NotKnown();
+            };
+            case Core.PreservedCall kept -> ofTheLibrary(kept);
+            case Core.Apply _, Core.Construct _ -> new Endings.NotKnown();
+            case Core.Int _, Core.Decimal _, Core.Str _, Core.Bool _, Core.Temporal _, Core.Read _,
+                 Core.UnitValue _, Core.MaterialisedValue _, Core.OptionNone _,
+                 Core.FieldAccess _, Core.FieldProjection _, Core.If _, Core.IfConstructed _,
+                 Core.LetIn _, Core.Block _, Core.ListLit _, Core.OptionSome _, Core.Tuple _,
+                 Core.TupleGet _, Core.Match _, Core.Widen _ -> NONE;
+        };
+    }
+
+    /** What an operation of the library a call keeps ends a run for: a kernel's, read off the
+     *  library once; one the library writes in the language is not known here. */
+    private static Endings ofTheLibrary(Core.PreservedCall kept) {
+        AnOperationApplied applied = AnOperationApplied.of(kept);
+        AbortSet ending = applied != null
+                && applied.operation() instanceof ValueName.Stdlib.Operation operation
                 ? Kernels.ENDING.get(operation) : null;
         return ending != null ? new Endings.Known(ending) : new Endings.NotKnown();
     }

@@ -906,6 +906,18 @@ public sealed interface Derivation {
          */
         private record Standing(TheCall call, Set<DeclaredArgument> writtenOut) {
 
+            /** Whether {@code answers} says only where counts are numbers: each statement counted
+             *  answering, and those together. */
+            private static boolean onlyWhereCountsAnswer(Derivation answers) {
+                return switch (answers) {
+                    case WhereItIsAnswered _ -> true;
+                    case Joined(ConditionJoin how, Derivation left, Derivation right) ->
+                            how == ConditionJoin.BOTH && onlyWhereCountsAnswer(left)
+                                    && onlyWhereCountsAnswer(right);
+                    default -> false;
+                };
+            }
+
             boolean reads(LawProposition<DeclaredArgument> law, Derivation read) {
                 if (read instanceof Stopped) {
                     return true;
@@ -918,6 +930,12 @@ public sealed interface Derivation {
                 if (read instanceof OfTheLastToHoldItsValue(Derivation ofTheElement, var _,
                         var _)) {
                     return reads(law, ofTheElement);
+                }
+                // And where each count it compares is a number: that every statement counted
+                // answers is said of the elements counted, and is no part of the law.
+                if (read instanceof WhereItAnswers(Derivation answers, Derivation stated)
+                        && onlyWhereCountsAnswer(answers)) {
+                    return reads(law, stated);
                 }
                 return switch (law) {
                     case LawProposition.Always<DeclaredArgument> _ ->

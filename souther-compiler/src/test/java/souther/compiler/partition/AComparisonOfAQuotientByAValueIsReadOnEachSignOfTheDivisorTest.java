@@ -465,6 +465,22 @@ class AComparisonOfAQuotientByAValueIsReadOnEachSignOfTheDivisorTest {
     }
 
     /**
+     * A count compared in a case of how many an operation answers is a number only where every
+     * statement it counts answered, and the case is read as the law states it all the same: how
+     * many {@code List.take} answers is said in cases of how many it was handed, and here that is
+     * a count of what a filter keeps.
+     */
+    @Test
+    void aCountACaseOfASizeComparesIsReadAsTheCaseItIs() {
+        for (String guard : List.of(
+                "guard List.length(List.take(n, List.filter(x -> 100 / x >= 1, xs))) >= 2 else No",
+                "guard List.length(List.take(n, List.filter(x -> x >= 1, xs))) >= 2 else No")) {
+            String report = human(OVER_A_LIST.formatted(guard));
+            assertTrue(report.contains("partition"), () -> guard + "\n" + report);
+        }
+    }
+
+    /**
      * Where the order is not the row's to choose, which element a run stops at is not read. Two
      * operations each stopping at the first element meeting a quotient by what it holds may each
      * need another element first: of {@code [0, 100]} and {@code [100, 0]}, the first stops the
@@ -472,7 +488,9 @@ class AComparisonOfAQuotientByAValueIsReadOnEachSignOfTheDivisorTest {
      * met — whether the closures are written in place or named first, and whatever the other one
      * ends a run for: a remainder by nought, or a sum with no place ({@code [0, MAX]} against
      * {@code [MAX, 0]} for {@code x + 1 == 1}). A list sorted first holds its elements in the order
-     * of their values.
+     * of their values. And a list compared whole with another reads its order wherever the
+     * comparison is made: {@code List.contains(xs, [[0, 100]])} holds only of {@code [0, 100]},
+     * which stops every run, and the same elements the other way round are not that row.
      */
     @Test
     void whereTheRowsDoNotChooseTheOrderWhichElementARunStopsAtIsNotRead() {
@@ -487,9 +505,28 @@ class AComparisonOfAQuotientByAValueIsReadOnEachSignOfTheDivisorTest {
                     guard List.any(x -> 100 / x >= 1, xs) else No""", """
                 guard List.any(x -> x + 1 == 1, xs) else No
                     guard List.any(x -> 100 / x >= 1, xs) else No""",
-                "guard List.any(x -> 100 / x >= 1, List.sort(xs)) else No")) {
+                "guard List.any(x -> 100 / x >= 1, List.sort(xs)) else No", """
+                guard List.contains(xs, [[0, 100]]) else No
+                    guard List.any(x -> 100 / x >= 1, xs) else No""")) {
             String report = human(OVER_A_LIST.formatted(guards));
             assertTrue(report.contains(WHICH_FIRST), () -> guards + "\n" + report);
+        }
+    }
+
+    /**
+     * The control: what the library's facts say is the same in whatever order a list holds its
+     * elements — how many it holds, whether it holds none, whether every element meets something
+     * that ends no run, whether it holds a number — leaves the order to the rows beside the one
+     * operation stopping at the first element meeting a quotient.
+     */
+    @Test
+    void whatTheLibrarySaysIsTheSameInAnyOrderLeavesTheOrderToTheRows() {
+        for (String first : List.of("List.length(xs) >= 2", "!List.isEmpty(xs)",
+                "List.all(x -> x != 7, xs)", "List.contains(n, xs)")) {
+            String guards = "guard " + first + " else No\n"
+                    + "    guard List.any(x -> 100 / x >= 1, xs) else No";
+            String report = human(OVER_A_LIST.formatted(guards));
+            assertFalse(report.contains(WHICH_FIRST), () -> guards + "\n" + report);
         }
     }
 

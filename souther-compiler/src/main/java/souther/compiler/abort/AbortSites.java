@@ -221,7 +221,7 @@ public final class AbortSites {
     private static AbortSet localAbortOf(Core node, KernelContracts kernels,
                                          Map<TypeSymbol.AtModule, Constructible> constructible) {
         return switch (node) {
-            case Core.Unreachable _ -> AbortSet.of(AbortKind.UNREACHABLE_REACHED);
+            case Core.Unreachable unreachable -> ofAnUnreachable(unreachable);
             case Core.Binary b -> arithmetic(b);
             case Core.Neg n -> negation(n);
             case Core.Call c -> callAborts(c, kernels);
@@ -257,14 +257,7 @@ public final class AbortSites {
             case Core.Reached.OfDeclaration _ -> AbortSet.NONE;
             case Core.Reached.OfValue _ -> AbortSet.NONE;
             case Core.Reached.OfPublishedValue _ -> AbortSet.NONE;
-            // Minted by a Core-to-Core pass for a fold the backend lowers as a whole. The walk
-            // itself ends with nothing of its own; the write its step makes into the builder is
-            // where a collection grows, and a fold can write more than one element per step, so
-            // that write can reach the most elements a collection holds (`Capacity`).
-            case Core.Emitted emitted -> switch (emitted) {
-                case BUILD_LIST, BUILD_MAP -> AbortSet.NONE;
-                case GROW_LIST, PUT_MAP -> AbortSet.of(AbortKind.REQUIRED_FORM_HAS_NO_PLACE);
-            };
+            case Core.Emitted emitted -> ofAnEmittedCall(emitted);
         };
     }
 
@@ -280,6 +273,24 @@ public final class AbortSites {
     /** The same, of a unary minus. */
     public static AbortSet ofANegation(Core.Neg neg) {
         return negation(neg);
+    }
+
+    /** The same, of an {@code unreachable} the model wrote. */
+    public static AbortSet ofAnUnreachable(Core.Unreachable unreachable) {
+        return AbortSet.of(AbortKind.UNREACHABLE_REACHED);
+    }
+
+    /**
+     * The same, of a call a Core-to-Core pass minted for a fold the backend lowers as a whole. The
+     * walk itself ends with nothing of its own; the write its step makes into the builder is where
+     * a collection grows, and a fold can write more than one element per step, so that write can
+     * reach the most elements a collection holds ({@code Capacity}).
+     */
+    public static AbortSet ofAnEmittedCall(Core.Emitted emitted) {
+        return switch (emitted) {
+            case BUILD_LIST, BUILD_MAP -> AbortSet.NONE;
+            case GROW_LIST, PUT_MAP -> AbortSet.of(AbortKind.REQUIRED_FORM_HAS_NO_PLACE);
+        };
     }
 
     /**

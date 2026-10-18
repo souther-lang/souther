@@ -3062,9 +3062,22 @@ final class Pullback {
 
         /**
          * {@code form states 0}, over numbers of the arguments, read as a relation over the
-         * quantities a condition is read over.
+         * quantities a condition is read over — where every count read for it is a number
+         * ({@link #answering}), whichever way it is read: a count a case of a size is read at
+         * among them.
          */
         private Derivation compared(LawProposition.Compared<DeclaredArgument> compared) {
+            List<Derivation> outerAnswering = answering;
+            answering = new ArrayList<>();
+            try {
+                return whereItsCountsAnswer(comparedWhereItsCountsAre(compared));
+            } finally {
+                answering = outerAnswering;
+            }
+        }
+
+        private Derivation comparedWhereItsCountsAre(
+                LawProposition.Compared<DeclaredArgument> compared) {
             Derivation kept = whereAnOperationKeepsIt(compared);
             if (kept != null) {
                 return kept;
@@ -3119,23 +3132,19 @@ final class Pullback {
             }
             Map<Quantity.HowManyMeet, Derivation.AComparisonRead.Counted> outer = counting;
             List<Derivation.AComparisonRead.Counted> outerAlike = alike;
-            List<Derivation> outerAnswering = answering;
             counting = new LinkedHashMap<>();
             alike = new ArrayList<>();
-            answering = new ArrayList<>();
             try {
                 return switch (numbers(form)) {
                     case Numbers.NotRead(WhyUnread why) ->
                             leaf(new Derivation.Stopped(why, fixed(e, reads)), e, reads);
                     case Numbers.EachNumber(Map<LawNumber<?>, LinearForm<Quantity>> each) ->
-                            whereItsCountsAnswer(leaf(
-                                    Derivation.ALawComparison.of(compared, each, counting, alike),
-                                    e, reads));
+                            leaf(Derivation.ALawComparison.of(compared, each, counting, alike),
+                                    e, reads);
                 };
             } finally {
                 counting = outer;
                 alike = outerAlike;
-                answering = outerAnswering;
             }
         }
 
