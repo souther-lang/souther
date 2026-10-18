@@ -445,6 +445,38 @@ class ARelationIsSettledOnlyWhereEveryValueTheOthersMayHoldIsOnOneSideTest {
     }
 
     /**
+     * {@code 2x < y} with {@code x} above nought and {@code y} the finest step: the least decimal
+     * {@code x} takes is the step, twice it is past {@code y}, and the relation fails at every
+     * value. The numbers it holds at, between nought and half a step, are no decimal's, and no run
+     * of them is offered.
+     */
+    @Test
+    void aRunBetweenTwoDecimalsHoldsNoneWhenAnEndIsNoDecimal() {
+        NumericDomain.Bounds aboveNought = new NumericDomain.Bounds(
+                Endpoint.exclusive(Count.of(0)), Endpoint.inclusive(Count.of(1)));
+        NumericDomain.Bounds step = dense("1E-2147483647", true, "1E-2147483647", true);
+        Leaves.Settled settled = (Leaves.Settled) denseLeavesOf(
+                denseTerm("x", 2, aboveNought, aboveNought), denseTerm("y", -1, step, step),
+                Rel.LT);
+        assertEquals(List.of(), settled.lines());
+        assertEquals(List.of(false), settled.runs().stream().map(run -> run.holds()).distinct()
+                .toList());
+    }
+
+    /**
+     * {@code x + 3y < 0} with {@code x} from minus two to minus one and {@code y} from nought to
+     * one: it holds at {@code y == 0} and fails at {@code y == 1} whatever {@code x} is, so
+     * {@code x} is undivided. The values of {@code y} that are asked of lie from a third to two
+     * thirds, which no decimal writes; the decimals just outside them are what {@code y} takes.
+     */
+    @Test
+    void anEndNoDecimalWritesNeedsNoDecimalAtIt() {
+        NumericDomain.Bounds x = dense("-2", true, "-1", true);
+        NumericDomain.Bounds unit = dense("0", true, "1", true);
+        assertEquals(Leaves.Undivided.class, denseLeavesOf(x, unit, unit, 3, Rel.LT).getClass());
+    }
+
+    /**
      * A decimal of a half is a value a whole term cannot take, and a decimal of one is: with
      * {@code x} held to the one decimal and {@code y} whole from nought to one, {@code x == y}
      * is false at a half whatever {@code y} is, and at one it is left either way.

@@ -274,7 +274,8 @@ public final class WhatARelationLeavesUndivided {
                 new ExactCut(to.at(), !to.inclusive()));
         Lattice.Point before = Lattice.greatest(Granularity.DENSE,
                 new ExactCut(from.at(), !from.inclusive()));
-        return after == null || before == null || Lattice.compare(after, before) <= 0;
+        Integer placed = Lattice.compare(after, before);
+        return placed == null || placed <= 0;
     }
 
     /**
@@ -864,16 +865,31 @@ public final class WhatARelationLeavesUndivided {
             Rel asked = holds ? relation : relation.denied();
             for (OnTheDifference statement : settledBy(it.weight(), rest, asked)) {
                 Span settling = Span.where(statement);
-                if (settling == null || settling.isEmpty()) {
+                if (settling == null) {
+                    continue;
+                }
+                Span.Occupancy settles = settling.occupancy();
+                if (settles == Span.Occupancy.UNKNOWN) {
+                    return null;
+                }
+                if (settles == Span.Occupancy.EMPTY) {
                     continue;
                 }
                 List<Span> left = new ArrayList<>();
                 for (Span each : between) {
-                    left.addAll(each.without(settling));
+                    List<Span> remains = each.without(settling);
+                    if (remains == null) {
+                        return null;
+                    }
+                    left.addAll(remains);
                 }
                 between = left;
                 Span here = settling.meet(held);
-                if (!here.isEmpty()) {
+                Span.Occupancy within = here.occupancy();
+                if (within == Span.Occupancy.UNKNOWN) {
+                    return null;
+                }
+                if (within == Span.Occupancy.HOLDS) {
                     runs.add(new SettledRun(here.lower(), here.upper(), holds));
                 }
             }
@@ -1347,10 +1363,10 @@ public final class WhatARelationLeavesUndivided {
                     && atLeast == Reach.EVERY_VALUE && !isOneWholeValue(start, stop)) {
                 return false;
             }
-            return (realized.min() == null || start != null && reachesFrom(
-                    atLeast, start, cutOf(realized.min()), spacings))
-                    && (realized.max() == null || stop != null && reachesTo(
-                    atMost, stop, cutOf(realized.max()), spacings));
+            return (realized.min() == null
+                    || (start != null && reachesFrom(atLeast, start, cutOf(realized.min()), spacings)))
+                    && (realized.max() == null
+                    || (stop != null && reachesTo(atMost, stop, cutOf(realized.max()), spacings)));
         }
 
         /** Whether the run is the one value, and a whole number: all the whole term can be at. */
@@ -1373,8 +1389,8 @@ public final class WhatARelationLeavesUndivided {
             if (asked == null || takes == null) {
                 return false;
             }
-            int order = Lattice.compare(takes, asked);
-            return reach == Reach.STRICTLY_BEYOND ? order < 0 : order <= 0;
+            Integer order = Lattice.compare(takes, asked);
+            return order != null && (reach == Reach.STRICTLY_BEYOND ? order < 0 : order <= 0);
         }
 
         /** The same beside the greatest point of this run, at {@code stop}. */
@@ -1386,8 +1402,8 @@ public final class WhatARelationLeavesUndivided {
             if (asked == null || takes == null) {
                 return false;
             }
-            int order = Lattice.compare(takes, asked);
-            return reach == Reach.STRICTLY_BEYOND ? order > 0 : order >= 0;
+            Integer order = Lattice.compare(takes, asked);
+            return order != null && (reach == Reach.STRICTLY_BEYOND ? order > 0 : order >= 0);
         }
 
         /** An end of the term below the least value asked of is reached, and one at it only where
@@ -1724,41 +1740,62 @@ public final class WhatARelationLeavesUndivided {
                     ExactCut.tighterUpper(upper, other.upper));
         }
 
+        /** Whether a decimal lies in a run: it does, it does not, or that is not worked out. */
+        enum Occupancy { HOLDS, EMPTY, UNKNOWN }
+
         /**
-         * Whether no decimal lies in this run: the least one in it is past the greatest. Where an
-         * end is no decimal there is no telling by that, and the run is taken to hold one unless
-         * its ends are one number, which is a value only where a decimal is that number.
+         * Whether a decimal lies in this run: the least one in it is not past the greatest. Both
+         * are points of the grid even where an end is no decimal, and where the ends are too close
+         * for the places they are moved from to say which is first, it is not worked out, which
+         * nothing reads as either answer.
          */
-        boolean isEmpty() {
+        Occupancy occupancy() {
             if (lower == null || upper == null) {
-                return false;
+                return Occupancy.HOLDS;
             }
             int order = lower.at().compareTo(upper.at());
-            if (order != 0) {
-                Lattice.Point least = Lattice.least(Granularity.DENSE, lower);
-                Lattice.Point greatest = Lattice.greatest(Granularity.DENSE, upper);
-                return order > 0 || (least != null && greatest != null
-                        && Lattice.compare(least, greatest) > 0);
+            if (order > 0) {
+                return Occupancy.EMPTY;
             }
-            return !(lower.inclusive() && upper.inclusive()
-                    && Lattice.holds(Granularity.DENSE, lower.at()));
+            if (order == 0) {
+                return lower.inclusive() && upper.inclusive()
+                        && Lattice.holds(Granularity.DENSE, lower.at())
+                        ? Occupancy.HOLDS : Occupancy.EMPTY;
+            }
+            Integer placed = Lattice.compare(Lattice.least(Granularity.DENSE, lower),
+                    Lattice.greatest(Granularity.DENSE, upper));
+            if (placed == null) {
+                return Occupancy.UNKNOWN;
+            }
+            return placed > 0 ? Occupancy.EMPTY : Occupancy.HOLDS;
         }
 
-        /** What is left of this run with {@code taken} out of it: up to two runs. */
+        /**
+         * What is left of this run with {@code taken} out of it: up to two runs, or null where
+         * whether one of them holds a decimal is not worked out.
+         */
         List<Span> without(Span taken) {
             List<Span> out = new ArrayList<>();
             if (taken.lower != null) {
                 Span below = meet(new Span(null, new ExactCut(taken.lower.at(),
                         !taken.lower.inclusive())));
-                if (!below.isEmpty()) {
-                    out.add(below);
+                switch (below.occupancy()) {
+                    case HOLDS -> out.add(below);
+                    case UNKNOWN -> {
+                        return null;
+                    }
+                    case EMPTY -> { }
                 }
             }
             if (taken.upper != null) {
                 Span above = meet(new Span(new ExactCut(taken.upper.at(),
                         !taken.upper.inclusive()), null));
-                if (!above.isEmpty()) {
-                    out.add(above);
+                switch (above.occupancy()) {
+                    case HOLDS -> out.add(above);
+                    case UNKNOWN -> {
+                        return null;
+                    }
+                    case EMPTY -> { }
                 }
             }
             return out;
