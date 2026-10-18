@@ -1231,6 +1231,18 @@ public final class InputReads {
             Objects.requireNonNull(lookup, "a name is found by some lookup");
             Objects.requireNonNull(arm, "under some arm of the match on it");
         }
+
+        /** The same lookup and the same arm themselves: an arm is told from another by being
+         *  that one, and comparing the trees under them would cost what they hold. */
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof LookupOpened that && lookup == that.lookup && arm == that.arm;
+        }
+
+        @Override
+        public int hashCode() {
+            return System.identityHashCode(arm);
+        }
     }
 
     /** What the name {@code binding} is the value of, where an arm bound it to what a lookup in a

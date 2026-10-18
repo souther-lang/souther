@@ -361,6 +361,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * way. An arm of any other match, or of another lookup, is not.
      */
     private boolean declinedOnlyAKeyFound(Reachability.Reaching way, InputReading read) {
+        if (way.declined().isEmpty()) {
+            return true;
+        }
         ArmsMet arms = ArmsMet.of(read);
         return way.declined().stream().allMatch(declined -> sides.stream().anyMatch(side ->
                 side.kept() != null && side.kept().seed()

@@ -5037,21 +5037,20 @@ final class Pullback {
                 if (!(under instanceof Core.Read name)) {
                     return null;
                 }
-                // What a fold filing an end of each key's numbers finds under the key is the end
-                // of the earlier elements of that key, however the name is given.
-                if (steps.isEmpty() && !at.turnsOnAnApplication(name, read.rules().symbols(),
-                        read.rules().newtypes())) {
-                    Optional<Quantity.KeptSoFar> underAKey = keptUnderAKey(name, at);
-                    if (underAKey.isPresent()) {
-                        return LinearForm.atom(new Quantity.OfABinding(name.binding(), steps,
-                                node.type(), Optional.empty(), underAKey));
-                    }
-                }
                 // A binding whose value turns on which application this is holds another value on
                 // the next, and its name would name them alike.
                 if (at.turnsOnAnApplication(name, read.rules().symbols(),
                         read.rules().newtypes())) {
                     return null;
+                }
+                // What a fold filing an end of each key's numbers finds under the key is the end
+                // of the earlier elements of that key, however the name is given.
+                if (steps.isEmpty()) {
+                    Optional<Quantity.KeptSoFar> underAKey = keptUnderAKey(name, at);
+                    if (underAKey.isPresent()) {
+                        return LinearForm.atom(new Quantity.OfABinding(name.binding(), steps,
+                                node.type(), Optional.empty(), underAKey));
+                    }
                 }
                 return switch (at.meaningOf(name, read.rules().symbols(), read.rules().newtypes())) {
                     case ReadMeaning.Element _, ReadMeaning.OneOf _, ReadMeaning.NoneHeld _,
