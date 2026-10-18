@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.core.Core;
+import souther.compiler.semantics.Combinator;
 import souther.compiler.types.BindingId;
 
 /**
@@ -14,8 +15,11 @@ import souther.compiler.types.BindingId;
  *
  * @param parameter the binding the closure was written about, which the body reads the element by
  * @param body      what the closure answered
+ * @param position  the binding the closure is handed the element's position on, counted from nought
+ *                  in the order the walked container holds its elements — or null where the
+ *                  operation is shown to hand it none ({@link Combinator#positionParam})
  */
-public record ElementAnswer(BindingId parameter, Core body) {
+public record ElementAnswer(BindingId parameter, Core body, BindingId position) {
 
     public ElementAnswer {
         if (parameter == null || body == null) {

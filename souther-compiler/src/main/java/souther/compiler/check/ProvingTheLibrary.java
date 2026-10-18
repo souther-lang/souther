@@ -117,7 +117,7 @@ final class ProvingTheLibrary implements LibraryProofs {
         Set<ValueName.Stdlib.Operation> walks = new LinkedHashSet<>(WalksFromASeed.of(stdlib,
                 AppliedClosures.of(stdlib, Combinators.kernelsIn(stdlib),
                         operation -> Combinators.listing(stdlib, facts, operation),
-                        Combinators::positionsOf)).keySet());
+                        Combinators.signaturesOf(stdlib))).keySet());
         walks.remove(stdlib.walk().operation());
         this.prover = new LibraryProver(library, walks);
         this.elements = new WhereTheElementsCameFrom(library, walks);

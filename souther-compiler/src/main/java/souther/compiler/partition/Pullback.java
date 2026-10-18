@@ -4171,7 +4171,8 @@ final class Pullback {
         if (wayIn.isPresent()) {
             return null;
         }
-        return overQuantities(left, right, comparison.claim().statedRelation());
+        return overQuantities(ASide.of(left), ASide.of(right),
+                comparison.claim().statedRelation());
     }
 
     /**
@@ -4183,7 +4184,7 @@ final class Pullback {
      * turns on the names in force where it was read, so two forms are put together wherever each
      * was read.
      */
-    private Derivation overQuantities(Denotation left, Denotation right, Rel states) {
+    private Derivation overQuantities(ASide left, ASide right, Rel states) {
         Map<Quantity.HowManyMeet, Derivation.AComparisonRead.Counted> outer = counting;
         List<Derivation.AComparisonRead.Counted> outerAlike = alike;
         List<Derivation> outerAnswering = answering;
@@ -4249,11 +4250,42 @@ final class Pullback {
      * sum beside such an answer is a line on it, which nothing here draws, so the side stays where
      * the reading stopped.
      */
-    private Derivation overQuantitiesCounting(Denotation left, Denotation right, Rel states) {
+    private Derivation overQuantitiesCounting(ASide left, ASide right, Rel states) {
         List<LinearForm<Quantity>> sides = new ArrayList<>();
         List<Denotation> calls = new ArrayList<>();
         Derivation unread = null;
-        for (Denotation side : List.of(left, right)) {
+        for (ASide each : List.of(left, right)) {
+            Denotation side = each.whole();
+            // A form of several values, or a constant: each value read as itself and none as the
+            // whole of a side, so no product of two is read in it and no value is taken for what
+            // an operation answers.
+            if (side == null && each instanceof ASide.AForm(LinearForm<Core> written,
+                                                            InputReads at)) {
+                LinearForm<Quantity> form = LinearForm.constant(written.constant());
+                for (Map.Entry<Core, ExactRatio> number : written.coefs().entrySet()) {
+                    switch (AffineForms.outcome(number.getKey(), at, quantities())) {
+                        case AffineForms.Outcome.Composed<Quantity, InputReads>(var read) -> {
+                            LinearForm<Quantity> before = form;
+                            switch (read.times(number.getValue()).flatMap(before::plus)) {
+                                case ExactAnswer.Held<LinearForm<Quantity>>(var held) -> form = held;
+                                case ExactAnswer.Unheld<LinearForm<Quantity>>(UnheldNumber why) -> {
+                                    return new Derivation.Stopped(
+                                            new WhyUnread.ANumberNotHeld(why), false);
+                                }
+                            }
+                        }
+                        case AffineForms.Outcome.StoppedAt<Quantity, InputReads> stopped -> {
+                            Derivation stop = new Derivation.Stopped(elementsMet.crowded()
+                                    ? new WhyUnread.TwoElementsOfOneContainer()
+                                    : noFormOf(stopped), false);
+                            return unread != null ? unread : stop;
+                        }
+                    }
+                }
+                sides.add(form);
+                calls.add(null);
+                continue;
+            }
             sideAsWritten = Core.withoutStanding(side.at().standing(side.value(),
                     read.rules().symbols(), read.rules().newtypes()).value());
             AffineForms.Outcome<Quantity, InputReads> outcome;
@@ -5172,7 +5204,7 @@ final class Pullback {
                 }
                 List<Derivation.MatchArms.Arm> each = new ArrayList<>();
                 for (Choice.ADefinitionCase one : cases) {
-                    each.add(new Derivation.MatchArms.Arm(reachedIn(one, where),
+                    each.add(new Derivation.MatchArms.Arm(reachedIn(one, where, at),
                             again.apply(on -> on.takingAForm(call, one.answers(),
                                     cases.size()))));
                 }
@@ -5184,12 +5216,25 @@ final class Pullback {
     /**
      * The values a call was given standing as {@code one}, a case of the definition the library
      * writes its operation in, says they do for it to be reached — each relation read as the
-     * arithmetic over those values it is, where the call stands.
+     * comparison it is, where the call stands, as one the source wrote is.
      */
-    private Derivation reachedIn(Choice.ADefinitionCase one, InputReads where) {
-        Derivation reached = null;
+    private Derivation reachedIn(Choice.ADefinitionCase one, InputReads where, Denotation at) {
+        List<Derivation> each = new ArrayList<>();
         for (Choice.FormsStand stands : one.given()) {
-            Derivation relation = overTheValues(stands, where);
+            each.add(comparedCase(new ASide.AForm(stands.left(), where),
+                    new ASide.AForm(stands.right(), where), stands.rel(), at));
+        }
+        return allOf(each, one);
+    }
+
+    /**
+     * The relations a case of a library definition is reached under, all of them holding.
+     *
+     * @param theCase the case, which a library writing none is said of
+     */
+    private static Derivation allOf(List<Derivation> relations, Object theCase) {
+        Derivation reached = null;
+        for (Derivation relation : relations) {
             reached = reached == null ? relation
                     : new Derivation.Joined(ConditionJoin.BOTH, reached, relation);
         }
@@ -5197,44 +5242,9 @@ final class Pullback {
             // A case reached whatever the arguments are is no case of a choice, and the cases after
             // it would never be reached; the library writes none.
             throw new IllegalStateException("a case of a library operation is reached by no"
-                    + " standing of its arguments: " + one);
+                    + " standing of its arguments: " + theCase);
         }
         return reached;
-    }
-
-    /** {@code stands}, over the numbers the values a call was given read as where it stands. */
-    private Derivation overTheValues(Choice.FormsStand stands, InputReads where) {
-        LinearForm<Core> apart;
-        switch (stands.left().minus(stands.right())) {
-            case ExactAnswer.Held<LinearForm<Core>>(var held) -> apart = held;
-            case ExactAnswer.Unheld<LinearForm<Core>>(UnheldNumber why) -> {
-                return new Derivation.Stopped(new WhyUnread.ANumberNotHeld(why), false);
-            }
-        }
-        LinearForm<Quantity> form = LinearForm.constant(apart.constant());
-        for (Map.Entry<Core, ExactRatio> each : apart.coefs().entrySet()) {
-            switch (AffineForms.outcome(each.getKey(), where, quantities())) {
-                case AffineForms.Outcome.Composed<Quantity, InputReads>(var argument) -> {
-                    LinearForm<Quantity> before = form;
-                    switch (argument.times(each.getValue()).flatMap(before::plus)) {
-                        case ExactAnswer.Held<LinearForm<Quantity>>(var held) -> form = held;
-                        case ExactAnswer.Unheld<LinearForm<Quantity>>(UnheldNumber why) -> {
-                            return new Derivation.Stopped(new WhyUnread.ANumberNotHeld(why),
-                                    false);
-                        }
-                    }
-                }
-                case AffineForms.Outcome.StoppedAt<Quantity, InputReads> stopped -> {
-                    return new Derivation.Stopped(noFormOf(stopped), false);
-                }
-            }
-        }
-        if (form.coefs().isEmpty()) {
-            return new Derivation.ACutThatCutsNothing(
-                    stands.rel().holds(form.constant().signum()), Set.of());
-        }
-        return aRelation(Derivation.ComparisonReading.OVER_BOUND_VALUES, form, stands.rel(),
-                Derivation.AComparisonRead.Facing.AS_WRITTEN);
     }
 
     /**
@@ -6328,47 +6338,139 @@ final class Pullback {
      */
     private Derivation comparedCase(Denotation left, Denotation right, Rel states,
                                     Denotation at) {
+        return comparedCase(ASide.of(left), ASide.of(right), states, at);
+    }
+
+    /**
+     * The same, of two sides each a form of values where it stands: a written side is the one
+     * value it is, and a case of a library definition stands its arguments in forms of them.
+     *
+     * <p>What a whole side is asked — whether it is chosen by cases, whether how many it holds is —
+     * is asked only of a side that is one value. A value inside a form is gone into as a value
+     * inside a written side is ({@link #aWayIn}).
+     */
+    private Derivation comparedCase(ASide left, ASide right, Rel states, Denotation at) {
         // An if on either side is gone into as any choice a comparison is read through is
         // ({@link #goingIn}): the value its condition stops at first, and only the arms a run
         // takes, each counted where it is read.
-        for (Denotation side : List.of(left, right)) {
-            if (chosenAt(side) instanceof Denotation chosen
+        for (ASide side : List.of(left, right)) {
+            if (side.whole() instanceof Denotation one
+                    && chosenAt(one) instanceof Denotation chosen
                     && Core.withoutStanding(chosen.value()) instanceof Core.If) {
-                return goingIn(new Inside.AChoice(side), side.at(), at, false,
-                        taking -> comparedCase(
-                                new Denotation(left.value(), taking.apply(left.at())),
-                                new Denotation(right.value(), taking.apply(right.at())),
-                                states, at));
+                return goingIn(new Inside.AChoice(one), one.at(), at, false,
+                        taking -> comparedCase(left.in(taking.apply(left.at())),
+                                right.in(taking.apply(right.at())), states, at));
             }
         }
-        Derivation byLeft = byItsCases(left, at,
-                side -> comparedCase(side, right, states, at));
+        Derivation byLeft = left.whole() == null ? null : byItsCases(left.whole(), at,
+                side -> comparedCase(ASide.of(side), right, states, at));
         if (byLeft != null) {
             return byLeft;
         }
-        Derivation byRight = byItsCases(right, at,
-                side -> comparedCase(left, side, states, at));
+        Derivation byRight = right.whole() == null ? null : byItsCases(right.whole(), at,
+                side -> comparedCase(left, ASide.of(side), states, at));
         if (byRight != null) {
             return byRight;
         }
         // A choice inside a side rather than the whole of it is split on as well, and a call of a
         // behavior entered, both sides read there ({@link #throughWhatItStopsAt}).
-        Inside inside = aWayIn(List.of(left, right));
+        List<Denotation> numbers = new ArrayList<>(left.numbers());
+        numbers.addAll(right.numbers());
+        Inside inside = aWayIn(numbers);
         if (inside != null) {
             return goingIn(inside, left.at(), at, false, taking -> comparedCase(
-                    new Denotation(left.value(), taking.apply(left.at())),
-                    new Denotation(right.value(), taking.apply(right.at())), states, at));
+                    left.in(taking.apply(left.at())), right.in(taking.apply(right.at())),
+                    states, at));
         }
         // And how many an operation answers, where which number that is turns on how its
         // arguments stand.
-        SizedByCases sized = measuredByCases(left);
-        if (sized == null) {
-            sized = measuredByCases(right);
+        SizedByCases sized = left.whole() == null ? null : measuredByCases(left.whole());
+        if (sized == null && right.whole() != null) {
+            sized = measuredByCases(right.whole());
         }
         if (sized != null) {
             return inEachCaseOf(sized, at, () -> comparedCase(left, right, states, at));
         }
         return partOf(at, overQuantities(left, right, states));
+    }
+
+    /**
+     * One side of a comparison: a value where it stands, or a form of values where they stand.
+     *
+     * <p>A written side is the one value it is, held as that and not as a form of it, which would
+     * key the form by the whole expression. A case of a library definition stands its arguments in
+     * forms of them.
+     */
+    private sealed interface ASide {
+
+        /** The written side {@code value} is. */
+        static ASide of(Denotation value) {
+            return new One(value);
+        }
+
+        /** Where the values stand. */
+        InputReads at();
+
+        /** The side as the one value it is, weighed by one and moved by nothing — or null where
+         *  it is a constant or a form of several. */
+        Denotation whole();
+
+        /** Each value the side weighs, where it stands. */
+        List<Denotation> numbers();
+
+        /** The same side, standing where {@code other} puts it. */
+        ASide in(InputReads other);
+
+        /** One value. */
+        record One(Denotation value) implements ASide {
+
+            @Override
+            public InputReads at() {
+                return value.at();
+            }
+
+            @Override
+            public Denotation whole() {
+                return value;
+            }
+
+            @Override
+            public List<Denotation> numbers() {
+                return List.of(value);
+            }
+
+            @Override
+            public ASide in(InputReads other) {
+                return new One(new Denotation(value.value(), other));
+            }
+        }
+
+        /**
+         * A form of values.
+         *
+         * @param form the values and the weight of each, and what is added to them
+         * @param at   where the values stand
+         */
+        record AForm(LinearForm<Core> form, InputReads at) implements ASide {
+
+            @Override
+            public Denotation whole() {
+                return form.constant().signum() == 0 && form.coefs().size() == 1
+                        && ExactRatio.ONE.equals(form.coefs().values().iterator().next())
+                        ? new Denotation(form.coefs().keySet().iterator().next(), at) : null;
+            }
+
+            @Override
+            public List<Denotation> numbers() {
+                return form.coefs().keySet().stream().map(each -> new Denotation(each, at))
+                        .toList();
+            }
+
+            @Override
+            public ASide in(InputReads other) {
+                return new AForm(form, other);
+            }
+        }
     }
 
     /**
@@ -6646,20 +6748,12 @@ final class Pullback {
      * comparison it is, where the call stands.
      */
     private Derivation howTheArgumentsStand(Choice.Arm arm, InputReads where, Denotation at) {
-        Derivation reached = null;
+        List<Derivation> each = new ArrayList<>();
         for (Choice.ArgumentRelation stands : relationsDeciding(arm)) {
-            Derivation one = comparedCase(new Denotation(stands.left(), where),
-                    new Denotation(stands.right(), where), stands.rel(), at);
-            reached = reached == null ? one
-                    : new Derivation.Joined(ConditionJoin.BOTH, reached, one);
+            each.add(comparedCase(new Denotation(stands.left(), where),
+                    new Denotation(stands.right(), where), stands.rel(), at));
         }
-        if (reached == null) {
-            // A case reached whatever the arguments are is no case of a choice, and the cases after
-            // it would never be reached; the library writes none.
-            throw new IllegalStateException("a case of a library operation is reached by no"
-                    + " standing of its arguments: " + arm);
-        }
-        return reached;
+        return allOf(each, arm);
     }
 
     /**

@@ -235,7 +235,7 @@ public final class InputNumber {
      * <p>Null wherever any of the three is missing, which is a rule this compiler did not read
      * rather than a rule the model does not state — and is reported as one. Null too where the three
      * are in hand and what they come to is not one run
-     * ({@link RunSource#overTheOccurrencesAt}), which is the same answer for the same reason: a
+     * ({@link RunSource#overEveryOccurrenceAt}), which is the same answer for the same reason: a
      * reading short rather than a line somewhere it does not go.
      */
     private static NumericTerm overARun(NumericMeasures.Measured measured, InputDomain inputs,
@@ -259,9 +259,11 @@ public final class InputNumber {
             return null;
         }
         ElementProjection answered = where.projectionAt(element);
-        // Where the elements stand, and nothing where they stand nowhere: a run is over the values
-        // at a position, so a container this reading could not place leaves no run to take.
-        TermPath at = switch (where.elementAt(element, source.newtypes())) {
+        // Where the elements stand, every one of them once, and nothing where they stand nowhere:
+        // a run is over the values at a position, so a container this reading could not place
+        // leaves no run to take — and a walk over some of them, as one after a filter is, is no
+        // run over the values standing there.
+        TermPath at = switch (where.everyElementAt(element, source.newtypes())) {
             case PathResolution.At(var stands) -> stands;
             case PathResolution.NotAPosition _ -> null;
             // A run is over the values at one position, and a walk whose elements come from more
@@ -292,20 +294,20 @@ public final class InputNumber {
             answered = placeStanding(computed, where.answerAt(element), at, inputs, source);
         }
         if (answered == null) {
-            return overWhatWasComputed(measured, where.answerAt(element), computed, at, source);
+            // A number that turns on where each element stands is a number of them in the order
+            // the row writes them, which is asked as well and only then.
+            RunSource.InTheOrderWritten order = computed.readsThePosition()
+                    && where.inTheOrderWrittenAt(element, source.newtypes())
+                            instanceof PathResolution.At(TermPath inOrder) && inOrder.equals(at)
+                    ? new RunSource.InTheOrderWritten(at) : null;
+            return overWhatWasComputed(measured, where.answerAt(element), computed, at, order,
+                    source);
         }
         TermPath under = answered.from(at);
-        // Whether what is read from there is one run is the run's own question, and it is asked
-        // rather than assumed: a walk over a container inside another container is over some of the
-        // occurrences of its path, and a term made of it would state of every one of them what the
-        // model says of those.
-        RunSource over = RunSource.overTheOccurrencesAt(under);
-        // A walk inside a container of containers is over some of the occurrences of its path,
-        // unless what it walked is every one of them: the lists of an outer list put end to end.
-        if (over == null && where.everyElementAt(element, source.newtypes())
-                instanceof PathResolution.At(TermPath every) && every.equals(at)) {
-            over = RunSource.overEveryOccurrenceAt(under);
-        }
+        // Every occurrence of the elements' position, so every occurrence of the place in them:
+        // one run where one container holds them, and the lists of an outer list put end to end
+        // where several do.
+        RunSource over = RunSource.overEveryOccurrenceAt(under);
         if (over == null) {
             return null;
         }
@@ -366,10 +368,10 @@ public final class InputNumber {
         ElementValue.ElementsAt elements =
                 new ElementValue.ElementsAt(at, container.at().declared());
         ElementValue.Added step = ElementValue.addedTo(
-                new ElementAnswer(element, walk.step().body()), walk.accumulator().binding(), held,
-                source, elements);
+                new ElementAnswer(element, walk.step().body(), null), walk.accumulator().binding(),
+                held, source, elements);
         ElementValue.Affine seed = affine(ElementValue.read(
-                new ElementAnswer(element, walk.seed()), held, source, elements));
+                new ElementAnswer(element, walk.seed(), null), held, source, elements));
         if (step == null || seed == null || !seed.form().coefs().isEmpty()) {
             return null;
         }
@@ -410,7 +412,7 @@ public final class InputNumber {
                             source.inners(), source.symbols());
         } else {
             Type each = walk.step().body().type();
-            RunSource over = RunSource.computedOverTheElementsAt(at, adds, each);
+            RunSource over = RunSource.computedOverTheElementsAt(at, adds, each, null);
             total = over == null ? null
                     : NumericTerm.TakenOver.of(SUM, over, each, source.inners(), source.symbols());
         }
@@ -496,9 +498,10 @@ public final class InputNumber {
      */
     private static NumericTerm overWhatWasComputed(NumericMeasures.Measured measured,
                                                    ElementAnswer closure, ElementValue computed,
-                                                   TermPath at, RuleReadingSource source) {
+                                                   TermPath at, RunSource.InTheOrderWritten order,
+                                                   RuleReadingSource source) {
         Type each = closure.body().type();
-        RunSource over = RunSource.computedOverTheElementsAt(at, computed, each);
+        RunSource over = RunSource.computedOverTheElementsAt(at, computed, each, order);
         return over == null ? null
                 : NumericTerm.TakenOver.of(measured.operation(), over, each, source.inners(),
                         source.symbols());

@@ -198,8 +198,9 @@ class HowFarAnOperationAppliesItsClosureIsWhatTheLibraryComputesTest {
                 """.formatted(name, String.join(", ", arguments));
     }
 
-    /** Whether running {@code module} aborted. */
-    private static boolean aborts(String module) throws Exception {
+    /** Whether running {@code module}, which takes {@code demo.In} and answers {@code demo.Out},
+     *  aborted. */
+    static boolean aborts(String module) throws Exception {
         Map<String, ClassFileImage> classes = Compiler.compile(module);
         ClassLoader loader = new ClassLoader(
                 HowFarAnOperationAppliesItsClosureIsWhatTheLibraryComputesTest.class

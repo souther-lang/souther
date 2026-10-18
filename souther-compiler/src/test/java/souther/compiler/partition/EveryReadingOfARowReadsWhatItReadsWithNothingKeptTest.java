@@ -129,7 +129,7 @@ class EveryReadingOfARowReadsWhatItReadsWithNothingKeptTest {
                 ValueName.Stdlib.operation("List", "sum"),
                 new RunSource.ComputedOccurrences(ORDERS.element(), new ElementValue.Affine(
                         new LinearForm<>(ExactRatio.ONE, Map.of(rank, ExactRatio.of(2)))),
-                        Type.Prim.INT),
+                        Type.Prim.INT, null),
                 Type.Prim.INT, ScopedDeclarations.wrapsOf(symbols), symbols);
         on.put(computed, TermOrdersFixtures.computed(computed, WHOLE, WHOLE,
                 Map.of(rank, WHOLE)));

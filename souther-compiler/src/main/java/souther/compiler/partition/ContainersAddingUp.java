@@ -580,7 +580,10 @@ final class ContainersAddingUp {
                         }
                     }
                 }
-                case ElementValue.Choose _, ElementValue.SumOfChoices _ -> { }
+                // A weight chosen by the position is one per element and not one for the run, so
+                // the fields adding up to a total are no one quotient of it.
+                case ElementValue.Choose _, ElementValue.ByPosition _,
+                     ElementValue.SumOfChoices _ -> { }
             }
             return List.copyOf(out);
         }

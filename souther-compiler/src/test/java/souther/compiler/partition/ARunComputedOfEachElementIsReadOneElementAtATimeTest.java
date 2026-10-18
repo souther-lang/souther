@@ -64,7 +64,7 @@ class ARunComputedOfEachElementIsReadOneElementAtATimeTest {
 
     private static NumericTerm.TakenOver total(ElementValue computation) {
         return NumericTerm.TakenOver.of(ValueName.Stdlib.operation("List", "sum"),
-                new RunSource.ComputedOccurrences(ELEMENTS, computation, Type.Prim.INT),
+                new RunSource.ComputedOccurrences(ELEMENTS, computation, Type.Prim.INT, null),
                 Type.Prim.INT, NewtypeInners.NONE,
                 Symbols.none(souther.compiler.DefaultStdlib.get()));
     }

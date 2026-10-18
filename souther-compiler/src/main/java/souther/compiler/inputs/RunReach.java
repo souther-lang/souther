@@ -215,6 +215,16 @@ final class RunReach {
                         ofWhatWasComputed(choice.otherwise(), elements, orders, typeAt, reading);
                 return yes == null || no == null ? null : NumericDomain.Bounds.spanning(yes, no);
             }
+            // Either answer at any element: which positions a run has, and so which answers it
+            // takes, is the row's, and a range that assumed some of them would be narrower than
+            // a row of other positions reaches.
+            case ElementValue.ByPosition choice -> {
+                NumericDomain.Bounds yes =
+                        ofWhatWasComputed(choice.whenHolds(), elements, orders, typeAt, reading);
+                NumericDomain.Bounds no =
+                        ofWhatWasComputed(choice.otherwise(), elements, orders, typeAt, reading);
+                return yes == null || no == null ? null : NumericDomain.Bounds.spanning(yes, no);
+            }
             case ElementValue.OfItsCase choice -> {
                 NumericDomain.Bounds every = choice.rest() == null ? null
                         : ofWhatWasComputed(choice.rest(), elements, orders, typeAt, reading);

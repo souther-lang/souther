@@ -105,6 +105,19 @@ public final class AffineForms {
         }
 
         /**
+         * The product of two forms each with an atom in it, which the arithmetic composes none of,
+         * where what the caller's atoms are makes it one — or null where they do not, and the
+         * product is the operation no form says.
+         *
+         * <p>Asked only after the arithmetic's own rule has refused, of the two forms it read: a
+         * product with a constant on either side is the arithmetic's, and a caller never says it
+         * again.
+         */
+        default LinearForm<A> productOf(LinearForm<A> left, LinearForm<A> right) {
+            return null;
+        }
+
+        /**
          * Whether a field access is a newtype's value read off something that is not a place.
          *
          * <p>What it wraps is what it is, so such a read is the target itself. Whether the target is
@@ -577,6 +590,11 @@ public final class AffineForms {
         }
 
         @Override
+        public LinearForm<A> productOf(LinearForm<A> left, LinearForm<A> right) {
+            return of.productOf(left, right);
+        }
+
+        @Override
         public boolean readsThrough(Core.FieldAccess fa, E at) {
             return of.readsThrough(fa, at);
         }
@@ -637,6 +655,18 @@ public final class AffineForms {
         };
     }
 
+    /** The product of two forms by the arithmetic's rule, and where that rule finds no form, by
+     *  what the caller's atoms say of it. */
+    private static <A, E> Terms.Operated<A> productAsRead(LinearForm<A> left, LinearForm<A> right,
+                                                          Reading<A, E> reading) {
+        Terms.Operated<A> product = Terms.product(left, right);
+        if (!(product instanceof Terms.Operated.NotLinear<A>)) {
+            return product;
+        }
+        LinearForm<A> asked = reading.productOf(left, right);
+        return asked == null ? product : new Terms.Operated.Form<>(asked);
+    }
+
     /** Whether {@code call} is a floor remainder whose divisor is a form with a number of the
      *  input in it. */
     private static <A, E> boolean remainderByAValue(Core.PreservedCall call, E at,
@@ -684,11 +714,11 @@ public final class AffineForms {
                             (left, right) -> Terms.sum(left, right, true), stopped);
             // A scalar multiply by a constant (`Amount * 2`) is linear and a variable factor is
             // not, so a product of two atoms comes back here as one value rather than as arithmetic
-            // over two.
+            // over two — unless the caller's atoms make it one (`Reading.productOf`).
             case Core.Binary b when b.op() == BinOp.MUL ->
                     operated(e, at, formOf(b.left(), at, reading, following, stopped),
-                            formOf(b.right(), at, reading, following, stopped), Terms::product,
-                            stopped);
+                            formOf(b.right(), at, reading, following, stopped),
+                            (left, right) -> productAsRead(left, right, reading), stopped);
             // And a quotient by a constant is that scalar multiply by the reciprocal. The quotient
             // is exact, so a third is what `x / 3` weighs its position by and not the nearest number
             // either operand's type writes — which is why this is arithmetic over a position at all
