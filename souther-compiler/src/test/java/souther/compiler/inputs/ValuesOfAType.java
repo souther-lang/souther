@@ -219,32 +219,33 @@ final class ValuesOfAType {
 
     /**
      * {@code value} at component {@code at}, beside the first values of the others the constructor
-     * accepts, counting through them the way an odometer does.
+     * accepts: the first value of each, and then each other component moved off its first value
+     * alone.
+     *
+     * <p>What is being asked is whether the constructor takes this value, and what it ties a value
+     * to is one other component — an absent owner beside the origin that means one. A value it
+     * refuses whatever stands beside it, a null where a component is never absent, is refused at
+     * every combination, and counting through all of them as an odometer does asked one record of
+     * four components the same question the better part of a million times. A value a constructor
+     * takes only beside two others moved at once is not made here, and a component that leaves
+     * with no other value is one no two values differ in alone, which {@link #ofARecord} refuses
+     * rather than passes over.
      */
     private static Optional<Object> firstMadeWith(Constructor<?> canonical,
                                                   List<List<Object>> offered, int at, Object value) {
-        int[] index = new int[offered.size()];
-        while (true) {
-            Object[] arguments = new Object[offered.size()];
-            for (int i = 0; i < arguments.length; i++) {
-                arguments[i] = i == at ? value : offered.get(i).get(index[i]);
-            }
-            Optional<Object> made = made(canonical, arguments);
-            if (made.isPresent()) {
-                return made;
-            }
-            int turning = offered.size() - 1;
-            while (turning >= 0) {
-                if (turning != at && ++index[turning] < offered.get(turning).size()) {
-                    break;
-                }
-                index[turning] = 0;
-                turning--;
-            }
-            if (turning < 0) {
-                return Optional.empty();
+        Object[] first = new Object[offered.size()];
+        for (int i = 0; i < first.length; i++) {
+            first[i] = i == at ? value : offered.get(i).get(0);
+        }
+        Optional<Object> made = made(canonical, first);
+        for (int one = 0; one < first.length && made.isEmpty(); one++) {
+            for (int a = 1; one != at && a < offered.get(one).size() && made.isEmpty(); a++) {
+                Object[] moved = first.clone();
+                moved[one] = offered.get(one).get(a);
+                made = made(canonical, moved);
             }
         }
+        return made;
     }
 
     /** What the constructor makes of {@code arguments}, or nothing where it refuses them. */
