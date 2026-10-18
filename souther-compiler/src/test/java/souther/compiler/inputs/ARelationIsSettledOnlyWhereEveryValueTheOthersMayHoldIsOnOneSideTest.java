@@ -41,7 +41,13 @@ class ARelationIsSettledOnlyWhereEveryValueTheOthersMayHoldIsOnOneSideTest {
                                                                  NumericDomain.Bounds holds,
                                                                  NumericDomain.Bounds realizes) {
         return new WhatARelationLeavesUndivided.Term<>(List.of(place), ExactRatio.of(weight), holds,
-                realizes, null, true);
+                realizes, null, true, Granularity.DISCRETE);
+    }
+
+    private static WhatARelationLeavesUndivided.Term<String> denseTerm(
+            String place, long weight, NumericDomain.Bounds holds, NumericDomain.Bounds realizes) {
+        return new WhatARelationLeavesUndivided.Term<>(List.of(place), ExactRatio.of(weight),
+                holds, realizes, null, true, Granularity.DENSE);
     }
 
     private static Leaves leavesOf(List<WhatARelationLeavesUndivided.Term<String>> terms, int at,
@@ -283,10 +289,15 @@ class ARelationIsSettledOnlyWhereEveryValueTheOthersMayHoldIsOnOneSideTest {
     private static Leaves denseLeavesOf(NumericDomain.Bounds it, NumericDomain.Bounds other,
                                         NumericDomain.Bounds reached, long weight,
                                         Rel relation) {
-        return WhatARelationLeavesUndivided.leavesOf(
-                List.of(term("x", 1, it, it), term("y", weight, other, reached)), 0,
-                ExactRatio.ZERO, relation, String::equals, (one, two) -> true,
-                Granularity.DENSE, null);
+        return denseLeavesOf(denseTerm("x", 1, it, it), denseTerm("y", weight, other, reached),
+                relation);
+    }
+
+    private static Leaves denseLeavesOf(WhatARelationLeavesUndivided.Term<String> x,
+                                        WhatARelationLeavesUndivided.Term<String> y,
+                                        Rel relation) {
+        return WhatARelationLeavesUndivided.leavesOf(List.of(x, y), 0, ExactRatio.ZERO, relation,
+                String::equals, (one, two) -> true, Granularity.DENSE, null);
     }
 
     /**
@@ -303,13 +314,43 @@ class ARelationIsSettledOnlyWhereEveryValueTheOthersMayHoldIsOnOneSideTest {
         assertNull(denseLeavesOf(unit, unit, dense("0.5", true, "1", true), -1, Rel.GT));
     }
 
-    /** {@code x + y < 0} with {@code y} between nought and one, both left out, holds at minus one
-     *  and fails at nought; the values between are asked of a {@code y} that takes no end, which
-     *  is shown to reach none of them, so nothing is shown of {@code x}. */
+    /**
+     * {@code x + y < 0} with {@code y} between nought and one, both left out, holds at minus one
+     * and fails at nought. Between them {@code y} is on both sides of {@code -x} whatever {@code x}
+     * is, though it takes neither end, because a dense term takes values as near an end as asked
+     * of.
+     */
     @Test
-    void anOpenRunTheOtherTermStopsAtIsNotTakenAsOneItReachesTheEndsOf() {
+    void aDenseTermTakingAnOpenRunReachesTheValuesInsideItFromBothSides() {
         NumericDomain.Bounds open = dense("0", false, "1", false);
-        assertNull(denseLeavesOf(NumericDomain.Bounds.OPEN, open, open, 1, Rel.LT));
+        Leaves leaves = denseLeavesOf(NumericDomain.Bounds.OPEN, open, open, 1, Rel.LT);
+        assertEquals(List.of(line(Rel.LE, -1), line(Rel.GE, 0)),
+                ((Leaves.Settled) leaves).lines());
+    }
+
+    /** A term that is not dense has no value between an end it leaves out and the next, so the
+     *  same open run is not one it reaches the values inside from both sides. */
+    @Test
+    void aTermThatIsNotDenseIsNotTakenAsOneThatTakesValuesNearAnEndItLeavesOut() {
+        NumericDomain.Bounds open = dense("0", false, "1", false);
+        assertNull(denseLeavesOf(denseTerm("x", 1, NumericDomain.Bounds.OPEN,
+                        NumericDomain.Bounds.OPEN), term("y", 1, open, open), Rel.LT));
+    }
+
+    /**
+     * {@code 3x - y < 0} with {@code y} from nought to one: {@code x} lies below a third wherever
+     * {@code y} is, which no decimal writes. The line is at the third all the same, and the
+     * values between nought and it are asked of {@code y} as they are.
+     */
+    @Test
+    void anEndNoDecimalWritesIsStillTheEndOfTheRunAskedAbout() {
+        NumericDomain.Bounds aboveNought = new NumericDomain.Bounds(
+                Endpoint.exclusive(Count.of(0)), null);
+        NumericDomain.Bounds unit = dense("0", true, "1", true);
+        Leaves leaves = denseLeavesOf(denseTerm("x", 3, aboveNought, aboveNought),
+                denseTerm("y", -1, unit, unit), Rel.LT);
+        assertEquals(List.of(new Line(Rel.GE, ExactRatio.of(BigInteger.ONE,
+                BigInteger.valueOf(3)))), ((Leaves.Settled) leaves).lines());
     }
 
     /** Runs a point apart are lines apart: a point both leave out is not covered. */

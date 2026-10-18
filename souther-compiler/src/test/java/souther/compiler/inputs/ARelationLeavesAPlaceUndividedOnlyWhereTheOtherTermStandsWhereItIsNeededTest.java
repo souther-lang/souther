@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Rel;
 
@@ -35,7 +36,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherTermStandsWhereItIsNeededTe
                                                                  NumericDomain.Bounds realizes,
                                                                  Object takes, boolean itsPlace) {
         return new WhatARelationLeavesUndivided.Term<>(List.of(place), ExactRatio.of(weight), holds,
-                realizes, takes, itsPlace);
+                realizes, takes, itsPlace, Granularity.DISCRETE);
     }
 
     private static Set<String> undivided(List<WhatARelationLeavesUndivided.Term<String>> terms,

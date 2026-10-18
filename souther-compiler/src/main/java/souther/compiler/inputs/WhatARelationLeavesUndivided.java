@@ -15,7 +15,6 @@ import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Optional;
 import java.util.Set;
 import java.util.function.BiPredicate;
 
@@ -92,9 +91,12 @@ public final class WhatARelationLeavesUndivided {
      *                 nothing says
      * @param itsPlace whether it is the value at its one place, so that an end of its type it runs
      *                 to is one value there and not every value something answers it at
+     * @param spacing  how its values are spaced, or null where that is not said. Only a dense term
+     *                 takes values as near as asked of an end its run leaves out
      */
     public record Term<P>(List<P> madeOf, ExactRatio weight, NumericDomain.Bounds holds,
-                          NumericDomain.Bounds realizes, Object takes, boolean itsPlace) {
+                          NumericDomain.Bounds realizes, Object takes, boolean itsPlace,
+                          Granularity spacing) {
 
         public Term {
             if (madeOf == null || weight == null || weight.signum() == 0 || holds == null) {
@@ -395,7 +397,7 @@ public final class WhatARelationLeavesUndivided {
         if (between.holdsAWholeNumber()) {
             List<Term<P>> narrowed = new ArrayList<>(terms);
             narrowed.set(at, new Term<>(it.madeOf(), it.weight(), between.asBounds(),
-                    it.realizes(), it.takes(), it.itsPlace()));
+                    it.realizes(), it.takes(), it.itsPlace(), it.spacing()));
             if (!reachedBySome(narrowed, at, constant, relation, overlap, independent)) {
                 return null;
             }
@@ -775,7 +777,8 @@ public final class WhatARelationLeavesUndivided {
             return false;
         }
         Run needed = one.compareTo(two) <= 0 ? new OfNumbers(one, two) : new OfNumbers(two, one);
-        return needed.around(realized, strictlyBelow(relation, ExactRatio.of(sign)));
+        return needed.around(realized, strictlyBelow(relation, ExactRatio.of(sign)),
+                Granularity.DISCRETE);
     }
 
     /** {@code level} over {@code end}, nought where there is no end, or null where it could not
@@ -866,14 +869,8 @@ public final class WhatARelationLeavesUndivided {
             return null;
         }
         for (Span each : between) {
-            NumericDomain.Bounds narrowedTo = each.asBounds();
-            if (narrowedTo == null) {
-                return null;
-            }
-            List<Term<P>> narrowed = new ArrayList<>(terms);
-            narrowed.set(at, new Term<>(it.madeOf(), it.weight(), narrowedTo, it.realizes(),
-                    it.takes(), it.itsPlace()));
-            if (!reachedBySome(narrowed, at, constant, relation, overlap, independent)) {
+            if (!reachedBySome(terms, at, new Interval(each.lower(), each.upper()), constant,
+                    relation, overlap, independent)) {
                 return null;
             }
         }
@@ -919,9 +916,20 @@ public final class WhatARelationLeavesUndivided {
     private static <P> boolean reachedBySome(List<Term<P>> terms, int at, ExactRatio constant,
                                              Rel relation, BiPredicate<P, P> overlap,
                                              Independence independent) {
+        return reachedBySome(terms, at, null, constant, relation, overlap, independent);
+    }
+
+    /**
+     * The same, asked of the values of the term at {@code at} that lie in {@code within} and not
+     * of all it may hold — an exact run, so that an end no decimal writes is still the end.
+     */
+    private static <P> boolean reachedBySome(List<Term<P>> terms, int at, Interval within,
+                                             ExactRatio constant, Rel relation,
+                                             BiPredicate<P, P> overlap,
+                                             Independence independent) {
         for (int other = 0; other < terms.size(); other++) {
             if (other != at && apart(terms, other, overlap) && untied(terms, other, independent)
-                    && reaches(terms, other, at, constant, relation)) {
+                    && reaches(terms, other, at, within, constant, relation)) {
                 return true;
             }
         }
@@ -1033,8 +1041,8 @@ public final class WhatARelationLeavesUndivided {
      * Whether the term at {@code by} stands wherever the relation needs it to for the term at
      * {@code of} to be left undivided.
      */
-    private static <P> boolean reaches(List<Term<P>> terms, int by, int of, ExactRatio constant,
-                                       Rel relation) {
+    private static <P> boolean reaches(List<Term<P>> terms, int by, int of, Interval within,
+                                       ExactRatio constant, Rel relation) {
         Term<P> reaching = terms.get(by);
         boolean exactly = relation == Rel.EQ || relation == Rel.NE;
         boolean itsValue = standsAtTheOthersValue(terms, constant);
@@ -1049,7 +1057,7 @@ public final class WhatARelationLeavesUndivided {
                 && terms.stream().allMatch(each -> each.weight().isWhole()))) {
             return false;
         }
-        Run needed = needed(terms, by, constant);
+        Run needed = needed(terms, by, of, within, constant);
         if (needed == null) {
             return false;
         }
@@ -1065,7 +1073,7 @@ public final class WhatARelationLeavesUndivided {
                 && !othersAreTheirPlaces(terms, by)) {
             return false;
         }
-        return needed.around(reaching.realizes(), strictlyBelow);
+        return needed.around(reaching.realizes(), strictlyBelow, reaching.spacing());
     }
 
     /**
@@ -1131,8 +1139,12 @@ public final class WhatARelationLeavesUndivided {
      * number writes allows: two terms weighed one and minus one against nought, where the term has
      * to stand exactly where the other may.
      */
-    private static <P> Run needed(List<Term<P>> terms, int by, ExactRatio constant) {
+    private static <P> Run needed(List<Term<P>> terms, int by, int of, Interval within,
+                                  ExactRatio constant) {
         Term<P> reaching = terms.get(by);
+        if (within != null && standsAtTheOthersValue(terms, constant)) {
+            return within.asRun();
+        }
         if (standsAtTheOthersValue(terms, constant)) {
             Term<P> other = terms.get(1 - by);
             Endpoint least = other.holds().min();
@@ -1150,7 +1162,7 @@ public final class WhatARelationLeavesUndivided {
             if (i == by) {
                 continue;
             }
-            Interval each = Interval.of(terms.get(i).holds());
+            Interval each = i == of && within != null ? within : Interval.of(terms.get(i).holds());
             if (each == null) {
                 return null;
             }
@@ -1218,17 +1230,45 @@ public final class WhatARelationLeavesUndivided {
 
         /** Whether {@code realized} holds every value of this run. */
         default boolean within(NumericDomain.Bounds realized) {
-            return lowFrom(realized.min(), false) && highTo(realized.max(), false);
+            return lowFrom(realized.min(), Reach.EVERY_VALUE, false)
+                    && highTo(realized.max(), Reach.EVERY_VALUE, false);
         }
 
-        /** Whether {@code realized} holds, beside every value of this run, a value strictly below
-         *  it and one at it or above — or, not {@code strictlyBelow}, one strictly above it and one
-         *  at it or below. */
-        default boolean around(NumericDomain.Bounds realized, boolean strictlyBelow) {
-            return lowFrom(realized.min(), strictlyBelow) && highTo(realized.max(), !strictlyBelow);
+        /**
+         * Whether {@code realized}, taken by a term spaced {@code spacing}, holds beside each value
+         * of this run a value strictly below it and one at it or above — or, not
+         * {@code strictlyBelow}, one strictly above it and one at it or below.
+         */
+        default boolean around(NumericDomain.Bounds realized, boolean strictlyBelow,
+                               Granularity spacing) {
+            boolean dense = spacing == Granularity.DENSE;
+            return lowFrom(realized.min(),
+                            strictlyBelow ? Reach.STRICTLY_BEYOND : Reach.AT_OR_BEYOND, dense)
+                    && highTo(realized.max(),
+                            strictlyBelow ? Reach.AT_OR_BEYOND : Reach.STRICTLY_BEYOND, dense);
         }
 
-        private boolean lowFrom(Endpoint end, boolean beyond) {
+        /** What a value of the run asks of the values a term takes on the side of an end. */
+        enum Reach {
+            /** The value itself is taken. */
+            EVERY_VALUE,
+            /** A value strictly short of it is taken. */
+            STRICTLY_BEYOND,
+            /** The value or one short of it is taken. */
+            AT_OR_BEYOND
+        }
+
+        /**
+         * Whether a term taking the run that stops at {@code end} takes what {@code reach} asks
+         * at the least value of this run, for each value of it.
+         *
+         * <p>Where the two stop at one value, it depends on which of them leaves the value out.
+         * A run that leaves it out asks nothing of the value itself, only of values past it, and
+         * those a dense term takes as near the value as asked of whether or not it takes the value.
+         * A run that holds it asks for a value short of it, which a term that stops there has none
+         * of.
+         */
+        private boolean lowFrom(Endpoint end, Reach reach, boolean dense) {
             if (end == null) {
                 return true;
             }
@@ -1236,11 +1276,18 @@ public final class WhatARelationLeavesUndivided {
                 return false;
             }
             Integer order = againstTheLeast(end.at());
-            return order != null && (order < 0
-                    || (order == 0 && end.inclusive() && (!beyond || leastIsOpen())));
+            if (order == null || order > 0) {
+                return false;
+            }
+            return order < 0 || switch (reach) {
+                case EVERY_VALUE -> end.inclusive() || leastIsOpen();
+                case STRICTLY_BEYOND -> leastIsOpen() && (end.inclusive() || dense);
+                case AT_OR_BEYOND -> end.inclusive() || (leastIsOpen() && dense);
+            };
         }
 
-        private boolean highTo(Endpoint end, boolean beyond) {
+        /** The same at the greatest value of this run. */
+        private boolean highTo(Endpoint end, Reach reach, boolean dense) {
             if (end == null) {
                 return true;
             }
@@ -1248,8 +1295,14 @@ public final class WhatARelationLeavesUndivided {
                 return false;
             }
             Integer order = againstTheGreatest(end.at());
-            return order != null && (order > 0
-                    || (order == 0 && end.inclusive() && (!beyond || greatestIsOpen())));
+            if (order == null || order < 0) {
+                return false;
+            }
+            return order > 0 || switch (reach) {
+                case EVERY_VALUE -> end.inclusive() || greatestIsOpen();
+                case STRICTLY_BEYOND -> greatestIsOpen() && (end.inclusive() || dense);
+                case AT_OR_BEYOND -> end.inclusive() || (greatestIsOpen() && dense);
+            };
         }
     }
 
@@ -1593,22 +1646,6 @@ public final class WhatARelationLeavesUndivided {
                 }
             }
             return out;
-        }
-
-        /** This run as bounds on numbers, or null where an end is no count. */
-        NumericDomain.Bounds asBounds() {
-            Endpoint low = lower == null ? null : endpointAt(lower);
-            Endpoint high = upper == null ? null : endpointAt(upper);
-            if ((lower != null && low == null) || (upper != null && high == null)) {
-                return null;
-            }
-            return new NumericDomain.Bounds(low, high);
-        }
-
-        private static Endpoint endpointAt(ExactCut cut) {
-            Optional<Count> count = Count.written(cut.at()).orNull();
-            return count == null || count.isEmpty() ? null
-                    : new Endpoint(count.get(), cut.inclusive());
         }
     }
 }

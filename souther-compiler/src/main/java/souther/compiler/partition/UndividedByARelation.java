@@ -629,6 +629,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         return false;
     }
 
+    /** How the values of {@code carrier} are spaced, or null where it has no order. */
+    private static Granularity spacingOf(Carrier carrier) {
+        return carrier == null ? null : carrier.spacing();
+    }
+
     /** How the values of {@code carrier} are spaced, or null where they are no numbers a
      *  relation's settling values are worked out over. */
     private static Granularity granularityOf(Carrier carrier) {
@@ -712,7 +717,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             Takes takes = source != null && way == Way.UNTOUCHED
                     && each.term() instanceof NumericTerm.ValueOf ? source.takes() : null;
             terms.add(new WhatARelationLeavesUndivided.Term<>(each.madeOf(), each.weight(), holds,
-                    realizes, takes, each.term() instanceof NumericTerm.ValueOf));
+                    realizes, takes, each.term() instanceof NumericTerm.ValueOf,
+                    spacingOf(carriers.get(i))));
         }
         return terms;
     }
@@ -755,7 +761,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         Start start = startOf(kept, region, read, conditions, heldWhole);
         if (start == null) {
             return new WhatARelationLeavesUndivided.Term<>(side.madeOf(), side.weight(),
-                    NumericDomain.Bounds.OPEN, null, null, false);
+                    NumericDomain.Bounds.OPEN, null, null, false, spacingOf(carrier));
         }
         NumericDomain.Bounds seed = start.lies();
         NumericDomain.Bounds seedTakes = start.takes();
@@ -790,7 +796,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
         return new WhatARelationLeavesUndivided.Term<>(side.madeOf(), side.weight(),
                 asARelationReadsIt(holds, carrier), asARelationReadsIt(realizes, carrier), null,
-                false);
+                false, spacingOf(carrier));
     }
 
     /**
@@ -966,7 +972,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 return Set.of();
             }
             terms.add(new WhatARelationLeavesUndivided.Term<>(each.madeOf(), each.weight(),
-                    on.asARelationReadsIt(), on.asARelationReadsIt(), source.takes(), true));
+                    on.asARelationReadsIt(), on.asARelationReadsIt(), source.takes(), true,
+                    on.spacing()));
         }
         // A statement about both sides is in each side's list; it is one statement.
         Set<OnAWay> aboutEither = new LinkedHashSet<>(stating.get(0));

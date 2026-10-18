@@ -3486,9 +3486,11 @@ public final class InvariantChecker {
                 left = run == null ? null : run.meet(values);
             }
             terms.add(new WhatARelationLeavesUndivided.Term<>(List.of(at.path()), weight,
-                    values, every ? values : left, null, itsPlace));
+                    values, every ? values : left, null, itsPlace,
+                    at.carrier() == null ? null : at.carrier().spacing()));
             apart.add(new WhatARelationLeavesUndivided.Term<>(List.of(at.path()), weight,
-                    values, every ? values : null, every ? at.carrier() : null, itsPlace));
+                    values, every ? values : null, every ? at.carrier() : null, itsPlace,
+                    at.carrier() == null ? null : at.carrier().spacing()));
         }
         // Where the type the places take stops: read only where the two take the same values, so
         // the first place's is the other's.
