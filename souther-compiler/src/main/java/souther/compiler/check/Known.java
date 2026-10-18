@@ -8,6 +8,7 @@ import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.OrderedIntervals;
 import souther.compiler.numeric.Rel;
+import souther.compiler.partition.CompositionBudget;
 import souther.compiler.values.Allowance;
 
 import java.util.ArrayList;
@@ -34,13 +35,100 @@ import java.util.Map;
  * terms its assumptions named are compared as the objects they are and not by what they hold
  * ({@link AppendOnly}). So two of these are equal where they were made of the same states, and
  * nothing asks it whether two paths know alike — a reader with that question asks what each knows.
+ *
+ * <p>And the conditions on the path that hold as one of their parts, which no domain here holds
+ * ({@link #oneOf}). Kept as they were written and taken apart only by a reader that has a question
+ * the parts answer and the whole does not: a domain holding each part of each of them would be one
+ * state per way of choosing a part, multiplied at every such condition the path passes, whether or
+ * not anything below was ever asked of them.
  */
 record Known(ConstraintState<FactSubject> constraints, List<Quantified> quantified,
                      AppendOnly<FactSubject, Boolean> spoken, Unguarded unguarded,
-                     Map<FactSubject, CasesLeft> cases) {
+                     Map<FactSubject, CasesLeft> cases, Choices oneOf) {
 
     Known {
         cases = Map.copyOf(cases);
+    }
+
+    /**
+     * The conditions held here as one of their parts, and one way through all of them.
+     *
+     * <p>Held as a line each one is put on top of, for the reason the spoken terms are told on: a
+     * path holds one more of them at each such condition it passes, and copying what it held at
+     * each would cost the square of the path. On top, so that what came to be held since a count
+     * was taken is read off the top without walking what was held before it.
+     *
+     * <p>The way is a state with one part taken in of every condition it holds — the ones held
+     * here, and the ones taking a part of them came to hold — which nothing had shown to reach
+     * nothing when it was made. It is what lets a condition taken in later be asked of one state,
+     * rather than of every way of choosing a part of each: a way that takes the new condition in
+     * and still reaches something is a run that gets past it. It answers only that. That the
+     * conditions leave no way at all is answered by looking for one over what is known
+     * ({@link Predicates#assumeCond}), never by this one failing — what is known may by then hold
+     * more than the way does, and a way that knew less is a way that admits more, which is the safe
+     * side for a "yes" and no ground for a "no". Null where the looking was given up: the path is
+     * then one nothing has shown to reach nothing, and is not looked along again.
+     *
+     * <p>{@code tries} is how many more parts the looking may take in alone along this path, across
+     * every time it looks ({@link #PARTS_A_PATH_LOOKS_THROUGH}).
+     */
+    record Choices(ChoiceLine held, Known wayIn, int tries) {
+
+        /**
+         * How many parts of the choices a path holds are taken in alone along one path, looking
+         * for a way through them where the way kept dies.
+         *
+         * <p>Counted for the path and not per look: a way that dies at one guard after another is
+         * looked for at each, and a count kept per look would have the path pay the whole of it
+         * again every time. Set by what a part read costs here, which is a reading of the domain of
+         * every value on the path, and not by how many parts a reading of a condition's meaning
+         * takes alone ({@link CompositionBudget#ALTERNATIVES_A_PATH_TRIES}),
+         * whose parts are read against far less.
+         *
+         * <p>A figure of this check's and not of the composing stage: reaching it stops no search
+         * a report says anything about. The path is then one nothing has shown to reach nothing,
+         * which is what it is taken to be without the looking, and no construction on it is judged
+         * differently from one on a path that holds no choice.
+         */
+        static final int PARTS_A_PATH_LOOKS_THROUGH = 64;
+
+        static final Choices NONE = new Choices(null, null, PARTS_A_PATH_LOOKS_THROUGH);
+
+        int count() {
+            return held == null ? 0 : held.count();
+        }
+    }
+
+    /** One condition held, on top of the ones held before it, and how many that is in all. */
+    record ChoiceLine(OneOf last, ChoiceLine before, int count) {}
+
+    /**
+     * A condition that holds here as one of its parts, and the bindings it was read under.
+     *
+     * <p>Not one of the parts, and not what the parts have in common: {@code y >= 0.5 || y <= -0.5}
+     * says each value of {@code y} is in one of two ranges, and the range they span holds
+     * {@code 0}. What the condition says is said by taking each part in alone, under what else is
+     * known where the question is asked ({@link Predicates#eachWayOf}).
+     *
+     * <p>The bindings are the ones in force where the condition stands, because that is where its
+     * names mean what they mean. A reader further in has entered more of them and a name it holds
+     * may be another value.
+     *
+     * <p>Equal only to itself, as the other states this holds are: which condition was taken in is
+     * which reading took it, and the same guard read twice is two of these. Compared by what they
+     * hold, two would also walk the trees they were read out of.
+     */
+    record OneOf(ClauseExpr.Joined of, Denotations at) {
+
+        @Override
+        public boolean equals(Object other) {
+            return this == other;
+        }
+
+        @Override
+        public int hashCode() {
+            return System.identityHashCode(this);
+        }
     }
 
     /** What holds of the values here whatever the path did — what a type guarantees of a value and
@@ -116,13 +204,15 @@ record Known(ConstraintState<FactSubject> constraints, List<Quantified> quantifi
     static Known top(ClosedStates closures) {
         return new Known(ConstraintState.top(FactSubject.inOneOrder(), closures), List.of(),
                 AppendOnly.empty(),
-                new Unguarded(ConstraintState.top(FactSubject.inOneOrder(), closures)), Map.of());
+                new Unguarded(ConstraintState.top(FactSubject.inOneOrder(), closures)), Map.of(),
+                Choices.NONE);
     }
 
     /** This, with {@code f rel 0} taken as holding as far as {@code held} reaches. */
     Known taking(LinearForm<FactSubject> f, Rel rel, Held held, Map<FactSubject, Granularity> kinds) {
         return new Known(constraints.taking(f, rel, kinds), quantified, spoken,
-                held == Held.OF_THE_VALUE ? unguarded.taking(f, rel, kinds) : unguarded, cases);
+                held == Held.OF_THE_VALUE ? unguarded.taking(f, rel, kinds) : unguarded, cases,
+                oneOf);
     }
 
     /**
@@ -143,7 +233,7 @@ record Known(ConstraintState<FactSubject> constraints, List<Quantified> quantifi
         ConstraintState<FactSubject> values =
                 ConstraintState.top(FactSubject.inOneOrder()).takingRead(read, sets);
         return new Known(constraints.meet(values, sets), quantified, spoken,
-                new Unguarded(unguarded.constraints().meet(values, sets)), cases);
+                new Unguarded(unguarded.constraints().meet(values, sets)), cases, oneOf);
     }
 
     /**
@@ -156,7 +246,8 @@ record Known(ConstraintState<FactSubject> constraints, List<Quantified> quantifi
     Known holdingOnThePath(Confinement.Worked<FactSubject> read, Allowance<FactSubject> sets) {
         ConstraintState<FactSubject> values =
                 ConstraintState.top(FactSubject.inOneOrder()).takingRead(read, sets);
-        return new Known(constraints.meet(values, sets), quantified, spoken, unguarded, cases);
+        return new Known(constraints.meet(values, sets), quantified, spoken, unguarded, cases,
+                oneOf);
     }
 
     /**
@@ -167,14 +258,16 @@ record Known(ConstraintState<FactSubject> constraints, List<Quantified> quantifi
      * strings do not add. A condition says it, so it reaches the path and not the value.
      */
     Known bounding(OrderedIntervals<FactSubject> bounded, Map<FactSubject, Carrier> on) {
-        return new Known(constraints.taking(bounded, on), quantified, spoken, unguarded, cases);
+        return new Known(constraints.taking(bounded, on), quantified, spoken, unguarded, cases,
+                oneOf);
     }
 
     /** This, with the predicate {@code key} taken as holding — or as failing, where {@code positive}
      * is false — as far as {@code held} reaches. */
     Known taking(FactSubject key, boolean positive, Held held) {
         return new Known(constraints.taking(key, positive), quantified, spoken,
-                held == Held.OF_THE_VALUE ? unguarded.taking(key, positive) : unguarded, cases);
+                held == Held.OF_THE_VALUE ? unguarded.taking(key, positive) : unguarded, cases,
+                oneOf);
     }
 
     /**
@@ -193,7 +286,7 @@ record Known(ConstraintState<FactSubject> constraints, List<Quantified> quantifi
         if (was == null) {
             Map<FactSubject, CasesLeft> more = new HashMap<>(cases);
             more.put(value, left);
-            return new Known(constraints, quantified, spoken, unguarded, more);
+            return new Known(constraints, quantified, spoken, unguarded, more, oneOf);
         }
         if (!was.atoms().getFirst().getClass().equals(left.atoms().getFirst().getClass())) {
             return this;
@@ -207,7 +300,7 @@ record Known(ConstraintState<FactSubject> constraints, List<Quantified> quantifi
         }
         Map<FactSubject, CasesLeft> narrowed = new HashMap<>(cases);
         narrowed.put(value, both);
-        return new Known(constraints, quantified, spoken, unguarded, narrowed);
+        return new Known(constraints, quantified, spoken, unguarded, narrowed, oneOf);
     }
 
     /**
@@ -220,7 +313,8 @@ record Known(ConstraintState<FactSubject> constraints, List<Quantified> quantifi
      * the program never builds rather than one it builds wrongly.
      */
     Known reachingNothing() {
-        return new Known(constraints.shownToHoldNothing(), quantified, spoken, unguarded, cases);
+        return new Known(constraints.shownToHoldNothing(), quantified, spoken, unguarded, cases,
+                oneOf);
     }
 
     /**
@@ -240,7 +334,8 @@ record Known(ConstraintState<FactSubject> constraints, List<Quantified> quantifi
                 all = all.with(term, true);
             }
         }
-        return all == spoken ? this : new Known(constraints, quantified, all, unguarded, cases);
+        return all == spoken ? this
+                : new Known(constraints, quantified, all, unguarded, cases, oneOf);
     }
 
     /** Whether an assumption on this path named {@code term}. */
@@ -254,6 +349,75 @@ record Known(ConstraintState<FactSubject> constraints, List<Quantified> quantifi
         }
         List<Quantified> all = new ArrayList<>(quantified);
         all.addAll(more);
-        return new Known(constraints, List.copyOf(all), spoken, unguarded, cases);
+        return new Known(constraints, List.copyOf(all), spoken, unguarded, cases, oneOf);
+    }
+
+    /**
+     * This, with {@code condition} holding as one of its parts, on the path only.
+     *
+     * <p>On the path for the reason every condition is: it is the guard that says it, and a value
+     * named anywhere else is not held to it.
+     */
+    Known holdingOneOf(OneOf condition) {
+        return new Known(constraints, quantified, spoken, unguarded, cases,
+                new Choices(new ChoiceLine(condition, oneOf.held(), oneOf.count() + 1),
+                        oneOf.wayIn(), oneOf.tries()));
+    }
+
+    /** The conditions held here as one of their parts, in the order they were taken in. */
+    List<OneOf> heldAsOneOfTheirParts() {
+        return heldSince(0);
+    }
+
+    /** How many conditions are held here as one of their parts. */
+    int heldCount() {
+        return oneOf.count();
+    }
+
+    /** The conditions held here past the first {@code count}, in the order they were taken in. */
+    List<OneOf> heldSince(int count) {
+        List<OneOf> out = new ArrayList<>();
+        for (ChoiceLine at = oneOf.held(); at != null && at.count() > count; at = at.before()) {
+            out.add(at.last());
+        }
+        return out.reversed();
+    }
+
+    /** Whether any condition is held here as one of its parts. */
+    boolean holdsAChoice() {
+        return oneOf.held() != null;
+    }
+
+    /**
+     * A state with one part taken in of every condition it holds, which nothing had shown to reach
+     * nothing when it was made — this state itself where none is held — or null where the looking
+     * for one was given up ({@link Choices}).
+     */
+    Known wayIn() {
+        return holdsAChoice() ? oneOf.wayIn() : this;
+    }
+
+    /** How many more parts looking for a way may take in alone along this path ({@link Choices}). */
+    int triesLeft() {
+        return oneOf.tries();
+    }
+
+    /** This, with {@code way} as the way through the conditions it holds — null where the looking
+     *  was given up — and {@code tries} left to look with ({@link Choices}). */
+    Known throughWay(Known way, int tries) {
+        return new Known(constraints, quantified, spoken, unguarded, cases,
+                new Choices(oneOf.held(), way, tries));
+    }
+
+    /**
+     * This, speaking of exactly what {@code other} speaks of.
+     *
+     * <p>For a state read from {@code other} to answer what follows from a condition and not what
+     * its author named ({@link Predicates#eachWayOf}): what it knows of the values is its own, and
+     * which values the path has said something of is {@code other}'s.
+     */
+    Known speakingAs(Known other) {
+        return other.spoken == spoken ? this
+                : new Known(constraints, quantified, other.spoken, unguarded, cases, oneOf);
     }
 }

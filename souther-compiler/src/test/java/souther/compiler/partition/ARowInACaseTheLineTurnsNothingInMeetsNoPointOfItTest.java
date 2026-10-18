@@ -82,11 +82,12 @@ class ARowInACaseTheLineTurnsNothingInMeetsNoPointOfItTest {
     /**
      * The line on {@code x} is drawn in the cases that hold {@code x + y > 0} and in no case that
      * holds it failing: one by one where those are as few as are said one by one, and as one where
-     * they are more. Of the assignments to the truths, half put the part on its holding side.
+     * they are more. Of the assignments to the truths, half put the part on its holding side — so
+     * five truths are as many cases as are said one by one, and six are past it.
      */
     @Test
     void theLineIsDrawnOnlyInTheCasesItTurnsIn() {
-        for (int truths = 4; truths <= 6; truths++) {
+        for (int truths = 5; truths <= 6; truths++) {
             int of = truths;
             int dividing = 1 << (truths - 1);
             List<Proposition> cases = casesTheLineIsDrawnIn(truths);

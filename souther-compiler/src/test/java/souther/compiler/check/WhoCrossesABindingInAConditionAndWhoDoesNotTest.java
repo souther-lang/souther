@@ -258,6 +258,47 @@ class WhoCrossesABindingInAConditionAndWhoDoesNotTest {
     }
 
     /**
+     * A choice taken apart names what it named taken whole, in every way and at every depth.
+     *
+     * <p>Taking it apart is asking what follows from each part, and each part is read as though it
+     * were written alone — which would name the comparisons it is written out of. What the author
+     * named is the other question, answered where the choice was taken in, so every way speaks of
+     * exactly what the whole does: the choice inside one of the parts, taken apart in its turn,
+     * still does not name the comparison under it.
+     */
+    @Test
+    void aChoiceTakenApartNamesWhatItNamedTakenWhole() {
+        Terms terms = terms();
+        Predicates predicates = new Predicates(terms);
+        Denotations at = rootAt();
+        Core deeper = binary(BinOp.GE, subject(), new Core.Int(1, Type.INT, POS));
+        Core half = binary(BinOp.OR, deeper,
+                binary(BinOp.LE, subject(), new Core.Int(9, Type.INT, POS)));
+        Core beside = binary(BinOp.EQ, subject(), new Core.Int(5, Type.INT, POS));
+        Known whole = predicates.assumeCond(binary(BinOp.OR, half, beside), Known.top(), at, true)
+                .known();
+        Function<Known, List<Boolean>> named = known -> List.of(
+                known.speaksOf(terms.subjectOf(half, at)),
+                known.speaksOf(terms.subjectOf(beside, at)),
+                known.speaksOf(terms.subjectOf(deeper, at)));
+
+        List<List<Boolean>> ways = new ArrayList<>();
+        for (Known way : predicates.eachWayOf(whole.heldAsOneOfTheirParts().getFirst(), whole)) {
+            ways.add(named.apply(way));
+            for (Known.OneOf inside : way.heldAsOneOfTheirParts()) {
+                if (inside.of() != whole.heldAsOneOfTheirParts().getFirst().of()) {
+                    for (Known deeperWay : predicates.eachWayOf(inside, way)) {
+                        ways.add(named.apply(deeperWay));
+                    }
+                }
+            }
+        }
+        assertEquals(List.of(List.of(true, true, false), List.of(true, true, false),
+                        List.of(true, true, false), List.of(true, true, false)), ways,
+                "the two ways of the choice, then the two ways of the choice inside its first part");
+    }
+
+    /**
      * And a denial above a binding reaches the connective under it.
      *
      * <p>The three shapes at once. A denial is carried to the leaves as the shape is read, so
