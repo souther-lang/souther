@@ -6,14 +6,12 @@ import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.inputs.CasesLeft;
-import souther.compiler.inputs.DeclaredInput;
 import souther.compiler.inputs.InputDomain;
-import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
-import souther.compiler.inputs.TermPath;
 
 import souther.compiler.meaning.Proposition;
 
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -95,10 +93,10 @@ record ConditionMeanings(souther.compiler.inputs.InputReading read) {
         return ReachingCuts.answersOf(match, inputs(), reads, rules());
     }
 
-    /** What the declarations leave the value at {@code position} read as one of {@code cases}
-     *  ({@link ReachingCuts#taking(TermPath, CasesLeft, InputReading)}). */
-    DeclaredInput.Taking taking(TermPath position, CasesLeft cases) {
-        return ReachingCuts.taking(position, cases, read);
+    /** The position of the input the arms of {@code fork} divide between them, where they do
+     *  ({@link WhatConditionsState#inputDividedBy}). */
+    Optional<WhatConditionsState.DividedInput> inputDividedBy(Core.Match fork, InputReads reads) {
+        return WhatConditionsState.of(read).inputDividedBy(fork, reads);
     }
 
     /** What taking arm {@code part} of {@code attempt}, written at {@code at}, says of the input. */

@@ -3,12 +3,17 @@ package souther.compiler.partition;
 import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.StatedComparison;
 import souther.compiler.core.Core;
+import souther.compiler.inputs.CasesLeft;
+import souther.compiler.inputs.DeclaredInput;
 import souther.compiler.inputs.Denotation;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.ReadMeaning;
+import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Proposition;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.List;
@@ -58,6 +63,7 @@ final class WhatConditionsState {
     private final Map<ANode, Pullback.Pulled> truths = new HashMap<>();
     private final Map<ANode, Pullback.Pulled> presences = new HashMap<>();
     private final Map<ANode, List<Pullback.Pulled>> arms = new HashMap<>();
+    private final Map<ANode, Optional<DividedInput>> dividedInputs = new HashMap<>();
     private final Map<ANode, Optional<Proposition>> operatorsAnswer = new HashMap<>();
     private final Map<Proposition, Proposition> denials = new IdentityHashMap<>();
 
@@ -143,6 +149,56 @@ final class WhatConditionsState {
     Pullback.Pulled arm(Core fork, int part, InputReads reads) {
         return kept(arms, new ANode(fork, reads),
                 () -> Pullback.ofTheArms(fork, reads, read, Optional.empty())).get(part);
+    }
+
+    /**
+     * The case of one input position each arm of a fork stands for.
+     *
+     * @param of      the position the arms divide
+     * @param answers what each arm leaves it, in the order of the arms, and null for an arm the
+     *                declarations already decide
+     */
+    record DividedInput(DecisionSubject.AnInput of, List<CasesLeft> answers) { }
+
+    /**
+     * The position of the input the arms of {@code fork} divide between them, where every arm
+     * states a case of that one position and no two leave it a case in common; empty where an arm
+     * states anything else, because nothing then says the arms divide it. What each leaves the
+     * position is what the declarations leave it ({@link ReachingCuts#taking(TermPath, CasesLeft, InputReading)}), as for a fork on
+     * the position itself.
+     *
+     * <p>A fact of the whole fork, so read once for it and not once for each arm a reader asks
+     * about.
+     */
+    Optional<DividedInput> inputDividedBy(Core.Match fork, InputReads reads) {
+        return kept(dividedInputs, new ANode(fork, reads), () -> divide(fork, reads));
+    }
+
+    private Optional<DividedInput> divide(Core.Match fork, InputReads reads) {
+        DecisionSubject.AnInput subject = null;
+        List<CasesLeft> answers = new ArrayList<>();
+        for (int part = 0; part < fork.cases().size(); part++) {
+            if (!(arm(fork, part, reads).proposition() instanceof Proposition.InCases(
+                    DecisionSubject.AnInput of, CasesLeft cases, boolean holds, _)) || !holds) {
+                return Optional.empty();
+            }
+            if (subject != null && !subject.equals(of)) {
+                return Optional.empty();
+            }
+            subject = of;
+            CasesLeft answer = switch (ReachingCuts.taking(of.at(), cases, read)) {
+                case DeclaredInput.Taking.Narrows(TermPath to) -> to.narrowing();
+                case DeclaredInput.Taking.Excluded _ -> cases;
+                case DeclaredInput.Taking.Implied _ -> null;
+            };
+            for (CasesLeft other : answers) {
+                if (answer != null && other != null && other.meet(answer) != null) {
+                    return Optional.empty();
+                }
+            }
+            answers.add(answer);
+        }
+        return subject == null ? Optional.empty() : Optional.of(new DividedInput(subject, answers));
     }
 
     /**

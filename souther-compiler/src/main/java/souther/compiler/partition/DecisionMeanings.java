@@ -3,7 +3,6 @@ package souther.compiler.partition;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.inputs.CasesLeft;
-import souther.compiler.inputs.DeclaredInput;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.PathResolution;
 import souther.compiler.inputs.TermPath;
@@ -319,10 +318,9 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects) {
         // A narrowing of a fork on a position is an answer to the question that fork asks. One of a
         // fork on a value the body computed is what the arm comes to for the input, which is no
         // answer to the question about the computed value.
-        boolean onAPosition = reads.forkedOn(match.scrutinee(), states.newtypes())
-                instanceof PathResolution.At;
-        if (onAPosition && onTheWay.size() == 1
-                && onTheWay.getFirst() instanceof OnTheWay.Narrowed narrowed) {
+        if (onTheWay.size() == 1 && onTheWay.getFirst() instanceof OnTheWay.Narrowed narrowed
+                && reads.forkedOn(match.scrutinee(), states.newtypes())
+                        instanceof PathResolution.At) {
             TermPath at = narrowed.position();
             // Where the value the fork is on stands: a name read on a value left several cases is
             // the name read at the sum, and not a name under the set of them.
@@ -366,44 +364,15 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects) {
      */
     private Optional<DecidedCondition.Narrowed> asACaseOfTheInput(Core.Match match, int part,
                                                                   InputReads reads) {
-        DecisionSubject.AnInput subject = null;
-        Set<CasesLeft> answers = new LinkedHashSet<>();
-        CasesLeft mine = null;
-        for (int arm = 0; arm < match.cases().size(); arm++) {
-            if (!(states.entered(match, arm, reads) instanceof Proposition.InCases(
-                    DecisionSubject.AnInput of, CasesLeft cases, boolean holds, _)) || !holds) {
-                return Optional.empty();
-            }
-            if (subject != null && !subject.equals(of)) {
-                return Optional.empty();
-            }
-            subject = of;
-            CasesLeft answer = switch (states.taking(of.at(), cases)) {
-                case DeclaredInput.Taking.Narrows(TermPath to) -> to.narrowing();
-                case DeclaredInput.Taking.Excluded _ -> cases;
-                case DeclaredInput.Taking.Implied _ -> null;
-            };
-            if (answer == null) {
-                if (arm == part) {
-                    return Optional.empty();
-                }
-                continue;
-            }
-            for (CasesLeft other : answers) {
-                if (other.meet(answer) != null) {
-                    return Optional.empty();
-                }
-            }
-            answers.add(answer);
-            if (arm == part) {
-                mine = answer;
-            }
-        }
-        if (mine == null) {
+        Optional<WhatConditionsState.DividedInput> divided = states.inputDividedBy(match, reads);
+        if (divided.isEmpty() || divided.get().answers().get(part) == null) {
             return Optional.empty();
         }
+        Set<CasesLeft> answers = new LinkedHashSet<>(divided.get().answers());
+        answers.remove(null);
         return Optional.of(new DecidedCondition.Narrowed(
-                new DecisionCondition.ACase(subject, answers), mine));
+                new DecisionCondition.ACase(divided.get().of(), answers),
+                divided.get().answers().get(part)));
     }
 
     /**
