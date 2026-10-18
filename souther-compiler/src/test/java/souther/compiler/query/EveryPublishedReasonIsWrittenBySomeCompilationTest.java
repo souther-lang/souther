@@ -276,15 +276,15 @@ class EveryPublishedReasonIsWrittenBySomeCompilationTest {
                 let f (p) = if p.lo < p.hi then Yes else No
                 """.formatted(ANSWER)));
         // What the rule states is read through what the operation answers in each of its cases,
-        // and comes to one line or another — and one of them is over a value the body made rather
-        // than the input's own numbers, so none of its lines is drawn.
+        // and comes to one line or another — each a line on the product, and where each decides
+        // turns on the product, which no row is asked, so none of its lines is drawn.
         out.put(UndividedPosition.Reason.SEVERAL_LINES_IN_ONE_RULE, of("""
                 module m
                 %s
-                behavior f : (a: Int, b: Int, c: Int) -> Answer
-                let f (a, b, c) = {
+                behavior f : (a: Int, b: Int) -> Answer
+                let f (a, b) = {
                     let p = a * b
-                    if Int.max(p, c) > 5 then Yes else No
+                    if Int.max(p, 0) > 5 then Yes else No
                 }
                 """.formatted(ANSWER)));
         // A relation whose other side is not shown to reach the values here left between those

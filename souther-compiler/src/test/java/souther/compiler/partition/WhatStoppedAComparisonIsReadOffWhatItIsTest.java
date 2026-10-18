@@ -243,7 +243,101 @@ class WhatStoppedAComparisonIsReadOffWhatItIsTest {
         }
     }
 
+    /**
+     * A value bound in the body whose arithmetic stopped is that stop wherever it is compared. An
+     * operation whose answer is one of several values — the greater, the lesser, the value or its
+     * negation — turns the comparison into a relation for each, and the relation over the bound
+     * value draws no line for the reason the value does not: what a reader is sent to is the
+     * product, the divisor, or the operation that made the value, as with the comparison written
+     * without the operation round it.
+     */
+    @Test
+    void aValueWhoseArithmeticStoppedIsThatStopUnderAnOperationAnsweringOneOfSeveral() {
+        String parameters = "a: Int, b: Int, c: Int";
+        for (String bound : List.of("let p = a * b", "let p = Int.floorMod(a, b)")) {
+            List<UndividedPosition.Reason> alone = whyAt(guard(parameters, bound, "p <= c"), "a");
+            assertEquals(1, alone.size(), bound);
+            for (String condition : List.of("Int.max(0, p) <= c", "Int.min(0, p) <= c",
+                    "Int.abs(p) <= c")) {
+                PartitionEvidence measured = guard(parameters, bound, condition);
+                for (String position : List.of("a", "b", "c")) {
+                    assertEquals(alone, whyAt(measured, position),
+                            bound + " | " + condition + " at " + position);
+                }
+            }
+        }
+        assertEquals(List.of(UndividedPosition.Reason.NON_AFFINE_PRODUCT),
+                whyAt(guard(parameters, "let p = a * b", "p <= c"), "a"));
+        assertEquals(List.of(UndividedPosition.Reason.NON_CONSTANT_REMAINDER_DIVISOR),
+                whyAt(guard(parameters, "let p = Int.floorMod(a, b)", "p <= c"), "a"));
+        // Written inline, the product is the same number with no name over it.
+        assertEquals(List.of(UndividedPosition.Reason.NON_AFFINE_PRODUCT),
+                whyAt(guard(parameters, "Int.max(0, a * b) <= c"), "a"));
+    }
+
+    /**
+     * And where the bound value was made by an operation the arithmetic takes no form of, each
+     * place words it as it does for the comparison without the operation round it.
+     */
+    @Test
+    void aValueAnOperationMadeIsWordedAtEachPlaceUnderAnOperationAnsweringOneOfSeveral() {
+        String parameters = "s: String, c: Int";
+        String bound = "let k = String.length(String.trim(s))";
+        PartitionEvidence alone = guard(parameters, bound, "k - c < 2");
+        PartitionEvidence under = guard(parameters, bound, "Int.abs(k - c) < 2");
+
+        assertEquals(List.of(UndividedPosition.Reason.RULE_ABOUT_A_DERIVED_VALUE),
+                whyAt(alone, "s"));
+        for (String position : List.of("s", "c")) {
+            assertEquals(whyAt(alone, position), whyAt(under, position), position);
+        }
+    }
+
+    /**
+     * Two values whose readings stopped at two different operations are no one operation, and the
+     * relations they leave undrawn are named for neither: naming the first would say of the second
+     * that it was not there. Which of them is written first does not choose.
+     */
+    @Test
+    void twoValuesStoppedAtDifferentOperationsAreNamedForNeither() {
+        String parameters = "a: Int, b: Int, c: Int";
+        String bound = "let p = a * b\n    let q = Int.floorMod(a, b)";
+        for (String condition : List.of("Int.max(p, q) <= c", "Int.max(q, p) <= c")) {
+            assertEquals(List.of(UndividedPosition.Reason.RULE_MEANING_NOT_READ),
+                    whyAt(guard(parameters, bound, condition), "a"), condition);
+        }
+    }
+
+    /**
+     * A bound value whose arithmetic did not stop is read through its name: a name over a sum
+     * under {@code Int.max} is read as the sum written there is.
+     */
+    @Test
+    void aValueWhoseArithmeticWasReadIsReadThroughItsNameUnderAnOperation() {
+        String parameters = "a: Int, b: Int, c: Int";
+        PartitionEvidence named = guard(parameters, "let p = a + b", "Int.max(0, p) <= c");
+        PartitionEvidence inline = guard(parameters, "Int.max(0, a + b) <= c");
+        for (String position : List.of("a", "b", "c")) {
+            assertEquals(whyAt(inline, position), whyAt(named, position), position);
+        }
+    }
+
+    /**
+     * Several relations each read to the end and not divided are several lines held together, and
+     * stay that. Each relation on the product is a line, and where each decides turns on the
+     * product, which no row is asked: nothing stopped, and no operation is named.
+     */
+    @Test
+    void severalLinesReadToTheEndAreSeveralLinesHeldTogether() {
+        assertEquals(List.of(UndividedPosition.Reason.SEVERAL_LINES_IN_ONE_RULE),
+                whyAt(guard("a: Int, b: Int", "let p = a * b", "Int.max(0, p) <= 3"), "a"));
+    }
+
     private static PartitionEvidence guard(String parameters, String condition) {
+        return guard(parameters, "", condition);
+    }
+
+    private static PartitionEvidence guard(String parameters, String bound, String condition) {
         String model = """
                 module demo
 
@@ -252,11 +346,12 @@ class WhatStoppedAComparisonIsReadOffWhatItIsTest {
 
                 behavior f : (%s) -> Ok | No
                 let f (%s) = {
+                    %s
                     guard %s else No
                     Ok
                 }
                 """.formatted(parameters,
-                parameters.replaceAll(":\\s*[A-Za-z<>]+", ""), condition);
+                parameters.replaceAll(":\\s*[A-Za-z<>]+", ""), bound, condition);
         return measured(model);
     }
 
