@@ -242,6 +242,32 @@ class AFoldThatKeepsAnEndIsReadAsEveryOrSomeElementTest {
         assertTrue(alone.contains("no IN point is owed at quote.lines[*].discount = 0"), alone);
     }
 
+    /** Over decimals the comparison in the step parts the discounts at the seed as well: nought is
+     *  settled, and a discount above it is not. */
+    @Test
+    void theComparisonInsideTheStepPartsDecimalDiscountsAtTheSeed() {
+        Drawn drawn = drawn("""
+                module example.worst
+
+                data Line = { discount: Decimal }
+                    invariant discount >= 0.0m && discount <= 1.0m
+
+                data Within
+                data Needs
+
+                behavior approval : (lines: List<Line>) -> Within | Needs
+
+                let approval (lines) =
+                    if List.fold((w, l) -> %s, 0.0m, lines) <= 0.1m then Within else Needs
+                """.formatted(GREATER));
+        assertFalse(drawn.report().contains(NOT_SHOWN_TO_REACH), drawn::report);
+        assertTrue(drawn.report().contains(
+                "no IN point is owed at lines[*].discount = 0 (comparison@"), drawn::report);
+        assertTrue(drawn.report().contains(
+                "read as approval/lines[*].discount: in 0 < lines[*].discount < 0.1"),
+                drawn::report);
+    }
+
     /**
      * What holds of the element the step is applied to holds of no element before it. A step
      * choosing only under a condition on its element keeps no end, so neither its comparison of

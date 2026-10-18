@@ -3,7 +3,9 @@ package souther.compiler.inputs;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactAnswer;
+import souther.compiler.numeric.ExactCut;
 import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Rel;
@@ -13,6 +15,7 @@ import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.BiPredicate;
 
@@ -157,11 +160,20 @@ public final class WhatARelationLeavesUndivided {
          * other value it may hold leaves the relation either way.
          *
          * @param runs     the runs, in order, and none beside another that settles it the same way
-         * @param least    the least value the term may hold, or null where it holds no least
-         * @param greatest the greatest, or null where it holds no greatest
+         * @param least    the lower end of what the term may hold, or null where it holds no least
+         * @param greatest the upper end, or null where it holds no greatest
+         * @param whole    whether the term's values are whole numbers, so that a run ending at one
+         *                 and a run starting at the next leave nothing between them
          */
-        record Settled(List<SettledRun> runs, BigInteger least, BigInteger greatest)
+        record Settled(List<SettledRun> runs, ExactCut least, ExactCut greatest, boolean whole)
                 implements Leaves {
+
+            /** Runs of a term whose values are whole, its ends being the whole numbers it holds. */
+            public static Settled ofWhole(List<SettledRun> runs, BigInteger least,
+                                          BigInteger greatest) {
+                return new Settled(runs, least == null ? null : wholeEnd(least),
+                        greatest == null ? null : wholeEnd(greatest), true);
+            }
 
             public Settled {
                 runs = List.copyOf(runs);
@@ -180,54 +192,105 @@ public final class WhatARelationLeavesUndivided {
              */
             public List<Line> lines() {
                 List<Line> out = new ArrayList<>();
-                // The least value no run before has taken, or none where nothing bounds it below.
-                BigInteger next = least;
+                // What the runs before cover, up to its upper end; none where nothing bounds the
+                // term below.
+                ExactCut covered = least == null ? null : justBelow(least);
+                ExactCut afterTheLast = greatest == null ? null : justAbove(greatest);
                 for (int i = 0; i < runs.size(); i++) {
                     SettledRun run = runs.get(i);
                     SettledRun after = i + 1 < runs.size() ? runs.get(i + 1) : null;
                     // Values it does not settle, just below it and just above it.
                     boolean leftBelow = run.from() != null
-                            && (next == null || run.from().compareTo(next) > 0);
+                            && (covered == null || gapBetween(covered, run.from(), whole));
                     boolean leftAbove = run.to() != null && (after != null
-                            ? after.from().compareTo(run.to().add(BigInteger.ONE)) > 0
-                            : greatest == null || run.to().compareTo(greatest) < 0);
-                    if (leftBelow && leftAbove && run.from().equals(run.to())) {
-                        out.add(new Line(Rel.EQ, run.from()));
+                            ? gapBetween(run.to(), after.from(), whole)
+                            : afterTheLast == null || gapBetween(run.to(), afterTheLast, whole));
+                    if (leftBelow && leftAbove && run.from().at().compareTo(run.to().at()) == 0) {
+                        out.add(new Line(Rel.EQ, run.from().at()));
                     } else {
                         if (leftBelow) {
-                            out.add(new Line(Rel.GE, run.from()));
+                            out.add(new Line(run.from().inclusive() ? Rel.GE : Rel.GT,
+                                    run.from().at()));
                         }
                         // Above it, values it leaves, or the next run settling it the other way.
                         if (leftAbove || after != null) {
-                            out.add(new Line(Rel.LE, run.to()));
+                            out.add(new Line(run.to().inclusive() ? Rel.LE : Rel.LT,
+                                    run.to().at()));
                         }
                     }
-                    next = run.to() == null ? null : run.to().add(BigInteger.ONE);
+                    covered = run.to();
                 }
                 return List.copyOf(out);
             }
+
+            /** The upper end of everything below the lower end {@code from}, or null where it
+             *  cannot be held. */
+            private ExactCut justBelow(ExactCut from) {
+                if (!whole) {
+                    return new ExactCut(from.at(), !from.inclusive());
+                }
+                ExactRatio before = from.at().minus(ExactRatio.ONE).orNull();
+                return before == null ? null : ExactCut.inclusive(before);
+            }
+
+            /** The lower end of everything above the upper end {@code to}, or null where it
+             *  cannot be held. */
+            private ExactCut justAbove(ExactCut to) {
+                if (!whole) {
+                    return new ExactCut(to.at(), !to.inclusive());
+                }
+                ExactRatio next = to.at().plus(ExactRatio.ONE).orNull();
+                return next == null ? null : ExactCut.inclusive(next);
+            }
         }
+    }
+
+    /** The end a whole number {@code at} is, inclusive. */
+    private static ExactCut wholeEnd(BigInteger at) {
+        return ExactCut.inclusive(ExactRatio.of(at));
+    }
+
+    /**
+     * Whether a value lies between a run ending at {@code to} and one starting at {@code from}:
+     * for whole values, a whole number; otherwise any value, which a point both leave out is.
+     */
+    private static boolean gapBetween(ExactCut to, ExactCut from, boolean whole) {
+        if (whole) {
+            ExactRatio next = to.at().plus(ExactRatio.ONE).orNull();
+            return next == null || from.at().compareTo(next) > 0;
+        }
+        int order = from.at().compareTo(to.at());
+        return order > 0 || (order == 0 && !to.inclusive() && !from.inclusive());
     }
 
     /**
      * One line on a term a relation's settled values are parted by: the term standing to
      * {@code at} as {@code relation}, which holds on the side of it the run is.
      */
-    public record Line(Rel relation, BigInteger at) {}
+    public record Line(Rel relation, ExactRatio at) {}
 
     /**
-     * A run of whole values of a term, and how the relation comes out at every one of them.
+     * A run of values of a term, and how the relation comes out at every one of them.
      *
-     * @param from  the least of them, or null where the run has no least
-     * @param to    the greatest of them, or null where it has no greatest
+     * @param from  the lower end of the run, or null where it has no least
+     * @param to    the upper end of the run, or null where it has no greatest
      * @param holds whether the relation holds there, or fails there
      */
-    public record SettledRun(BigInteger from, BigInteger to, boolean holds) {
+    public record SettledRun(ExactCut from, ExactCut to, boolean holds) {
 
         public SettledRun {
-            if (from != null && to != null && from.compareTo(to) > 0) {
+            if (from != null && to != null && (from.at().compareTo(to.at()) > 0
+                    || (from.at().compareTo(to.at()) == 0
+                            && !(from.inclusive() && to.inclusive())))) {
                 throw new IllegalArgumentException("a run holds some value: " + from + " to " + to);
             }
+        }
+
+        /** A run of the whole numbers {@code from} to {@code to}, either end null where it has
+         *  none. */
+        public static SettledRun whole(BigInteger from, BigInteger to, boolean holds) {
+            return new SettledRun(from == null ? null : wholeEnd(from),
+                    to == null ? null : wholeEnd(to), holds);
         }
     }
 
@@ -250,20 +313,28 @@ public final class WhatARelationLeavesUndivided {
      * the type's greatest value — so no sum of them, in whatever order the run adds them, passes
      * it. Where a run has none, nothing is shown.
      *
-     * @param whole    whether the term's values are whole numbers
-     * @param greatest the greatest value the type of the form holds, or null where it holds no
-     *                 greatest
+     * <p>Where the term's values are dense, the same is worked out over runs that end open or
+     * closed, and the values left between the runs settled are as many runs as they come to, each
+     * asked whether some other term reaches every value of it.
+     *
+     * @param granularity how the term's values are spaced, or null where they are no numbers
+     * @param greatest    the greatest value the type of the form holds, or null where it holds no
+     *                    greatest
      */
     public static <P> Leaves leavesOf(List<Term<P>> terms, int at, ExactRatio constant,
                                       Rel relation, BiPredicate<P, P> overlap,
-                                      Independence independent, boolean whole,
+                                      Independence independent, Granularity granularity,
                                       BigInteger greatest) {
         if (reachedBySome(terms, at, constant, relation, overlap, independent)) {
             return new Leaves.Undivided();
         }
         Term<P> it = terms.get(at);
-        WholeRun held = whole ? WholeRun.ofTheValues(it.holds()) : null;
-        if (held == null || constant == null) {
+        if (granularity == null || constant == null) {
+            return null;
+        }
+        WholeRun held = granularity == Granularity.DISCRETE
+                ? WholeRun.ofTheValues(it.holds()) : null;
+        if (granularity == Granularity.DISCRETE && held == null) {
             return null;
         }
         // What the others and the constant come to together, wherever they lie.
@@ -279,15 +350,22 @@ public final class WhatARelationLeavesUndivided {
                 return null;
             }
         }
+        if (granularity == Granularity.DENSE) {
+            return leavesOfADenseTerm(terms, at, constant, relation, overlap, independent, rest);
+        }
         List<SettledRun> runs = new ArrayList<>();
         WholeRun between = held;
         for (boolean holds : List.of(true, false)) {
             Rel asked = holds ? relation : relation.denied();
-            for (WholeRun settling : settledBy(it.weight(), rest, asked)) {
+            for (OnTheDifference statement : settledBy(it.weight(), rest, asked)) {
+                WholeRun settling = WholeRun.where(statement);
+                if (settling == null || !settling.holdsAWholeNumber()) {
+                    continue;
+                }
                 between = between == null ? null : between.without(settling);
                 WholeRun here = settling.meet(held);
                 if (here.holdsAWholeNumber()) {
-                    runs.add(new SettledRun(here.low, here.high, holds));
+                    runs.add(SettledRun.whole(here.low, here.high, holds));
                 }
             }
         }
@@ -306,9 +384,7 @@ public final class WhatARelationLeavesUndivided {
             }
             ExactRatio besideIt = others;
             for (SettledRun each : runs) {
-                ExactRatio near = nearestNought(new Interval(
-                        each.from() == null ? null : ExactRatio.of(each.from()),
-                        each.to() == null ? null : ExactRatio.of(each.to())));
+                ExactRatio near = nearestNought(new Interval(each.from(), each.to()));
                 ExactRatio total = besideIt == null || near == null ? null
                         : near.times(it.weight().abs()).flatMap(besideIt::plus).orNull();
                 if (total == null || total.compareTo(ExactRatio.of(greatest)) > 0) {
@@ -324,7 +400,7 @@ public final class WhatARelationLeavesUndivided {
                 return null;
             }
         }
-        return new Leaves.Settled(inOrder(runs), held.low, held.high);
+        return Leaves.Settled.ofWhole(inOrder(runs, true), held.low, held.high);
     }
 
     /**
@@ -387,7 +463,7 @@ public final class WhatARelationLeavesUndivided {
         List<SettledRun> runs = new ArrayList<>();
         WholeRun zero = new WholeRun(BigInteger.ZERO, BigInteger.ZERO).meet(held);
         if (zero.holdsAWholeNumber()) {
-            runs.add(new SettledRun(BigInteger.ZERO, BigInteger.ZERO,
+            runs.add(SettledRun.whole(BigInteger.ZERO, BigInteger.ZERO,
                     relation.holds(ExactRatio.ZERO.compareTo(level))));
         }
         for (int sign : List.of(-1, 1)) {
@@ -406,7 +482,7 @@ public final class WhatARelationLeavesUndivided {
                 between = between == null ? null : between.without(settling);
                 WholeRun here = settling.meet(side);
                 if (here.holdsAWholeNumber()) {
-                    runs.add(new SettledRun(here.low, here.high, holds));
+                    runs.add(SettledRun.whole(here.low, here.high, holds));
                 }
             }
             if (between == null) {
@@ -420,9 +496,7 @@ public final class WhatARelationLeavesUndivided {
         if (greatest != null) {
             ExactRatio nearOther = nearestNought(lies);
             for (SettledRun each : runs) {
-                ExactRatio near = nearestNought(new Interval(
-                        each.from() == null ? null : ExactRatio.of(each.from()),
-                        each.to() == null ? null : ExactRatio.of(each.to())));
+                ExactRatio near = nearestNought(new Interval(each.from(), each.to()));
                 ExactRatio smallest = near == null || nearOther == null ? null
                         : near.times(nearOther).orNull();
                 if (smallest == null || smallest.compareTo(ExactRatio.of(greatest)) > 0) {
@@ -431,7 +505,7 @@ public final class WhatARelationLeavesUndivided {
             }
         }
         return runs.isEmpty() ? new Leaves.Undivided()
-                : new Leaves.Settled(inOrder(runs), held.low, held.high);
+                : Leaves.Settled.ofWhole(inOrder(runs, true), held.low, held.high);
     }
 
     /**
@@ -479,7 +553,7 @@ public final class WhatARelationLeavesUndivided {
             }
             WholeRun nought = new WholeRun(BigInteger.ZERO, BigInteger.ZERO).meet(held);
             if (nought.holdsAWholeNumber()) {
-                runs.add(new SettledRun(BigInteger.ZERO, BigInteger.ZERO, holdsWhenDivides));
+                runs.add(SettledRun.whole(BigInteger.ZERO, BigInteger.ZERO, holdsWhenDivides));
             }
             if (least.compareTo(BigInteger.ONE) > 0) {
                 BigInteger below = least.subtract(BigInteger.ONE);
@@ -487,7 +561,7 @@ public final class WhatARelationLeavesUndivided {
                         new WholeRun(BigInteger.ONE, below))) {
                     WholeRun here = side.meet(held);
                     if (here.holdsAWholeNumber()) {
-                        runs.add(new SettledRun(here.low, here.high, !holdsWhenDivides));
+                        runs.add(SettledRun.whole(here.low, here.high, !holdsWhenDivides));
                     }
                 }
             }
@@ -507,19 +581,19 @@ public final class WhatARelationLeavesUndivided {
             }
             for (BigInteger one : List.of(BigInteger.ONE.negate(), BigInteger.ONE)) {
                 if (new WholeRun(one, one).meet(held).holdsAWholeNumber()) {
-                    runs.add(new SettledRun(one, one, holdsWhenDivides));
+                    runs.add(SettledRun.whole(one, one, holdsWhenDivides));
                 }
             }
             for (WholeRun beyond : divisorsBeyondEveryDividend(seen, dividends)) {
                 WholeRun here = beyond.meet(new WholeRun(divisors.least(), divisors.greatest()))
                         .meet(held);
                 if (here.holdsAWholeNumber()) {
-                    runs.add(new SettledRun(here.low, here.high, !holdsWhenDivides));
+                    runs.add(SettledRun.whole(here.low, here.high, !holdsWhenDivides));
                 }
             }
         }
         return runs.isEmpty() ? new Leaves.Undivided()
-                : new Leaves.Settled(inOrder(runs), held.low, held.high);
+                : Leaves.Settled.ofWhole(inOrder(runs, true), held.low, held.high);
     }
 
     /** The least size such that the divisors held in {@code divisors}, nought aside, are every
@@ -718,37 +792,92 @@ public final class WhatARelationLeavesUndivided {
      * the rest come to in {@code rest}: those at which the weighed term and every sum the rest
      * could be stand as {@code relation} to nought.
      */
-    private static List<WholeRun> settledBy(ExactRatio weight, Interval rest, Rel relation) {
-        List<WholeRun> out = new ArrayList<>();
+    private static List<OnTheDifference> settledBy(ExactRatio weight, Interval rest,
+                                                   Rel relation) {
+        List<OnTheDifference> out = new ArrayList<>();
         switch (relation) {
-            case LT, LE -> addWhere(weight, rest.high(), relation, out);
-            case GT, GE -> addWhere(weight, rest.low(), relation, out);
+            case LT, LE -> addWhere(weight, rest.upper(), relation, out);
+            case GT, GE -> addWhere(weight, rest.lower(), relation, out);
             case EQ -> {
-                if (rest.low() != null && rest.high() != null
-                        && rest.low().compareTo(rest.high()) == 0) {
-                    addWhere(weight, rest.low(), Rel.EQ, out);
+                if (rest.lower() != null && rest.upper() != null
+                        && rest.low().compareTo(rest.high()) == 0
+                        && rest.lower().inclusive() && rest.upper().inclusive()) {
+                    addWhere(weight, rest.lower(), Rel.EQ, out);
                 }
             }
             case NE -> {
-                addWhere(weight, rest.high(), Rel.LT, out);
-                addWhere(weight, rest.low(), Rel.GT, out);
+                addWhere(weight, rest.upper(), Rel.LT, out);
+                addWhere(weight, rest.lower(), Rel.GT, out);
             }
         }
         return out;
     }
 
-    /** The whole values {@code weight} times which, moved by {@code constant}, stand to nought as
-     *  {@code relation}, added to {@code out} where there are some; nothing where the constant is
-     *  past every number. */
-    private static void addWhere(ExactRatio weight, ExactRatio constant, Rel relation,
-                                 List<WholeRun> out) {
+    /** What {@code weight} times a value, moved by the end {@code constant}, standing to nought
+     *  as {@code relation} says, added to {@code out}; nothing where the constant is past every
+     *  number. A strict relation against an end the rest never reach holds as the relation that
+     *  allows equality does. */
+    private static void addWhere(ExactRatio weight, ExactCut constant, Rel relation,
+                                 List<OnTheDifference> out) {
         if (constant == null) {
             return;
         }
-        WholeRun at = WholeRun.where(new OnTheDifference(weight, constant, relation));
-        if (at != null && at.holdsAWholeNumber()) {
-            out.add(at);
+        Rel asked = constant.inclusive() ? relation : switch (relation) {
+            case LT -> Rel.LE;
+            case GT -> Rel.GE;
+            default -> relation;
+        };
+        out.add(new OnTheDifference(weight, constant.at(), asked));
+    }
+
+    /**
+     * What a relation leaves the values of a dense term, which the runs that settle it, open or
+     * closed, and the values left between them are asked of.
+     */
+    private static <P> Leaves leavesOfADenseTerm(List<Term<P>> terms, int at, ExactRatio constant,
+                                                 Rel relation, BiPredicate<P, P> overlap,
+                                                 Independence independent, Interval rest) {
+        Term<P> it = terms.get(at);
+        Span held = Span.ofTheValues(it.holds());
+        if (held == null) {
+            return null;
         }
+        List<SettledRun> runs = new ArrayList<>();
+        List<Span> between = List.of(held);
+        for (boolean holds : List.of(true, false)) {
+            Rel asked = holds ? relation : relation.denied();
+            for (OnTheDifference statement : settledBy(it.weight(), rest, asked)) {
+                Span settling = Span.where(statement);
+                if (settling == null || !settling.holdsAValue()) {
+                    continue;
+                }
+                List<Span> left = new ArrayList<>();
+                for (Span each : between) {
+                    left.addAll(each.without(settling));
+                }
+                between = left;
+                Span here = settling.meet(held);
+                if (here.holdsAValue()) {
+                    runs.add(new SettledRun(here.lower(), here.upper(), holds));
+                }
+            }
+        }
+        if (runs.isEmpty()) {
+            return null;
+        }
+        for (Span each : between) {
+            NumericDomain.Bounds narrowedTo = each.asBounds();
+            if (narrowedTo == null) {
+                return null;
+            }
+            List<Term<P>> narrowed = new ArrayList<>(terms);
+            narrowed.set(at, new Term<>(it.madeOf(), it.weight(), narrowedTo, it.realizes(),
+                    it.takes(), it.itsPlace()));
+            if (!reachedBySome(narrowed, at, constant, relation, overlap, independent)) {
+                return null;
+            }
+        }
+        return new Leaves.Settled(inOrder(runs, false), held.lower(), held.upper(), false);
     }
 
     /** How far from nought the value of {@code run} nearest it is, or null where the run is no
@@ -768,16 +897,15 @@ public final class WhatARelationLeavesUndivided {
 
     /** {@code runs} in order of their values, each joined to the one beside it where the two
      *  settle the relation the same way. */
-    private static List<SettledRun> inOrder(List<SettledRun> runs) {
+    private static List<SettledRun> inOrder(List<SettledRun> runs, boolean whole) {
         List<SettledRun> sorted = new ArrayList<>(runs);
-        sorted.sort((one, two) -> one.from() == null ? -1 : two.from() == null ? 1
-                : one.from().compareTo(two.from()));
+        sorted.sort((one, two) -> one.from() == null ? (two.from() == null ? 0 : -1)
+                : two.from() == null ? 1 : one.from().at().compareTo(two.from().at()));
         List<SettledRun> out = new ArrayList<>();
         for (SettledRun each : sorted) {
             SettledRun last = out.isEmpty() ? null : out.getLast();
             if (last != null && last.holds() == each.holds() && last.to() != null
-                    && each.from() != null
-                    && last.to().add(BigInteger.ONE).compareTo(each.from()) >= 0) {
+                    && each.from() != null && !gapBetween(last.to(), each.from(), whole)) {
                 out.set(out.size() - 1, new SettledRun(last.from(), each.to(), last.holds()));
             } else {
                 out.add(each);
@@ -1007,8 +1135,11 @@ public final class WhatARelationLeavesUndivided {
         Term<P> reaching = terms.get(by);
         if (standsAtTheOthersValue(terms, constant)) {
             Term<P> other = terms.get(1 - by);
-            return new OfPlaces(other.holds().min() == null ? null : other.holds().min().at(),
-                    other.holds().max() == null ? null : other.holds().max().at());
+            Endpoint least = other.holds().min();
+            Endpoint greatest = other.holds().max();
+            return new OfPlaces(least == null ? null : least.at(),
+                    greatest == null ? null : greatest.at(),
+                    least != null && !least.inclusive(), greatest != null && !greatest.inclusive());
         }
         if (constant == null) {
             return null;
@@ -1078,6 +1209,13 @@ public final class WhatARelationLeavesUndivided {
 
         boolean runsUp();
 
+        /** Whether this run leaves out its least value, so that a value at it is below every value
+         *  of the run. */
+        boolean leastIsOpen();
+
+        /** Whether this run leaves out its greatest value. */
+        boolean greatestIsOpen();
+
         /** Whether {@code realized} holds every value of this run. */
         default boolean within(NumericDomain.Bounds realized) {
             return lowFrom(realized.min(), false) && highTo(realized.max(), false);
@@ -1098,7 +1236,8 @@ public final class WhatARelationLeavesUndivided {
                 return false;
             }
             Integer order = againstTheLeast(end.at());
-            return order != null && (order < 0 || (order == 0 && !beyond && end.inclusive()));
+            return order != null && (order < 0
+                    || (order == 0 && end.inclusive() && (!beyond || leastIsOpen())));
         }
 
         private boolean highTo(Endpoint end, boolean beyond) {
@@ -1109,12 +1248,25 @@ public final class WhatARelationLeavesUndivided {
                 return false;
             }
             Integer order = againstTheGreatest(end.at());
-            return order != null && (order > 0 || (order == 0 && !beyond && end.inclusive()));
+            return order != null && (order > 0
+                    || (order == 0 && end.inclusive() && (!beyond || greatestIsOpen())));
         }
     }
 
-    /** A run of values of any type, between two of them. */
-    private record OfPlaces(Place min, Place max) implements Run {
+    /** A run of values of any type, between two of them, each end open where the run leaves out
+     *  the value it stops at. */
+    private record OfPlaces(Place min, Place max, boolean openBelow, boolean openAbove)
+            implements Run {
+
+        @Override
+        public boolean leastIsOpen() {
+            return openBelow;
+        }
+
+        @Override
+        public boolean greatestIsOpen() {
+            return openAbove;
+        }
 
         @Override
         public Integer againstTheLeast(Place end) {
@@ -1138,7 +1290,22 @@ public final class WhatARelationLeavesUndivided {
     }
 
     /** A run of numbers, which an end that is a number is compared with. */
-    private record OfNumbers(ExactRatio min, ExactRatio max) implements Run {
+    private record OfNumbers(ExactRatio min, ExactRatio max, boolean openBelow, boolean openAbove)
+            implements Run {
+
+        OfNumbers(ExactRatio min, ExactRatio max) {
+            this(min, max, false, false);
+        }
+
+        @Override
+        public boolean leastIsOpen() {
+            return openBelow;
+        }
+
+        @Override
+        public boolean greatestIsOpen() {
+            return openAbove;
+        }
 
         @Override
         public Integer againstTheLeast(Place end) {
@@ -1293,8 +1460,17 @@ public final class WhatARelationLeavesUndivided {
         }
     }
 
-    /** A run of numbers, each end inclusive and null where nothing bounds it. */
-    private record Interval(ExactRatio low, ExactRatio high) {
+    /**
+     * A run of numbers, null at an end where nothing bounds it, and each end saying whether the
+     * number it stops at is one of the run.
+     */
+    private record Interval(ExactCut lower, ExactCut upper) {
+
+        /** A run with both ends inclusive. */
+        Interval(ExactRatio low, ExactRatio high) {
+            this(low == null ? null : ExactCut.inclusive(low),
+                    high == null ? null : ExactCut.inclusive(high));
+        }
 
         static Interval at(ExactRatio value) {
             return new Interval(value, value);
@@ -1302,41 +1478,137 @@ public final class WhatARelationLeavesUndivided {
 
         /** The run {@code bounds} gives, or null where an end is no number. */
         static Interval of(NumericDomain.Bounds bounds) {
-            ExactRatio low = number(bounds.min());
-            ExactRatio high = number(bounds.max());
+            ExactCut low = cut(bounds.min());
+            ExactCut high = cut(bounds.max());
             if ((bounds.min() != null && low == null) || (bounds.max() != null && high == null)) {
                 return null;
             }
             return new Interval(low, high);
         }
 
-        private static ExactRatio number(Endpoint end) {
-            return end != null && end.at() instanceof Count count ? count.exactly() : null;
+        private static ExactCut cut(Endpoint end) {
+            return end != null && end.at() instanceof Count count
+                    ? new ExactCut(count.exactly(), end.inclusive()) : null;
+        }
+
+        ExactRatio low() {
+            return lower == null ? null : lower.at();
+        }
+
+        ExactRatio high() {
+            return upper == null ? null : upper.at();
         }
 
         Interval plus(Interval other) {
-            ExactRatio lower = low == null || other.low == null ? null
-                    : low.plus(other.low).orNull();
-            ExactRatio upper = high == null || other.high == null ? null
-                    : high.plus(other.high).orNull();
-            if ((low != null && other.low != null && lower == null)
-                    || (high != null && other.high != null && upper == null)) {
+            ExactCut least = lower == null || other.lower == null ? null
+                    : ExactCut.meetingBoth(lower, other.lower).orNull();
+            ExactCut most = upper == null || other.upper == null ? null
+                    : ExactCut.meetingBoth(upper, other.upper).orNull();
+            if ((lower != null && other.lower != null && least == null)
+                    || (upper != null && other.upper != null && most == null)) {
                 return null;
             }
-            return new Interval(lower, upper);
+            return new Interval(least, most);
         }
 
         Interval times(ExactRatio by) {
-            ExactRatio one = low == null ? null : low.times(by).orNull();
-            ExactRatio two = high == null ? null : high.times(by).orNull();
-            if ((low != null && one == null) || (high != null && two == null)) {
+            ExactCut one = lower == null ? null : scaled(lower, by);
+            ExactCut two = upper == null ? null : scaled(upper, by);
+            if ((lower != null && one == null) || (upper != null && two == null)) {
                 return null;
             }
             return by.signum() >= 0 ? new Interval(one, two) : new Interval(two, one);
         }
 
+        private static ExactCut scaled(ExactCut cut, ExactRatio by) {
+            ExactRatio at = cut.at().times(by).orNull();
+            return at == null ? null : new ExactCut(at, cut.inclusive());
+        }
+
         Run asRun() {
-            return new OfNumbers(low, high);
+            return new OfNumbers(low(), high(), lower != null && !lower.inclusive(),
+                    upper != null && !upper.inclusive());
+        }
+    }
+
+    /**
+     * A run of numbers as cuts, empty where its ends have crossed. It is what a dense term's
+     * values are worked out as: a run ends open or closed, and a difference of two such runs is
+     * runs again.
+     */
+    private record Span(ExactCut lower, ExactCut upper) {
+
+        /** The run {@code bounds} gives, or null where an end is no number. */
+        static Span ofTheValues(NumericDomain.Bounds bounds) {
+            Interval run = Interval.of(bounds);
+            return run == null ? null : new Span(run.lower(), run.upper());
+        }
+
+        /** The values {@code statement} holds at, or null where they are no run. */
+        static Span where(OnTheDifference statement) {
+            ExactRatio at = statement.constant().negated().dividedBy(statement.weight()).orNull();
+            if (at == null) {
+                return null;
+            }
+            Rel relation = statement.weight().signum() < 0 ? statement.relation().turned()
+                    : statement.relation();
+            return switch (relation) {
+                case LT -> new Span(null, ExactCut.exclusive(at));
+                case LE -> new Span(null, ExactCut.inclusive(at));
+                case GT -> new Span(ExactCut.exclusive(at), null);
+                case GE -> new Span(ExactCut.inclusive(at), null);
+                case EQ -> new Span(ExactCut.inclusive(at), ExactCut.inclusive(at));
+                case NE -> null;
+            };
+        }
+
+        Span meet(Span other) {
+            return new Span(ExactCut.tighterLower(lower, other.lower),
+                    ExactCut.tighterUpper(upper, other.upper));
+        }
+
+        boolean holdsAValue() {
+            if (lower == null || upper == null) {
+                return true;
+            }
+            int order = lower.at().compareTo(upper.at());
+            return order < 0 || (order == 0 && lower.inclusive() && upper.inclusive());
+        }
+
+        /** What is left of this run with {@code taken} out of it: up to two runs. */
+        List<Span> without(Span taken) {
+            List<Span> out = new ArrayList<>();
+            if (taken.lower != null) {
+                Span below = meet(new Span(null, new ExactCut(taken.lower.at(),
+                        !taken.lower.inclusive())));
+                if (below.holdsAValue()) {
+                    out.add(below);
+                }
+            }
+            if (taken.upper != null) {
+                Span above = meet(new Span(new ExactCut(taken.upper.at(),
+                        !taken.upper.inclusive()), null));
+                if (above.holdsAValue()) {
+                    out.add(above);
+                }
+            }
+            return out;
+        }
+
+        /** This run as bounds on numbers, or null where an end is no count. */
+        NumericDomain.Bounds asBounds() {
+            Endpoint low = lower == null ? null : endpointAt(lower);
+            Endpoint high = upper == null ? null : endpointAt(upper);
+            if ((lower != null && low == null) || (upper != null && high == null)) {
+                return null;
+            }
+            return new NumericDomain.Bounds(low, high);
+        }
+
+        private static Endpoint endpointAt(ExactCut cut) {
+            Optional<Count> count = Count.written(cut.at()).orNull();
+            return count == null || count.isEmpty() ? null
+                    : new Endpoint(count.get(), cut.inclusive());
         }
     }
 }

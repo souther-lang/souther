@@ -23,6 +23,7 @@ import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Rel;
@@ -581,7 +582,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         for (int at = 0; at < sides.size(); at++) {
             WhatARelationLeavesUndivided.Leaves each = WhatARelationLeavesUndivided.leavesOf(
                     terms, at, constant, relation, UndividedByARelation::overlap, independent,
-                    carriers.get(at) instanceof Carrier.Whole, greatestOf(carriers.get(at)));
+                    granularityOf(carriers.get(at)), greatestOf(carriers.get(at)));
             leaves.add(each);
             if (each instanceof WhatARelationLeavesUndivided.Leaves.Undivided) {
                 out.addAll(sides.get(at).madeOf());
@@ -626,6 +627,16 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
         }
         return false;
+    }
+
+    /** How the values of {@code carrier} are spaced, or null where they are no numbers a
+     *  relation's settling values are worked out over. */
+    private static Granularity granularityOf(Carrier carrier) {
+        return switch (carrier) {
+            case Carrier.Whole _ -> Granularity.DISCRETE;
+            case Carrier.Dense _ -> Granularity.DENSE;
+            case null, default -> null;
+        };
     }
 
     /** The greatest whole number {@code carrier} holds, or null where it holds no greatest or none

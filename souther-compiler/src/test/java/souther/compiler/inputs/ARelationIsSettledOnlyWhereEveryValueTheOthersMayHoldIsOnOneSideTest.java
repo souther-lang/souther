@@ -7,10 +7,13 @@ import souther.compiler.inputs.WhatARelationLeavesUndivided.Line;
 import souther.compiler.inputs.WhatARelationLeavesUndivided.SettledRun;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.ExactCut;
 import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Rel;
 
+import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.List;
 
@@ -44,7 +47,7 @@ class ARelationIsSettledOnlyWhereEveryValueTheOthersMayHoldIsOnOneSideTest {
     private static Leaves leavesOf(List<WhatARelationLeavesUndivided.Term<String>> terms, int at,
                                    long constant, Rel relation) {
         return WhatARelationLeavesUndivided.leavesOf(terms, at, ExactRatio.of(constant), relation,
-                String::equals, (one, other) -> true, true, GREATEST_INT);
+                String::equals, (one, other) -> true, Granularity.DISCRETE, GREATEST_INT);
     }
 
     private static Leaves ofAProduct(NumericDomain.Bounds it, NumericDomain.Bounds other,
@@ -56,18 +59,18 @@ class ARelationIsSettledOnlyWhereEveryValueTheOthersMayHoldIsOnOneSideTest {
     }
 
     private static SettledRun settled(Long from, Long to, boolean holds) {
-        return new SettledRun(from == null ? null : BigInteger.valueOf(from),
+        return SettledRun.whole(from == null ? null : BigInteger.valueOf(from),
                 to == null ? null : BigInteger.valueOf(to), holds);
     }
 
     private static Leaves.Settled settledIn(Long least, Long greatest, SettledRun... runs) {
-        return new Leaves.Settled(List.of(runs),
+        return Leaves.Settled.ofWhole(List.of(runs),
                 least == null ? null : BigInteger.valueOf(least),
                 greatest == null ? null : BigInteger.valueOf(greatest));
     }
 
     private static Line line(Rel relation, long at) {
-        return new Line(relation, BigInteger.valueOf(at));
+        return new Line(relation, ExactRatio.of(at));
     }
 
     /**
@@ -268,5 +271,58 @@ class ARelationIsSettledOnlyWhereEveryValueTheOthersMayHoldIsOnOneSideTest {
                         settled(100L, null, true)).lines());
         assertEquals(List.of(line(Rel.GE, 0), line(Rel.LE, 5), line(Rel.GE, 10), line(Rel.LE, 20)),
                 settledIn(null, null, settled(0L, 5L, false), settled(10L, 20L, true)).lines());
+    }
+
+    private static NumericDomain.Bounds dense(String low, boolean lowIn, String high,
+                                              boolean highIn) {
+        return new NumericDomain.Bounds(
+                new Endpoint(Count.of(new BigDecimal(low)), lowIn),
+                new Endpoint(Count.of(new BigDecimal(high)), highIn));
+    }
+
+    private static Leaves denseLeavesOf(NumericDomain.Bounds it, NumericDomain.Bounds other,
+                                        NumericDomain.Bounds reached, long weight,
+                                        Rel relation) {
+        return WhatARelationLeavesUndivided.leavesOf(
+                List.of(term("x", 1, it, it), term("y", weight, other, reached)), 0,
+                ExactRatio.ZERO, relation, String::equals, (one, two) -> true,
+                Granularity.DENSE, null);
+    }
+
+    /**
+     * {@code x > w} with both between nought and one: nought is settled and a value above it is
+     * not, so the one line is {@code x <= 0}, with nought on the settled side. A value just
+     * above nought has {@code w} on both sides only because {@code w} takes nought itself, which
+     * the run left to ask about does not.
+     */
+    @Test
+    void aDenseTermIsPartedAtTheEndTheOtherTermsRunStopsAt() {
+        NumericDomain.Bounds unit = dense("0", true, "1", true);
+        Leaves leaves = denseLeavesOf(unit, unit, unit, -1, Rel.GT);
+        assertEquals(List.of(line(Rel.LE, 0)), ((Leaves.Settled) leaves).lines());
+        assertNull(denseLeavesOf(unit, unit, dense("0.5", true, "1", true), -1, Rel.GT));
+    }
+
+    /** {@code x + y < 0} with {@code y} between nought and one, both left out, holds at minus one
+     *  and fails at nought; the values between are asked of a {@code y} that takes no end, which
+     *  is shown to reach none of them, so nothing is shown of {@code x}. */
+    @Test
+    void anOpenRunTheOtherTermStopsAtIsNotTakenAsOneItReachesTheEndsOf() {
+        NumericDomain.Bounds open = dense("0", false, "1", false);
+        assertNull(denseLeavesOf(NumericDomain.Bounds.OPEN, open, open, 1, Rel.LT));
+    }
+
+    /** Runs a point apart are lines apart: a point both leave out is not covered. */
+    @Test
+    void aPointNoRunTakesIsAGapBetweenTwoDenseRuns() {
+        ExactRatio five = ExactRatio.of(5);
+        Leaves.Settled apart = new Leaves.Settled(List.of(
+                new SettledRun(null, ExactCut.exclusive(five), true),
+                new SettledRun(ExactCut.exclusive(five), null, false)), null, null, false);
+        assertEquals(List.of(new Line(Rel.LT, five), new Line(Rel.GT, five)), apart.lines());
+        Leaves.Settled touching = new Leaves.Settled(List.of(
+                new SettledRun(null, ExactCut.inclusive(five), true),
+                new SettledRun(ExactCut.exclusive(five), null, false)), null, null, false);
+        assertEquals(List.of(new Line(Rel.LE, five)), touching.lines());
     }
 }
