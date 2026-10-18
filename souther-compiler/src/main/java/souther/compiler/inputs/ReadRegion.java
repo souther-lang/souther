@@ -1,7 +1,6 @@
 package souther.compiler.inputs;
 
-import souther.compiler.check.DatePartsLeft;
-import souther.compiler.numeric.Congruences;
+import souther.compiler.check.HeldClass;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.PlacesApart;
@@ -71,20 +70,15 @@ record ReadRegion(ReadQuantities within) implements SearchRegion {
     public NumericDomain.Bounds wholeRunOf(NumericTerm.FromOnePosition term) {
         if (!apartAt(term).isEmpty()
                 || (term instanceof NumericTerm.ValueOf value
-                        && (valueClassAt(value) != null || datePartsAt(value) != null))) {
+                        && !(classAt(value) instanceof HeldClass.None))) {
             return null;
         }
         return within.wholeRunOf(term);
     }
 
     @Override
-    public Congruences valueClassAt(NumericTerm.ValueOf place) {
-        return within.valueClassAt(place);
-    }
-
-    @Override
-    public DatePartsLeft datePartsAt(NumericTerm.ValueOf place) {
-        return within.datePartsAt(place);
+    public HeldClass classAt(NumericTerm.ValueOf place) {
+        return within.classAt(place);
     }
 
     @Override

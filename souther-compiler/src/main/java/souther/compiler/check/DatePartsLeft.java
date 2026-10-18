@@ -1,8 +1,5 @@
 package souther.compiler.check;
 
-import souther.compiler.numeric.Count;
-import souther.compiler.numeric.Endpoint;
-import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.semantics.TakenAs;
@@ -62,6 +59,14 @@ public record DatePartsLeft(Map<TakenAs.DatePart, NumericDomain.Bounds> byPart) 
         }
     }
 
+    /** The parts both of these leave: each part met with what the other leaves it. */
+    public DatePartsLeft and(DatePartsLeft other) {
+        Map<TakenAs.DatePart, NumericDomain.Bounds> both = new EnumMap<>(TakenAs.DatePart.class);
+        both.putAll(byPart);
+        other.byPart.forEach((part, bounds) -> both.merge(part, bounds, NumericDomain.Bounds::meet));
+        return new DatePartsLeft(both);
+    }
+
     /** Whether {@code part} is left at {@code value}. */
     public boolean leaves(TakenAs.DatePart part, int value) {
         NumericDomain.Bounds left = byPart.get(part);
@@ -81,33 +86,44 @@ public record DatePartsLeft(Map<TakenAs.DatePart, NumericDomain.Bounds> byPart) 
 
     /** Whether some date the calendar has has parts these leave. */
     public boolean leaveADate() {
-        return !walk(FIRST_DAY, LAST_DAY, true, 1).days().isEmpty();
+        return !walk(null, null, true, 1).days().isEmpty();
     }
 
     /**
      * The days these hold met walking from {@code from} towards {@code to}, at most {@code most} of
      * them: a day at a time, and a month at a time past a month or a year these do not leave.
      *
-     * <p>Inside the years these leave first, since a year is the one part that does not come round
-     * again. Past that, a walk that went a whole cycle of the calendar beyond the last day it met
-     * has met every combination of a month and a day there is, so it ends there and says it left
-     * none.
+     * <p>Over the days the run, the calendar and the years these leave have in common, and nothing
+     * where they have none. A run reaching past the calendar holds no day there, and cut to the
+     * calendar end by end it would name the calendar's last day for a run that lies wholly after it.
+     * The years first, since a year is the one part that does not come round again. Past that, a walk
+     * that went a whole cycle of the calendar beyond the last day it met has met every combination
+     * of a month and a day there is, so it ends there and says it left none.
+     *
+     * @param from the day the walk starts at, or null for the calendar's end on that side
+     * @param to   the day it goes no further than, or null for the calendar's end on that side
      */
-    public Walked walk(long from, long to, boolean upward, int most) {
-        long firstHeld = FIRST_DAY;
-        long lastHeld = LAST_DAY;
+    public Walked walk(BigInteger from, BigInteger to, boolean upward, int most) {
+        BigInteger low = upward ? from : to;
+        BigInteger high = upward ? to : from;
+        BigInteger firstHeld = BigInteger.valueOf(FIRST_DAY);
+        BigInteger lastHeld = BigInteger.valueOf(LAST_DAY);
         NumericDomain.Bounds years = byPart.get(TakenAs.DatePart.YEAR);
         if (years != null && years.min() != null && wholeYear(years, true) instanceof Long first) {
-            firstHeld = LocalDate.of(first.intValue(), 1, 1).toEpochDay();
+            firstHeld = BigInteger.valueOf(LocalDate.of(first.intValue(), 1, 1).toEpochDay());
         }
         if (years != null && years.max() != null && wholeYear(years, false) instanceof Long last) {
-            lastHeld = LocalDate.of(last.intValue(), 12, 31).toEpochDay();
+            lastHeld = BigInteger.valueOf(LocalDate.of(last.intValue(), 12, 31).toEpochDay());
         }
-        long start = upward ? Math.max(from, firstHeld) : Math.min(from, lastHeld);
-        long end = upward ? Math.min(to, lastHeld) : Math.max(to, firstHeld);
+        BigInteger lowest = low == null ? firstHeld : low.max(firstHeld);
+        BigInteger highest = high == null ? lastHeld : high.min(lastHeld);
         List<Long> out = new ArrayList<>();
+        if (lowest.compareTo(highest) > 0) {
+            return new Walked(out, false);
+        }
+        long end = (upward ? highest : lowest).longValueExact();
         long unmet = 0;
-        long day = Math.max(FIRST_DAY, Math.min(LAST_DAY, start));
+        long day = (upward ? lowest : highest).longValueExact();
         while (upward ? day <= end : day >= end) {
             if (out.size() >= most) {
                 return new Walked(out, true);
@@ -141,17 +157,10 @@ public record DatePartsLeft(Map<TakenAs.DatePart, NumericDomain.Bounds> byPart) 
     /** The nearest year an end of {@code years} admits, inside the calendar, or null where the end
      *  names no number this reads. */
     private static Long wholeYear(NumericDomain.Bounds years, boolean lower) {
-        Endpoint end = lower ? years.min() : years.max();
-        if (!(end.at() instanceof Count count)) {
+        BigInteger whole = (lower ? years.min() : years.max()).wholeAdmitted(lower);
+        if (whole == null) {
             return null;
         }
-        ExactRatio at = count.exactly();
-        if (!((lower ? at.ceiling() : at.floor()) instanceof ExactAnswer.Held<BigInteger> held)) {
-            return null;
-        }
-        BigInteger whole = at.isWhole() && !end.inclusive()
-                ? held.value().add(lower ? BigInteger.ONE : BigInteger.ONE.negate())
-                : held.value();
         return whole.max(BigInteger.valueOf(LocalDate.MIN.getYear()))
                 .min(BigInteger.valueOf(LocalDate.MAX.getYear())).longValueExact();
     }

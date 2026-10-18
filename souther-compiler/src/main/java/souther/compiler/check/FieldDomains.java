@@ -22,6 +22,7 @@ import souther.compiler.values.StringFacts;
 import souther.compiler.values.StringMachineAnswers;
 import souther.compiler.values.StoppedReading;
 import souther.compiler.values.UnreadReason;
+import souther.compiler.values.Value;
 import souther.compiler.values.ValueSet;
 
 import souther.compiler.numeric.Count;
@@ -257,19 +258,21 @@ public final class FieldDomains {
     private final Map<LeftOut, FieldDomains> counterfactuals = new HashMap<>();
 
     /**
-     * The class of whole numbers each place is held to ({@link #valueClassAt}), kept under the place.
+     * The class each place is held to ({@link #classAt}), kept under the place.
      *
      * <p>Asked at every projection of a number of the place, and the answer turns on the rules of
      * this value alone, so it is worked out once for each place and not once for each question.
      */
-    private final Map<RuleKey, Residues> classes = new ConcurrentHashMap<>();
+    private final Map<RuleKey, HeldClass> classes = new ConcurrentHashMap<>();
 
     /** The place {@link #classLeavingNothing} found, worked out the first time it is asked. */
     private volatile Optional<RuleKey> leavingNothing;
 
-    /** Where the rules leave the parts of the date at each place ({@link #datePartsAt}), kept for
-     *  the same reason {@link #classes} is. */
-    private final Map<RuleKey, Optional<DatePartsLeft>> dateParts = new ConcurrentHashMap<>();
+    /**
+     * The numbers the rules speak of that an operation answers of a place, under the place they are
+     * taken of ({@link #takenOf}), worked out the first time it is asked.
+     */
+    private volatile Map<Term, List<FactSubject>> takenOfEachPlace;
 
     /**
      * What the rules keep the elements of each place apart at ({@link #keptApartAt}), and what the
@@ -984,7 +987,8 @@ public final class FieldDomains {
      * asked for the other.
      */
     public Composing composing(Map<NumberAt<RuleKey>, Count> fixed) {
-        return new Composing(settling(fixed), atomAt, countAt, this::keptApartAt, this::admits);
+        return new Composing(settling(fixed), atomAt, countAt, this::keptApartAt, this::admits,
+                this::classAt);
     }
 
     /**
@@ -1111,15 +1115,22 @@ public final class FieldDomains {
          *  ({@link FieldDomains#admits}). */
         private final Function<RuleKey, AdmissibleSet> admits;
 
+        /** The class the values at each place are held to, as the reading this was taken off has
+         *  it ({@link FieldDomains#classAt}). A settling only takes values away, so a class read
+         *  before it still holds every value left after it. */
+        private final Function<RuleKey, HeldClass> classAt;
+
         private Composing(ConstraintState<FactSubject> constraints,
                           Map<RuleKey, FactSubject> atomAt, Map<RuleKey, Counted> countAt,
                           Function<RuleKey, List<List<String>>> keptApartAt,
-                          Function<RuleKey, AdmissibleSet> admits) {
+                          Function<RuleKey, AdmissibleSet> admits,
+                          Function<RuleKey, HeldClass> classAt) {
             this.constraints = constraints;
             this.atomAt = atomAt;
             this.countAt = countAt;
             this.keptApartAt = keptApartAt;
             this.admits = admits;
+            this.classAt = classAt;
         }
 
         /**
@@ -1135,8 +1146,16 @@ public final class FieldDomains {
          * no range on a string or on the cases of an enumeration can.
          */
         public ConstructionLimits at(RuleKey path) {
-            if (path == null || path.isTheValueItself()) {
+            if (path == null) {
                 return ConstructionLimits.NONE;
+            }
+            // The value itself is chosen by what a caller builds it of, and nothing here says where
+            // it stops — but the class its rules hold it to is its own, and a whole newtype nobody
+            // reads is chosen out of the class as a field is.
+            if (path.isTheValueItself()) {
+                HeldClass own = classAt.apply(path);
+                return own instanceof HeldClass.None ? ConstructionLimits.NONE
+                        : new ConstructionLimits(null, null, ConstructionLimits.NONE.admits(), own);
             }
             NumericDomain.Bounds values = boundsOn(atomAt.get(path));
             Counted counted = countAt.get(path);
@@ -1144,7 +1163,7 @@ public final class FieldDomains {
             List<List<String>> apart = keptApartAt.apply(path);
             return new ConstructionLimits(values, held == null && apart.isEmpty() ? null
                     : new Held(held == null ? NumericDomain.Bounds.OPEN : held, apart),
-                    admits.apply(path));
+                    admits.apply(path), classAt.apply(path));
         }
 
         /** Where these constraints stop one subject, or null where they stop it nowhere. */
@@ -1170,20 +1189,68 @@ public final class FieldDomains {
      * @param held   how many a collection there holds, or null where no rule counts it
      * @param admits which values may stand at the position, read in full and naming none where the
      *               rules say nothing about which
+     * @param heldTo the class the value there is held to besides where it stops: a value chosen
+     *               between the ends is one of the class, or the rules refuse it
      */
     public record ConstructionLimits(NumericDomain.Bounds values, Held held,
-                                     AdmissibleSet admits) {
+                                     AdmissibleSet admits, HeldClass heldTo) {
 
         public ConstructionLimits {
-            if (admits == null) {
+            if (admits == null || heldTo == null) {
                 throw new IllegalArgumentException(
-                        "a position says which values may stand there, every one of them included");
+                        "a position says which values may stand there, every one of them included,"
+                                + " and which class they are of, which is none where it is none");
+            }
+        }
+
+        /**
+         * The values {@link #admits} names, which is what a value chosen out of a class is put to:
+         * the values it is, or the values it keeps out — and every value where it names neither, as
+         * a set read off a pattern does not.
+         */
+        public ValuesNamed valuesNamed() {
+            return switch (admits.approximation()) {
+                case ValueSet.Finite it -> new ValuesNamed(it.values(), true);
+                case ValueSet.Cofinite it -> new ValuesNamed(it.excluded(), false);
+                default -> ValuesNamed.EVERY;
+            };
+        }
+
+        /**
+         * Values a set names, and whether they are its values or the ones it keeps out.
+         *
+         * <p>Values and nothing that is not one, so two of these are equal exactly where they name
+         * the same values — which a set holding a machine it was read through is not, and is why
+         * this is its own type and not the set it was read off.
+         *
+         * @param values       the values named
+         * @param areTheValues whether they are the set's values, rather than the ones it keeps out
+         */
+        public record ValuesNamed(Set<Value> values, boolean areTheValues) {
+
+            public ValuesNamed {
+                values = Set.copyOf(values);
+            }
+
+            /** Every value, which keeps none out. */
+            public static final ValuesNamed EVERY = new ValuesNamed(Set.of(), false);
+
+            /** The same values as a set a carrier can be asked of. */
+            public ValueSet asASet() {
+                return areTheValues ? new ValueSet.Finite(values)
+                        : values.isEmpty() ? ValueSet.ANY : new ValueSet.Cofinite(values);
+            }
+
+            /** How many values this keeps out, which is how many members of a class it can. */
+            public int keptOut() {
+                return areTheValues ? 0 : values.size();
             }
         }
 
         /** A position the rules reach in no way. */
         public static final ConstructionLimits NONE =
-                new ConstructionLimits(null, null, AdmissibleSet.complete(ValueSet.ANY));
+                new ConstructionLimits(null, null, AdmissibleSet.complete(ValueSet.ANY),
+                        HeldClass.NONE);
     }
 
     /**
@@ -2120,38 +2187,24 @@ public final class FieldDomains {
     }
 
     /**
-     * The class of whole numbers the rules leave the value at {@code path} in through the
-     * remainders they hold at one number each, or null where they hold none.
+     * What the rules hold the value at {@code path} to besides where it runs, met with where it runs
+     * and with the values they admit there.
      *
-     * <p>Read off what the rules leave each remainder of the value and not off how a clause spells
-     * it: {@code Int.floorMod(value, 1000) == 0} and a pair of bounds that meet at nought leave the
-     * value in the same class. A remainder left at one number is a congruence, and the ends of the
-     * range the value runs in say nothing of the numbers between them.
-     */
-    public Congruences valueClassAt(RuleKey path) {
-        return residuesAt(path) instanceof Residues.Within(Congruences class_) ? class_ : null;
-    }
-
-    /**
-     * What the remainders the rules hold the value at a place to leave it.
+     * <p>Read off what the rules leave each remainder and each part of the date, and not off how a
+     * clause spells it: {@code Int.floorMod(value, 1000) == 0} and a pair of bounds that meet at
+     * nought leave the value in the same class, and so do {@code Date.day(value) == 1} and a pair of
+     * bounds meeting at one. A part asked of the date moved by days is no part of this one, so only a
+     * part taken of the date as it stands is read.
      *
-     * <p>Three answers and not a class or null. Remainders no number leaves together leave the value
-     * nothing, which is the opposite of holding it to no class, and read as null the two were one:
-     * a value no number can be was searched as one any number can.
+     * <p>The one place a class meets the rest of what the rules leave the value. A class says which
+     * values of the order there are and nothing of where they run, and what a rule leaves the value
+     * itself says the opposite: {@code value == 1} beside a remainder of nought by two is two
+     * statements each of which some value meets, and no value meets both. Met here, a class with no
+     * member where the value runs is {@link HeldClass.NoValue}, and every reader — whether the value
+     * exists, which values a search may choose, which points a border owes — reads that answer
+     * rather than meeting the two again for itself.
      */
-    private sealed interface Residues {
-
-        /** No remainder of the value is held at one number. */
-        record NoneHeld() implements Residues {}
-
-        /** The value is held to {@code class_}. */
-        record Within(Congruences class_) implements Residues {}
-
-        /** No whole number leaves every remainder held. */
-        record NoNumberLeavesThem() implements Residues {}
-    }
-
-    private Residues residuesAt(RuleKey path) {
+    public HeldClass classAt(RuleKey path) {
         return classes.computeIfAbsent(path, this::classOf);
     }
 
@@ -2166,11 +2219,13 @@ public final class FieldDomains {
     private RuleKey classLeavingNothing() {
         if (leavingNothing == null) {
             RuleKey found = null;
-            for (RuleKey path : atomAt.keySet()) {
-                DatePartsLeft parts = datePartsAt(path);
-                if (residuesAt(path) instanceof Residues.NoNumberLeavesThem
-                        || (parts != null && !parts.leaveADate())) {
-                    found = path;
+            for (Map.Entry<RuleKey, FactSubject> each : atomAt.entrySet()) {
+                // Only a place some number is taken of can be held to a class, and most are not.
+                if (takenOf(each.getValue()).isEmpty()) {
+                    continue;
+                }
+                if (classAt(each.getKey()) instanceof HeldClass.NoValue) {
+                    found = each.getKey();
                     break;
                 }
             }
@@ -2179,81 +2234,101 @@ public final class FieldDomains {
         return leavingNothing.orElse(null);
     }
 
-    /** The class {@link #valueClassAt} says, worked out: a walk of every subject the rules hold. */
-    private Residues classOf(RuleKey path) {
-        FactSubject place = atomAt.get(path);
-        if (place == null) {
-            return new Residues.NoneHeld();
+    /**
+     * The numbers the rules speak of that an operation answers of {@code place}: a call whose first
+     * argument is it.
+     *
+     * <p>Indexed once over every subject the rules hold. Whether the rules leave a value asks this
+     * of every place, and a place reads its own few rather than every subject there is.
+     */
+    private List<FactSubject> takenOf(FactSubject place) {
+        Map<Term, List<FactSubject>> index = takenOfEachPlace;
+        if (index == null) {
+            index = new HashMap<>();
+            for (FactSubject atom : constraints.numbers().atomsSpokenOf()) {
+                Term call = atom.identity();
+                if (call.calledOperation() != null && !call.parts().isEmpty()) {
+                    index.computeIfAbsent(call.parts().getFirst(), _ -> new ArrayList<>())
+                            .add(atom);
+                }
+            }
+            takenOfEachPlace = index;
         }
-        Congruences together = null;
-        for (FactSubject atom : constraints.numbers().atomsSpokenOf()) {
-            Term call = atom.identity();
-            ValueName operation = call.calledOperation();
-            OptionalInt divides = operation == null ? OptionalInt.empty()
-                    : DefaultBoundOperationFacts.get().divisorOfAFloorRemainder(operation);
-            if (divides.isEmpty() || call.parts().size() <= divides.getAsInt()
-                    || !call.parts().getFirst().equals(place.identity())) {
-                continue;
-            }
-            Long written = call.parts().get(divides.getAsInt()).foldedWholeNumber();
-            if (written == null || written == 0
-                    || !(constraints.numbers().projectionOf(atom)
-                            instanceof NumericDomain.Projection.Within(
-                                    NumericDomain.Bounds bounds))) {
-                continue;
-            }
-            BigInteger residue = bounds.holdsOneWholeNumber();
-            if (residue == null) {
-                continue;
-            }
-            Congruences leaves = new Congruences(residue,
-                    BigInteger.valueOf(written).abs());
-            together = together == null ? leaves : together.meet(leaves);
-            if (together == null) {
-                return new Residues.NoNumberLeavesThem();
-            }
-        }
-        return together == null ? new Residues.NoneHeld() : new Residues.Within(together);
+        return index.getOrDefault(place.identity(), List.of());
     }
 
     /**
-     * Where the rules leave the parts of the date at {@code path}, or null where they say nothing of
-     * any part of it.
-     *
-     * <p>Read off what the rules leave each part and not off how a clause spells it, as
-     * {@link #valueClassAt} is: {@code Date.day(value) == 1} and a pair of bounds meeting at one
-     * leave the date in the same class. A part asked of the date moved by days is no part of this
-     * one, so only a part taken of the date as it stands is read.
+     * The class {@link #classAt} says, worked out: the class the numbers taken of the place hold it
+     * to, met with where the place runs and with the values admitted there.
      */
-    public DatePartsLeft datePartsAt(RuleKey path) {
-        return dateParts.computeIfAbsent(path, at -> Optional.ofNullable(datePartsOf(at)))
-                .orElse(null);
-    }
-
-    /** The parts {@link #datePartsAt} says, worked out: a walk of every subject the rules hold. */
-    private DatePartsLeft datePartsOf(RuleKey path) {
+    private HeldClass classOf(RuleKey path) {
         FactSubject place = atomAt.get(path);
         if (place == null) {
-            return null;
+            return HeldClass.NONE;
         }
-        Map<TakenAs.DatePart, NumericDomain.Bounds> left = new EnumMap<>(TakenAs.DatePart.class);
-        for (FactSubject atom : constraints.numbers().atomsSpokenOf()) {
+        HeldClass held = classTakenOf(place).within(constraints.numbers().boundsOf(place));
+        // And the values the rules name there, where they name finitely many: a class none of them
+        // is of leaves the place nothing, which no range of them shows — the numbers one and three
+        // run over two, which is even, and neither of them is.
+        if (held instanceof HeldClass.OfResidues
+                && admits(path).approximation() instanceof ValueSet.Finite named
+                && named.values().stream().noneMatch(each -> each instanceof Value.Number number
+                        && number.value().stripTrailingZeros().scale() <= 0
+                        && held.holds(number.value().toBigIntegerExact()))) {
+            return HeldClass.NO_VALUE;
+        }
+        return held;
+    }
+
+    /** The class the numbers taken of {@code place} hold it to: the remainders the rules hold at
+     *  one number each, and the parts of the date they leave. */
+    private HeldClass classTakenOf(FactSubject place) {
+        Congruences together = null;
+        Map<TakenAs.DatePart, NumericDomain.Bounds> parts = new EnumMap<>(TakenAs.DatePart.class);
+        for (FactSubject atom : takenOf(place)) {
             Term call = atom.identity();
             ValueName operation = call.calledOperation();
-            if (operation == null || call.parts().size() != 1
-                    || !call.parts().getFirst().equals(place.identity())
-                    || !(DefaultBoundOperationFacts.get().takenAs(operation)
-                            instanceof TakenAs.PartOfDate part)) {
+            if (call.parts().size() == 1 && DefaultBoundOperationFacts.get().takenAs(operation)
+                    instanceof TakenAs.PartOfDate part) {
+                // The range the part is left, and not every number the projection names: a part
+                // held inside a range by rules the projection lost is a part the range still holds,
+                // so reading the range keeps every date the rules leave.
+                parts.merge(part.part(), constraints.numbers().boundsOf(atom),
+                        NumericDomain.Bounds::meet);
                 continue;
             }
-            // The range the part is left, and not every number the projection names: a part held
-            // inside a range by rules the projection lost is a part the range still holds, so
-            // reading the range keeps every date the rules leave.
-            NumericDomain.Bounds bounds = constraints.numbers().boundsOf(atom);
-            left.merge(part.part(), bounds, NumericDomain.Bounds::meet);
+            Congruences leaves = remainderHeldBy(atom, call, operation);
+            if (leaves != null) {
+                together = together == null ? leaves : together.meet(leaves);
+                if (together == null) {
+                    return HeldClass.NO_VALUE;
+                }
+            }
         }
-        left.values().removeIf(bounds -> bounds.min() == null && bounds.max() == null);
-        return left.isEmpty() ? null : new DatePartsLeft(left);
+        parts.values().removeIf(bounds -> bounds.min() == null && bounds.max() == null);
+        if (!parts.isEmpty()) {
+            DatePartsLeft left = new DatePartsLeft(parts);
+            return left.leaveADate() ? new HeldClass.OfDays(left) : HeldClass.NO_VALUE;
+        }
+        return together == null ? HeldClass.NONE : new HeldClass.OfResidues(together);
+    }
+
+    /** The class a remainder {@code atom} is of leaves the value it is taken of in, where the rules
+     *  hold it at one number and its divisor was written — or null. */
+    private Congruences remainderHeldBy(FactSubject atom, Term call, ValueName operation) {
+        OptionalInt divides = DefaultBoundOperationFacts.get().divisorOfAFloorRemainder(operation);
+        if (divides.isEmpty() || call.parts().size() <= divides.getAsInt()) {
+            return null;
+        }
+        Long written = call.parts().get(divides.getAsInt()).foldedWholeNumber();
+        if (written == null || written == 0
+                || !(constraints.numbers().projectionOf(atom)
+                        instanceof NumericDomain.Projection.Within(NumericDomain.Bounds bounds))) {
+            return null;
+        }
+        BigInteger residue = bounds.holdsOneWholeNumber();
+        return residue == null ? null
+                : new Congruences(residue, BigInteger.valueOf(written).abs());
     }
 
     /**

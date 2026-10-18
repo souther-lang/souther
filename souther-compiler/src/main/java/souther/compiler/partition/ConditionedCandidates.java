@@ -59,7 +59,7 @@ final class ConditionedCandidates {
         FieldDomains.ConstructionLimits limits = rules.limitsAt(asked.at(), asked.settled());
         Proposals stands = Witnesses.firstWhatThePlaceAdmits(position.type(), limits,
                 reading, Set.of(), () -> Partitions.displacedRepresentativesOf(position.type(),
-                        reading, limits.values(), limits.held()));
+                        reading, limits));
         met = met.and(stands.met());
         found.put(asked, stands.values());
         return stands.values();

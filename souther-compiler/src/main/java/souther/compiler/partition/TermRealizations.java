@@ -4,6 +4,8 @@ import net.unit8.notation199x.pattern.CodePoints;
 
 import souther.compiler.ast.Hir;
 import souther.compiler.check.Carrier;
+import souther.compiler.check.ClassMembers;
+import souther.compiler.check.HeldClass;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.TypeView;
@@ -1884,7 +1886,9 @@ final class TermRealizations {
             return new RemainderSolutions.Value(run, null, at -> false);
         }
         NumericTerm.ValueOf value = new NumericTerm.ValueOf(taken.position());
-        return new RemainderSolutions.Value(run, within.valueClassAt(value),
+        return new RemainderSolutions.Value(run,
+                within.classAt(value) instanceof HeldClass.OfResidues(Congruences residues)
+                        ? residues : null,
                 at -> within.given(value, at).emptiness().isPresent());
     }
 
@@ -2107,9 +2111,9 @@ final class TermRealizations {
         // A value held to a class is a value of the class, so what is offered are its members: the
         // end of a run is one only by luck, and a place the class refuses is no candidate whatever
         // else is asked of it afterwards.
-        Congruences members = orders.term() instanceof NumericTerm.ValueOf value && within != null
-                ? within.valueClassAt(value) : null;
-        if (members != null) {
+        HeldClass members = orders.term() instanceof NumericTerm.ValueOf value && within != null
+                ? within.classAt(value) : HeldClass.NONE;
+        if (!(members instanceof HeldClass.None)) {
             return membersOnTheOrder(wanted, orders, members, leaves, ofTheRun);
         }
         Place found = Criterion.Within.somewhereIn(wanted.region(orders.answered()),
@@ -2128,7 +2132,7 @@ final class TermRealizations {
      * for the figure it was cut at.
      */
     private static Tried membersOnTheOrder(NumericSet wanted, TermOrders orders,
-                                           Congruences members, NumericDomain.Bounds leaves,
+                                           HeldClass members, NumericDomain.Bounds leaves,
                                            Set<CompositionRepertoire> ofTheRun) {
         Carrier carrier = orders.answered();
         List<Place> offered = new ArrayList<>();
@@ -2139,7 +2143,7 @@ final class TermRealizations {
             if (run == null) {
                 continue;
             }
-            ClassMembers inside = ClassMembers.within(members,
+            ClassMembers inside = members.within(
                     new NumericDomain.Bounds(run.low(), run.high()), Towards.ABOVE,
                     CompositionBudget.VALUES_OF_AN_UNBOUNDED_PROGRESSION_TRIED.maximum());
             offered.addAll(inside.notApart(PlacesApart.NONE));

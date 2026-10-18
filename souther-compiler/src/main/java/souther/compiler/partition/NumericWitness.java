@@ -1,14 +1,18 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.Carrier;
+import souther.compiler.check.ClassMembers;
+import souther.compiler.check.HeldClass;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.PlacesApart;
 import souther.compiler.values.ValueSet;
 
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.HashSet;
@@ -414,18 +418,34 @@ final class NumericWitness {
             met.leftUnwalked = true;
             return false;
         }
+        // A value held to a class is a value of the class, so its members are what is walked, in
+        // the order a walk outward from the same place takes: a step of one reaches a member only by
+        // luck, and every value between two members is one the rules refuse.
+        HeldClass held = term instanceof NumericTerm.ValueOf value
+                ? within.classAt(value) : HeldClass.NONE;
+        if (!(held instanceof HeldClass.None) && held.countsOn(carrier)
+                && Count.number(first).exactly().floor()
+                        instanceof ExactAnswer.Held<BigInteger> from) {
+            ClassMembers inside = held.nearest(from.value(), runs, VALUES_A_POSITION_IS_TRIED_AT);
+            for (Place tried : inside.notApart(apart)) {
+                if (carrier.admitted(admits, tried)
+                        && tryingAt(within, term, tried, terms, at, on, looking, composing,
+                                standing, met)) {
+                    return true;
+                }
+            }
+            if (inside.stoppedShort()) {
+                met.leftUnwalked = true;
+                met.figures.add(CompositionBudget.VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT);
+            }
+            return false;
+        }
         Outwards.Walked walked = Outwards.from(first, Count.of(1), carrier, runs,
                 VALUES_A_POSITION_IS_TRIED_AT, PLACES_A_POSITION_IS_LOOKED_AT, admits, apart);
         for (Place tried : walked) {
-            SearchRegion next = within.given(term, tried);
-            if (next.emptiness().isPresent()) {
-                continue;
-            }
-            standing.put(term, tried);
-            if (walk(next, terms, at + 1, on, looking, composing, standing, met)) {
+            if (tryingAt(within, term, tried, terms, at, on, looking, composing, standing, met)) {
                 return true;
             }
-            standing.remove(term);
         }
         // What the walk of this position came to, read over the ways it can end rather than off one
         // of them. Each says something different about an empty hand, and a reading that asked only
@@ -457,6 +477,27 @@ final class NumericWitness {
                     CompositionCapacity.Where.VALUES_A_POSITION_ON_THE_WAY_IS_WALKED_TO,
                     walked.unheld()));
         }
+        return false;
+    }
+
+    /**
+     * The term {@code at} held at {@code tried} and the walk of every term after it, or nothing
+     * where the rules leave nothing there — which steps on, as a value the rules refuse does.
+     */
+    private static boolean tryingAt(SearchRegion within, NumericTerm term, Place tried,
+                                    List<? extends NumericTerm> terms, int at,
+                                    Function<NumericTerm, Carrier> on, WitnessSearch looking,
+                                    Composing composing,
+                                    SequencedMap<NumericTerm, Place> standing, Met met) {
+        SearchRegion next = within.given(term, tried);
+        if (next.emptiness().isPresent()) {
+            return false;
+        }
+        standing.put(term, tried);
+        if (walk(next, terms, at + 1, on, looking, composing, standing, met)) {
+            return true;
+        }
+        standing.remove(term);
         return false;
     }
 

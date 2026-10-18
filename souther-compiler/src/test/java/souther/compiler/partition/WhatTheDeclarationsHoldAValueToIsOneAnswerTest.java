@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.DatePartsLeft;
+import souther.compiler.check.HeldClass;
 import souther.compiler.check.NarrowedBounds;
 import souther.compiler.check.RuleReportAnchor;
 import souther.compiler.check.RuleRef;
@@ -59,25 +60,25 @@ class WhatTheDeclarationsHoldAValueToIsOneAnswerTest {
     private static final Carrier WHOLE = new Carrier.Whole();
 
     /** A position held to {@code "a"} or {@code "b"}. */
-    private static final HeldValues TWO_STRINGS = new HeldValues.OfAPosition(TEXT, null,
+    private static final HeldValues TWO_STRINGS = new HeldValues.OfAPosition(TEXT, HeldClass.NONE,
             new ValueSet.Finite(Set.of(new Value.Text("a"), new Value.Text("b"))));
 
     /** A position held to the multiples of a thousand. */
     private static final HeldValues THOUSANDS = new HeldValues.OfAPosition(WHOLE,
-            new ClassHeldTo.OfWholeNumbers(
+            new HeldClass.OfResidues(
                     new Congruences(BigInteger.ZERO, BigInteger.valueOf(1000))), ValueSet.ANY);
 
     private static final Carrier DAYS = new Carrier.Days();
 
     /** A position held to the first of each month. */
-    private static final ClassHeldTo FIRST_OF_A_MONTH = new ClassHeldTo.OfDays(
+    private static final HeldClass FIRST_OF_A_MONTH = new HeldClass.OfDays(
             new DatePartsLeft(Map.of(TakenAs.DatePart.DAY, onlyAt(1))));
 
     private static final HeldValues FIRSTS =
             new HeldValues.OfAPosition(DAYS, FIRST_OF_A_MONTH, ValueSet.ANY);
 
     /** A position held away from two. */
-    private static final HeldValues NOT_TWO = new HeldValues.OfAPosition(WHOLE, null,
+    private static final HeldValues NOT_TWO = new HeldValues.OfAPosition(WHOLE, HeldClass.NONE,
             new ValueSet.Cofinite(Set.of(new Value.Number(BigDecimal.valueOf(2)))));
 
     @Test
@@ -117,7 +118,7 @@ class WhatTheDeclarationsHoldAValueToIsOneAnswerTest {
         assertEquals(List.of(epochDay("2024-05-01"), epochDay("2024-04-01")),
                 FIRST_OF_A_MONTH.within(new NumericDomain.Bounds(null,
                         Endpoint.inclusive(dayCount("2024-05-15"))), Towards.BELOW, 2).values());
-        ClassHeldTo leapDays = new ClassHeldTo.OfDays(new DatePartsLeft(Map.of(
+        HeldClass leapDays = new HeldClass.OfDays(new DatePartsLeft(Map.of(
                 TakenAs.DatePart.DAY, onlyAt(29), TakenAs.DatePart.MONTH, onlyAt(2))));
         assertEquals(List.of(epochDay("2028-02-29")),
                 leapDays.within(new NumericDomain.Bounds(Endpoint.inclusive(dayCount("2025-01-01")),
@@ -193,7 +194,7 @@ class WhatTheDeclarationsHoldAValueToIsOneAnswerTest {
      */
     @Test
     void aValueSingledOutThatTheDeclarationsRefuseOwesNoRowAtIt() {
-        HeldValues odd = new HeldValues.OfAPosition(WHOLE, null, new ValueSet.Finite(Set.of(
+        HeldValues odd = new HeldValues.OfAPosition(WHOLE, HeldClass.NONE, new ValueSet.Finite(Set.of(
                 new Value.Number(BigDecimal.ONE), new Value.Number(BigDecimal.valueOf(3)))));
         assertEquals(new PointAnswer.NotOwed(NotOwedReason.NO_VALUE_CAN_STAND_THERE, List.of()),
                 singledAt(2, odd).answers().get(new DomainPoint.AtTheLine()));

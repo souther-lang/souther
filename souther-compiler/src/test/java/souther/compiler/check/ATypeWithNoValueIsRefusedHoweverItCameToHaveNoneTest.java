@@ -657,6 +657,39 @@ class ATypeWithNoValueIsRefusedHoweverItCameToHaveNoneTest {
     }
 
     /**
+     * A class with no member where the value runs, or among the values the rules name, is no value
+     * either: each rule is met by some value and no value meets both.
+     *
+     * <p>The class is read beside where the value runs and beside the values named, and met with
+     * them where it is read. Each model is beside the nearest one whose rules leave a value.
+     */
+    @Test
+    void aClassWithNoMemberWhereTheValueRunsIsRefusedAndOneWithAMemberIsNot() {
+        for (String[] each : List.of(
+                new String[] {"Int", "value == 1 && Int.floorMod(value, 2) == 0",
+                        "value == 2 && Int.floorMod(value, 2) == 0"},
+                new String[] {"Int", "(value == 1 || value == 3) && Int.floorMod(value, 2) == 0",
+                        "(value == 1 || value == 4) && Int.floorMod(value, 2) == 0"},
+                new String[] {"Date", "value == Date(\"2024-05-15\") && Date.day(value) == 1",
+                        "value == Date(\"2024-05-01\") && Date.day(value) == 1"},
+                new String[] {"Date", "value < Date(\"2024-01-01\") && Date.year(value) == 2025",
+                        "value < Date(\"2026-01-01\") && Date.year(value) == 2025"})) {
+            assertEquals(List.of("NothingIsLeftForThatPositionToHold"), saidBy("""
+                    module demo
+
+                    data V = %s
+                        invariant held = %s
+                    """.formatted(each[0], each[1])), each[1]);
+            admits("""
+                    module demo
+
+                    data V = %s
+                        invariant held = %s
+                    """.formatted(each[0], each[2]));
+        }
+    }
+
+    /**
      * A declaration whose equalities admit no value is told the same thing, and told it once.
      *
      * <p>The sentence is about the rules and not about the carrier, since neither is the count. Two
