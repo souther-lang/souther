@@ -130,6 +130,14 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                             + " alone answers for + - * and needs the answered type for too for /"),
             new Held("souther.compiler.abort.AbortSites.arithmeticType",
                     "the same, for the answered type / dispatches on before it asks the operator"),
+            new Held("souther.compiler.abort.AbortSites.whateverItsTypes",
+                    "the same, for an operator whose answer turns on no type"),
+            new Held("souther.compiler.abort.AbortSites.ofAnOperatorOfAnyType",
+                    "the same, over every typing the operator is admitted at, for a tree whose"
+                            + " operands carry no type"),
+            new Held("souther.compiler.check.LibraryEndings.Reading.itself",
+                    "hands the operator a library operation's body writes to AbortSites, which"
+                            + " answers what it ends a run for"),
             new Held("souther.compiler.check.BinaryElaborator.operandBeside",
                     "what the operator asks of one operand, given the one beside it"),
             new Held("souther.compiler.check.HelperParams.BodyTyping.visitOperand",

@@ -1,15 +1,11 @@
 package souther.compiler.check;
 
-import souther.compiler.DefaultStdlib;
 import souther.compiler.abort.AbortSet;
 import souther.compiler.abort.AbortSites;
 import souther.compiler.core.Core;
 import souther.compiler.core.KernelContracts;
-import souther.compiler.stdlib.Stdlib;
 import souther.compiler.types.ValueName;
 
-import java.util.HashMap;
-import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -17,11 +13,11 @@ import java.util.Objects;
  * operations stand as calls — the tree a reading of what a body states walks.
  *
  * <p>Asked of the owners, and never worked out again: what an operator ends a run for is
- * {@link AbortSites}', and what a kernel the library implements ends one for is
- * {@link KernelContracts}'. Where neither answers — an operation the library writes in the language,
- * whose body is not in this tree; a helper, a behavior or a function value; a construction, whose
- * invariant is its declaration's — what it ends a run for is not known, which is not that it ends
- * none ({@link Endings.NotKnown}).
+ * {@link AbortSites}', what a kernel ends one for is {@link KernelContracts}', and what an operation
+ * of the library ends one for, a kernel or one it writes in the language, is
+ * {@link LibraryEndings}'. Where none answers — a helper, a behavior or a function value; a
+ * construction, whose invariant is its declaration's — what it ends a run for is not known, which is
+ * not that it ends none ({@link Endings.NotKnown}).
  */
 public final class WhatARunMayEndFor {
 
@@ -55,27 +51,6 @@ public final class WhatARunMayEndFor {
     }
 
     private static final Endings NONE = new Endings.Known(AbortSet.NONE);
-
-    /**
-     * What each operation of the library a kernel implements ends a run for, read off the library
-     * once: the library is the same for every compilation, and which kernel an operation is is a
-     * fact of the library alone.
-     */
-    private static final class Kernels {
-        private static final Map<ValueName.Stdlib.Operation, AbortSet> ENDING = ending();
-
-        private static Map<ValueName.Stdlib.Operation, AbortSet> ending() {
-            Stdlib library = DefaultStdlib.get();
-            Map<ValueName.Stdlib.Operation, AbortSet> out = new HashMap<>();
-            for (ValueName.Stdlib.Operation operation : library.entries().keySet()) {
-                Stdlib.Intrinsic intrinsic = library.intrinsicOf(operation);
-                if (intrinsic != null) {
-                    out.put(operation, KernelContracts.abortsOf(intrinsic.kernel()));
-                }
-            }
-            return Map.copyOf(out);
-        }
-    }
 
     /** What working {@code e} out, and everything under it, may end a run without a value for. */
     public static Endings of(Core e) {
@@ -132,13 +107,12 @@ public final class WhatARunMayEndFor {
         };
     }
 
-    /** What an operation of the library a call keeps ends a run for: a kernel's, read off the
-     *  library once; one the library writes in the language is not known here. */
+    /** What an operation of the library a call keeps ends a run for, over every call of it
+     *  ({@link LibraryEndings}). */
     private static Endings ofTheLibrary(Core.PreservedCall kept) {
         AnOperationApplied applied = AnOperationApplied.of(kept);
-        AbortSet ending = applied != null
+        return applied != null
                 && applied.operation() instanceof ValueName.Stdlib.Operation operation
-                ? Kernels.ENDING.get(operation) : null;
-        return ending != null ? new Endings.Known(ending) : new Endings.NotKnown();
+                ? LibraryEndings.shipped().of(operation) : new Endings.NotKnown();
     }
 }
