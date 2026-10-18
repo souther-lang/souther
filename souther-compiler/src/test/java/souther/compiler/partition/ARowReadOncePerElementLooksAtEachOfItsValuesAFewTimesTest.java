@@ -176,7 +176,7 @@ class ARowReadOncePerElementLooksAtEachOfItsValuesAFewTimesTest {
                     ValueName.Stdlib.operation("List", "sum"),
                     new RunSource.ComputedOccurrences(SCORES.element(), new ElementValue.Affine(
                             new LinearForm<>(ExactRatio.ZERO, Map.of(itself, ExactRatio.ONE))),
-                            Type.Prim.INT),
+                            Type.Prim.INT, null),
                     Type.Prim.INT, ScopedDeclarations.wrapsOf(symbols), symbols);
             LinearQuantity quantity = form(Map.of(
                     tagged, TermOrdersFixtures.orders(tagged, Carrier.TEXT, WHOLE),

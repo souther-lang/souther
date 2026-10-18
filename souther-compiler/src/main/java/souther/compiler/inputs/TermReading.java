@@ -492,9 +492,16 @@ final class TermReading {
      * element's number with another's. What an element comes to is the computation's, applied to
      * the numbers its fields hold; what is added up is those, in the exact arithmetic.
      *
-     * <p>An element whose computed number the carrier of what the walk answers cannot hold is one
-     * the program stops at rather than one it answers, so the row has no number for the run. Read as
-     * the exact sum it would be a total the program never returns.
+     * <p>The number a run comes to where it answers, and nothing about whether it does. The
+     * computation is the closure's answer put together as arithmetic, and what the closure works out
+     * on the way is not in it: {@code (c + 1) - 1} is read as {@code c}, though a run stops at
+     * {@code c + 1} where {@code c} is the largest whole number. Whether a row's run comes to an
+     * answer is what running the row says, and a reader that needs the run to have answered asks
+     * that.
+     *
+     * <p>What is read is a number the program can answer, so where one element's computed number,
+     * or the total, is one the carrier of what the walk answers cannot hold, the row has no number
+     * for the run: no run answering comes to it.
      */
     static Reading overElements(TermOrders on,
                                 List<Function<ElementProjection, ObservedValue>> each) {
@@ -509,10 +516,12 @@ final class TermReading {
             return new Reading.NotNumber();
         }
         List<ExactRatio> terms = new ArrayList<>();
+        // The elements come in the order the row holds them, which is where each stands.
+        long position = 0;
         for (Function<ElementProjection, ObservedValue> element : each) {
             // The fields are asked for as the computation needs them, so what a row holds at a
             // field the element's own choice does not reach is no part of this element's number.
-            OneElement fields = new OneElement(on, element);
+            OneElement fields = new OneElement(on, element, position++);
             ExactAnswer<ExactRatio> made = computed.computation().at(fields);
             if (made == null) {
                 return fields.stopped != null ? fields.stopped : new Reading.NotNumber();
@@ -552,11 +561,19 @@ final class TermReading {
 
         private final TermOrders on;
         private final Function<ElementProjection, ObservedValue> element;
+        private final long position;
         private Reading stopped;
 
-        OneElement(TermOrders on, Function<ElementProjection, ObservedValue> element) {
+        OneElement(TermOrders on, Function<ElementProjection, ObservedValue> element,
+                   long position) {
             this.on = on;
             this.element = element;
+            this.position = position;
+        }
+
+        @Override
+        public long position() {
+            return position;
         }
 
         @Override
