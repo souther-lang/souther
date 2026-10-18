@@ -196,8 +196,9 @@ sealed interface ClosureApplications {
                     // read here, and is past where its operators answer.
                     boolean aTruth = Type.BOOL.equals(block.body().type());
                     List<Proposition> regions = new ArrayList<>();
-                    each.forEach(one -> regions.add(
-                            Pullback.whereItsOperatorsAnswer(block.body(), one.reads(), read)));
+                    each.forEach(one -> regions.add(WhatConditionsState.of(read)
+                            .whereItsOperatorsAnswer(block.body(), one.reads(), read)
+                            .orElse(null)));
                     List<Proposition> answers = null;
                     if (aTruth || how != HowAClosureIsApplied.TO_EVERY_ELEMENT
                             || regions.stream().anyMatch(Objects::nonNull)) {

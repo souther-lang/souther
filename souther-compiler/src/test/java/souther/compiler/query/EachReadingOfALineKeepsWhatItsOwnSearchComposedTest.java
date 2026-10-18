@@ -159,8 +159,7 @@ class EachReadingOfALineKeepsWhatItsOwnSearchComposedTest {
         // Through the point the line is owed at, which is where the readings of a point are put
         // together for a reader.
         List<BorderObligationPointAssessment> points =
-                BorderObligationPointAssessment.across(List.of(merged), _ -> List.of(),
-                        _ -> List.of());
+                BorderObligationPointAssessment.across(List.of(merged), _ -> List.of());
         assertFalse(points.isEmpty(), "the line owes rows at its points");
         for (BorderObligationPointAssessment point : points) {
             WritabilityKnowledge.Prevented stopped = assertInstanceOf(

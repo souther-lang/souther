@@ -296,12 +296,12 @@ final class Pullback {
      */
     private List<Derivation> answering;
     /**
-     * Each operator the sides of the comparison being read were worked out through, by the form it
-     * came to, as they are read ({@link AffineForms.Reading#composed}) — or null where what is read
-     * is no comparison of numbers. Where each answers is where the comparison is read
+     * Each operator the sides of the comparison being read were worked out through, with the form
+     * it came to, as they are read ({@link AffineForms.Reading#composed}) — or null where what is
+     * read is no comparison of numbers. Where each answers is where the comparison is read
      * ({@link #whereEachOperatorAnswers}).
      */
-    private Map<LinearForm<Quantity>, Core> operated;
+    private Operators operated;
     /**
      * The elements of the containers the comparison being read is read of, which name stands for
      * each — held to one name for each container ({@link ElementsMet}). Nothing where what is read
@@ -853,7 +853,7 @@ final class Pullback {
      */
     static Proposition whereItsOperatorsAnswer(Core body, InputReads reads, InputReading read) {
         Pullback reading = new Pullback(read, Optional.empty());
-        List<Derivation> answers = reading.inAComparisonsScope(() -> {
+        List<Derivation> answers = reading.inAComparisonsScope(true, () -> {
             reading.operatorsIn(body, reads);
             return whereEachOperatorAnswers(reading.operated);
         });
@@ -4246,26 +4246,27 @@ final class Pullback {
      * was read.
      */
     private Derivation overQuantities(ASide left, ASide right, Rel states) {
-        return inAComparisonsScope(() ->
+        return inAComparisonsScope(false, () ->
                 whereItsCountsAnswer(overQuantitiesCounting(left, right, states)));
     }
 
     /**
      * What {@code reading} answers, read as one comparison over the quantities is: with nothing
      * that reading a comparison collects — the counts, what answers, the operators, the elements met
-     * — carried in from around it or out to it.
+     * — carried in from around it or out to it. The operators are told of only where
+     * {@code tellingOfOperators} asks for them, and nobody else keeps a table of them.
      */
-    private <T> T inAComparisonsScope(Supplier<T> reading) {
+    private <T> T inAComparisonsScope(boolean tellingOfOperators, Supplier<T> reading) {
         Map<Quantity.HowManyMeet, Derivation.AComparisonRead.Counted> outer = counting;
         List<Derivation.AComparisonRead.Counted> outerAlike = alike;
         List<Derivation> outerAnswering = answering;
-        Map<LinearForm<Quantity>, Core> outerOperated = operated;
+        Operators outerOperated = operated;
         ElementsMet outerElements = elementsMet;
         Core outerSide = sideAsWritten;
         counting = new LinkedHashMap<>();
         alike = null;
         answering = new ArrayList<>();
-        operated = new LinkedHashMap<>();
+        operated = tellingOfOperators ? new Operators() : null;
         elementsMet = new ElementsMet();
         sideAsWritten = null;
         try {
@@ -4281,6 +4282,27 @@ final class Pullback {
     }
 
     /**
+     * The operators a reading was told of, in the order it was told, each node once.
+     *
+     * <p>Told apart by which node each is and not by the form it came to. An {@code Int} sum and a
+     * {@code Decimal} sum over the same numbers come to one form and answer in different places,
+     * and the form alone would keep whichever came first.
+     */
+    private static final class Operators {
+        private final List<Operated> told = new ArrayList<>();
+        private final Set<Core> nodes = Collections.newSetFromMap(new IdentityHashMap<>());
+
+        void tell(Core operation, LinearForm<Quantity> form) {
+            if (nodes.add(operation)) {
+                told.add(new Operated(operation, form));
+            }
+        }
+    }
+
+    /** One operator a reading was told of, with the form it came to there. */
+    private record Operated(Core operation, LinearForm<Quantity> form) {}
+
+    /**
      * Where each of {@code operated} answers, as the language says it does
      * ({@link WhereAnOperatorAnswers}): an {@code Int} sum where the number it comes to is one an
      * {@code Int} holds. A run working a side out stops at the first that does not, and the
@@ -4290,12 +4312,11 @@ final class Pullback {
      * wherever it answers at all, and an operator whose region is not said is left where nothing
      * here says it.
      */
-    private static List<Derivation> whereEachOperatorAnswers(
-            Map<LinearForm<Quantity>, Core> operated) {
+    private static List<Derivation> whereEachOperatorAnswers(Operators operated) {
         List<Derivation> out = new ArrayList<>();
-        for (Map.Entry<LinearForm<Quantity>, Core> each : operated.entrySet()) {
-            LinearForm<Quantity> form = each.getKey();
-            Core operation = each.getValue();
+        for (Operated each : operated.told) {
+            LinearForm<Quantity> form = each.form();
+            Core operation = each.operation();
             WhereAnOperatorAnswers where = switch (operation) {
                 case Core.Binary binary -> WhereAnOperatorAnswers.ofAnOperator(binary.op(),
                         binary.type(), List.of(binary.left().type(), binary.right().type()));
@@ -4962,7 +4983,7 @@ final class Pullback {
             @Override
             public void composed(Core operation, LinearForm<Quantity> form) {
                 if (operated != null) {
-                    operated.putIfAbsent(form, operation);
+                    operated.tell(operation, form);
                 }
             }
         };

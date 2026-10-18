@@ -219,7 +219,7 @@ class WhatTheDeclarationsHoldAValueToIsOneAnswerTest {
                         new RuleRef.Comparison("pick", wrote),
                         new ModelOccurrence(wrote, ExpansionLineage.ORIGINAL),
                         new RuleReportAnchor.ByTheModuleThatWroteIt(),
-                        List.of(Numberings.comparison(1, 0)), ElementsMetOn.EVERY),
+                        List.of(Numberings.comparison(1, 0)), ElementsMetOn.EVERY, List.of()),
                 Optional.empty(),
                 new LineFacts(new ComparisonClaim.Singled(true)),
                 new AuthoredPointMapping.Proven(WrittenLine.THE_COMPARISON,

@@ -118,7 +118,7 @@ class AnAccountEstablishesItsDenominatorBeforeItCountsTest {
                         new RuleRef.Comparison("f", wrote),
                         new ModelOccurrence(wrote, ExpansionLineage.ORIGINAL),
                         new RuleReportAnchor.ByTheModuleThatWroteIt(),
-                        List.of(WHERE), ElementsMetOn.EVERY),
+                        List.of(WHERE), ElementsMetOn.EVERY, List.of()),
                 Optional.empty(),
                 new LineFacts(new ComparisonClaim.Cut(Towards.BELOW, true)),
                 new AuthoredPointMapping.Proven(WrittenLine.THE_COMPARISON,

@@ -41,7 +41,6 @@ import souther.compiler.coverage.SourceOutcome;
 import souther.compiler.reach.PathDecision;
 import souther.compiler.reach.Reachability;
 import souther.compiler.reach.ValuesNamed;
-import souther.compiler.reach.WhatMayStopARun;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.Region;
@@ -7962,53 +7961,8 @@ public final class Adequacy {
             if (readings.isEmpty()) {
                 return Answer.of(List.of());
             }
-            Map<String, Function<ModelOccurrence, List<WhatMayStopARun>>> stopsIn =
-                    new HashMap<>();
             return Answer.of(BorderObligationPointAssessment.across(readings,
-                    reading -> premisesAtTheLine(db, name, reading),
-                    reading -> reading.border().origin() instanceof LineOrigin.ComparisonOrigin drawn
-                            ? stopsIn.computeIfAbsent(reading.border().cut().behavior(),
-                                    behavior -> stopsBeforeTheComparisons(db, name, behavior))
-                                    .apply(drawn.read().states())
-                            : List.of()));
-        }
-
-        /**
-         * What a run getting to each comparison of {@code behavior} may stop at on the way for what
-         * nothing here says, by the comparison of the model — read off what arrives at every copy
-         * of it the tree that runs holds ({@link PathReachability.Arrivals#stopsBefore}).
-         *
-         * <p>Only where every copy has such a place. A run through a copy reached with everything on
-         * the way read is a run a row can be shown to make, whatever the other copies say; and a
-         * comparison with no copy, or a body nobody read, has nothing said of it.
-         */
-        private static Function<ModelOccurrence, List<WhatMayStopARun>> stopsBeforeTheComparisons(
-                Db db, String name, String behavior) {
-            Answer<Map<String, PathReachability.Arrivals>> arrived =
-                    db.ask(new ArrivedAtLines(name));
-            Answer<Bodies.Elaborated> checked = db.ask(new Bodies.Observable(name));
-            PathReachability.Arrivals arrivals = arrived.present()
-                    ? arrived.value().get(behavior) : null;
-            Core emitted = checked.present()
-                    ? checked.value().behaviorBodies().get(behavior) : null;
-            if (arrivals == null || emitted == null) {
-                return comparison -> List.of();
-            }
-            ComparisonEmissionIndex comparisons =
-                    ComparisonEmissionIndex.ofBody(emitted, checked.value().plan());
-            return comparison -> {
-                Set<WhatMayStopARun> out = new LinkedHashSet<>();
-                List<ComparisonEmissionIndex.EmittedComparison> copies =
-                        comparisons.madeFor(comparison);
-                for (ComparisonEmissionIndex.EmittedComparison copy : copies) {
-                    List<WhatMayStopARun> here = arrivals.stopsBefore(copy.occurrence());
-                    if (here.isEmpty()) {
-                        return List.of();
-                    }
-                    out.addAll(here);
-                }
-                return List.copyOf(out);
-            };
+                    reading -> premisesAtTheLine(db, name, reading)));
         }
 
         /**

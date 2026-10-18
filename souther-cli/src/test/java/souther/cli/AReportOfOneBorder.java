@@ -140,7 +140,7 @@ final class AReportOfOneBorder {
                         new RuleRef.Comparison("weigh", wrote),
                         new ModelOccurrence(wrote, ExpansionLineage.ORIGINAL),
                         new souther.compiler.check.RuleReportAnchor.ByTheModuleThatWroteIt(),
-                        List.of(WHERE), ElementsMetOn.EVERY),
+                        List.of(WHERE), ElementsMetOn.EVERY, List.of()),
                 Optional.empty(),
                 new LineFacts(new ComparisonClaim.Cut(Towards.BELOW, true)),
                 new AuthoredPointMapping.Proven(WrittenLine.THE_COMPARISON,
@@ -309,8 +309,7 @@ final class AReportOfOneBorder {
                 new souther.compiler.query.BehaviorEvidence(
                         Adequacy.RowReading.NONE, null, partition, lines,
                         lines.readAs(read -> souther.compiler.query
-                                .BorderObligationPointAssessment.across(read, _ -> List.of(),
-                                        _ -> List.of())
+                                .BorderObligationPointAssessment.across(read, _ -> List.of())
                                 .stream()
                                 .filter(point -> point.belongsToBehaviorAccount("weigh"))
                                 .toList()),

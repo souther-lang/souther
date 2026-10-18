@@ -13,6 +13,7 @@ import souther.compiler.meaning.AuthoredPointMapping;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.publish.PublishedRuleHandle;
 import souther.compiler.publish.PublishedSentence;
+import souther.compiler.reach.WhatMayStopARun;
 import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.ModelOccurrences;
 import souther.compiler.types.TypeSymbol;
@@ -220,10 +221,17 @@ public sealed interface LineOrigin extends RuleEvidenceOrigin {
          *              on. A run through any of {@link #recordedAt} got one out of the rule, and
          *              not on every element: a row standing at the line through an element no run
          *              compared anything on did not meet the line there
+         * @param stopsBefore what, worked out on the way to the rule, may stop a run on operands
+         *              nothing here says — at every place of {@link #recordedAt} a run arrives at,
+         *              and so none where one of them is reached with everything on the way read: a
+         *              run through that one is a run through the rule. What arrives at the rule is
+         *              what has to hold for a run to get there, and this is whether that is all
+         *              getting there takes
          */
         public record Read(RuleRef.Comparison rule, ModelOccurrence states,
                            RuleReportAnchor anchor,
-                           List<ConditionOutcomeSite> recordedAt, ElementsMetOn metOn) {
+                           List<ConditionOutcomeSite> recordedAt, ElementsMetOn metOn,
+                           List<WhatMayStopARun> stopsBefore) {
 
             public Read {
                 if (rule == null || states == null || anchor == null || metOn == null) {
@@ -232,6 +240,7 @@ public sealed interface LineOrigin extends RuleEvidenceOrigin {
                                     + " it");
                 }
                 recordedAt = List.copyOf(recordedAt);
+                stopsBefore = List.copyOf(stopsBefore);
                 if (recordedAt.isEmpty()) {
                     throw new IllegalArgumentException(
                             "a rule a row is held to is one a run through is written down"
@@ -656,6 +665,19 @@ public sealed interface LineOrigin extends RuleEvidenceOrigin {
         return switch (this) {
             case ComparisonOrigin g -> g.read().recordedAt();
             case NarrowedOrigin n -> n.bound().recordedAt();
+            case InvariantOrigin _, EnsuresOrigin _ -> List.of();
+        };
+    }
+
+    /**
+     * What, worked out on the way to the comparison, may stop a run getting there on operands
+     * nothing here says ({@link ComparisonOrigin.Read#stopsBefore}) — none for a rule meeting which
+     * takes writing the value and no run, which is a declaration's and a clause's.
+     */
+    default List<WhatMayStopARun> stopsBefore() {
+        return switch (this) {
+            case ComparisonOrigin g -> g.read().stopsBefore();
+            case NarrowedOrigin n -> n.bound().stopsBefore();
             case InvariantOrigin _, EnsuresOrigin _ -> List.of();
         };
     }

@@ -137,6 +137,20 @@ class ARunGetsPastWhatItWorksOutOnlyWhereItsOperatorsAnswerTest {
         assertEquals(List.of(), pointsAt(report, "5:42"), report);
     }
 
+    /**
+     * Two operators coming to one form are two operators. A {@code Decimal} sum and an {@code Int}
+     * sum over the same number answer in different places, and the closure's next application is
+     * made only past both.
+     */
+    @Test
+    void twoOperatorsComingToOneFormAreEachGotPast() {
+        String report = report("""
+                    guard a == %s else No
+                    guard List.length(List.filter(x -> Decimal.fromInt(x) + 1.0m > Decimal.fromInt(x + 1) + Decimal.fromInt(x), [a, b])) >= 1 else No"""
+                .formatted(GREATEST));
+        assertEquals(List.of(), pointsAt(report, "5:62"), report);
+    }
+
     @Test
     void anApplicationPastOneThatAnswersIsMade() {
         String report = report("""

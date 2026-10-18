@@ -133,9 +133,9 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.semantics.WhereAnOperatorAnswers.ofAnOperator",
                     "on which operands an operator answers a value, which the operator and the"
                             + " types it answers and takes alone say"),
-            new Held("souther.compiler.check.PathCompletion.answering",
+            new Held("souther.compiler.check.PathCompletion.operated",
                     "hands the operator to WhereAnOperatorAnswers, which says on which operands it"
-                            + " answers a value, to take that in past it"),
+                            + " answers a value, once for every question asked of the evaluation"),
             new Held("souther.compiler.check.PathCompletion.readsWhereItAnswers",
                     "the same, to say whether what was taken in is all of where it answers, and"
                             + " which operand of a product or a quotient that is asked of"),

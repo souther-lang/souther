@@ -7,6 +7,7 @@ import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Rel;
+import souther.compiler.reach.WhatMayStopARun;
 import souther.compiler.semantics.NumericResult;
 import souther.compiler.semantics.WhereAnOperatorAnswers;
 import souther.compiler.core.Core;
@@ -67,11 +68,14 @@ final class PathCompletion {
      *          after would be asking whether an evaluation answers under the assumption that it did
      */
     Completion of(Core e, Known k, Denotations at) {
-        return of(e, k, answering(e, k, at), at);
+        return of(e, k, answersNowhere(operated(e, at), k), at);
     }
 
-    /** The same, told what holds where {@code e}'s operator answers ({@link #answering}). */
-    private Completion of(Core e, Known k, Known answered, Denotations at) {
+    /**
+     * The same, told whether nothing {@code k} leaves is where {@code e}'s operator answers
+     * ({@link WhereAnOperatorAnswers}).
+     */
+    private Completion of(Core e, Known k, boolean answersNowhere, Denotations at) {
         if (k.reachesNothing()) {
             // Nothing stands here, so there is no run to say anything about. Answered as the
             // weaker of the two, since a state that holds nothing proves whatever it is asked.
@@ -85,7 +89,7 @@ final class PathCompletion {
         }
         // Read before the recipes: what the operator asks of its operands is the language's, and
         // a recipe says the number it computes, which is a second and narrower question.
-        if (answered.reachesNothing()) {
+        if (answersNowhere) {
             return new Completion.CannotComplete(new Completion.NoCompletionProof.NotHeld(e));
         }
         Core called = operationAt(e);
@@ -133,17 +137,78 @@ final class PathCompletion {
      * construction is about. What it leaves out is a fact, and leaving one out decides nothing it
      * would not otherwise decide.
      *
-     * @param k what holds before {@code e} answers, as for {@link #of}
+     * <p>And what, on the way to a run past it, may have stopped a run for what nothing here says:
+     * {@code mayStop}, with {@code e} itself where where it answers is not all read here
+     * ({@link #readsWhereItAnswers}). Nothing is added where no run gets past, since a place
+     * nothing arrives at is not one a run may have stopped on the way to.
+     *
+     * @param k       what holds before {@code e} answers, as for {@link #of}
+     * @param mayStop what may have stopped a run on the way to {@code e}
      */
-    Known past(Core e, Known k, Denotations at) {
-        Known answered = answering(e, k, at);
-        return of(e, k, answered, at) instanceof Completion.CannotComplete
-                ? k.reachingNothing() : answered;
+    Past past(Core e, Known k, Denotations at, List<WhatMayStopARun> mayStop) {
+        Operated operated = operated(e, at);
+        Known answered = answering(operated, k);
+        if (of(e, k, answered.reachesNothing(), at) instanceof Completion.CannotComplete) {
+            return new Past(k.reachingNothing(), mayStop);
+        }
+        WhatMayStopARun stopping = whatStops(operated.e());
+        if (mayStop.contains(stopping) || readsWhereItAnswers(operated, k, at)) {
+            return new Past(answered, mayStop);
+        }
+        List<WhatMayStopARun> more = new ArrayList<>(mayStop);
+        more.add(stopping);
+        return new Past(answered, List.copyOf(more));
     }
 
     /**
-     * Whether where a run that reached {@code e} gets past it is read here, under {@code k}: every
-     * operand it answers on is one {@link #past} keeps, and every one it does not is one past
+     * What a run past an evaluation holds, and what on the way there may have stopped a run for
+     * what nothing here says.
+     */
+    record Past(Known known, List<WhatMayStopARun> mayStop) {}
+
+    /** Which kind of thing {@code e} is, as one that may stop a run. */
+    private static WhatMayStopARun whatStops(Core e) {
+        return switch (e) {
+            case Core.Binary _, Core.Neg _ -> new WhatMayStopARun.AnOperator();
+            case Core.Construct _ -> new WhatMayStopARun.AConstruction();
+            default -> new WhatMayStopARun.ACall();
+        };
+    }
+
+    /**
+     * The operator {@code e} is and where it answers, with the form its region is said over —
+     * read once for every question asked of the evaluation.
+     *
+     * @param e     the evaluation, any standing set aside
+     * @param where where its operator answers, or null where it is no operator
+     * @param form  what {@code where} is said over, where the arithmetic composes it: the value
+     *              itself where it answers on a run of exact values, the divisor where it answers
+     *              on a divisor that is not nought, and null otherwise
+     */
+    private record Operated(Core e, WhereAnOperatorAnswers where, LinearForm<FactSubject> form) {}
+
+    private Operated operated(Core standing, Denotations at) {
+        Core e = Core.withoutStanding(standing);
+        WhereAnOperatorAnswers where = switch (e) {
+            case Core.Binary binary -> WhereAnOperatorAnswers.ofAnOperator(binary.op(),
+                    binary.type(), List.of(binary.left().type(), binary.right().type()));
+            case Core.Neg neg -> WhereAnOperatorAnswers.ofANegation(neg.type());
+            default -> null;
+        };
+        LinearForm<FactSubject> form = switch (where) {
+            case WhereAnOperatorAnswers.WhereItsExactValueIsHeld _ ->
+                    terms.affineOf(standing, at);
+            case WhereAnOperatorAnswers.WhereTheDivisorIsNotNought _ ->
+                    e instanceof Core.Binary quotient ? terms.affineOf(quotient.right(), at)
+                            : null;
+            case null, default -> null;
+        };
+        return new Operated(e, where, form);
+    }
+
+    /**
+     * Whether where a run that reached the evaluation gets past it is read here, under {@code k}:
+     * every operand it answers on is one {@link #past} keeps, and every one it does not is one past
      * leaves out.
      *
      * <p>Not whether it answers. A sum over two values held to a hundred answers everywhere they
@@ -157,31 +222,21 @@ final class PathCompletion {
      * that some run gets there, where this answers false: the rows past {@code e} that
      * {@link #past} keeps include ones that stop at it.
      */
-    boolean readsWhereItAnswers(Core standing, Known k, Denotations at) {
+    private boolean readsWhereItAnswers(Operated operated, Known k, Denotations at) {
         if (k.reachesNothing()) {
             return true;
         }
-        Core e = Core.withoutStanding(standing);
-        WhereAnOperatorAnswers where = switch (e) {
-            case Core.Binary binary -> WhereAnOperatorAnswers.ofAnOperator(binary.op(),
-                    binary.type(), List.of(binary.left().type(), binary.right().type()));
-            case Core.Neg neg -> WhereAnOperatorAnswers.ofANegation(neg.type());
-            default -> null;
-        };
-        if (where == null) {
+        Core e = operated.e();
+        if (operated.where() == null) {
             return WhatARunMayEndFor.itself(e).endsNone();
         }
-        return switch (where) {
+        return switch (operated.where()) {
             case WhereAnOperatorAnswers.Everywhere _ -> true;
             case WhereAnOperatorAnswers.WhereItsExactValueIsHeld(var least, var greatest) ->
                     e instanceof Core.Binary product && product.op() == BinOp.MUL
                             ? heldWherever(product, least, greatest, k, at)
-                            : terms.affineOf(e, at) != null;
-            case WhereAnOperatorAnswers.WhereTheDivisorIsNotNought _ ->
-                    e instanceof Core.Binary quotient
-                            && terms.affineOf(quotient.right(), at) instanceof LinearForm<FactSubject>
-                                    divisor
-                            && k.numbers().entails(divisor, Rel.NE);
+                            : operated.form() != null;
+            case WhereAnOperatorAnswers.WhereTheDivisorIsNotNought _ -> operated.form() != null;
             case WhereAnOperatorAnswers.NotStated _ -> false;
         };
     }
@@ -223,28 +278,27 @@ final class PathCompletion {
      * {@code k} with the operands of {@code e} where its operator answers
      * ({@link WhereAnOperatorAnswers}), as far as the numbers here can say it.
      *
-     * <p>Only where it answers on a run of numbers and the value is a form over what this reads: a
-     * sum, a difference, a scalar multiple, a negation. A product of two values is one atom here,
-     * and an end on that atom says nothing of either factor, though it is no less true. What is not
-     * said here is left as it was, which over-reads where a run gets past and never under-reads it.
+     * <p>Only where what its region is said over is a form over what this reads: the value of a
+     * sum, a difference, a scalar multiple or a negation, and the divisor of a quotient. A product
+     * of two values is one atom here, and an end on that atom says nothing of either factor, though
+     * it is no less true. What is not said here is left as it was, which over-reads where a run
+     * gets past and never under-reads it.
      */
-    private Known answering(Core standing, Known k, Denotations at) {
-        WhereAnOperatorAnswers where = switch (Core.withoutStanding(standing)) {
-            case Core.Binary binary -> WhereAnOperatorAnswers.ofAnOperator(binary.op(),
-                    binary.type(), List.of(binary.left().type(), binary.right().type()));
-            case Core.Neg neg -> WhereAnOperatorAnswers.ofANegation(neg.type());
-            default -> null;
-        };
-        if (!(where instanceof WhereAnOperatorAnswers.WhereItsExactValueIsHeld(
-                BigInteger least, BigInteger greatest))) {
-            return k;
-        }
-        LinearForm<FactSubject> form = terms.affineOf(standing, at);
+    private Known answering(Operated operated, Known k) {
+        LinearForm<FactSubject> form = operated.form();
         if (form == null) {
             return k;
         }
-        // An end what holds already keeps the value inside is not taken again, so a run past an
-        // operator that answers wherever it is reached holds what it held — and the same state.
+        // What holds already is not taken again, so a run past an operator that answers wherever
+        // it is reached holds what it held — and the same state.
+        if (operated.where() instanceof WhereAnOperatorAnswers.WhereTheDivisorIsNotNought) {
+            return k.numbers().entails(form, Rel.NE) ? k
+                    : k.taking(form, Rel.NE, Known.Held.ON_THE_PATH, terms.kindsOf(form));
+        }
+        if (!(operated.where() instanceof WhereAnOperatorAnswers.WhereItsExactValueIsHeld(
+                BigInteger least, BigInteger greatest))) {
+            return k;
+        }
         Known out = k;
         if (form.minus(LinearForm.constant(ExactRatio.of(greatest)))
                 instanceof ExactAnswer.Held<LinearForm<FactSubject>>(var above)
@@ -257,6 +311,29 @@ final class PathCompletion {
             out = out.taking(below, Rel.GE, Known.Held.ON_THE_PATH, terms.kindsOf(below));
         }
         return out;
+    }
+
+    /**
+     * Whether {@code k} leaves nothing where {@code e}'s operator answers, asked of what holds
+     * rather than of {@link #answering}'s state: a caller asking only whether the evaluation
+     * answers keeps nothing taken in, so nothing is built for it.
+     */
+    private boolean answersNowhere(Operated operated, Known k) {
+        LinearForm<FactSubject> form = operated.form();
+        if (form == null) {
+            return false;
+        }
+        if (operated.where() instanceof WhereAnOperatorAnswers.WhereTheDivisorIsNotNought) {
+            return k.numbers().entails(form, Rel.EQ);
+        }
+        return operated.where() instanceof WhereAnOperatorAnswers.WhereItsExactValueIsHeld(
+                BigInteger least, BigInteger greatest)
+                && (form.minus(LinearForm.constant(ExactRatio.of(greatest)))
+                        instanceof ExactAnswer.Held<LinearForm<FactSubject>>(var above)
+                        && k.numbers().entails(above, Rel.GT)
+                || form.minus(LinearForm.constant(ExactRatio.of(least)))
+                        instanceof ExactAnswer.Held<LinearForm<FactSubject>>(var below)
+                        && k.numbers().entails(below, Rel.LT));
     }
 
     /**
