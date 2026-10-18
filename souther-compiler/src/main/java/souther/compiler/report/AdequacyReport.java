@@ -3726,6 +3726,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     "it was read to the end, and no row that arrives at it holds a value at its"
                             + " line — what holds on the way there, the conditions and what a run"
                             + " got past working out, rules those values out";
+            case NOTHING_ARRIVES_AT_THE_RELATION ->
+                    "it was read to the end and relates the value here to another value, and no"
+                            + " row that arrives at it takes the way to the comparison — what holds"
+                            + " on the way there, the conditions and what a run got past working"
+                            + " out, rules those rows out";
             case RULE_NEVER_TURNS_ON_THIS_LINE ->
                     "it was read to the end and states several things at once, and wherever a row"
                             + " reaches its line here the rest of it already decides the outcome";
