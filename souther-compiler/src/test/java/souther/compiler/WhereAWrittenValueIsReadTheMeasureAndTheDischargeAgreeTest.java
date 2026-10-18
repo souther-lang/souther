@@ -74,8 +74,10 @@ class WhereAWrittenValueIsReadTheMeasureAndTheDischargeAgreeTest {
             Map.entry(opening("List.get(1024, String.codePoints(\"" + "0".repeat(1025) + "\"))"),
                     false),
             Map.entry(opening("Option.map(n -> n + k, List.get(0, [48]))"), false),
+            // As many as 49 of them may be kept, so under `c >= 48` the body may come to one
+            // below nought: no reading of how many is taken passes it.
             Map.entry("c - List.length(List.filter(n -> n > k, String.codePoints(\""
-                    + "0".repeat(48) + "\")))", false));
+                    + "0".repeat(49) + "\")))", false));
 
     /** A body subtracting what a {@code Some} arm over {@code option} opens. */
     private static String opening(String option) {

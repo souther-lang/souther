@@ -646,6 +646,22 @@ final class DerivedNumericFacts {
                         case NO -> between(atom, AT_NOUGHT, terms);
                         case UNSETTLED -> Says.NOTHING;
                     };
+            // Wherever all of them put it: what each found, together — and no value at all where
+            // one of them shows the operation answered none.
+            case Derivation.Each each -> {
+                List<Fact> found = new ArrayList<>();
+                Says answered = null;
+                for (Derivation recipe : each.recipes()) {
+                    Says one = recipeFacts(atom, recipe, base, terms, done, deriving, copies);
+                    if (one instanceof Says.NoValueCameOfIt) {
+                        answered = one;
+                        break;
+                    }
+                    found.addAll(one.facts());
+                }
+                yield answered != null ? answered
+                        : found.isEmpty() ? Says.NOTHING : new Says.These(found);
+            }
         };
     }
 
@@ -698,6 +714,14 @@ final class DerivedNumericFacts {
                         case NO -> Shown.YES;
                         case UNSETTLED -> Shown.UNSETTLED;
                     };
+            case Derivation.HoldsSomethingWhere.Holding.Stands(
+                    LinearForm<FactSubject> form, Rel rel) -> {
+                yield switch (boundsOf(form, base, terms, done, deriving, copies)
+                        .stands(rel, Count.ZERO)) {
+                    case null -> Shown.UNSETTLED;
+                    case Boolean holds -> holds ? Shown.YES : Shown.NO;
+                };
+            }
         };
     }
 

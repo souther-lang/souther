@@ -555,9 +555,6 @@ class AnExpressionIsAskedWhatItIsWithWhatItStandsAsSetAsideTest {
         row(out, c + "check/PathReachability", "walk",
                 "(" + core + "L" + c + "check/Known;L" + c + "check/Denotations;L" + c
                         + "inputs/InputReads;Ljava/util/List;Z)V", 2, GOES_ON_INTO_IT);
-        row(out, c + "check/Predicates", "chosenCalls",
-                "(" + core + "L" + c + "check/Denotations;Ljava/util/Map;Ljava/util/Set;)V", 2,
-                GOES_ON_INTO_IT);
         row(out, c + "check/Predicates", "names",
                 "(" + core + "L" + c + "check/Term$Chains;L" + c + "check/Denotations;)Z", 1,
                 GOES_ON_INTO_IT);

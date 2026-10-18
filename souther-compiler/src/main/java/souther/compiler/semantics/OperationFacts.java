@@ -969,7 +969,17 @@ public final class OperationFacts {
             about("Decimal", "abs", answers(LinearForm.weighing(at(0), ExactRatio.of(-1)),
                     standsAgainst(at(0), Rel.LT, 0))),
             about("Decimal", "abs", answers(LinearForm.atom(at(0)),
-                    standsAgainst(at(0), Rel.GE, 0))));
+                    standsAgainst(at(0), Rel.GE, 0))),
+            // And a comparison, which answers one of its three numbers by how the two stand. It is
+            // the bounds and the order stated above, read together: a whole number from one below
+            // nought to one above it, positive where the first is the greater. Not of a rational,
+            // which is no number a case of a definition is written over.
+            about("Int", "compare", answersTheNumber(-1, stands(at(0), Rel.LT, at(1)))),
+            about("Int", "compare", answersTheNumber(0, stands(at(0), Rel.EQ, at(1)))),
+            about("Int", "compare", answersTheNumber(1, stands(at(0), Rel.GT, at(1)))),
+            about("Decimal", "compare", answersTheNumber(-1, stands(at(0), Rel.LT, at(1)))),
+            about("Decimal", "compare", answersTheNumber(0, stands(at(0), Rel.EQ, at(1)))),
+            about("Decimal", "compare", answersTheNumber(1, stands(at(0), Rel.GT, at(1)))));
     }
 
     /** How many whole minutes the first date-time and the last stand apart, which is as far apart as
@@ -1016,6 +1026,13 @@ public final class OperationFacts {
             reached.add(stands);
         }
         return new OperationFact.IsDefinedByCases(new DefinitionCase<>(form, reached));
+    }
+
+    /** The case answering {@code constant} where every one of {@code given} holds. */
+    @SafeVarargs
+    private static OperationFact answersTheNumber(long constant,
+                                                  ArgumentsStand<ArgumentRef>... given) {
+        return answers(LinearForm.constant(ExactRatio.of(constant)), given);
     }
 
     private static ArgumentsStand<ArgumentRef> stands(ArgumentRef left, Rel rel,
