@@ -1817,14 +1817,22 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      *                           has no far side for anything to stand on
      */
     boolean reachedIn(SearchRegion region, boolean drawnByAnInvariant) {
-        Border.Values values = valuesIn(region);
+        return reachedBy(valuesIn(region), drawnByAnInvariant);
+    }
+
+    /**
+     * {@link #reachedIn}, of what a region was already read to leave this quantity
+     * ({@link #valuesIn}) — null where it leaves nothing.
+     */
+    boolean reachedBy(Border.Values values, boolean drawnByAnInvariant) {
         return values != null
                 && Border.reaches(at, this::seam, claim, drawnByAnInvariant, values);
     }
 
     /**
-     * Whether the rows {@code regions} hold between them stand on both sides of this line — at the
-     * value a rule names and beside it, for a rule that names one.
+     * Whether the rows some regions hold between them stand on both sides of a line — at the value
+     * a rule names and beside it, for a rule that names one — taken in a region at a time, so that
+     * no region is read once both sides are found.
      *
      * <p>What a line of a statement of several is asked in each case of where it decides. A case is
      * other relations holding or failing, and a row on one side of the line and a row on the other,
@@ -1840,36 +1848,58 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      *
      * <p>A side that was not worked out is not a proof that no row stands on it, as it is not in
      * {@link #reachedIn}.
+     *
+     * <p>Two sides for each claim. A line that cuts has the values below it and the values above
+     * it. A line that names a value has the value and a row beside it on either side: with the
+     * value put above the seam, the seam parts it from what is below; put below, from what is
+     * above.
      */
-    boolean crossedIn(List<SearchRegion> regions) {
-        List<Border.Values> each = new ArrayList<>();
-        for (SearchRegion region : regions) {
-            Border.Values values = valuesIn(region);
-            if (values != null) {
-                each.add(values);
-            }
+    static final class Sides {
+
+        private final Cutting line;
+
+        private boolean one;
+
+        private boolean other;
+
+        Sides(Cutting line) {
+            this.line = line;
         }
-        return switch (claim) {
-            case ComparisonClaim.Cut _ -> each.stream().anyMatch(values ->
-                    Border.standsBeside(at, seam(), Towards.BELOW, values))
-                    && each.stream().anyMatch(values ->
-                            Border.standsBeside(at, seam(), Towards.ABOVE, values));
-            // The value it names and a row beside it on either side. With the value put above the
-            // seam, the seam parts it from what is below; put below, from what is above.
-            case ComparisonClaim.Singled _ -> each.stream().anyMatch(values -> values.holdAt(at))
-                    && each.stream().anyMatch(values ->
-                            Border.standsBeside(at, Seam.where(of, at, Towards.ABOVE),
-                                    Towards.BELOW, values)
-                            || Border.standsBeside(at, Seam.where(of, at, Towards.BELOW),
-                                    Towards.ABOVE, values));
-        };
+
+        /**
+         * Takes in what one more region leaves the quantity ({@link #valuesIn}, null for
+         * nothing), and answers whether the rows taken in so far stand on both sides.
+         */
+        boolean add(Border.Values values) {
+            if (values != null) {
+                switch (line.claim) {
+                    case ComparisonClaim.Cut _ -> {
+                        one = one || Border.standsBeside(line.at, line.seam(), Towards.BELOW,
+                                values);
+                        other = other || Border.standsBeside(line.at, line.seam(), Towards.ABOVE,
+                                values);
+                    }
+                    case ComparisonClaim.Singled _ -> {
+                        one = one || values.holdAt(line.at);
+                        other = other
+                                || Border.standsBeside(line.at,
+                                        Seam.where(line.of, line.at, Towards.ABOVE),
+                                        Towards.BELOW, values)
+                                || Border.standsBeside(line.at,
+                                        Seam.where(line.of, line.at, Towards.BELOW),
+                                        Towards.ABOVE, values);
+                    }
+                }
+            }
+            return one && other;
+        }
     }
 
     /**
      * What {@code region} leaves this quantity, as the two questions a line asks of it — or null
      * where it leaves the quantity nothing at all.
      */
-    private Border.Values valuesIn(SearchRegion region) {
+    Border.Values valuesIn(SearchRegion region) {
         NumericDomain.FormProjection runs = of.projectedIn(region);
         if (runs instanceof NumericDomain.FormProjection.NothingIsLeft) {
             return null;
