@@ -7,7 +7,6 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.NumericTerms;
 import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.Refinement;
-import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.DecisionSubject;
@@ -1223,8 +1222,7 @@ final class AStatementAtARow {
 
         /**
          * A form over positions some of which have no numbers under them, and which is not two of
-         * them held against each other — or the factors of a product that are not both whole
-         * numbers: no quantity reads a row at it.
+         * them held against each other: no quantity reads a row at it.
          *
          * <p>Kept, and not dropped from the statement, because what it is about is still the row's:
          * every row answers it as not known, and where a value of one of its terms turns it over is
@@ -1337,25 +1335,14 @@ final class AStatementAtARow {
             };
         }
 
-        /**
-         * A relation over {@code product}, read at the two factors — or at no quantity where a
-         * factor is no whole number, which is the only product a row is read for here as it is
-         * for a line on one.
-         */
+        /** A relation over {@code product}, read at the two factors. */
         private static OneRelation ofAProduct(Relation.Affine affine,
                                               Quantity.ProductOfTwo product, String behavior,
                                               Quantities quantities) {
             Map<NumericTerm, ExactRatio> each = new LinkedHashMap<>();
-            boolean whole = true;
-            for (NumericTerm factor : product.factors()) {
-                each.put(factor, ExactRatio.ONE);
-                TermOrders orders = quantities.ordersOf(factor);
-                whole &= orders != null && orders.answered() instanceof Carrier.Whole;
-            }
-            LinearForm<NumericTerm> factors = new LinearForm<>(ExactRatio.ZERO, each);
-            LinearQuantity over = whole ? Cutting.readAt(behavior, factors, quantities) : null;
-            return over == null ? new NoQuantity(factors) : new OnAProduct(over,
-                    affine.form().coefs().get(product), affine.form().constant(),
+            product.factors().forEach(factor -> each.put(factor, ExactRatio.ONE));
+            return new OnAProduct(Cutting.readAt(behavior, new LinearForm<>(ExactRatio.ZERO, each),
+                    quantities), affine.form().coefs().get(product), affine.form().constant(),
                     affine.proposition());
         }
     }

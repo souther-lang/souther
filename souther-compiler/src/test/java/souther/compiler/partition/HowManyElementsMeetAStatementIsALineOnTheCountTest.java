@@ -93,6 +93,22 @@ class HowManyElementsMeetAStatementIsALineOnTheCountTest {
     }
 
     /**
+     * A product of decimals is no number a row's values are read for, so how many elements it is
+     * above three for is no count a line is drawn on: a line there would be one no row is ever
+     * read at.
+     */
+    @Test
+    void aCountOfElementsWhoseProductOfDecimalsMeetsSomethingIsNoLine() {
+        assertTrue(countBorders(reportOf("""
+                module probe
+
+                behavior atLeastTwo : (xs: List<Decimal>, limit: Decimal) -> Int
+                let atLeastTwo (xs, limit) =
+                    if List.length(List.filter(x -> x * limit > 3.0m, xs)) >= 2 then 1 else 0
+                """)).isEmpty());
+    }
+
+    /**
      * The rows #2218 was written with, each standing where as many of its elements are above the
      * limit as it holds: none, one and two meet the line's three points.
      */

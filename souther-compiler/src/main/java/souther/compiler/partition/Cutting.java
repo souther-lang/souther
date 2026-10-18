@@ -1,6 +1,5 @@
 package souther.compiler.partition;
 
-import souther.compiler.check.Carrier;
 import souther.compiler.check.StatedComparison;
 import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.NonAffineOperation;
@@ -684,17 +683,15 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
 
     /**
      * The line a relation over what two whole numbers of the input come to multiplied draws — or
-     * null where the relation is no such thing: the product alone against a number, each factor on
-     * an order of whole numbers.
+     * null where the relation is no such thing: the product alone against a number.
      *
      * <p>A line on the product and on neither factor: where the product is the level turns on both,
      * so what a row is at is what its two numbers multiply to.
      */
     private static Read onAProduct(String behavior, Relation.Affine affine, boolean holds,
                                    InputReading read) {
-        if (affine.form().coefs().size() != 1
-                || !(affine.form().coefs().keySet().iterator().next()
-                        instanceof Quantity.ProductOfTwo product)) {
+        Quantity.ProductOfTwo product = AStatementAtARow.productIn(affine);
+        if (product == null) {
             return null;
         }
         ExactRatio weight = affine.form().coefs().get(product);
@@ -705,11 +702,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         Map<NumericTerm, TermOrders> on = new LinkedHashMap<>();
         Map<NumericTerm, ExactRatio> each = new LinkedHashMap<>();
         for (NumericTerm factor : product.factors()) {
-            TermOrders orders = read.quantities().ordersOf(factor);
-            if (orders == null || !(orders.answered() instanceof Carrier.Whole)) {
-                return null;
-            }
-            on.put(factor, orders);
+            on.put(factor, read.quantities().ordersOf(factor));
             each.put(factor, ExactRatio.ONE);
         }
         // Over the product's weight, which turns the relation round where it is below nought.
