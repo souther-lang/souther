@@ -592,6 +592,7 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Ljava/lang/String;"
                             + "Lsouther/compiler/check/StatedComparison;"
                             + "Lsouther/compiler/meaning/Proposition;"
+                            + "Ljava/util/function/Supplier;"
                             + "Lsouther/compiler/inputs/InputReading;"
                             + "Lsouther/compiler/inputs/InputReads;"
                             + "Lsouther/compiler/coverage/Arrivals;"

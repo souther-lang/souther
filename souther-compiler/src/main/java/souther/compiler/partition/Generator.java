@@ -7990,6 +7990,10 @@ public final class Generator {
      * <p>For a run computed of each element those values are the elements, and each is read as one
      * element: the fields its computation reads are the fields of that element, so what is paired
      * is what the row pairs.
+     *
+     * <p>What a run of the program comes to where it answers ({@link TermOrders#readOverElements}),
+     * so a candidate reading back at the place it was built for is one worth running and not one
+     * shown to get there: its run may stop on the way.
      */
     private static NumericTerm.Reading readRun(TermOrders on, List<ObservedValue> values) {
         if (!(on.term() instanceof NumericTerm.TakenOver over)

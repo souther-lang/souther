@@ -81,6 +81,18 @@ public enum Rel {
         };
     }
 
+    /** The operator the language writes this relation with. */
+    public String written() {
+        return switch (this) {
+            case EQ -> "==";
+            case NE -> "/=";
+            case LT -> "<";
+            case LE -> "<=";
+            case GT -> ">";
+            case GE -> ">=";
+        };
+    }
+
     /**
      * The one of this relation and its denial that stands for the pair.
      *

@@ -1007,17 +1007,17 @@ public sealed interface BorderQuantity
                         if (form == null && count != null) {
                             ExactRatio weight = affine.form().coefs().get(count);
                             yield "#" + count.container() + " [" + said(count.ofTheElement())
-                                    + "] " + written(rel) + " "
+                                    + "] " + rel.written() + " "
                                     + affine.form().constant().negated().dividedBy(weight)
                                             .map(ExactRatio::spelled).orNull();
                         }
                         yield form == null ? stated.key()
-                                : OrderedAffineBoundary.spelled(form.coefs()) + " " + written(rel)
+                                : OrderedAffineBoundary.spelled(form.coefs()) + " " + rel.written()
                                         + " " + form.constant().negated().spelled();
                     }
                     case Relation.Ordered ordered -> ordered.term().spelled() + " "
-                            + written(compared.holds() ? ordered.proposition()
-                                    : ordered.proposition().denied())
+                            + (compared.holds() ? ordered.proposition()
+                                    : ordered.proposition().denied()).written()
                             + " " + ordered.at().spelled();
                 };
                 // How many of the statements hold, each as many times as it was written, and the
@@ -1049,17 +1049,6 @@ public sealed interface BorderQuantity
                      Proposition.Present _, Proposition.SameValue _, Proposition.LastToHold _,
                      Proposition.Carried _, Proposition.SomeReachable _, Proposition.Unread _,
                      Proposition.OnAnApplication _, Proposition.WhereItAnswers _ -> said(part);
-            };
-        }
-
-        private static String written(Rel rel) {
-            return switch (rel) {
-                case EQ -> "==";
-                case NE -> "/=";
-                case LT -> "<";
-                case LE -> "<=";
-                case GT -> ">";
-                case GE -> ">=";
             };
         }
 

@@ -188,6 +188,30 @@ final class InputPath {
                 .elementOf(binding, names).heldAt();
     }
 
+    /**
+     * The position whose every occurrence the elements handed to {@code binding} are, once each and
+     * in the order the row writes them there — and that they are those of none where they are not
+     * ({@link ElementQuestion#IN_THE_ORDER_WRITTEN}).
+     *
+     * <p>Beside {@link #everyElementAt} and stronger again: the elements are walked as the row holds
+     * them, so the first handed is the first written. No operation is crossed, a reordering no more
+     * than a filter, since this says nothing of what any of them does to the order.
+     */
+    static PathResolution inTheOrderWrittenAt(BindingId binding, BindingEnvironment names,
+                                              DeclarationNewtypes newtypes,
+                                              Function<Core, Denotation> taken) {
+        return new InputPath(newtypes, ElementQuestion.IN_THE_ORDER_WRITTEN, taken)
+                .elementOf(binding, names).heldAt();
+    }
+
+    /** Whether the question in hand wants every occurrence of a position, each once. */
+    private boolean asksEveryOccurrence() {
+        return switch (asked) {
+            case EVERY_OCCURRENCE, IN_THE_ORDER_WRITTEN -> true;
+            case NAMED_POSITION, VALUE_ORIGIN, ONE_PER_ELEMENT, SAME_EMPTINESS -> false;
+        };
+    }
+
     private PathResolution named(Core e, BindingEnvironment names) {
         PathResolution where = whereTaken(e, null);
         if (where != null) {
@@ -521,7 +545,7 @@ final class InputPath {
             // is never a pair, since a pair has no form a boundary writes, so a place of one names
             // nothing there.
             case PathResolution.At at -> switch (wanted) {
-                case Wanted.APart(var part) -> asked == ElementQuestion.EVERY_OCCURRENCE
+                case Wanted.APart(var part) -> asksEveryOccurrence()
                         && at.path().insideAContainer()
                         ? new PathResolution.NotAPosition() : at.deeper(part::of);
                 case Wanted.APlaceOfAnElement _ -> new PathResolution.NotAPosition();
@@ -533,7 +557,7 @@ final class InputPath {
             // further for one of them, what it holds would come back at a single place while the
             // container stands at more.
             case PathResolution.MayStandAt among -> switch (wanted) {
-                case Wanted.APart(var part) -> asked == ElementQuestion.EVERY_OCCURRENCE
+                case Wanted.APart(var part) -> asksEveryOccurrence()
                         ? new PathResolution.NotAPosition() : among.deeper(part::of);
                 case Wanted.APlaceOfAnElement _ -> new PathResolution.NotAPosition();
             };
@@ -599,15 +623,20 @@ final class InputPath {
                 // be; every occurrence of a position is held on every run or by none.
                 boolean holdsNone = Core.withoutStanding(arm) instanceof Core.ListLit written
                         && written.elements().isEmpty();
-                if (!holdsNone || asked == ElementQuestion.EVERY_OCCURRENCE) {
+                if (!holdsNone || asksEveryOccurrence()) {
                     each.add(heldAt(arm, wanted, names));
                 }
             }
             return switch (asked) {
                 case NAMED_POSITION, VALUE_ORIGIN -> PathResolution.anyOf(each);
-                case EVERY_OCCURRENCE -> PathResolution.inEveryCase(each);
+                case EVERY_OCCURRENCE, IN_THE_ORDER_WRITTEN -> PathResolution.inEveryCase(each);
                 case ONE_PER_ELEMENT, SAME_EMPTINESS -> throw unaskedHere();
             };
+        }
+        // What an operation does to the order of what it was given is said of none of them, so
+        // a walk after the order stops at every one — even one answering each element as it is.
+        if (asked == ElementQuestion.IN_THE_ORDER_WRITTEN) {
+            return new PathResolution.NotAPosition();
         }
         // Or through an operation that answers what it was given, in either of the two shapes a
         // representation gives an application: the call a name reached where the operation has been
@@ -781,8 +810,14 @@ final class InputPath {
                 DefaultBoundOperationFacts.get().buildsItsResultFrom(operation);
         // Each as often is more than the same values: an answer that keeps some of what it was
         // given holds those and not the rest.
-        if (asked == ElementQuestion.EVERY_OCCURRENCE) {
-            return built == null ? null : built.permutesTheElementsOf();
+        switch (asked) {
+            case EVERY_OCCURRENCE -> {
+                return built == null ? null : built.permutesTheElementsOf();
+            }
+            // Stopped in `through` before any operation is asked of.
+            case IN_THE_ORDER_WRITTEN -> throw new IllegalStateException("a walk after the order"
+                    + " crosses no operation, and " + operation + " was asked of");
+            case NAMED_POSITION, VALUE_ORIGIN, ONE_PER_ELEMENT, SAME_EMPTINESS -> { }
         }
         DeclaredArgument holds = argumentWhoseElementsItHolds(operation);
         // What is made from a position came from it and is not it, so an answer holding only that
@@ -794,7 +829,7 @@ final class InputPath {
                 : switch (asked) {
                     case VALUE_ORIGIN -> built != null ? built.derivesItsElementsFrom()
                             : DefaultBoundOperationFacts.get().elementsMadeFromAlone(operation);
-                    case NAMED_POSITION, EVERY_OCCURRENCE -> null;
+                    case NAMED_POSITION, EVERY_OCCURRENCE, IN_THE_ORDER_WRITTEN -> null;
                     case ONE_PER_ELEMENT, SAME_EMPTINESS -> throw unaskedHere();
                 };
     }
@@ -838,7 +873,7 @@ final class InputPath {
             case ONE_PER_ELEMENT -> !(asked instanceof Core.Widen)
                     && !(reached instanceof Core.Widen) && asked.type().equals(reached.type());
             case SAME_EMPTINESS -> true;
-            case NAMED_POSITION, VALUE_ORIGIN, EVERY_OCCURRENCE ->
+            case NAMED_POSITION, VALUE_ORIGIN, EVERY_OCCURRENCE, IN_THE_ORDER_WRITTEN ->
                     throw new IllegalArgumentException("a list is followed beneath for a question"
                             + " about one value for each element, not " + question);
         };
@@ -870,7 +905,7 @@ final class InputPath {
         boolean asksWhatEachIs = switch (question) {
             case ONE_PER_ELEMENT -> true;
             case SAME_EMPTINESS -> false;
-            case NAMED_POSITION, VALUE_ORIGIN, EVERY_OCCURRENCE ->
+            case NAMED_POSITION, VALUE_ORIGIN, EVERY_OCCURRENCE, IN_THE_ORDER_WRITTEN ->
                     throw new IllegalArgumentException("a step beneath a list is taken for a"
                             + " question about one value for each element, not " + question);
         };
