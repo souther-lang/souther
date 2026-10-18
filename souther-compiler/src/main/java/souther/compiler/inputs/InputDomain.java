@@ -1794,6 +1794,8 @@ public final class InputDomain {
             case NumberAt.OfWhatNumber.OfHowManyCodePointsAreIn count ->
                     NumericTerm.CodePointClassCount.of(path, count.counted(), type,
                             source.inners());
+            case NumberAt.OfWhatNumber.OfWhatItsCodePointsComeTo _ ->
+                    NumericTerm.CodePointValueSum.of(path, type, source.inners());
             // No clause of a declaration states how often a value occurs among the elements
             // beside it, so none is read at a position here.
             case NumberAt.OfWhatNumber.OfItsMultiplicity _ -> throw new IllegalStateException(
@@ -1822,8 +1824,8 @@ public final class InputDomain {
         // whichever answer it was not named in.
         NarrowedBounds projected = switch (term) {
             case NumericTerm.ValueOf _ -> placed.at(path);
-            case NumericTerm.TakenOf _, NumericTerm.CodePointClassCount _ ->
-                    NarrowedBounds.NOTHING;
+            case NumericTerm.TakenOf _, NumericTerm.CodePointClassCount _,
+                 NumericTerm.CodePointValueSum _ -> NarrowedBounds.NOTHING;
         };
         return new PositionBounds(term,
                 // Two questions of one pair of readings, and they do not have one answer. What the
@@ -1871,6 +1873,7 @@ public final class InputDomain {
             case NumberAt.OfWhatNumber.OfItsOwnValue _ -> carried;
             case NumberAt.OfWhatNumber.OfWhatAnOperationAnswers _,
                  NumberAt.OfWhatNumber.OfHowManyCodePointsAreIn _,
+                 NumberAt.OfWhatNumber.OfWhatItsCodePointsComeTo _,
                  NumberAt.OfWhatNumber.OfItsMultiplicity _ -> Carrier.WHOLE;
             // One of the values standing there, so on their order.
             case NumberAt.OfWhatNumber.OfTheExtremeOfItsKey _ -> carried;
@@ -1958,6 +1961,15 @@ public final class InputDomain {
                             + "` was asked for, and what stands there is no string");
                 }
                 yield counted;
+            }
+            case NumberAt.OfWhatNumber.OfWhatItsCodePointsComeTo _ -> {
+                NumericTerm.CodePointValueSum summed =
+                        NumericTerm.CodePointValueSum.of(path, type, source.inners());
+                if (summed == null) {
+                    throw new IllegalStateException("what the code points of `" + path
+                            + "` come to was asked for, and what stands there is no string");
+                }
+                yield summed;
             }
             case NumberAt.OfWhatNumber.OfItsMultiplicity _ -> {
                 List<TermPath> holding = path.containersHoldingIt();

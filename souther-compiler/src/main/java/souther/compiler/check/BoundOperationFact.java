@@ -142,6 +142,10 @@ sealed interface BoundOperationFact permits BoundOperationFact.OneAboutAnOperati
                             DeclaredArgument string)
             implements OneAboutAnOperation {}
 
+    /** The operation answers the code points of {@code string}, each the number it is, in order. */
+    record ListsTheCodePointsOf(DeclaredOperation operation, DeclaredArgument string)
+            implements OneAboutAnOperation {}
+
     /** The operation's answer holds, exactly where {@code option} holds a value, what
      *  {@code closure} answers on it. */
     record AnswersTheClosureOnWhatItHolds(DeclaredOperation operation, DeclaredArgument option,
