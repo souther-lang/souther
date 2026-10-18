@@ -1166,18 +1166,6 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
     }
 
     /**
-     * Whether a row stands on each side of the line, where {@link #reaches} asks whether the values
-     * run to it on either.
-     *
-     * <p>What a line is asked where it has to be crossed and not only met: a row on each side, so
-     * that two rows differing in this line alone are there to be written.
-     */
-    static boolean reachesBothSides(Level cut, ExactAnswer<Seam> parts, Values values) {
-        return standsBeside(cut, parts, Towards.BELOW, values)
-                && standsBeside(cut, parts, Towards.ABOVE, values);
-    }
-
-    /**
      * Whether a row stands anywhere on the {@code side} of the line, and not at the line.
      *
      * <p>Every value on that side, and not the nearest one: the nearest may be one the rules leave

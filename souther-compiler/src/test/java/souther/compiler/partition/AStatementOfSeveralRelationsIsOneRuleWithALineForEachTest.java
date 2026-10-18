@@ -289,9 +289,11 @@ class AStatementOfSeveralRelationsIsOneRuleWithALineForEachTest {
                 return false;
             }
         };
-        assertTrue(Border.reachesBothSides(new Level.OfTheQuantity(ExactRatio.ONE),
-                        ExactAnswer.unheld(UnheldNumber.MORE_ROOM_COULD_ANSWER), none),
-                "a seam that was not worked out keeps both sides");
+        for (Towards side : Towards.values()) {
+            assertTrue(Border.standsBeside(new Level.OfTheQuantity(ExactRatio.ONE),
+                            ExactAnswer.unheld(UnheldNumber.MORE_ROOM_COULD_ANSWER), side, none),
+                    () -> "a seam that was not worked out keeps the side " + side);
+        }
     }
 
     /**

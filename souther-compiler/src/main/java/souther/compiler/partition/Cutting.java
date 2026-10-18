@@ -1823,8 +1823,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
     }
 
     /**
-     * Whether the rows {@code region} holds stand on both sides of this line — at the value a rule
-     * names and beside it, for a rule that names one.
+     * Whether the rows {@code regions} hold between them stand on both sides of this line — at the
+     * value a rule names and beside it, for a rule that names one.
      *
      * <p>What a line of a statement of several is asked in each case of where it decides. A case is
      * other relations holding or failing, and a row on one side of the line and a row on the other,
@@ -1833,21 +1833,33 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * other: {@code Int.min(a, 11 - a) > 5} decides on {@code 11 - a > 5} where {@code a > 5}, and
      * crossing from six to five takes {@code a > 5} with it, so the statement never turns there.
      *
+     * <p>Each side is asked of every region and the two sides need not be found in one. The rows are
+     * every row any region holds, so a row in one and a row in another differ in this line as two
+     * rows of one do; and the values between the regions are no row's, so the regions are not put
+     * together into one that spans them.
+     *
      * <p>A side that was not worked out is not a proof that no row stands on it, as it is not in
      * {@link #reachedIn}.
      */
-    boolean crossedIn(SearchRegion region) {
-        Border.Values values = valuesIn(region);
-        if (values == null) {
-            return false;
+    boolean crossedIn(List<SearchRegion> regions) {
+        List<Border.Values> each = new ArrayList<>();
+        for (SearchRegion region : regions) {
+            Border.Values values = valuesIn(region);
+            if (values != null) {
+                each.add(values);
+            }
         }
         return switch (claim) {
-            case ComparisonClaim.Cut _ -> Border.reachesBothSides(at, seam(), values);
+            case ComparisonClaim.Cut _ -> each.stream().anyMatch(values ->
+                    Border.standsBeside(at, seam(), Towards.BELOW, values))
+                    && each.stream().anyMatch(values ->
+                            Border.standsBeside(at, seam(), Towards.ABOVE, values));
             // The value it names and a row beside it on either side. With the value put above the
             // seam, the seam parts it from what is below; put below, from what is above.
-            case ComparisonClaim.Singled _ -> values.holdAt(at)
-                    && (Border.standsBeside(at, Seam.where(of, at, Towards.ABOVE), Towards.BELOW,
-                            values)
+            case ComparisonClaim.Singled _ -> each.stream().anyMatch(values -> values.holdAt(at))
+                    && each.stream().anyMatch(values ->
+                            Border.standsBeside(at, Seam.where(of, at, Towards.ABOVE),
+                                    Towards.BELOW, values)
                             || Border.standsBeside(at, Seam.where(of, at, Towards.BELOW),
                                     Towards.ABOVE, values));
         };

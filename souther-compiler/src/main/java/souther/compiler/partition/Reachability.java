@@ -259,6 +259,24 @@ public sealed interface Reachability {
             return ways.along();
         }
 
+        /**
+         * Regions that between them hold every row past this way: the region of each way it is
+         * split into, where it is split into every way a row may take, and its own region
+         * otherwise.
+         *
+         * <p>What a proof that nothing arrives somewhere is asked of. The region alone spans every
+         * way, so a choice between runs of one number leaves the values between the runs in it,
+         * and a line drawn there looks reached when no way a row takes gets to it. Past a figure
+         * the ways looked along are not every way, so only the region whole is a statement about
+         * every row.
+         */
+        public List<SearchRegion> holdingEveryRow() {
+            return switch (ways) {
+                case Ways.Each each -> each.along().stream().map(Reaching::region).toList();
+                case Ways.One _, Ways.Whole _ -> List.of(region);
+            };
+        }
+
         /** The same way, split as {@code split} says. What the way asks of a row is the same
          *  however it is split, so it is not worked out again. */
         Reaching splitAs(Ways split) {

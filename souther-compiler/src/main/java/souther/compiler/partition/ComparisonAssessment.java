@@ -809,8 +809,8 @@ sealed interface ComparisonAssessment {
                     "a rule watched at no place is not one to ask what arrives at: " + read);
         }
         if (cutting != null) {
-            if (!arrivesAtSomePlace(cutting, way, arrivals,
-                    region -> cutting.reachedIn(region, drawnByAnInvariant))) {
+            if (!arrivesAtSomePlace(cutting, way, arrivals, regions -> regions.stream()
+                    .anyMatch(region -> cutting.reachedIn(region, drawnByAnInvariant)))) {
                 return new NothingArrivesAtItsLine(cutting);
             }
             // A relation whose rows all come out one way where they arrive is decided there: no
@@ -851,8 +851,17 @@ sealed interface ComparisonAssessment {
     }
 
     /**
-     * Whether some place the rule is watched at leaves {@code asked} true of the region a row
-     * arriving there is in.
+     * Whether some place the rule is watched at leaves {@code asked} true of the regions the rows
+     * arriving there are in.
+     *
+     * <p>The regions that between them hold every row past the way
+     * ({@link Reachability.Reaching#holdingEveryRow}), handed to {@code asked} together. A way
+     * through a choice between runs of one number is a row in one run or another: a line between
+     * the runs is reached by neither, and a row in one run and a row in the other differ in a line
+     * as two rows in one run do. So whether a row holds a value at the line is asked of each region,
+     * and whether rows stand on both sides of it is asked of all of them, one side in one region
+     * and the other in another. The region that spans them holds the values between the runs,
+     * which are no row's, and is asked neither.
      *
      * <p>A way no row takes is one no row arrives at the line by, wherever the tree that runs holds
      * the rule. Otherwise every place the rule is watched at, and the answer is no only where all of
@@ -866,16 +875,17 @@ sealed interface ComparisonAssessment {
      */
     private static boolean arrivesAtSomePlace(Cutting cutting, Reachability way,
                                               List<ComparisonArrival> arrivals,
-                                              Predicate<SearchRegion> asked) {
+                                              Predicate<List<SearchRegion>> asked) {
         if (!(way instanceof Reachability.Reaching reaching)) {
             return false;
         }
+        List<SearchRegion> arriving = reaching.holdingEveryRow();
         for (ComparisonArrival arrival : arrivals) {
             boolean reaches = switch (arrival) {
                 case ComparisonArrival.NothingArrives _ -> false;
-                case ComparisonArrival.Values values ->
-                        asked.test(cutting.narrowedBy(values, reaching.region()));
-                case ComparisonArrival.NoProjection _ -> asked.test(reaching.region());
+                case ComparisonArrival.Values values -> asked.test(arriving.stream()
+                        .map(region -> cutting.narrowedBy(values, region)).toList());
+                case ComparisonArrival.NoProjection _ -> asked.test(arriving);
             };
             if (reaches) {
                 return true;
