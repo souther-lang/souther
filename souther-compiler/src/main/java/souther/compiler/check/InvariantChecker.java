@@ -1072,10 +1072,15 @@ public final class InvariantChecker {
             // of one declaration number differently ({@link ClauseOccurrence}); what is filed is
             // the part its author wrote, which is the same whichever reading met it. Two readings
             // short of one thing about one part are one fact from here on.
-            Map<ClauseOccurrence, PartId<RuleRef.Invariant>> wrote = authoredPartsOf(each);
-            Set<RuleShortfall> filed = new LinkedHashSet<>();
-            one.account().aboutARule().forEach(met -> filed.add(met.of(wroteIt(met.at(), wrote))));
-            took.stoppedBy(each.from(), filed);
+            Map<ClauseOccurrence, InvariantStatementId> wrote = statementsOf(each);
+            // With the statements each was decided in beside it, which are not part of the fact:
+            // one choice a helper wrote, copied into two conjuncts, is one thing to look at — and
+            // whether some other reading took a statement in is what decides whether its fact is
+            // any account of the rule.
+            one.account().aboutARule().forEach(met -> {
+                InvariantStatementId in = wroteIt(met.at(), wrote);
+                took.stoppedBy(each.from(), met.of(in.part()), in);
+            });
             // Only the rules with one, so that a reader asking a position what is left open there
             // walks the rules that have something rather than every rule of the declaration.
             //
@@ -1705,63 +1710,72 @@ public final class InvariantChecker {
     }
 
     /**
-     * Which part its author wrote each part of {@code reading}'s tree is.
+     * Which statement each occurrence of {@code reading}'s tree is written in, and so which
+     * conjunct its author wrote ({@link InvariantStatementId#part}).
      *
-     * <p>Read off what the reading was built from and not counted again. Which parts a clause has
-     * was settled where it was split, and a second count made where a reading stands is a count
-     * that moves with whatever that reading's substitution put into the tree.
+     * <p>The statement because it is what a reading takes in or leaves standing, and a conjunct
+     * states more than one wherever a helper's body joined two rules or a denial was carried into a
+     * choice. Numbered by the one walk that numbers them ({@link ConjunctStatements}), which is the
+     * numbering every reading of the clause is handed; counted here as well, the two would disagree
+     * the day either changes what a conjunct states.
+     *
+     * <p>The occurrences inside a statement and no others. A reading decides at a leaf it read or
+     * at a choice it took whole, and both are inside the statement that holds them; a conjunction
+     * or a binding above the statements is where none of them decides anything, and a fact said to
+     * be decided there is refused ({@link #wroteIt}) rather than spread over every statement.
      */
-    private static Map<ClauseOccurrence, PartId<RuleRef.Invariant>> authoredPartsOf(
-            Written reading) {
-        Map<ClauseOccurrence, PartId<RuleRef.Invariant>> out = new LinkedHashMap<>();
-        reading.parts().forEach(part -> under(part.of(), part.id(), out));
+    private static Map<ClauseOccurrence, InvariantStatementId> statementsOf(Written reading) {
+        Map<ClauseOccurrence, InvariantStatementId> out = new HashMap<>();
+        reading.parts().forEach(part -> ConjunctStatements.of(part.of(), part.id())
+                .forEach(each -> under(each.said(), each.statement(), out)));
         return out;
     }
 
     /**
-     * Every occurrence of {@code shape} filed under the part it is written in.
+     * Every occurrence of {@code shape} filed under {@code in}, which is what it is written in.
      *
      * <p>Over the shape and not over what some reading of it happened to reach. A walk that stopped
      * where a reading did would leave the coordinates it never got to naming no part, and what was
      * decided under a choice it gave up at is exactly what has to cross.
      */
-    private static void under(ClauseExpr shape, PartId<RuleRef.Invariant> part,
-                              Map<ClauseOccurrence, PartId<RuleRef.Invariant>> out) {
-        out.put(shape.at(), part);
+    private static void under(ClauseExpr shape, InvariantStatementId in,
+                              Map<ClauseOccurrence, InvariantStatementId> out) {
+        out.put(shape.at(), in);
         switch (shape) {
             case ClauseExpr.Leaf _ -> { }
             case ClauseExpr.Joined it -> {
-                under(it.left(), part, out);
-                under(it.right(), part, out);
+                under(it.left(), in, out);
+                under(it.right(), in, out);
             }
-            case ClauseExpr.Scoped it -> under(it.body(), part, out);
+            case ClauseExpr.Scoped it -> under(it.body(), in, out);
         }
     }
 
     /**
-     * Which part its author wrote {@code at} is, refusing a coordinate of no part of the reading.
+     * What its author wrote {@code at} in, refusing a coordinate of no part of the reading.
      *
      * <p>Every coordinate that reaches here was handed out by the same reading, so one that names
      * no part of it is this compiler's two answers disagreeing rather than a fact about a model.
      * Answered with nothing, what a rule is answerable for would be filed under no part and a
      * report would have nowhere to send anybody.
      */
-    private static PartId<RuleRef.Invariant> wroteIt(
-            ClauseOccurrence at, Map<ClauseOccurrence, PartId<RuleRef.Invariant>> wrote) {
-        PartId<RuleRef.Invariant> part = wrote.get(at);
-        if (part == null) {
+    private static InvariantStatementId wroteIt(
+            ClauseOccurrence at, Map<ClauseOccurrence, InvariantStatementId> wrote) {
+        InvariantStatementId in = wrote.get(at);
+        if (in == null) {
             throw new IllegalStateException(
                     "a reading decided something at " + at + ", which is no part of it");
         }
-        return part;
+        return in;
     }
 
     /** Each of {@code behind}'s choices, as what a reader is owed and where they go about it. */
     private static Set<ChoiceToLift> wroteAll(
-            EndsLeftOpen.Behind behind, Map<ClauseOccurrence, PartId<RuleRef.Invariant>> wrote) {
+            EndsLeftOpen.Behind behind, Map<ClauseOccurrence, InvariantStatementId> wrote) {
         Set<ChoiceToLift> out = new LinkedHashSet<>();
         behind.named().forEach(choice -> out.add(new ChoiceToLift(choice.writtenAs(),
-                RuleSite.at(choice.writtenAs().origin(), wroteIt(choice.writtenIn(), wrote)))));
+                RuleSite.at(choice.writtenAs().origin(),
+                        wroteIt(choice.writtenIn(), wrote).part()))));
         return out;
     }
 
@@ -2285,24 +2299,35 @@ public final class InvariantChecker {
      * read a conjunct at a time; evidence gathered for the whole answers a clause half of which
      * nothing read on the strength of the half that was, which is how `value >= 1 && value * value
      * >= 4` came back with nothing to say while the same two rules written apart were reported.
+     *
+     * @param stoppedOn what the arithmetic stopped on in this part, or null where it read it to the
+     *                  end or the part is no comparison
      */
     private void settle(Core part, RuleRef.Invariant rule, Written of,
                         InvariantStatementId statement, ClauseOccurrence at,
                         ClauseStates states, InvariantBound.Read placed,
                         Coordinates byName, Map<RuleRef.Invariant, Required> raised,
                         ReadingEvidence took,
-                        Map<ReadingPlace, Required> raisedByPart) {
+                        Map<ReadingPlace, Required> raisedByPart,
+                        WhereTheFormStopped stoppedOn) {
         raises(raised, rule, states);
         // And what this part of it raises, kept apart from what the rule raises. A reader that found
         // one conjunct wanting reaches for this: the questions of the conjunct written beside it are
         // not what that conjunct left standing.
         raisedByPart.merge(new ReadingPlace(of.opened(), at),
                 Required.ofInvariant(states), Required::and);
+        // The positions this part is about, by every name each answers to, since a reading files a
+        // clause under whichever name it recognised.
+        Set<FactSubject> about = new LinkedHashSet<>();
+        for (RuleKey each : states.about()) {
+            about.addAll(byName.namesAt(each));
+        }
         // A part the reading of ends took in is accounted for by that reading, whatever shape the
         // clause has. Asked of the reading and not of the shape: the two were one question while a
         // bound this could fold was the only clause that arrived here as a bound, and reading the
         // shape for it would say that `value <= 10 * 2` went unadopted by a reading that never got
-        // to look at it.
+        // to look at it. Recorded as taken in at the statement, so that what another reading was
+        // short of in it is no account of a statement beside it that nothing took in.
         //
         // A bound past where the order stops is not named here, and the walk below is what it gets.
         // On a position's own value it leaves nothing standing all the same — the numeric reading
@@ -2314,13 +2339,8 @@ public final class InvariantChecker {
         // a real one: the rule admits nothing, and whether the input is empty is the prover's to
         // say. That it was read is said by the finding its caller files beside it.
         if (placed instanceof InvariantBound.Read.AnEnd) {
+            about.forEach(name -> took.tookInStatement(statement, name));
             return;
-        }
-        // The positions this part is about, by every name each answers to, since a reading files a
-        // clause under whichever name it recognised.
-        Set<FactSubject> about = new LinkedHashSet<>();
-        for (RuleKey each : states.about()) {
-            about.addAll(byName.namesAt(each));
         }
         if (about.isEmpty()) {
             return;
@@ -2347,16 +2367,42 @@ public final class InvariantChecker {
         // `value /= "abc" && String.length(value) == 3` is read by the values on one side and by
         // the numbers an operation answers on the other, and came back as a rule nothing read. A
         // part nothing took in is still left standing below, and that outranks this.
+        //
+        // Taken in at a position only where it was taken in under every name the position answers
+        // to. The question stands where any of them is left standing, and a statement counted as
+        // taken in under the others would take what stopped the reading of values there out of
+        // the account of that very question.
         Set<FactSubject> standing = new LinkedHashSet<>();
-        for (FactSubject name : about) {
-            if (here.contains(name)) {
-                took.record(rule, name);
-            } else if (!constrained.contains(name)) {
-                standing.add(name);
+        for (RuleKey each : states.about()) {
+            Set<FactSubject> names = byName.namesAt(each);
+            boolean left = false;
+            for (FactSubject name : names) {
+                if (here.contains(name)) {
+                    took.record(rule, name);
+                } else if (!constrained.contains(name)) {
+                    standing.add(name);
+                    left = true;
+                }
+            }
+            if (!left) {
+                names.forEach(name -> took.tookInStatement(statement, name));
             }
         }
-        if (!standing.isEmpty()) {
-            took.leftStanding(rule, standing);
+        if (standing.isEmpty()) {
+            return;
+        }
+        took.leftStanding(rule, standing);
+        // And where the arithmetic stopped on it, at each position nothing took it in at. The
+        // reading of numeric constraints takes in what the arithmetic reads, so where that stopped
+        // is what that reading was given up on — which an equality says nowhere else, having no
+        // line for a stop to be said beside. Filed at the written comparison, the place the
+        // reading of values files what it could not take apart in it, so the two are said of one
+        // thing an author wrote.
+        if (stoppedOn != null) {
+            RuleSite site = RuleSite.at(AdmissibleReading.wroteIt(part).origin(), statement.part());
+            BlockReason.RuleReadingStopped why = stoppedOn.said();
+            standing.forEach(name -> took.stoppedOnTheForm(rule,
+                    new FormShortfall(site, why, name), statement));
         }
     }
 
@@ -2456,15 +2502,18 @@ public final class InvariantChecker {
             // for which declarations narrowed that position, and neither is a thing another shape
             // of rule states.
             settle(clause, from, of, statement, said.at(),
-                    states(clause, at, byName, null, Set.of(), answering, runs),
+                    states(clause, at, byName, null, null, Set.of(), answering, runs),
                     new InvariantBound.Read.NoEnd(),
-                    byName, raised, took, raisedByPart);
+                    byName, raised, took, raisedByPart, null);
             return;
         }
         Core.Binary bin = (Core.Binary) clause;
         // And the one reading of the arithmetic over it, handed to each of the questions asked of
         // it: what the clause states, and what a reader is left with where no end came of it.
         CanonicalForm read = canonicalFormOf(comparison, at, byName);
+        // What it stopped on, where it did: the same word for a rule ordering the values that drew
+        // no line and for a part of any comparison that nothing took in.
+        WhereTheFormStopped formStopped = whereTheFormStopped(read, byName, answering);
         // The places a line over several of them relates and is not shown to leave undivided,
         // worked out once: the question the clause leaves standing at each and what a report is
         // told of it are one answer.
@@ -2495,9 +2544,9 @@ public final class InvariantChecker {
                 comparison.at(each -> byName.get(nameOf(each, at)));
         if (asWritten instanceof ComparisonClaim.Singled named && !named.holdsAtTheValue()) {
             settle(bin, from, of, statement, said.at(),
-                    states(bin, at, byName, read, notShown, answering, runs),
+                    states(bin, at, byName, read, formStopped, notShown, answering, runs),
                     new InvariantBound.Read.NoEnd(),
-                    byName, raised, took, raisedByPart);
+                    byName, raised, took, raisedByPart, formStopped);
             // And handed on, which is not the same as being reported. A rule that rules one value
             // out places no end and is no failure of this reading, so there is nothing here for an
             // author to lift and there is a conjunct for the reading that draws lines to make what
@@ -2524,7 +2573,7 @@ public final class InvariantChecker {
         // What the clause is about, asked of the comparison and not of what `end` came to. A
         // coordinate compared for order against something naming no other coordinate states where
         // the values stop, whether or not the number on the other side is one this could fold.
-        ClauseStates shape = states(bin, at, byName, read, notShown, answering, runs);
+        ClauseStates shape = states(bin, at, byName, read, formStopped, notShown, answering, runs);
         // And nothing of this value on the other side. `ARelation` is only what
         // `Relates.twoPositions` recognises, which wants each whole side to be a position — so
         // `width <= height + 1` is not one, and read as a bound it raised a question about where
@@ -2565,7 +2614,7 @@ public final class InvariantChecker {
                                     : had.and(part)));
         }
         settle(bin, from, of, statement, said.at(), shape, end, byName, raised, took,
-                raisedByPart);
+                raisedByPart, formStopped);
         if (end instanceof InvariantBound.Read.NoEnd) {
             // A rule saying where the values stop that no end came out of, said as that. Here,
             // where the reading gave up, because this is the reading a report's line would have
@@ -2940,9 +2989,12 @@ public final class InvariantChecker {
      *                  second answer to that question
      * @param notShown  the places a line over several of them relates and is not shown to leave
      *                  undivided
+     * @param stoppedOn what the arithmetic stopped on in {@code read}, or null where it did not stop
+     *                  ({@link #whereTheFormStopped})
      */
     private ClauseStates states(Core clause, Denotations at,
-                                Coordinates byName, CanonicalForm read, Set<RuleKey> notShown,
+                                Coordinates byName, CanonicalForm read,
+                                WhereTheFormStopped stoppedOn, Set<RuleKey> notShown,
                                 Arrivals answering, RunsRead runs) {
         List<RuleKey> found = new ArrayList<>();
         namedIn(clause, at, byName, answering, found);
@@ -2975,7 +3027,7 @@ public final class InvariantChecker {
                     : new ClauseStates.SomethingElse(notShown, whereItStopped(notShown));
         }
         SequencedMap<RuleKey, List<BlockReason.RuleReadingStopped>> stopped =
-                stoppedOnTheFormOf(found, read, byName, answering);
+                stoppedOnTheFormOf(found, stoppedOn);
         whereItStopped(notShown).forEach((name, why) ->
                 stopped.merge(name, why, InvariantChecker::alsoSaying));
         // And where whether it states one was not worked out, the question stands with no answer.
@@ -3022,15 +3074,13 @@ public final class InvariantChecker {
      * classification is given in, and taking one would put the answer inside the thing it is an
      * answer about.
      */
-    private SequencedMap<RuleKey, List<BlockReason.RuleReadingStopped>> stoppedOnTheFormOf(
-            List<RuleKey> found, CanonicalForm read, Coordinates byName,
-            Arrivals answering) {
+    private static SequencedMap<RuleKey, List<BlockReason.RuleReadingStopped>> stoppedOnTheFormOf(
+            List<RuleKey> found, WhereTheFormStopped stoppedOn) {
         SequencedMap<RuleKey, List<BlockReason.RuleReadingStopped>> out = new LinkedHashMap<>();
         // Only a rule that orders the values. An equality singles one out and puts no end anywhere,
         // which is what it states and not what a reading of it managed — so however little of the
         // form was read, there is no line for anything to be undecided about.
-        if (!(read instanceof CanonicalForm.NotRead stopped)
-                || !(read.comparison().claim() instanceof ComparisonClaim.Cut)) {
+        if (stoppedOn == null || !stoppedOn.ordersTheValues()) {
             return out;
         }
         // The same answer at each name the conjunct writes, because the form is what would settle
@@ -3038,11 +3088,56 @@ public final class InvariantChecker {
         // has a line worked out. What differs between names is settled per conjunct and arrives
         // here as separate readings of separate comparisons, which is why this is asked per name
         // rather than said once of the clause.
-        BlockReason.RuleReadingStopped why = UnreadComparison.notAboutOwnValues(
-                placesIn(stopped.stoppedAt(), stopped.under(), byName, answering).origin(),
-                stopped.decided());
+        BlockReason.RuleReadingStopped why = stoppedOn.said();
         found.forEach(each -> out.put(each, List.of(why)));
         return out;
+    }
+
+    /**
+     * What the arithmetic stopped on in one comparison, worked out the first time a question asks
+     * and not before.
+     *
+     * <p>Handed to both questions that ask it: whether a rule ordering the values has a line
+     * ({@link #stoppedOnTheFormOf}), and what a part no reading took in was given up on
+     * ({@link #settle}). The arithmetic is one for both, so the word is. Most comparisons the
+     * arithmetic stops on are asked neither — an equality some reading took in raises no line and
+     * leaves nothing standing — and the word is a walk of the expression it stopped at, so it is
+     * not paid for one nobody reads.
+     */
+    private final class WhereTheFormStopped {
+
+        private final CanonicalForm.NotRead stopped;
+        private final Coordinates byName;
+        private final Arrivals answering;
+        private BlockReason.RuleReadingStopped said;
+
+        private WhereTheFormStopped(CanonicalForm.NotRead stopped, Coordinates byName,
+                                    Arrivals answering) {
+            this.stopped = stopped;
+            this.byName = byName;
+            this.answering = answering;
+        }
+
+        BlockReason.RuleReadingStopped said() {
+            if (said == null) {
+                said = UnreadComparison.notAboutOwnValues(
+                        placesIn(stopped.stoppedAt(), stopped.under(), byName, answering).origin(),
+                        stopped.decided());
+            }
+            return said;
+        }
+
+        /** Whether the comparison it stopped on orders the values, rather than singling one out. */
+        boolean ordersTheValues() {
+            return stopped.comparison().claim() instanceof ComparisonClaim.Cut;
+        }
+    }
+
+    /** Where the arithmetic stopped in {@code read}, or null where it read it to the end. */
+    private WhereTheFormStopped whereTheFormStopped(CanonicalForm read, Coordinates byName,
+                                                   Arrivals answering) {
+        return read instanceof CanonicalForm.NotRead stopped
+                ? new WhereTheFormStopped(stopped, byName, answering) : null;
     }
 
     /**

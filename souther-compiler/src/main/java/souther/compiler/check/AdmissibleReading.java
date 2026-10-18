@@ -381,11 +381,15 @@ final class AdmissibleReading {
     /**
      * What the author wrote at {@code e}, where they wrote anything.
      *
-     * <p>The construct and not the copy an expansion made of it: what an author rewrites is the one
-     * they wrote, and rewriting it answers every copy. Nothing for a shape no author wrote, which a
-     * substitution puts in the tree when it gives a field an expression of its own.
+     * <p>The construct and the copy an expansion made of it. What an author rewrites is the one they
+     * wrote ({@link ConstructOccurrence#origin}), and rewriting it answers every copy; which copy
+     * this is says which call's arguments it was read with. Nothing for a shape no author wrote,
+     * which a substitution puts in the tree when it gives a field an expression of its own.
+     *
+     * <p>Asked by every reader that files something about a part, so that two facts about one
+     * copy of one part are told to be one.
      */
-    private static ConstructOccurrence wroteIt(Core e) {
+    static ConstructOccurrence wroteIt(Core e) {
         return switch (Core.withoutStanding(e)) {
             case Core.Binary it -> it.occurrence();
             case Core.Call it -> it.occurrence();
