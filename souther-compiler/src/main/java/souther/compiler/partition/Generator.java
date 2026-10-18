@@ -7962,11 +7962,11 @@ public final class Generator {
         List<Function<ElementProjection, ObservedValue>> each = new ArrayList<>();
         for (ObservedValue element : held) {
             for (ElementProjection field : read) {
-                if (field.in(element) == null) {
+                if (on.in(field, element) == null) {
                     return null;
                 }
             }
-            each.add(field -> field.in(element));
+            each.add(field -> on.in(field, element));
         }
         return on.readEachInItsOccurrence(each);
     }
@@ -7985,7 +7985,7 @@ public final class Generator {
         }
         List<Function<ElementProjection, ObservedValue>> each = new ArrayList<>();
         for (ObservedValue element : values) {
-            each.add(field -> field.in(element));
+            each.add(field -> on.in(field, element));
         }
         return on.readOverElements(each);
     }

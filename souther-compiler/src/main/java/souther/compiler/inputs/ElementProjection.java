@@ -6,10 +6,12 @@ import souther.compiler.core.Core;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
+import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
 
 /**
  * Where in an element the value a walk answered stands: the steps from the element to it.
@@ -39,11 +41,24 @@ public record ElementProjection(List<TermPath.Step> steps) {
     public ElementProjection {
         steps = List.copyOf(steps);
         for (TermPath.Step step : steps) {
-            if (!(step instanceof TermPath.Step.Field || step instanceof TermPath.Step.Refine)) {
+            if (!staysInside(step)) {
                 throw new IllegalArgumentException("a way inside one element goes into no"
                         + " container, and " + step + " does");
             }
         }
+    }
+
+    /**
+     * Whether {@code step} stays inside one element: a field, or a narrowing.
+     *
+     * <p>Exhaustive over {@link TermPath.Step}, with no {@code default}, so a step added later is
+     * put on one side of this here and not on whichever side each reader's test left it.
+     */
+    private static boolean staysInside(TermPath.Step step) {
+        return switch (step) {
+            case TermPath.Step.Field _, TermPath.Step.Refine _ -> true;
+            case TermPath.Step.Element _, TermPath.Step.Key _ -> false;
+        };
     }
 
     /** The way through {@code fields}, one after another. */
@@ -62,12 +77,8 @@ public record ElementProjection(List<TermPath.Step> steps) {
         }
         List<TermPath.Step> steps = place.steps().subList(element.steps().size(),
                 place.steps().size());
-        for (TermPath.Step step : steps) {
-            if (!(step instanceof TermPath.Step.Field || step instanceof TermPath.Step.Refine)) {
-                return null;
-            }
-        }
-        return new ElementProjection(steps);
+        return steps.stream().allMatch(ElementProjection::staysInside)
+                ? new ElementProjection(steps) : null;
     }
 
     /** The names of the fields this goes through, where it goes through fields alone, or null where
@@ -87,6 +98,13 @@ public record ElementProjection(List<TermPath.Step> steps) {
     public ElementProjection then(String field) {
         List<TermPath.Step> longer = new ArrayList<>(steps);
         longer.add(new TermPath.Step.Field(field));
+        return new ElementProjection(longer);
+    }
+
+    /** The same place, narrowed to the values {@code cases} leaves. */
+    public ElementProjection narrowedTo(CasesLeft cases) {
+        List<TermPath.Step> longer = new ArrayList<>(steps);
+        longer.add(new TermPath.Step.Refine(cases));
         return new ElementProjection(longer);
     }
 
@@ -247,42 +265,56 @@ public record ElementProjection(List<TermPath.Step> steps) {
      * row where the row said nothing; handed the value that stopped, it says what stopped as it
      * does for a value at the field itself.
      *
-     * <p>A newtype is no step of a path, so a name wrapped round a record is walked through to the
-     * record it wraps when a step is not one of its own fields.
+     * <p>A newtype is no step of a path, so a value on the way may be written inside the names it
+     * wears. Before each step the names the declaration puts at the place reached so far come off
+     * ({@link ObservedValue#inside}), by name: which names a place wears is the declaration's to
+     * say, and a value's shape does not say it — a record may have a field of its own called
+     * {@code value}.
      *
      * <p>A narrowing goes nowhere and is passed where the value is a case it leaves. A value of
      * another case holds nothing below it, which is the element's own answer and not one cut short.
+     *
+     * @param wornAt the names the declaration puts at each place on the way, from the element itself
+     *               to the one before the last step
      */
-    public ObservedValue in(ObservedValue element) {
+    public ObservedValue in(ObservedValue element,
+                            Function<ElementProjection, List<TypeSymbol>> wornAt) {
         ObservedValue at = element;
-        for (TermPath.Step step : steps) {
+        for (int i = 0; i < steps.size(); i++) {
+            at = ObservedValue.inside(wornAt.apply(new ElementProjection(steps.subList(0, i))), at);
             if (at.cause() != null) {
                 return at;
             }
-            if (step instanceof TermPath.Step.Refine(CasesLeft cases)) {
-                if (!cases.leaves(at)) {
-                    return null;
+            switch (steps.get(i)) {
+                case TermPath.Step.Refine(CasesLeft cases) -> {
+                    if (!cases.leaves(at)) {
+                        return null;
+                    }
                 }
-                continue;
-            }
-            String field = ((TermPath.Step.Field) step).name();
-            ObservedValue held = at;
-            while (held.cause() == null && held instanceof ObservedValue.Constructed wrapper
-                    && wrapper.field(field) == null && wrapper.field("value") != null) {
-                held = wrapper.field("value");
-            }
-            if (held.cause() != null) {
-                return held;
-            }
-            if (!(held instanceof ObservedValue.Constructed holder)) {
-                return null;
-            }
-            at = holder.field(field);
-            if (at == null) {
-                return null;
+                case TermPath.Step.Field(String field) -> {
+                    if (!(at instanceof ObservedValue.Constructed holder)) {
+                        return null;
+                    }
+                    at = holder.field(field);
+                    if (at == null) {
+                        return null;
+                    }
+                }
+                case TermPath.Step.Element _, TermPath.Step.Key _ ->
+                        throw new IllegalStateException("a way inside one element goes into no"
+                                + " container");
             }
         }
         return at;
+    }
+
+    /** Every place on the way to this from the element, the element itself first and this last. */
+    public List<ElementProjection> onTheWay() {
+        List<ElementProjection> out = new ArrayList<>();
+        for (int i = 0; i <= steps.size(); i++) {
+            out.add(new ElementProjection(steps.subList(0, i)));
+        }
+        return out;
     }
 
     @Override

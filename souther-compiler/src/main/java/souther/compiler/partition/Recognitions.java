@@ -48,7 +48,7 @@ public final class Recognitions {
         Objects.requireNonNull(value, "a class is put to a value that stands at the position");
         return switch (what) {
             case Recognition.Under under ->
-                    membershipOf(under.inner(), Classifier.inside(under.worn(), value));
+                    membershipOf(under.inner(), ObservedValue.inside(under.worn(), value));
             case Recognition.Truth truth -> byShape(value, seen ->
                     seen instanceof ObservedValue.Bool it && it.value() == truth.value());
             case Recognition.Held held -> byShape(value, seen ->

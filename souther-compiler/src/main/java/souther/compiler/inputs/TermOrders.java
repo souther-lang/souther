@@ -3,6 +3,7 @@ package souther.compiler.inputs;
 import souther.compiler.check.Carrier;
 import souther.compiler.numeric.Place;
 import souther.compiler.observe.ObservedValue;
+import souther.compiler.types.TypeSymbol;
 import souther.compiler.values.Value;
 
 import java.util.ArrayList;
@@ -41,6 +42,7 @@ public final class TermOrders {
     private final Carrier observed;
     private final Carrier answered;
     private final Map<ElementProjection, Carrier> fields;
+    private final Map<ElementProjection, List<TypeSymbol>> worn;
 
     /**
      * @param term     the number these are the orders of. Carried, because an answer that leaves
@@ -53,16 +55,21 @@ public final class TermOrders {
      *                 is drawn and written back on
      */
     TermOrders(NumericTerm term, Carrier observed, Carrier answered) {
-        this(term, observed, answered, Map.of());
+        this(term, observed, answered, Map.of(), Map.of());
     }
 
     /**
      * @param fields   for a term over what a walk computed of each element: what each field the
      *                 computation reads is decoded on. Nothing for any other term, which reads no
      *                 field of an element
+     * @param worn     for a term read off the places of an element: the names the declaration puts
+     *                 at each place on the way to them, the element itself among them, where it
+     *                 puts any. A newtype is no step, so a value there may be written inside them,
+     *                 and only the declaration says which they are
      */
     TermOrders(NumericTerm term, Carrier observed, Carrier answered,
-               Map<ElementProjection, Carrier> fields) {
+               Map<ElementProjection, Carrier> fields,
+               Map<ElementProjection, List<TypeSymbol>> worn) {
         if (term == null) {
             throw new IllegalArgumentException("orders of no term, which is an answer to nothing");
         }
@@ -70,6 +77,7 @@ public final class TermOrders {
         this.observed = observed;
         this.answered = answered;
         this.fields = Map.copyOf(fields);
+        this.worn = Map.copyOf(worn);
     }
 
     /** The number these are the orders of. */
@@ -229,6 +237,20 @@ public final class TermOrders {
         return fields.get(field);
     }
 
+    /** The names the declaration puts at {@code place} of an element, outermost first; none where
+     *  it puts none there. */
+    public List<TypeSymbol> wornAt(ElementProjection place) {
+        return worn.getOrDefault(place, List.of());
+    }
+
+    /**
+     * What stands at {@code place} of {@code element}, walked through the names the declaration puts
+     * on the way ({@link ElementProjection#in}).
+     */
+    public ObservedValue in(ElementProjection place, ObservedValue element) {
+        return place.in(element, this::wornAt);
+    }
+
     /** What a value at the term's path is decoded on, or null where nothing orders it. */
     public Carrier observed() {
         return observed;
@@ -253,12 +275,13 @@ public final class TermOrders {
                 && term.equals(that.term)
                 && Objects.equals(observed, that.observed)
                 && Objects.equals(answered, that.answered)
-                && fields.equals(that.fields);
+                && fields.equals(that.fields)
+                && worn.equals(that.worn);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(term, observed, answered, fields);
+        return Objects.hash(term, observed, answered, fields, worn);
     }
 
     @Override

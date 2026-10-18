@@ -102,6 +102,70 @@ class ASumOverWhatAWalkComputedIsReadLikeASumOverWhatItReadTest {
         assertFalse(chosen.contains("not read"), chosen);
     }
 
+    /** Arithmetic over a choice by a flag is the choice of the arithmetic, in each branch. */
+    @Test
+    void arithmeticOverAChoiceIsTheChoiceOfTheArithmetic() {
+        String weighed = report(model("(if a.debit then a.q else 0 - a.q) * 2 + a.p", 3));
+        assertTrue(weighed.contains("List.sum({if debit then 1·p + 2·q + 0 else 1·p + -2·q + 0"
+                + " | xs[*]})"), weighed);
+        assertFalse(weighed.contains("not read"), weighed);
+    }
+
+    /**
+     * Two choices in one sum are one number whichever is written first: the choice pushed into
+     * first holds the other in its answers, and which that is does not follow from the writing.
+     */
+    @Test
+    void twoChoicesInOneSumAreOneNumberInEitherOrder() {
+        String first = "(if a.debit then a.q else 0)";
+        String second = "(if a.first then a.p else 0)";
+        String one = report(twoFlags(first + " + " + second));
+        String other = report(twoFlags(second + " + " + first));
+        String read = "List.sum({if debit then if first then 1·p + 1·q + 0 else 1·q + 0"
+                + " else if first then 1·p + 0 else 0 | xs[*]})";
+        assertTrue(one.contains(read), one);
+        assertTrue(other.contains(read), other);
+    }
+
+    private static String twoFlags(String closure) {
+        return """
+                module example.computed
+
+                data Many
+                data Few
+
+                data A = { q: Int, p: Int, debit: Bool, first: Bool }
+
+                behavior decide : (xs: List<A>) -> Many | Few
+
+                let decide (xs) =
+                    if List.sum(List.map(a -> %s, xs)) >= 3
+                    then Many else Few
+                """.formatted(closure);
+    }
+
+    /** A fold whose step adds a choice of the element is the total of that choice. */
+    @Test
+    void aFoldAddingAChoiceIsTheTotalOfTheChoice() {
+        String folded = report("""
+                module example.computed
+
+                data Many
+                data Few
+
+                data A = { q: Int, p: Int, debit: Bool }
+
+                behavior decide : (xs: List<A>) -> Many | Few
+
+                let decide (xs) =
+                    if List.fold((acc, a) -> acc + (if a.debit then a.q else 0 - a.q), 0, xs) >= 3
+                    then Many else Few
+                """);
+        assertTrue(folded.contains("List.sum({if debit then 1·q + 0 else -1·q + 0 | xs[*]})"),
+                folded);
+        assertFalse(folded.contains("not read"), folded);
+    }
+
     /**
      * A closure that is the field and nothing made of it is the place, whichever way it is spelled.
      *

@@ -576,11 +576,24 @@ final class TermReading {
          * Asked of the value at the place the arms narrow and not at the narrowed place: a value of
          * another case holds nothing at the second, which is an answer about the case and not an
          * element with nothing written where the computation looked.
+         *
+         * <p>Of the value under the names the declaration puts at the place, as the row walk asks
+         * it ({@link ObservedValue#inside}); and only where that value was read whole, since a case
+         * told off a value cut short is a guess at which arm the program took.
          */
         @Override
-        public Boolean isOf(ElementProjection subject, CasesLeft cases) {
+        public Predicate<CasesLeft> caseAt(ElementProjection subject) {
             ObservedValue at = held(subject);
-            return at == null ? null : cases.leaves(at);
+            if (at == null) {
+                return null;
+            }
+            ObservedValue inner = ObservedValue.inside(on.wornAt(subject), at);
+            Membership.Incomplete unread = Membership.unread(inner);
+            if (unread != null) {
+                stopped = new Reading.Missing(unread.cause());
+                return null;
+            }
+            return cases -> cases.leaves(inner);
         }
 
         /** The value at the field, or null with the reason recorded where there is none to use. */

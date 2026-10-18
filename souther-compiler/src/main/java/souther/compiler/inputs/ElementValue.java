@@ -16,13 +16,14 @@ import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.BindingId;
 
 import java.util.ArrayList;
-import java.util.HashSet;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Predicate;
 
 /**
  * What a closure computed from one element of a walk, for a closure whose answer is not a place of
@@ -80,9 +81,14 @@ public sealed interface ElementValue {
         /** Whether the flag at {@code field} is set, or null where the element holds none there. */
         Boolean flag(ElementProjection field);
 
-        /** Whether the value at {@code subject} is one of {@code cases}, or null where the element
-         *  holds nothing there whose case can be told. */
-        Boolean isOf(ElementProjection subject, CasesLeft cases);
+        /**
+         * Which case the value at {@code subject} is, as the test of whether it is one of the cases
+         * an arm takes; or null where the element holds nothing there whose case can be told.
+         *
+         * <p>The value is read once and every arm is tried against it, so a {@code match} of many
+         * arms reads its subject once per element and not once per arm.
+         */
+        Predicate<CasesLeft> caseAt(ElementProjection subject);
     }
 
     /**
@@ -93,6 +99,73 @@ public sealed interface ElementValue {
      * terms by the way its closure happened to be spelled.
      */
     ElementProjection asAPlace();
+
+    /**
+     * What {@code one} and {@code other} come to added, for each element; or null where the exact
+     * arithmetic cannot hold a number of it.
+     *
+     * <p>Arithmetic over a choice is the choice of the arithmetic: what is added to a choice is
+     * added to each of its answers, {@code 1 + case(A ↦ a, B ↦ b) = case(A ↦ 1 + a, B ↦ 1 + b)}, and
+     * an element takes the same arm either way. So a sum of forms is a form, and a sum with a
+     * choice is that choice with the sum pushed into every answer — which is the only way a choice
+     * stands inside arithmetic here, since a form holds no choice.
+     */
+    static ElementValue plus(ElementValue one, ElementValue other) {
+        return switch (one) {
+            case Affine form -> switch (other) {
+                case Affine more -> form.form().plus(more.form())
+                        instanceof ExactAnswer.Held<LinearForm<ElementProjection>>(var summed)
+                        ? new Affine(summed) : null;
+                case Choose _, OfItsCase _ -> plus(other, one);
+            };
+            case Choose choice -> {
+                ElementValue yes = plus(choice.whenSet(), other);
+                ElementValue no = yes == null ? null : plus(choice.otherwise(), other);
+                yield no == null ? null : choosing(choice.flag(), yes, no);
+            }
+            case OfItsCase choice -> {
+                List<OfItsCase.Arm> arms = new ArrayList<>();
+                for (OfItsCase.Arm arm : choice.arms()) {
+                    ElementValue added = plus(arm.value(), other);
+                    if (added == null) {
+                        yield null;
+                    }
+                    arms.add(new OfItsCase.Arm(arm.cases(), added));
+                }
+                ElementValue rest = choice.rest() == null ? null : plus(choice.rest(), other);
+                yield choice.rest() != null && rest == null ? null
+                        : choosingByCase(choice.subject(), arms, rest);
+            }
+        };
+    }
+
+    /** What {@code value} comes to weighed by {@code weight}, for each element, pushed into every
+     *  answer of a choice as {@link #plus} is; or null where the exact arithmetic cannot hold it. */
+    static ElementValue times(ElementValue value, ExactRatio weight) {
+        return switch (value) {
+            case Affine form -> form.form().times(weight)
+                    instanceof ExactAnswer.Held<LinearForm<ElementProjection>>(var weighed)
+                    ? new Affine(weighed) : null;
+            case Choose choice -> {
+                ElementValue yes = times(choice.whenSet(), weight);
+                ElementValue no = yes == null ? null : times(choice.otherwise(), weight);
+                yield no == null ? null : choosing(choice.flag(), yes, no);
+            }
+            case OfItsCase choice -> {
+                List<OfItsCase.Arm> arms = new ArrayList<>();
+                for (OfItsCase.Arm arm : choice.arms()) {
+                    ElementValue weighed = times(arm.value(), weight);
+                    if (weighed == null) {
+                        yield null;
+                    }
+                    arms.add(new OfItsCase.Arm(arm.cases(), weighed));
+                }
+                ElementValue rest = choice.rest() == null ? null : times(choice.rest(), weight);
+                yield choice.rest() != null && rest == null ? null
+                        : choosingByCase(choice.subject(), arms, rest);
+            }
+        };
+    }
 
     /**
      * The choice of {@code whenSet} or {@code otherwise} by {@code flag}, with a choice between
@@ -149,7 +222,7 @@ public sealed interface ElementValue {
             List<String> terms = new ArrayList<>();
             form.coefs().entrySet().stream()
                     .sorted(Map.Entry.comparingByKey(
-                            java.util.Comparator.comparing(ElementProjection::toString)))
+                            Comparator.comparing(ElementProjection::toString)))
                     .forEach(each -> terms.add(each.getValue() + "·" + each.getKey()));
             terms.add(form.constant().toString());
             return String.join(" + ", terms);
@@ -203,49 +276,45 @@ public sealed interface ElementValue {
      * element, and a total over the run is the total of what each one's arm made of it — so one
      * container stays one run, and no arm is a run of its own.
      *
-     * <p>Each arm is held as the place its name stands at: the matched value, narrowed to what the
-     * arm took. What a body under the arm reads of that value is a field of the case, and two cases
-     * declaring a field of one name are two places.
+     * <p>Each arm's name stands at the matched value narrowed to what the arm took ({@link #taken}).
+     * What a body under the arm reads of that value is a field of the case, and two cases declaring
+     * a field of one name are two places.
      *
-     * @param rest what an element no arm took comes to, or null where the arms take every value the
-     *             declaration leaves the place
+     * @param subject the place whose case chooses, which every arm narrows
+     * @param rest    what an element no arm took comes to, or null where the arms take every value
+     *                the declaration leaves the place
      */
-    record OfItsCase(List<Arm> arms, ElementValue rest) implements ElementValue {
+    record OfItsCase(ElementProjection subject, List<Arm> arms, ElementValue rest)
+            implements ElementValue {
 
-        /** An arm: where the value stands once the arm has taken it, and what it comes to there. */
-        public record Arm(ElementProjection taken, ElementValue value) {
+        /** An arm: the cases it takes that no arm before it took, and what it comes to there. */
+        public record Arm(CasesLeft cases, ElementValue value) {
 
             public Arm {
-                if (taken == null || taken.narrowing() == null || value == null) {
-                    throw new IllegalArgumentException("an arm narrows the value it matched and"
-                            + " answers something of it");
+                if (cases == null || value == null) {
+                    throw new IllegalArgumentException("an arm takes some case and answers"
+                            + " something of it");
                 }
             }
         }
 
         public OfItsCase {
-            if (arms == null || arms.isEmpty()) {
-                throw new IllegalArgumentException("a choice by case has an arm to choose");
+            if (subject == null || arms == null || arms.isEmpty()) {
+                throw new IllegalArgumentException("a choice by case has a place and an arm to"
+                        + " choose");
             }
             arms = List.copyOf(arms);
-            ElementProjection subject = arms.getFirst().taken().narrowedFrom();
-            for (Arm arm : arms) {
-                if (!arm.taken().narrowedFrom().equals(subject)) {
-                    throw new IllegalArgumentException("the arms of one match narrow one value, and"
-                            + " these narrow " + subject + " and " + arm.taken().narrowedFrom());
-                }
-            }
         }
 
-        /** The place whose case chooses. */
-        public ElementProjection subject() {
-            return arms.getFirst().taken().narrowedFrom();
+        /** Where the name of {@code arm} stands: the subject, narrowed to what the arm took. */
+        public ElementProjection taken(Arm arm) {
+            return subject.narrowedTo(arm.cases());
         }
 
         @Override
         public Set<ElementProjection> reads() {
             Set<ElementProjection> all = new LinkedHashSet<>();
-            all.add(subject());
+            all.add(subject);
             for (Arm arm : arms) {
                 all.addAll(arm.value().reads());
             }
@@ -257,12 +326,12 @@ public sealed interface ElementValue {
 
         @Override
         public ExactAnswer<ExactRatio> at(OneElement element) {
+            Predicate<CasesLeft> isOf = element.caseAt(subject);
+            if (isOf == null) {
+                return null;
+            }
             for (Arm arm : arms) {
-                Boolean taken = element.isOf(subject(), arm.taken().narrowing());
-                if (taken == null) {
-                    return null;
-                }
-                if (taken) {
+                if (isOf.test(arm.cases())) {
                     return arm.value().at(element);
                 }
             }
@@ -279,7 +348,7 @@ public sealed interface ElementValue {
         public String toString() {
             List<String> said = new ArrayList<>();
             for (Arm arm : arms) {
-                said.add("when " + arm.taken() + " then " + arm.value());
+                said.add("when " + taken(arm) + " then " + arm.value());
             }
             if (rest != null) {
                 said.add("otherwise " + rest);
@@ -295,7 +364,8 @@ public sealed interface ElementValue {
      * <p>A {@code match} is exhaustive, so an element is taken by some arm, and where every arm
      * comes to the same thing the case does not change what the element comes to.
      */
-    static ElementValue choosingByCase(List<OfItsCase.Arm> arms, ElementValue rest) {
+    static ElementValue choosingByCase(ElementProjection subject, List<OfItsCase.Arm> arms,
+                                       ElementValue rest) {
         if (arms.isEmpty()) {
             return rest;
         }
@@ -304,7 +374,7 @@ public sealed interface ElementValue {
         for (OfItsCase.Arm arm : arms) {
             one &= arm.value().equals(first);
         }
-        return one ? first : new OfItsCase(arms, rest);
+        return one ? first : new OfItsCase(subject, arms, rest);
     }
 
     /**
@@ -322,7 +392,7 @@ public sealed interface ElementValue {
     static ElementValue read(ElementAnswer answer, Map<BindingId, Core> held,
                              RuleReadingSource source, ElementsAt elements) {
         return new Reader(answer.parameter(), Map.of(), held, source, elements)
-                .value(answer.body(), new HashSet<>());
+                .value(answer.body());
     }
 
     /**
@@ -377,42 +447,69 @@ public sealed interface ElementValue {
         }
 
         /**
-         * @param expanding the names being read through at this point of the walk. The names on the
-         *                  way down to here and no others: a name read in one branch and again in
-         *                  the other is one definition met twice, which is no cycle, so a name is
-         *                  taken out when its reading returns
+         * What {@code answer} comes to of the element: a form of its places and of the choices in
+         * it, with each choice taking the rest of the form into its answers ({@link #plus}).
+         *
+         * <p>One walk, the arithmetic's own. A choice is no arithmetic, so the walk stops at one and
+         * asks what it is as it asks of any place it cannot compose ({@link #atoms}); a name given
+         * a choice is read through to it by the same walk as a name given arithmetic. So a choice
+         * is read the same way as the whole answer, as a part of a sum, or behind a name.
          */
-        private ElementValue value(Core answer, Set<BindingId> expanding) {
-            Core e = Core.withoutStanding(answer);
-            if (e instanceof Core.LetIn let) {
-                return value(let.body(), expanding);
+        private ElementValue value(Core answer) {
+            LinearForm<Atom> form = AffineForms.of(answer, held, atoms());
+            if (form == null) {
+                return null;
             }
-            // A name given a branch or a match is that choice, and a name given arithmetic is read
-            // by the arithmetic's own walk below.
-            if (e instanceof Core.Read read && !element.equals(read.binding())
-                    && held.get(read.binding()) != null
-                    && Core.withoutStanding(held.get(read.binding())) instanceof Core fork
-                    && (fork instanceof Core.If || fork instanceof Core.Match)) {
-                if (!expanding.add(read.binding())) {
+            Map<ElementProjection, ExactRatio> places = new LinkedHashMap<>();
+            Map<ElementValue, ExactRatio> chosen = new LinkedHashMap<>();
+            form.coefs().forEach((atom, weight) -> {
+                switch (atom) {
+                    case Atom.Place(ElementProjection place) -> places.put(place, weight);
+                    case Atom.Chosen(ElementValue choice) -> chosen.put(choice, weight);
+                }
+            });
+            return pushedIn(form.constant(), places, chosen);
+        }
+
+        /**
+         * {@code constant + Σ weight·place + Σ weight·choice}, with the choices taking the rest
+         * into their answers; or null where the exact arithmetic cannot hold it.
+         *
+         * <p>The choices in one order made of them alone. They arrive in the order a hash left
+         * them, and the first one pushed into holds the rest inside its answers, so two orders
+         * would be two spellings of one number.
+         */
+        private static ElementValue pushedIn(ExactRatio constant,
+                                             Map<ElementProjection, ExactRatio> places,
+                                             Map<ElementValue, ExactRatio> chosen) {
+            List<Map.Entry<ElementValue, ExactRatio>> inOrder = new ArrayList<>(chosen.entrySet());
+            inOrder.sort(Comparator.comparing(each -> each.getKey().toString()));
+            ElementValue made = new Affine(new LinearForm<>(constant, places));
+            for (Map.Entry<ElementValue, ExactRatio> each : inOrder) {
+                ElementValue weighed = ElementValue.times(each.getKey(), each.getValue());
+                made = weighed == null ? null : ElementValue.plus(made, weighed);
+                if (made == null) {
                     return null;
                 }
-                try {
-                    return value(held.get(read.binding()), expanding);
-                } finally {
-                    expanding.remove(read.binding());
-                }
             }
-            if (e instanceof Core.If branch) {
-                ElementProjection flag = placeOf(branch.cond(), held);
-                ElementValue yes = flag == null ? null : value(branch.then(), expanding);
-                ElementValue no = yes == null ? null : value(branch.els(), expanding);
-                return no == null ? null : ElementValue.choosing(flag, yes, no);
-            }
-            if (e instanceof Core.Match match) {
-                return byCase(match, expanding);
-            }
-            LinearForm<ElementProjection> form = AffineForms.of(e, held, atoms());
-            return form == null ? null : new Affine(form);
+            return made;
+        }
+
+        /** What an atom of what a closure computed is: a place of the element, or a choice made
+         *  of it. */
+        private sealed interface Atom {
+
+            record Place(ElementProjection place) implements Atom {}
+
+            record Chosen(ElementValue choice) implements Atom {}
+        }
+
+        /** What a branch on a flag of the element comes to, or null where it is not read. */
+        private ElementValue byFlag(Core.If branch) {
+            ElementProjection flag = placeOf(branch.cond(), held);
+            ElementValue yes = flag == null ? null : value(branch.then());
+            ElementValue no = yes == null ? null : value(branch.els());
+            return no == null ? null : ElementValue.choosing(flag, yes, no);
         }
 
         /**
@@ -423,14 +520,21 @@ public sealed interface ElementValue {
          * elements stand. An arm no value there is of is no arm any element takes, and is left out;
          * one every value left there is of takes all of them, and the arms after it are not reached.
          * An arm selecting nothing — the one written to take whatever is left — does the same.
+         *
+         * <p>Each arm is asked about the whole declaration and not about what the arms before it
+         * left, because no two arms of a {@code match} select one case: the checker refuses that
+         * (E1204), so what an arm selects is what it takes.
          */
-        private ElementValue byCase(Core.Match match, Set<BindingId> expanding) {
+        private ElementValue byCase(Core.Match match) {
             ElementProjection subject = placeOf(match.scrutinee(), held);
             if (subject == null) {
                 return null;
             }
             TermPath at = subject.from(elements.at());
             List<OfItsCase.Arm> arms = new ArrayList<>();
+            // What the arms narrow, which is the subject or, where it was narrowed to several
+            // cases already, the place that narrowing was of.
+            ElementProjection narrowed = null;
             for (Core.Case arm : match.cases()) {
                 CasesLeft covered = arm.pattern() == null ? null
                         : CasesLeft.selectedBy(arm.pattern());
@@ -442,37 +546,48 @@ public sealed interface ElementValue {
                 switch (taking) {
                     case DeclaredInput.Taking.Excluded _ -> { }
                     case DeclaredInput.Taking.Implied _ -> {
-                        ElementValue rest = binding(arm.binder(), subject)
-                                .value(arm.body(), expanding);
-                        return rest == null ? null : ElementValue.choosingByCase(arms, rest);
+                        ElementValue rest = binding(arm.binder(), subject).value(arm.body());
+                        return rest == null ? null
+                                : ElementValue.choosingByCase(narrowed, arms, rest);
                     }
                     case DeclaredInput.Taking.Narrows(TermPath to) -> {
                         // Every arm narrows the one place, so each is the same place narrowed.
-                        ElementProjection taken = ElementProjection.below(elements.at(), to);
-                        boolean ofOnePlace = taken != null && taken.narrowing() != null
-                                && (arms.isEmpty() || arms.getFirst().taken().narrowedFrom()
-                                        .equals(taken.narrowedFrom()));
+                        ElementProjection reached = ElementProjection.below(elements.at(), to);
+                        boolean ofOnePlace = reached != null && reached.narrowing() != null
+                                && (narrowed == null || narrowed.equals(reached.narrowedFrom()));
                         ElementValue value = !ofOnePlace ? null
-                                : binding(arm.binder(), taken).value(arm.body(), expanding);
+                                : binding(arm.binder(), reached).value(arm.body());
                         if (value == null) {
                             return null;
                         }
-                        arms.add(new OfItsCase.Arm(taken, value));
+                        narrowed = reached.narrowedFrom();
+                        arms.add(new OfItsCase.Arm(reached.narrowing(), value));
                     }
                 }
             }
-            return arms.isEmpty() ? null : ElementValue.choosingByCase(arms, null);
+            return arms.isEmpty() ? null : ElementValue.choosingByCase(narrowed, arms, null);
         }
 
-        /** What an atom of an element is called: the way to it from the element, and what a name on
-         *  the way holds. */
-        private AffineForms.Reading<ElementProjection, Map<BindingId, Core>> atoms() {
+        /**
+         * What an atom of an element is called: the way to it from the element, and what a name on
+         * the way holds; or, where the walk stopped at a branch on a flag of the element or a
+         * {@code match} on a place of it, that choice.
+         */
+        private AffineForms.Reading<Atom, Map<BindingId, Core>> atoms() {
             return new Names<>() {
 
                 @Override
-                public LinearForm<ElementProjection> leafOf(Core e, Map<BindingId, Core> at) {
+                public LinearForm<Atom> leafOf(Core e, Map<BindingId, Core> at) {
                     ElementProjection place = placeOf(e, at);
-                    return place == null ? null : LinearForm.atom(place);
+                    if (place != null) {
+                        return LinearForm.atom(new Atom.Place(place));
+                    }
+                    ElementValue choice = switch (Core.withoutStanding(e)) {
+                        case Core.If branch -> byFlag(branch);
+                        case Core.Match match -> byCase(match);
+                        case null, default -> null;
+                    };
+                    return choice == null ? null : LinearForm.atom(new Atom.Chosen(choice));
                 }
             };
         }
@@ -491,6 +606,10 @@ public sealed interface ElementValue {
          * <p>Null where the form has the answer so far at any weight but exactly one — which is
          * where it is multiplied, ignored or chosen between. What every element adds alike is the
          * constant, and a step adding nothing else of the element adds that many for each of them.
+         *
+         * <p>A choice of the element the step adds is read as it is in a closure's answer
+         * ({@link #value}): {@code acc + (if a.debit then a.q else 0)} adds the choice. A choice
+         * holding the answer so far is no choice of the element, and is not read.
          */
         private Added addedTo(Core answer, BindingId accumulator) {
             LinearForm<TheStep> form = AffineForms.of(answer, held, new Names<TheStep>() {
@@ -505,33 +624,42 @@ public sealed interface ElementValue {
                     if (counted != null) {
                         return LinearForm.atom(new TheStep.HowManyAt(counted));
                     }
-                    ElementProjection place = placeOf(e, at);
-                    return place == null ? null : LinearForm.atom(new TheStep.OfTheElement(place));
+                    LinearForm<Atom> ofTheElement = atoms().leafOf(e, at);
+                    if (ofTheElement == null) {
+                        return null;
+                    }
+                    Atom only = ofTheElement.coefs().keySet().iterator().next();
+                    return LinearForm.atom(new TheStep.OfTheElement(only));
                 }
             });
             if (form == null
                     || !ExactRatio.ONE.equals(form.coefs().get(new TheStep.TheAnswerSoFar()))) {
                 return null;
             }
-            Map<ElementProjection, ExactRatio> added = new LinkedHashMap<>();
+            Map<ElementProjection, ExactRatio> places = new LinkedHashMap<>();
+            Map<ElementValue, ExactRatio> chosen = new LinkedHashMap<>();
             Map<ElementProjection, ExactRatio> counted = new LinkedHashMap<>();
             form.coefs().forEach((atom, weight) -> {
                 switch (atom) {
-                    case TheStep.OfTheElement(ElementProjection place) -> added.put(place, weight);
+                    case TheStep.OfTheElement(Atom.Place(ElementProjection place)) ->
+                            places.put(place, weight);
+                    case TheStep.OfTheElement(Atom.Chosen(ElementValue choice)) ->
+                            chosen.put(choice, weight);
                     case TheStep.HowManyAt(ElementProjection place) -> counted.put(place, weight);
                     case TheStep.TheAnswerSoFar _ -> { }
                 }
             });
-            return new Added(new Affine(new LinearForm<>(form.constant(), added)), counted);
+            ElementValue adds = pushedIn(form.constant(), places, chosen);
+            return adds == null ? null : new Added(adds, counted);
         }
 
-        /** What an atom of a step is: the answer so far, a place of the element, or how many the
+        /** What an atom of a step is: the answer so far, an atom of the element, or how many the
          *  container at a place of the element holds. */
         private sealed interface TheStep {
 
             record TheAnswerSoFar() implements TheStep {}
 
-            record OfTheElement(ElementProjection place) implements TheStep {}
+            record OfTheElement(Atom atom) implements TheStep {}
 
             record HowManyAt(ElementProjection place) implements TheStep {}
         }
@@ -580,14 +708,15 @@ public sealed interface ElementValue {
     }
 
     /**
-     * What a step adds to the answer so far for one element: a form of the element's numbers, and
-     * how many each container at a place of the element holds, with the weight it is added at.
+     * What a step adds to the answer so far for one element: what it computes of the element's
+     * numbers, and how many each container at a place of the element holds, with the weight it is
+     * added at.
      *
      * <p>A count is no number of the element's: how many a list inside it holds is as many values
      * as stand inside, so over every element it is how many occurrences of that list's element
      * there are, which is a number of the walk and not a total of one value of each element.
      */
-    record Added(Affine ofTheElement, Map<ElementProjection, ExactRatio> heldAt) {
+    record Added(ElementValue ofTheElement, Map<ElementProjection, ExactRatio> heldAt) {
 
         public Added {
             heldAt = Map.copyOf(heldAt);

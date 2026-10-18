@@ -168,6 +168,8 @@ final class Reasons {
                 case ELEMENTS_A_COMPUTED_TOTAL_IS_SOLVED_FOR ->
                         "the elements whose computed number is made of several fields, chosen"
                                 + " by a flag or chosen by their case";
+                case MIXES_OF_CASES_A_TOTAL_IS_SPREAD_OVER ->
+                        "the containers mixing the cases a computed number is chosen by";
                 case TREES_WRITTEN_FOR_A_COUNT ->
                         "the trees that hold a count of nodes deeper than one node below the root";
             });

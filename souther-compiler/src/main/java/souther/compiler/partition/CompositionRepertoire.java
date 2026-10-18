@@ -101,15 +101,26 @@ public enum CompositionRepertoire {
      * element and solving for it, where the computation is a form of that one field alone. A form of
      * several fields, or a choice between two by a flag, has more than one value to choose in an
      * element, and nothing here chooses the others so that the first can be solved for. A choice by
-     * the element's case is solved for through one arm, so what is written is the containers whose
-     * elements are all of that case and none that mixes them. Raising anything reaches none of the
-     * rest; what would is a way of choosing the rest of an element.
+     * the element's case none of whose arms is a form of one field of its case is the same. Raising
+     * anything reaches none of them; what would is a way of choosing the rest of an element.
      *
      * <p>So a total of such a number is not a total no row comes to. Read as a figure, an author is
      * told to raise a number that changes nothing; read as an answer about the model, they are told
      * the rules admit no row when what happened is that this compiler wrote none.
      */
     ELEMENTS_A_COMPUTED_TOTAL_IS_SOLVED_FOR,
+
+    /**
+     * The containers a total of what was computed of each element by its case is spread over,
+     * where they mix the cases.
+     *
+     * <p>Such a total is solved for through one arm, which is a form of one field of the case it
+     * takes, so every element written is of that case. A container mixing it with another case
+     * comes to a total no container of one case does — twice an amount is even, and an odd fee
+     * beside it is not — and is written by none of these. What would reach it is a way of sharing a
+     * total out among the arms, and raising no figure does.
+     */
+    MIXES_OF_CASES_A_TOTAL_IS_SPREAD_OVER,
 
     /**
      * The trees written for how many nodes, or values inside the nodes, a tree holds.

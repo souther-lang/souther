@@ -21,12 +21,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * A {@code match} on the element inside a walk's closure is a number of each element, chosen by the
  * case that element is, as the same {@code match} on one value is read case by case.
  *
- * <p>{@code List.sum(List.map(d -> match d with | A { amount } -> amount | B { amount } -> amount,
- * deductions))} came back as a comparison nothing read, though the same {@code match} applied to
- * one {@code d} was read at {@code d@A.amount} and {@code d@B.amount}. What is held here is that the
- * total is one run over the container with each element's arm chosen by its own case, that a field
- * of one case is a place apart from a field of the same name in another, that what the arms read is
- * read as it is anywhere else in a closure, and that rows are written for the line it draws.
+ * <p>What is held here is that the total is one run over the container with each element's arm
+ * chosen by its own case, that a field of one case is a place apart from a field of the same name in
+ * another, that what the arms read is read as it is anywhere else in a closure, and that rows are
+ * written for the line it draws.
  */
 class AMatchOnTheElementInsideAWalkIsReadCaseByCaseTest {
 
@@ -44,7 +42,7 @@ class AMatchOnTheElementInsideAWalkIsReadCaseByCaseTest {
     private static final String READ_BY_CASE = "List.sum({when @A then 1·@A.amount + 0"
             + " when @B then 1·@B.amount + 0 | deductions[*]})";
 
-    /** The issue's model: a guard that the deductions do not exceed the gross. */
+    /** A guard that the deductions do not exceed the gross. */
     private static String guarded(String declarations, String closure) {
         return """
                 module example.deductions
@@ -170,6 +168,31 @@ class AMatchOnTheElementInsideAWalkIsReadCaseByCaseTest {
         assertFalse(report.contains("not read"), report);
     }
 
+    /**
+     * Arithmetic over a {@code match} is the {@code match} of the arithmetic: what is added to it is
+     * added in each arm, and two of them in one sum are each chosen by their own case.
+     */
+    @Test
+    void arithmeticOverAMatchIsTheMatchOfTheArithmetic() {
+        String added = report(guarded(TWO_CASES, """
+                (match d with
+                        | A { amount } -> amount
+                        | B { amount } -> amount) * 2 + 1"""));
+        assertTrue(added.contains("List.sum({when @A then 2·@A.amount + 1"
+                + " when @B then 2·@B.amount + 1 | deductions[*]})"), added);
+        assertFalse(added.contains("not read"), added);
+
+        String named = report(guarded(TWO_CASES, """
+                {
+                            let owed = match d with
+                                | A { amount } -> amount
+                                | B { amount } -> amount
+                            1 + owed
+                        }"""));
+        assertTrue(named.contains("List.sum({when @A then 1·@A.amount + 1"
+                + " when @B then 1·@B.amount + 1 | deductions[*]})"), named);
+    }
+
     /** Every arm answering the same is an answer the case does not change. */
     @Test
     void armsThatAllAnswerAlikeAreThatAnswer() {
@@ -266,22 +289,78 @@ class AMatchOnTheElementInsideAWalkIsReadCaseByCaseTest {
      */
     @Test
     void aPointOnlyAnotherCaseReachesIsLeftUntried() {
-        String model = thresholded(FEES, """
+        Compilation compiled = compiled(thresholded(FEES, """
                 match d with
                         | A { amount } -> amount * 2
-                        | B { fee } -> fee""", 6);
-        String rows = rowsOf(model);
+                        | B { fee } -> fee""", 6));
+        String rows = rowsOf(compiled);
         List<Long> totals = totalsOf(rows, 2);
 
         assertTrue(totals.contains(6L), () -> "the point on the line: " + rows);
         assertTrue(rows.contains("no row for `List.sum({when @A then 2·@A.amount + 0"
                 + " when @B then 1·@B.fee + 0 | deductions[*]}) = 5` in `decide`: the search left"
                 + " something untried"), rows);
-        String report = report(model);
+        String report = report(compiled);
         assertTrue(report.lines().anyMatch(line -> line.contains("= 5 — ")
-                && line.contains("the elements whose computed number is made of several fields,"
-                        + " chosen by a flag or chosen by their case rather than all of them")),
+                && line.contains("the containers mixing the cases a computed number is chosen by"
+                        + " rather than all of them")),
                 report);
+    }
+
+    /**
+     * A sum worn under a newtype is matched as the case it wraps, and the rows written for it read
+     * back as the totals they were written for.
+     */
+    @Test
+    void aSumWornUnderANewtypeIsMatchedAsTheCaseItWraps() {
+        String rows = rowsOf(thresholded("""
+                data A = { amount: Int }
+                data B = { amount: Int }
+                data Owed = A | B
+                data Deduction = Owed
+                """, """
+                match d.value with
+                        | A { amount } -> amount
+                        | B { amount } -> amount""", 6));
+        assertTrue(rows.contains("fills ON point"), rows);
+        assertFalse(rows.contains("= 6` in `decide`"), rows);
+    }
+
+    /**
+     * Arms that each answer a number written in the arm are chosen by the carrier the optional is
+     * at: no field read afterwards could catch the wrong arm, so the rows read back are what holds
+     * the choice to the program's. A line holding a cap comes to one and stands at the point below
+     * the line, and a line holding none comes to nought and stands outside it.
+     */
+    @Test
+    void armsAnsweringWrittenNumbersAreChosenByTheOptionalsCarrier() {
+        Compilation compiled = compiled("""
+                module example.capped
+
+                data Line = { cap: Option<Int> }
+
+                data Many
+                data Few
+
+                behavior decide : (lines: List<Line>) -> Many | Few
+
+                let decide (lines) =
+                    if List.sum(List.map(l -> match l.cap with
+                            | Some n -> 1
+                            | None -> 0, lines)) >= 2
+                    then Many else Few
+                """);
+        String report = report(compiled);
+        assertTrue(report.contains("when cap@Some then 1 when cap@None then 0 | lines[*]"),
+                report);
+        assertFalse(report.contains("not read"), report);
+        String rows = rowsOf(compiled);
+        assertTrue(rows.contains("""
+                // fills OFF point of comparison@0:null
+                    | ([Line { cap = 0 }])"""), rows);
+        assertTrue(rows.contains("""
+                // fills OUT point of comparison@0:null
+                    | ([Line { cap = None }])"""), rows);
     }
 
     private static final String FEES = """
@@ -312,12 +391,19 @@ class AMatchOnTheElementInsideAWalkIsReadCaseByCaseTest {
     }
 
     private static String rowsOf(String model) {
-        return GeneratedRows.of(compiled(model), null, null,
+        return rowsOf(compiled(model));
+    }
+
+    private static String rowsOf(Compilation compilation) {
+        return GeneratedRows.of(compilation, null, null,
                 SourceRendering.namedByIdentity(SourceLayouts.NONE)).text();
     }
 
     private static String report(String model) {
-        Compilation compilation = compiled(model);
+        return report(compiled(model));
+    }
+
+    private static String report(Compilation compilation) {
         return AdequacyReport.of(compilation)
                 .human(SourceRendering.namedByIdentity(compilation.texts()));
     }

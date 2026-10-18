@@ -18,6 +18,7 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
+import souther.compiler.observe.Limits;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
@@ -176,21 +177,20 @@ class ARunComputedOfEachElementIsReadOneElementAtATimeTest {
     private static final TypeSymbol B = TypeSymbols.declared(new TypeKey("probe", "B"));
     private static final TypeSymbol C = TypeSymbols.declared(new TypeKey("probe", "C"));
     private static final ElementProjection THE_ELEMENT = new ElementProjection(List.of());
-    private static final ElementProjection AT_A = narrowedTo(A);
-    private static final ElementProjection AT_B = narrowedTo(B);
-    private static final ElementProjection A_AMOUNT = AT_A.then("amount");
-    private static final ElementProjection B_AMOUNT = AT_B.then("amount");
+    private static final ElementProjection A_AMOUNT =
+            THE_ELEMENT.narrowedTo(caseOf(A)).then("amount");
+    private static final ElementProjection B_AMOUNT =
+            THE_ELEMENT.narrowedTo(caseOf(B)).then("amount");
 
-    private static ElementProjection narrowedTo(TypeSymbol leaf) {
-        return new ElementProjection(List.of(new TermPath.Step.Refine(
-                CasesLeft.of(Refinement.of(new Case.SumCase(leaf, true))))));
+    private static CasesLeft caseOf(TypeSymbol leaf) {
+        return CasesLeft.of(Refinement.of(new Case.SumCase(leaf, true)));
     }
 
     /** {@code match d with | A { amount } -> amount | B { amount } -> amount * 10}. */
-    private static final ElementValue BY_CASE = new ElementValue.OfItsCase(List.of(
-            new ElementValue.OfItsCase.Arm(AT_A,
+    private static final ElementValue BY_CASE = new ElementValue.OfItsCase(THE_ELEMENT, List.of(
+            new ElementValue.OfItsCase.Arm(caseOf(A),
                     form(ExactRatio.ZERO, Map.of(A_AMOUNT, ExactRatio.ONE))),
-            new ElementValue.OfItsCase.Arm(AT_B,
+            new ElementValue.OfItsCase.Arm(caseOf(B),
                     form(ExactRatio.ZERO, Map.of(B_AMOUNT, ExactRatio.of(10))))), null);
 
     private static ObservedValue ofCase(TypeSymbol leaf, long amount) {
@@ -207,7 +207,7 @@ class ARunComputedOfEachElementIsReadOneElementAtATimeTest {
         TermOrders orders = ordersOf(total(BY_CASE), A_AMOUNT, B_AMOUNT);
         List<Function<ElementProjection, ObservedValue>> each = new ArrayList<>();
         for (ObservedValue element : List.of(ofCase(A, 4), ofCase(B, 7), ofCase(A, 1))) {
-            each.add(field -> field.in(element));
+            each.add(field -> orders.in(field, element));
         }
         assertEquals(Count.of(4 + 70 + 1), number(orders.readOverElements(each)));
     }
@@ -223,29 +223,101 @@ class ARunComputedOfEachElementIsReadOneElementAtATimeTest {
     void theCaseIsAskedOfTheValueAndOnlyTheTakenArmsFieldsAfterIt() {
         TermOrders orders = ordersOf(total(BY_CASE), A_AMOUNT, B_AMOUNT);
         ObservedValue element = ofCase(B, 7);
+        List<ElementProjection> asks = new ArrayList<>();
         Function<ElementProjection, ObservedValue> asked = field -> {
             assertTrue(field.equals(THE_ELEMENT) || field.equals(B_AMOUNT),
                     () -> "a B is asked its case and its own amount, and not " + field);
-            return field.in(element);
+            asks.add(field);
+            return orders.in(field, element);
         };
         assertEquals(Count.of(70), number(orders.readOverElements(List.of(asked))));
+        assertEquals(List.of(THE_ELEMENT, B_AMOUNT), asks,
+                "the case is read once, though the arm that takes it is the second one tried");
     }
 
     /** A field of one case is nothing in a value of another, though the other has a field of that
      *  name. */
     @Test
     void aFieldOfOneCaseIsNothingInAValueOfAnother() {
-        assertEquals(new ObservedValue.Integer(7), B_AMOUNT.in(ofCase(B, 7)));
-        assertNull(A_AMOUNT.in(ofCase(B, 7)));
+        assertEquals(new ObservedValue.Integer(7), B_AMOUNT.in(ofCase(B, 7), _ -> List.of()));
+        assertNull(A_AMOUNT.in(ofCase(B, 7), _ -> List.of()));
     }
 
-    /** An element whose case was not read is no element any arm is guessed for. */
+    private static final TypeSymbol OWED = TypeSymbols.declared(new TypeKey("probe", "Owed"));
+
+    /** The orders of {@code term} where the declaration puts the name {@code Owed} on the element. */
+    private static TermOrders underOwed(NumericTerm term, ElementProjection... fields) {
+        Map<ElementProjection, Carrier> read = new HashMap<>();
+        for (ElementProjection each : fields) {
+            read.put(each, new Carrier.Whole());
+        }
+        return TermOrdersFixtures.computed(term, new Carrier.Whole(), new Carrier.Whole(), read,
+                Map.of(THE_ELEMENT, List.of(OWED)));
+    }
+
+    private static ObservedValue owed(ObservedValue inside) {
+        return new ObservedValue.Constructed(OWED, Map.of("value", inside));
+    }
+
+    /**
+     * An element written inside the name the declaration puts on it is the case it wraps, both where
+     * its case is asked and where a field of the case is; and where the declaration puts no name
+     * there, the same observation is a record of that name and of no case an arm takes.
+     */
+    @Test
+    void anElementInsideTheNameItIsDeclaredUnderIsTheCaseItWraps() {
+        ObservedValue wrapped = owed(ofCase(B, 7));
+        TermOrders named = underOwed(total(BY_CASE), A_AMOUNT, B_AMOUNT);
+        assertEquals(Count.of(70),
+                number(named.readOverElements(List.of(field -> named.in(field, wrapped)))));
+
+        TermOrders bare = ordersOf(total(BY_CASE), A_AMOUNT, B_AMOUNT);
+        assertInstanceOf(NumericTerm.Reading.NotNumber.class,
+                bare.readOverElements(List.of(field -> bare.in(field, wrapped))),
+                "a field called `value` is no name the declaration said is worn");
+    }
+
+    /**
+     * The name comes off before an optional's carrier is asked too: a construction around nothing
+     * is the optional holding nothing, and not an optional holding the construction.
+     *
+     * <p>Both arms answer a number written in the arm, so no field read afterwards could catch the
+     * wrong arm being taken.
+     */
+    @Test
+    void theNameComesOffBeforeAnOptionalsCarrierIsAsked() {
+        ElementValue present = new ElementValue.OfItsCase(THE_ELEMENT, List.of(
+                new ElementValue.OfItsCase.Arm(CasesLeft.of(Refinement.of(new Case.Presence(true))),
+                        form(ExactRatio.ONE, Map.of())),
+                new ElementValue.OfItsCase.Arm(
+                        CasesLeft.of(Refinement.of(new Case.Presence(false))),
+                        form(ExactRatio.ZERO, Map.of()))), null);
+        TermOrders named = underOwed(total(present));
+        List<Function<ElementProjection, ObservedValue>> each = new ArrayList<>();
+        for (ObservedValue element : List.of(owed(new ObservedValue.Absent()),
+                owed(new ObservedValue.Integer(5)), owed(new ObservedValue.Absent()))) {
+            each.add(field -> named.in(field, element));
+        }
+        assertEquals(Count.of(0 + 1 + 0), number(named.readOverElements(each)));
+    }
+
+    /** An element whose case was not read is no element any arm is guessed for, whether it is the
+     *  element or what the name over it holds. */
     @Test
     void anElementWhoseCaseWasNotReadTakesNoArm() {
         TermOrders orders = ordersOf(total(BY_CASE), A_AMOUNT, B_AMOUNT);
         ObservedValue unread = new ObservedValue.Unknown("not decoded");
         assertInstanceOf(NumericTerm.Reading.Missing.class,
-                orders.readOverElements(List.of(field -> field.in(unread))));
+                orders.readOverElements(List.of(field -> orders.in(field, unread))));
+
+        TermOrders named = underOwed(total(BY_CASE), A_AMOUNT, B_AMOUNT);
+        for (ObservedValue cut : List.of(unread,
+                new ObservedValue.Truncated(Limits.DEFAULT.nodesFigure()))) {
+            ObservedValue wrapped = owed(cut);
+            assertInstanceOf(NumericTerm.Reading.Missing.class,
+                    named.readOverElements(List.of(field -> named.in(field, wrapped))),
+                    () -> "a name over " + cut + " says nothing of which case is under it");
+        }
     }
 
     /** An element of a case no arm takes is an element of another shape than the walk's. */
@@ -254,7 +326,7 @@ class ARunComputedOfEachElementIsReadOneElementAtATimeTest {
         TermOrders orders = ordersOf(total(BY_CASE), A_AMOUNT, B_AMOUNT);
         ObservedValue other = ofCase(C, 3);
         assertInstanceOf(NumericTerm.Reading.NotNumber.class,
-                orders.readOverElements(List.of(field -> field.in(other))));
+                orders.readOverElements(List.of(field -> orders.in(field, other))));
     }
 
     /** A number the exact arithmetic could not hold is said as that, and not as a value missing. */

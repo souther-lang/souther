@@ -241,7 +241,7 @@ final class ContainersAddingUp {
         }
         WhatWasLeft left = new WhatWasLeft();
         if (solved != null && solved.ofOneCase()) {
-            left.notAllOf(CompositionRepertoire.ELEMENTS_A_COMPUTED_TOTAL_IS_SOLVED_FOR);
+            left.notAllOf(CompositionRepertoire.MIXES_OF_CASES_A_TOTAL_IS_SPREAD_OVER);
         }
         // What the planning gave up at, which is a way that was there to try and was not. A way down
         // that was never planned is a value never composed, and a reader told only that nothing was
@@ -524,7 +524,7 @@ final class ContainersAddingUp {
                 case ElementValue.OfItsCase choice -> {
                     for (ElementValue.OfItsCase.Arm arm : choice.arms()) {
                         if (arm.value() instanceof ElementValue.Affine affine) {
-                            FieldSolved solved = ofAForm(affine, arm.taken(), run, orders);
+                            FieldSolved solved = ofAForm(affine, choice.taken(arm), run, orders);
                             if (solved != null) {
                                 yield solved;
                             }
@@ -545,15 +545,14 @@ final class ContainersAddingUp {
             }
             Map.Entry<ElementProjection, ExactRatio> only =
                     affine.form().coefs().entrySet().iterator().next();
-            List<TermPath.Step> steps = only.getKey().steps();
-            if (taken != null && (steps.size() < taken.steps().size()
-                    || !steps.subList(0, taken.steps().size()).equals(taken.steps()))) {
+            TermPath field = only.getKey().from(run.elements());
+            if (taken != null && !field.isAtOrUnder(taken.from(run.elements()))) {
                 return null;
             }
             Carrier carrier = orders.fieldCarrier(only.getKey());
             return carrier == null ? null
-                    : new FieldSolved(only.getKey().from(run.elements()), carrier, only.getValue(),
-                            affine.form().constant(), taken != null);
+                    : new FieldSolved(field, carrier, only.getValue(), affine.form().constant(),
+                            taken != null);
         }
 
         /**

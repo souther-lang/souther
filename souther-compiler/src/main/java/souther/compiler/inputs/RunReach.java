@@ -16,7 +16,6 @@ import souther.compiler.semantics.Accumulation;
 import souther.compiler.types.Type;
 
 import java.math.BigDecimal;
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -212,15 +211,14 @@ final class RunReach {
                 return yes == null || no == null ? null : NumericDomain.Bounds.spanning(yes, no);
             }
             case ElementValue.OfItsCase choice -> {
-                List<ElementValue> answers = new ArrayList<>();
-                choice.arms().forEach(arm -> answers.add(arm.value()));
-                if (choice.rest() != null) {
-                    answers.add(choice.rest());
+                NumericDomain.Bounds every = choice.rest() == null ? null
+                        : ofWhatWasComputed(choice.rest(), elements, orders, typeAt, reading);
+                if (choice.rest() != null && every == null) {
+                    return null;
                 }
-                NumericDomain.Bounds every = null;
-                for (ElementValue answer : answers) {
+                for (ElementValue.OfItsCase.Arm arm : choice.arms()) {
                     NumericDomain.Bounds one =
-                            ofWhatWasComputed(answer, elements, orders, typeAt, reading);
+                            ofWhatWasComputed(arm.value(), elements, orders, typeAt, reading);
                     if (one == null) {
                         return null;
                     }

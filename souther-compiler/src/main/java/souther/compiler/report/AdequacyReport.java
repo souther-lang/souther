@@ -6469,7 +6469,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 ArrayNode arms = into.putArray("arms");
                 for (ElementValue.OfItsCase.Arm arm : it.arms()) {
                     ObjectNode each = arms.addObject();
-                    each.put("taken", arm.taken().spelled());
+                    each.put("taken", it.taken(arm).spelled());
                     elementComputation(each.putObject("value"), arm.value());
                 }
                 if (it.rest() != null) {

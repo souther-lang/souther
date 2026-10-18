@@ -282,7 +282,7 @@ public final class InputNumber {
                 return howManyStandAt(counted.from(at).element(), inputs, source);
             }
             computed = computedOf(measured, where, element, source,
-                    new ElementValue.ElementsAt(at, inputs.declared(source)));
+                    new ElementValue.ElementsAt(at, where.declared()));
             if (computed == null) {
                 return null;
             }
@@ -363,7 +363,8 @@ public final class InputNumber {
         }
         BindingId element = walk.element().binding();
         Map<BindingId, Core> held = reads.heldByTheBody();
-        ElementValue.ElementsAt elements = new ElementValue.ElementsAt(at, inputs.declared(source));
+        ElementValue.ElementsAt elements =
+                new ElementValue.ElementsAt(at, container.at().declared());
         ElementValue.Added step = ElementValue.addedTo(
                 new ElementAnswer(element, walk.step().body()), walk.accumulator().binding(), held,
                 source, elements);
@@ -383,11 +384,11 @@ public final class InputNumber {
             }
             added.put(howMany, counted.getValue());
         }
-        ElementValue.Affine adds = step.ofTheElement();
-        if (adds.form().coefs().isEmpty()) {
+        ElementValue adds = step.ofTheElement();
+        if (adds instanceof ElementValue.Affine alike && alike.form().coefs().isEmpty()) {
             // What every element adds alike is that many for each of them, so a step adding
             // nothing else of the element counts them.
-            ExactRatio each = adds.form().constant();
+            ExactRatio each = alike.form().constant();
             if (each.signum() != 0) {
                 NumericTerm howMany = howManyStandAt(at, inputs, source);
                 if (howMany == null) {
