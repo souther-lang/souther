@@ -5,12 +5,16 @@ import souther.compiler.meaning.DecisionSubject;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -109,10 +113,16 @@ class AForkOnAComputedValueAnswersAboutTheInputTest {
         assertEquals(2, columns.size(), "asking an input again is the same column");
     }
 
-    /** A rotation answers each arm with a different case of the input than the arm names. */
+    /**
+     * A rotation answers each arm with a different case of the input than the arm names.
+     *
+     * <p>Each rule is checked for the arm of the fork on the result that it takes, beside the case
+     * of the input it answers. A reversed correspondence between an arm and its answer gets that
+     * wrong though the answers come out the same.
+     */
     @Test
     void aHelperThatMovesTheCasesAroundIsAskedAsTheInputsOwnCases() {
-        List<DecisionRule> rules = DecisionReadings.readToTheEnd(KINDS + """
+        DecisionReading read = ways(KINDS + """
 
                 let rotate (kind: Kind): Kind =
                     match kind with
@@ -126,18 +136,22 @@ class AForkOnAComputedValueAnswersAboutTheInputTest {
                         | A -> Done
                         | B -> Other
                         | C -> Done
-                """, "f");
+                """);
 
-        Set<DecisionCondition.ACase> columns = casesOf(rules);
+        Set<DecisionCondition.ACase> columns = casesOf(read.rules());
         assertEquals(1, columns.size(), "one question about the one input: " + columns);
         assertEquals(Set.of("A", "B", "C"), spelled(columns.iterator().next()),
                 "the arms are the cases of the kind the input has");
+        assertEquals(Map.of("C", Set.of(0), "A", Set.of(1), "B", Set.of(2)),
+                armsTakenByTheCaseOfEachRule(read),
+                "the first arm of the fork on the rotation is the input that is C, the second the"
+                        + " input that is A, the third the input that is B");
     }
 
     /** A helper that makes two cases one gives an arm more than one case of the input. */
     @Test
     void aHelperThatJoinsCasesGivesAnArmTheCasesItJoined() {
-        List<DecisionRule> rules = DecisionReadings.readToTheEnd(KINDS + """
+        DecisionReading read = ways(KINDS + """
 
                 let flag (kind: Kind): Flag =
                     match kind with
@@ -150,12 +164,15 @@ class AForkOnAComputedValueAnswersAboutTheInputTest {
                     match flag(kind) with
                         | Hot -> Done
                         | Cold -> Other
-                """, "f");
+                """);
 
-        Set<DecisionCondition.ACase> columns = casesOf(rules);
+        Set<DecisionCondition.ACase> columns = casesOf(read.rules());
         assertEquals(1, columns.size(), "one question about the one input: " + columns);
         assertEquals(Set.of("{A|B}", "C"), spelled(columns.iterator().next()),
                 "the arm for Hot is the two cases that make a Hot");
+        assertEquals(Map.of("{A|B}", Set.of(0), "C", Set.of(1)), armsTakenByTheCaseOfEachRule(read),
+                "Hot is the first arm and is taken by the two cases, Cold the second and by the"
+                        + " one");
     }
 
     /** What a fork on the input itself is, for the same input read both ways. */
@@ -193,36 +210,29 @@ class AForkOnAComputedValueAnswersAboutTheInputTest {
                 casesOf(rotated).iterator().next().of(), "and asked of the same subject");
     }
 
+    private static final String ROTATED = """
+
+            let rotate (kind: Kind): Kind =
+                match kind with
+                    | A -> B
+                    | B -> C
+                    | C -> A
+            """;
+
     /**
-     * A position the declarations leave fewer cases is divided as it is when it is matched
-     * directly: the case they exclude is an answer of the one question as much as the others.
+     * A position declared fewer cases than the helper takes: one arm needs a case the declaration
+     * excludes, and the others narrow the position to one case apiece.
+     *
+     * <p>The excluded case is an answer of the question as much as the others, as it is when the
+     * position is matched directly, so the arm that needs it is a column too and not a statement.
      */
     @Test
-    void aPositionTheDeclarationsNarrowIsDividedAsItIsWhenMatchedDirectly() {
-        String declared = KINDS + """
+    void aCaseTheDeclarationsExcludeIsAnAnswerOfTheQuestionAsMuchAsTheOthers() {
+        DecisionReading read = ways(KINDS + """
 
-                data Pick = { kind: Kind }
-                    invariant notC = match kind with
-                        | A -> true
-                        | B -> true
-                        | C -> false
-                """;
-        List<DecisionRule> direct = DecisionReadings.readToTheEnd(declared + """
-
-                behavior f : (pick: Pick) -> Done | Other
-                let f (pick) =
-                    match pick.kind with
-                        | A -> Done
-                        | B -> Other
-                        | C -> Done
-                """, "f");
-        List<DecisionRule> rotated = DecisionReadings.readToTheEnd(declared + """
-
-                let rotate (kind: Kind): Kind =
-                    match kind with
-                        | A -> B
-                        | B -> C
-                        | C -> A
+                data AOrB = A | B
+                data Pick = { kind: AOrB }
+                """ + ROTATED + """
 
                 behavior f : (pick: Pick) -> Done | Other
                 let f (pick) =
@@ -230,13 +240,36 @@ class AForkOnAComputedValueAnswersAboutTheInputTest {
                         | A -> Done
                         | B -> Other
                         | C -> Done
-                """, "f");
+                """);
 
-        assertEquals(1, casesOf(direct).size());
-        assertEquals(1, casesOf(rotated).size(), "one question: " + casesOf(rotated));
-        assertEquals(spelled(casesOf(direct).iterator().next()),
-                spelled(casesOf(rotated).iterator().next()),
-                "what the declarations leave the position, whichever way the body asks");
+        Set<DecisionCondition.ACase> columns = casesOf(read.rules());
+        assertEquals(1, columns.size(), "one question about the one position: " + columns);
+        assertEquals(Set.of("A", "B", "C"), spelled(columns.iterator().next()),
+                "A and B narrow the position, and C is what the declaration excludes");
+    }
+
+    /**
+     * A position declared one case: the arm that needs that case is taken by every value there is,
+     * and the others need a case the declaration excludes. The declarations decide the fork, so it
+     * asks nothing and is no column, and reading it neither refuses nor invents an answer.
+     */
+    @Test
+    void aForkTheDeclarationsDecideIsNoColumn() {
+        DecisionReading read = ways(KINDS + """
+
+                data Pick = { kind: A }
+                """ + ROTATED + """
+
+                behavior f : (pick: Pick) -> Done | Other
+                let f (pick) =
+                    match rotate(pick.kind) with
+                        | A -> Done
+                        | B -> Other
+                        | C -> Done
+                """);
+
+        assertEquals(Set.of(), casesOf(read.rules()), "nothing is asked of a position decided");
+        assertEquals(1, read.rules().size(), "and one way is taken through it");
     }
 
     /** A fork on what a dependency answered stays a question about that answer. */
@@ -261,6 +294,37 @@ class AForkOnAComputedValueAnswersAboutTheInputTest {
         assertTrue(column.of() instanceof DecisionSubject.AnAnswer,
                 "the answer is the subject, and not a position of the input: " + column);
         assertEquals(Set.of("A", "B", "C"), spelled(column));
+    }
+
+    private static DecisionReading ways(String source) {
+        DecisionReading read = DecisionReadings.of(source, "f");
+        assertEquals(new DecisionReading.Enumeration.Complete(), read.enumeration());
+        return read;
+    }
+
+    /**
+     * For each case of the input a rule answers, which arms of the model's forks the rule takes.
+     *
+     * <p>A rule answers one case of the one column, and the arms it takes are where a run through
+     * it would be seen.
+     */
+    private static Map<String, Set<Integer>> armsTakenByTheCaseOfEachRule(DecisionReading read) {
+        Map<String, Set<Integer>> taken = new LinkedHashMap<>();
+        for (DecisionReading.Ruled ruled : read.found()) {
+            Set<String> answers = ruled.rule().consulted().values().stream()
+                    .filter(DecidedCondition.Narrowed.class::isInstance)
+                    .map(each -> ((DecidedCondition.Narrowed) each).to().spelled())
+                    .collect(Collectors.toCollection(LinkedHashSet::new));
+            assertEquals(1, answers.size(), "a rule answers the one column once: " + answers);
+            Set<Integer> arms = ruled.steps().stream()
+                    .flatMap(step -> step.seen().stream())
+                    .filter(ShownBy.AtAnArm.class::isInstance)
+                    .map(each -> ((ShownBy.AtAnArm) each).part())
+                    .collect(Collectors.toCollection(TreeSet::new));
+            assertNull(taken.put(answers.iterator().next(), arms),
+                    "one rule for each case of the input");
+        }
+        return taken;
     }
 
     private static Set<DecisionCondition.ACase> casesOf(List<DecisionRule> rules) {

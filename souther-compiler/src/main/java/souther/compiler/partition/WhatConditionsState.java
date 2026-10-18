@@ -14,6 +14,7 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Proposition;
 
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
@@ -164,7 +165,15 @@ final class WhatConditionsState {
      *                 decide asks nothing and has no entry
      */
     record DividedInput(DecisionSubject.AnInput of, Set<CasesLeft> question,
-                        Map<Integer, CasesLeft> answered) { }
+                        Map<Integer, CasesLeft> answered) {
+
+        /** Kept for the whole reading, so held as the one meaning of the fork it is. The order is
+         *  the arms', which a copy through {@code Set.copyOf} would not keep. */
+        DividedInput {
+            question = Collections.unmodifiableSet(new LinkedHashSet<>(question));
+            answered = Collections.unmodifiableMap(new LinkedHashMap<>(answered));
+        }
+    }
 
     /**
      * The position of the input the arms of {@code fork} divide between them, where every arm
