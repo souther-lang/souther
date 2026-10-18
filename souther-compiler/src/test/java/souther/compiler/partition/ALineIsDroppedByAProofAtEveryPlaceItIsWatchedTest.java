@@ -180,7 +180,7 @@ class ALineIsDroppedByAProofAtEveryPlaceItIsWatchedTest {
         assertEquals(new ComparisonAssessment.NothingArrivesAtItsRelation(
                 line().cutting().over()), narrowed);
         assertEquals(ComparisonAssessment.atEachOf(line().cutting().over(),
-                        new BlockReason.ComparisonNothingArrivesAtItsLine()).entrySet().stream()
+                        new BlockReason.ComparisonRelationNothingArrivesAt()).entrySet().stream()
                         .map(each -> new ComparisonAssessment.LeftAt(each.getKey(),
                                 each.getValue())).toList(),
                 narrowed.whatEachPlaceIsLeftWith());
@@ -241,6 +241,26 @@ class ALineIsDroppedByAProofAtEveryPlaceItIsWatchedTest {
                 "each line's own cases, none of them said for several by their number together");
     }
 
+    /** More cases than are said one by one, all parted by one line, are said as one. */
+    @Test
+    void casesSharingTheirLinesPastTheMostSaidOneByOneAreSaidAsOne() {
+        List<DecidingCase> cases = new ArrayList<>();
+        Map<Proposition, ComparisonAssessment.InACase> inCases = new LinkedHashMap<>();
+        for (int i = 0; i <= WhereEachLineDecides.MOST_CASES; i++) {
+            DecidingCase each = caseNamed("c" + i);
+            cases.add(each);
+            inCases.put(each.condition(), new ComparisonAssessment.InACase(true,
+                    List.of(lineAt(BigDecimal.ONE))));
+        }
+
+        List<ComparisonAssessment.Several.Part> parts = partsOf(cases, inCases);
+
+        assertEquals(1, parts.size());
+        assertEquals(List.of(DecidingCase.saidInAsFewAsMay(cases).getFirst()),
+                parts.getFirst().cases());
+        assertEquals(1, parts.getFirst().cases().size());
+    }
+
     @Test
     void aRelationNoRowIsInAnyCaseOfItsPartIsOneTheStatementNeverTurnsOn() {
         PlaceOfALine at = new PlaceOfALine(PartOfAComparison.of(WrittenLine.THE_COMPARISON),
@@ -261,6 +281,9 @@ class ALineIsDroppedByAProofAtEveryPlaceItIsWatchedTest {
                                     line().cutting().over())
                             : relation(),
                     narrowed.parts().getFirst().line());
+            assertEquals(toTheCase == NOT_TAKEN, narrowed.whatEachPlaceIsLeftWith().isEmpty(),
+                    "a relation turning nothing leaves its places nothing, and one left without"
+                            + " a line says so");
         }
     }
 

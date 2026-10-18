@@ -518,6 +518,7 @@ final class WhatABodyTellsApart {
                  BlockReason.ComparisonCuttingOutsideDomain _,
                  BlockReason.ComparisonNothingArrivesAtItsLine _,
                  BlockReason.ComparisonLineTurningNothing _,
+                 BlockReason.ComparisonRelationNothingArrivesAt _,
                  BlockReason.PredicateTellingNothingApart _ -> true;
             case BlockReason.ComparisonRelatingTwoValues _,
                  BlockReason.ComparisonOverARun _,

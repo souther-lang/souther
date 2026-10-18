@@ -371,6 +371,10 @@ public final class ReportedReason {
             // a reader of this one looks at the guards above it.
             case BlockReason.ComparisonNothingArrivesAtItsLine _ ->
                     UndividedPosition.Reason.NOTHING_ARRIVES_AT_THE_RULES_LINE;
+            // And its own word beside that one, for a relation, which has no line for rows to
+            // miss: what refuses them is the same, and the rule is not left without a line.
+            case BlockReason.ComparisonRelationNothingArrivesAt _ ->
+                    UndividedPosition.Reason.NOTHING_ARRIVES_AT_THE_RELATION;
             // And its own word beside that one. Rows arrive at this line; it is the rest of the
             // statement that leaves it nothing to turn, and a reader of the word above would look
             // at the guards above the rule for what is inside it.

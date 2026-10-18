@@ -1253,8 +1253,7 @@ sealed interface ComparisonAssessment {
         // are not the lines of a wider one, so no case is given up or said for several before
         // its own lines are known. Cases are said for several only past that, where they part the
         // values by the same lines.
-        List<List<AtAPosition>> partedBy = new ArrayList<>();
-        List<List<DecidingCase>> casesOf = new ArrayList<>();
+        Map<List<AtAPosition>, List<DecidingCase>> casesByLines = new LinkedHashMap<>();
         Set<CompositionBudget> stoppedAt = EnumSet.noneOf(CompositionBudget.class);
         boolean someCaseLeftUndrawn = part.cases().isEmpty();
         for (DecidingCase each : part.cases()) {
@@ -1270,27 +1269,20 @@ sealed interface ComparisonAssessment {
                     someCaseLeftUndrawn = true;
                     continue;
                 }
-                int at = partedBy.indexOf(lines);
-                if (at < 0) {
-                    partedBy.add(lines);
-                    casesOf.add(new ArrayList<>());
-                    at = partedBy.size() - 1;
-                }
-                casesOf.get(at).add(DecidingCase.alone(atom.condition()));
+                casesByLines.computeIfAbsent(lines, _ -> new ArrayList<>())
+                        .add(DecidingCase.alone(atom.condition()));
             }
         }
         // Cases that were all worked out and none of them reached: the relation turns the
         // statement nowhere a row is, which is not a relation left without a line.
-        if (partedBy.isEmpty() && !someCaseLeftUndrawn && stoppedAt.isEmpty()) {
+        if (casesByLines.isEmpty() && !someCaseLeftUndrawn && stoppedAt.isEmpty()) {
             return List.of(new Several.Part(part.id(),
                     new RelationTurnsNothing(against.filedAt()), List.of()));
         }
-        someCaseLeftUndrawn |= partedBy.isEmpty();
+        someCaseLeftUndrawn |= casesByLines.isEmpty();
         List<Several.Part> out = new ArrayList<>();
-        for (int i = 0; i < partedBy.size(); i++) {
-            out.add(new Several.Part(part.id(), against.partedBy(partedBy.get(i)),
-                    DecidingCase.saidInAsFewAsMay(casesOf.get(i))));
-        }
+        casesByLines.forEach((lines, cases) -> out.add(new Several.Part(part.id(),
+                against.partedBy(lines), DecidingCase.saidInAsFewAsMay(cases))));
         if (someCaseLeftUndrawn || !stoppedAt.isEmpty()) {
             out.add(new Several.Part(part.id(), against.partedBy(List.of()), List.of()));
         }
@@ -1586,11 +1578,11 @@ sealed interface ComparisonAssessment {
             // the same either side of it wherever they do.
             case TurnsNothing _ ->
                     sameAtEachPlace(new BlockReason.ComparisonLineTurningNothing());
-            // The same two words for a relation, which has no line to be about.
             case NothingArrivesAtItsRelation _ ->
-                    sameAtEachPlace(new BlockReason.ComparisonNothingArrivesAtItsLine());
-            case RelationTurnsNothing _ ->
-                    sameAtEachPlace(new BlockReason.ComparisonLineTurningNothing());
+                    sameAtEachPlace(new BlockReason.ComparisonRelationNothingArrivesAt());
+            // A relation the statement turns on in no case a row is in tells no values apart and
+            // owes no rows, and has no line to name a reason for: it leaves its places nothing.
+            case RelationTurnsNothing _ -> List.of();
             // What each of its lines leaves, each in its own words — and, of what a line read to
             // the end leaves, nothing at a position another of its lines divides, since the rule
             // divides it. A line whose reading stopped is said wherever it is: it may divide the

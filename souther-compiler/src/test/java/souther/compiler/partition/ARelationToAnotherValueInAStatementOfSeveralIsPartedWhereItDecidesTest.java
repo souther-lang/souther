@@ -129,7 +129,8 @@ class ARelationToAnotherValueInAStatementOfSeveralIsPartedWhereItDecidesTest {
                 else true""");
         assertFalse(report.contains("relates the value here to another value not shown to reach"),
                 report);
-        assertTrue(report.contains("no row that arrives at it holds a value at its line"), report);
+        assertTrue(report.contains("no row that arrives at it takes the way to the comparison"),
+                report);
     }
 
     /** The adequacy report of a behavior that asks {@code condition} of an order. */
