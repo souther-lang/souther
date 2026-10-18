@@ -5479,6 +5479,7 @@ public final class Generator {
         RowTaking taking = preferring == null ? RowTaking.FIRST
                 : preferring.over(RowTaking.FIRST);
         boolean[] noRowAnswered = {false};
+        SearchShortfall[] passedFound = {SearchShortfall.NONE};
         ContentsAsked.UnderTheCases.Walked walked = under.tryEach(way -> {
             // And the value the way asks of each Bool position it read, which no edge offers and
             // no region placed — at the position each stands at in this way, which for a Bool the
@@ -5537,8 +5538,12 @@ public final class Generator {
                     if (came instanceof WalkedInOrder.RowTaken) {
                         return true;
                     }
-                    // Rows were composed and none was run to an answer: what the rows did, said
-                    // after the ways are all tried, and not a parameter that came to nothing.
+                    // Rows were composed and none was run to an answer: said with the rest of
+                    // what the ways came to once they are all tried, as a row passed over and not
+                    // as a parameter that came to nothing.
+                    if (came instanceof WalkedInOrder.PassedOver(SearchShortfall its)) {
+                        passedFound[0] = passedFound[0].and(its);
+                    }
                     noRowAnswered[0] = true;
                     return false;
                 }
@@ -5549,12 +5554,14 @@ public final class Generator {
             // What every way tried came to, beside the figure where the walk stopped short of the
             // rest and a way under a case nobody read; where no way came to nothing to say it in,
             // the figure, the case nobody read, or that no case held them.
-            // And the figure the choice among rows was stopped at, which leaves the rows past it
-            // untried whatever the rows before it did.
-            SearchShortfall stopped = preferring == null ? SearchShortfall.NONE
-                    : preferring.untried();
-            switch (WhatTheAlternativesCameTo.over(cameToNothing, null,
-                    under.foundOut(walked).and(stopped), PARAMETERS)) {
+            // And, where rows were composed and none came to an answer, those rows passed over:
+            // beside what the choice among rows was stopped at, which leaves the rows past it
+            // untried, and what the other ways came to — none of which a row passed over takes
+            // away, and a proof among them is not the walk's.
+            SearchShortfall passedOver = noRowAnswered[0]
+                    ? preferring.untried().and(passedFound[0]) : null;
+            switch (WhatTheAlternativesCameTo.over(cameToNothing, passedOver,
+                    under.foundOut(walked), PARAMETERS)) {
                 case WhatTheAlternativesCameTo.Came.Said(ParameterCameToNothing said) ->
                         failed = said;
                 case WhatTheAlternativesCameTo.Came.Untried(SearchShortfall found) -> {
@@ -5567,22 +5574,19 @@ public final class Generator {
                             A_CASE_WAS_NOT_READ), where.unrepresented());
                 }
                 case WhatTheAlternativesCameTo.Came.NothingToSayItIn<ParameterCameToNothing> _ -> {
-                    // Rows were composed and run, and none came to an answer: a fact about those
-                    // rows, which is not that no row reaches the point.
-                    if (noRowAnswered[0]) {
-                        return new BoundaryAttempt.Unresolved(UnresolvedCombination.atAPoint(label,
-                                UnresolvedCombination.Reason.NO_CERTIFIED_WITNESS,
-                                preferring.aRunRanOut() ? NO_ROW_ANSWERED_A_RUN_RAN_OUT
-                                        : NO_ROW_ANSWERED), where.unrepresented());
-                    }
                     return new BoundaryAttempt.Unresolved(UnresolvedCombination.atAPoint(label,
                             UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
                             NO_CASE_HOLDS_THEM), where.unrepresented());
                 }
-                // No row is handed a caller on the way to a point, so none is passed over.
-                case WhatTheAlternativesCameTo.Came.PassedOver<ParameterCameToNothing> _ ->
-                        throw new IllegalStateException("a row on the way to a point was passed"
-                                + " over, and nothing passes rows over there");
+                // Rows were composed and run, and none came to an answer: a fact about those rows,
+                // which is not that no row reaches the point. A figure that stopped the search is
+                // said as the figure; otherwise the word is the one for rows none of which was a
+                // witness, or the one for what else the search left untried.
+                case WhatTheAlternativesCameTo.Came.PassedOver<ParameterCameToNothing>(
+                        SearchShortfall found) -> {
+                    return noRowAnswered(label, found, preferring.aRunRanOut(),
+                            where.unrepresented());
+                }
             }
         }
         if (failed != null) {
@@ -5822,6 +5826,25 @@ public final class Generator {
     private static final String NO_ROW_ANSWERED_A_RUN_RAN_OUT = NO_ROW_ANSWERED
             + ", and a run went past what a run may spend";
 
+    /**
+     * What a point comes to where rows were composed and run and none came to an answer, with
+     * {@code found} of what the search left untried beside them.
+     *
+     * <p>A figure that stopped the search is said as the figure, because the rows past it were
+     * never composed. Otherwise the rows themselves are what is said, in the word for rows none of
+     * which was a witness or in the one for what else was left untried — a fact about the rows
+     * this compiler composed, and never that no row reaches the point.
+     */
+    static BoundaryAttempt noRowAnswered(String label, SearchShortfall found, boolean aRunRanOut,
+                                         CompositionAccount unrepresented) {
+        if (!found.met().figures().isEmpty()) {
+            return BoundaryAttempt.Stopped.at(label, found.met().figures(), unrepresented);
+        }
+        return new BoundaryAttempt.Unresolved(UnresolvedCombination.atAPoint(label,
+                found.wordFor(UnresolvedCombination.Reason.NO_CERTIFIED_WITNESS),
+                aRunRanOut ? NO_ROW_ANSWERED_A_RUN_RAN_OUT : NO_ROW_ANSWERED), unrepresented);
+    }
+
     /** What is said of a row no case of which holds every container and value it is asked of. */
     private static final String NO_CASE_HOLDS_THEM = "no case the row can be holds every"
             + " container and value the way asks to be written into one";
@@ -5859,8 +5882,14 @@ public final class Generator {
         /** A row, taken, and standing in the walk's values. */
         record RowTaken() implements WalkedInOrder {}
 
-        /** Rows were composed and every one was passed over. Not a refusal of any of them. */
-        record PassedOver() implements WalkedInOrder {}
+        /**
+         * Rows were composed and every one was passed over. Not a refusal of any of them.
+         *
+         * @param found what the walk found out beside passing them over: the figures it stopped at
+         *              and what the parameters it went on to came to, none of which a row passed
+         *              over takes away
+         */
+        record PassedOver(SearchShortfall found) implements WalkedInOrder {}
 
         /** The caller stopped. */
         record Halted() implements WalkedInOrder {}
@@ -5869,7 +5898,7 @@ public final class Generator {
         record CameToNothingAt(ParameterCameToNothing why) implements WalkedInOrder {}
 
         RowTaken TAKEN = new RowTaken();
-        PassedOver PASSED_OVER = new PassedOver();
+        PassedOver PASSED_OVER = new PassedOver(SearchShortfall.NONE);
         Halted HALTED = new Halted();
     }
 
@@ -5949,13 +5978,16 @@ public final class Generator {
             WalkedInOrder[] after = {null};
             List<ParameterCameToNothing> cameToNothing = new ArrayList<>();
             boolean[] passed = {false};
+            // What the rows passed over left found out beside them, from every value of this one.
+            SearchShortfall[] passedFound = {SearchShortfall.NONE};
             ValueTaking taking = value -> {
                 composed[p] = value.value();
                 after[0] = from(next + 1, elsewhere.and(value.read()));
                 return switch (after[0]) {
                     case WalkedInOrder.RowTaken _ -> Acceptance.TAKEN;
-                    case WalkedInOrder.PassedOver _ -> {
+                    case WalkedInOrder.PassedOver(SearchShortfall its) -> {
                         passed[0] = true;
+                        passedFound[0] = passedFound[0].and(its);
                         yield Acceptance.PASSED;
                     }
                     case WalkedInOrder.Halted _ -> Acceptance.STOPPED;
@@ -5979,47 +6011,57 @@ public final class Generator {
                 case Outcome.Built _ -> after[0];
                 // Every value passed over: for a row the caller passed over, or for what a
                 // parameter after it came to under each of them — said over all of them.
-                case Outcome.PassedOver _ -> passed[0] ? WalkedInOrder.PASSED_OVER
-                        : new WalkedInOrder.CameToNothingAt(
-                                overEveryValue(cameToNothing, found.shortfall()));
+                case Outcome.PassedOver _ -> overTheAlternatives(cameToNothing,
+                        passed[0] ? passedFound[0] : null, found.shortfall());
                 // Stopped by the caller, which is the answer as it stands; or by a parameter after
                 // this one that nothing could be composed for whatever this one is. Where nothing
                 // after it turns on it, that is said as it came, the value before it being the
                 // first; otherwise with the values before it that one came to nothing under.
                 case Outcome.Halted _ -> {
                     if (!(after[0] instanceof WalkedInOrder.CameToNothingAt(
-                            ParameterCameToNothing why)) || passed[0]) {
-                        yield passed[0] ? WalkedInOrder.PASSED_OVER : after[0];
+                            ParameterCameToNothing why))) {
+                        yield passed[0] ? overTheAlternatives(cameToNothing, passedFound[0],
+                                found.shortfall()) : after[0];
                     }
-                    yield !awaited ? after[0] : new WalkedInOrder.CameToNothingAt(
-                            overEveryValue(withFirst(why, cameToNothing), found.shortfall()));
+                    yield !awaited && !passed[0] ? after[0] : overTheAlternatives(
+                            withFirst(why, cameToNothing), passed[0] ? passedFound[0] : null,
+                            found.shortfall());
                 }
                 // Its own search came to nothing, which ended the walk.
                 case Outcome.Unresolved _, Outcome.Stopped _, Outcome.Unexhausted _,
                      Outcome.OfferShort _, Outcome.Limited _, Outcome.Unplanned _ ->
-                        passed[0] ? WalkedInOrder.PASSED_OVER
-                                : new WalkedInOrder.CameToNothingAt(overEveryValue(withFirst(
-                                        new ParameterCameToNothing(p, tried, found.shortfall(),
-                                                here),
-                                        cameToNothing), found.shortfall()));
+                        overTheAlternatives(withFirst(
+                                new ParameterCameToNothing(p, tried, found.shortfall(), here),
+                                cameToNothing), passed[0] ? passedFound[0] : null,
+                                found.shortfall());
             };
         }
 
         /**
-         * What every value tried came to, none of which a row was composed with — with what this
-         * parameter's search found out about its own candidates, which is the point's to know
+         * What the alternatives came to, said as a walk: the row passed over with what was found
+         * beside it where one was, and otherwise the parameter they came to nothing at.
+         *
+         * <p>The same composition {@link WhatTheAlternativesCameTo} gives every search that passes
+         * rows, so a row passed over keeps what the others came to and a proof among them is not
+         * read as the walk's. Where none was, what every value tried came to is said with what
+         * this parameter's search found out about its own candidates, which is the point's to know
          * whichever parameter the word is said at: a value another parameter came to nothing
          * under is not every value there was where a value of this one was not handed on.
          */
-        private static ParameterCameToNothing overEveryValue(
-                List<ParameterCameToNothing> cameToNothing, SearchShortfall found) {
-            if (!(WhatTheAlternativesCameTo.over(cameToNothing, null, found, PARAMETERS)
-                    instanceof WhatTheAlternativesCameTo.Came.Said(
-                            ParameterCameToNothing said))) {
-                throw new IllegalStateException(
-                        "a value was tried and nothing is said of what came of it");
-            }
-            return said;
+        private static WalkedInOrder overTheAlternatives(List<ParameterCameToNothing> cameToNothing,
+                                                         SearchShortfall passedOver,
+                                                         SearchShortfall found) {
+            return switch (WhatTheAlternativesCameTo.over(cameToNothing, passedOver, found,
+                    PARAMETERS)) {
+                case WhatTheAlternativesCameTo.Came.PassedOver<ParameterCameToNothing>(
+                        SearchShortfall its) -> new WalkedInOrder.PassedOver(its);
+                case WhatTheAlternativesCameTo.Came.Said<ParameterCameToNothing>(
+                        ParameterCameToNothing said) -> new WalkedInOrder.CameToNothingAt(said);
+                case WhatTheAlternativesCameTo.Came.Untried<ParameterCameToNothing> _,
+                     WhatTheAlternativesCameTo.Came.NothingToSayItIn<ParameterCameToNothing> _ ->
+                        throw new IllegalStateException(
+                                "a value was tried and nothing is said of what came of it");
+            };
         }
     }
 

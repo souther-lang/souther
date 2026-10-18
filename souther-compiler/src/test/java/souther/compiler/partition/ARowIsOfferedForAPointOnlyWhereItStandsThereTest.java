@@ -17,6 +17,7 @@ import souther.compiler.query.Shapes;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -221,6 +222,31 @@ class ARowIsOfferedForAPointOnlyWhereItStandsThereTest {
                             ? new AnswerObservation.Answered(new ObservedValue.Integer(0))
                             : new AnswerObservation.NotAnswered());
         };
+    }
+
+    /** Rows run and none answering, with nothing else left untried, are no witness. */
+    @Test
+    void rowsThatNoneAnsweredAreNoWitnessAndNotAPointNoRowReaches() {
+        Generator.BoundaryAttempt.Unresolved no = assertInstanceOf(
+                Generator.BoundaryAttempt.Unresolved.class, Generator.noRowAnswered("p",
+                        SearchShortfall.NONE, false, CompositionAccount.NOTHING));
+
+        assertEquals(Generator.UnresolvedCombination.Reason.NO_CERTIFIED_WITNESS,
+                no.why().reason());
+    }
+
+    /** A figure that stopped the search is said as the figure beside the rows that did not answer,
+     *  because the rows past it were never composed. */
+    @Test
+    void aFigureTheSearchWasStoppedAtIsSaidBesideRowsThatNoneAnswered() {
+        Generator.BoundaryAttempt.Stopped stopped = assertInstanceOf(
+                Generator.BoundaryAttempt.Stopped.class, Generator.noRowAnswered("p",
+                        SearchShortfall.of(CompositionShortfall.of(List.of(
+                                CompositionBudget.ROWS_A_WALK_HANDS_THE_CHOICE_OF_A_ROW))),
+                        false, CompositionAccount.NOTHING));
+
+        assertEquals(Set.of(CompositionBudget.ROWS_A_WALK_HANDS_THE_CHOICE_OF_A_ROW),
+                stopped.met().figures());
     }
 
     /** A row whose run aborts is passed over for the next one composed, which answers. */
