@@ -319,7 +319,8 @@ public final class StandingAtAPoint {
                     // It stands where the line is and nothing watched it get there. Said rather
                     // than counted as a row that did not reach the comparison: a run that reached
                     // nothing is something this found out, and a run nobody watched is not.
-                    case Generator.Watched.NoAccount _ -> unwatched = true;
+                    case Generator.Watched.NoAccount _, Generator.Watched.NotRun _ ->
+                            unwatched = true;
                 }
             }
             // And where none of them stood there, whether there were others to try. Asked of the
@@ -401,7 +402,7 @@ public final class StandingAtAPoint {
                             continue;   // it ran and never met this rule, so it says nothing here
                         }
                     }
-                    case Generator.Watched.NoAccount _ -> {
+                    case Generator.Watched.NoAccount _, Generator.Watched.NotRun _ -> {
                         unwatched = true;
                         continue;
                     }

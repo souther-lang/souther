@@ -8,10 +8,7 @@ import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Prepared;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.numeric.Count;
-import souther.compiler.coverage.Runs;
-import souther.compiler.coverage.SiteNumbering;
 import souther.compiler.observe.AnswerObservation;
-import souther.compiler.query.Bodies;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
@@ -217,18 +214,9 @@ class ARowIsOfferedForAPointOnlyWhereItStandsThereTest {
     /** A trial whose run of the {@code n}-th row it is handed (from 1) is {@code answered}. */
     private static Generator.Trial running(java.util.function.IntPredicate answered,
                                            List<List<String>> handed) {
-        Compilation compilation = Compilation.ofSource("""
-                module example.one
-                behavior one : (n: Int) -> Int
-                let one (n) = if n > 0 then n else 0
-                """, "Main");
-        compilation.answerEverything();
-        SiteNumbering numbering = compilation.db()
-                .ask(new Bodies.Checked(compilation.modules().getFirst())).value().plan()
-                .numbering();
         return row -> {
             handed.add(row.inputs().stream().map(FixtureTemplate::text).toList());
-            return new Generator.ObservedRun(new Generator.Watched.Ran(Runs.nowhere(numbering)),
+            return new Generator.ObservedRun(new Generator.Watched.NoAccount(),
                     answered.test(handed.size())
                             ? new AnswerObservation.Answered(new ObservedValue.Integer(0))
                             : new AnswerObservation.NotAnswered());

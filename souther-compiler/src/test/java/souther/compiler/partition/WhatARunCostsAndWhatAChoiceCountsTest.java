@@ -17,11 +17,13 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.TreeMap;
 import java.util.function.LongFunction;
 import java.util.function.LongUnaryOperator;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -153,9 +155,7 @@ class WhatARunCostsAndWhatAChoiceCountsTest {
     @Test
     void aFirstRowWhoseRunAnswersNothingIsPassedOverForTheNext() {
         Generator.TellingArmsApart choosing = new Generator.TellingArmsApart(
-                new Counting(numbering(), _ -> 0,
-                        value -> value == 0 ? new AnswerObservation.NotAnswered()
-                                : new AnswerObservation.Answered(new ObservedValue.Integer(0))),
+                answering(value -> value == 0 ? new AnswerObservation.NotAnswered() : answer()),
                 List.of());
         Generator.RowTaking taking = choosing.over(_ -> Generator.Acceptance.TAKEN);
 
@@ -170,9 +170,7 @@ class WhatARunCostsAndWhatAChoiceCountsTest {
     @Test
     void rowsWhoseRunsAnswerNothingAreNotCountedAgainstTheChoice() {
         Generator.TellingArmsApart choosing = new Generator.TellingArmsApart(
-                new Counting(numbering(), _ -> 0,
-                        value -> value < 0 ? new AnswerObservation.NotAnswered()
-                                : new AnswerObservation.Answered(new ObservedValue.Integer(0))),
+                answering(value -> value < 0 ? new AnswerObservation.NotAnswered() : answer()),
                 List.of());
         Generator.RowTaking taking = choosing.over(_ -> Generator.Acceptance.TAKEN);
 
@@ -189,9 +187,7 @@ class WhatARunCostsAndWhatAChoiceCountsTest {
     @Test
     void aRunThatRanOutIsPassedOverAndRemembered() {
         Generator.TellingArmsApart choosing = new Generator.TellingArmsApart(
-                new Counting(numbering(), _ -> 0,
-                        _ -> new AnswerObservation.RanOut(Optional.empty())),
-                List.of());
+                answering(_ -> new AnswerObservation.RanOut(Optional.empty())), List.of());
         Generator.RowTaking taking = choosing.over(_ -> Generator.Acceptance.TAKEN);
 
         assertEquals(Generator.Acceptance.PASSED, taking.take(List.of(FixtureTemplate.integer(0))));
@@ -200,15 +196,47 @@ class WhatARunCostsAndWhatAChoiceCountsTest {
         assertTrue(choosing.aRunRanOut());
     }
 
-    /** Where nothing runs rows, the first row is taken as it is composed. */
+    /** Where nothing ran the row, the first row is taken as it is composed. */
     @Test
-    void theFirstRowIsTakenAsItIsWhereNothingRunsRows() {
+    void theFirstRowIsTakenAsItIsWhereNothingRanIt() {
         Generator.TellingArmsApart choosing = new Generator.TellingArmsApart(
-                Generator.Trial.NOTHING_RUNS, List.of());
+                _ -> Generator.ObservedRun.nothingRan(), List.of());
         Generator.RowTaking taking = choosing.over(_ -> Generator.Acceptance.TAKEN);
 
         assertEquals(Generator.Acceptance.TAKEN, taking.take(List.of(FixtureTemplate.integer(3))));
         assertEquals("3", text(choosing.taken()));
+    }
+
+    /** A walk that hands more rows than the choice may be handed is stopped, and says so. */
+    @Test
+    void aWalkHandingMoreRowsThanTheFigureIsStoppedAndSaysSo() {
+        Generator.TellingArmsApart choosing = new Generator.TellingArmsApart(
+                answering(_ -> new AnswerObservation.NotAnswered()), List.of());
+        Generator.RowTaking taking = choosing.over(_ -> Generator.Acceptance.TAKEN);
+        int figure = CompositionBudget.ROWS_A_WALK_HANDS_THE_CHOICE_OF_A_ROW.maximum();
+
+        for (int i = 1; i <= figure; i++) {
+            assertEquals(Generator.Acceptance.PASSED,
+                    taking.take(List.of(FixtureTemplate.integer(i))));
+        }
+        assertFalse(choosing.stoppedAtItsFigure(), "the figure is reached, not yet past");
+
+        assertEquals(Generator.Acceptance.STOPPED,
+                taking.take(List.of(FixtureTemplate.integer(figure + 1))));
+        assertTrue(choosing.stoppedAtItsFigure());
+        assertEquals(Set.of(CompositionBudget.ROWS_A_WALK_HANDS_THE_CHOICE_OF_A_ROW),
+                choosing.untried().met().figures());
+        assertNull(choosing.taken());
+    }
+
+    private static AnswerObservation answer() {
+        return new AnswerObservation.Answered(new ObservedValue.Integer(0));
+    }
+
+    /** Rows applied and not recorded, which answer as {@code answer} says of the row's value. */
+    private static Generator.Trial answering(LongFunction<AnswerObservation> answer) {
+        return row -> new Generator.ObservedRun(new Generator.Watched.NoAccount(),
+                answer.apply(Long.parseLong(text(row.inputs()))));
     }
 
     private static String text(List<FixtureTemplate> inputs) {

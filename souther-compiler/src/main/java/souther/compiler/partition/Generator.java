@@ -752,6 +752,7 @@ public final class Generator {
                              WAYS_DOWN_TO_A_TOTAL_TRIED,
                              WAYS_UNDER_THE_CASES_TRIED,
                              STEPS_A_SEARCH_MAY_TAKE, ASSIGNMENTS_A_SEARCH_COMPOSES,
+                             ROWS_A_WALK_HANDS_THE_CHOICE_OF_A_ROW,
                              VALUES_OF_AN_UNBOUNDED_PROGRESSION_TRIED,
                              LEVELS_A_SIDE_IS_ASKED_AT,
                              // The divisors past this one were never asked for, so what the search
@@ -1369,7 +1370,7 @@ public final class Generator {
 
         /** A row nothing ran: nothing can say where it went, and it answered nothing. */
         public static ObservedRun nothingRan() {
-            return new ObservedRun(new Watched.NoAccount(), new AnswerObservation.NotAnswered());
+            return new ObservedRun(new Watched.NotRun(), new AnswerObservation.NotAnswered());
         }
     }
 
@@ -1389,15 +1390,20 @@ public final class Generator {
         record Ran(AlignedObservation seen) implements Watched {}
 
         /**
-         * Nothing here can say what it did.
-         *
-         * <p>Three things come to this and they are one arm because nothing tells them apart by
-         * acting differently: nothing ran the row, something ran it and nothing was recording, and
-         * something ran it and the recording was never read. What none of them is, is a run that
-         * reached nothing — that is {@link Ran} of an empty account, and it is the one difference
-         * anything here turns on.
+         * Something ran the row and nothing here can say what it did: nothing was recording, or the
+         * recording was never read. What it answered is the run's, and a run that aborted is as
+         * much one that did not answer here as it is in {@link Ran}. What this is not is a run that
+         * reached nothing — that is {@link Ran} of an empty account — or a row nothing ran
+         * ({@link NotRun}).
          */
         record NoAccount() implements Watched {}
+
+        /**
+         * Nothing ran the row: no way to run it, or a row short of what the behavior is stood in
+         * with. It answered nothing because nothing was asked, which is not a run that stopped
+         * without an answer, and a search that needs a run to say anything has nothing to go on.
+         */
+        record NotRun() implements Watched {}
     }
 
     // --- composing the rows ---------------------------------------------------------------------
@@ -2864,12 +2870,12 @@ public final class Generator {
                                         yield Acceptance.STOPPED;
                                     }
                                     // Past the guard and to an answer. A run that went on and
-                                    // then stopped without one is a row the compiler refuses,
-                                    // wherever it got to first.
+                                    // then stopped without one, or went past what a run may
+                                    // spend, is not a row that answers, wherever it got to first.
                                     case ObservedRun(Watched.Ran(AlignedObservation run),
                                                      AnswerObservation answer)
                                             when run.lit(goneOn)
-                                            && !(answer instanceof AnswerObservation.NotAnswered) ->
+                                            && answer instanceof AnswerObservation.Answered ->
                                             Acceptance.TAKEN;
                                     default -> Acceptance.PASSED;
                                 }, answersNothing);
@@ -5472,6 +5478,7 @@ public final class Generator {
                         ? new TellingArmsApart(trial, answers) : null;
         RowTaking taking = preferring == null ? RowTaking.FIRST
                 : preferring.over(RowTaking.FIRST);
+        boolean[] noRowAnswered = {false};
         ContentsAsked.UnderTheCases.Walked walked = under.tryEach(way -> {
             // And the value the way asks of each Bool position it read, which no edge offers and
             // no region placed — at the position each stands at in this way, which for a Bool the
@@ -5530,15 +5537,9 @@ public final class Generator {
                     if (came instanceof WalkedInOrder.RowTaken) {
                         return true;
                     }
-                    // Rows were composed and none was run to an answer. That says of the rows
-                    // tried what they did, and nothing of whether a row reaches the point.
-                    cameToNothing.add(new ParameterCameToNothing(order.order().getLast(),
-                            new Outcome.Unresolved(UnresolvedCombination.Reason.NO_CERTIFIED_WITNESS,
-                                    preferring.aRunRanOut()
-                                            ? "no row composed here was run to an answer, and a run"
-                                            + " went past what a run may spend"
-                                            : "no row composed here was run to an answer"),
-                            SearchShortfall.NONE, Map.of()));
+                    // Rows were composed and none was run to an answer: what the rows did, said
+                    // after the ways are all tried, and not a parameter that came to nothing.
+                    noRowAnswered[0] = true;
                     return false;
                 }
             }
@@ -5548,8 +5549,12 @@ public final class Generator {
             // What every way tried came to, beside the figure where the walk stopped short of the
             // rest and a way under a case nobody read; where no way came to nothing to say it in,
             // the figure, the case nobody read, or that no case held them.
+            // And the figure the choice among rows was stopped at, which leaves the rows past it
+            // untried whatever the rows before it did.
+            SearchShortfall stopped = preferring == null ? SearchShortfall.NONE
+                    : preferring.untried();
             switch (WhatTheAlternativesCameTo.over(cameToNothing, null,
-                    under.foundOut(walked), PARAMETERS)) {
+                    under.foundOut(walked).and(stopped), PARAMETERS)) {
                 case WhatTheAlternativesCameTo.Came.Said(ParameterCameToNothing said) ->
                         failed = said;
                 case WhatTheAlternativesCameTo.Came.Untried(SearchShortfall found) -> {
@@ -5562,6 +5567,14 @@ public final class Generator {
                             A_CASE_WAS_NOT_READ), where.unrepresented());
                 }
                 case WhatTheAlternativesCameTo.Came.NothingToSayItIn<ParameterCameToNothing> _ -> {
+                    // Rows were composed and run, and none came to an answer: a fact about those
+                    // rows, which is not that no row reaches the point.
+                    if (noRowAnswered[0]) {
+                        return new BoundaryAttempt.Unresolved(UnresolvedCombination.atAPoint(label,
+                                UnresolvedCombination.Reason.NO_CERTIFIED_WITNESS,
+                                preferring.aRunRanOut() ? NO_ROW_ANSWERED_A_RUN_RAN_OUT
+                                        : NO_ROW_ANSWERED), where.unrepresented());
+                    }
                     return new BoundaryAttempt.Unresolved(UnresolvedCombination.atAPoint(label,
                             UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
                             NO_CASE_HOLDS_THEM), where.unrepresented());
@@ -5801,6 +5814,13 @@ public final class Generator {
         return to == null ? holds : new DeclaredBounds.CountRange(
                 Math.max(holds.least(), to.least()), Math.min(holds.most(), to.most()));
     }
+
+    /** What is said of a point at which rows were composed and run and none came to an answer. */
+    private static final String NO_ROW_ANSWERED = "no row composed here was run to an answer";
+
+    /** The same, where a run of one of them went past what a run may spend. */
+    private static final String NO_ROW_ANSWERED_A_RUN_RAN_OUT = NO_ROW_ANSWERED
+            + ", and a run went past what a run may spend";
 
     /** What is said of a row no case of which holds every container and value it is asked of. */
     private static final String NO_CASE_HOLDS_THEM = "no case the row can be holds every"
@@ -8982,6 +9002,11 @@ public final class Generator {
      */
     static final class TellingArmsApart {
 
+        /** What bounds the rows a walk hands the choice, whatever they come to. */
+        private static final CompositionBudget HANDED_THE_CHOICE =
+                CompositionBudget.ROWS_A_WALK_HANDS_THE_CHOICE_OF_A_ROW;
+        private static final int MOST_ROWS_HANDED = HANDED_THE_CHOICE.maximum();
+
         private final RunOnce trial;
         private final List<StoodInAnswer> answers;
         /** Every row ranked so far, as it is written, so a row composed again is not ranked again. */
@@ -8997,6 +9022,8 @@ public final class Generator {
         private int answering;
         /** Whether a row that met the requirement was run and went past what a run may spend. */
         private boolean aRunRanOut;
+        /** Whether the walk was stopped for handing more rows than it may. */
+        private boolean stoppedAtItsFigure;
         /** How many rows a walk has handed here, ranked or not. */
         private int handed;
 
@@ -9012,14 +9039,15 @@ public final class Generator {
          *
          * <p>Two figures, each of its own thing. What is ranked is bounded by
          * {@link #MOST_ROWS_OFFERED_FOR_THE_ARMS}; and the rows a walk hands here at all — ranked,
-         * not meeting the requirement, or composed again — by {@link #MOST_REPAIRS}, which bounds
-         * choosing a candidate's values again wherever that is done. A walk over every assignment of
-         * every parameter multiplies, and the rows it hands on that are no candidates cost
-         * composing each time even though they cost no run.
+         * not meeting the requirement, or composed again — by
+         * {@link CompositionBudget#ROWS_A_WALK_HANDS_THE_CHOICE_OF_A_ROW}. A walk over every
+         * assignment of every parameter multiplies, and the rows it hands on that are no
+         * candidates cost composing each time even though they cost no run.
          */
         RowTaking over(RowTaking meets) {
             return inputs -> {
-                if (++handed > MOST_REPAIRS) {
+                if (++handed > MOST_ROWS_HANDED) {
+                    stoppedAtItsFigure = true;
                     return Acceptance.STOPPED;
                 }
                 RowToRun row = new RowToRun(inputs, answers);
@@ -9042,15 +9070,29 @@ public final class Generator {
             return aRunRanOut;
         }
 
+        /**
+         * Whether the walk handed more rows than {@link #HANDED_THE_CHOICE} allows and was
+         * stopped, which leaves the rows past it untried.
+         */
+        boolean stoppedAtItsFigure() {
+            return stoppedAtItsFigure;
+        }
+
+        /** The rows left untried: the figure where the walk was stopped at it, otherwise none. */
+        SearchShortfall untried() {
+            return stoppedAtItsFigure
+                    ? SearchShortfall.of(CompositionShortfall.of(List.of(HANDED_THE_CHOICE)))
+                    : SearchShortfall.NONE;
+        }
+
         /** What is made of one row that meets the requirement, not ranked before. */
         private Acceptance rank(RowToRun row, List<String> written) {
             List<FixtureTemplate> inputs = row.inputs();
             ranked.add(written);
             ObservedRun ran = trial.runsRows() ? trial.run(row) : ObservedRun.nothingRan();
-            // Where nothing applied the row, or nothing was recording and it answered nothing,
-            // nothing says whether it answers; the first row is offered as it is composed.
-            if (ran.watched() instanceof Watched.NoAccount
-                    && ran.answer() instanceof AnswerObservation.NotAnswered) {
+            // Where nothing ran the row, nothing says whether it answers; the first row is offered
+            // as it is composed.
+            if (ran.watched() instanceof Watched.NotRun) {
                 if (best == null) {
                     best = List.copyOf(inputs);
                 }
@@ -9404,16 +9446,28 @@ public final class Generator {
                     // Nothing can say where it went, so nothing certifies it and nothing refutes
                     // it. Offered as it was before anything ran, and said to be. Both of the ways
                     // that happens come here: nothing applied the row, or nothing was recording
-                    // while it was applied.
+                    // while it was applied and it answered.
+                    case Watched.NotRun _ -> {
+                        found = new Witness.Unconfirmed(named, candidate.where());
+                        return Taken.AND_DONE;
+                    }
                     case Watched.NoAccount _ -> {
+                        // Applied and not recorded, so a run that did not answer is as much no
+                        // witness here as where it was recorded.
+                        if (!(observed.answer() instanceof AnswerObservation.Answered)) {
+                            missed = true;
+                            return Taken.AND_MORE;
+                        }
                         found = new Witness.Unconfirmed(named, candidate.where());
                         return Taken.AND_DONE;
                     }
                     case Watched.Ran ran -> {
-                        // A run that stopped without an answer is no witness, wherever it went
-                        // before it stopped: a row that aborts is one the compiler refuses — at an
+                        // A run that did not answer is no witness, wherever it went before it
+                        // stopped: a row that aborts is one the compiler refuses — at an
                         // `unreachable` it is E1911 — and what it lit, it lit on the way to nothing.
-                        if (observed.answer() instanceof AnswerObservation.NotAnswered) {
+                        // Nor is one that went past what a run may spend, which given more might
+                        // have answered and has not.
+                        if (!(observed.answer() instanceof AnswerObservation.Answered)) {
                             missed = true;
                             return Taken.AND_MORE;
                         }
@@ -9481,7 +9535,7 @@ public final class Generator {
                                 return Acceptance.STOPPED;
                             }
                             // No witness, for the reason one built at once is none.
-                            if (observed.answer() instanceof AnswerObservation.NotAnswered) {
+                            if (!(observed.answer() instanceof AnswerObservation.Answered)) {
                                 missed = true;
                                 return Acceptance.PASSED;
                             }
