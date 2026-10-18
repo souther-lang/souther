@@ -411,6 +411,19 @@ public sealed interface Carrier extends ValueOrder {
     }
 
     /**
+     * How the values of this order lie, for a reader that argues from there being another value
+     * between two: {@link Granularity#DENSE} only where there is one, which is a decimal's and
+     * not a string's — nothing lies between {@code "a"} and {@code "a\0"} though this language
+     * names no next string ({@link #spacing}) — and null for an order that is neither.
+     */
+    default Granularity spacingBetweenValues() {
+        return switch (spacing()) {
+            case DISCRETE -> Granularity.DISCRETE;
+            case DENSE -> this instanceof Dense ? Granularity.DENSE : null;
+        };
+    }
+
+    /**
      * Every value this order has, as the ends it runs between.
      *
      * <p>Where a reading of the rules starts. Neither the spacing nor the literals say it, and a

@@ -631,7 +631,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
 
     /** How the values of {@code carrier} are spaced, or null where it has no order. */
     private static Granularity spacingOf(Carrier carrier) {
-        return carrier == null ? null : carrier.spacing();
+        return carrier == null ? null : carrier.spacingBetweenValues();
     }
 
     /** How the values of {@code carrier} are spaced, or null where they are no numbers a
@@ -973,7 +973,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
             terms.add(new WhatARelationLeavesUndivided.Term<>(each.madeOf(), each.weight(),
                     on.asARelationReadsIt(), on.asARelationReadsIt(), source.takes(), true,
-                    on.spacing()));
+                    on.spacingBetweenValues()));
         }
         // A statement about both sides is in each side's list; it is one statement.
         Set<OnAWay> aboutEither = new LinkedHashSet<>(stating.get(0));

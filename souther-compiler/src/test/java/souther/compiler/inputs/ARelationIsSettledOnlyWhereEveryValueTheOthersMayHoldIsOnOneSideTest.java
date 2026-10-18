@@ -337,6 +337,20 @@ class ARelationIsSettledOnlyWhereEveryValueTheOthersMayHoldIsOnOneSideTest {
                         NumericDomain.Bounds.OPEN), term("y", 1, open, open), Rel.LT));
     }
 
+    /** The same asked at the least end of the run alone: {@code x > y} for {@code y} above nought
+     *  up to one, and the values of {@code x} above nought, are reached below by a dense
+     *  {@code y} that takes no nought and not by one that is whole. */
+    @Test
+    void theLeastEndOfAnOpenRunIsReachedByADenseTermAlone() {
+        NumericDomain.Bounds unit = dense("0", true, "1", true);
+        NumericDomain.Bounds aboveNought = dense("0", false, "1", true);
+        Leaves leaves = denseLeavesOf(denseTerm("x", 1, unit, unit),
+                denseTerm("y", -1, aboveNought, aboveNought), Rel.GT);
+        assertEquals(List.of(line(Rel.LE, 0)), ((Leaves.Settled) leaves).lines());
+        assertNull(denseLeavesOf(denseTerm("x", 1, unit, unit),
+                term("y", -1, aboveNought, aboveNought), Rel.GT));
+    }
+
     /**
      * {@code 3x - y < 0} with {@code y} from nought to one: {@code x} lies below a third wherever
      * {@code y} is, which no decimal writes. The line is at the third all the same, and the
