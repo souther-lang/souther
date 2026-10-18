@@ -1110,24 +1110,29 @@ public final class WhatARelationLeavesUndivided {
      * How the values the term at {@code by} has to stand at are spaced, or null where that is not
      * said.
      *
-     * <p>They are what the others come to, over its weight and turned, and are on the finest grid
-     * any of the others is on: whole only where every other term is, with whole weights, a whole
-     * constant, and a weight of one or minus one for the term itself. Any finer grid is a superset
-     * of the points there are, and a run of more points is the harder to reach.
+     * <p>They are what the others come to, over its weight and turned. That is a point of a grid
+     * only where the weighing keeps the others' points on one: a weight of one or minus one for
+     * the term itself, whole weights for the others, and a constant that is a point of the
+     * decimals. The grid is then whole where every other term is whole and the constant is, and
+     * the finest decimal grid otherwise. Any other weighing divides or multiplies the step
+     * ({@code x / 3} stands at the thirds of a step), so no grid is said, and the run is compared
+     * as the numbers it ends at.
      */
     private static <P> Granularity neededSpacing(List<Term<P>> terms, int by,
                                                  ExactRatio constant) {
-        boolean whole = terms.get(by).weight().abs().equals(ExactRatio.ONE)
-                && (constant == null || constant.isWhole());
-        for (int i = 0; i < terms.size(); i++) {
+        boolean keepsTheStep = terms.get(by).weight().abs().equals(ExactRatio.ONE)
+                && (constant == null || constant.fitsWrittenDecimal());
+        boolean whole = constant == null || constant.isWhole();
+        for (int i = 0; i < terms.size() && keepsTheStep; i++) {
             if (i == by) {
                 continue;
             }
             Granularity spacing = terms.get(i).spacing();
-            if (spacing == null) {
-                return null;
-            }
-            whole &= spacing == Granularity.DISCRETE && terms.get(i).weight().isWhole();
+            keepsTheStep = spacing != null && terms.get(i).weight().isWhole();
+            whole &= spacing == Granularity.DISCRETE;
+        }
+        if (!keepsTheStep) {
+            return null;
         }
         return whole ? Granularity.DISCRETE : Granularity.DENSE;
     }

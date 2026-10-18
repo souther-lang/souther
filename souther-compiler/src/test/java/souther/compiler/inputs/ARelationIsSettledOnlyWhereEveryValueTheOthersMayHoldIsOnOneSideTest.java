@@ -477,6 +477,24 @@ class ARelationIsSettledOnlyWhereEveryValueTheOthersMayHoldIsOnOneSideTest {
     }
 
     /**
+     * {@code 3y > x}: the values of {@code y} that {@code x} needs are a third of {@code x}, which
+     * lie on a grid a third of a step fine. At {@code x} one step, {@code 3y} is past it whatever
+     * {@code y} is, so {@code x} is not left undivided by {@code y} reaching either side of a third
+     * of the step: the grid of the decimals is not the grid of what is needed.
+     */
+    @Test
+    void aWeightThatDividesTheStepSaysNoGridOfTheValuesNeeded() {
+        NumericDomain.Bounds step = dense("1E-2147483647", true, "1E-2147483647", true);
+        NumericDomain.Bounds upToAStep = dense("0", false, "1E-2147483647", true);
+        NumericDomain.Bounds aboveNought = dense("0", false, "1", true);
+        NumericDomain.Bounds fromAStep = dense("1E-2147483647", true, "1", true);
+        assertEquals(false, undivided(denseTerm("x", -1, upToAStep, upToAStep),
+                denseTerm("y", 3, step, step), Rel.GT).contains("x"));
+        assertEquals(false, undivided(denseTerm("x", -1, aboveNought, aboveNought),
+                denseTerm("y", 3, fromAStep, fromAStep), Rel.GT).contains("x"));
+    }
+
+    /**
      * A decimal of a half is a value a whole term cannot take, and a decimal of one is: with
      * {@code x} held to the one decimal and {@code y} whole from nought to one, {@code x == y}
      * is false at a half whatever {@code y} is, and at one it is left either way.
