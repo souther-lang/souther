@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.core.EnteredArm;
 import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.DeclaredInput;
 import souther.compiler.inputs.NameReach;
@@ -315,17 +316,27 @@ public sealed interface OnTheWay {
      *
      * @param condition which condition of the reading was declined
      * @param whys      why, each once, in the order met
+     * @param arm       the arm of a match the condition is the entering of, as the tree read has
+     *                  it, or none where it is no arm's. Beside the name and not in place of it: a
+     *                  reader asking whether a condition is the entering of one particular arm
+     *                  asks here, and the name is what tells the conditions apart
      */
     record Declined(ConditionOccurrence condition, ConditionReportAnchor anchor,
-                    List<WhyNotTaken> whys)
+                    List<WhyNotTaken> whys, Optional<EnteredArm> arm)
             implements OnTheWay {
 
         public Declined(ConditionOccurrence condition, ConditionReportAnchor anchor,
                         WhyNotTaken why) {
-            this(condition, anchor, List.of(why));
+            this(condition, anchor, List.of(why), Optional.empty());
+        }
+
+        public Declined(ConditionOccurrence condition, ConditionReportAnchor anchor,
+                        List<WhyNotTaken> whys) {
+            this(condition, anchor, whys, Optional.empty());
         }
 
         public Declined {
+            Objects.requireNonNull(arm, "an arm, or none");
             if (condition == null) {
                 throw new IllegalArgumentException(
                         "a condition this reading declined is some condition it met");

@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.ElementBindings;
 import souther.compiler.core.Core;
+import souther.compiler.core.EnteredArm;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
@@ -19,7 +20,6 @@ import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -188,8 +188,8 @@ class EveryAnswerThisReadingPublishesCarriesWhatMakesItOneTest {
         if (type == BindingId.class) {
             return new BindingId(new BindingOwner.OfValue("example", "f"), 0);
         }
-        if (type == Optional.class) {
-            return Optional.empty();
+        if (type == EnteredArm.class) {
+            return new EnteredArm(new BindingId(new BindingOwner.OfValue("example", "f"), 0));
         }
         if (type == InputReads.ContainerOf.class) {
             return new InputReads.ContainerOf.AtAPosition(TermPath.of("x"));

@@ -365,10 +365,20 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             return true;
         }
         return way.declined().stream().allMatch(declined -> sides.stream().anyMatch(side ->
-                side.kept() != null && side.kept().seed()
-                        instanceof Quantity.KeptSoFar.Seed.OfTheKey(var _, var arm)
-                        && declined.anchor() instanceof ConditionReportAnchor.WhereItIsWritten(
-                                var written) && arm.isPresent() && arm.get().equals(written)));
+                side.kept() != null && findsTheEndOf(declined, side.kept().seed())));
+    }
+
+    /**
+     * Whether {@code declined} is the entering of the arm that finds the end kept under a key,
+     * {@code seed} being what that end starts from.
+     *
+     * <p>The arm itself, as the tree read has it, and not the arm the source wrote: a helper
+     * expanded at two places has one source arm and a lookup in each, and a lookup that found a
+     * value in one says nothing of the end the other found.
+     */
+    static boolean findsTheEndOf(OnTheWay.Declined declined, Quantity.KeptSoFar.Seed seed) {
+        return seed instanceof Quantity.KeptSoFar.Seed.OfTheKey(var _, var arm)
+                && arm.isPresent() && declined.arm().equals(arm);
     }
 
     /**

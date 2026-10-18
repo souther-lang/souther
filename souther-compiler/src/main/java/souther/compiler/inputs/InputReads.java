@@ -19,9 +19,9 @@ import souther.compiler.check.ElementsWrittenOut;
 import souther.compiler.check.FoldedValue;
 import souther.compiler.check.WhatAnOptionHolds;
 import souther.compiler.core.Core;
+import souther.compiler.core.EnteredArm;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.semantics.HowAClosureIsApplied;
-import souther.compiler.sites.WrittenCondition;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.CaseSelector;
 import souther.compiler.types.ModelOccurrence;
@@ -1203,8 +1203,7 @@ public final class InputReads {
      * <p>Reached through {@link #choosing} and from nowhere else, so that a walk going into an arm
      * says which way of deciding took it there rather than which node it is standing on.
      */
-    private InputReads insideArmOn(Core scrutinee, Core.Case arm,
-                                   Optional<WrittenCondition.ForkArm> entered, Symbols symbols,
+    private InputReads insideArmOn(Core scrutinee, Core.Case arm, Symbols symbols,
                                    DeclarationNewtypes newtypes) {
         InputReads inside = narrowedInsideArmOn(scrutinee, arm, symbols, newtypes);
         if (arm.binder() == null || arm.binder().binding() == null
@@ -1215,7 +1214,7 @@ public final class InputReads {
         return AnOperationApplied.of(lookup) instanceof AnOperationApplied looked
                 && GET.equals(looked.operation())
                 ? new InputReads(inside.names.opening(arm.binder().binding(),
-                        new LookupOpened(lookup, entered)),
+                        new LookupOpened(lookup, new EnteredArm(arm.binder().binding()))),
                         inside.alternatives, inside.declared, inside.dependencies, inside.applied)
                 : inside;
     }
@@ -1225,14 +1224,13 @@ public final class InputReads {
      * and which arm is reached only where the lookup found one.
      *
      * @param lookup  the call that asked the map for the key, itself and not one like it
-     * @param entered which arm of which match the source wrote binds the name, or none where the
-     *                source wrote no such match
+     * @param entered the arm that binds the name
      */
-    public record LookupOpened(Core lookup, Optional<WrittenCondition.ForkArm> entered) {
+    public record LookupOpened(Core lookup, EnteredArm entered) {
 
         public LookupOpened {
             Objects.requireNonNull(lookup, "a name is found by some lookup");
-            Objects.requireNonNull(entered, "under an arm the source wrote, or none");
+            Objects.requireNonNull(entered, "under some arm of the match on it");
         }
 
         /** The same call itself: comparing the trees under it would cost what they hold. */
@@ -1953,8 +1951,8 @@ public final class InputReads {
         return switch (decidedBy) {
             // A condition binds nothing. Which way it went is settled where the arm is read.
             case Choice.Decides.ACondition _ -> this;
-            case Choice.Decides.ACase(Core.Case arm, Core scrutinee, var entered) ->
-                    insideArmOn(scrutinee, arm, entered, symbols, newtypes);
+            case Choice.Decides.ACase(Core.Case arm, Core scrutinee) ->
+                    insideArmOn(scrutinee, arm, symbols, newtypes);
             // The invariant held, so the name the attempt writes stands for what was built.
             case Choice.Decides.ItWasBuilt(Core.IfConstructed attempt) ->
                     and(attempt.binder(), attempt.construct());

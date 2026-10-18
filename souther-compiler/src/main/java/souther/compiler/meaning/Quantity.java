@@ -2,6 +2,7 @@ package souther.compiler.meaning;
 
 import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.Extreme;
+import souther.compiler.core.EnteredArm;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.NumericTerms;
 import souther.compiler.inputs.TermPath;
@@ -11,7 +12,6 @@ import souther.compiler.numeric.NumericDomain;
 import souther.compiler.semantics.CodePointClass;
 import souther.compiler.semantics.ResultRange;
 import souther.compiler.semantics.TakenArguments;
-import souther.compiler.sites.WrittenCondition;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
@@ -636,10 +636,11 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
              * @param key       where the key stands in an element
              * @param reachedBy the arm of the match on a lookup of the key that finds the end,
              *                  which is entered only where an earlier element has the key — or
-             *                  none where the walk hands a closure the value found, or the source
-             *                  wrote no such match
+             *                  none where the walk hands a closure the value found. The name
+             *                  already tells this end from the end found by another expansion of
+             *                  the same code, and so does this
              */
-            record OfTheKey(TermPath key, Optional<WrittenCondition.ForkArm> reachedBy)
+            record OfTheKey(TermPath key, Optional<EnteredArm> reachedBy)
                     implements Seed {
 
                 public OfTheKey {

@@ -29,7 +29,6 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.function.Predicate;
 
@@ -409,8 +408,7 @@ final class PathEngine {
      */
     private Entered opening(Core.Case arm, Core scrutinee, Known k, Denotations at) {
         Core.Read root = Terms.read(arm.binder(), arm.bindType(), arm.pos());
-        Denotations next = terms.choosing(
-                new Choice.Decides.ACase(arm, scrutinee, Optional.empty()), at);
+        Denotations next = terms.choosing(new Choice.Decides.ACase(arm, scrutinee), at);
         return new Entered(seedAt(root, k, next), next);
     }
 

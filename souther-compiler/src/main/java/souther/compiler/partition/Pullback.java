@@ -4918,7 +4918,7 @@ final class Pullback {
                         NumericTerm.FromOnePosition count) ? count : null;
         return Optional.of(new Quantity.KeptSoFar(kept.extreme(),
                 new Quantity.KeptSoFar.Seed.OfTheKey(keyPlace, opened == null ? Optional.empty()
-                        : opened.entered()),
+                        : Optional.of(opened.entered())),
                 walked.container(), each, howMany));
     }
 
