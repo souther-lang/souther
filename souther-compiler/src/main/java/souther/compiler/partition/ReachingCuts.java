@@ -507,15 +507,7 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
         // The arm is declined for either answer: a search composes against a position read as one
         // of its cases, and there is no position to narrow whether the scrutinee stands at none or
         // this reading did not follow it to one.
-        TermPath scrutinee = switch (reads.forkedOn(match.scrutinee(), ruleSource.newtypes())) {
-            case PathResolution.At(var stands) -> stands;
-            case PathResolution.NotAPosition _ -> null;
-            // And declined for a scrutinee that only may stand at one. What a narrowing is composed
-            // against is one position; narrowing each of the ones it may be would say a row
-            // reaching this arm stands at a case of every one of them, which is a region narrower
-            // than the rows that arrive — the one direction that takes a coverage item away.
-            case PathResolution.MayStandAt _ -> null;
-        };
+        TermPath scrutinee = positionOf(match, reads, ruleSource);
         // A value this reading already knows is no narrowing of anything, and needs none: every row
         // takes the arm or none does. Read before giving up on the position, since a scrutinee
         // standing at none is exactly what a helper handed a case written in the source matches.
@@ -531,12 +523,7 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
         // nothing under it and this reading holds no position there, which is what it is for; what
         // has to exist is the position the case is a case of, since that is what a row writes a
         // value at and what a requirement on the way is keyed by.
-        //
-        // Two values and not one: where the name stands is what the environment answers, and
-        // whether the input's rules hold a position there is the reading's.
-        DeclaredInput.Taking taking = scrutinee == null ? null
-                : taking(inputs, inputs.declared(ruleSource), scrutinee,
-                        match.scrutinee().type(), selected);
+        DeclaredInput.Taking taking = takingAt(match, scrutinee, selected, read);
         if (taking == null) {
             return enteredWhole(match, part, read, reads, met, at);
         }
@@ -547,6 +534,59 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
             case DeclaredInput.Taking.Implied _ -> new OnTheWay.Settled(met, at, true);
             case DeclaredInput.Taking.Excluded _ -> new OnTheWay.Settled(met, at, false);
         }), copyOf(match.occurrence()));
+    }
+
+    /**
+     * The one position the scrutinee of {@code match} stands at, or null where it stands at none.
+     *
+     * <p>Null both where the scrutinee stands at none and where this reading did not follow it to
+     * one. And for a scrutinee that only may stand at one: what a narrowing is composed against is
+     * one position, and narrowing each of the ones it may be would say a row reaching an arm
+     * stands at a case of every one of them, which is a region narrower than the rows that arrive
+     * — the one direction that takes a coverage item away.
+     */
+    private static TermPath positionOf(Core.Match match, InputReads reads,
+                                       RuleReadingSource ruleSource) {
+        return switch (reads.forkedOn(match.scrutinee(), ruleSource.newtypes())) {
+            case PathResolution.At(var stands) -> stands;
+            case PathResolution.NotAPosition _ -> null;
+            case PathResolution.MayStandAt _ -> null;
+        };
+    }
+
+    /**
+     * What arriving at an arm leaving {@code selected} says of the position {@code scrutinee}
+     * stands at, or null where there is no position to say it of.
+     *
+     * <p>The position that is narrowed, and not the narrowed one. A case declaring no field has
+     * nothing under it and this reading holds no position there, which is what it is for; what has
+     * to exist is the position the case is a case of, since that is what a row writes a value at
+     * and what a requirement on the way is keyed by.
+     *
+     * <p>Two values and not one: where the name stands is what the environment answers, and
+     * whether the input's rules hold a position there is the reading's.
+     */
+    private static DeclaredInput.Taking takingAt(Core.Match match, TermPath scrutinee,
+                                                 CasesLeft selected, InputReading read) {
+        return scrutinee == null ? null
+                : taking(read.domain(), read.domain().declared(read.rules()), scrutinee,
+                        match.scrutinee().type(), selected);
+    }
+
+    /**
+     * Whether arm {@code arm} of {@code match} narrows the position its own scrutinee stands at, so
+     * that what {@link #entering} puts on the way for it is an answer to the question the fork
+     * asks. Otherwise the arm is read whole ({@link #enteredWhole}): what it comes to for the
+     * input is no answer to a fork on a value the body computed.
+     *
+     * <p>Decided by the same two readings {@link #entering} decides by, so the two cannot differ
+     * about which arm is which.
+     */
+    static boolean narrowsItsOwnPosition(Core.Match match, Core.Case arm, InputReading read,
+                                         InputReads reads) {
+        CasesLeft selected = CasesLeft.selectedBy(arm.pattern());
+        return selected != null && takingAt(match, positionOf(match, reads, read.rules()),
+                selected, read) instanceof DeclaredInput.Taking.Narrows;
     }
 
     /**

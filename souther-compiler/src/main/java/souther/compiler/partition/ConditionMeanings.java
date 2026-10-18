@@ -93,6 +93,12 @@ record ConditionMeanings(souther.compiler.inputs.InputReading read) {
         return ReachingCuts.answersOf(match, inputs(), reads, rules());
     }
 
+    /** Whether what entering arm {@code part} of {@code match} puts on the way answers the question
+     *  the fork asks ({@link ReachingCuts#narrowsItsOwnPosition}). */
+    boolean narrowsItsOwnPosition(Core.Match match, int part, InputReads reads) {
+        return ReachingCuts.narrowsItsOwnPosition(match, match.cases().get(part), read, reads);
+    }
+
     /** The position of the input the arms of {@code fork} divide between them, where they do
      *  ({@link WhatConditionsState#inputDividedBy}). */
     Optional<WhatConditionsState.DividedInput> inputDividedBy(Core.Match fork, InputReads reads) {

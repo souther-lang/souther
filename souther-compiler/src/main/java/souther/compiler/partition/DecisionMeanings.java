@@ -4,7 +4,6 @@ import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.InputReads;
-import souther.compiler.inputs.PathResolution;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.DecisionSubject;
@@ -319,8 +318,7 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects) {
         // fork on a value the body computed is what the arm comes to for the input, which is no
         // answer to the question about the computed value.
         if (onTheWay.size() == 1 && onTheWay.getFirst() instanceof OnTheWay.Narrowed narrowed
-                && reads.forkedOn(match.scrutinee(), states.newtypes())
-                        instanceof PathResolution.At) {
+                && states.narrowsItsOwnPosition(match, part, reads)) {
             TermPath at = narrowed.position();
             // Where the value the fork is on stands: a name read on a value left several cases is
             // the name read at the sum, and not a name under the set of them.

@@ -9,16 +9,20 @@ import souther.compiler.inputs.Denotation;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.ReadMeaning;
+import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Proposition;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.IdentityHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Supplier;
 
 /**
@@ -177,28 +181,100 @@ final class WhatConditionsState {
     private Optional<DividedInput> divide(Core.Match fork, InputReads reads) {
         DecisionSubject.AnInput subject = null;
         List<CasesLeft> answers = new ArrayList<>();
+        Set<Refinement> covered = new HashSet<>();
         for (int part = 0; part < fork.cases().size(); part++) {
-            if (!(arm(fork, part, reads).proposition() instanceof Proposition.InCases(
-                    DecisionSubject.AnInput of, CasesLeft cases, boolean holds, _)) || !holds) {
+            CaseOfAnInput stated = caseOfAnInput(arm(fork, part, reads).proposition());
+            if (stated == null || subject != null && !subject.equals(stated.of())) {
                 return Optional.empty();
             }
-            if (subject != null && !subject.equals(of)) {
-                return Optional.empty();
-            }
-            subject = of;
-            CasesLeft answer = switch (ReachingCuts.taking(of.at(), cases, read)) {
+            subject = stated.of();
+            CasesLeft answer = switch (ReachingCuts.taking(subject.at(), stated.cases(), read)) {
                 case DeclaredInput.Taking.Narrows(TermPath to) -> to.narrowing();
-                case DeclaredInput.Taking.Excluded _ -> cases;
+                case DeclaredInput.Taking.Excluded _ -> stated.cases();
                 case DeclaredInput.Taking.Implied _ -> null;
             };
-            for (CasesLeft other : answers) {
-                if (answer != null && other != null && other.meet(answer) != null) {
-                    return Optional.empty();
+            if (answer != null) {
+                for (Refinement atom : answer.atoms()) {
+                    if (!covered.add(atom)) {
+                        return Optional.empty();
+                    }
                 }
             }
             answers.add(answer);
         }
         return subject == null ? Optional.empty() : Optional.of(new DividedInput(subject, answers));
+    }
+
+    /** Some cases of one input position, which is what an arm of a fork states of the input when
+     *  it states nothing else. */
+    private record CaseOfAnInput(DecisionSubject.AnInput of, CasesLeft cases) { }
+
+    /**
+     * The cases of one input position {@code stated} says the input is one of, or null where it
+     * says anything else.
+     *
+     * <p>What a body that makes several cases one states is those cases held alternatively, and
+     * what its last arm states is its own case held with every earlier arm's denied. Both are
+     * cases of the one position, taken as the sets of distinctions they are: an alternative is
+     * their union, a conjunction the cases it holds in common less the ones it denies. A denial
+     * alone leaves a value every other case and is read as nothing, as is a statement about
+     * another position or of another kind.
+     */
+    private static CaseOfAnInput caseOfAnInput(Proposition stated) {
+        return switch (stated) {
+            case Proposition.InCases(DecisionSubject.AnInput of, CasesLeft cases, boolean holds, _)
+                    when holds -> new CaseOfAnInput(of, cases);
+            case Proposition.Any(List<Proposition> parts, _) -> {
+                DecisionSubject.AnInput of = null;
+                Set<Refinement> atoms = new LinkedHashSet<>();
+                for (Proposition part : parts) {
+                    CaseOfAnInput one = caseOfAnInput(part);
+                    if (one == null || of != null && !of.equals(one.of())) {
+                        yield null;
+                    }
+                    of = one.of();
+                    atoms.addAll(one.cases().atoms());
+                }
+                yield casesOf(of, atoms);
+            }
+            case Proposition.All(List<Proposition> parts, _) -> {
+                DecisionSubject.AnInput of = null;
+                Set<Refinement> atoms = null;
+                Set<Refinement> denied = new HashSet<>();
+                for (Proposition part : parts) {
+                    if (part instanceof Proposition.InCases(DecisionSubject.AnInput at,
+                            CasesLeft cases, boolean holds, _) && !holds) {
+                        if (of != null && !of.equals(at)) {
+                            yield null;
+                        }
+                        of = at;
+                        denied.addAll(cases.atoms());
+                        continue;
+                    }
+                    CaseOfAnInput one = caseOfAnInput(part);
+                    if (one == null || of != null && !of.equals(one.of())) {
+                        yield null;
+                    }
+                    of = one.of();
+                    if (atoms == null) {
+                        atoms = new LinkedHashSet<>(one.cases().atoms());
+                    } else {
+                        atoms.retainAll(one.cases().atoms());
+                    }
+                }
+                if (atoms == null) {
+                    yield null;
+                }
+                atoms.removeAll(denied);
+                yield casesOf(of, atoms);
+            }
+            default -> null;
+        };
+    }
+
+    private static CaseOfAnInput casesOf(DecisionSubject.AnInput of, Set<Refinement> atoms) {
+        CasesLeft cases = CasesLeft.ofEach(List.copyOf(atoms));
+        return of == null || cases == null ? null : new CaseOfAnInput(of, cases);
     }
 
     /**
