@@ -65,13 +65,29 @@ class WhereALibraryLawIsReadTheMeasureAndTheDischargeAgreeTest {
             new Row("{\n        let kept = [c, 3]\n"
                     + "        if List.isEmpty(List.filter(n -> n > 2, kept)) then 0 - 1 else c\n"
                     + "    }", 0, Set.of("2", "3", "4", "5"), true),
+            // And none where every element written out fails the step on every run.
+            new Row("if List.isEmpty(List.filter(n -> n > 5, [1, 3])) then c else 0 - 1", 0,
+                    Set.of("4", "5"), true),
+            // A list taken from holds as many as its case says, whichever the case turns on: the
+            // number asked for against how many there are, written down or not.
+            new Row("c + 2 - List.length(List.take(2, [1, 2, 3]))", 0, Set.of("4", "5"), true),
+            new Row("c + 1 - List.length(List.take(2, [1, 2, 3]))", 0, Set.of("5", "6"), false),
+            new Row("c - List.length(List.take(c, [1, 2, 3]))", 0, Set.of("7", "8"), true),
+            new Row("c - 1 - List.length(List.take(c, [1, 2, 3]))", 0, Set.of("8", "9"), false),
+            // A size read from one expression in two environments is two sizes.
+            new Row("c + 5 - grown([c]) - grown([c, c])", 0, Set.of("4", "5"), true),
+            new Row("c + 4 - grown([c]) - grown([c, c])", 0, Set.of("5", "6"), false),
             // A comparison answers one of three numbers by how the two stand.
             new Row("c + 1 + Int.compare(c, 0)", 0, Set.of("2", "3"), true),
             new Row("Int.compare(c, 0) + 4", 0, Set.of("0", "1"), true),
             new Row("c - 1 + Int.compare(c, 0)", 0, Set.of("4", "5"), false),
             // A magnitude of a number written down is the number its case answers.
             new Row("c - Int.abs(0 - 48)", 48, Set.of("52", "53"), true),
-            new Row("c - Int.abs(0 - 49)", 48, Set.of("53", "54"), false));
+            new Row("c - Int.abs(0 - 49)", 48, Set.of("53", "54"), false),
+            // And of a number not written down, case by case and not only by where it lies: the
+            // magnitude of a number at or above nought is that number.
+            new Row("c - Int.abs(c)", 0, Set.of(), true),
+            new Row("c - Int.abs(c - 2)", 0, Set.of(), false));
 
     private static String program(Row row) {
         return """
@@ -80,6 +96,8 @@ class WhereALibraryLawIsReadTheMeasureAndTheDischargeAgreeTest {
                 data Bad
                 data Digit = Int
                     invariant atLeastNought = value >= 0
+
+                let grown (xs: List<Int>): Int = List.length(List.append(xs, [7]))
 
                 let helper (c: Int): Int =
                     %s

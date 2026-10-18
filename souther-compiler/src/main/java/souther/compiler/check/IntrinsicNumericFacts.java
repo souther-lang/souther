@@ -119,17 +119,26 @@ final class IntrinsicNumericFacts {
     }
 
     /**
-     * How many {@code container} holds, where the law of the operation that answered it says
-     * whether it holds anything — or null where no operation answered it, no law says that, or a
-     * part of the law is one this side has no name for ({@link LawOverAtoms}).
+     * How many {@code container} holds, where the laws of the operation that answered it say so by
+     * what it was handed: whether it holds anything, and how many case by case — or null where no
+     * operation answered it, no law says either, or a part of each is one this side has no name
+     * for ({@link LawOverAtoms}).
      *
-     * <p>The whole law or nothing. It says when the answer holds something and, by the same
+     * <p>Each law whole or not at all. One says when the answer holds something and, by the same
      * statement, when it holds nothing, so a part of it left out would answer the second wrong.
      */
-    static Derivation heldWhereItsLawSays(Core container, Denotations at, Terms terms) {
-        Derivation.HoldsSomethingWhere.Holding holds = LawOverAtoms.whereItHolds(
-                AnOperationApplied.of(container), AnswerAspect.EMPTINESS, at, terms);
-        return holds == null ? null : new Derivation.HoldsSomethingWhere(holds);
+    static Derivation heldWhereItsLawsSay(Core container, Denotations at, Terms terms) {
+        AnOperationApplied applied = AnOperationApplied.of(container);
+        Derivation.HoldsSomethingWhere.Holding holds =
+                LawOverAtoms.whereItHolds(applied, AnswerAspect.EMPTINESS, at, terms);
+        Derivation held = holds == null ? null : new Derivation.HoldsSomethingWhere(holds);
+        // And how many case by case, where the law says it so: a size in cases is no relation the
+        // atom carries whatever the path, since which case holds is the path's.
+        Derivation sized = LawOverAtoms.sizeInCases(applied, at, terms);
+        if (held == null || sized == null) {
+            return held != null ? held : sized;
+        }
+        return new Derivation.Each(List.of(held, sized));
     }
 
     /** States how {@code atom} stands to the size of {@code source}, where that size is one this can

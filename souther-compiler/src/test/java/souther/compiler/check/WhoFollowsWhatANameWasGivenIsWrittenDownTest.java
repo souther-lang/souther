@@ -38,15 +38,13 @@ class WhoFollowsWhatANameWasGivenIsWrittenDownTest {
      *
      * <p>{@code CoreConstantEval}'s names and {@code Terms} answer with something and hold it: the
      * first through {@link FoldedValue}, which holds what each name read in each environment came
-     * to. {@code Predicates} fills a map and holds the bindings it followed, and
-     * {@code AdmissibleReading} fills the set of positions a rule names and does the same.
-     * {@code PathEngine} steps from name to name without descending.
+     * to. {@code AdmissibleReading} fills the set of positions a rule names and holds the bindings
+     * it followed. {@code PathEngine} steps from name to name without descending.
      */
     private static final List<String> FOLLOWERS = List.of(
             "souther.compiler.check.AdmissibleReading",
             "souther.compiler.check.CoreConstantEval$Told",
             "souther.compiler.check.PathEngine",
-            "souther.compiler.check.Predicates",
             "souther.compiler.check.Terms");
 
     @Test

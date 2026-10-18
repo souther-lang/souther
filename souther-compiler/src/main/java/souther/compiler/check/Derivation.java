@@ -432,4 +432,55 @@ sealed interface Derivation {
             return true;
         }
     }
+
+    /**
+     * A value every one of {@code recipes} says something of, each on its own: it lies wherever all
+     * of them put it.
+     *
+     * <p>Where the library states two things of one answer — how many a container holds case by
+     * case, and when it holds anything — and neither says all the other does. Recorded as one
+     * recipe because a value is reached one way, and these are two accounts of that one way.
+     */
+    record Each(List<Derivation> recipes) implements Derivation {
+
+        public Each {
+            recipes = List.copyOf(recipes);
+            if (recipes.size() < 2) {
+                throw new IllegalArgumentException("a value is said of by every one of several"
+                        + " recipes, and was given " + recipes.size());
+            }
+        }
+
+        @Override
+        public List<LinearForm<FactSubject>> formsRead() {
+            List<LinearForm<FactSubject>> out = new ArrayList<>();
+            recipes.forEach(each -> out.addAll(each.formsRead()));
+            return List.copyOf(out);
+        }
+
+        /** Recipe by recipe and in order. */
+        @Override
+        public boolean sameAs(Derivation other, Same same) {
+            if (!(other instanceof Each it) || recipes.size() != it.recipes().size()) {
+                return false;
+            }
+            for (int i = 0; i < recipes.size(); i++) {
+                if (!recipes.get(i).sameAs(it.recipes().get(i), same)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        /** What the first of them that divides divides by. */
+        @Override
+        public DivisorExtent divisorExtent() {
+            for (Derivation each : recipes) {
+                if (each.divisorExtent() != null) {
+                    return each.divisorExtent();
+                }
+            }
+            return null;
+        }
+    }
 }

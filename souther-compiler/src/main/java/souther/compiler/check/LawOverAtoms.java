@@ -59,28 +59,59 @@ final class LawOverAtoms implements LawAtACall.Reading<Denotations, Holding, Lin
     }
 
     /**
-     * How many {@code applied}'s answer holds as its law says, read in {@code at} — the form the
-     * first case it is in comes to, where every case before it is settled as not met and it is
-     * settled as met — or null where no law says, or which case it is turns on the run.
+     * How many {@code applied}'s answer holds, read in {@code at}, where its law says it in one
+     * case met whatever the arguments are — or null where no law says, it says it case by case
+     * ({@link #sizeInCases}), or names a number this cannot.
      */
     static LinearForm<FactSubject> sizeOf(AnOperationApplied applied, Denotations at,
                                           Terms terms) {
-        if (applied == null || !(DefaultBoundOperationFacts.get().settled(applied.operation(),
-                OperationLaw.Observed.SIZE) instanceof BoundOperationFacts.Settled.ByALaw(
-                        OperationLaw.Size<DeclaredArgument> law, var _))) {
+        OperationLaw.Size<DeclaredArgument> law = sizeLawOf(applied);
+        LinearForm<LawNumber<DeclaredArgument>> unconditional =
+                law == null ? null : law.unconditional();
+        return unconditional == null ? null
+                : new LawOverAtoms(applied, at, terms).form(unconditional);
+    }
+
+    /**
+     * How many {@code applied}'s answer holds, read in {@code at}, where its law says it case by
+     * case: one arm for each case, answering what the case comes to and settled by what its
+     * condition makes certain — or null where no law says it so, or a case comes to a number this
+     * cannot name.
+     *
+     * <p>Which case it is, is the domain's to say and not this: {@code List.take(2, [1, 2, 3])}
+     * holds two because a list of three is no shorter than two, which is what the size of
+     * {@code [1, 2, 3]} is known to be, and {@code List.take(c, [1, 2, 3])} holds {@code c} or
+     * three by where {@code c} stands. A case whose condition cannot hold is no arm; one whose
+     * condition this cannot name is an arm settled by nothing, which can only widen where the value
+     * may lie.
+     */
+    static Derivation.Chosen sizeInCases(AnOperationApplied applied, Denotations at,
+                                         Terms terms) {
+        OperationLaw.Size<DeclaredArgument> law = sizeLawOf(applied);
+        if (law == null || law.unconditional() != null) {
             return null;
         }
         LawOverAtoms reading = new LawOverAtoms(applied, at, terms);
+        List<Derivation.Chosen.Arm> arms = new ArrayList<>();
         for (OperationLaw.Size.Case<DeclaredArgument> each : law.cases()) {
-            Boolean met = settled(LawAtACall.of(each.where(), reading));
-            if (met == null) {
+            LinearForm<FactSubject> answer = reading.form(each.equalTo());
+            if (answer == null) {
                 return null;
             }
-            if (met) {
-                return reading.form(each.equalTo());
+            Holding where = LawAtACall.of(each.where(), reading);
+            List<NumericConstraint> settles = where == null ? List.of() : certain(where, true);
+            if (settles != null) {
+                arms.add(new Derivation.Chosen.Arm(answer, settles));
             }
         }
-        return null;
+        return arms.isEmpty() ? null : new Derivation.Chosen(arms);
+    }
+
+    /** The law {@code applied}'s operation is settled how many it holds by, or null where none. */
+    private static OperationLaw.Size<DeclaredArgument> sizeLawOf(AnOperationApplied applied) {
+        return applied != null && DefaultBoundOperationFacts.get().settled(applied.operation(),
+                OperationLaw.Observed.SIZE) instanceof BoundOperationFacts.Settled.ByALaw(
+                        OperationLaw.Size<DeclaredArgument> law, var _) ? law : null;
     }
 
     /** Whether {@code holding} comes out the same whatever the counts and numbers are, and which
@@ -114,8 +145,15 @@ final class LawOverAtoms implements LawAtACall.Reading<Denotations, Holding, Lin
                 Boolean one = settled(denied);
                 yield one == null ? null : !one;
             }
-            case Holding.Something _, Holding.Stands _ -> null;
+            case Holding.Something(LinearForm<FactSubject> count) -> standing(count, Rel.GT);
+            case Holding.Stands(LinearForm<FactSubject> form, Rel rel) -> standing(form, rel);
         };
+    }
+
+    /** Whether {@code form} stands {@code rel} to nought whatever the counts and numbers are, which
+     *  it does one way or the other where it is a constant — or null where it weighs any. */
+    private static Boolean standing(LinearForm<FactSubject> form, Rel rel) {
+        return form.coefs().isEmpty() ? rel.holds(form.constant().signum()) : null;
     }
 
     /**

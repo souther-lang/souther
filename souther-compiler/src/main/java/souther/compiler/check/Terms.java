@@ -169,12 +169,14 @@ final class Terms {
     private final ElementsReading elements = new ElementsReading();
 
     /**
-     * The expressions each size atom has had what it carries filed from, each told apart by
-     * identity ({@link #sizeAtomFor}). A size is named wherever a clause reads it, and what it
-     * carries walks the elements written out and the laws of what built it; read from one
-     * expression it is the same answer every time.
+     * The expressions each size atom has had what it carries filed from, and the environments each
+     * was read in, both told apart by identity ({@link #sizeAtomFor}). A size is named wherever a
+     * clause reads it, and what it carries walks the elements written out and the laws of what
+     * built it; read from one expression in one environment it is the same answer every time.
+     * Read in another, it is read again and held to be the answer the first gave
+     * ({@link #carrying}), which is what says one atom is one value however it was reached.
      */
-    private final Map<FactSubject, Set<Core>> sizesFiledFrom = new HashMap<>();
+    private final Map<FactSubject, Map<Core, Set<Denotations>>> sizesFiledFrom = new HashMap<>();
 
     /**
      * What this reading knows about each atom it has named by knowing which value it is: how the
@@ -2041,14 +2043,16 @@ final class Terms {
             // that built it — and in the environment that expression's own names mean something in,
             // which is not the one the name was read in where a binding stands between them.
             Given built = sizedBy(container, at);
-            if (!sizesFiledFrom.computeIfAbsent(atom,
-                    _ -> Collections.newSetFromMap(new IdentityHashMap<>())).add(built.value())) {
+            if (!sizesFiledFrom.computeIfAbsent(atom, _ -> new IdentityHashMap<>())
+                    .computeIfAbsent(built.value(),
+                            _ -> Collections.newSetFromMap(new IdentityHashMap<>()))
+                    .add(built.at())) {
                 return atom;
             }
             carrying(atom, IntrinsicNumericFacts.ofSize(size, built.value(), atom, built.at(),
                     this));
-            Derivation held = IntrinsicNumericFacts.heldWhereItsLawSays(built.value(), built.at(),
-                    this);
+            Derivation held = IntrinsicNumericFacts.heldWhereItsLawsSay(built.value(),
+                    built.at(), this);
             if (held != null) {
                 computedBy(atom, new AtomKnowledge.Computation.Derived(held));
             }
