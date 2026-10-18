@@ -1397,6 +1397,19 @@ public sealed interface BlockReason {
     record ComparisonLineTurningNothing() implements ReadToEndWithoutLine {}
 
     /**
+     * The comparison was read to the end as a relation of the value at a position to another
+     * value, and no row that arrives at the comparison takes the way to it.
+     *
+     * <p>Not {@link ComparisonNothingArrivesAtItsLine}: a relation has no line of its own for
+     * the rows to miss. What refuses them is what holds on the way to the comparison, as there,
+     * and not the relation being left without a line ({@link RelationNotShownToReachEveryValue}),
+     * which an author would go looking for in the rule.
+     *
+     * <p>Said only on a proof, as there.
+     */
+    record ComparisonRelationNothingArrivesAt() implements ReadToEndWithoutLine {}
+
+    /**
      * The comparison relates the value at a position to another value rather than dividing the
      * position's values: to another position's, or to a value no position holds — what an
      * operation looked up, an element a walk was handed, the index it is at.

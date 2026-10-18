@@ -553,6 +553,12 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/meaning/CasesOfALineAsked$Found;",
                     "how many ways of choosing a case are asked, counted before any is: past the"
                             + " figure, more cases than are taken apart, and none is asked"),
+            Map.entry("souther.compiler.meaning.CasesOfALineAsked#allAsked("
+                            + "Lsouther/compiler/meaning/DecidingCase;"
+                            + "Ljava/util/function/Function;)"
+                            + "Lsouther/compiler/meaning/CasesOfALineAsked$Atoms;",
+                    "how many ways of choosing a case are asked, counted before any is: past the"
+                            + " figure, more cases than are taken apart, and none is asked"),
             Map.entry("souther.compiler.meaning.CasesOfALineAsked#pastTheSteps("
                             + "Ljava/util/List;)V",
                     "out of steps, naming them and the cases left nobody took apart"),
@@ -564,6 +570,13 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Ljava/util/List;",
                     "hands the figure the asking stopped at to the line, as one where it decides"
                             + " in those cases was not worked out"),
+            Map.entry("souther.compiler.partition.ComparisonAssessment#partsOfARelation("
+                            + "Lsouther/compiler/partition/ComparisonAssessment$Several$Part;"
+                            + "Lsouther/compiler/partition/ComparisonAssessment$AgainstAnotherValue;"
+                            + "Ljava/util/function/Function;)"
+                            + "Ljava/util/List;",
+                    "hands the figure the asking stopped at to the relation, as one where it"
+                            + " decides in those cases was not worked out"),
             // What a path takes in of a condition: the parts of a disjunction taken alone, across
             // every disjunction inside another. Past the figure the disjunction is declined,
             // naming it.

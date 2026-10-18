@@ -250,6 +250,63 @@ class AFoldThatFilesACounterUnderEachKeyAnswersHowOftenTheKeyOccursTest {
         }
     }
 
+    /** Whether the map a fold files holds anything, the fold walking {@code keys}. */
+    private static String modelOfWhetherItHoldsAnything(String keys) {
+        return """
+                module example.popular
+
+                let countsOf (xs: List<String>): Map<String, Int> =
+                    List.fold((acc, i) -> Map.updateOrInsert(i, 1, n -> n + 1, acc),
+                        Map.empty, %s)
+
+                behavior popular : (xs: List<String>) -> Bool
+
+                let popular (xs) = Map.isEmpty(countsOf(xs))
+                """.formatted(keys);
+    }
+
+    /**
+     * A fold walking the elements of a list in another order holds the same keys, each as often, so
+     * whether the map it files holds anything is read as it is where the fold walks the list. Which
+     * operations reorder is {@code InputPath}'s to say, and is asked there.
+     */
+    @Test
+    void whetherAMapHoldsAnythingIsReadWhateverOrderTheFoldWalksTheKeysIn() {
+        Compilation plain = measured(modelOfWhetherItHoldsAnything("xs"));
+        assertFalse(axisOf(plain).isEmpty(), () -> report(plain));
+        assertSidesAreRead(plain);
+        Compilation reversed = measured(modelOfWhetherItHoldsAnything("List.reverse(xs)"));
+        assertEquals(axisOf(plain), axisOf(reversed), () -> report(reversed));
+        assertEquals(decisionsOf(plain), decisionsOf(reversed), () -> report(reversed));
+        assertFalse(report(reversed).contains("not read"), () -> report(reversed));
+    }
+
+    /** Each side of a line is read, and neither is read as the other. */
+    private static void assertSidesAreRead(Compilation compilation) {
+        List<String> decisions = decisionsOf(compilation);
+        assertTrue(decisions.stream().anyMatch(each -> each.endsWith(" held")),
+                () -> decisions + report(compilation));
+        assertTrue(decisions.stream().anyMatch(each -> each.endsWith(" denied")),
+                () -> decisions + report(compilation));
+        assertTrue(decisions.stream().noneMatch(each -> each.startsWith("not_read")),
+                () -> decisions + report(compilation));
+    }
+
+    /**
+     * A list that kept some of the elements is empty where none of them was kept, which a list
+     * that holds something does not say: the map is not read as empty where the list is.
+     */
+    @Test
+    void whetherAMapHoldsAnythingIsNotReadAsHowManyKeysThereAreWhereSomeWereKept() {
+        Compilation kept = measured(modelOfWhetherItHoldsAnything(
+                "List.filter(k -> String.length(k) > 1, xs)"));
+        assertTrue(axisOf(kept).stream().noneMatch(each -> each.contains("List.length(xs)")),
+                () -> axisOf(kept) + report(kept));
+        assertTrue(decisionsOf(kept).stream()
+                        .noneMatch(each -> each.contains("List.length(xs)")),
+                () -> decisionsOf(kept) + report(kept));
+    }
+
     /** The rows offered for keys a map answered as they are are the rows offered for the keys. */
     @Test
     void theRowsOfferedForKeysAMapAnsweredAsTheyAreAreTheRowsOfferedForTheKeys() {
@@ -832,6 +889,21 @@ class AFoldThatFilesACounterUnderEachKeyAnswersHowOftenTheKeyOccursTest {
             out.add(node);
         }
         node.forEach(child -> collect(child, out));
+    }
+
+    /** What each decision of the behavior comes to, with how it was read, in the order drawn. */
+    private static List<String> decisionsOf(Compilation compilation) {
+        List<String> out = new ArrayList<>();
+        decisions(JSON.readTree(json(compilation)), out);
+        return out;
+    }
+
+    private static void decisions(JsonNode node, List<String> out) {
+        if (node.isObject() && node.has("condition") && node.has("outcome")) {
+            out.add(node.path("kind").asString() + " " + node.path("condition").asString() + " "
+                    + node.path("outcome").asString());
+        }
+        node.forEach(child -> decisions(child, out));
     }
 
     /** The quantity each border is on, as the report names it. */
