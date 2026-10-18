@@ -337,6 +337,46 @@ class ARelationIsSettledOnlyWhereEveryValueTheOthersMayHoldIsOnOneSideTest {
                         NumericDomain.Bounds.OPEN), term("y", 1, open, open), Rel.LT));
     }
 
+    private static Leaves.Settled denseAgainstOne(long weight, Rel relation) {
+        NumericDomain.Bounds one = dense("1", true, "1", true);
+        return (Leaves.Settled) denseLeavesOf(
+                denseTerm("x", weight, NumericDomain.Bounds.OPEN, NumericDomain.Bounds.OPEN),
+                denseTerm("y", -1, one, one), relation);
+    }
+
+    /**
+     * {@code 3x == y} with {@code y} always one: the number it holds at is a third, which no
+     * decimal is, so no value of {@code x} makes it hold. It fails below the third and above it,
+     * and those are one run, there being nothing between to part them.
+     */
+    @Test
+    void aNumberNoDecimalIsIsNoValueTheRelationHoldsAt() {
+        Leaves.Settled settled = denseAgainstOne(3, Rel.EQ);
+        assertEquals(1, settled.runs().size());
+        SettledRun only = settled.runs().getFirst();
+        assertEquals(false, only.holds());
+        assertNull(only.from());
+        assertNull(only.to());
+        assertEquals(List.of(), settled.lines());
+    }
+
+    /** The relation turned round holds at every decimal, and parts nothing. */
+    @Test
+    void aNumberNoDecimalIsIsNoValueTheRelationFailsAtEither() {
+        Leaves.Settled settled = denseAgainstOne(3, Rel.NE);
+        assertEquals(1, settled.runs().size());
+        assertEquals(true, settled.runs().getFirst().holds());
+        assertEquals(List.of(), settled.lines());
+    }
+
+    /** A half is a decimal, so {@code 2x == y} holds there and fails on either side. */
+    @Test
+    void aNumberADecimalIsIsAValueTheRelationHoldsAt() {
+        ExactRatio half = ExactRatio.of(BigInteger.ONE, BigInteger.TWO);
+        assertEquals(List.of(new Line(Rel.LT, half), new Line(Rel.LE, half)),
+                denseAgainstOne(2, Rel.EQ).lines());
+    }
+
     /** The same asked at the least end of the run alone: {@code x > y} for {@code y} above nought
      *  up to one, and the values of {@code x} above nought, are reached below by a dense
      *  {@code y} that takes no nought and not by one that is whole. */

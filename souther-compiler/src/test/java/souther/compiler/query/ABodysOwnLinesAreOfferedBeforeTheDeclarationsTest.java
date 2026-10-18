@@ -82,11 +82,11 @@ class ABodysOwnLinesAreOfferedBeforeTheDeclarationsTest {
      * <p>What the order is for. A row standing at the bottom of the declaration's range also stands
      * in the run beside the guard's line, so it settles that point as well — and a reduction that
      * kept it and dropped the row composed for the point would offer the point's own row to
-     * nobody. Which of the rows that settle it is kept is the earlier one, and a cell of the
-     * classes the guard parts the positions into comes before a line.
+     * nobody. Which of the rows that settle it is kept is the reduction's to say
+     * ({@link OfTwoRowsSettlingOneItemTheEarlierIsKeptTest}); that a row is kept is held here.
      */
     @Test
-    void theRowComposedForTheBodysPointIsTheOneKept() {
+    void aBodysPointIsStillOfferedARowThatSettlesIt() {
         Compilation compilation = compiled();
         Composition composition = Composition.composed(
                 OfferingRequest.overTheModule("example.dense"),

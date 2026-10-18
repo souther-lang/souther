@@ -262,7 +262,14 @@ public final class WhatARelationLeavesUndivided {
             return next == null || from.at().compareTo(next) > 0;
         }
         int order = from.at().compareTo(to.at());
-        return order > 0 || (order == 0 && !to.inclusive() && !from.inclusive());
+        return order > 0
+                || (order == 0 && !to.inclusive() && !from.inclusive() && isAValue(to.at()));
+    }
+
+    /** Whether a dense term can stand at the number {@code at}: only the decimals a model can
+     *  write are its values, and a third is none. */
+    private static boolean isAValue(ExactRatio at) {
+        return at.fitsWrittenDecimal();
     }
 
     /**
@@ -1588,6 +1595,13 @@ public final class WhatARelationLeavesUndivided {
      * A run of numbers as cuts, empty where its ends have crossed. It is what a dense term's
      * values are worked out as: a run ends open or closed, and a difference of two such runs is
      * runs again.
+     *
+     * <p>The ends are exact numbers and the values are decimals, and the two differ at one point
+     * only. A run between two ends that differ holds a value: a decimal's scale is an exponent of
+     * thirty-two bits, which no two numbers a model can reason with lie closer than, and the
+     * search for a value of a run takes the same view ({@code CandidateDomain}). A run of equal
+     * ends is one number, a third for instance, and holds a value only where a decimal is that
+     * number ({@link #isAValue}).
      */
     private record Span(ExactCut lower, ExactCut upper) {
 
@@ -1620,12 +1634,16 @@ public final class WhatARelationLeavesUndivided {
                     ExactCut.tighterUpper(upper, other.upper));
         }
 
+        /** Whether some value of a dense term lies in this run, which {@link #isAValue} decides
+         *  for the one point a run of equal ends is. */
         boolean holdsAValue() {
             if (lower == null || upper == null) {
                 return true;
             }
             int order = lower.at().compareTo(upper.at());
-            return order < 0 || (order == 0 && lower.inclusive() && upper.inclusive());
+            return order < 0
+                    || (order == 0 && lower.inclusive() && upper.inclusive()
+                            && isAValue(lower.at()));
         }
 
         /** What is left of this run with {@code taken} out of it: up to two runs. */
