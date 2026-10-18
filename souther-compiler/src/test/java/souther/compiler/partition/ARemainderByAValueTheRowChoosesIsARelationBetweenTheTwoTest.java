@@ -78,6 +78,31 @@ class ARemainderByAValueTheRowChoosesIsARelationBetweenTheTwoTest {
                 classes.toString());
     }
 
+    /**
+     * Dividends from one up have no multiple of the divisor at the type's least end, so that
+     * divisor settles it unmet on its own and the divisors one and minus one are not all it does.
+     */
+    @Test
+    void aDivisorNoPositiveDividendReachesIsAClassOfItsOwn() {
+        Compilation compilation = compiled("""
+                data Positive = Int
+                    invariant value >= 1
+                """, "eaches: Positive, pack: Int", "Int.floorMod(eaches.value, pack) == 0");
+        assertEquals(List.of("pack/x <= -9223372036854775808", "pack/= -1", "pack/= 1",
+                        "pack/-9223372036854775808 < x and x /= -1, 1"),
+                classesOf(measured(compilation)).get("pack"));
+    }
+
+    /** Where the divisors begin past half the type, the far end dividend has no divisor. */
+    @Test
+    void divisorsFromPastHalfTheTypeLeaveTheDividendNothingToSay() {
+        Compilation compilation = compiled("""
+                data Pack = Int
+                    invariant value >= 4611686018427387905
+                """, "eaches: Int, pack: Pack", "Int.floorMod(eaches, pack.value) == 0");
+        assertTrue(!classesOf(measured(compilation)).containsKey("eaches"));
+    }
+
     /** A divisor held to exactly two is not every size from some one up: parity decides. */
     @Test
     void aDivisorHeldToTwoLeavesTheDividendNothingToSay() {

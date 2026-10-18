@@ -473,6 +473,12 @@ public final class WhatARelationLeavesUndivided {
             if (least == null || !reachesEverySizeFrom(divisor.realizes(), least)) {
                 return null;
             }
+            // The dividend at the far end of the type, of a size one past the greatest, is divided
+            // only by a divisor of at most half its size: from further up, none divides it.
+            if (greatest != null
+                    && least.multiply(BigInteger.TWO).compareTo(greatest.add(BigInteger.ONE)) > 0) {
+                return null;
+            }
             WholeRun nought = new WholeRun(BigInteger.ZERO, BigInteger.ZERO).meet(held);
             if (nought.holdsAWholeNumber()) {
                 runs.add(new SettledRun(BigInteger.ZERO, BigInteger.ZERO, holdsWhenDivides));
@@ -504,6 +510,15 @@ public final class WhatARelationLeavesUndivided {
             for (BigInteger one : List.of(BigInteger.ONE.negate(), BigInteger.ONE)) {
                 if (new WholeRun(one, one).meet(held).holdsAWholeNumber()) {
                     runs.add(new SettledRun(one, one, holdsWhenDivides));
+                }
+            }
+            if (greatest != null && seen.high == null && !containsNought(seen)) {
+                // Dividends reaching only upward have no multiple of a divisor past minus their
+                // greatest: it settles the relation unmet, as a run does for the divisors that small.
+                WholeRun beyond = new WholeRun(null, greatest.add(BigInteger.ONE).negate())
+                        .meet(held);
+                if (beyond.holdsAWholeNumber()) {
+                    runs.add(new SettledRun(beyond.low, beyond.high, !holdsWhenDivides));
                 }
             }
         }
@@ -540,8 +555,8 @@ public final class WhatARelationLeavesUndivided {
      * Whether a divisor of every size has a multiple among the dividends {@code seen}: where they
      * hold nought it has, and where they run off one way from an end it has one as long as the end
      * is no further than half the way to where the type stops — a divisor just under the end then
-     * has its second multiple past it. The very end of the type is read as the class's account
-     * reads one.
+     * has its second multiple past it. The divisor with none, past the greatest on the other
+     * sign, is a run of its own in the caller.
      */
     private static boolean reachesAMultipleOfEverySize(WholeRun seen, BigInteger greatest) {
         if (greatest == null || containsNought(seen)) {
