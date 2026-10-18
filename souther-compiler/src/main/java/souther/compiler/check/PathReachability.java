@@ -99,7 +99,7 @@ public final class PathReachability {
      * @param stopsBefore what a run arriving at each construct may have stopped at on the way for
      *                   what nothing here says, for each construct where it may — an operator or a
      *                   call worked out before it whose operands this reading does not hold to
-     *                   where it answers ({@link PathCompletion.Past#readWhereItAnswers}). What
+     *                   where it answers ({@link PathCompletion.Past#mayStop}). What
      *                   arrives there is what has to hold for a run to get there, and a construct
      *                   here is one where that is not all that getting there takes
      */
@@ -736,7 +736,7 @@ public final class PathReachability {
      * take in narrowed nothing and is not on the list.
      *
      * <p>{@code mayStop} is what, worked out on the way here, may stop a run on operands nothing
-     * here says ({@link PathCompletion.Past#readWhereItAnswers}): what holds here is what has to
+     * here says ({@link PathCompletion.Past#mayStop}): what holds here is what has to
      * hold for a run to get here, and no more than that.
      */
     private Walked walk(Core e, Walked here, Denotations at, InputReads reads) {
