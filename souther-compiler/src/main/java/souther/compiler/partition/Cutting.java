@@ -1408,7 +1408,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                                 Proposition stated, InputReading read, InputReads reads,
                                 Optional<AuthorsLines> authors) {
         if (!onlyRelations(stated)
-                && !(holdsARelation(stated) && askableBesideItsRelations(stated))) {
+                && !(holdsARelation(stated)
+                        && AStatementAtARow.askableBesideItsRelations(stated))) {
             return null;
         }
         List<WhereEachLineDecides.Decides> lines = WhereEachLineDecides.in(stated);
@@ -1416,8 +1417,6 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             return null;
         }
         List<Read.Several.Part> parts = new ArrayList<>();
-        boolean drawn = false;
-        boolean departed = false;
         for (WhereEachLineDecides.Decides each : lines) {
             Read line = lineOf(behavior, each.line(), written, read, reads);
             PlaceOfALine alone = new PlaceOfALine(THE_COMPARISON, each.line().key());
@@ -1431,7 +1430,6 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                 if (against == null) {
                     return null;
                 }
-                departed = true;
                 parts.add(new Read.Several.Part(alone, against(against, each.line()), List.of()));
                 continue;
             }
@@ -1440,13 +1438,11 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             // be held to where it decides, so it is said not to be drawn, at its own places.
             if (line instanceof Read.Cuts cuts && !each.cases().stream()
                     .allMatch(one -> AStatementAtARow.askable(one.condition()))) {
-                departed = true;
                 parts.add(new Read.Several.Part(alone, new Read.Stopped(ComparisonAssessment
                         .atEachOf(cuts.cutting().over(), new BlockReason.SeveralLinesInOneRule())),
                         List.of()));
                 continue;
             }
-            drawn |= line instanceof Read.Cuts;
             if (authors.isEmpty()) {
                 parts.add(new Read.Several.Part(alone, line, each.cases()));
                 continue;
@@ -1458,9 +1454,13 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                             WhereEachLineDecides.takenWhere(each.cases(),
                                     authors.get().takenWhere(mapping.line())))));
         }
-        // A statement only some of whose relations are lines, and none of those drawn, is several
-        // lines not drawn, as it is said where nothing is taken apart.
-        return drawn || !departed ? new Read.Several(parts) : null;
+        // Read as its parts where each is a line on the input, drawn or refused, or where some line
+        // is drawn beside what is no line. With no line drawn and some part no line, nothing of it
+        // is on the input to be taken apart, and it is several lines not drawn at the places the
+        // comparison is filed at.
+        boolean drawn = parts.stream().anyMatch(part -> part.line() instanceof Read.Cuts);
+        boolean allLines = parts.stream().allMatch(part -> Read.Several.Part.isALine(part.line()));
+        return drawn || allLines ? new Read.Several(parts) : null;
     }
 
     /**
@@ -1539,31 +1539,6 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      */
     static boolean drawsLines(Proposition stated) {
         return AStatementAtARow.askable(stated) && holdsARelation(stated);
-    }
-
-    /**
-     * Whether every part of {@code stated} that is no relation is one a row answers of its own
-     * values. Its relations are asked one at a time, for a line or for what else they relate
-     * ({@link #several}).
-     */
-    private static boolean askableBesideItsRelations(Proposition stated) {
-        return switch (stated) {
-            case Proposition.Compared _ -> true;
-            case Proposition.All all ->
-                    all.parts().stream().allMatch(Cutting::askableBesideItsRelations);
-            case Proposition.Any any ->
-                    any.parts().stream().allMatch(Cutting::askableBesideItsRelations);
-            case Proposition.SoManyHold counted ->
-                    counted.statements().stream().allMatch(Cutting::askableBesideItsRelations);
-            case Proposition.WhereItAnswers where -> askableBesideItsRelations(where.answers())
-                    && askableBesideItsRelations(where.states());
-            case Proposition.Some some -> askableBesideItsRelations(some.ofTheElement());
-            case Proposition.Always _, Proposition.Truth _, Proposition.Present _,
-                 Proposition.InCases _, Proposition.SameValue _, Proposition.LastToHold _,
-                 Proposition.Unread _, Proposition.OnAnApplication _,
-                 Proposition.SomeReachable _ -> AStatementAtARow.askable(stated);
-            case Proposition.Carried carried -> throw carried.handedToAReader();
-        };
     }
 
     private static boolean holdsARelation(Proposition stated) {

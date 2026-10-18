@@ -482,35 +482,46 @@ sealed interface ComparisonAssessment {
          *
          * <p>Every line it drew is said not to be drawn, and why: a reader composing rows against a
          * line with nothing that holds them where the line decides would be owed rows the statement
-         * answers alike on both sides. A line that was refused keeps its own reason, and a
-         * relation that was no line stays what it was beside them.
+         * answers alike on both sides. A line that was refused keeps its own reason.
+         *
+         * <p>Where every part was a line, the statement is a reading that stopped, at each place
+         * one of them is at. A relation that was no line is no stop: it stays what it was, and the
+         * statement stays its parts, each line said not drawn at its own places.
          */
         ComparisonAssessment withNoWayForItsParts() {
+            List<Part> each = new ArrayList<>();
             SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped> why =
                     new LinkedHashMap<>();
-            List<Part> noLines = new ArrayList<>();
+            boolean allStopped = true;
             for (Part part : parts) {
-                switch (part.line()) {
-                    case Unread unread -> unread.why().forEach(why::putIfAbsent);
-                    case AtAPosition _, AcrossPositions _, OutsideTheDomain _,
-                         NothingArrivesAtItsLine _, TurnsNothing _, NoFeasibleInput _ ->
-                            cuttingOf(part.line()).over().forEach(at ->
-                                    why.putIfAbsent(at, new BlockReason.SeveralLinesInOneRule()));
-                    case AgainstAnotherValue _, AnswerDependent _, OnADependencysAnswer _,
-                         StatesNoRelation _, NoInput _, CutsNothing _ -> noLines.add(part);
-                    case Several _ -> throw new IllegalStateException(
-                            "a line of a statement is what one line comes to: " + part);
+                Unread stopped = notDrawn(part.line());
+                if (stopped == null) {
+                    allStopped = false;
+                    each.add(part);
+                } else {
+                    stopped.why().forEach(why::putIfAbsent);
+                    each.add(new Part(part.id(), stopped, List.of()));
                 }
             }
-            if (noLines.isEmpty()) {
-                return new Unread(why);
-            }
-            List<Part> out = new ArrayList<>();
-            if (!why.isEmpty()) {
-                out.add(new Part(parts.getFirst().id(), new Unread(why), List.of()));
-            }
-            out.addAll(noLines);
-            return new Several(out);
+            return allStopped ? new Unread(why) : new Several(each);
+        }
+
+        /**
+         * {@code line} said not drawn, or kept its own reason where it was refused — or null where
+         * it is no line at all.
+         */
+        private static Unread notDrawn(ComparisonAssessment line) {
+            return switch (line) {
+                case Unread unread -> unread;
+                case AtAPosition _, AcrossPositions _, OutsideTheDomain _,
+                     NothingArrivesAtItsLine _, TurnsNothing _, NoFeasibleInput _ ->
+                        new Unread(atEachOf(cuttingOf(line).over(),
+                                new BlockReason.SeveralLinesInOneRule()));
+                case AgainstAnotherValue _, AnswerDependent _, OnADependencysAnswer _,
+                     StatesNoRelation _, NoInput _, CutsNothing _ -> null;
+                case Several _ -> throw new IllegalStateException(
+                        "a line of a statement is what one line comes to: " + line);
+            };
         }
     }
 

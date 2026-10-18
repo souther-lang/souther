@@ -339,7 +339,7 @@ class AnOptionConsumedByAHelperIsReadAsTheChoiceItIsTest {
                 "· not read: ensures f (found) — what it states was read, and it relates the value"
                         + " here to another value not shown to reach every value here, so which"
                         + " values here settle it on their own is not worked out, about `q`"),
-                saidAbout(report, "q"), report);
+                saidAbout(report, "q").stream().sorted().toList(), report);
     }
 
     private static String measurement(String report) {
