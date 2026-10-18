@@ -2592,6 +2592,14 @@ final class Terms {
     private Naming naming(Core raw, Denotations at, Map<BindingId, Term> bound, int depth,
                           Leaf leaf) {
         Core e = asOperator(raw);
+        // A text is one value however it is spelled, so a fact about it is filed under the text it
+        // comes to: `"J" ++ "P"` and a field holding "JP" are the literal. Only where an identity is
+        // asked for — the symbolic reading reads the shape that was written — and only of a text, so
+        // no arithmetic is made equal by the number it happens to answer.
+        if (leaf == Leaf.AN_EVALUATION && !(e instanceof Core.Str) && e.type().equals(Type.STRING)
+                && folded(raw, at) instanceof String text) {
+            return new Naming.Named(interned.written(text));
+        }
         BindingId root = rootBinding(e);
         if (root != null) {
             Term here = bound.get(root);
