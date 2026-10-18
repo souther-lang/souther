@@ -243,7 +243,13 @@ final class Combinators {
     static Map<ValueName.Stdlib.Operation, Combinator> read(Stdlib stdlib,
                                                             BoundOperationFacts facts) {
         return AppliedClosures.of(stdlib, kernelsIn(stdlib),
-                operation -> listing(stdlib, facts, operation), Combinators::positionsOf);
+                operation -> listing(stdlib, facts, operation), signaturesOf(stdlib));
+    }
+
+    /** Where the signatures of {@code stdlib} put each operation's closure and container, read
+     *  once — the library's own, so a body is held to what its own library declares. */
+    static Function<ValueName.Stdlib.Operation, ClosurePositions> signaturesOf(Stdlib stdlib) {
+        return positions(stdlib)::get;
     }
 
     /** What the kernels taking a closure are declared to apply it to, held to the library. */

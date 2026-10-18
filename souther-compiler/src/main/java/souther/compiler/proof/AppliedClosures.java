@@ -237,22 +237,30 @@ public final class AppliedClosures {
     /** What a value bound inside a body is, as far as these rules care. */
     private sealed interface Role {
 
-        record Element(Source from) implements Role {}
+        /** An element of {@code from}, handed to the step {@code step} of a walk over it — null
+         *  where no step was handed it, as the value an option holds is not. */
+        record Element(Source from, LibraryTerm.Closure step) implements Role {}
 
         record Key(Source from) implements Role {}
 
         record Entry(Source from) implements Role {}
 
         /**
-         * What a walk from {@code seed} over {@code from} carries, inside its step, with the
-         * components of it that count the elements walked before the one the step is handed
-         * ({@link #counting}) — none where the walk is over no argument.
+         * What a walk from {@code seed} over {@code from} carries, inside its step {@code step},
+         * with the components of it that count the elements walked before the one that step is
+         * handed ({@link #counting}) — none where the walk is over no argument.
          */
-        record Carried(LibraryTerm seed, Set<Integer> counting, Source from) implements Role {}
+        record Carried(LibraryTerm seed, Set<Integer> counting, Source from,
+                       LibraryTerm.Closure step) implements Role {}
 
-        /** How many elements of {@code from} the walk came to before the one its step is handed,
-         *  which is that element's position counted from nought. */
-        record Position(Source from) implements Role {}
+        /**
+         * Where the element the step {@code step} is handed stands in {@code from}, counted from
+         * nought.
+         *
+         * <p>Of that step's element and of no other: a walk nested in the step hands elements of
+         * its own, of the same list it may be, at the one position the outer element stands at.
+         */
+        record Position(Source from, LibraryTerm.Closure step) implements Role {}
     }
 
     /**
@@ -362,7 +370,7 @@ public final class AppliedClosures {
                         Source from = sourceOf(call.args().get(argument));
                         if (from != null) {
                             inside = scope.with(on.value(), new Role.Element(
-                                    new Source(from.argument(), false, false)));
+                                    new Source(from.argument(), false, false), null));
                         }
                     }
                     walk(on.present(), inside, false);
@@ -426,7 +434,7 @@ public final class AppliedClosures {
                     if (applies.elementParam() < inner.params().size()) {
                         BindingId element = inner.params().get(applies.elementParam());
                         if (from != null) {
-                            inside = inside.with(element, new Role.Element(from));
+                            inside = inside.with(element, new Role.Element(from, inner));
                         } else if (entries != null) {
                             inside = inside.with(element, new Role.Entry(entries));
                         }
@@ -436,13 +444,21 @@ public final class AppliedClosures {
                         inside = inside.with(inner.params().get(applies.keyParam()),
                                 new Role.Key(from));
                     }
+                    // An operation handing its closure the position hands it to this one, of the
+                    // argument where that is the container as it stands.
+                    if (applies.handsAPosition() && applies.positionParam() < inner.params().size()
+                            && from != null && from.inItsOrder()) {
+                        inside = inside.with(inner.params().get(applies.positionParam()),
+                                new Role.Position(from, inner));
+                    }
                     TheWalk walk = library.walk();
                     if (call.operation().equals(walk.operation())
                             && walk.accumulator() < inner.params().size()) {
                         BindingId carried = inner.params().get(walk.accumulator());
                         LibraryTerm seed = call.args().get(walk.seed());
                         inside = inside.with(carried, new Role.Carried(seed,
-                                from == null ? Set.of() : counting(inner, carried, seed), from));
+                                from == null ? Set.of() : counting(inner, carried, seed), from,
+                                inner));
                     }
                     stopping(inner, inside);
                     walk(inner.body(), inside, true);
@@ -462,7 +478,8 @@ public final class AppliedClosures {
                     || (op != BinOp.OR && op != BinOp.AND)
                     || !isTheClosure(applied.function())
                     || !(inside.roles().get(carried.binding())
-                            instanceof Role.Carried(LibraryTerm.Truth(boolean seed), var _, var _))
+                            instanceof Role.Carried(LibraryTerm.Truth(boolean seed), var _, var _,
+                                    var _))
                     || inside.enclosing() != HowAClosureIsApplied.TO_EVERY_ELEMENT) {
                 return;
             }
@@ -501,21 +518,24 @@ public final class AppliedClosures {
             int element = -1;
             int key = Combinator.NO_KEY;
             Source from = null;
+            LibraryTerm.Closure handedBy = null;
             List<Integer> positions = new ArrayList<>();
-            Source counted = null;
+            Role.Position counted = null;
             for (int at = 0; at < applied.args().size(); at++) {
                 Role role = roleOf(applied.args().get(at), scope);
-                if (role instanceof Role.Element(Source source) && element < 0) {
+                if (role instanceof Role.Element(Source source, LibraryTerm.Closure step)
+                        && element < 0) {
                     element = at;
                     from = source;
+                    handedBy = step;
                 } else if (role instanceof Role.Key(Source source) && key == Combinator.NO_KEY) {
                     key = at;
                     if (from == null) {
                         from = source;
                     }
-                } else if (role instanceof Role.Position(Source source)) {
+                } else if (role instanceof Role.Position position) {
                     positions.add(at);
-                    counted = source;
+                    counted = position;
                 }
             }
             if (element < 0 || from == null) {
@@ -526,11 +546,13 @@ public final class AppliedClosures {
             if (how == null) {
                 return null;
             }
-            // The position of the very element handed beside it, in the argument as it stands,
-            // and at one parameter: two would leave which one a reader asks a question of the
-            // closure's own.
-            int position = positions.size() == 1 && from.equals(counted) && from.inItsOrder()
-                    ? positions.getFirst() : Combinator.NO_POSITION;
+            // The position of the very element handed beside it — handed to the one step, in the
+            // argument as it stands — and at one parameter: two would leave which one a reader
+            // asks a question of the closure's own. The step is the step itself and not one
+            // spelled alike, so it is asked by identity.
+            int position = positions.size() == 1 && handedBy != null
+                    && counted.step() == handedBy && from.equals(counted.from())
+                    && from.inItsOrder() ? positions.getFirst() : Combinator.NO_POSITION;
             return new Combinator(closure, element, from.argument(), key, position, how,
                     Combinator.FROM_THE_FIRST);
         }
@@ -542,11 +564,13 @@ public final class AppliedClosures {
                 case LibraryTerm.Bound(BindingId binding) -> scope.roles().get(binding);
                 case LibraryTerm.Component(LibraryTerm.Bound(BindingId binding), int index)
                         when scope.roles().get(binding) instanceof Role.Entry(Source from) ->
-                        index == 0 ? new Role.Key(from) : index == 1 ? new Role.Element(from) : null;
+                        index == 0 ? new Role.Key(from)
+                                : index == 1 ? new Role.Element(from, null) : null;
                 case LibraryTerm.Component(LibraryTerm.Bound(BindingId binding), int index)
                         when scope.roles().get(binding)
-                                instanceof Role.Carried(var _, Set<Integer> counting, Source from)
-                        && counting.contains(index) -> new Role.Position(from);
+                                instanceof Role.Carried(var _, Set<Integer> counting, Source from,
+                                        LibraryTerm.Closure step)
+                        && counting.contains(index) -> new Role.Position(from, step);
                 default -> null;
             };
         }
@@ -637,10 +661,13 @@ public final class AppliedClosures {
                 bound.put(let.binding(), let.value());
                 yield answersOneMore(let.body(), at, carried, bound);
             }
-            case LibraryTerm.Fork fork -> answersOneMore(fork.then(), at, carried, bound)
-                    && answersOneMore(fork.otherwise(), at, carried, bound);
-            case LibraryTerm.OnAnOption on -> answersOneMore(on.present(), at, carried, bound)
-                    && answersOneMore(on.absent(), at, carried, bound);
+            // Each way through with the names bound on it and on no other.
+            case LibraryTerm.Fork fork ->
+                    answersOneMore(fork.then(), at, carried, new HashMap<>(bound))
+                            && answersOneMore(fork.otherwise(), at, carried, new HashMap<>(bound));
+            case LibraryTerm.OnAnOption on ->
+                    answersOneMore(on.present(), at, carried, new HashMap<>(bound))
+                            && answersOneMore(on.absent(), at, carried, new HashMap<>(bound));
             case LibraryTerm.Bound(BindingId binding) when bound.containsKey(binding) ->
                     answersOneMore(bound.get(binding), at, carried, bound);
             case LibraryTerm.TupleOf(List<LibraryTerm> parts) -> at < parts.size()

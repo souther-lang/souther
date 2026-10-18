@@ -59,7 +59,7 @@ public sealed interface RunSource {
                     ? new FlattenedOccurrences(at) : null;
             // What was shown of the order was shown of the elements where they stood, and nothing
             // says those moved to stand in it, so a run that needs the order does not move.
-            case ComputedOccurrences computed -> computed.computation().readsThePosition() ? null
+            case ComputedOccurrences computed -> computed.order() != null ? null
                     : computedOverTheElementsAt(at, computed.computation(), computed.each(), null);
             // The nodes below a node are the same fields of it wherever it stands, and moved
             // inside a container it is one tree of many.
@@ -229,8 +229,9 @@ public sealed interface RunSource {
             requireOneRun(elements);
             Objects.requireNonNull(computation, "a computed run is computed by something");
             Objects.requireNonNull(each, "and what it computes stands as some type");
-            if (computation.readsThePosition() != (order != null)) {
-                throw new IllegalArgumentException(computation.readsThePosition()
+            boolean byPosition = computation.readsThePosition();
+            if (byPosition != (order != null)) {
+                throw new IllegalArgumentException(byPosition
                         ? "{" + computation + "} turns on where each element stands, and nothing"
                                 + " showed the walk was handed `" + elements + "` in the order"
                                 + " written"

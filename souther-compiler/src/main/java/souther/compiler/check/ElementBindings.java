@@ -255,7 +255,10 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
         Map<BindingId, ElementProjection> projected =
                 projections(answered, found, held, provenance, newtypes, closures);
         standing.forEach((element, closure) -> {
-            closures.putIfAbsent(element, closure);
+            // One closure read two ways says the same of it, except that only the operation still
+            // standing says where the element stands; that answer is the one kept.
+            closures.merge(element, closure,
+                    (was, now) -> was.position() == null ? now : was);
             ElementProjection was =
                     ElementProjection.read(closure.body(), element, held, newtypes);
             if (was != null) {

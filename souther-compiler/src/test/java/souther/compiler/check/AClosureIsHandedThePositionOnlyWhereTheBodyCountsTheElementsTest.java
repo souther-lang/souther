@@ -33,16 +33,49 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class AClosureIsHandedThePositionOnlyWhereTheBodyCountsTheElementsTest {
 
-    private static final ValueName.Stdlib.Operation MAP_INDEXED =
-            ValueName.Stdlib.operation("List", "mapIndexed");
+    /**
+     * A helper written the way {@code mapIndexed} is, under {@code name}: a walk carrying a count
+     * from {@code seed}, whose step adds {@code applied} to what it has built and answers
+     * {@code next}.
+     */
+    private static String counting(String name, String applied, String next, String seed) {
+        return """
+                let %s (f: (Int, 'a) -> 'b, xs: List<'a>): List<'b> = {
+                    let (_, out) = List.fold(
+                        (acc, x) -> {
+                            let (i, ys) = acc
+                            let mapped = ys ++ %s
+                            %s
+                        },
+                        %s,
+                        xs
+                    )
+                    out
+                }
+                """.formatted(name, applied, next, seed);
+    }
 
-    /** The step and the seed of {@code mapIndexed} as the library writes them. */
-    private static final String SHIPPED = """
-                        let mapped = ys ++ [f(i, x)]
-                        (i + 1, mapped)
-                    },
-                    (0, []),
-            """;
+    /**
+     * What each operation hands its closure, of the library as shipped with every helper this
+     * asks about declared beside {@code mapIndexed}: one library read once, since reading one
+     * binds every fact the library states.
+     */
+    private static final Map<ValueName.Stdlib.Operation, Combinator> READ = read(String.join("\n",
+            counting("asWritten", "[f(i, x)]", "(i + 1, mapped)", "(0, [])"),
+            counting("fromTheOtherSide", "[f(i, x)]", "(1 + i, mapped)", "(0, [])"),
+            counting("fromOne", "[f(i, x)]", "(i + 1, mapped)", "(1, [])"),
+            counting("byTwo", "[f(i, x)]", "(i + 2, mapped)", "(0, [])"),
+            counting("theNextCount", "[f(i + 1, x)]", "(i + 1, mapped)", "(0, [])"),
+            counting("twoSites", "[f(i, x), f(0, x)]", "(i + 1, mapped)", "(0, [])"),
+            counting("crossed", "List.map(y -> f(i, y), xs)", "(i + 1, mapped)", "(0, [])"),
+            """
+            let handedOn (f: (Int, 'a) -> 'b, xs: List<'a>): List<'b> =
+                List.mapIndexed((i, x) -> f(i, x), xs)
+            """));
+
+    private static Combinator rule(String helper) {
+        return READ.get(ValueName.Stdlib.operation("List", helper));
+    }
 
     /** Control: the library as shipped hands its position to {@code mapIndexed}'s closure first,
      *  and hands no other closure one. */
@@ -57,30 +90,50 @@ class AClosureIsHandedThePositionOnlyWhereTheBodyCountsTheElementsTest {
         assertEquals(Set.of("List.mapIndexed@0/1"), handing);
     }
 
-    /** The count written the other way round is the same count. */
+    /** Control: a helper written as {@code mapIndexed} is hands the position, and written the
+     *  other way round the count is the same count. */
     @Test
-    void aCountWrittenFromTheOtherSideIsTheSameCount() {
-        assertEquals(0, positionHandedBy(SHIPPED.replace("(i + 1, mapped)", "(1 + i, mapped)")));
+    void aCountWrittenEitherWayRoundIsThePosition() {
+        assertEquals(0, rule("asWritten").positionParam());
+        assertEquals(0, rule("fromTheOtherSide").positionParam());
     }
 
-    /** A count from one, a count by two and the next count handed are no position. */
+    /** A count from one, a count by two and the next count handed are no position — though the
+     *  element is still the element. */
     @Test
     void aBodyThatDoesNotCountFromNoughtOneByOneHandsNone() {
-        assertEquals(Combinator.NO_POSITION,
-                positionHandedBy(SHIPPED.replace("(0, []),", "(1, []),")), "from one");
-        assertEquals(Combinator.NO_POSITION,
-                positionHandedBy(SHIPPED.replace("(i + 1, mapped)", "(i + 2, mapped)")), "by two");
-        assertEquals(Combinator.NO_POSITION,
-                positionHandedBy(SHIPPED.replace("[f(i, x)]", "[f(i + 1, x)]")),
-                "the next count");
+        for (String helper : List.of("fromOne", "byTwo", "theNextCount")) {
+            assertEquals(Combinator.NO_POSITION, rule(helper).positionParam(), helper);
+            assertEquals(1, rule(helper).elementParam(), helper);
+        }
     }
 
     /** A closure handed the count where it is applied once and a number where it is applied
      *  again is handed something other than the position on some application. */
     @Test
     void aClosureHandedTheCountAtOnePlaceAndNotAtAnotherIsHandedNone() {
-        assertEquals(Combinator.NO_POSITION,
-                positionHandedBy(SHIPPED.replace("[f(i, x)]", "[f(i, x), f(0, x)]")));
+        assertEquals(Combinator.NO_POSITION, rule("twoSites").positionParam());
+    }
+
+    /**
+     * A count of one walk's elements is the position of the element that walk's step is handed,
+     * and of no element another walk hands — even one walking the same list.
+     *
+     * <p>Here the closure is applied inside a walk nested in the step, beside that inner walk's
+     * element and the outer walk's count: it is handed every element of {@code xs} at each outer
+     * element, all at the same count.
+     */
+    @Test
+    void aCountOfOneWalkIsNoPositionOfTheElementsAnotherWalkHands() {
+        assertEquals(Combinator.NO_POSITION, rule("crossed").positionParam());
+    }
+
+    /** A closure handed on to an operation that hands its closure the position, inside a closure
+     *  of the operation's own, is handed the position where that closure hands it on. */
+    @Test
+    void aClosureHandedOnBesideThePositionIsHandedThePosition() {
+        assertEquals(0, rule("handedOn").positionParam());
+        assertEquals(1, rule("handedOn").elementParam());
     }
 
     /** Each operation said to hand the position hands where the element stands, from nought. */
@@ -113,27 +166,19 @@ class AClosureIsHandedThePositionOnlyWhereTheBodyCountsTheElementsTest {
         assertTrue(ran > 0, "the run is what is asked, so it has to have asked something");
     }
 
-    /**
-     * What the library's {@code mapIndexed}, with its step and seed written {@code as}, hands its
-     * position on.
-     *
-     * <p>Only where the body as shipped was found and rewritten: a rewrite that found nothing
-     * would ask the shipped body again, and a variant answering what the shipped one does would
-     * say nothing.
-     */
-    private static int positionHandedBy(String as) {
-        AtomicBoolean rewritten = new AtomicBoolean();
+    /** What each operation of the library hands its closure, with {@code helpers} declared after
+     *  the rest of the module {@code mapIndexed} is in. */
+    private static Map<ValueName.Stdlib.Operation, Combinator> read(String helpers) {
+        AtomicBoolean added = new AtomicBoolean();
         Stdlib stdlib = StdlibLoader.load(text -> {
-            if (!text.contains(SHIPPED)) {
+            if (!text.contains("let mapIndexed ")) {
                 return text;
             }
-            rewritten.set(true);
-            return text.replace(SHIPPED, as);
+            added.set(true);
+            return text + "\n" + helpers;
         });
-        assertTrue(rewritten.get(), "the library writes mapIndexed's step as this test does");
-        Map<ValueName.Stdlib.Operation, Combinator> rules =
-                Combinators.read(stdlib, OperationFactBinder.bindAll(stdlib));
-        return rules.get(MAP_INDEXED).positionParam();
+        assertTrue(added.get(), "the helpers are declared in the module mapIndexed is in");
+        return Combinators.read(stdlib, OperationFactBinder.bindAll(stdlib));
     }
 
     /**
