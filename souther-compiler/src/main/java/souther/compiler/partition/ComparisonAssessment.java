@@ -225,9 +225,6 @@ sealed interface ComparisonAssessment {
         for (NumericTerm term : NumericTerms.inOrder(terms)) {
             List<WhatARelationLeavesUndivided.Line> lines =
                     settled.get(term.atOnePosition()).lines();
-            if (lines == null) {
-                continue;
-            }
             List<AtAPosition> here = new ArrayList<>();
             for (WhatARelationLeavesUndivided.Line each : lines) {
                 Cutting drawn = Cutting.onOneTerm(beside.behavior(), term,

@@ -175,8 +175,8 @@ public final class WhatARelationLeavesUndivided {
              * The lines on the term that part its values where the relation is settled from where
              * it is not, or settled one way from settled the other: one where a run ends inside
              * what the term holds, and one value singled out where a run of one value has values
-             * left either way on both sides of it — or null where two of them would say the same
-             * of the term, which no two lines of one rule on one term may.
+             * left either way on both sides of it. Several runs are several lines, and two of them
+             * may stand to different values as the same relation.
              */
             public List<Line> lines() {
                 List<Line> out = new ArrayList<>();
@@ -203,13 +203,6 @@ public final class WhatARelationLeavesUndivided {
                         }
                     }
                     next = run.to() == null ? null : run.to().add(BigInteger.ONE);
-                }
-                for (int i = 0; i < out.size(); i++) {
-                    for (int j = i + 1; j < out.size(); j++) {
-                        if (out.get(i).relation() == out.get(j).relation()) {
-                            return null;
-                        }
-                    }
                 }
                 return List.copyOf(out);
             }
@@ -459,10 +452,14 @@ public final class WhatARelationLeavesUndivided {
      *
      * @param askDividend whether the answer is about the dividend, or the divisor
      * @param apart       whether the other is apart from the one asked and tied to it by nothing
+     * @param greatest    the greatest value the type of the dividend holds, or null where it holds
+     *                    no greatest: a divisor of any size has a multiple among the dividends
+     *                    only where they reach out from nought or from no further than half the
+     *                    way to it, as a weight does ({@link #leavesOfAProduct})
      */
     public static <P> Leaves leavesOfADivisibility(Term<P> dividend, Term<P> divisor,
                                                    boolean askDividend, Rel relation,
-                                                   boolean apart) {
+                                                   boolean apart, BigInteger greatest) {
         if (!apart || (relation != Rel.EQ && relation != Rel.NE)) {
             return null;
         }
@@ -500,7 +497,8 @@ public final class WhatARelationLeavesUndivided {
             }
             WholeRun seen = WholeRun.ofTheValues(dividend.realizes());
             if (seen == null || !twoInARow(seen)
-                    || !(containsNought(seen) || seen.low == null || seen.high == null)) {
+                    || !(containsNought(seen) || seen.low == null || seen.high == null)
+                    || !reachesAMultipleOfEverySize(seen, greatest)) {
                 return null;
             }
             for (BigInteger one : List.of(BigInteger.ONE.negate(), BigInteger.ONE)) {
@@ -536,6 +534,21 @@ public final class WhatARelationLeavesUndivided {
         return (seen.high == null && (seen.low == null || seen.low.compareTo(least) <= 0))
                 || (seen.low == null && (seen.high == null
                         || seen.high.compareTo(least.negate()) >= 0));
+    }
+
+    /**
+     * Whether a divisor of every size has a multiple among the dividends {@code seen}: where they
+     * hold nought it has, and where they run off one way from an end it has one as long as the end
+     * is no further than half the way to where the type stops — a divisor just under the end then
+     * has its second multiple past it. The very end of the type is read as the class's account
+     * reads one.
+     */
+    private static boolean reachesAMultipleOfEverySize(WholeRun seen, BigInteger greatest) {
+        if (greatest == null || containsNought(seen)) {
+            return true;
+        }
+        BigInteger end = seen.low != null ? seen.low : seen.high;
+        return end.abs().multiply(BigInteger.TWO).compareTo(greatest) <= 0;
     }
 
     private static boolean twoInARow(WholeRun run) {

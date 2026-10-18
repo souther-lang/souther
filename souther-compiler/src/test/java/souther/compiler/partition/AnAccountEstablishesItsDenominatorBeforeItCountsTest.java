@@ -48,15 +48,16 @@ class AnAccountEstablishesItsDenominatorBeforeItCountsTest {
     /**
      * Two pieces of evidence called one name are refused where they are handed over.
      *
-     * <p>One rule parting the position's values in two places is not something the reader above
-     * writes today. What this fixes is not that: it is that the account below would not have noticed
-     * if it were, and would have said so by reporting a complete reading.
+     * <p>A rule parting the position's values in two places is two pieces, each named by the seam
+     * it says ({@link #severalPartingsOfOneRuleAreSeveralPieces}); what is refused is two that
+     * say the same thing and are not one piece. The account below would not have noticed, and
+     * would have said so by reporting a complete reading.
      */
     @Test
     void twoPiecesOfEvidenceUnderOneNameAreRefusedWhereTheyAreHandedOver() {
-        RuleEvidence one = dividing("10");
-        RuleEvidence other = dividing("20");
-        assertEquals(one.id(), other.id(), "the same rule and the same number");
+        RuleEvidence one = dividing("10", Towards.BELOW);
+        RuleEvidence other = dividing("10", Towards.ABOVE);
+        assertEquals(one.id(), other.id(), "the same rule and the same seam");
 
         IllegalStateException refused = assertThrows(IllegalStateException.class,
                 () -> new EvidenceAccount(List.of(one, other), List.of()));
@@ -90,18 +91,37 @@ class AnAccountEstablishesItsDenominatorBeforeItCountsTest {
         EvidenceAccount account = new EvidenceAccount(List.of(dividing("10")), List.of());
 
         IllegalStateException refused = assertThrows(IllegalStateException.class,
-                () -> account.measured(dividing("20"), new AxisId("f", AT.toString())));
+                () -> account.measured(dividing("10", Towards.ABOVE),
+                        new AxisId("f", AT.toString())));
 
         assertTrue(refused.getMessage().contains("under the name of"), refused.getMessage());
     }
 
+    /**
+     * One rule that parts a position's values in several places — the values that settle a
+     * relation between two positions are several — is several pieces, and the account owes an
+     * answer at each.
+     */
+    @Test
+    void severalPartingsOfOneRuleAreSeveralPieces() {
+        RuleEvidence one = dividing("10");
+        RuleEvidence other = dividing("20");
+        assertTrue(!one.id().equals(other.id()), "the same rule, two seams");
+
+        new EvidenceAccount(List.of(one, other), List.of());
+    }
+
     private static RuleEvidence dividing(String at) {
+        return dividing(at, Towards.BELOW);
+    }
+
+    private static RuleEvidence dividing(String at, Towards belongs) {
         return new RuleEvidence.Divides(new Threshold(AT,
                 HeldSeams.of(LevelSpace.onACarrier(new Carrier.Whole()),
                         new Level.OnACarrier(new Carrier.Whole(),
                                 new Count(new java.math.BigDecimal(at))),
                         Towards.BELOW),
-                Towards.BELOW, origin()));
+                belongs, origin()));
     }
 
     /** The numbering this fixture's places are of. One of them, so that two origins built here

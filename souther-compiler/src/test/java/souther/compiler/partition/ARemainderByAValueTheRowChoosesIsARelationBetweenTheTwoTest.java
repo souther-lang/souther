@@ -41,7 +41,7 @@ class ARemainderByAValueTheRowChoosesIsARelationBetweenTheTwoTest {
         Map<String, List<String>> classes = classesOf(measured(compilation));
         assertEquals(List.of("eaches/= 0", "eaches//= 0"), classes.get("eaches"),
                 classes.toString());
-        assertTrue(!classes.containsKey("pack"), classes.toString());
+        assertTrue(classes.containsKey("pack"), classes.toString());
     }
 
     /** Written the other way round, the same quantity and the same class. */
@@ -50,6 +50,31 @@ class ARemainderByAValueTheRowChoosesIsARelationBetweenTheTwoTest {
         Map<String, List<String>> classes =
                 classesOf(measured(compiled("0 == Int.floorMod(eaches, pack)")));
         assertEquals(List.of("eaches/= 0", "eaches//= 0"), classes.get("eaches"),
+                classes.toString());
+    }
+
+    /**
+     * With the divisors every size from two up, the dividends nought and one either side are the
+     * values that settle it, and each is a class: the values several of one rule single out at one
+     * position are several pieces of evidence.
+     */
+    @Test
+    void severalValuesThatSettleItAreSeveralClassesOfTheDividend() {
+        Compilation compilation = compiled("""
+                data Pack = Int
+                    invariant value >= 2
+                """, "eaches: Int, pack: Pack", "Int.floorMod(eaches, pack.value) == 0");
+        assertEquals(List.of("eaches/x < -1", "eaches/-1 <= x <= -1", "eaches/-1 < x <= 0",
+                        "eaches/0 < x <= 1", "eaches/1 < x"),
+                classesOf(measured(compilation)).get("eaches"));
+    }
+
+    /** With both signs of divisor, the divisors one and minus one are two classes of the divisor. */
+    @Test
+    void theTwoDivisorsThatDivideEveryDividendAreTwoClassesOfTheDivisor() {
+        Map<String, List<String>> classes = classesOf(measured(compiled(
+                "Int.floorMod(eaches, pack) == 0")));
+        assertEquals(List.of("pack/= -1", "pack/= 1", "pack//= -1, 1"), classes.get("pack"),
                 classes.toString());
     }
 

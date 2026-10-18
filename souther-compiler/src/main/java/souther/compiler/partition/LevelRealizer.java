@@ -1133,6 +1133,11 @@ public final class LevelRealizer {
                     bounded = false;
                 }
                 for (BigInteger dividend : members.values()) {
+                    // A member past where the type stops is no number a row holds, which the run
+                    // as the rules read it does not say.
+                    if (!Carrier.WHOLE.extent().admits(Count.of(new BigDecimal(dividend)))) {
+                        continue;
+                    }
                     Map<RealizationTarget, Place> fixing = new LinkedHashMap<>();
                     fixing.put(RealizationTarget.of(over.dividend()),
                             Count.of(new BigDecimal(dividend)));
@@ -1162,6 +1167,27 @@ public final class LevelRealizer {
     }
 
     /**
+     * What {@code run} holds of the whole numbers a row's number can be, each end inclusive.
+     *
+     * <p>A run a relation reads is open where the type stops ({@code Carrier.asARelationReadsIt}),
+     * which is the right account of where a relation divides a position and the wrong one of which
+     * numbers a row can hold: a divisor past the greatest {@code Int} is a number, and no row has
+     * it. So the numbers a search chooses are asked of this and not of the run as it was read.
+     */
+    private static NumericDomain.Bounds withinTheType(NumericDomain.Bounds run) {
+        BigInteger low = Carrier.WHOLE.extent().low().wholeAdmitted(true);
+        BigInteger high = Carrier.WHOLE.extent().high().wholeAdmitted(false);
+        if (run.min() != null) {
+            low = low.max(run.min().wholeAdmitted(true));
+        }
+        if (run.max() != null) {
+            high = high.min(run.max().wholeAdmitted(false));
+        }
+        return new NumericDomain.Bounds(Endpoint.inclusive(Count.of(new BigDecimal(low))),
+                Endpoint.inclusive(Count.of(new BigDecimal(high))));
+    }
+
+    /**
      * The values a divisor can have to leave one remainder, nearest nought first, and whether they
      * are every such value the run holds.
      *
@@ -1188,8 +1214,9 @@ public final class LevelRealizer {
         }
 
         static DivisorsLeaving of(BigInteger remainder, NumericDomain.Bounds run) {
-            BigInteger low = run.min() == null ? null : run.min().wholeAdmitted(true);
-            BigInteger high = run.max() == null ? null : run.max().wholeAdmitted(false);
+            NumericDomain.Bounds held = withinTheType(run);
+            BigInteger low = held.min().wholeAdmitted(true);
+            BigInteger high = held.max().wholeAdmitted(false);
             // The nearest divisor of each sign that can leave it.
             BigInteger above = remainder.signum() >= 0 ? remainder.add(BigInteger.ONE) : null;
             BigInteger below = remainder.signum() <= 0 ? remainder.subtract(BigInteger.ONE) : null;

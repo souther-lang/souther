@@ -33,8 +33,7 @@ import souther.compiler.inputs.NumericTerm;
 public sealed interface RuleEvidence {
 
     /**
-     * The position whose values the rule says something about.
-     *
+     * The position whose values the rule says something about.     *
      * <p>One position and not several, because that is what a statement of this kind has a subject
      * at: what the rule states is true of the values standing at one place, and a rule relating two
      * places states nothing about either one's values on its own. Whether the position holds values
@@ -55,7 +54,7 @@ public sealed interface RuleEvidence {
      * of them would close the account over all three.
      */
     default FiledEvidenceId id() {
-        return new FiledEvidenceId(by(), at());
+        return new FiledEvidenceId(by(), at(), null);
     }
 
     /** Where a run of the position's values ends and the next begins. */
@@ -69,6 +68,11 @@ public sealed interface RuleEvidence {
         @Override
         public LineOrigin by() {
             return line.origin();
+        }
+
+        @Override
+        public FiledEvidenceId id() {
+            return new FiledEvidenceId(by(), at(), line.parts());
         }
     }
 
@@ -89,6 +93,13 @@ public sealed interface RuleEvidence {
         @Override
         public LineOrigin by() {
             return point.origin();
+        }
+
+        /** The value too: one rule singles out several values of one position when the values
+         *  that settle a relation between two positions are single ones. */
+        @Override
+        public FiledEvidenceId id() {
+            return new FiledEvidenceId(by(), at(), point.value());
         }
     }
 
@@ -113,9 +124,12 @@ public sealed interface RuleEvidence {
         }
     }
 
-    /** What one filed piece of evidence is called: the rule that said it and the position it was
-     *  filed at. Not a count of how many times anything reached it. */
-    record FiledEvidenceId(RuleEvidenceOrigin by, NumericTerm.FromOnePosition at) {}
+    /** What one filed piece of evidence is called: the rule that said it, the position it was
+     *  filed at, and what it said there — the seam of a line, the value of a single one — since one
+     *  rule says several things at one position when the values that settle a relation between
+     *  two positions are several. Not a count of how many times anything reached it. */
+    record FiledEvidenceId(RuleEvidenceOrigin by, NumericTerm.FromOnePosition at,
+                           Object saying) {}
 
     /**
      * The lines among {@code evidence}, for a reader that wants only those.

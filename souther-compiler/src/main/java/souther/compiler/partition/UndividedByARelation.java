@@ -538,7 +538,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     && independent.between(0, 1);
             for (int at = 0; at < 2; at++) {
                 putDown(at, WhatARelationLeavesUndivided.leavesOfADivisibility(terms.get(0),
-                        terms.get(1), at == 0, relation, apart), out, settled);
+                        terms.get(1), at == 0, relation, apart, greatestOf(carriers.get(0))), out,
+                        settled);
             }
             return new WhatItLeaves(out, settled);
         }

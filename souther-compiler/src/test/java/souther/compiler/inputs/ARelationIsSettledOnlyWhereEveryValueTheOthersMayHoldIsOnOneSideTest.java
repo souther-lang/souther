@@ -255,8 +255,8 @@ class ARelationIsSettledOnlyWhereEveryValueTheOthersMayHoldIsOnOneSideTest {
 
     /**
      * Two runs settling it opposite ways side by side are parted by one line, and a run of one
-     * value with values left either way on both sides is that value singled out. Two lines of one
-     * kind on one term are no answer.
+     * value with values left either way on both sides is that value singled out. Runs apart are
+     * lines apart, and two of one kind on one term stand at different values.
      */
     @Test
     void theLinesPartingTheRunsAreEachOfTheirOwnKind() {
@@ -266,7 +266,7 @@ class ARelationIsSettledOnlyWhereEveryValueTheOthersMayHoldIsOnOneSideTest {
         assertEquals(List.of(line(Rel.LE, -100), line(Rel.EQ, 0), line(Rel.GE, 100)),
                 settledIn(null, null, settled(null, -100L, true), settled(0L, 0L, false),
                         settled(100L, null, true)).lines());
-        assertNull(settledIn(null, null, settled(0L, 5L, false), settled(10L, 20L, true))
-                .lines());
+        assertEquals(List.of(line(Rel.GE, 0), line(Rel.LE, 5), line(Rel.GE, 10), line(Rel.LE, 20)),
+                settledIn(null, null, settled(0L, 5L, false), settled(10L, 20L, true)).lines());
     }
 }
