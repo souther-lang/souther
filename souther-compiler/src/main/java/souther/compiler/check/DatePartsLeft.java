@@ -7,6 +7,7 @@ import souther.compiler.semantics.TakenAs;
 import java.math.BigInteger;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
@@ -45,7 +46,7 @@ public record DatePartsLeft(Map<TakenAs.DatePart, NumericDomain.Bounds> byPart) 
             throw new IllegalArgumentException("a date nothing was said of the parts of leaves"
                     + " every date, which is no class of them");
         }
-        byPart = Map.copyOf(new EnumMap<>(byPart));
+        byPart = Collections.unmodifiableMap(new EnumMap<>(byPart));
     }
 
     /**

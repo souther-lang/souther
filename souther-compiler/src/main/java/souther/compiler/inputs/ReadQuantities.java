@@ -1791,16 +1791,16 @@ final class ReadQuantities implements Quantities {
                     it.why().at(), it.why().one(), it.why().other()));
         }
         StructuralContext under = ((StructuralContext.Merge.Together) merged).context();
-        // And a value fixed outside the class the declarations hold its position to. The class is
-        // read beside the arithmetic and not in it — a remainder and a part of a date are numbers
-        // of their own there, and nothing ties them back to the value — so the rules said together
-        // below would leave the fifteenth of a month to a value held to the first of each.
+        // And a value fixed outside the class its position is held to, which is a place a rule on
+        // the way holds it away from as a hole is. The class is read beside the arithmetic and not
+        // in it — a remainder and a part of a date are numbers of their own there, and nothing ties
+        // them back to the value — so the rules said together below would leave the fifteenth of a
+        // month to a value held to the first of each.
         for (Map.Entry<NumericTerm, Fixed> each : inOrder) {
             if (each.getKey() instanceof NumericTerm.ValueOf value && each.getValue().isOne()
                     && !ofItsClass(value, each.getValue().least())) {
-                return Optional.of(new EmptyInput.ProvedByTheDeclarations(new Emptiness.AtAField(
-                        new Emptiness.AtAField.Where.In(value.position().toString()),
-                        new Emptiness.NoAllowedValueInRange())));
+                return Optional.of(new EmptyInput.WhereARuleHoldsThePositionApart(value,
+                        each.getValue().least()));
             }
         }
         // And what the rules leave once they are all said together, which is the one thing that

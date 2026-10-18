@@ -2,14 +2,12 @@ package souther.compiler.check;
 
 import souther.compiler.semantics.ConditionJoin;
 import souther.compiler.semantics.TakenArguments;
-import souther.compiler.semantics.TakenAs;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.ChoiceToLift;
 import souther.compiler.numeric.CanonicalOrder;
 import souther.compiler.numeric.Endpoint;
-import souther.compiler.numeric.Congruences;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.Rel;
@@ -30,14 +28,12 @@ import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import java.math.BigInteger;
 import java.util.ArrayList;
-import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import souther.compiler.types.ValueName;
 
 import java.util.Optional;
-import java.util.OptionalInt;
 import java.util.SequencedMap;
 import java.util.List;
 import java.util.Map;
@@ -2268,7 +2264,7 @@ public final class FieldDomains {
         if (place == null) {
             return HeldClass.NONE;
         }
-        HeldClass held = classTakenOf(place).within(constraints.numbers().boundsOf(place));
+        HeldClass held = classTakenOf(path, place).within(constraints.numbers().boundsOf(place));
         // And the values the rules name there, where they name finitely many: a class none of them
         // is of leaves the place nothing, which no range of them shows — the numbers one and three
         // run over two, which is even, and neither of them is.
@@ -2284,55 +2280,27 @@ public final class FieldDomains {
         return held;
     }
 
-    /** The class the numbers taken of {@code place} hold it to: the remainders the rules hold at
-     *  one number each, and the parts of the date they leave. */
-    private HeldClass classTakenOf(FactSubject place) {
-        Congruences together = null;
-        Map<TakenAs.DatePart, NumericDomain.Bounds> parts = new EnumMap<>(TakenAs.DatePart.class);
+    /**
+     * The class the numbers taken of {@code place} hold it to, each read as the reading of derived
+     * numbers reads it ({@link DerivedNumber#readBack}) and turned into a class by the same number
+     * ({@link DerivedNumber#leaves}) — so a rule that reading takes in is one this holds a class
+     * for, and the account and the values cannot part.
+     *
+     * <p>Each number read off the envelope the rules leave it and not off the numbers the
+     * projection names: a number held inside a range by rules the projection lost is a number the
+     * range still holds, so reading the range keeps every value the rules leave — and under a
+     * conjunction it lies inside what any one rule left, so a remainder a rule left at one number is
+     * left at that number here, or at none.
+     */
+    private HeldClass classTakenOf(RuleKey path, FactSubject place) {
+        HeldClass held = HeldClass.NONE;
         for (FactSubject atom : takenOf(place)) {
-            Term call = atom.identity();
-            ValueName operation = call.calledOperation();
-            if (call.parts().size() == 1 && DefaultBoundOperationFacts.get().takenAs(operation)
-                    instanceof TakenAs.PartOfDate part) {
-                // The range the part is left, and not every number the projection names: a part
-                // held inside a range by rules the projection lost is a part the range still holds,
-                // so reading the range keeps every date the rules leave.
-                parts.merge(part.part(), constraints.numbers().boundsOf(atom),
-                        NumericDomain.Bounds::meet);
-                continue;
-            }
-            Congruences leaves = remainderHeldBy(atom, call, operation);
-            if (leaves != null) {
-                together = together == null ? leaves : together.meet(leaves);
-                if (together == null) {
-                    return HeldClass.NO_VALUE;
-                }
+            DerivedNumber number = DerivedNumber.readBack(atom.identity(), _ -> path);
+            if (number != null) {
+                held = held.and(number.leaves(constraints.numbers().boundsOf(atom)));
             }
         }
-        parts.values().removeIf(bounds -> bounds.min() == null && bounds.max() == null);
-        if (!parts.isEmpty()) {
-            DatePartsLeft left = new DatePartsLeft(parts);
-            return left.leaveADate() ? new HeldClass.OfDays(left) : HeldClass.NO_VALUE;
-        }
-        return together == null ? HeldClass.NONE : new HeldClass.OfResidues(together);
-    }
-
-    /** The class a remainder {@code atom} is of leaves the value it is taken of in, where the rules
-     *  hold it at one number and its divisor was written — or null. */
-    private Congruences remainderHeldBy(FactSubject atom, Term call, ValueName operation) {
-        OptionalInt divides = DefaultBoundOperationFacts.get().divisorOfAFloorRemainder(operation);
-        if (divides.isEmpty() || call.parts().size() <= divides.getAsInt()) {
-            return null;
-        }
-        Long written = call.parts().get(divides.getAsInt()).foldedWholeNumber();
-        if (written == null || written == 0
-                || !(constraints.numbers().projectionOf(atom)
-                        instanceof NumericDomain.Projection.Within(NumericDomain.Bounds bounds))) {
-            return null;
-        }
-        BigInteger residue = bounds.holdsOneWholeNumber();
-        return residue == null ? null
-                : new Congruences(residue, BigInteger.valueOf(written).abs());
+        return held;
     }
 
     /**

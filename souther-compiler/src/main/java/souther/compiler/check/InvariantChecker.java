@@ -33,9 +33,6 @@ import souther.compiler.types.ReachName;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
-import souther.compiler.numeric.ValueTransformation;
-import souther.compiler.semantics.TakenArguments;
-import java.math.BigDecimal;
 import souther.compiler.values.TextExtent;
 import souther.compiler.values.ValueSet;
 import java.util.ArrayList;
@@ -2199,39 +2196,12 @@ public final class InvariantChecker {
         atoms.forEach((path, atom) -> positionOf.putIfAbsent(atom.identity(), path));
         Map<FactSubject, DerivedNumber> readBack = new LinkedHashMap<>();
         for (FactSubject each : spoken) {
-            DerivedNumber number = readBackOutOf(each, positionOf);
+            DerivedNumber number = DerivedNumber.readBack(each.identity(), positionOf::get);
             if (number != null && !byName.containsKey(each)) {
                 readBack.put(each, number);
             }
         }
         return Coordinates.of(byName, readBack);
-    }
-
-    /**
-     * The number {@code spoken} is, where it is one an operation answers of a position and the
-     * values at the position are read back out of what it is left — or null where it is not.
-     */
-    private static DerivedNumber readBackOutOf(FactSubject spoken, Map<Term, RuleKey> positionOf) {
-        Term call = spoken.identity();
-        ValueName operation = call.calledOperation();
-        if (operation == null || call.parts().isEmpty()) {
-            return null;
-        }
-        RuleKey path = positionOf.get(call.parts().getFirst());
-        if (path == null) {
-            return null;
-        }
-        Map<Integer, BigDecimal> given = new LinkedHashMap<>();
-        for (int position = 1; position < call.parts().size(); position++) {
-            Long written = call.parts().get(position).foldedWholeNumber();
-            if (written == null) {
-                return null;
-            }
-            given.put(position, BigDecimal.valueOf(written));
-        }
-        DerivedNumber number = new DerivedNumber(path, operation, new TakenArguments(given),
-                ValueTransformation.NONE);
-        return number.holdsTheValuesOf() ? number : null;
     }
 
     /**
