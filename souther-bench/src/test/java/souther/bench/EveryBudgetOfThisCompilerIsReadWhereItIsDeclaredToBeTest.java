@@ -564,6 +564,14 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Ljava/util/List;",
                     "hands the figure the asking stopped at to the line, as one where it decides"
                             + " in those cases was not worked out"),
+            Map.entry("souther.compiler.partition.ComparisonAssessment#aRelationPartNarrowed("
+                            + "Lsouther/compiler/partition/ComparisonAssessment$Several$Part;"
+                            + "Lsouther/compiler/partition/ComparisonAssessment$AgainstAnotherValue;"
+                            + "Ljava/util/function/Function;"
+                            + "Ljava/util/List;Lsouther/compiler/inputs/InputReading;)"
+                            + "Ljava/util/List;",
+                    "hands the figure the asking stopped at to the relation, as one where it"
+                            + " decides in those cases was not worked out"),
             // What a path takes in of a condition: the parts of a disjunction taken alone, across
             // every disjunction inside another. Past the figure the disjunction is declined,
             // naming it.

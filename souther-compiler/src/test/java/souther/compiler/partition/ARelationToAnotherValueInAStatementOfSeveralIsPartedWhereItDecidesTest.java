@@ -7,12 +7,14 @@ import souther.compiler.check.ElementBindings;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.inputs.BlockReason;
+import souther.compiler.diag.SourceRendering;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
+import souther.compiler.report.AdequacyReport;
 
 import java.util.List;
 
@@ -62,7 +64,8 @@ class ARelationToAnotherValueInAStatementOfSeveralIsPartedWhereItDecidesTest {
     /**
      * The control: the value found is the greatest of numbers between nought and a hundred, which
      * this does not work out, so no value of {@code q} is shown to settle the relation, no line
-     * is read in any case, and the place keeps its reason.
+     * is read in any case, and the place keeps its reason. The cases where it decides are kept all
+     * the same: what settles a relation is asked again over the rows that arrive in each.
      */
     @Test
     void whereNothingIsShownToSettleItThePlaceKeepsItsReason() {
@@ -72,10 +75,46 @@ class ARelationToAnotherValueInAStatementOfSeveralIsPartedWhereItDecidesTest {
         ComparisonAssessment.Several.Part part = relationPart(several);
         assertTrue(assertInstanceOf(ComparisonAssessment.AgainstAnotherValue.class, part.line())
                 .settling().isEmpty(), several::toString);
-        assertEquals(List.of(), part.cases(), several::toString);
+        assertFalse(part.cases().isEmpty(), several::toString);
+        assertEquals(List.of(), part.readings(), several::toString);
         assertTrue(several.whatEachPlaceIsLeftWith().stream().anyMatch(
                         each -> each.why() instanceof BlockReason.RelationNotShownToReachEveryValue),
                 several::toString);
+    }
+
+    /**
+     * What a statement is narrowed to where rows arrive is what the report says of it: the line
+     * parting the discounts at nought is owed no IN point, and no place is said to be one the
+     * walk's value is not shown to reach.
+     */
+    @Test
+    void theLineIsDrawnInTheFinalPartition() {
+        Compilation compilation = Compilation.ofSource("""
+                module demo
+
+                data Item = { n: Int }
+                    invariant n >= 0 && n <= 100
+                data Order = { items: List<Item>, open: Bool }
+
+                data Within
+                data Needs
+
+                behavior approval : (o: Order) -> Within | Needs
+
+                let approval (o) =
+                    if List.fold((w, i) -> if i.n > (if o.open then w else 5) then i.n else w,
+                                 0, o.items) <= 50 then Within else Needs
+                """, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        assertEquals(List.of(), compilation.errors().stream()
+                .map(each -> each.diagnostic().code().toString()).toList());
+        String report = AdequacyReport.of(compilation)
+                .human(SourceRendering.namedByIdentity(compilation.texts()));
+        assertTrue(report.contains("no IN point is owed at o.items[*].n = 0 (comparison@"),
+                report);
+        assertFalse(report.contains("relates the value here to another value not shown to reach"),
+                report);
     }
 
     private static ComparisonAssessment.Several.Part relationPart(

@@ -522,12 +522,6 @@ sealed interface ComparisonAssessment {
                     throw new IllegalArgumentException("what is no line is read in no case: "
                             + line);
                 }
-                if (line instanceof AgainstAnotherValue against
-                        && against.settling().isEmpty() != cases.isEmpty()) {
-                    throw new IllegalArgumentException("a relation to another value is read in a"
-                            + " case where it parts what settles it, and in none where it does"
-                            + " not: " + line);
-                }
             }
 
             /**
@@ -541,11 +535,12 @@ sealed interface ComparisonAssessment {
 
             /**
              * Whether {@code line} is read in the cases where the statement turns on it: a line on
-             * the input space, or a relation to another value that parts what settles it by lines.
+             * the input space, or a relation to another value. What parts the values that settle
+             * the relation depends on the rows that arrive in a case, so the cases are kept
+             * whether or not a line is drawn over the declarations alone.
              */
             static boolean isReadInCases(ComparisonAssessment line) {
-                return isALine(line) || line instanceof AgainstAnotherValue against
-                        && !against.settling().isEmpty();
+                return isALine(line) || line instanceof AgainstAnotherValue;
             }
 
             /**
@@ -573,6 +568,10 @@ sealed interface ComparisonAssessment {
              * the line, and the line is out of reach only where it is out of reach in all of them.
              */
             public List<WhereAPartDecides> readings() {
+                // A relation that parts nothing has no line to read in a case.
+                if (line instanceof AgainstAnotherValue against && against.settling().isEmpty()) {
+                    return List.of();
+                }
                 return cases.stream().map(each -> new WhereAPartDecides(id, each.condition()))
                         .toList();
             }
@@ -1167,34 +1166,70 @@ sealed interface ComparisonAssessment {
      * case where it decides: each line parting the values that settle it, read in the cases it
      * turns the statement in.
      *
-     * <p>The relation itself, with no line, stays beside them where any line was not shown to
-     * turn the statement in some case, or was not worked out there: a place is left without its
-     * reason only where a line was drawn for it in the cases that line turns in.
+     * <p>Which values settle the relation is a question about the rows that arrive, so it is
+     * asked again in each case, over the rows that arrive there: a case that says the walk began
+     * high parts the values at a different place than the declarations alone do. A line is then
+     * read in a case only where rows stand on both sides of it, as a line is.
+     *
+     * <p>The relation itself, with no line, stays beside them where some case has no line that
+     * turns the statement in it, or none was worked out there: a place is left without its
+     * reason only where a line was drawn for it in the cases that line turns in. The figures the
+     * cases nobody worked out stopped at are said as they are for a line.
      */
     private static List<Several.Part> aRelationPartNarrowed(
             Several.Part part, AgainstAnotherValue against,
             Function<Proposition, Reachability> wayToACase, List<ComparisonArrival> arrivals,
             InputReading reading) {
-        List<Several.Part> out = new ArrayList<>();
-        boolean someLineLeftUndrawn = against.settling().isEmpty();
-        // The way to a case is the case's and not the line's, so it is worked out once for all
-        // the lines.
-        Map<Proposition, Reachability> ways = new HashMap<>();
-        Function<Proposition, Reachability> wayOnce =
-                condition -> ways.computeIfAbsent(condition, wayToACase);
-        for (AtAPosition line : against.settling()) {
-            CasesReached found = casesTurnedOn(line.cutting(), part.cases(), wayOnce,
-                    arrivals, reading);
-            if (found.reached().isEmpty() || !found.stoppedAt().isEmpty()) {
-                someLineLeftUndrawn = true;
+        // What a condition says of the way to it and of the lines it parts is the condition's
+        // and not the case's, and a case said for several is asked of each condition in turn.
+        Map<Proposition, List<AtAPosition>> turning = new HashMap<>();
+        Function<Proposition, List<AtAPosition>> linesTurningIn = condition ->
+                turning.computeIfAbsent(condition, _ -> {
+                    Reachability toIt = wayToACase.apply(condition);
+                    return against.whereRowsArrive(reading, waysArrivedBy(toIt, arrivals))
+                            .settling().stream()
+                            .filter(line -> crossedAtSomePlace(line.cutting(), toIt, arrivals,
+                                    line.cutting().keptTo(condition, reading)))
+                            .toList();
+                });
+        List<List<AtAPosition>> partedBy = new ArrayList<>();
+        List<List<DecidingCase>> casesOf = new ArrayList<>();
+        Set<CompositionBudget> stoppedAt = EnumSet.noneOf(CompositionBudget.class);
+        boolean someCaseLeftUndrawn = part.cases().isEmpty();
+        for (DecidingCase each : part.cases()) {
+            List<DecidingCase> turned;
+            if (each.saidAlone()) {
+                turned = linesTurningIn.apply(each.condition()).isEmpty() ? List.of() : List.of(each);
+            } else {
+                CasesOfALineAsked.Found found = CasesOfALineAsked.casesOf(each,
+                        condition -> !linesTurningIn.apply(condition).isEmpty());
+                turned = found.decidesIn();
+                stoppedAt.addAll(found.notWorkedOut());
             }
-            if (!found.reached().isEmpty()) {
-                out.add(new Several.Part(part.id(), against.partedBy(List.of(line)),
-                        DecidingCase.saidInAsFewAsMay(found.reached())));
+            someCaseLeftUndrawn |= turned.isEmpty();
+            for (DecidingCase one : turned) {
+                List<AtAPosition> lines = linesTurningIn.apply(one.condition());
+                int at = partedBy.indexOf(lines);
+                if (at < 0) {
+                    partedBy.add(lines);
+                    casesOf.add(new ArrayList<>());
+                    at = partedBy.size() - 1;
+                }
+                casesOf.get(at).add(one);
             }
         }
-        if (someLineLeftUndrawn) {
+        List<Several.Part> out = new ArrayList<>();
+        for (int i = 0; i < partedBy.size(); i++) {
+            out.add(new Several.Part(part.id(), against.partedBy(partedBy.get(i)),
+                    DecidingCase.saidInAsFewAsMay(casesOf.get(i))));
+        }
+        if (someCaseLeftUndrawn || !stoppedAt.isEmpty()) {
             out.add(new Several.Part(part.id(), against.partedBy(List.of()), List.of()));
+        }
+        if (!stoppedAt.isEmpty()) {
+            out.add(new Several.Part(part.id(), new Unread(atEachOf(against.filedAt(),
+                    new BlockReason.WhereALineDecidesNotWorkedOut(stoppedAt.stream()
+                            .map(CompositionBudget::figure).toList()))), List.of()));
         }
         return List.copyOf(out);
     }
