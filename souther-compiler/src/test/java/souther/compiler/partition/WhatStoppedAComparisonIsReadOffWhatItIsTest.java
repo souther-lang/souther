@@ -416,13 +416,16 @@ class WhatStoppedAComparisonIsReadOffWhatItIsTest {
 
     /**
      * Several relations each read to the end and not divided are several lines held together, and
-     * stay that. Each relation on the product is a line, and where each decides turns on the
-     * product, which no row is asked: nothing stopped, and no operation is named.
+     * stay that. Each relation on how many elements meet something less another number is a line,
+     * and where each decides turns on that difference, which no row is asked: nothing stopped, and
+     * no operation is named.
      */
     @Test
     void severalLinesReadToTheEndAreSeveralLinesHeldTogether() {
         assertEquals(List.of(UndividedPosition.Reason.SEVERAL_LINES_IN_ONE_RULE),
-                whyAt(guard("a: Int, b: Int", "let p = a * b", "Int.max(0, p) <= 3"), "a"));
+                whyAt(guard("a: Int, xs: List<Int>",
+                        "let m = List.length(List.filter(x -> x > 0, xs))",
+                        "Int.max(0, m - a) <= 3"), "a"));
     }
 
     /**

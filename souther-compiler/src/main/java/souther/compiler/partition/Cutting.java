@@ -1,6 +1,5 @@
 package souther.compiler.partition;
 
-import souther.compiler.check.Carrier;
 import souther.compiler.check.StatedComparison;
 import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.NonAffineOperation;
@@ -54,6 +53,7 @@ import java.util.Optional;
 import java.util.SequencedMap;
 import java.util.Set;
 import java.util.function.Supplier;
+import java.util.function.UnaryOperator;
 
 /**
  * What one comparison cuts, and where — the one place that decides it.
@@ -683,17 +683,15 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
 
     /**
      * The line a relation over what two whole numbers of the input come to multiplied draws — or
-     * null where the relation is no such thing: the product alone against a number, each factor on
-     * an order of whole numbers.
+     * null where the relation is no such thing: the product alone against a number.
      *
      * <p>A line on the product and on neither factor: where the product is the level turns on both,
      * so what a row is at is what its two numbers multiply to.
      */
     private static Read onAProduct(String behavior, Relation.Affine affine, boolean holds,
                                    InputReading read) {
-        if (affine.form().coefs().size() != 1
-                || !(affine.form().coefs().keySet().iterator().next()
-                        instanceof Quantity.ProductOfTwo product)) {
+        Quantity.ProductOfTwo product = AStatementAtARow.productIn(affine);
+        if (product == null) {
             return null;
         }
         ExactRatio weight = affine.form().coefs().get(product);
@@ -704,11 +702,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         Map<NumericTerm, TermOrders> on = new LinkedHashMap<>();
         Map<NumericTerm, ExactRatio> each = new LinkedHashMap<>();
         for (NumericTerm factor : product.factors()) {
-            TermOrders orders = read.quantities().ordersOf(factor);
-            if (orders == null || !(orders.answered() instanceof Carrier.Whole)) {
-                return null;
-            }
-            on.put(factor, orders);
+            on.put(factor, read.quantities().ordersOf(factor));
             each.put(factor, ExactRatio.ONE);
         }
         // Over the product's weight, which turns the relation round where it is below nought.
@@ -1725,6 +1719,19 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                     holds ? affine.proposition() : affine.proposition().denied(),
                     written, reads, read.rules()), read.quantities());
         }
+        return onANumberNoPositionHolds(behavior, affine, holds, read);
+    }
+
+    /**
+     * The line a relation draws on a number of the input no position holds — how many elements
+     * meet something, what a division leaves of a form, what two numbers come to multiplied — or
+     * null where it is over none of them.
+     *
+     * <p>Every way such a relation is a line, for {@link #lineOn} and for what a case of where a
+     * line decides leaves the line's own number ({@link #leftBy}).
+     */
+    private static Read onANumberNoPositionHolds(String behavior, Relation.Affine affine,
+                                                 boolean holds, InputReading read) {
         return firstDrawn(onACount(behavior, affine, holds, read),
                 () -> firstDrawn(onARemainder(behavior, affine, holds, read),
                         () -> onAProduct(behavior, affine, holds, read)));
@@ -1893,6 +1900,135 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             }
             return one && other;
         }
+    }
+
+    /**
+     * What a region's values ({@link #valuesIn}) come to for the rows in {@code where}, a case of
+     * where this line decides — the values themselves where the case says nothing more of this
+     * line's quantity than the region does. What {@link Sides} takes in, in that case.
+     *
+     * <p>The region is what the way and the case leave the input's own numbers, and it says
+     * nothing about a number no position holds. A case of where a line on such a number decides is
+     * mostly other relations over that same number: {@code Int.max(0, a * b) <= 3} turns on where
+     * the product is nought only where it is above three, and the region is the same on both sides
+     * of nought whatever the case says. So what the case leaves this line's own quantity
+     * ({@link #leftBy}) is asked beside the region, and a line no row crosses inside it turns
+     * nothing there.
+     *
+     * <p>The two are asked apart, each for values on both sides, and not for one row meeting both:
+     * a region holds nothing of the quantity's own values, so all it can say of them is a run. So
+     * this answers that a row on each side is not ruled out, which is what keeps a case, and never
+     * that one stands there — a product of ten and another number is three nowhere, though the
+     * run and the case both hold three. Whether a row stands at each point is the search's, which
+     * proves the points nothing can stand at, as it does for any line on the product.
+     *
+     * <p>Read off the case once, and asked of every region the case is put to: what the case
+     * leaves the quantity is the same whatever arrives.
+     */
+    UnaryOperator<Border.Values> keptTo(Proposition where, InputReading read) {
+        LevelRegion onIt = leftBy(where, read);
+        return onIt == null ? UnaryOperator.identity()
+                : values -> values == null ? null : keptTo(values, onIt);
+    }
+
+    private Border.Values keptTo(Border.Values values, LevelRegion onIt) {
+        return new Border.Values() {
+            @Override
+            public boolean extendTo(Level level) {
+                return values.extendTo(level) && onIt.parts().stream().anyMatch(part ->
+                        new LevelInterval(withItsEnd(part.low()), withItsEnd(part.high()))
+                                .contains(level));
+            }
+
+            @Override
+            public boolean holdAt(Level level) {
+                return values.holdAt(level) && onIt.contains(level);
+            }
+
+            @Override
+            public boolean holdOnSide(Level level, Towards side, boolean including) {
+                Bound end = Bound.at(level, including);
+                LevelRegion past = LevelRegion.of(side == Towards.ABOVE
+                        ? new LevelInterval(end, null) : new LevelInterval(null, end));
+                // A run the order could not say anything of is no proof that nothing is there.
+                return values.holdOnSide(level, side, including)
+                        && onIt.meet(past).parts().stream().anyMatch(run -> {
+                            Occupancy held = of.levels().inspect(run);
+                            return held instanceof Occupancy.NotWorkedOut || held.any();
+                        });
+            }
+        };
+    }
+
+    /** {@code end} keeping the value at its place, or no end. */
+    private static Bound withItsEnd(Bound end) {
+        return end == null ? null : new Bound(end.at(), true);
+    }
+
+    /**
+     * What {@code where} leaves this line's own quantity, where it is a number no position holds:
+     * every value each relation of it on that quantity leaves, read as a line on it would be — or
+     * null where none of it is about the quantity, or where the quantity is a form of the input's
+     * own numbers, which the region already holds every relation over.
+     *
+     * <p>Read the way the line itself was, by the reading that draws a line on such a number
+     * ({@link #onANumberNoPositionHolds}). A relation that comes to a line on this same quantity
+     * leaves it the values on the side it holds on; anything else in the case leaves it whatever it
+     * had.
+     */
+    private LevelRegion leftBy(Proposition where, InputReading read) {
+        if (of instanceof LinearQuantity) {
+            return null;
+        }
+        return switch (where) {
+            case Proposition.All all -> joined(all.parts(), read, true);
+            case Proposition.Any any -> joined(any.parts(), read, false);
+            case Proposition.Compared compared
+                    when compared.relation() instanceof Relation.Affine affine
+                    && onANumberNoPositionHolds(of.behavior(), affine, compared.holds(), read)
+                            instanceof Read.Cuts(Cutting on, AuthoredPointMapping _)
+                    && on.of().equals(of) -> on.holdsOn();
+            default -> null;
+        };
+    }
+
+    /**
+     * What {@code parts} leave this quantity together: what every one of them leaves where
+     * {@code every}, and what any one leaves where not — null where they leave it whatever it had.
+     */
+    private LevelRegion joined(List<Proposition> parts, InputReading read, boolean every) {
+        LevelRegion out = null;
+        for (Proposition part : parts) {
+            LevelRegion one = leftBy(part, read);
+            if (one == null) {
+                if (every) {
+                    continue;
+                }
+                return null;
+            }
+            if (out == null) {
+                out = one;
+            } else if (every) {
+                out = out.meet(one);
+            } else {
+                List<LevelInterval> either = new ArrayList<>(out.parts());
+                either.addAll(one.parts());
+                out = new LevelRegion(either);
+            }
+        }
+        return out;
+    }
+
+    /** The values of this quantity the comparison holds at. */
+    private LevelRegion holdsOn() {
+        return switch (claim.statedRelation()) {
+            case EQ -> LevelRegion.point(at);
+            case NE -> LevelRegion.EVERYTHING.without(at);
+            case GE -> LevelRegion.of(new LevelInterval(Bound.at(at, true), null));
+            case GT -> LevelRegion.of(new LevelInterval(Bound.at(at, false), null));
+            case LE -> LevelRegion.of(new LevelInterval(null, Bound.at(at, true)));
+            case LT -> LevelRegion.of(new LevelInterval(null, Bound.at(at, false)));
+        };
     }
 
     /**

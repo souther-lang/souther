@@ -41,6 +41,7 @@ import java.util.SequencedMap;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.function.Supplier;
+import java.util.function.UnaryOperator;
 
 /**
  * What one comparison comes to on the input space: one reading, and everything read off it.
@@ -809,7 +810,7 @@ sealed interface ComparisonAssessment {
         }
         if (cutting != null) {
             Arrived arrived = whatArrives(cutting, way, arrivals, true, drawnByAnInvariant,
-                    read instanceof AcrossPositions);
+                    read instanceof AcrossPositions, UnaryOperator.identity());
             if (arrived == Arrived.NOTHING_AT_THE_LINE) {
                 return new NothingArrivesAtItsLine(cutting);
             }
@@ -880,11 +881,14 @@ sealed interface ComparisonAssessment {
      *
      * @param reaching whether to ask if a row holds a value at the line; where not, the answer is
      *                 {@link Arrived#ACROSS_THE_LINE} or nothing
+     * @param crossing whether to ask if rows stand on both sides of it
+     * @param keptTo   what a region's values come to for the rows the crossing is asked of
+     *                 ({@link Cutting#keptTo})
      */
     private static Arrived whatArrives(Cutting cutting, Reachability way,
                                        List<ComparisonArrival> arrivals,
                                        boolean reaching, boolean drawnByAnInvariant,
-                                       boolean crossing) {
+                                       boolean crossing, UnaryOperator<Border.Values> keptTo) {
         if (!(way instanceof Reachability.Reaching taken)) {
             return Arrived.NOTHING_AT_THE_LINE;
         }
@@ -903,7 +907,7 @@ sealed interface ComparisonAssessment {
                             region;
                 });
                 reached = reached || cutting.reachedBy(values, drawnByAnInvariant);
-                crossed = crossed || (crossing && sides.add(values));
+                crossed = crossed || (crossing && sides.add(keptTo.apply(values)));
                 if (reached && (crossed || !crossing)) {
                     break;
                 }
@@ -917,12 +921,13 @@ sealed interface ComparisonAssessment {
     }
 
     /**
-     * Whether the rows arriving at some place the rule is watched at stand on both sides of the
-     * line ({@link #whatArrives}).
+     * Whether the rows arriving at some place the rule is watched at, in the case {@code keptTo}
+     * keeps a region's values to, stand on both sides of the line ({@link #whatArrives}).
      */
     private static boolean crossedAtSomePlace(Cutting cutting, Reachability way,
-                                              List<ComparisonArrival> arrivals) {
-        return whatArrives(cutting, way, arrivals, false, false, true)
+                                              List<ComparisonArrival> arrivals,
+                                              UnaryOperator<Border.Values> keptTo) {
+        return whatArrives(cutting, way, arrivals, false, false, true, keptTo)
                 == Arrived.ACROSS_THE_LINE;
     }
 
@@ -961,14 +966,16 @@ sealed interface ComparisonAssessment {
         for (DecidingCase each : part.cases()) {
             if (each.saidAlone()) {
                 Reachability toIt = wayToACase.apply(each.condition());
-                if (crossedAtSomePlace(cutting, toIt, arrivals)) {
+                if (crossedAtSomePlace(cutting, toIt, arrivals,
+                        cutting.keptTo(each.condition(), reading))) {
                     reached.add(each);
                     deciding.addAll(waysArrivedBy(toIt, arrivals));
                 }
                 continue;
             }
             CasesOfALineAsked.Found found = CasesOfALineAsked.casesOf(each, condition ->
-                    crossedAtSomePlace(cutting, wayToACase.apply(condition), arrivals));
+                    crossedAtSomePlace(cutting, wayToACase.apply(condition), arrivals,
+                            cutting.keptTo(condition, reading)));
             for (DecidingCase one : found.decidesIn()) {
                 reached.add(one);
                 deciding.addAll(waysArrivedBy(wayToACase.apply(one.condition()), arrivals));
