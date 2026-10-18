@@ -1110,11 +1110,8 @@ public final class LevelRealizer {
                 continue;
             }
             DivisorsLeaving divisors = DivisorsLeaving.of(remainder, runs.get(over.divisor()));
-            if (!divisors.everyOne()) {
-                stoppedBy.add(CompositionBudget.DIVISORS_OF_A_REMAINDER_TRIED);
-                bounded = false;
-            }
-            for (BigInteger divisor : divisors.each()) {
+            for (BigInteger divisor = divisors.next(); divisor != null;
+                    divisor = divisors.next()) {
                 Place divisorAt = Count.of(new BigDecimal(divisor));
                 NumericDomain.Bounds dividends = switch (within
                         .given(Map.<NumericTerm, Place>of(over.divisor(), divisorAt))
@@ -1151,6 +1148,10 @@ public final class LevelRealizer {
                     }
                 }
             }
+            if (divisors.leftSome()) {
+                stoppedBy.add(CompositionBudget.DIVISORS_OF_A_REMAINDER_TRIED);
+                bounded = false;
+            }
         }
         if (bounded && over.where() instanceof Criterion.AtTheLevel) {
             return new Realization.Impossible();
@@ -1167,12 +1168,24 @@ public final class LevelRealizer {
      * <p>A remainder is below its divisor in size and has its sign: nought is left by any divisor
      * but nought, a remainder above nought by a divisor above it, and one below nought by a divisor
      * below it. The divisors of the two signs are taken in turn by their size, the positive one
-     * first where two stand as far from nought.
-     *
-     * @param each     the divisors, in the order they are tried
-     * @param everyOne whether every divisor the run holds is among them
+     * first where two stand as far from nought. Handed out one at a time, so a search that finds
+     * its row at the first pays for the first.
      */
-    private record DivisorsLeaving(List<BigInteger> each, boolean everyOne) {
+    private static final class DivisorsLeaving {
+
+        private final BigInteger low;
+        private final BigInteger high;
+        private BigInteger positive;
+        private BigInteger negative;
+        private int handedOut;
+
+        private DivisorsLeaving(BigInteger low, BigInteger high, BigInteger positive,
+                                BigInteger negative) {
+            this.low = low;
+            this.high = high;
+            this.positive = positive;
+            this.negative = negative;
+        }
 
         static DivisorsLeaving of(BigInteger remainder, NumericDomain.Bounds run) {
             BigInteger low = run.min() == null ? null : run.min().wholeAdmitted(true);
@@ -1180,29 +1193,41 @@ public final class LevelRealizer {
             // The nearest divisor of each sign that can leave it.
             BigInteger above = remainder.signum() >= 0 ? remainder.add(BigInteger.ONE) : null;
             BigInteger below = remainder.signum() <= 0 ? remainder.subtract(BigInteger.ONE) : null;
-            BigInteger positive = above == null ? null
-                    : low != null && low.compareTo(above) > 0 ? low : above;
-            BigInteger negative = below == null ? null
-                    : high != null && high.compareTo(below) < 0 ? high : below;
-            List<BigInteger> out = new ArrayList<>();
-            int most = CompositionBudget.DIVISORS_OF_A_REMAINDER_TRIED.maximum();
-            while (out.size() < most) {
-                boolean hasPositive = positive != null && (high == null
-                        || positive.compareTo(high) <= 0);
-                boolean hasNegative = negative != null && (low == null
-                        || negative.compareTo(low) >= 0);
-                if (!hasPositive && !hasNegative) {
-                    return new DivisorsLeaving(out, true);
-                }
-                if (hasPositive && (!hasNegative || positive.compareTo(negative.negate()) <= 0)) {
-                    out.add(positive);
-                    positive = positive.add(BigInteger.ONE);
-                } else {
-                    out.add(negative);
-                    negative = negative.subtract(BigInteger.ONE);
-                }
+            return new DivisorsLeaving(low, high,
+                    above == null ? null : low != null && low.compareTo(above) > 0 ? low : above,
+                    below == null ? null
+                            : high != null && high.compareTo(below) < 0 ? high : below);
+        }
+
+        private boolean hasPositive() {
+            return positive != null && (high == null || positive.compareTo(high) <= 0);
+        }
+
+        private boolean hasNegative() {
+            return negative != null && (low == null || negative.compareTo(low) >= 0);
+        }
+
+        /** The next divisor to try, or null where none is left or the figure is spent. */
+        BigInteger next() {
+            if (handedOut == CompositionBudget.DIVISORS_OF_A_REMAINDER_TRIED.maximum()
+                    || !(hasPositive() || hasNegative())) {
+                return null;
             }
-            return new DivisorsLeaving(out, false);
+            handedOut++;
+            BigInteger out;
+            if (hasPositive() && (!hasNegative() || positive.compareTo(negative.negate()) <= 0)) {
+                out = positive;
+                positive = positive.add(BigInteger.ONE);
+            } else {
+                out = negative;
+                negative = negative.subtract(BigInteger.ONE);
+            }
+            return out;
+        }
+
+        /** Whether the figure was spent with divisors the run holds not handed out. */
+        boolean leftSome() {
+            return hasPositive() || hasNegative();
         }
     }
 
