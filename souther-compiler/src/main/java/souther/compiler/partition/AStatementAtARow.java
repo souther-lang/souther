@@ -343,11 +343,11 @@ final class AStatementAtARow {
      * @return null where the walk could not reach the container
      */
     HowManyAtARow howManyMeetIn(TermPath container, BorderQuantity.Observation row) {
-        return row.keptOf(new HowManyMeet(this, container));
+        return row.keptOf(new MeetingIn(this, container));
     }
 
     /** How many elements of a container meet one statement, by the statement and the container. */
-    private record HowManyMeet(AStatementAtARow statement, TermPath container)
+    private record MeetingIn(AStatementAtARow statement, TermPath container)
             implements BorderQuantity.ReadAlike<HowManyAtARow> {
 
         @Override

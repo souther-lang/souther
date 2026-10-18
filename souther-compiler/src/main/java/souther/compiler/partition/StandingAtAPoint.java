@@ -1190,7 +1190,8 @@ public final class StandingAtAPoint {
 
         /** Where each value stands in the order the row wrote them, by how deep it was reached and
          *  the elements it was taken from in the containers a walk named, by those containers. */
-        private final Map<List<Boolean>, Map<Reached, List<Integer>>> byElements = new HashMap<>();
+        private final Map<List<Boolean>, Map<ReachedAtDepth, List<Integer>>> byElements =
+                new HashMap<>();
 
         Written(RowWalk walk, WalkResult<List<BehaviorInputs.Occurrence>> found) {
             this.walk = walk;
@@ -1263,10 +1264,10 @@ public final class StandingAtAPoint {
 
         /** Where the values {@code choice} is under stand, at each depth some value is under it. */
         private List<List<Integer>> atEachDepth(Choice choice) {
-            Map<Reached, List<Integer>> index = indexed(choice.named());
+            Map<ReachedAtDepth, List<Integer>> index = indexed(choice.named());
             List<List<Integer>> out = new ArrayList<>(depths.size());
             for (int depth : depths) {
-                List<Integer> found = index.get(new Reached(depth, choice.within(depth)));
+                List<Integer> found = index.get(new ReachedAtDepth(depth, choice.within(depth)));
                 if (found != null) {
                     out.add(found);
                 }
@@ -1289,8 +1290,8 @@ public final class StandingAtAPoint {
 
         /** Where every value stands, by how deep it was reached and the elements it was taken
          *  from in the containers {@code named} marks; made the first time a walk names those. */
-        private Map<Reached, List<Integer>> indexed(List<Boolean> named) {
-            Map<Reached, List<Integer>> known = byElements.get(named);
+        private Map<ReachedAtDepth, List<Integer>> indexed(List<Boolean> named) {
+            Map<ReachedAtDepth, List<Integer>> known = byElements.get(named);
             if (known == null) {
                 known = new HashMap<>();
                 List<BehaviorInputs.Occurrence> values = values();
@@ -1303,7 +1304,7 @@ public final class StandingAtAPoint {
                             elements.add(taken.get(container).element());
                         }
                     }
-                    known.computeIfAbsent(new Reached(taken.size(), elements),
+                    known.computeIfAbsent(new ReachedAtDepth(taken.size(), elements),
                             _ -> new ArrayList<>()).add(at);
                 }
                 byElements.put(named, known);
@@ -1358,7 +1359,7 @@ public final class StandingAtAPoint {
          * A value as the index has it: how many of the containers it was reached through, and
          * the elements it was taken from in those a walk named.
          */
-        private record Reached(int depth, List<Integer> elements) {}
+        private record ReachedAtDepth(int depth, List<Integer> elements) {}
 
         /**
          * The containers the deepest value was reached through, each value's being the first so
