@@ -723,7 +723,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
             // with each application of the step carrying the seed into the first step, which is
             // what a condition on what the walk carried is read against
             // ({@link ClosureApplications#taking}).
-            case Core.PreservedCall call when SeededWalk.of(call, closure ->
+            case Core.PreservedCall call when SeededWalk.enteredHoweverFar(call, closure ->
                     Core.withoutStanding(reads.standing(closure, symbols, in.newtypes()).value())
                             instanceof Core.Block block ? block : null)
                     instanceof SeededWalk seeded -> ScopeStep.forEachChild(e, (child, step) -> {

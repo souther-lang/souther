@@ -515,10 +515,30 @@ public final class InputReads {
     public ClosureUses usesOf(Core.Block block) {
         for (Core.Binder param : block.params()) {
             if (param != null && param.binding() != null) {
-                return names.usesOf(param.binding());
+                return usesOfTheClosureTaking(param.binding());
             }
         }
         return null;
+    }
+
+    /**
+     * What the body gave {@code name}, read here, where that is all the name is — or null where it
+     * is a parameter, what an application handed, an element, or was given nothing.
+     *
+     * <p>Beside {@link #standing}, which stops at a name standing at a position of the input: that
+     * is where it stands, and it is also a name for what it was given. {@code let d = l.discount}
+     * stands at the element's discount, and {@code d} is {@code l.discount} — the same element's,
+     * which the position alone does not say.
+     */
+    public Denotation givenTo(Core.Read name) {
+        Core value = names.given(name.binding());
+        return value == null ? null : new Denotation(value, this);
+    }
+
+    /** Every use of the closure {@code param} is a parameter of, or null where no operation
+     *  applies it ({@link #usesOf}). */
+    public ClosureUses usesOfTheClosureTaking(BindingId param) {
+        return names.usesOf(param);
     }
 
     /**
