@@ -3,10 +3,13 @@ package souther.compiler.meaning;
 import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.Rel;
 import souther.compiler.partition.CompositionBudget;
 
 import java.util.ArrayList;
 import java.util.BitSet;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -70,14 +73,23 @@ public final class WhereEachLineDecides {
      * @param cases where it decides, as cases any one of which is enough: each a part, a conjunction
      *              of parts, or nothing asked at all. Empty where it decides nowhere. None of them
      *              names {@code line}
+     * @param scales the line held at every scale the statement wrote it at, {@code line} first:
+     *               what made each of them made the line ({@link OneSpellingPerLine})
      */
-    public record Decides(Proposition.Compared line, List<DecidingCase> cases) {
+    public record Decides(Proposition.Compared line, List<DecidingCase> cases,
+                          List<Proposition.Compared> scales) {
 
         public Decides {
             Objects.requireNonNull(line, "a line is some relation");
             cases = DecidingCase.eachByItsOwnCondition(cases);
+            scales = List.copyOf(scales);
             if (!line.holds()) {
                 throw new IllegalArgumentException("a line is the relation held: " + line);
+            }
+            if (scales.isEmpty() || !scales.getFirst().equals(line)
+                    || !scales.stream().allMatch(Proposition.Compared::holds)) {
+                throw new IllegalArgumentException("a line is written at its own scale first, and"
+                        + " held at each: " + line + " at " + scales);
             }
         }
     }
@@ -109,15 +121,17 @@ public final class WhereEachLineDecides {
     public static List<Decides> in(Proposition writtenAs) {
         Map<String, Proposition.Compared> lines = new TreeMap<>();
         Map<String, List<List<List<DecidingCase>>>> standings = new TreeMap<>();
-        Proposition lifted = new Lifting().of(writtenAs);
+        OneSpellingPerLine spellings = new OneSpellingPerLine();
+        Proposition stated = spellings.of(writtenAs);
+        Proposition lifted = new Lifting().of(stated);
         if (lifted != null) {
             read(lifted, lifted, null, List.of(), true, lines, standings);
         } else {
-            read(writtenAs, writtenAs, null, List.of(), false, lines, standings);
+            read(stated, stated, null, List.of(), false, lines, standings);
         }
         List<Decides> out = new ArrayList<>();
         lines.forEach((key, line) -> out.add(new Decides(line,
-                whereItStands(line, casesOf(standings.get(key))))));
+                whereItStands(line, casesOf(standings.get(key))), spellings.scalesOf(line))));
         return List.copyOf(out);
     }
 
@@ -345,6 +359,100 @@ public final class WhereEachLineDecides {
                 read(some.ofTheElement(), whole, some.container(), inside, lifted, lines,
                         standings);
             }
+        }
+    }
+
+    /**
+     * A statement with every relation it holds at more than one scale written at the first: {@code
+     * 2c >= 0} and {@code c >= 0} are one line. Read as two, crossing nought turns both at once, and
+     * neither of them turns the statement alone.
+     *
+     * <p>Here and not in how a relation is written down, because which scale a relation was written
+     * at is what a reader of a document is shown and what a row is found against; only that two of
+     * them are one line is this reading's. A statement holding each line at one scale is itself.
+     */
+    private static final class OneSpellingPerLine {
+
+        /** A relation and the atoms it is over, which every scale of one line shares. */
+        private record Alike(Rel proposition, Set<Quantity> atoms) {}
+
+        private final Map<Alike, List<Relation.Affine>> written = new HashMap<>();
+        /** Each relation written first, and every scale it was written at, itself first. */
+        private final Map<Relation.Affine, List<Relation.Affine>> scales = new HashMap<>();
+
+        /** {@code line} held at every scale the statement wrote it at, itself first. */
+        List<Proposition.Compared> scalesOf(Proposition.Compared line) {
+            if (!(line.relation() instanceof Relation.Affine affine)
+                    || !scales.containsKey(affine)) {
+                return List.of(line);
+            }
+            return scales.get(affine).stream()
+                    .map(each -> new Proposition.Compared(each, true)).toList();
+        }
+
+        Proposition of(Proposition stated) {
+            return switch (stated) {
+                case Proposition.All all -> {
+                    List<Proposition> parts = each(all.parts());
+                    yield parts == all.parts() ? stated : Proposition.all(parts);
+                }
+                case Proposition.Any any -> {
+                    List<Proposition> parts = each(any.parts());
+                    yield parts == any.parts() ? stated : Proposition.any(parts);
+                }
+                case Proposition.Some some -> {
+                    Proposition element = of(some.ofTheElement());
+                    yield element == some.ofTheElement() ? stated
+                            : new Proposition.Some(some.container(), element, some.holds());
+                }
+                case Proposition.WhereItAnswers where -> {
+                    Proposition answers = of(where.answers());
+                    Proposition states = of(where.states());
+                    yield answers == where.answers() && states == where.states() ? stated
+                            : Proposition.whereItAnswers(answers, states);
+                }
+                case Proposition.Compared(Relation.Affine affine, boolean holds, String _) -> {
+                    Relation.Affine first = firstWritten(affine);
+                    yield first == affine ? stated : new Proposition.Compared(first, holds);
+                }
+                case Proposition.SoManyHold counted -> throw notWrittenOut(counted);
+                case Proposition.Always _, Proposition.Compared _, Proposition.Truth _,
+                     Proposition.InCases _, Proposition.Present _, Proposition.SameValue _,
+                     Proposition.LastToHold _, Proposition.Carried _, Proposition.SomeReachable _,
+                     Proposition.Unread _, Proposition.OnAnApplication _ -> stated;
+            };
+        }
+
+        private List<Proposition> each(List<Proposition> parts) {
+            List<Proposition> out = new ArrayList<>();
+            boolean changed = false;
+            for (Proposition part : parts) {
+                Proposition said = of(part);
+                changed |= said != part;
+                out.add(said);
+            }
+            return changed ? out : parts;
+        }
+
+        /** The relation {@code affine} is at the scale it was first written, which is itself where
+         *  it is the first. Both face one way, so one is the other at a positive scale. */
+        private Relation.Affine firstWritten(Relation.Affine affine) {
+            List<Relation.Affine> alike = written.computeIfAbsent(
+                    new Alike(affine.proposition(), affine.form().coefs().keySet()),
+                    _ -> new ArrayList<>());
+            for (Relation.Affine each : alike) {
+                ExactRatio scale = affine.form().multipleOf(each.form());
+                if (scale != null && scale.signum() > 0) {
+                    List<Relation.Affine> atEach = scales.get(each);
+                    if (!atEach.contains(affine)) {
+                        atEach.add(affine);
+                    }
+                    return each;
+                }
+            }
+            alike.add(affine);
+            scales.put(affine, new ArrayList<>(List.of(affine)));
+            return affine;
         }
     }
 

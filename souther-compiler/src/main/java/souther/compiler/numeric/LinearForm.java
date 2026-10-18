@@ -188,6 +188,21 @@ public record LinearForm<A>(ExactRatio constant, Map<A, ExactRatio> coefs) {
         return new LinearForm<>(constant.negated(), m);
     }
 
+    /**
+     * The number {@code other} scaled by is this, or null where no number is — or where the exact
+     * arithmetic cannot hold the one that would be. A form of no atom is a multiple of nothing
+     * here: every constant is a multiple of every other but nought, and that says nothing of where
+     * either is nought.
+     */
+    public ExactRatio multipleOf(LinearForm<A> other) {
+        if (coefs.isEmpty() || !coefs.keySet().equals(other.coefs.keySet())) {
+            return null;
+        }
+        A some = coefs.keySet().iterator().next();
+        ExactRatio k = coefs.get(some).dividedBy(other.coefs.get(some)).orNull();
+        return k != null && equals(other.times(k).orNull()) ? k : null;
+    }
+
     /** The difference, or which way the exact arithmetic could not hold it — see {@link #plus},
      *  which a difference is the sum of the negation of. */
     public ExactAnswer<LinearForm<A>> minus(LinearForm<A> o) {

@@ -548,17 +548,15 @@ public sealed interface Derivation {
     }
 
     /** Whether {@code form rel 0} and {@code otherForm otherRel 0} are met on no sign the one
-     *  number they are both of may have, where they are of one number either way round. */
+     *  number they are both of may have, where they are of one number at any scale, either way
+     *  round. */
     private static boolean apart(LinearForm<Quantity> form, Rel rel, LinearForm<Quantity> otherForm,
                                  Rel otherRel) {
-        Rel against;
-        if (form.equals(otherForm)) {
-            against = otherRel;
-        } else if (form.negate().equals(otherForm)) {
-            against = otherRel.turned();
-        } else {
+        ExactRatio scale = otherForm.multipleOf(form);
+        if (scale == null) {
             return false;
         }
+        Rel against = scale.signum() > 0 ? otherRel : otherRel.turned();
         for (int sign = -1; sign <= 1; sign++) {
             if (rel.holds(sign) && against.holds(sign)) {
                 return false;

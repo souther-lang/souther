@@ -4,6 +4,7 @@ import souther.compiler.core.Core;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Rel;
+import souther.compiler.types.BinOp;
 import souther.compiler.types.ValueName;
 
 import java.math.BigInteger;
@@ -12,8 +13,8 @@ import java.util.Objects;
 import java.util.function.Function;
 
 /**
- * A comparison one side of which is a call of an operation carrying a fact, and the other a number
- * the same on every run.
+ * A comparison one side of which is a call of an operation carrying a fact, alone or moved and
+ * scaled by numbers the same on every run, and the other a number the same on every run.
  *
  * <p>Found here for every reader that turns such a comparison into one of what the call was given
  * ({@link TheSignOfAnOrder}, {@link WholeUnitsBetween}, {@link RoundedToAWholeNumber}): which side
@@ -32,9 +33,11 @@ import java.util.function.Function;
  * @param answered the call as a value, for what its answer is counted on
  * @param fact what the operation is declared to carry
  * @param at where the call was applied, which is where its arguments are read
- * @param against the number on the other side
+ * @param against the number on the other side, with what the call was moved and scaled by taken
+ *                over to it: twelve against {@code compare(a, b) + 10} is two against the call
  * @param written the relation the source wrote, read from the call's side: {@code call rel number}
- *                however the two were written round
+ *                however the two were written round, and turned where the call was scaled below
+ *                nought
  */
 record ACallAgainstANumber<E, F>(AnOperationApplied applied, Core answered, F fact, E at,
                                  ExactRatio against, Rel written) {
@@ -66,24 +69,107 @@ record ACallAgainstANumber<E, F>(AnOperationApplied applied, Core answered, F fa
                                                TheSignOfAnOrder.Sides<E> sides,
                                                Function<ValueName, F> factOf) {
         for (boolean callFirst : List.of(true, false)) {
-            ValueStanding.ReadThrough<E> call =
-                    under(callFirst ? comparison.left() : comparison.right(), at, sides);
-            Core answered = Core.withoutStanding(call.value());
-            AnOperationApplied applied = AnOperationApplied.of(answered);
-            F fact = applied == null ? null : factOf.apply(applied.operation());
-            if (fact == null) {
+            Weighed<E> side = weighed(callFirst ? comparison.left() : comparison.right(), at,
+                    sides, factOf);
+            if (side == null) {
                 continue;
             }
-            ExactRatio against =
+            ExactRatio other =
                     sides.constant(callFirst ? comparison.right() : comparison.left(), at);
+            ExactRatio moved = other == null ? null : other.minus(side.offset()).orNull();
+            ExactRatio against = moved == null ? null : moved.dividedBy(side.scale()).orNull();
             if (against == null) {
                 return null;
             }
-            Rel written = (callFirst ? comparison.claim() : comparison.claim().turned())
+            Rel stated = (callFirst ? comparison.claim() : comparison.claim().turned())
                     .statedRelation();
-            return new ACallAgainstANumber<>(applied, answered, fact, call.at(), against, written);
+            Rel written = side.scale().signum() > 0 ? stated : stated.turned();
+            Core answered = Core.withoutStanding(side.call().value());
+            AnOperationApplied applied = AnOperationApplied.of(answered);
+            return new ACallAgainstANumber<>(applied, answered, factOf.apply(applied.operation()),
+                    side.call().at(), against, written);
         }
         return null;
+    }
+
+    /**
+     * A side that is the call weighed by numbers the same on every run: {@code scale · call +
+     * offset}, with {@code scale} not nought.
+     */
+    private record Weighed<E>(ValueStanding.ReadThrough<E> call, ExactRatio scale,
+                              ExactRatio offset) {}
+
+    /**
+     * {@code side} as a call of an operation {@code factOf} answers for, negated, added to, taken
+     * from or multiplied by numbers the same on every run — or null where it is none. So {@code
+     * compare(a, b) + 10 >= 12} is the sign held at or above two, as the arithmetic reads it
+     * ({@link AffineForms}), and the comparison is of the call however the source moved its
+     * number. A quotient is left out: what it comes to of a whole number is the arithmetic's to
+     * say, and this does not say it a second time.
+     */
+    private static <E, F> Weighed<E> weighed(Core side, E at, TheSignOfAnOrder.Sides<E> sides,
+                                             Function<ValueName, F> factOf) {
+        ValueStanding.ReadThrough<E> stands = under(side, at, sides);
+        Core e = Core.withoutStanding(stands.value());
+        AnOperationApplied applied = AnOperationApplied.of(e);
+        if (applied != null && factOf.apply(applied.operation()) != null) {
+            return new Weighed<>(stands, ExactRatio.ONE, ExactRatio.ZERO);
+        }
+        return switch (e) {
+            case Core.Neg n -> {
+                Weighed<E> inner = weighed(n.operand(), stands.at(), sides, factOf);
+                yield inner == null ? null : new Weighed<>(inner.call(), inner.scale().negated(),
+                        inner.offset().negated());
+            }
+            case Core.Binary b when b.op() == BinOp.ADD || b.op() == BinOp.SUB -> {
+                boolean taken = b.op() == BinOp.SUB;
+                Beside<E> beside = beside(b, stands.at(), sides, factOf);
+                if (beside == null) {
+                    yield null;
+                }
+                Weighed<E> call = beside.call();
+                ExactRatio offset = beside.callLeft()
+                        ? (taken ? call.offset().minus(beside.number())
+                                : call.offset().plus(beside.number())).orNull()
+                        : (taken ? beside.number().minus(call.offset())
+                                : beside.number().plus(call.offset())).orNull();
+                yield offset == null ? null : new Weighed<>(call.call(),
+                        taken && !beside.callLeft() ? call.scale().negated() : call.scale(),
+                        offset);
+            }
+            case Core.Binary b when b.op() == BinOp.MUL -> {
+                Beside<E> beside = beside(b, stands.at(), sides, factOf);
+                if (beside == null || beside.number().isZero()) {
+                    yield null;
+                }
+                ExactRatio scale = beside.call().scale().times(beside.number()).orNull();
+                ExactRatio offset = beside.call().offset().times(beside.number()).orNull();
+                yield scale == null || offset == null ? null
+                        : new Weighed<>(beside.call().call(), scale, offset);
+            }
+            default -> null;
+        };
+    }
+
+    /** The call one operand of an operator is weighed by, beside the number the other is. */
+    private record Beside<E>(Weighed<E> call, ExactRatio number, boolean callLeft) {}
+
+    /**
+     * The operand of {@code b} that weighs the call, beside the other as a number the same on every
+     * run — or null where neither is. Only the operand beside a number is walked, so a value named
+     * on both sides of an operator, and again under each of those, is not walked once for each way
+     * down to it.
+     */
+    private static <E, F> Beside<E> beside(Core.Binary b, E at, TheSignOfAnOrder.Sides<E> sides,
+                                           Function<ValueName, F> factOf) {
+        ExactRatio right = sides.constant(b.right(), at);
+        if (right != null) {
+            Weighed<E> call = weighed(b.left(), at, sides, factOf);
+            return call == null ? null : new Beside<>(call, right, true);
+        }
+        ExactRatio left = sides.constant(b.left(), at);
+        Weighed<E> call = left == null ? null : weighed(b.right(), at, sides, factOf);
+        return call == null ? null : new Beside<>(call, left, false);
     }
 
     /** What {@code side} is under the names it was given and the newtypes it was built as. */

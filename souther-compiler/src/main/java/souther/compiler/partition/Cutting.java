@@ -807,7 +807,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         }
         AuthorsLines authors = lines.get().orElseThrow();
         Map<PartOfAComparison, AuthoredPointMapping> of =
-                authorsLines(authors, compared, comparison.claim());
+                authorsLines(authors, List.of(compared), comparison.claim());
         // A place of one of the author's lines is that line's one reading here, whichever line it
         // is; the line it is a place of is carried with it. A place of several is a line of each,
         // deciding where a row takes the arms that line is under.
@@ -824,21 +824,28 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
     }
 
     /**
-     * Which of the author's lines {@code relation} is a place of, and how it stands to each, as
+     * Which of the author's lines a relation is a place of, and how it stands to each, as
      * {@code lines} says: the comparison itself where nothing the derivation made it under was the
      * author's choice, and not shown to be its line where no step was seen making it at all.
      *
+     * @param scales  the relation at every scale the statement wrote it at, its own first: a step
+     *                that made it at any of them made it, and where two say how it stands to one
+     *                line, the first says
      * @param written what the comparison claims, as its author wrote it
      */
     private static Map<PartOfAComparison, AuthoredPointMapping> authorsLines(
-            AuthorsLines lines, Proposition.Compared relation, ComparisonClaim written) {
-        Map<WrittenLine, AuthoredPointMapping> under = lines.of(relation.heldKey());
+            AuthorsLines lines, List<Proposition.Compared> scales, ComparisonClaim written) {
         Map<PartOfAComparison, AuthoredPointMapping> out = new LinkedHashMap<>();
-        if (under == null || under.isEmpty()) {
+        for (Proposition.Compared relation : scales) {
+            Map<WrittenLine, AuthoredPointMapping> under = lines.of(relation.heldKey());
+            if (under != null) {
+                under.forEach((line, mapping) ->
+                        out.putIfAbsent(PartOfAComparison.of(line), mapping));
+            }
+        }
+        if (out.isEmpty()) {
             out.put(THE_COMPARISON,
                     new AuthoredPointMapping.Undetermined(WrittenLine.THE_COMPARISON, written));
-        } else {
-            under.forEach((line, mapping) -> out.put(PartOfAComparison.of(line), mapping));
         }
         return out;
     }
@@ -1447,7 +1454,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                 parts.add(new Read.Several.Part(alone, line, each.cases()));
                 continue;
             }
-            authorsLines(authors.get(), each.line(), WrittenLines.claimOf(each.line()))
+            authorsLines(authors.get(), each.scales(), WrittenLines.claimOf(each.line()))
                     .forEach((of, mapping) -> parts.add(
                     new Read.Several.Part(new PlaceOfALine(of, each.line().key()),
                             authored(line, mapping, each.line()),

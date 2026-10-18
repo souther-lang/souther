@@ -87,7 +87,21 @@ class WhereALibraryLawIsReadTheMeasureAndTheDischargeAgreeTest {
             // And of a number not written down, case by case and not only by where it lies: the
             // magnitude of a number at or above nought is that number.
             new Row("c - Int.abs(c)", 0, Set.of(), true),
-            new Row("c - Int.abs(c - 2)", 0, Set.of(), false));
+            new Row("c - Int.abs(c - 2)", 0, Set.of(), false),
+            // A case of the magnitude and the arithmetic over it state one relation at two scales,
+            // c >= 0 and 2c >= 0, which is one line; two relations whose numbers are not one
+            // multiple of the other are two.
+            new Row("c + 5 - Int.abs(c)", 0, Set.of("-1", "0"), true),
+            new Row("if c < 0 then c + c + 7 else 5", 0, Set.of("-2", "-1", "0"), true),
+            // A sign moved and scaled by numbers is still compared with a number, and the library's
+            // bounds on it settle the comparison either way. Where they leave it, it is a relation
+            // of two rationals, which the measure draws no line on.
+            new Row("if Rational.compare(Rational.fromInt(c), Rational.fromInt(0)) + 10 >= 12"
+                    + " then 0 - 1 else c", 0, Set.of("4", "5"), true),
+            new Row("if 10 - 2 * Rational.compare(Rational.fromInt(c), Rational.fromInt(0)) >= 7"
+                    + " then c else 0 - 1", 0, Set.of("4", "5"), true),
+            new Row("if 10 - 2 * Rational.compare(Rational.fromInt(c), Rational.fromInt(0)) >= 9"
+                    + " then c else 0 - 1", 0, Set.of(), false));
 
     private static String program(Row row) {
         return """
