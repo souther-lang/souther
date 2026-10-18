@@ -3,17 +3,20 @@ package souther.compiler.check;
 import souther.compiler.core.Core;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 import souther.compiler.types.ValueName;
 
 import java.math.BigInteger;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.function.Function;
+import java.util.function.Predicate;
 
 /**
- * A comparison one side of which is a call of an operation carrying a fact, and the other a number
- * the same on every run.
+ * A comparison one side of which is a call of an operation carrying a fact, alone or moved and
+ * scaled by numbers the same on every run, and the other a number the same on every run.
  *
  * <p>Found here for every reader that turns such a comparison into one of what the call was given
  * ({@link TheSignOfAnOrder}, {@link WholeUnitsBetween}, {@link RoundedToAWholeNumber}): which side
@@ -24,7 +27,9 @@ import java.util.function.Function;
  * newtype's construction is the value it wraps, so {@code Yen(Rational.toInt(DOWN, total / 3))}
  * held against {@code Yen(100)} is the rounding held against a hundred, as it is for the arithmetic
  * ({@link AffineForms}). Each reader finding the call for itself found it under what that reader
- * thought of, and the next one written would have found it under less.
+ * thought of, and the next one written would have found it under less. And the arithmetic it is
+ * moved and scaled by is read by the reader's own arithmetic ({@link AffineForms#overTheCalls}), so
+ * what a side comes to is said once, by the walk every reader of a number reads it with.
  *
  * @param <E> the environment the call is read in
  * @param <F> the fact the operation carries
@@ -32,9 +37,11 @@ import java.util.function.Function;
  * @param answered the call as a value, for what its answer is counted on
  * @param fact what the operation is declared to carry
  * @param at where the call was applied, which is where its arguments are read
- * @param against the number on the other side
+ * @param against the number on the other side, with what the call was moved and scaled by taken
+ *                over to it: twelve against {@code compare(a, b) + 10} is two against the call
  * @param written the relation the source wrote, read from the call's side: {@code call rel number}
- *                however the two were written round
+ *                however the two were written round, and turned where the call was scaled below
+ *                nought
  */
 record ACallAgainstANumber<E, F>(AnOperationApplied applied, Core answered, F fact, E at,
                                  ExactRatio against, Rel written) {
@@ -65,25 +72,57 @@ record ACallAgainstANumber<E, F>(AnOperationApplied applied, Core answered, F fa
     static <E, F> ACallAgainstANumber<E, F> of(StatedComparison comparison, E at,
                                                TheSignOfAnOrder.Sides<E> sides,
                                                Function<ValueName, F> factOf) {
+        Predicate<Core> isTheCall = e -> AnOperationApplied.of(e) instanceof AnOperationApplied
+                applied && factOf.apply(applied.operation()) != null;
         for (boolean callFirst : List.of(true, false)) {
-            ValueStanding.ReadThrough<E> call =
-                    under(callFirst ? comparison.left() : comparison.right(), at, sides);
-            Core answered = Core.withoutStanding(call.value());
-            AnOperationApplied applied = AnOperationApplied.of(answered);
-            F fact = applied == null ? null : factOf.apply(applied.operation());
-            if (fact == null) {
+            Core asWritten = callFirst ? comparison.left() : comparison.right();
+            // The call itself — an operation the arithmetic reads as a form of its arguments is
+            // still the call here — or the arithmetic over it, as the reader reads arithmetic.
+            ValueStanding.ReadThrough<E> stands = under(asWritten, at, sides);
+            Weighed<E> side = isTheCall.test(Core.withoutStanding(stands.value()))
+                    ? new Weighed<>(stands, ExactRatio.ONE, ExactRatio.ZERO)
+                    : weighed(sides.overTheCalls(asWritten, at, isTheCall));
+            if (side == null) {
                 continue;
             }
-            ExactRatio against =
+            ExactRatio other =
                     sides.constant(callFirst ? comparison.right() : comparison.left(), at);
+            ExactRatio moved = other == null ? null : other.minus(side.offset()).orNull();
+            ExactRatio against = moved == null ? null : moved.dividedBy(side.scale()).orNull();
             if (against == null) {
                 return null;
             }
-            Rel written = (callFirst ? comparison.claim() : comparison.claim().turned())
+            Rel stated = (callFirst ? comparison.claim() : comparison.claim().turned())
                     .statedRelation();
-            return new ACallAgainstANumber<>(applied, answered, fact, call.at(), against, written);
+            Rel written = side.scale().signum() > 0 ? stated : stated.turned();
+            Core answered = Core.withoutStanding(side.call().value());
+            AnOperationApplied applied = AnOperationApplied.of(answered);
+            return new ACallAgainstANumber<>(applied, answered, factOf.apply(applied.operation()),
+                    side.call().at(), against, written);
         }
         return null;
+    }
+
+    /**
+     * A side that is the call weighed by numbers the same on every run: {@code scale · call +
+     * offset}, with {@code scale} not nought.
+     */
+    private record Weighed<E>(ValueStanding.ReadThrough<E> call, ExactRatio scale,
+                              ExactRatio offset) {}
+
+    /**
+     * A side read as arithmetic over the calls, where it is one of them weighed by numbers the same
+     * on every run — or null where it is no call, or more than one. So {@code compare(a, b) + 10 >=
+     * 12} is the sign held at or above two.
+     */
+    private static <E> Weighed<E> weighed(LinearForm<AffineForms.ACall<E>> side) {
+        if (side == null || side.coefs().size() != 1) {
+            return null;
+        }
+        Map.Entry<AffineForms.ACall<E>, ExactRatio> only =
+                side.coefs().entrySet().iterator().next();
+        return new Weighed<>(new ValueStanding.ReadThrough<>(only.getKey().call(),
+                only.getKey().at()), only.getValue(), side.constant());
     }
 
     /** What {@code side} is under the names it was given and the newtypes it was built as. */

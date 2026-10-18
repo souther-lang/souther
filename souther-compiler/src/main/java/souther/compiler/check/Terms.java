@@ -29,6 +29,7 @@ import souther.compiler.types.ValueName;
 import java.math.BigDecimal;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -39,6 +40,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.Set;
+import java.util.function.Predicate;
 
 /**
  * What a value is to the invariant-discharge check: where it is, what it is called, and whether
@@ -166,6 +168,16 @@ final class Terms {
 
     /** How the walk that writes a container out reads names here ({@link ElementsReading}). */
     private final ElementsReading elements = new ElementsReading();
+
+    /**
+     * The expressions each size atom has had what it carries filed from, and the environments each
+     * was read in, both told apart by identity ({@link #sizeAtomFor}). A size is named wherever a
+     * clause reads it, and what it carries walks the elements written out and the laws of what
+     * built it; read from one expression in one environment it is the same answer every time.
+     * Read in another, it is read again and held to be the answer the first gave
+     * ({@link #carrying}), which is what says one atom is one value however it was reached.
+     */
+    private final Map<FactSubject, Map<Core, Set<Denotations>>> sizesFiledFrom = new HashMap<>();
 
     /**
      * What this reading knows about each atom it has named by knowing which value it is: how the
@@ -527,6 +539,13 @@ final class Terms {
      */
     LinearForm<FactSubject> affineOf(Core raw, Denotations at) {
         return AffineForms.of(raw, at, affineReading, affineAnswers);
+    }
+
+    /** {@code raw} as arithmetic over the calls {@code taken} names, read as {@link #affineOf}
+     *  reads arithmetic ({@link AffineForms#overTheCalls}). */
+    LinearForm<AffineForms.ACall<Denotations>> overTheCalls(Core raw, Denotations at,
+                                                            Predicate<Core> taken) {
+        return AffineForms.of(raw, at, AffineForms.overTheCalls(affineReading, taken));
     }
 
     /**
@@ -921,10 +940,22 @@ final class Terms {
         if (container == null) {
             return null;
         }
-        Given written = given(container, at);
-        OptionalLong counted = ElementsWrittenOut.sizeOf(
-                new ElementsWrittenOut.Stood<>(written.value(), written.at()), elements);
+        OptionalLong counted = writtenCount(container, at);
         return counted.isPresent() ? BigDecimal.valueOf(counted.getAsLong()) : null;
+    }
+
+    /** How many elements {@code container}, followed through the names it was given, was written
+     *  out with on every run ({@link ElementsWrittenOut#sizeOf}), or empty where it was not. What a
+     *  size of it read as a number is, and what the atom a size of it is named by carries. */
+    OptionalLong writtenCount(Core container, Denotations at) {
+        Given written = given(container, at);
+        return ElementsWrittenOut.sizeOf(
+                new ElementsWrittenOut.Stood<>(written.value(), written.at()), elements);
+    }
+
+    /** How a walk of the elements of a container ({@link ElementsWrittenOut}) reads names here. */
+    ElementsWrittenOut.Reading<Denotations> elementsReading() {
+        return elements;
     }
 
     /** An expression a value is written at, and the environment that expression is read in — which
@@ -1173,7 +1204,14 @@ final class Terms {
             // by whichever reader happened to get furthest. That is the same order the arithmetic is
             // in — a meaning with no recipe stops rather than falling through — and it is why the
             // question asked of a call is whether it is a walk rather than whether one was recorded.
-            made = chosen(Choice.of(asOperator(e)), at);
+            //
+            // A call whose operation the library defines in cases that are no choice between its
+            // values answers what the case reached computes, and is one of those answers in the
+            // same way.
+            Core operator = asOperator(e);
+            Choice choice = Choice.of(operator);
+            made = choice != null ? chosen(choice, at)
+                    : operator instanceof Core.PreservedCall call ? definedByCases(call, at) : null;
         }
         if (made == null) {
             return;
@@ -1690,6 +1728,51 @@ final class Terms {
     }
 
     /**
+     * The recipe {@code call} is where its operation is defined in cases, one arm for each: what
+     * the case answers, settled by how the values it was given stand there — or null where it is
+     * defined in none, or a case names a value this cannot read.
+     *
+     * <p>The cases are {@link Choice#casesOf}'s, the one reading of the library's definitions in the
+     * values a call was given, which the reading of an input reads them through as well. So
+     * {@code Int.abs(-48)} is the 48 its first case answers, its second case asking a value below
+     * nought to stand at or above it.
+     *
+     * <p>Every case or none, for the reason {@link #chosen} gives.
+     */
+    private Derivation definedByCases(Core.PreservedCall call, Denotations at) {
+        List<Choice.ADefinitionCase> cases = Choice.casesOf(call);
+        if (cases.isEmpty()) {
+            return null;
+        }
+        List<Derivation.Chosen.Arm> arms = new ArrayList<>();
+        for (Choice.ADefinitionCase each : cases) {
+            LinearForm<FactSubject> answer = formOver(each.answers(), at);
+            if (answer == null) {
+                return null;
+            }
+            List<NumericConstraint> settles = new ArrayList<>();
+            for (Choice.FormsStand stands : each.given()) {
+                LinearForm<FactSubject> left = formOver(stands.left(), at);
+                LinearForm<FactSubject> right = formOver(stands.right(), at);
+                LinearForm<FactSubject> apart = left == null || right == null ? null
+                        : left.minus(right).orNull();
+                if (apart == null) {
+                    return null;
+                }
+                settles.add(new NumericConstraint(apart, stands.rel()));
+            }
+            arms.add(new Derivation.Chosen.Arm(answer, settles));
+        }
+        return new Derivation.Chosen(arms);
+    }
+
+    /** {@code form}, each value it is written over read as the form it is in {@code at} — or null
+     *  where one of them reads as none, or the sum has no representation. */
+    private LinearForm<FactSubject> formOver(LinearForm<Core> form, Denotations at) {
+        return form.over(value -> affineOf(value, at));
+    }
+
+    /**
      * Everything choosing {@code decidedBy} settles, as relations.
      *
      * <p>Two sources and one question. What a condition states is read where the condition is
@@ -1968,10 +2051,16 @@ final class Terms {
             // that built it — and in the environment that expression's own names mean something in,
             // which is not the one the name was read in where a binding stands between them.
             Given built = sizedBy(container, at);
+            if (!sizesFiledFrom.computeIfAbsent(atom, _ -> new IdentityHashMap<>())
+                    .computeIfAbsent(built.value(),
+                            _ -> Collections.newSetFromMap(new IdentityHashMap<>()))
+                    .add(built.at())) {
+                return atom;
+            }
             carrying(atom, IntrinsicNumericFacts.ofSize(size, built.value(), atom, built.at(),
                     this));
-            Derivation held = IntrinsicNumericFacts.heldWhereItsLawSays(built.value(), built.at(),
-                    this);
+            Derivation held = IntrinsicNumericFacts.heldWhereItsLawsSay(built.value(),
+                    built.at(), this);
             if (held != null) {
                 computedBy(atom, new AtomKnowledge.Computation.Derived(held));
             }

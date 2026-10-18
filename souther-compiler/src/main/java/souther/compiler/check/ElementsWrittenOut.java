@@ -205,7 +205,7 @@ public final class ElementsWrittenOut {
      * <p>Which arm of a choice a run takes is not folded here, so an occurrence kept by one turns
      * on the run.
      */
-    private static <E> Boolean onEveryRun(Occurrence<E> one, Reading<E> reading) {
+    static <E> Boolean onEveryRun(Occurrence<E> one, Reading<E> reading) {
         boolean decided = true;
         for (Kept<E> kept : one.keptWhere()) {
             switch (kept) {
