@@ -53,6 +53,8 @@ class OnlyABoundaryOrAProcessConstantReadsTheDefaultLibraryTest {
             "check/LibraryReadThrough.java",
             "check/Preserved.java",
             "check/Reductions.java",
+            // Which library operations a kernel implements, for what each ends a run for.
+            "check/WhatARunMayEndFor.java",
             // The facts about the language's operations, held to the shipped library once.
             "check/DefaultBoundOperationFacts.java");
 
@@ -60,7 +62,8 @@ class OnlyABoundaryOrAProcessConstantReadsTheDefaultLibraryTest {
     private static final List<String> WHAT_THE_LOADER_MAY_NOT_READ = List.of(
             "DefaultStdlib", "Combinators", "LibraryReadThrough", "Preserved", "Accumulations",
             "Reductions", "KeyedAccumulation", "AnIndexedMap",
-            "DischargeRules", "DefaultBoundOperationFacts", "OperationFactBinder");
+            "DischargeRules", "DefaultBoundOperationFacts", "OperationFactBinder",
+            "WhatARunMayEndFor");
 
     @Test
     void theseAreTheOnlyReadersOfTheProcessLibrary() throws IOException {

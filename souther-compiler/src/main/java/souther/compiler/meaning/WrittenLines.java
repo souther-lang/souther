@@ -383,6 +383,7 @@ public final class WrittenLines {
             case Derivation.AComparisonAt(var _, var read) -> List.of(read);
             case Derivation.Restated(var read) -> List.of(read);
             case Derivation.WhereItAnswers(var answers, var read) -> List.of(answers, read);
+            case Derivation.WhereItIsAnswered(var of) -> List.of(of);
             case Derivation.IfThenElse(var condition, var then, var otherwise) ->
                     List.of(condition, then, otherwise);
             case Derivation.MatchArms(var arms) -> ofTheArms(arms);
@@ -403,9 +404,9 @@ public final class WrittenLines {
             case Derivation.ALawQuantifies(var _, var meeting) -> List.of(meeting);
             case Derivation.AnOrderOfItsArguments(var _, var _, var arguments) ->
                     List.of(arguments);
-            case Derivation.OverElementsWrittenOut(var each, var _) -> each;
+            case Derivation.OverElementsWrittenOut(var each, var _, var _) -> each;
             case Derivation.OnEachApplication(var each) -> each;
-            case Derivation.SomeElementMeeting(var _, var element, var _, var holds) ->
+            case Derivation.SomeElementMeeting(var _, var element, var _, var holds, var _) ->
                     holds.map(something -> List.of(element, something))
                             .orElseGet(() -> List.of(element));
             case Derivation.AcrossAWalk(var seed, var walked, var keeps, var _) ->

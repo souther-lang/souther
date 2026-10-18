@@ -304,6 +304,9 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                     "writes the number times the divisor as the source would, through the rule"
                             + " for the operator, so that the comparison is read where any"
                             + " comparison of a product is"),
+            new Held("souther.compiler.check.OrderOfElements.walk",
+                    "asks whether two values compared for sameness hold something whose"
+                            + " sameness turns on the order a list holds its elements in"),
             new Held("souther.compiler.check.QuotientByAValue.timesTheDivisor",
                     "names the two operators the number times the divisor is written with"),
             new Held("souther.compiler.check.QuotientByAValue.ofAQuotient",

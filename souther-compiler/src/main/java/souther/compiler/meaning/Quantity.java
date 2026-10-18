@@ -478,6 +478,10 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
                 throw new IllegalArgumentException("a settled statement is a number, and not one"
                         + " of these: " + each);
             }
+            if (each.stream().anyMatch(Proposition::mayAnswerNothing)) {
+                throw new IllegalArgumentException("a count is of statements answering on every"
+                        + " row: " + each);
+            }
         }
 
         @Override
@@ -520,6 +524,10 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
             if (!ofTheElement.mayTurnOnAnElementOf(container)) {
                 throw new IllegalArgumentException("a count of " + ofTheElement
                         + " is the same for every element of " + container);
+            }
+            if (Proposition.mayAnswerNothing(ofTheElement)) {
+                throw new IllegalArgumentException("a count is of a statement answering on every"
+                        + " element: " + ofTheElement);
             }
             if (Proposition.leavesSomethingUnread(ofTheElement)) {
                 throw new IllegalArgumentException("a count is of a statement read through, and "
