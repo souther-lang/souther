@@ -27,9 +27,16 @@ import java.util.Map;
  */
 public final class WalksFromASeed {
 
-    /** Where a walk's seed and what it carries are: the argument holding the seed, and the
-     *  closure's parameter the value carried so far arrives on. */
-    public record Walk(int seedArg, int accumulatorParam) {}
+    /**
+     * Where a walk's seed and what it carries are: the argument holding the seed, and the
+     * closure's parameter the value carried so far arrives on.
+     *
+     * @param inTheContainersOrder whether the step is handed the elements in the order the
+     *        container holds them, first to last: the library's walk is, and an operation is where
+     *        it hands the walk the very container it was given. One that hands it the container
+     *        reversed or rebuilt, or whose container holds its elements in no order, is not.
+     */
+    public record Walk(int seedArg, int accumulatorParam, boolean inTheContainersOrder) {}
 
     private WalksFromASeed() {}
 
@@ -42,13 +49,13 @@ public final class WalksFromASeed {
             Stdlib library, Map<ValueName.Stdlib.Operation, Combinator> applied) {
         TheWalk walk = library.walk();
         Map<ValueName.Stdlib.Operation, Walk> walks = new LinkedHashMap<>();
-        walks.put(walk.operation(), new Walk(walk.seed(), walk.accumulator()));
+        walks.put(walk.operation(), new Walk(walk.seed(), walk.accumulator(), true));
         library.helpers().forEach((operation, declaration) -> {
             if (walks.containsKey(operation) || applied.get(operation) == null) {
                 return;
             }
             Walk read = readOff(LibraryTerms.of(library, declaration), walks, applied,
-                    applied.get(operation).closureArg());
+                    applied.get(operation));
             if (read != null) {
                 walks.put(operation, read);
             }
@@ -64,9 +71,11 @@ public final class WalksFromASeed {
     }
 
     /** The walk {@code body} is, where it answers a call of one that takes its seed from the
-     *  operation's own arguments and its step from the closure at {@code closure}. */
+     *  operation's own arguments and its step from the closure {@code own} applies. */
     private static Walk readOff(LibraryTerm body, Map<ValueName.Stdlib.Operation, Walk> walks,
-                                Map<ValueName.Stdlib.Operation, Combinator> applied, int closure) {
+                                Map<ValueName.Stdlib.Operation, Combinator> applied,
+                                Combinator own) {
+        int closure = own.closureArg();
         if (!(body instanceof LibraryTerm.Call call)) {
             return null;
         }
@@ -78,9 +87,16 @@ public final class WalksFromASeed {
                 || !fromTheFirst(steps, call)) {
             return null;
         }
+        // The elements arrive in the order the container holds them where the walk is handed the
+        // container this operation was given, as it is, and walks it in that order.
+        boolean inOrder = walk.inTheContainersOrder()
+                && steps.containerArg() < call.args().size()
+                && call.args().get(steps.containerArg()) instanceof LibraryTerm.Parameter(
+                        int container)
+                && container == own.containerArg();
         LibraryTerm step = call.args().get(steps.closureArg());
         if (step instanceof LibraryTerm.Parameter(int position) && position == closure) {
-            return new Walk(seed, walk.accumulatorParam());
+            return new Walk(seed, walk.accumulatorParam(), inOrder);
         }
         if (!(step instanceof LibraryTerm.Closure written)
                 || walk.accumulatorParam() >= written.params().size()) {
@@ -105,7 +121,7 @@ public final class WalksFromASeed {
                 at = i;
             }
         }
-        return at < 0 ? null : new Walk(seed, at);
+        return at < 0 ? null : new Walk(seed, at, inOrder);
     }
 
     private static boolean fromTheFirst(Combinator steps, LibraryTerm.Call call) {
