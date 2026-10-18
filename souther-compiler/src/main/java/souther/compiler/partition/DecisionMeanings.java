@@ -312,7 +312,11 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects) {
     private Read asTheArm(Core.Match match, int part, InputReads reads,
                           ReachingCuts.Stating entered) {
         List<OnTheWay> onTheWay = entered.entries();
-        if (onTheWay.size() == 1 && onTheWay.getFirst() instanceof OnTheWay.Narrowed narrowed) {
+        // A narrowing of a fork on a position is an answer to the question that fork asks. One of a
+        // fork on a value the body computed is what the arm comes to for the input, which is no
+        // answer to the question about the computed value.
+        if (onTheWay.size() == 1 && onTheWay.getFirst() instanceof OnTheWay.Narrowed narrowed
+                && states.narrowsItsOwnPosition(match, part, reads)) {
             TermPath at = narrowed.position();
             // Where the value the fork is on stands: a name read on a value left several cases is
             // the name read at the sum, and not a name under the set of them.
@@ -333,10 +337,36 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects) {
                     new DecisionCondition.ACase(subject, states.answersOf(match, reads)),
                     narrowing), entered);
         }
+        Optional<DecidedCondition.Narrowed> ofTheInput = asACaseOfTheInput(match, part, reads);
+        if (ofTheInput.isPresent()) {
+            return new Read(ofTheInput.get(), entered);
+        }
         // Otherwise the column is what entering the arm states: which case a value the body
         // computed is of, under what.
         return new Read(columnOf(states.entered(match, part, reads), true, metAt(onTheWay),
                 states::denied), entered);
+    }
+
+    /**
+     * Arm {@code part} of a fork on a value the body computed, as the case of an input position
+     * the arms between them divide.
+     *
+     * <p>Each arm comes to a case of one position when every arm states exactly that: the same
+     * position, held, and the arms leave it nothing in common. The answers are what the
+     * declarations leave the position, as for a fork on the position itself, so the one question is
+     * asked whichever way the body reaches it. Empty where an arm states anything else, because
+     * nothing then says the arms divide the position and a table would admit a value that is two
+     * of them.
+     */
+    private Optional<DecidedCondition.Narrowed> asACaseOfTheInput(Core.Match match, int part,
+                                                                  InputReads reads) {
+        Optional<WhatConditionsState.DividedInput> divided = states.inputDividedBy(match, reads);
+        if (divided.isEmpty() || !divided.get().answered().containsKey(part)) {
+            return Optional.empty();
+        }
+        return Optional.of(new DecidedCondition.Narrowed(
+                new DecisionCondition.ACase(divided.get().of(), divided.get().question()),
+                divided.get().answered().get(part)));
     }
 
     /**

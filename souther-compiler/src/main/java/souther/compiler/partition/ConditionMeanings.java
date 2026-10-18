@@ -11,6 +11,7 @@ import souther.compiler.inputs.InputReads;
 
 import souther.compiler.meaning.Proposition;
 
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -90,6 +91,18 @@ record ConditionMeanings(souther.compiler.inputs.InputReading read) {
      *  ({@link ReachingCuts#answersOf}). */
     Set<CasesLeft> answersOf(Core.Match match, InputReads reads) {
         return ReachingCuts.answersOf(match, inputs(), reads, rules());
+    }
+
+    /** Whether what entering arm {@code part} of {@code match} puts on the way answers the question
+     *  the fork asks ({@link ReachingCuts#narrowsItsOwnPosition}). */
+    boolean narrowsItsOwnPosition(Core.Match match, int part, InputReads reads) {
+        return ReachingCuts.narrowsItsOwnPosition(match, match.cases().get(part), read, reads);
+    }
+
+    /** The position of the input the arms of {@code fork} divide between them, where they do
+     *  ({@link WhatConditionsState#inputDividedBy}). */
+    Optional<WhatConditionsState.DividedInput> inputDividedBy(Core.Match fork, InputReads reads) {
+        return WhatConditionsState.of(read).inputDividedBy(fork, reads);
     }
 
     /** What taking arm {@code part} of {@code attempt}, written at {@code at}, says of the input. */
