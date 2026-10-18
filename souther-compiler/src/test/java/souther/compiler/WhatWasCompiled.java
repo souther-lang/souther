@@ -5,13 +5,17 @@ import souther.test.CompiledClasses;
 import java.lang.classfile.ClassModel;
 import java.lang.classfile.constantpool.ClassEntry;
 import java.lang.classfile.constantpool.ConstantPool;
+import java.lang.classfile.constantpool.MemberRefEntry;
 import java.lang.classfile.constantpool.MethodTypeEntry;
 import java.lang.classfile.constantpool.PoolEntry;
 import java.lang.constant.ClassDesc;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.TreeSet;
 
 /**
  * What this module compiled to, for a rule about who may depend on what.
@@ -188,25 +192,53 @@ public final class WhatWasCompiled {
         for (String each : implementing(on)) {
             owners.add(ClassDesc.of(each));
         }
-        Set<String> found = new LinkedHashSet<>();
-        for (ClassModel model : compiled().all()) {
-            ConstantPool pool = model.constantPool();
-            for (int i = 1; i < pool.size(); i++) {
-                PoolEntry entry;
-                try {
-                    entry = pool.entryByIndex(i);
-                } catch (Exception _) {
-                    continue;
-                }
-                if (entry instanceof java.lang.classfile.constantpool.MemberRefEntry asCall
-                        && owners.contains(asCall.owner().asSymbol())
-                        && asCall.name().stringValue().equals(method)) {
-                    found.add(named(model));
-                }
-            }
+        Map<ClassDesc, Set<String>> byOwner = callsByName().getOrDefault(method, Map.of());
+        Set<String> found = new TreeSet<>();
+        for (ClassDesc owner : owners) {
+            found.addAll(byOwner.getOrDefault(owner, Set.of()));
         }
         return found;
     }
+
+    /**
+     * Every member each compiled class refers to, by the member's name and then its owner, and the
+     * classes that refer to it: what the compiled classes say about who calls what, read once.
+     *
+     * <p>Once because it is one fact about the output, and asked of it member by member the same
+     * pool of every class was read again for each member asked about.
+     */
+    private static Map<String, Map<ClassDesc, Set<String>>> callsByName() {
+        Map<String, Map<ClassDesc, Set<String>>> read = calls;
+        if (read != null) {
+            return read;
+        }
+        synchronized (WhatWasCompiled.class) {
+            if (calls == null) {
+                Map<String, Map<ClassDesc, Set<String>>> out = new HashMap<>();
+                for (ClassModel model : compiled().all()) {
+                    ConstantPool pool = model.constantPool();
+                    for (int i = 1; i < pool.size(); i++) {
+                        PoolEntry entry;
+                        try {
+                            entry = pool.entryByIndex(i);
+                        } catch (Exception _) {
+                            continue;
+                        }
+                        if (entry instanceof MemberRefEntry asCall) {
+                            out.computeIfAbsent(asCall.name().stringValue(), _ -> new HashMap<>())
+                                    .computeIfAbsent(asCall.owner().asSymbol(),
+                                            _ -> new LinkedHashSet<>())
+                                    .add(named(model));
+                        }
+                    }
+                }
+                calls = out;
+            }
+            return calls;
+        }
+    }
+
+    private static volatile Map<String, Map<ClassDesc, Set<String>>> calls;
 
     /**
      * {@code named} and every compiled type that is one, however many types in between.
