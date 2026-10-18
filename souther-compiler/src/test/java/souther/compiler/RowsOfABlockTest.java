@@ -48,6 +48,10 @@ class RowsOfABlockTest {
                 "the note below a block is over no row, and a blank line ends what is over one");
         assertTrue(rows.get(2).written().contains("-> <?>"),
                 "a wrapped row is one row: " + rows.get(2).written());
+        assertEquals(List.of("(Draft { cost = Amount(101) }) -> <?>",
+                        "(Draft { cost = Amount(0) }) -> <?>", "(Draft { cost = Amount(7) }) -> <?>"),
+                rows.stream().map(RowsOfABlock.Row::values).toList(),
+                "what a row holds and answers is read past its name, wrapped or not");
     }
 
     @Test

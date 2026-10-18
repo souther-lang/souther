@@ -219,8 +219,8 @@ class AFoldThatKeepsAnEndIsReadAsEveryOrSomeElementTest {
         Drawn unbounded = drawn(model("", "List.fold((w, l) -> %s, 0, lines) <= 10"
                 .formatted(GREATER)));
         assertFalse(unbounded.report().contains(NOT_SHOWN_TO_REACH), unbounded::report);
-        assertTrue(unbounded.rows().stream()
-                        .anyMatch(row -> row.startsWith("| \"lines[*].discount=x <= 0\"")),
+        assertTrue(unbounded.written().stream()
+                        .anyMatch(row -> row.isFor("lines[*].discount=x <= 0")),
                 () -> unbounded.report() + "\n" + unbounded.rows());
         String alone = report("""
                 module example.worst
@@ -480,7 +480,15 @@ class AFoldThatKeepsAnEndIsReadAsEveryOrSomeElementTest {
      * What one compilation of a model reports, the points it owes rows at and the rows written for
      * what nothing covers.
      */
-    private record Drawn(String report, List<String> points, List<String> rows) {}
+    private record Drawn(String report, List<String> points, List<RowsOfABlock.Row> written) {
+
+        /** What each row holds and answers, in order; what it is for is left out. */
+        List<String> rows() {
+            List<String> out = new ArrayList<>(written.stream().map(RowsOfABlock.Row::values).toList());
+            out.sort(null);
+            return out;
+        }
+    }
 
     private static Drawn drawn(String model) {
         Compilation compilation = compiled(model);
@@ -513,29 +521,13 @@ class AFoldThatKeepsAnEndIsReadAsEveryOrSomeElementTest {
     }
 
     /**
-     * Each row written for what nothing covers, whole however many lines its value takes, in
-     * order. What a row is said to fill is left out: it names where the comparison is written.
+     * The rows written for what nothing covers. Two forms are held to the same rows by what each
+     * holds and answers and not by what it is for: that names where the comparison is written, and
+     * which of a form's rows a rule is composed onto is the form's.
      */
-    private static List<String> rowsOf(Compilation compilation) {
-        String rows = GeneratedRows.of(compilation, null, null,
-                SourceRendering.namedByIdentity(SourceLayouts.NONE)).text();
-        List<String> out = new ArrayList<>();
-        StringBuilder row = null;
-        for (String line : rows.split("\n")) {
-            if (line.startsWith("    | ")) {
-                if (row != null) {
-                    out.add(row.toString().replaceAll("\\s+", " ").trim());
-                }
-                row = new StringBuilder(line);
-            } else if (row != null && !line.startsWith("//") && !line.isBlank()) {
-                row.append(' ').append(line);
-            }
-        }
-        if (row != null) {
-            out.add(row.toString().replaceAll("\\s+", " ").trim());
-        }
-        out.sort(null);
-        return out;
+    private static List<RowsOfABlock.Row> rowsOf(Compilation compilation) {
+        return RowsOfABlock.of(GeneratedRows.of(compilation, null, null,
+                SourceRendering.namedByIdentity(SourceLayouts.NONE)).text());
     }
 
     private static String report(String model) {

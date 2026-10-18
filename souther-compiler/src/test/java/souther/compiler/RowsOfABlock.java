@@ -43,6 +43,25 @@ public final class RowsOfABlock {
             over = List.copyOf(over);
         }
 
+        /**
+         * The row past its name, its whitespace closed up: what it holds and what it answers, which
+         * is what two blocks offering the same rows under other names have alike.
+         */
+        public String values() {
+            List<GreenToken> tokens = CstLexer.lex(written).tokens();
+            StringBuilder out = new StringBuilder();
+            boolean past = name.isEmpty();
+            for (GreenToken token : tokens) {
+                if (past) {
+                    out.append(token.text());
+                } else if (token.kind() == SyntaxKind.COLON) {
+                    past = true;
+                }
+            }
+            String held = out.toString().replaceAll("\\s+", " ").trim();
+            return held.startsWith("| ") ? held.substring(2) : held;
+        }
+
         /** What is said over the row as filled, one thing a line. */
         public List<String> fills() {
             return over.stream().filter(line -> line.startsWith(FILLS))
